@@ -586,6 +586,44 @@ describe('MAM Background Catch-Up', () => {
       expect(querySpy).toHaveBeenCalledTimes(1 + 10)
     })
 
+    it('stops the Phase B walk immediately when the backward cursor stops advancing (stuck pointer)', async () => {
+      await connectClient()
+      setupChat('mds-ptr') // the pending pointer never clears in this test
+
+      const calls: any[] = []
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        // Every page — including the fetch-latest — returns the SAME cursor:
+        // the archive has nothing further to offer this walk.
+        return { messages: [], complete: false, rsm: { first: 'stuck' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      // Fetch-latest + exactly ONE backward page — the non-advancing-cursor
+      // guard bails instead of looping MAM_POINTER_STITCH_MAX_PAGES times.
+      expect(querySpy).toHaveBeenCalledTimes(2)
+      expect(calls.map((c) => c.before)).toEqual(['', 'stuck'])
+    })
+
+    it('terminates cleanly when a pending pointer has no cursor anywhere (empty archive, cache unavailable)', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+      // Default loadMessagesFromCache mock resolves [] — the cache-bottom probe is unavailable.
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive')
+        .mockResolvedValue({ messages: [], complete: false, rsm: {} })
+
+      await expect(
+        xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      ).resolves.not.toThrow()
+
+      // Only the fetch-latest ran — with no windowBottom from Phase A, no seed
+      // from the cache-bottom probe, and no seed from the (empty) peek slice,
+      // there is no cursor to page backward from.
+      expect(querySpy).toHaveBeenCalledTimes(1)
+    })
+
     it('does NOT grow toward the pointer when stitchReadPointer is off (active entity)', async () => {
       await connectClient()
       setupChat('mds-ptr')
@@ -761,6 +799,32 @@ describe('MAM Background Catch-Up', () => {
       await xmppClient.mam.catchUpConversationHistory('alice@example.com', [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
+    })
+
+    it('degrades gracefully through the orchestrator when the Phase A anchor is purged (item-not-found)', async () => {
+      await connectClient()
+      setupChat(undefined)
+
+      // Don't stub queryArchive — exercise the real transport-level degrade
+      // (item-not-found on the first after-anchored page → fetch-latest retry).
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async () => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+        return createFinResponse(true)
+      })
+
+      const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'purged-42' }]
+      await expect(
+        xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+          sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        })
+      ).resolves.not.toThrow()
+
+      // First page (after-anchored) failed, degrade retry (fetch-latest) succeeded.
+      expect(callCount).toBe(2)
     })
   })
 

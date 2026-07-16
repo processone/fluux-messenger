@@ -3593,6 +3593,26 @@ describe('chatStore', () => {
       const persisted = chatStore.persist.getOptions().partialize!(chatStore.getState())
       expect('windowAtLiveEdge' in persisted).toBe(false)
     })
+
+    it('mergeMAMMessages flips windowAtLiveEdge true on a fetch-latest merge, but a plain backward merge does not', () => {
+      chatStore.getState().setActiveConversation(conversationId)
+      // Seed the flag false, as if a prior scroll-up slid the window off the live edge.
+      chatStore.setState((state) => {
+        const w = new Map(state.windowAtLiveEdge)
+        w.set(conversationId, false)
+        return { windowAtLiveEdge: w }
+      })
+
+      // A plain backward merge (isFetchLatest false) must not flip it back.
+      const older = chatMsgAt('older-1', 1)
+      chatStore.getState().mergeMAMMessages(conversationId, [older], {}, false, 'backward')
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+
+      // A fetch-latest merge lands the window AT the live edge by construction.
+      const fresh = chatMsgAt('fresh-1', 20000)
+      chatStore.getState().mergeMAMMessages(conversationId, [fresh], {}, false, 'backward', true)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(true)
+    })
   })
 
   describe('loadNewerMessagesFromCache (sliding window)', () => {

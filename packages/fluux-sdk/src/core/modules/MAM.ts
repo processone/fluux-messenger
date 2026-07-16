@@ -1300,6 +1300,12 @@ export class MAM extends BaseModule {
     // (The `messages` peek param is the NEWEST-100 slice and would pin the
     // seed ~100 below live forever; it remains only the cacheless fallback.)
     if (!windowBottom && io.getPendingStanzaId()) {
+      // Known bounded blind spot: "cache bottom" only equals true COVERAGE
+      // bottom for a CONTIGUOUS cache. A disjoint deep cached island (e.g. a
+      // bounded context fetch that jumped far below live) can seed this walk
+      // below an unresolved pointer instead of at it. Cost stays bounded
+      // (MAM_POINTER_STITCH_MAX_PAGES) and the gap self-heals on the next
+      // open/scroll, so this is left as-is rather than special-cased here.
       const bottom = await io.probeCacheBottom()
       windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
         ?? oldestMessageWithStanzaId(messages)?.stanzaId

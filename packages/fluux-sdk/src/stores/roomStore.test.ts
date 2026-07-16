@@ -4289,6 +4289,27 @@ describe('roomStore', () => {
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
       expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
     })
+
+    it('mergeRoomMAMMessages flips windowAtLiveEdge true on a fetch-latest merge, but a plain backward merge does not', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      // Seed the flag false, as if a prior scroll-up slid the window off the live edge.
+      roomStore.setState((state) => {
+        const newRuntime = new Map(state.roomRuntime)
+        const existing = newRuntime.get(roomJid)!
+        newRuntime.set(roomJid, { ...existing, windowAtLiveEdge: false })
+        return { roomRuntime: newRuntime }
+      })
+
+      // A plain backward merge (isFetchLatest false) must not flip it back.
+      const older = roomMsgAt('older-1', 1)
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [older], {}, false, 'backward')
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+
+      // A fetch-latest merge lands the window AT the live edge by construction.
+      const fresh = roomMsgAt('fresh-1', 20000)
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [fresh], {}, false, 'backward', false, true)
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+    })
   })
 
   describe('loadNewerMessagesFromCache (sliding window)', () => {

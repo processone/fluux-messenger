@@ -9,9 +9,11 @@ import {
   oldestMessageWithStanzaId,
   MAM_POINTER_RECOUNT_CACHE_LIMIT,
   MAM_POINTER_STITCH_MAX_PAGES,
+  MAM_POINTER_SEED_PROBE_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
+  MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_CATCHUP_DELAY_MS,
@@ -169,6 +171,16 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
     const messages = [{ timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 's1' }]
     expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
       .toEqual({ before: '' })
+  })
+
+  it('with no sessionStartTime, anchors on the GLOBAL newest message, id-exact (live fetchHistory path)', () => {
+    // Without a sessionStartTime, selectCatchUpQuery falls back to
+    // findNewestMessage instead of findCatchUpCursorMessage — this is the
+    // path fetchHistory (the live, non-catch-up caller) uses.
+    const t1 = new Date('2026-06-01T00:00:00Z')
+    const t2 = new Date('2026-06-14T12:00:00Z')
+    expect(selectCatchUpQuery([{ timestamp: t1, stanzaId: 'a' }, { timestamp: t2, stanzaId: 'b' }]))
+      .toEqual({ after: 'b' })
   })
 })
 
@@ -329,6 +341,9 @@ describe('MAM constants', () => {
     expect(MAM_CACHE_LOAD_LIMIT).toBe(100)
     expect(MAM_ROOM_CATCHUP_DELAY_MS).toBe(10_000)
     expect(MAM_ROOM_FORWARD_MAX_PAGES).toBe(50)
+    expect(MAM_CATCHUP_FORWARD_BAIL_PAGES).toBe(3)
+    expect(MAM_POINTER_STITCH_MAX_PAGES).toBe(10)
+    expect(MAM_POINTER_SEED_PROBE_LIMIT).toBe(25)
   })
 
   it('sizes the exact-recount window to everything one catch-up pass can download', () => {

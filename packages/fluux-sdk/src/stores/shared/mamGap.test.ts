@@ -133,6 +133,12 @@ describe('detectFetchLatestSeam', () => {
     expect(detectFetchLatestSeam([], 0, 0, heldBelowTs)).toBeUndefined()
     expect(detectFetchLatestSeam([{}], 1, 0, heldBelowTs)).toBeUndefined()
   })
+
+  it('no seam from an id alone: newestHeldBelowId with undefined newestHeldBelowTs', () => {
+    // A seam's start comes from the TIMESTAMP; an id without a timestamp must
+    // not be enough to invent one.
+    expect(detectFetchLatestSeam(page, 2, 0, undefined, 'held-id-without-ts')).toBeUndefined()
+  })
 })
 
 describe('closeGapWithBackwardPage', () => {
@@ -155,6 +161,12 @@ describe('closeGapWithBackwardPage', () => {
     expect(closeGapWithBackwardPage(gap, page, false)).toBe(gap)
     // Even archive-start (complete=true) below the gap must NOT clear it.
     expect(closeGapWithBackwardPage(gap, page, true)).toBe(gap)
+  })
+
+  it('is reference-stable even when pageOldestId is passed (unchanged branch ignores it)', () => {
+    const page = { oldestTs: ts('2026-07-01T00:00:00Z'), newestTs: ts('2026-07-05T00:00:00Z') }
+    const result = closeGapWithBackwardPage(gap, page, false, 'should-not-appear')
+    expect(result).toBe(gap)
   })
 
   it('clears the gap when a page from at/above it reaches archive start (complete)', () => {

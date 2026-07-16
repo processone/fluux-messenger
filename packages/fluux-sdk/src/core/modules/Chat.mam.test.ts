@@ -876,6 +876,114 @@ describe('XMPPClient MAM', () => {
       expect(beforeEl?.children?.length || 0).toBe(0)
     })
 
+    it('backward pagination: a page with only a reaction (no displayable message) fetches the next older page', async () => {
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      const capturedIqs: any[] = []
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+
+        if (callCount === 1) {
+          // Page 1: only a reaction (fastening-style modification) — no
+          // displayable message — and the archive says there is more.
+          if (stanzaListener) {
+            const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+                      {
+                        name: 'message',
+                        attrs: { from: 'bob@example.com/resource', type: 'chat', id: 'reaction-stanza' },
+                        children: [
+                          {
+                            name: 'reactions',
+                            attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'msg-not-in-this-page' },
+                            children: [{ name: 'reaction', text: '👍' }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            stanzaListener(reactionMsg)
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+              children: [
+                {
+                  name: 'set',
+                  attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+                  children: [{ name: 'first', text: 'p1' }],
+                },
+              ],
+            },
+          ])
+        }
+
+        // Page 2: a real displayable message; archive complete.
+        if (stanzaListener) {
+          const realMsg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T09:00:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: 'alice@example.com', type: 'chat', id: 'real-msg' },
+                      children: [{ name: 'body', text: 'Hello from the older page' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(realMsg)
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
+
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+
+      expect(callCount).toBe(2)
+      const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
+      const secondSetEl = secondQueryEl?.children?.find((c: any) => c.name === 'set')
+      const secondBeforeEl = secondSetEl?.children?.find((c: any) => c.name === 'before')
+      expect(secondBeforeEl?.children?.[0]).toBe('p1')
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].id).toBe('real-msg')
+    })
+
     it('should skip messages without body', async () => {
       // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
