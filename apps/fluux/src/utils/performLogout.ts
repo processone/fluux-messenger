@@ -3,7 +3,7 @@ import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 import { markLoggedOut } from '@/utils/reconnectIntent'
-import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
+import { clearCachedPassphrase } from '@fluux/openpgp-plugin'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
 const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500

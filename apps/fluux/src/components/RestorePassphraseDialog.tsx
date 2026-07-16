@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { USE_V6_KEYS } from '@fluux/openpgp-plugin'
 import { ModalOverlay } from './ModalOverlay'
 
 const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'

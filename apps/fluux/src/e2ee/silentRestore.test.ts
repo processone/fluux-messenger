@@ -4,10 +4,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // branching logic of the silent-restore helper, not the storage layer.
 const loadCachedPassphrase = vi.fn()
 const clearCachedPassphrase = vi.fn()
-vi.mock('./webPassphraseCache', () => ({
-  loadCachedPassphrase: (...args: unknown[]) => loadCachedPassphrase(...args),
-  clearCachedPassphrase: (...args: unknown[]) => clearCachedPassphrase(...args),
-}))
+vi.mock('@fluux/openpgp-plugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/openpgp-plugin')>()
+  return {
+    ...actual,
+    loadCachedPassphrase: (...args: unknown[]) => loadCachedPassphrase(...args),
+    clearCachedPassphrase: (...args: unknown[]) => clearCachedPassphrase(...args),
+  }
+})
 
 import { attemptCachedUnlockOrPrompt } from './silentRestore'
 

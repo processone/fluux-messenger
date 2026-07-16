@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { isKeyLocked, subscribeKeyLockState } from '@/e2ee/webPassphraseStore'
+import { isKeyLocked, subscribeKeyLockState } from '@fluux/openpgp-plugin'
 import { isTauri } from '@/utils/tauri'
 
 /**

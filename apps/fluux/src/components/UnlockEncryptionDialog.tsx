@@ -4,16 +4,17 @@ import { Loader2 } from 'lucide-react'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { getBareJid } from '@fluux/sdk'
 import { KeyPickerDialog } from './KeyPickerDialog'
-import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
-import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { isTauri } from '@/utils/tauri'
 import { ModalOverlay } from './ModalOverlay'
 import {
+  KeyPickerRequiredError,
+  NoRecoveryAvailableError,
   cachePassphrase,
   clearCachedPassphrase,
   getRememberPassphrasePreference,
   setRememberPassphrasePreference,
-} from '@/e2ee/webPassphraseCache'
+} from '@fluux/openpgp-plugin'
+import type { KeyBundle } from '@fluux/openpgp-plugin'
 
 interface UnlockEncryptionDialogProps {
   client: XMPPClient

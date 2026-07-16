@@ -16,7 +16,7 @@ import { clearAllAvatarData } from '@fluux/sdk/cache'
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
-import { clearCachedPassphrase, clearAllCachedPassphrases } from '@/e2ee/webPassphraseCache'
+import { clearCachedPassphrase, clearAllCachedPassphrases } from '@fluux/openpgp-plugin'
 
 /** localStorage keys containing user data (not app preferences) */
 const USER_DATA_KEYS = [

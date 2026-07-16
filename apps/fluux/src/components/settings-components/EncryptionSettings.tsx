@@ -11,18 +11,18 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
-import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
-import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import {
+  parseArmorPassphraseFormat,
   probeRemoteIdentityState,
   SecretKeyBackupProbeError,
-} from '@/e2ee/secretKeyProbe'
-import { isKeyLocked } from '@/e2ee/webPassphraseStore'
+  isKeyLocked,
+} from '@fluux/openpgp-plugin'
+import type { KeyBundle } from '@fluux/openpgp-plugin'
 import { isTauri } from '@/utils/tauri'
 
 type PluginStatus =

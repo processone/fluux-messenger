@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Key, Loader2, Star } from 'lucide-react'
-import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
+import type { KeyBundle } from '@fluux/openpgp-plugin'
 import { ModalOverlay } from './ModalOverlay'
 
 interface KeyPickerDialogProps {

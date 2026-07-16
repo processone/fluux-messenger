@@ -10,7 +10,7 @@
  * Extracted from the App connect handler so the branch logic is unit-testable
  * without rendering the whole app.
  */
-import { loadCachedPassphrase, clearCachedPassphrase } from './webPassphraseCache'
+import { loadCachedPassphrase, clearCachedPassphrase } from '@fluux/openpgp-plugin'
 
 interface UnlockCapablePlugin {
   unlock?: (passphrase: string) => Promise<{ recovered: boolean }>

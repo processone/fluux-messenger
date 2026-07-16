@@ -4,12 +4,16 @@ import { UnlockEncryptionDialog } from './UnlockEncryptionDialog'
 
 const cachePassphrase = vi.fn()
 const clearCachedPassphrase = vi.fn()
-vi.mock('@/e2ee/webPassphraseCache', () => ({
-  cachePassphrase: (...a: unknown[]) => cachePassphrase(...a),
-  clearCachedPassphrase: (...a: unknown[]) => clearCachedPassphrase(...a),
-  getRememberPassphrasePreference: () => false,
-  setRememberPassphrasePreference: vi.fn(),
-}))
+vi.mock('@fluux/openpgp-plugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/openpgp-plugin')>()
+  return {
+    ...actual,
+    cachePassphrase: (...a: unknown[]) => cachePassphrase(...a),
+    clearCachedPassphrase: (...a: unknown[]) => clearCachedPassphrase(...a),
+    getRememberPassphrasePreference: () => false,
+    setRememberPassphrasePreference: vi.fn(),
+  }
+})
 
 // i18n: return the key so we can assert by stable text fragments.
 vi.mock('react-i18next', () => ({

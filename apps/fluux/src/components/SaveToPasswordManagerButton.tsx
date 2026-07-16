@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { KeyRound, Check } from 'lucide-react'
 import { saveCredentialToManager } from '@/utils/saveCredentialToManager'
-import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { USE_V6_KEYS } from '@fluux/openpgp-plugin'
 import { isTauri } from '@/utils/tauri'
 
 interface SaveToPasswordManagerButtonProps {

@@ -7,7 +7,7 @@ import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
-import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
+import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
 /**

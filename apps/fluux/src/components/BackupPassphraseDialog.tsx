@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
-import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@fluux/openpgp-plugin'
 import { SaveToPasswordManagerButton } from './SaveToPasswordManagerButton'
 import { ModalOverlay } from './ModalOverlay'
 
