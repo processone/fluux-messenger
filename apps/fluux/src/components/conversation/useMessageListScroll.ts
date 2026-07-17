@@ -237,6 +237,8 @@ export interface UseMessageListScrollOptions {
   messageCount: number
   firstMessageId: string | undefined
   firstNewMessageId?: string  // ID of the first unread message (for new message marker)
+  /** Forward-only local id of the furthest read message, including XEP-0490 sync. */
+  lastSeenMessageId?: string
   targetMessageId?: string | null  // ID of a message to scroll to (e.g., from activity log click)
   onTargetMessageConsumed?: () => void  // Called after scrolling to target message
   externalScrollerRef?: React.RefObject<HTMLElement | null>
@@ -329,6 +331,7 @@ export function useMessageListScroll({
   messageCount,
   firstMessageId,
   firstNewMessageId,
+  lastSeenMessageId,
   clearFirstNewMessageId,
   targetMessageId,
   onTargetMessageConsumed,
@@ -419,6 +422,14 @@ export function useMessageListScroll({
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
   const pendingRestoreConversationRef = useRef<string | null>(null)
+  const pendingSyncedLiveEdgeRef = useRef<{
+    conversationId: string
+    savedReadPositionId: string | undefined
+  } | null>(null)
+  const previousReadPositionRef = useRef(lastSeenMessageId)
+  useEffect(() => {
+    previousReadPositionRef.current = lastSeenMessageId
+  }, [conversationId, lastSeenMessageId])
   // Whether the user has GENUINELY scrolled since entering this conversation (wheel / touch /
   // keyboard / FAB). Reset on every conversation switch. The saved scroll position is only
   // overwritten once this is true: a restore can drift on its own as rows below the fold load media
@@ -1937,7 +1948,14 @@ export function useMessageListScroll({
     const now = Date.now()
     if (!programmaticScroll && userHasScrolledSinceEntryRef.current && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
+      scrollStateManager.saveScrollPosition(
+        conversationId,
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        lastAnchorRef.current ?? undefined,
+        lastSeenMessageId,
+      )
     }
 
     // Track if user scrolled away from top (allows re-trigger of load)
@@ -2012,7 +2030,14 @@ export function useMessageListScroll({
     // position creep older on the next open (see userHasScrolledSinceEntryRef).
     if (prevConversationRef.current && lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
       const { top, height, client } = lastScrollDataRef.current
-      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+      scrollStateManager.leaveConversation(
+        prevConversationRef.current,
+        top,
+        height,
+        client,
+        lastAnchorRef.current ?? undefined,
+        previousReadPositionRef.current,
+      )
     } else if (prevConversationRef.current) {
       scrollStateManager.markAsLeft(prevConversationRef.current)
     }
@@ -2025,6 +2050,7 @@ export function useMessageListScroll({
     lastAnchorRef.current = null
     prependRef.current = null
     pendingRestoreConversationRef.current = null
+    pendingSyncedLiveEdgeRef.current = null
     // Returning to this conversation later must be free to re-request its anchor slice.
     aroundLoadStatusRef.current.clear()
     // Fresh entry: the saved position is locked until the user genuinely scrolls (see the ref).
@@ -2062,8 +2088,31 @@ export function useMessageListScroll({
       const firstOpenThisSession = !scrollStateManager.isInitialized(conversationId)
 
       // Decide: restore position or scroll to bottom?
-      const action = scrollStateManager.enterConversation(conversationId, messageCount)
+      let action = scrollStateManager.enterConversation(conversationId, messageCount)
       const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
+      const savedReadPositionId = scrollStateManager.getSavedReadPositionId(conversationId)
+
+      if (action === 'restore-position') {
+        pendingSyncedLiveEdgeRef.current = { conversationId, savedReadPositionId }
+        // The remote pointer can resolve before this mount. When it now identifies the newest
+        // downloaded row, a saved position tied to an older pointer must not win merely because
+        // there was never an unread divider.
+        if (
+          firstNewMessageId === undefined &&
+          lastSeenMessageId !== undefined &&
+          lastSeenMessageId === lastMessageId &&
+          lastSeenMessageId !== savedReadPositionId
+        ) {
+          scrollStateManager.clearSavedScrollState(conversationId)
+          pendingSyncedLiveEdgeRef.current = null
+          action = 'scroll-to-bottom'
+          debugLog('MDS LIVE EDGE: synced read supersedes saved position on entry', {
+            conversationId,
+            savedReadPositionId,
+            lastSeenMessageId,
+          })
+        }
+      }
 
       debugLog('CONVERSATION ACTION', { action, savedPos, firstOpenThisSession, scrollHeight: scroller.scrollHeight })
 
@@ -2146,8 +2195,31 @@ export function useMessageListScroll({
     prevConversationRef.current = conversationId
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
+    previousReadPositionRef.current = lastSeenMessageId
 
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition, runMarkerReassertLoop])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, lastSeenMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition, runMarkerReassertLoop])
+
+  // Zero-unread twin of the divider-clear settle below. The old local position may be restored
+  // before MAM resolves the other device's pointer to the newest downloaded row; with no divider,
+  // observing that pointer transition is the only signal that the restore became obsolete.
+  useLayoutEffect(() => {
+    const pending = pendingSyncedLiveEdgeRef.current
+    if (!pending || pending.conversationId !== conversationId) return
+    if (staticMode || userHasScrolledSinceEntryRef.current) return
+    if (firstNewMessageId !== undefined || lastSeenMessageId === undefined) return
+    if (lastSeenMessageId !== lastMessageId || lastSeenMessageId === pending.savedReadPositionId) return
+
+    pendingSyncedLiveEdgeRef.current = null
+    pendingRestoreConversationRef.current = null
+    scrollStateManager.clearSavedScrollState(conversationId)
+    isAtBottomRef.current = true
+    debugLog('MDS LIVE EDGE: late synced read supersedes restored position', {
+      conversationId,
+      savedReadPositionId: pending.savedReadPositionId,
+      lastSeenMessageId,
+    })
+    reassertBottom('mds-live-edge')
+  }, [conversationId, firstNewMessageId, lastMessageId, lastSeenMessageId, staticMode, isAtBottomRef, reassertBottom])
 
   // XEP-0490 settle window: the fresh-session read-sync seed can land just AFTER a
   // conversation is opened. The SDK's entry fold races the async PEP fetch, so at
@@ -2225,7 +2297,14 @@ export function useMessageListScroll({
             anchorMessageId: lastAnchorRef.current?.messageId,
             anchorFraction: lastAnchorRef.current?.fraction,
           })
-          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+          scrollStateManager.leaveConversation(
+            prevConversationRef.current,
+            top,
+            height,
+            client,
+            lastAnchorRef.current ?? undefined,
+            previousReadPositionRef.current,
+          )
         } else {
           // No scroll data, or the user never scrolled this visit → don't overwrite the saved
           // position; just mark the conversation left so a return is detected as a switch.

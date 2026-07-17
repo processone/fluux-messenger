@@ -31,6 +31,7 @@ interface HookHarnessProps {
   conversationId: string
   ids: string[]
   firstNewMessageId?: string
+  lastSeenMessageId?: string
   clearFirstNewMessageId?: () => void
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   scrollHeight?: number
@@ -39,9 +40,9 @@ interface HookHarnessProps {
   onReady: (handle: HarnessHandle) => void
 }
 
-function seedSavedScrollPosition(conversationId: string, scrollTop = 200) {
+function seedSavedScrollPosition(conversationId: string, scrollTop = 200, readPositionId?: string) {
   scrollStateManager.enterConversation(conversationId, 10)
-  scrollStateManager.leaveConversation(conversationId, scrollTop, 1000, 500)
+  scrollStateManager.leaveConversation(conversationId, scrollTop, 1000, 500, undefined, readPositionId)
 }
 
 // Seed a saved CONTENT anchor whose scrollHeight differs from the harness scroller (1000) so the
@@ -59,6 +60,7 @@ function HookHarness({
   conversationId,
   ids,
   firstNewMessageId,
+  lastSeenMessageId,
   clearFirstNewMessageId,
   onLoadAround,
   scrollHeight = 1000,
@@ -77,6 +79,7 @@ function HookHarness({
     messageCount: ids.length,
     firstMessageId: ids[0],
     firstNewMessageId,
+    lastSeenMessageId,
     clearFirstNewMessageId,
     onLoadAround,
     reactionsSignature: '',
@@ -297,6 +300,68 @@ describe('useMessageListScroll saved-position restore', () => {
 
     expect(handle?.scrollTopSets).toContain(200)
     expect(handle?.scrollTopSets.some((v) => Math.abs(v - markerTarget) < 1)).toBe(false)
+  })
+
+  it('discards a saved position when a synced read pointer already reached the downloaded live edge', () => {
+    seedSavedScrollPosition('synced-live-edge', 200, 'msg-5')
+    let handle: HarnessHandle | undefined
+
+    render(
+      <HookHarness
+        conversationId="synced-live-edge"
+        ids={manyIds()}
+        lastSeenMessageId="msg-19"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.scrollTopSets).not.toContain(200)
+    expect(handle?.getScrollTop()).toBe(1000)
+    expect(scrollStateManager.getSavedScrollTop('synced-live-edge')).toBeNull()
+  })
+
+  it('keeps a deliberate saved position when its read pointer was already at the live edge', () => {
+    seedSavedScrollPosition('same-live-edge', 200, 'msg-19')
+    let handle: HarnessHandle | undefined
+
+    render(
+      <HookHarness
+        conversationId="same-live-edge"
+        ids={manyIds()}
+        lastSeenMessageId="msg-19"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.scrollTopSets).toContain(200)
+    expect(scrollStateManager.getSavedScrollTop('same-live-edge')).toBe(200)
+  })
+
+  it('settles to the bottom when MAM resolves the synced read pointer after restore', () => {
+    seedSavedScrollPosition('late-live-edge', 200, 'msg-5')
+    let handle: HarnessHandle | undefined
+    const view = render(
+      <HookHarness
+        conversationId="late-live-edge"
+        ids={manyIds()}
+        lastSeenMessageId="msg-5"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.scrollTopSets).toContain(200)
+
+    view.rerender(
+      <HookHarness
+        conversationId="late-live-edge"
+        ids={manyIds()}
+        lastSeenMessageId="msg-19"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.getScrollTop()).toBe(1000)
+    expect(scrollStateManager.getSavedScrollTop('late-live-edge')).toBeNull()
   })
 
   it('clears restored scrolled-up state only after explicit bottom intent', () => {

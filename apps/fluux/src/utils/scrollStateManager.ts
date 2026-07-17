@@ -56,6 +56,9 @@ interface ScrollState {
    *  the anchor message's CURRENT measured height, so it survives re-measure / width / density /
    *  font-size changes. {@link ScrollState.scrollTop} is only a fallback when this is absent. */
   anchor?: ScrollAnchor
+  /** Read pointer current when this position was saved. A later synced pointer at the live edge
+   * makes the old local position obsolete. */
+  readPositionId?: string
 }
 
 interface ConversationState {
@@ -162,7 +165,8 @@ class ScrollStateManager {
     scrollTop: number,
     scrollHeight: number,
     clientHeight: number,
-    anchor?: ScrollAnchor
+    anchor?: ScrollAnchor,
+    readPositionId?: string
   ): void {
     const state = this.getState(conversationId)
     // scrollHeight/clientHeight are transient inputs used only to decide wasAtBottom here — they are
@@ -191,6 +195,7 @@ class ScrollStateManager {
         wasAtBottom,
         savedAt: Date.now(),
         anchor,
+        readPositionId,
       }
     }
   }
@@ -204,10 +209,11 @@ class ScrollStateManager {
     scrollTop: number,
     scrollHeight: number,
     clientHeight: number,
-    anchor?: ScrollAnchor
+    anchor?: ScrollAnchor,
+    readPositionId?: string
   ): void {
     // Save position first
-    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, anchor)
+    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, anchor, readPositionId)
 
     const state = this.getState(conversationId)
     this.log('leaveConversation', {
@@ -271,6 +277,14 @@ class ScrollStateManager {
       return null
     }
     return state.scrollState.anchor ?? null
+  }
+
+  /** Read pointer captured alongside the saved scroll position. */
+  getSavedReadPositionId(conversationId: string): string | undefined {
+    const state = this.states.get(conversationId)
+    if (!state?.scrollState || state.scrollState.wasAtBottom) return undefined
+    if (Date.now() - state.scrollState.savedAt > this.staleThresholdMs) return undefined
+    return state.scrollState.readPositionId
   }
 
   /**
