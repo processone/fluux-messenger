@@ -88,6 +88,7 @@ describe('chatStore', () => {
       archivedConversations: new Set(),
       mamQueryStates: new Map(),
       conversationGaps: new Map(),
+      conversationCoverage: new Map(),
       // Reset other ephemeral state
       typingStates: new Map(),
       drafts: new Map(),
@@ -498,6 +499,72 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(cid, [m], { last: 'c1' }, false, 'forward')
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
       resolveSave(true)
+    })
+
+    it('fetch-latest establishes the coverage record and it survives resetMAMStates (fresh session)', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const m = { ...createMessage(cid, 'm1'), id: 'm1', stanzaId: 'sid-1', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', true, false,
+        { initialBefore: '', fetchLatestTopId: 'sid-1' })
+      await vi.waitFor(() => {
+        expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+      })
+      chatStore.getState().resetMAMStates()
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+    })
+
+    it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.getState().mergeMAMMessages(cid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', true, false,
+        { initialBefore: '', fetchLatestTopId: 'p1-last' })
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last' })
+    })
+
+    it('coverage bottom advance with persistable messages defers until the durable write commits', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep', topId: 'top' }]]) })
+      let resolveSave!: (committed: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(new Promise<boolean>((r) => { resolveSave = r }))
+
+      const older = { ...createMessage(cid, 'old'), id: 'old', stanzaId: 'deeper', timestamp: new Date('2026-07-01T00:00:00Z') }
+      // Plain backward page resumed id-exactly from the coverage bottom.
+      chatStore.getState().mergeMAMMessages(cid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deep')
+      resolveSave(true)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deeper')
+      })
+    })
+
+    it('coverage advance is dropped when the durable write reports failure', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep' }]]) })
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
+
+      const older = { ...createMessage(cid, 'old'), id: 'old', stanzaId: 'deeper', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deep')
+    })
+
+    it('clearConversationCoverage with ifBottomId only clears a matching record', () => {
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'x' }]]) })
+      chatStore.getState().clearConversationCoverage(cid, 'other')
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeDefined()
+      chatStore.getState().clearConversationCoverage(cid, 'x')
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
+    it('windowed context fetches (preserveGapMarker) never touch the coverage record', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep' }]]) })
+      const island = { ...createMessage(cid, 'island'), id: 'island', stanzaId: 'island-id', timestamp: new Date('2026-06-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [island], { first: 'island-id' }, true, 'backward', true, true,
+        { initialBefore: '' })
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'deep' })
     })
 
     it('backward CLEARANCE with zero new persistable messages deletes immediately', () => {

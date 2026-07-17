@@ -10,6 +10,7 @@ import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
+import { syncCoverageAfterArchiveMerge, type CoverageRecord, type MergeArchiveExtras } from './shared/mamCoverage'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -194,6 +195,10 @@ interface ChatState {
   // Persisted history-gap intervals per conversation (in the account-scoped chat
   // blob; drives the gap marker). Parity with roomStore.roomGaps.
   conversationGaps: Map<string, GapInterval>
+  // Persisted contiguous-with-live coverage per conversation (positive twin of
+  // conversationGaps; survives fresh sessions and gap closure). Parity with
+  // roomStore.roomCoverage. See shared/mamCoverage.ts.
+  conversationCoverage: Map<string, CoverageRecord>
   // Target message to scroll to after navigation (ephemeral, not persisted)
   targetMessageId: string | null
   // Session-only new-message divider per conversation (jid -> messageId). Derived
@@ -319,7 +324,7 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -328,6 +333,11 @@ interface ChatState {
    * MATCHING id — a gap whose anchor already advanced is left untouched.
    */
   clearConversationGapAnchor: (conversationId: string, purgedStartId: string) => void
+  /** Persisted contiguous-with-live coverage record, if any. */
+  getConversationCoverage: (conversationId: string) => CoverageRecord | undefined
+  /** Drop the coverage record; with `ifBottomId`, only when it matches
+   *  `bottomId` (purge-event guard — the anchor is known gone). */
+  clearConversationCoverage: (conversationId: string, ifBottomId?: string) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
   /**
@@ -399,13 +409,14 @@ interface PersistedState {
   archivedConversations?: string[] // Optional for backwards compatibility
   drafts?: [string, string][] // Optional for backwards compatibility
   conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
+  conversationCoverage?: [string, CoverageRecord][] // Optional for backwards compatibility
   // Legacy fields, kept for backwards compatibility when reading old storage
   messages?: [string, Message[]][] // May exist in old storage, will be migrated
   activeConversationId?: string | null
 }
 
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval> }): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord> }): PersistedState {
   return {
     // Serialize separated maps (Phase 6)
     conversationEntities: Array.from(state.conversationEntities.entries()),
@@ -417,12 +428,14 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
     drafts: Array.from(state.drafts.entries()),
     // Persisted history gaps (account-scoped via the chat storage key)
     conversationGaps: Array.from((state.conversationGaps ?? new Map<string, GapInterval>()).entries()),
+    // Persisted contiguous-with-live coverage (positive twin of the gaps)
+    conversationCoverage: Array.from((state.conversationCoverage ?? new Map<string, CoverageRecord>()).entries()),
   }
 }
 
 // Deserialize arrays back to Maps, reset unread counts, restore Date objects
 // Also handles migration of old localStorage messages to IndexedDB
-function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps'> {
+function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage'> {
   // Helper to restore Date objects in lastMessage
   const restoreLastMessage = (lastMessage?: Message): Message | undefined => {
     if (!lastMessage) return undefined
@@ -528,6 +541,9 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Restore history gaps (backwards compatible - default to empty map)
   const conversationGaps = new Map<string, GapInterval>(persisted.conversationGaps || [])
 
+  // Restore coverage records (backwards compatible - default to empty map)
+  const conversationCoverage = new Map<string, CoverageRecord>(persisted.conversationCoverage || [])
+
   return {
     conversationEntities,
     conversationMeta,
@@ -539,10 +555,11 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     archivedConversations,
     drafts,
     conversationGaps,
+    conversationCoverage,
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -556,6 +573,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     drafts: new Map(),
     mamQueryStates: new Map(),
     conversationGaps: new Map(),
+    conversationCoverage: new Map(),
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
     windowAtLiveEdge: new Map(),
@@ -568,7 +586,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -607,7 +625,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -629,6 +647,7 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
       archivedConversations: restored.archivedConversations,
       drafts: restored.drafts,
       conversationGaps: restored.conversationGaps,
+      conversationCoverage: restored.conversationCoverage,
     }
   } catch {
     try {
@@ -1777,7 +1796,7 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false) => {
+      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
         // Newest persisted timestamp (entity preview) — the seam-formation fallback
         // when the resident array is empty this run (fresh session, history on disk).
         const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
@@ -1889,6 +1908,28 @@ export const chatStore = createStore<ChatState>()(
             persistableMessages.length > 0
           const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 
+          // Persisted coverage record (Codex r3 #3/#4) — positive durable twin
+          // of the gap machinery; see mamCoverage.ts. Advancing the bottom
+          // past a page with persistable messages must wait for the durable
+          // commit: the record must never point past unstored data. A merge
+          // with nothing persistable (signal-only give-up) applies now.
+          const newCoverage = syncCoverageAfterArchiveMerge({
+            coverage: state.conversationCoverage,
+            id: conversationId,
+            direction,
+            isFetchLatest,
+            preserveGapMarker,
+            rsmFirst: rsm.first,
+            fetchLatestTopId: extras?.fetchLatestTopId,
+            initialBefore: extras?.initialBefore,
+            connectedToHeld: newMessages.length < mamMessages.length || patched.length > 0,
+          })
+          const prevCoverage = state.conversationCoverage.get(conversationId)
+          const deferCoverageCommit =
+            newCoverage !== state.conversationCoverage &&
+            persistableMessages.length > 0
+          const coverageAfterMerge = deferCoverageCommit ? state.conversationCoverage : newCoverage
+
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
           // RAM messages must persist — but only for the ACTIVE conversation
@@ -1896,33 +1937,44 @@ export const chatStore = createStore<ChatState>()(
           const isActive = state.activeConversationId === conversationId
           if (newMessages.length === 0) {
             if (patched.length === 0 || !isActive) {
-              return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
+              return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
             const backfilledMap = new Map(state.messages)
             backfilledMap.set(conversationId, trimmed)
-            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
+            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
           // Persist to IndexedDB regardless of active state (durable history).
           if (persistableMessages.length > 0) {
             const savePromise = messageCache.saveMessages(persistableMessages)
-            if (deferGapCommit) {
-              // The page is durably cached — now the transition is safe.
+            if (deferGapCommit || deferCoverageCommit) {
+              // The page is durably cached — now the transitions are safe.
               void savePromise.then((committed) => {
                 if (!committed) return
                 set((s) => {
                   // State may have moved on (a later merge advanced or
-                  // re-planted the gap): only transition the exact interval
-                  // this merge computed from. Reference equality suffices —
-                  // every gap transition (syncGap) creates a new object. A
-                  // lost race leaves a LAGGING (conservative) cursor, never
-                  // a skipping one.
-                  if (s.conversationGaps.get(conversationId) !== prevGap) return s
-                  const next = new Map(s.conversationGaps)
-                  const target = newGaps.get(conversationId)
-                  if (target) next.set(conversationId, target)
-                  else next.delete(conversationId)
-                  return { conversationGaps: next }
+                  // re-planted the gap/record): only transition the exact
+                  // value this merge computed from. Reference equality
+                  // suffices — every transition creates a new object. A lost
+                  // race leaves a LAGGING (conservative) cursor, never a
+                  // skipping one.
+                  const out: Partial<ChatState> = {}
+                  if (deferGapCommit && s.conversationGaps.get(conversationId) === prevGap) {
+                    const next = new Map(s.conversationGaps)
+                    const target = newGaps.get(conversationId)
+                    if (target) next.set(conversationId, target)
+                    else next.delete(conversationId)
+                    out.conversationGaps = next
+                  }
+                  if (deferCoverageCommit && s.conversationCoverage.get(conversationId) === prevCoverage) {
+                    const target = newCoverage.get(conversationId)
+                    if (target) {
+                      const next = new Map(s.conversationCoverage)
+                      next.set(conversationId, target)
+                      out.conversationCoverage = next
+                    }
+                  }
+                  return Object.keys(out).length > 0 ? out : s
                 })
               })
             } else {
@@ -1987,9 +2039,9 @@ export const chatStore = createStore<ChatState>()(
                   lastSeenMessageId: hydrated.lastSeenMessageId,
                 } : {}),
               })
-              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge }
+              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
-            return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
+            return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
 
           // ACTIVE conversation: populate the resident messages map.
@@ -2019,10 +2071,10 @@ export const chatStore = createStore<ChatState>()(
             newMeta.set(conversationId, { ...meta!, lastMessage })
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, { ...conv!, lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
+          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
         // XEP-0490: a remote displayed marker may have arrived before its message.
@@ -2043,6 +2095,19 @@ export const chatStore = createStore<ChatState>()(
           const { startId: _purged, ...withoutAnchor } = gap
           newGaps.set(conversationId, withoutAnchor)
           return { conversationGaps: newGaps }
+        })
+      },
+
+      getConversationCoverage: (conversationId) => get().conversationCoverage.get(conversationId),
+
+      clearConversationCoverage: (conversationId, ifBottomId) => {
+        set((state) => {
+          const existing = state.conversationCoverage.get(conversationId)
+          if (!existing) return state
+          if (ifBottomId !== undefined && existing.bottomId !== ifBottomId) return state
+          const next = new Map(state.conversationCoverage)
+          next.delete(conversationId)
+          return { conversationCoverage: next }
         })
       },
 
@@ -2352,6 +2417,8 @@ export const chatStore = createStore<ChatState>()(
         drafts: state.drafts,
         // Persist history gaps so the "Load missing messages" marker survives reload
         conversationGaps: state.conversationGaps,
+        // Persist coverage records (contiguous-with-live bottom; Codex r3 #3)
+        conversationCoverage: state.conversationCoverage,
       }),
     }
     )
