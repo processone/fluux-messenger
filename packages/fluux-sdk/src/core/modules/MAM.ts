@@ -226,6 +226,15 @@ export class MAM extends BaseModule {
     // rsm.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForwardPaginate
+      ? this.deps.stores?.chat.getConversationCoverage?.(conversationId)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = before === ''
+    let jumpedToFloor = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
@@ -294,6 +303,15 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record (this degrade site is the only place that
+              // KNOWS the id is gone) and degrade to fetch-latest.
+              logInfo(`MAM before-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: currentBefore })
+              const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -334,7 +352,19 @@ export class MAM extends BaseModule {
             // No displayable messages but archive has more - continue with next page
             // Use the 'first' ID as the 'before' cursor for backward pagination
             if (rsm.first) {
-              currentBefore = rsm.first
+              // Known signal-only floor (persisted coverage): once this walk
+              // re-enters previously-covered territory (the page contains the
+              // record's top entry), everything down to the record's bottom is
+              // already proven signal-only — jump the cursor straight there so
+              // successive sessions descend instead of re-walking the same
+              // newest pages (Codex r3 #4).
+              if (canJumpToFloor && coverageRecord?.topId && !jumpedToFloor &&
+                  rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
                 category: 'sm',
@@ -432,6 +462,15 @@ export class MAM extends BaseModule {
     // rsm.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForward
+      ? this.deps.stores?.room.getRoomCoverage?.(roomJid)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = !before
+    let jumpedToFloor = false
     let currentAfter = after
     let currentBefore = before
     // BACKWARD retry pages accumulate modifications across pages and resolve
@@ -505,6 +544,15 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record and degrade to fetch-latest (see the 1:1
+              // twin in queryArchive).
+              logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: currentBefore })
+              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -571,7 +619,15 @@ export class MAM extends BaseModule {
               break
             }
             if (rsm.first) {
-              currentBefore = rsm.first
+              // Known signal-only floor (persisted coverage) — jump below
+              // covered territory; see the 1:1 twin in queryArchive.
+              if (canJumpToFloor && coverageRecord?.topId && !jumpedToFloor &&
+                  rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
                 category: 'sm',
