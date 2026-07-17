@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { chatStore } from './chatStore'
+import { chatStore, _resetChatArchiveSavesForTesting } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
@@ -38,7 +38,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
     saveMessage: vi.fn().mockResolvedValue(undefined),
-    saveMessages: vi.fn().mockResolvedValue(undefined),
+    saveMessages: vi.fn().mockResolvedValue(true),
     getMessages: vi.fn().mockResolvedValue([]),
     getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
@@ -88,12 +88,19 @@ describe('chatStore', () => {
       archivedConversations: new Set(),
       mamQueryStates: new Map(),
       conversationGaps: new Map(),
+      conversationCoverage: new Map(),
       // Reset other ephemeral state
       typingStates: new Map(),
       drafts: new Map(),
       windowAtLiveEdge: new Map(),
     })
     vi.clearAllMocks()
+    // clearAllMocks does NOT reset implementations: a test that mocks a
+    // rejecting/false-resolving saveMessages would leak it into every later
+    // test. Re-assert the factory default here so ordering can't matter.
+    vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
+    // A failed save poisons the per-conversation chain by design — drop it between tests.
+    _resetChatArchiveSavesForTesting()
   })
 
   afterEach(() => {
@@ -235,7 +242,7 @@ describe('chatStore', () => {
   describe('mergeMAMMessages gap tracking (persisted conversationGaps)', () => {
     const cid = 'alice@example.com'
 
-    it('records a GapInterval when a forward catch-up ends incomplete (parity with rooms)', () => {
+    it('records a GapInterval when a forward catch-up ends incomplete (parity with rooms)', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       const recent = { ...createMessage(cid, 'recent'), id: 'recent', timestamp: new Date('2026-06-10T00:00:00Z') }
       chatStore.getState().addMessage(recent)
@@ -243,9 +250,12 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
 
-      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
-        start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
-        end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+          start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
+          end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+        })
       })
     })
 
@@ -258,7 +268,7 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
     })
 
-    it('persists conversationGaps to the account-scoped chat storage (survives reload, no cross-account leak)', () => {
+    it('persists conversationGaps to the account-scoped chat storage (survives reload, no cross-account leak)', async () => {
       localStorageMock.clear() // drop the empty bare-key write from beforeEach's scope-null setState
       setStorageScopeJid('alice@example.com')
       chatStore.getState().addConversation(createConversation(cid))
@@ -267,6 +277,10 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
 
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
+      })
       const scoped = localStorageMock._store['xmpp-chat-storage:alice@example.com']
       expect(scoped).toBeDefined()
       expect(scoped).toContain('conversationGaps')
@@ -275,7 +289,7 @@ describe('chatStore', () => {
       expect(localStorageMock._store['xmpp-chat-storage']).toBeUndefined()
     })
 
-    it('plants a seam when a fetch-latest page lands disjoint above held history (parity with rooms)', () => {
+    it('plants a seam when a fetch-latest page lands disjoint above held history (parity with rooms)', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-06T00:00:00Z') }
       chatStore.getState().addMessage(held)
@@ -283,9 +297,12 @@ describe('chatStore', () => {
       const fetched = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fetched], {}, true, 'backward', true)
 
-      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
-        start: new Date('2026-07-06T00:00:00Z').getTime(),
-        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+          start: new Date('2026-07-06T00:00:00Z').getTime(),
+          end: new Date('2026-07-15T00:00:00Z').getTime(),
+        })
       })
     })
 
@@ -347,7 +364,7 @@ describe('chatStore', () => {
       expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBe(true)
     })
 
-    it('POSITIVE: a proven resident boundary still forms the seam on a disjoint fetch-latest (no over-suppression)', () => {
+    it('POSITIVE: a proven resident boundary still forms the seam on a disjoint fetch-latest (no over-suppression)', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-06T00:00:00Z') }
       chatStore.getState().addMessage(held)
@@ -355,10 +372,13 @@ describe('chatStore', () => {
       const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
 
-      // Resident boundary proven → the seam is still recorded as before.
-      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
-        start: new Date('2026-07-06T00:00:00Z').getTime(),
-        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      // Resident boundary proven → the seam is still recorded (deferred until
+      // the page is durably cached — Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+          start: new Date('2026-07-06T00:00:00Z').getTime(),
+          end: new Date('2026-07-15T00:00:00Z').getTime(),
+        })
       })
       // A proven boundary means coverage is NOT flagged unproven.
       expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).not.toBe(true)
@@ -386,9 +406,13 @@ describe('chatStore', () => {
       const mid = { ...createMessage(cid, 'mid'), id: 'mid', timestamp: new Date('2026-07-10T00:00:00Z') }
       const upper = { ...createMessage(cid, 'upper'), id: 'upper', timestamp: new Date('2026-07-14T06:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [mid, upper], {}, false, 'backward')
-      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
-        start: new Date('2026-07-06T00:00:00Z').getTime(),
-        end: new Date('2026-07-10T00:00:00Z').getTime(),
+      // The shrink is a hole-reducing transition of an existing gap: it is
+      // deferred until the page is durably cached (crash-window safety).
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+          start: new Date('2026-07-06T00:00:00Z').getTime(),
+          end: new Date('2026-07-10T00:00:00Z').getTime(),
+        })
       })
 
       const below = { ...createMessage(cid, 'below'), id: 'below', timestamp: new Date('2026-07-05T00:00:00Z') }
@@ -412,9 +436,9 @@ describe('chatStore', () => {
       }]]) })
 
       // Hold the IndexedDB write open to observe the window.
-      let resolveSave!: () => void
+      let resolveSave!: (committed: boolean) => void
       vi.mocked(messageCache.saveMessages).mockReturnValue(
-        new Promise<void>((resolve) => { resolveSave = resolve })
+        new Promise<boolean>((resolve) => { resolveSave = resolve })
       )
 
       // Page crosses the gap (reaches below its start) → clearance.
@@ -428,10 +452,228 @@ describe('chatStore', () => {
       await Promise.resolve()
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
 
-      resolveSave()
+      resolveSave(true)
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
       })
+    })
+
+    it('forward ADVANCE of an existing gap is deferred until the page is durably cached', async () => {
+      // Codex r3 #1: the advance (startId → rsm.last) was persisted
+      // synchronously while the IndexedDB write was still in flight — a crash
+      // in between resumes `after: rsm.last` and skips the page forever.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        startId: 'old-cursor',
+      }]]) })
+
+      let resolveSave!: (committed: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
+        new Promise<boolean>((resolve) => { resolveSave = resolve })
+      )
+
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      // Incomplete forward page: gap start moves up and startId advances to rsm.last.
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'new-cursor' }, false, 'forward')
+
+      // Advance must NOT be visible while the write is pending.
+      expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('old-cursor')
+      await Promise.resolve()
+      expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('old-cursor')
+
+      resolveSave(true)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('new-cursor')
+      })
+    })
+
+    it('gap transition is dropped when the durable write reports failure', async () => {
+      // A quota-exceeded / aborted transaction resolves false (never throws):
+      // the cursor must NOT advance past data that was never stored.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        startId: 'old-cursor',
+      }]]) })
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
+
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'new-cursor' }, false, 'forward')
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('old-cursor')
+    })
+
+    it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s rsm.last)', async () => {
+      // Codex r4 #1: a formed forward gap carries rsm.last as startId — a
+      // cursor INTO this very page. Publishing it before the write commits
+      // has exactly the deletion/advance crash window: resume `after: startId`
+      // skips the never-stored page. So formation defers as well; on a crash
+      // before the write the cache is unchanged and the next catch-up resumes
+      // from the cached edge — nothing skipped.
+      chatStore.getState().addConversation(createConversation(cid))
+      let resolveSave!: (committed: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
+        new Promise<boolean>((resolve) => { resolveSave = resolve })
+      )
+
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'c1' }, false, 'forward')
+
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      await Promise.resolve()
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+
+      resolveSave(true)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('c1')
+      })
+    })
+
+    it('gap FORMATION is dropped when the durable write reports failure', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
+
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'c1' }, false, 'forward')
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+    })
+
+    it('gap FORMATION with nothing persistable applies immediately', () => {
+      // A signal-only forward page proves the hole without any page to store.
+      chatStore.getState().addConversation(createConversation(cid))
+      const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.setState({ messages: new Map([[cid, [held]]]) })
+      // All-duplicate page: newMessages 0 → no crash window → immediate.
+      chatStore.getState().mergeMAMMessages(cid, [{ ...held }], { last: 'c1' }, false, 'forward')
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
+    })
+
+    it('fetch-latest establishes the coverage record and it survives resetMAMStates (fresh session)', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const m = { ...createMessage(cid, 'm1'), id: 'm1', stanzaId: 'sid-1', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', true, false,
+        { initialBefore: '', fetchLatestTopId: 'sid-1' })
+      await vi.waitFor(() => {
+        expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+      })
+      chatStore.getState().resetMAMStates()
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+    })
+
+    it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.getState().mergeMAMMessages(cid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', true, false,
+        { initialBefore: '', fetchLatestTopId: 'p1-last' })
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last' })
+    })
+
+    it('coverage bottom advance with persistable messages defers until the durable write commits', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep', topId: 'top' }]]) })
+      let resolveSave!: (committed: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(new Promise<boolean>((r) => { resolveSave = r }))
+
+      const older = { ...createMessage(cid, 'old'), id: 'old', stanzaId: 'deeper', timestamp: new Date('2026-07-01T00:00:00Z') }
+      // Plain backward page resumed id-exactly from the coverage bottom.
+      chatStore.getState().mergeMAMMessages(cid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deep')
+      resolveSave(true)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deeper')
+      })
+    })
+
+    it('coverage advance is dropped when the durable write reports failure', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep' }]]) })
+      vi.mocked(messageCache.saveMessages).mockResolvedValue(false)
+
+      const older = { ...createMessage(cid, 'old'), id: 'old', stanzaId: 'deeper', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(chatStore.getState().getConversationCoverage(cid)?.bottomId).toBe('deep')
+    })
+
+    it('clearConversationCoverage with ifBottomId only clears a matching record', () => {
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'x' }]]) })
+      chatStore.getState().clearConversationCoverage(cid, 'other')
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeDefined()
+      chatStore.getState().clearConversationCoverage(cid, 'x')
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
+    it('deleteConversation drops the gap and coverage entries (its IDB messages are deleted)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({
+        conversationGaps: new Map([[cid, { start: 1000, startId: 'x' }]]),
+        conversationCoverage: new Map([[cid, { bottomId: 'b' }]]),
+      })
+      chatStore.getState().deleteConversation(cid)
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
+    it('a deferred commit captured before reset never lands in the fresh state', async () => {
+      // Codex r4 #5: the chain is cleared on reset, but a gate captured
+      // BEFORE the reset still resolves — its apply must be epoch-guarded.
+      chatStore.getState().addConversation(createConversation(cid))
+      let resolveSave!: (ok: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
+        new Promise<boolean>((r) => { resolveSave = r })
+      )
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      // Formation deferred on the held write.
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'c1' }, false, 'forward')
+
+      chatStore.getState().reset()
+      resolveSave(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
+    it('windowed context fetches (preserveGapMarker) never touch the coverage record', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep' }]]) })
+      const island = { ...createMessage(cid, 'island'), id: 'island', stanzaId: 'island-id', timestamp: new Date('2026-06-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [island], { first: 'island-id' }, true, 'backward', true, true,
+        { initialBefore: '' })
+      expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'deep' })
+    })
+
+    it('a later page cannot advance the gap past an earlier page whose write failed (per-conversation save chain)', async () => {
+      // Codex r4 #4 (chat twin): overlapping merges must not let page N+1's
+      // cursor advance leap over a failed page N.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-01T00:00:00Z').getTime(),
+        startId: 'cursor-0',
+      }]]) })
+
+      let resolveN!: (ok: boolean) => void
+      let resolveN1!: (ok: boolean) => void
+      vi.mocked(messageCache.saveMessages)
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN = r }))
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN1 = r }))
+
+      const mN = { ...createMessage(cid, 'n'), id: 'n', timestamp: new Date('2026-07-02T00:00:00Z') }
+      const mN1 = { ...createMessage(cid, 'n1'), id: 'n1', timestamp: new Date('2026-07-03T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [mN], { last: 'cursor-N' }, false, 'forward')
+      chatStore.getState().mergeMAMMessages(cid, [mN1], { last: 'cursor-N1' }, false, 'forward')
+
+      resolveN(false)
+      resolveN1(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('cursor-0')
     })
 
     it('backward CLEARANCE with zero new persistable messages deletes immediately', () => {

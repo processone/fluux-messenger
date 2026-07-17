@@ -223,6 +223,25 @@ export class MAM extends BaseModule {
     let currentAfter: string | undefined = after
     let isComplete = false
     let lastRsm: RSMResponse = {}
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForwardPaginate
+      ? this.deps.stores?.chat.getConversationCoverage?.(conversationId)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = before === ''
+    let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
+    // The walk contained the record's top entry — the only accepted proof of
+    // contiguity with the existing record (Codex r4 #3), and the trigger for
+    // the floor jump.
+    let sawCoverageTop = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
@@ -291,6 +310,26 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record (this degrade site is the only place that
+              // KNOWS the id is gone) and degrade to fetch-latest.
+              logInfo(`MAM before-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: currentBefore })
+              const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // The jumped-to floor was purged MID-WALK (page > 0): drop the
+              // stale record and resume from the pre-jump cursor instead of
+              // aborting the walk — otherwise the record survives and every
+              // session re-jumps onto the dead id (Codex r4 #6).
+              logInfo(`MAM coverage floor purged mid-walk for ...@${getDomain(conversationId) || '*'} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -313,6 +352,10 @@ export class MAM extends BaseModule {
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForwardPaginate) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           if (isForwardPaginate) {
             // Forward catch-up: accumulate every page, advance via `after` until complete.
@@ -330,7 +373,19 @@ export class MAM extends BaseModule {
             // No displayable messages but archive has more - continue with next page
             // Use the 'first' ID as the 'before' cursor for backward pagination
             if (rsm.first) {
-              currentBefore = rsm.first
+              // Known signal-only floor (persisted coverage): once this walk
+              // re-enters previously-covered territory (the page contains the
+              // record's top entry), everything down to the record's bottom is
+              // already proven signal-only — jump the cursor straight there so
+              // successive sessions descend instead of re-walking the same
+              // newest pages (Codex r3 #4).
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
                 category: 'sm',
@@ -365,6 +420,14 @@ export class MAM extends BaseModule {
         direction,
         preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
+        ...(direction === 'backward' ? {
+          initialBefore: before,
+          fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            modifications.retractions.length + modifications.corrections.length +
+            modifications.fastenings.length + modifications.reactions.length > 0,
+        } : {}),
       })
 
       // Modifications whose target is not in this batch belong to a message
@@ -424,6 +487,24 @@ export class MAM extends BaseModule {
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForward
+      ? this.deps.stores?.room.getRoomCoverage?.(roomJid)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = !before
+    let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
+    // The walk contained the record's top entry — contiguity proof and floor
+    // jump trigger (Codex r4 #3); see the 1:1 twin in queryArchive.
+    let sawCoverageTop = false
     let currentAfter = after
     let currentBefore = before
     // BACKWARD retry pages accumulate modifications across pages and resolve
@@ -497,6 +578,24 @@ export class MAM extends BaseModule {
               // this is ALREADY a fetch-latest page and skip issuing another one.
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record and degrade to fetch-latest (see the 1:1
+              // twin in queryArchive).
+              logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: currentBefore })
+              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // Jumped-to floor purged mid-walk — resume from the pre-jump
+              // cursor (see the 1:1 twin in queryArchive; Codex r4 #6).
+              logInfo(`Room MAM coverage floor purged mid-walk for ${roomJid} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -539,6 +638,10 @@ export class MAM extends BaseModule {
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForward) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           // Stop if archive is complete (no more messages)
           if (complete) {
@@ -562,7 +665,15 @@ export class MAM extends BaseModule {
               break
             }
             if (rsm.first) {
-              currentBefore = rsm.first
+              // Known signal-only floor (persisted coverage) — jump below
+              // covered territory; see the 1:1 twin in queryArchive.
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
                 category: 'sm',
@@ -598,6 +709,12 @@ export class MAM extends BaseModule {
           direction: 'backward',
           preserveGapMarker,
           isFetchLatest: !before,
+          initialBefore: before ?? '',
+          fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            backwardModifications.retractions.length + backwardModifications.corrections.length +
+            backwardModifications.fastenings.length + backwardModifications.reactions.length > 0,
         })
         this.emitUnresolvedRoomModifications(roomJid, unresolved)
       }
@@ -1125,6 +1242,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
       getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
       getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
+      getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
@@ -1292,6 +1410,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
       getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
       getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
+      getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
@@ -1319,6 +1438,7 @@ export class MAM extends BaseModule {
       getGapStart: () => number | undefined
       getGapStartId: () => string | undefined
       getGapEndId: () => string | undefined
+      getCoverageBottomId: () => string | undefined
       getCoverageUnproven: () => boolean | undefined
       getPendingStanzaId: () => string | undefined
       isActive: () => boolean
@@ -1395,12 +1515,13 @@ export class MAM extends BaseModule {
     // (The `messages` peek param is the NEWEST-100 slice and would pin the
     // seed ~100 below live forever; it remains only the cacheless fallback.)
     if (!windowBottom && io.getPendingStanzaId()) {
-      // Contiguous coverage bottom: a recorded gap's upper edge is the proven
-      // bottom of the contiguous-from-live region. Seeding from it (not the
-      // global-oldest cache row) keeps the backward walk inside the contiguous
-      // region — a disjoint search/context island below a recorded gap can no
-      // longer mis-seed the descent (finding 9).
-      const seamBottom = io.getGapEndId()
+      // Contiguous coverage bottom: prefer the recorded gap's proven upper
+      // edge, else the persisted coverage record (positive data that survives
+      // fresh sessions and gap closure — Codex r3 #3). Seeding from it (not
+      // the global-oldest cache row) keeps the backward walk inside the
+      // contiguous region — a disjoint search/context island (with or without
+      // a recorded gap) can no longer mis-seed the descent (finding 9).
+      const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom
       } else if (!io.getCoverageUnproven()) {

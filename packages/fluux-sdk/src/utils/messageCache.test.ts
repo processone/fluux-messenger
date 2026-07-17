@@ -171,6 +171,31 @@ describe('messageCache', () => {
         const retrieved = await messageCache.getMessages(conversationId)
         expect(retrieved.length).toBe(3)
       })
+
+      it('resolves true when the transaction commits', async () => {
+        await expect(
+          messageCache.saveMessages([createMockMessage(conversationId, { id: 'commit-1' })])
+        ).resolves.toBe(true)
+      })
+
+      it('resolves true for an empty batch', async () => {
+        await expect(messageCache.saveMessages([])).resolves.toBe(true)
+      })
+
+      it('resolves false when the write fails', async () => {
+        // Break IndexedDB for this call so getDB rejects.
+        messageCache._resetDBForTesting()
+        const original = globalThis.indexedDB
+        globalThis.indexedDB = { open: () => { throw new Error('quota exceeded') } } as unknown as IDBFactory
+        try {
+          await expect(
+            messageCache.saveMessages([createMockMessage(conversationId, { id: 'fail-1' })])
+          ).resolves.toBe(false)
+        } finally {
+          globalThis.indexedDB = original
+          messageCache._resetDBForTesting()
+        }
+      })
     })
 
     describe('getMessages', () => {
@@ -511,6 +536,30 @@ describe('messageCache', () => {
 
         const retrieved = await messageCache.getRoomMessages(roomJid)
         expect(retrieved.length).toBe(2)
+      })
+
+      it('resolves true when the transaction commits', async () => {
+        await expect(
+          messageCache.saveRoomMessages([createMockRoomMessage(roomJid, { id: 'room-commit-1' })])
+        ).resolves.toBe(true)
+      })
+
+      it('resolves true for an empty batch', async () => {
+        await expect(messageCache.saveRoomMessages([])).resolves.toBe(true)
+      })
+
+      it('resolves false when the write fails', async () => {
+        messageCache._resetDBForTesting()
+        const original = globalThis.indexedDB
+        globalThis.indexedDB = { open: () => { throw new Error('quota exceeded') } } as unknown as IDBFactory
+        try {
+          await expect(
+            messageCache.saveRoomMessages([createMockRoomMessage(roomJid, { id: 'room-fail-1' })])
+          ).resolves.toBe(false)
+        } finally {
+          globalThis.indexedDB = original
+          messageCache._resetDBForTesting()
+        }
       })
     })
 
