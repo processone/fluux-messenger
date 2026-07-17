@@ -2702,24 +2702,24 @@ export const roomStore = createStore<RoomState>()(
           newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, true)
         }
       }
-      // Crash-window safety (backward CLEARANCE only): the gap map is
-      // persisted synchronously (localStorage) while saveRoomMessages to
-      // IndexedDB is fire-and-forget. Deleting the gap now and crashing
-      // before the write lands leaves cache [old][HOLE][new] with no marker —
-      // a permanent silent hole. So when a backward merge would DELETE an
-      // existing gap AND carries persistable new messages, defer ONLY the
-      // deletion until the durable write resolves (below). Forward paths are
-      // self-healing (coverage anchors on cache newest) and are left
-      // untouched; a clearing merge with nothing to persist has no crash
-      // window and deletes immediately.
-      const clearedGap = state.roomGaps.get(roomJid)
+      // Crash-window safety (Codex r3 #1/#2): the gap map is persisted
+      // synchronously (localStorage) while saveRoomMessages to IndexedDB is
+      // fire-and-forget AND absorbs errors. Persisting a transition that
+      // SHRINKS the recorded hole (deletion, forward startId advance,
+      // backward end/endId shrink) before the page write commits lets a
+      // crash — or a silently failed write — skip the page forever: the
+      // resume cursor would point past data that was never stored. So ANY
+      // transition of an EXISTING gap defers until the durable write reports
+      // success. Formation (prevGap undefined) records a hole — conservative
+      // — and applies immediately. A merge with nothing persistable has no
+      // crash window and applies immediately.
+      const prevGap = state.roomGaps.get(roomJid)
       const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
-      const deferGapClear =
-        direction === 'backward' &&
-        clearedGap !== undefined &&
-        !newGaps.has(roomJid) &&
+      const deferGapCommit =
+        newGaps !== state.roomGaps &&
+        prevGap !== undefined &&
         persistableMessages.length > 0
-      const gapsAfterMerge = deferGapClear ? state.roomGaps : newGaps
+      const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
       if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
@@ -2744,19 +2744,23 @@ export const roomStore = createStore<RoomState>()(
       // history that rehydrates on open (search index too).
       if (persistableMessages.length > 0) {
         const savePromise = messageCache.saveRoomMessages(persistableMessages)
-        if (deferGapClear) {
-          // The page is durably cached — now the gap deletion is safe.
-          void savePromise.then(() => {
+        if (deferGapCommit) {
+          // The page is durably cached — now the transition is safe.
+          void savePromise.then((committed) => {
+            if (!committed) return
             set((s) => {
-              // State may have moved on (gap advanced or re-planted by a
-              // later merge): only delete the exact interval this merge
-              // cleared. Reference equality suffices — every gap transition
-              // (syncGap) creates a new object.
-              if (s.roomGaps.get(roomJid) !== clearedGap) return s
-              const cleared = new Map(s.roomGaps)
-              cleared.delete(roomJid)
-              saveGapsToStorage(cleared)
-              return { roomGaps: cleared }
+              // State may have moved on (a later merge advanced or re-planted
+              // the gap): only transition the exact interval this merge
+              // computed from. Reference equality suffices — every gap
+              // transition (syncGap) creates a new object. A lost race leaves
+              // a LAGGING (conservative) cursor, never a skipping one.
+              if (s.roomGaps.get(roomJid) !== prevGap) return s
+              const next = new Map(s.roomGaps)
+              const target = newGaps.get(roomJid)
+              if (target) next.set(roomJid, target)
+              else next.delete(roomJid)
+              saveGapsToStorage(next)
+              return { roomGaps: next }
             })
           })
         } else {

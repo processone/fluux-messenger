@@ -34,7 +34,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessages: vi.fn().mockResolvedValue(undefined),
+    saveRoomMessages: vi.fn().mockResolvedValue(true),
     getRoomMessages: vi.fn().mockResolvedValue([]),
     getRoomMessagesAround: vi.fn().mockResolvedValue([]),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
