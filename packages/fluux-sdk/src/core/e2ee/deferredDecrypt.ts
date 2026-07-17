@@ -153,9 +153,15 @@ export class DeferredDecryptEngine {
             decryptedCount++
           } else if (outcome.kind === 'modification') {
             this.applyChatModification(conversationId, msg, outcome.modification, chatBindings)
+            // The placeholder was provisionally counted as unread; dropping it
+            // must clear that phantom badge. removeMessage above has already
+            // pruned the resident window, so this recount reads a clean slice.
+            await chatBindings.recomputeUnreadForConversation?.(conversationId)
             decryptedCount++
           } else if (outcome.kind === 'rejected') {
-            this.resolveRejectedPlaceholder(conversationId, msg, outcome.securityContext, chatBindings)
+            if (this.resolveRejectedPlaceholder(conversationId, msg, outcome.securityContext, chatBindings)) {
+              await chatBindings.recomputeUnreadForConversation?.(conversationId)
+            }
           } else if (outcome.kind === 'unsupported') {
             chatBindings.updateMessage(conversationId, msg.id, {
               encryptedPayload: undefined,
@@ -237,6 +243,11 @@ export class DeferredDecryptEngine {
           // now-unlocked key decrypts it inline.
           this.applyChatModification(conversationId, msg, outcome.modification, stores.chat)
           await this.deps.cache.deleteMessage(msg.id)
+          // Never-opened conversation: its unread badge was hydrated from the
+          // durable cache during catch-up and still counts this placeholder.
+          // Recompute now that the row is gone from the cache (deleted above),
+          // so the phantom badge clears without waiting for the user to open it.
+          await stores.chat.recomputeUnreadForConversation?.(conversationId)
           decryptedCount++
         } else if (outcome.kind === 'rejected') {
           if (msg.body === COULD_NOT_DECRYPT_BODY) {
@@ -377,16 +388,19 @@ export class DeferredDecryptEngine {
     placeholder: { id: string; body: string },
     securityContext: MessageSecurityContext | undefined,
     chatBindings: StoreBindings['chat'],
-  ): void {
+  ): boolean {
     if (placeholder.body === COULD_NOT_DECRYPT_BODY) {
+      // Dropped a bodiless-signal placeholder that had been counted as unread —
+      // signal the caller to reconcile the badge.
       chatBindings.removeMessage(conversationId, placeholder.id)
-    } else {
-      chatBindings.updateMessage(conversationId, placeholder.id, {
-        body: MESSAGE_REJECTED_BODY,
-        ...(securityContext && { securityContext }),
-        encryptedPayload: undefined,
-      })
+      return true
     }
+    chatBindings.updateMessage(conversationId, placeholder.id, {
+      body: MESSAGE_REJECTED_BODY,
+      ...(securityContext && { securityContext }),
+      encryptedPayload: undefined,
+    })
+    return false
   }
 
   /**

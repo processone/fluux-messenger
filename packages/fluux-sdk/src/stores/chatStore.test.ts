@@ -155,6 +155,83 @@ describe('chatStore', () => {
     })
   })
 
+  describe('recomputeUnreadForConversation (phantom-badge cleanup)', () => {
+    // Regression: an encrypted reaction/retraction that arrives undecryptable
+    // during catch-up is stored as a bodiless placeholder and counted as unread.
+    // When a later deferred-decrypt reveals it was a signal and drops it, the
+    // unread badge must drop too. This method reconciles the count against the
+    // read pointer using the resident window (or the durable cache when the
+    // conversation was never opened).
+    const cid = 'carol@example.com'
+
+    function withId(m: Message, id: string, ts: string): Message {
+      return { ...m, id, timestamp: new Date(ts) }
+    }
+
+    it('recomputes the count from the resident window after a counted placeholder is dropped', async () => {
+      const read = withId(createMessage(cid, 'read'), 'm-read', '2026-06-10T00:00:00Z')
+      const realUnread = withId(createMessage(cid, 'still unread'), 'm-real', '2026-06-10T00:02:00Z')
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState((s) => {
+        const conversationMeta = new Map(s.conversationMeta)
+        // unreadCount is 2 (stale): it still includes the reaction placeholder
+        // that has already been removed from the resident array below.
+        conversationMeta.set(cid, {
+          ...conversationMeta.get(cid)!,
+          unreadCount: 2,
+          lastSeenMessageId: read.id,
+        })
+        const conversations = new Map(s.conversations)
+        conversations.set(cid, { ...conversations.get(cid)!, unreadCount: 2, lastSeenMessageId: read.id })
+        const messages = new Map(s.messages)
+        messages.set(cid, [read, realUnread])
+        return { conversationMeta, conversations, messages, activeConversationId: null }
+      })
+
+      await chatStore.getState().recomputeUnreadForConversation(cid)
+
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
+      expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(1)
+    })
+
+    it('recomputes from the durable cache when the conversation is not resident', async () => {
+      const read = withId(createMessage(cid, 'read'), 'm-read', '2026-06-10T00:00:00Z')
+      const realUnread = withId(createMessage(cid, 'still unread'), 'm-real', '2026-06-10T00:02:00Z')
+      vi.mocked(messageCache.getMessages).mockResolvedValueOnce([read, realUnread])
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState((s) => {
+        const conversationMeta = new Map(s.conversationMeta)
+        conversationMeta.set(cid, {
+          ...conversationMeta.get(cid)!,
+          unreadCount: 2,
+          lastSeenMessageId: read.id,
+        })
+        const conversations = new Map(s.conversations)
+        conversations.set(cid, { ...conversations.get(cid)!, unreadCount: 2, lastSeenMessageId: read.id })
+        // No resident messages array — the durable (never-opened) path.
+        return { conversationMeta, conversations, activeConversationId: null }
+      })
+
+      await chatStore.getState().recomputeUnreadForConversation(cid)
+
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
+    })
+
+    it('does not touch the active conversation (activation owns its counts)', async () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState((s) => {
+        const conversationMeta = new Map(s.conversationMeta)
+        conversationMeta.set(cid, { ...conversationMeta.get(cid)!, unreadCount: 5 })
+        return { conversationMeta, activeConversationId: cid }
+      })
+
+      await chatStore.getState().recomputeUnreadForConversation(cid)
+
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(5)
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
+    })
+  })
+
   describe('mergeMAMMessages gap tracking (persisted conversationGaps)', () => {
     const cid = 'alice@example.com'
 
