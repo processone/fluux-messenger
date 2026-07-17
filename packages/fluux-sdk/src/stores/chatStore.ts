@@ -403,9 +403,17 @@ interface ChatState {
 // for the conversation committed too. See shared/archiveSaveChain.ts.
 const conversationArchiveSaves = createArchiveSaveChain()
 
+// Cache epoch (Codex r4 #5): bumped whenever the chat cache lifecycle resets
+// (logout reset, account switch, conversation deletion). Deferred
+// gap/coverage commits capture the epoch at merge time and no-op when it
+// moved — a gate already in flight when the state was torn down must not
+// resurrect entries.
+let chatCacheEpoch = 0
+
 /** Test-only: drop all per-conversation archive-save chain entries. */
 export function _resetChatArchiveSavesForTesting(): void {
   conversationArchiveSaves.clear()
+  chatCacheEpoch++
 }
 
 // Serialization types for localStorage
@@ -914,6 +922,11 @@ export const chatStore = createStore<ChatState>()(
       deleteConversation: (id) => {
         // Delete messages from IndexedDB asynchronously
         void messageCache.deleteConversationMessages(id)
+        // The durable cursors describe messages that no longer exist (Codex
+        // r4 #5): drop them with the cache, and invalidate in-flight deferred
+        // commits so one can't resurrect an entry for the deleted
+        // conversation.
+        chatCacheEpoch++
 
         set((state) => {
           // Remove from separated maps
@@ -935,6 +948,12 @@ export const chatStore = createStore<ChatState>()(
           const newArchived = new Set(state.archivedConversations)
           newArchived.delete(id)
 
+          // Drop the durable cursors with the cache (Codex r4 #5)
+          const newGaps = new Map(state.conversationGaps)
+          newGaps.delete(id)
+          const newCoverage = new Map(state.conversationCoverage)
+          newCoverage.delete(id)
+
           // Clear active conversation if it's the one being deleted
           const newActiveId = state.activeConversationId === id ? null : state.activeConversationId
 
@@ -944,6 +963,8 @@ export const chatStore = createStore<ChatState>()(
             conversations: newConversations,
             messages: newMessages,
             archivedConversations: newArchived,
+            conversationGaps: newGaps,
+            conversationCoverage: newCoverage,
             activeConversationId: newActiveId,
           }
         })
@@ -1949,9 +1970,11 @@ export const chatStore = createStore<ChatState>()(
           // given promise (this page's write chained behind every earlier
           // in-flight page — see conversationArchiveSaves). Shared by the
           // with-messages path and the nothing-persistable path below.
+          const epochAtMerge = chatCacheEpoch
           const scheduleDeferredCommit = (gate: Promise<boolean>) => {
             void gate.then((committed) => {
               if (!committed) return
+              if (chatCacheEpoch !== epochAtMerge) return
               set((s) => {
                 // State may have moved on (a later merge advanced or
                 // re-planted the gap/record): only transition the exact
@@ -2380,12 +2403,14 @@ export const chatStore = createStore<ChatState>()(
         // In-flight archive-save gates belong to the previous account; their
         // deferred commits must not land in the new account's maps.
         conversationArchiveSaves.clear()
+        chatCacheEpoch++
         set(loadScopedChatState(jid))
       },
 
       reset: () => {
         clearAllTypingTimeouts()
         conversationArchiveSaves.clear()
+        chatCacheEpoch++
         // New session → the XEP-0490 synced read marker may be folded again on first open.
         mdsGate.reset()
         // Clear persisted data on logout

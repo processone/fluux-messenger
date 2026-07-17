@@ -229,9 +229,16 @@ function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: stri
 // room committed too. See shared/archiveSaveChain.ts.
 const roomArchiveSaves = createArchiveSaveChain()
 
+// Cache epoch (Codex r4 #5): bumped whenever the room cache lifecycle resets
+// (logout reset, account switch, room removal). Deferred gap/coverage commits
+// capture the epoch at merge time and no-op when it moved — a gate that was
+// already in flight when the state was torn down must not resurrect entries.
+let roomCacheEpoch = 0
+
 /** Test-only: drop all per-room archive-save chain entries. */
 export function _resetRoomArchiveSavesForTesting(): void {
   roomArchiveSaves.clear()
+  roomCacheEpoch++
 }
 
 /**
@@ -846,6 +853,10 @@ export const roomStore = createStore<RoomState>()(
   removeRoom: (roomJid) => {
     // Delete messages from IndexedDB (non-blocking)
     void messageCache.deleteRoomMessages(roomJid)
+    // The durable cursors describe messages that no longer exist (Codex r4
+    // #5): drop them with the cache, and invalidate in-flight deferred
+    // commits so one can't resurrect an entry for the removed room.
+    roomCacheEpoch++
 
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -860,12 +871,25 @@ export const roomStore = createStore<RoomState>()(
       const newRuntime = new Map(state.roomRuntime)
       newRuntime.delete(roomJid)
 
-      return {
+      const out: Partial<RoomState> = {
         rooms: newRooms,
         roomEntities: newEntities,
         roomMeta: newMeta,
         roomRuntime: newRuntime,
       }
+      if (state.roomGaps.has(roomJid)) {
+        const newGaps = new Map(state.roomGaps)
+        newGaps.delete(roomJid)
+        saveGapsToStorage(newGaps)
+        out.roomGaps = newGaps
+      }
+      if (state.roomCoverage.has(roomJid)) {
+        const newCoverage = new Map(state.roomCoverage)
+        newCoverage.delete(roomJid)
+        saveCoverageToStorage(newCoverage)
+        out.roomCoverage = newCoverage
+      }
+      return out
     })
   },
 
@@ -1228,6 +1252,7 @@ export const roomStore = createStore<RoomState>()(
     // In-flight archive-save gates belong to the previous account; their
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
+    roomCacheEpoch++
     set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid), loadCoverageFromStorage(jid)))
   },
 
@@ -1235,6 +1260,7 @@ export const roomStore = createStore<RoomState>()(
     // In-flight archive-save gates from the old session must not commit
     // cursors into the fresh state.
     roomArchiveSaves.clear()
+    roomCacheEpoch++
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
@@ -1245,6 +1271,7 @@ export const roomStore = createStore<RoomState>()(
     localStorage.removeItem(getRoomVotedPollsStorageKey())
     localStorage.removeItem(getRoomDismissedPollsStorageKey())
     localStorage.removeItem(getRoomGapsStorageKey())
+    localStorage.removeItem(getRoomCoverageStorageKey())
     localStorage.removeItem(getRoomNonAnonAckStorageKey())
     set(createEmptyRoomState())
   },
@@ -2810,9 +2837,11 @@ export const roomStore = createStore<RoomState>()(
       // promise (this page's write chained behind every earlier in-flight
       // page — see roomArchiveSaves). Shared by the with-messages path and
       // the nothing-persistable-but-chain-pending path below.
+      const epochAtMerge = roomCacheEpoch
       const scheduleDeferredCommit = (gate: Promise<boolean>) => {
         void gate.then((committed) => {
           if (!committed) return
+          if (roomCacheEpoch !== epochAtMerge) return
           set((s) => {
             // State may have moved on (a later merge advanced or re-planted
             // the gap/record): only transition the exact value this merge

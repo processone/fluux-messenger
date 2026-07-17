@@ -2587,6 +2587,49 @@ describe('roomStore', () => {
       expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
     })
 
+    it('removeRoom drops the room gap and coverage entries (its IDB messages are deleted)', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({
+        roomGaps: new Map([[jid, { start: 1000, startId: 'x' }]]),
+        roomCoverage: new Map([[jid, { bottomId: 'b' }]]),
+      })
+      roomStore.getState().removeRoom(jid)
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+      expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
+    })
+
+    it('reset clears the persisted coverage storage alongside the gap storage', () => {
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'b' }]]) })
+      roomStore.getState().reset()
+      expect(roomStore.getState().roomCoverage.size).toBe(0)
+      const coverageKeys = Object.keys(localStorageMock._store).filter((k) => k.startsWith('fluux-room-coverage'))
+      expect(coverageKeys).toHaveLength(0)
+    })
+
+    it('a deferred commit captured before switchAccount never lands in the new account state', async () => {
+      // Codex r4 #5: the chain is cleared on switch, but a gate captured
+      // BEFORE the switch still resolves — its apply must be epoch-guarded.
+      roomStore.getState().addRoom(createRoom(jid))
+      let resolveSave!: (ok: boolean) => void
+      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
+        new Promise<boolean>((r) => { resolveSave = r })
+      )
+      const m: RoomMessage = {
+        type: 'groupchat', id: 'fwd', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z'), isOutgoing: false,
+      }
+      // Formation deferred on the held write.
+      roomStore.getState().mergeRoomMAMMessages(jid, [m], { last: 'c1' }, false, 'forward')
+
+      roomStore.getState().switchAccount('other@example.com')
+      resolveSave(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      // The stale formation must NOT materialize in the fresh account state.
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+      expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
+    })
+
     it('windowed context fetches (preserveGapMarker) never touch the coverage record', () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })

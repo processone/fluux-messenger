@@ -609,6 +609,37 @@ describe('chatStore', () => {
       expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
     })
 
+    it('deleteConversation drops the gap and coverage entries (its IDB messages are deleted)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({
+        conversationGaps: new Map([[cid, { start: 1000, startId: 'x' }]]),
+        conversationCoverage: new Map([[cid, { bottomId: 'b' }]]),
+      })
+      chatStore.getState().deleteConversation(cid)
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
+    it('a deferred commit captured before reset never lands in the fresh state', async () => {
+      // Codex r4 #5: the chain is cleared on reset, but a gate captured
+      // BEFORE the reset still resolves — its apply must be epoch-guarded.
+      chatStore.getState().addConversation(createConversation(cid))
+      let resolveSave!: (ok: boolean) => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
+        new Promise<boolean>((r) => { resolveSave = r })
+      )
+      const m = { ...createMessage(cid, 'fwd'), id: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z') }
+      // Formation deferred on the held write.
+      chatStore.getState().mergeMAMMessages(cid, [m], { last: 'c1' }, false, 'forward')
+
+      chatStore.getState().reset()
+      resolveSave(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      expect(chatStore.getState().getConversationCoverage(cid)).toBeUndefined()
+    })
+
     it('windowed context fetches (preserveGapMarker) never touch the coverage record', () => {
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationCoverage: new Map([[cid, { bottomId: 'deep' }]]) })
