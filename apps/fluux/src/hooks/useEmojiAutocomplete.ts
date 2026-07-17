@@ -132,8 +132,8 @@ export function useEmojiAutocomplete(
     setSelectedIndex(0)
   }, [matches.length])
 
-  // Reset dismissed state when a NEW : trigger appears at a different position
-  if (dismissed && triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current) {
+  // Reset dismissed state when the trigger disappears or changes to a different position
+  if (dismissed && (triggerIndex === -1 || (triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current))) {
     setDismissed(false)
     dismissedAtTriggerRef.current = -1
   }
