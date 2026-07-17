@@ -556,6 +556,89 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(ghost).toBeUndefined()
     })
 
+    it('clears the phantom unread badge when a deferred inbound reaction is dropped', async () => {
+      // The user-facing bug: an INBOUND encrypted reaction that arrives
+      // undecryptable during catch-up is stored as a placeholder and counted as
+      // unread (nothing yet knows it is a reaction). When the deferred decrypt
+      // later reveals it was a reaction and drops the placeholder, the unread
+      // badge it inflated must drop too — otherwise the conversation shows a
+      // notification with nothing new to read.
+      const reactionEnvelope =
+        `<payload xmlns="jabber:client">` +
+        `<reactions xmlns="urn:xmpp:reactions:0" id="read-msg"><reaction>👍</reaction></reactions>` +
+        `</payload>`
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(reactionEnvelope),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      // A message the user has already read — the reaction targets it.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'read-msg',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'already read',
+        timestamp: new Date('2026-06-10T00:00:00Z'),
+        isOutgoing: false,
+      })
+      // A genuinely-unread incoming message.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'real-unread',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'genuinely new',
+        timestamp: new Date('2026-06-10T00:01:00Z'),
+        isOutgoing: false,
+      })
+      // Bob's reaction, stashed as an inbound placeholder while the key was locked.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'reaction-ghost',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date('2026-06-10T00:02:00Z'),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+      // Model the catch-up state: read pointer at 'read-msg', with the two later
+      // incoming messages (the real one + the phantom reaction) counted as unread.
+      chatStore.setState((s) => {
+        const conversationMeta = new Map(s.conversationMeta)
+        conversationMeta.set('bob@example.com', {
+          ...conversationMeta.get('bob@example.com')!,
+          unreadCount: 2,
+          lastSeenMessageId: 'read-msg',
+        })
+        const conversations = new Map(s.conversations)
+        conversations.set('bob@example.com', {
+          ...conversations.get('bob@example.com')!,
+          unreadCount: 2,
+          lastSeenMessageId: 'read-msg',
+        })
+        return { conversationMeta, conversations, activeConversationId: null }
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      // The reaction landed and the placeholder is gone.
+      expect(messages.find((m) => m.id === 'read-msg')?.reactions).toEqual({ '👍': ['bob@example.com'] })
+      expect(messages.find((m) => m.id === 'reaction-ghost')).toBeUndefined()
+      // The phantom unread is gone — only the genuinely-unread message counts.
+      expect(chatStore.getState().conversationMeta.get('bob@example.com')?.unreadCount).toBe(1)
+    })
+
     it('applies a deferred-decrypted retraction to its target and drops the placeholder', async () => {
       // Retractions are the sibling of reactions: sendRetraction keeps an outer
       // fallback body, but the <retract> element itself is bodiless inside the

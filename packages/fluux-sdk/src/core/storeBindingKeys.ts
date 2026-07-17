@@ -66,6 +66,7 @@ export const chatBindingMethodKeys = [
   'updateReactions',
   'updateMessage',
   'removeMessage',
+  'recomputeUnreadForConversation',
   'getMessage',
   'triggerAnimation',
   // XEP-0313: MAM support

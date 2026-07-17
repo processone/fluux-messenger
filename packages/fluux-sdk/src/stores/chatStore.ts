@@ -285,6 +285,15 @@ interface ChatState {
    * disappear once the real reaction is applied to its target.
    */
   removeMessage: (conversationId: string, messageId: string) => void
+  /**
+   * Reconcile a non-active conversation's unread count against its persisted
+   * read pointer, using the resident window when loaded or the durable cache
+   * otherwise. Called after a deferred-decrypt drops a bodiless-signal
+   * placeholder (reaction/retraction) that had been provisionally counted as
+   * unread — {@link removeMessage} clears the row but not the phantom badge it
+   * left behind. No-op for the active conversation (activation owns its counts).
+   */
+  recomputeUnreadForConversation: (conversationId: string) => Promise<void>
   getMessage: (conversationId: string, messageId: string) => Message | undefined
   /**
    * Epoch ms of the conversation's persisted last-known message (the entity
@@ -1664,6 +1673,66 @@ export const chatStore = createStore<ChatState>()(
           }
 
           return { messages: newMessages }
+        })
+      },
+
+      recomputeUnreadForConversation: async (conversationId) => {
+        // Active conversation counts are owned by activation (they are already
+        // zero while viewed); a bulk recompute here could race it.
+        if (get().activeConversationId === conversationId) return
+
+        // Prefer the resident window: it already reflects a just-dropped
+        // placeholder synchronously, so no cache-write race. A never-opened
+        // conversation has no resident array — fall back to the newest cached
+        // window (sized to one catch-up pass, mirroring the MDS recount).
+        const resident = get().messages.get(conversationId)
+        let slice: Message[]
+        if (resident && resident.length > 0) {
+          slice = resident
+        } else {
+          try {
+            slice = await messageCache.getMessages(conversationId, {
+              limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+              latest: true,
+            })
+          } catch {
+            return
+          }
+        }
+        if (slice.length === 0) return
+
+        set((state) => {
+          // Re-check: the conversation may have become active while the cache
+          // read was in flight — activation recomputes counts itself.
+          if (state.activeConversationId === conversationId) return state
+          const meta = state.conversationMeta.get(conversationId)
+          if (!meta) return state
+          const pointerState: notifState.EntityNotificationState = {
+            unreadCount: meta.unreadCount,
+            mentionsCount: 0,
+            lastReadAt: meta.lastReadAt,
+            lastSeenMessageId: meta.lastSeenMessageId,
+            firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+          }
+          const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice)
+          // Same-reference return = nothing changed; skip the map churn.
+          if (recomputed === pointerState) return state
+
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, {
+            ...meta,
+            unreadCount: recomputed.unreadCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+          const conv = state.conversations.get(conversationId)
+          if (!conv) return { conversationMeta: newMeta }
+          const newConversations = new Map(state.conversations)
+          newConversations.set(conversationId, {
+            ...conv,
+            unreadCount: recomputed.unreadCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+          return { conversationMeta: newMeta, conversations: newConversations }
         })
       },
 
