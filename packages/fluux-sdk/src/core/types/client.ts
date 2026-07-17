@@ -78,10 +78,17 @@ export interface StoreBindings {
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Persisted forward-gap boundary for automatic catch-up recovery
     getConversationGapStart?: (conversationId: string) => number | undefined
+    // Archive id of the recorded gap's coverage edge (GapInterval.startId) —
+    // id-exact resume cursor, preferred over the timestamp fallback above.
+    getConversationGapStartId?: (conversationId: string) => string | undefined
     // XEP-0490 stanza-id of the remote read position, kept unresolved when it
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.
     getConversationPendingStanzaId?: (conversationId: string) => string | undefined
+    // Currently ACTIVE conversation id (null when none). Re-checked at every
+    // Phase B iteration of the pointer-stitch walk: backward pages into the
+    // active resident window would keep-oldest-evict its live edge.
+    getActiveConversationId?: () => string | null
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
     getLastMessage?: (conversationId: string) => Message | undefined
@@ -106,6 +113,9 @@ export interface StoreBindings {
   room: Pick<RoomState, (typeof roomBindingMethodKeys)[number]> & {
     // Persisted forward-gap boundary for automatic catch-up recovery
     getRoomGapStart?: (roomJid: string) => number | undefined
+    // Archive id of the recorded gap's coverage edge (GapInterval.startId) —
+    // id-exact resume cursor, preferred over the timestamp fallback above.
+    getRoomGapStartId?: (roomJid: string) => string | undefined
     // XEP-0490 stanza-id of the remote read position, kept unresolved when it
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.

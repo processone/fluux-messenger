@@ -106,15 +106,21 @@ export function mergeArchive<T extends TimelineMessage>(
   messages: T[],
   incoming: T[],
   direction: 'backward' | 'forward',
-  config: TimelineConfig<T>
+  config: TimelineConfig<T>,
+  isFetchLatest = false
 ): MergeArchiveResult<T> {
   // Backfill server stanzaIds from archived copies onto stanzaId-less resident
   // messages (e.g. own outgoing) BEFORE merging, so the live copy gains a valid
   // backward-pagination cursor. The archived copy itself still dedups away.
   const { messages: existing, patched } = backfillArchiveIds(messages, incoming, config.getKeys)
 
+  // Fetch-latest pages land at the LIVE edge and may sit entirely ABOVE the
+  // resident window (bail after an incomplete forward catch-up). The backward
+  // prepend assumes incoming pages are older — it would misorder them and
+  // keep-oldest could evict the fresh page — so fetch-latest gets dedupe +
+  // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
   const { merged, newMessages } =
-    direction === 'backward'
+    direction === 'backward' && !isFetchLatest
       ? prependOlderMessages(existing, incoming, config.getKeys, config.windowSize)
       : mergeAndProcessMessages(existing, incoming, config.getKeys, config.windowSize)
 
@@ -127,6 +133,7 @@ export function mergeArchive<T extends TimelineMessage>(
 
   const newestEvicted =
     direction === 'backward' &&
+    !isFetchLatest &&
     merged[merged.length - 1]?.id !== existing[existing.length - 1]?.id
 
   return { merged, newMessages, patched, newestEvicted }

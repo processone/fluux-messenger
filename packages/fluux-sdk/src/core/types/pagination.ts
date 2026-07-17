@@ -89,6 +89,12 @@ export interface MAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
@@ -133,6 +139,12 @@ export interface RoomMAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
@@ -221,12 +233,6 @@ export interface MAMQueryState {
   isCaughtUpToLive: boolean
   /** ID of oldest fetched message (rsm.first) - use as 'before' cursor for pagination */
   oldestFetchedId?: string
-  /**
-   * True if conversation needs a catch-up MAM query (e.g., after reconnect).
-   * Set to true on reconnect for all conversations, cleared after catch-up query completes.
-   * Used by side effects to determine if a MAM query should run when conversation opens.
-   */
-  needsCatchUp?: boolean
   /**
    * Epoch ms of the newest message from an incomplete forward catch-up.
    * Used to position the gap marker in the message list. Set when a forward

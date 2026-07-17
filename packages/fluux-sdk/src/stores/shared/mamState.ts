@@ -94,6 +94,9 @@ export function computeNewestFetchedTimestamp(
  * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
  * @param oldestFetchedId - ID of oldest fetched message for pagination
  * @param newestFetchedTimestamp - Epoch ms of the newest fetched message (for gap marker positioning)
+ * @param preserveGapMarker - Leave forwardGapTimestamp untouched (bounded windowed queries)
+ * @param isFetchLatest - A `before:''` fetch-latest merge: the window is the live edge by
+ *   definition (SM/carbons own everything newer), regardless of `complete`.
  */
 export function setMAMQueryCompleted(
   states: Map<string, MAMQueryState>,
@@ -102,7 +105,8 @@ export function setMAMQueryCompleted(
   direction: MAMQueryDirection,
   oldestFetchedId?: string,
   newestFetchedTimestamp?: number,
-  preserveGapMarker = false
+  preserveGapMarker = false,
+  isFetchLatest = false
 ): Map<string, MAMQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
@@ -112,9 +116,15 @@ export function setMAMQueryCompleted(
     ? complete
     : current.isHistoryComplete
 
+  // Forward: complete === reached live. Fetch-latest: the window IS the live
+  // edge by definition (SM/carbons own everything newer), regardless of
+  // `complete` (which only says whether OLDER history is exhausted) — without
+  // this, an entity synced via fetch-latest is re-seeded on every SM resume.
   const isCaughtUpToLive = direction === 'forward'
     ? complete
-    : current.isCaughtUpToLive
+    : isFetchLatest
+      ? true
+      : current.isCaughtUpToLive
 
   // Track gap position for incomplete forward catch-ups.
   // Set when forward catch-up ends without complete=true, cleared when caught up.
@@ -125,10 +135,18 @@ export function setMAMQueryCompleted(
   // completion says nothing about whether older history is contiguous. Letting
   // such a query clear the marker would hide a real gap older than the window;
   // letting it set one would plant a spurious marker inside the window.
+  //
+  // Incomplete forward with NO fetched timestamp (a signal-only page:
+  // reactions/receipts only, zero displayable messages) PRESERVES the current
+  // marker — such a page proves nothing about the hole, and clearing the
+  // marker here would let the persisted-gap mirror (syncGapAfterArchiveMerge)
+  // delete the recorded GapInterval: a permanent silent hole. Coverage still
+  // advances id-exactly via the gap's startId (rsm.last IS set for
+  // signal-only pages; see mamGap.ts).
   const forwardGapTimestamp = preserveGapMarker
     ? current.forwardGapTimestamp
     : direction === 'forward'
-      ? (complete ? undefined : newestFetchedTimestamp)
+      ? (complete ? undefined : (newestFetchedTimestamp ?? current.forwardGapTimestamp))
       : current.forwardGapTimestamp
 
   newStates.set(id, {
@@ -141,40 +159,8 @@ export function setMAMQueryCompleted(
     oldestFetchedId: direction === 'backward' && oldestFetchedId
       ? oldestFetchedId
       : current.oldestFetchedId,
-    // Clear needsCatchUp after successful query
-    needsCatchUp: false,
     forwardGapTimestamp,
   })
-  return newStates
-}
-
-/**
- * Mark all conversations/rooms as needing a catch-up MAM query.
- * Called on reconnect to ensure open conversations fetch new messages.
- */
-export function markAllNeedsCatchUp(
-  states: Map<string, MAMQueryState>
-): Map<string, MAMQueryState> {
-  const newStates = new Map(states)
-  for (const [id, state] of newStates) {
-    newStates.set(id, { ...state, needsCatchUp: true })
-  }
-  return newStates
-}
-
-/**
- * Clear the needsCatchUp flag for a specific conversation/room.
- * Called after catch-up query completes or when manually cleared.
- */
-export function clearNeedsCatchUp(
-  states: Map<string, MAMQueryState>,
-  id: string
-): Map<string, MAMQueryState> {
-  const current = states.get(id)
-  if (!current || !current.needsCatchUp) return states
-
-  const newStates = new Map(states)
-  newStates.set(id, { ...current, needsCatchUp: false })
   return newStates
 }
 

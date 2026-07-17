@@ -96,7 +96,7 @@ describe('Network Scenario Journey Tests', () => {
       )
 
       // No MAM on SM resume — replay covers any missed messages
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -123,7 +123,7 @@ describe('Network Scenario Journey Tests', () => {
       expect(room?.isJoining).toBeFalsy()
 
       // No MAM on SM resume
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -166,7 +166,7 @@ describe('Network Scenario Journey Tests', () => {
       )
 
       // No MAM for any room — SM replay covers message delivery
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -189,7 +189,7 @@ describe('Network Scenario Journey Tests', () => {
       ])
 
       // Neither room should trigger MAM — SM replay handles message delivery
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -214,9 +214,11 @@ describe('Network Scenario Journey Tests', () => {
 
       // MAM SHOULD be triggered on fresh session (fetchInitiated was cleared by 'online' handler)
       await vi.waitFor(() => {
-        expect(client.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'room@conference.example.com' })
-        )
+        expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        expect.any(Array),
+        expect.objectContaining({}),
+      )
       })
     })
   })
@@ -245,7 +247,7 @@ describe('Network Scenario Journey Tests', () => {
       expect(room?.isJoining).toBeFalsy()
 
       // No MAM on either SM resume
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -273,14 +275,16 @@ describe('Network Scenario Journey Tests', () => {
         'roomB@conference.example.com',
       ])
 
-      vi.mocked(client.chat.queryRoomMAM).mockClear()
+      vi.mocked(client.mam.catchUpRoomHistory).mockClear()
 
       // Switch to room B (empty local archive) — must fetch its archive.
       roomStore.getState().setActiveRoom('roomB@conference.example.com')
       await settle()
 
-      expect(client.chat.queryRoomMAM).toHaveBeenCalledWith(
-        expect.objectContaining({ roomJid: 'roomB@conference.example.com' })
+      expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        'roomB@conference.example.com',
+        expect.any(Array),
+        expect.objectContaining({}),
       )
     })
 
@@ -347,7 +351,7 @@ describe('Network Scenario Journey Tests', () => {
       expect(afterResume.get('roomC@conference.example.com')?.joined).toBe(true)
 
       // SM replay covers any diff — no MAM catch-up, no rejoin churn
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should trigger MAM when switching to a room after fresh session', async () => {
@@ -365,15 +369,17 @@ describe('Network Scenario Journey Tests', () => {
         'roomB@conference.example.com',
       ])
 
-      vi.mocked(client.chat.queryRoomMAM).mockClear()
+      vi.mocked(client.mam.catchUpRoomHistory).mockClear()
 
       // Switch to room B — should trigger MAM (fresh session only protected active room)
       roomStore.getState().setActiveRoom('roomB@conference.example.com')
 
       await vi.waitFor(() => {
-        expect(client.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'roomB@conference.example.com' })
-        )
+        expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        'roomB@conference.example.com',
+        expect.any(Array),
+        expect.objectContaining({}),
+      )
       })
     })
   })

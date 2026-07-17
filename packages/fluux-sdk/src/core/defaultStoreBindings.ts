@@ -95,7 +95,9 @@ export function createDefaultStoreBindings(stores: SDKStores = defaultStores): S
         }))
       },
       getConversationGapStart: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.start,
+      getConversationGapStartId: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.startId,
       getConversationPendingStanzaId: (conversationId: string) => chatStore.getState().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId,
+      getActiveConversationId: () => chatStore.getState().activeConversationId,
       getArchivedConversations: () => {
         const state = chatStore.getState()
         const result = []
@@ -132,6 +134,7 @@ export function createDefaultStoreBindings(stores: SDKStores = defaultStores): S
       ...bindStoreMethods(roomStore, roomBindingMethodKeys),
       // Composite getter
       getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
+      getRoomGapStartId: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.startId,
       getRoomPendingStanzaId: (roomJid: string) => roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
       getAllRoomMessages: () =>
         Array.from(roomStore.getState().roomRuntime, ([jid, runtime]) => ({ jid, messages: runtime.messages })),

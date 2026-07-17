@@ -2,14 +2,18 @@ import { describe, it, expect } from 'vitest'
 import {
   findNewestMessage,
   findCatchUpCursorMessage,
-  findContinueCatchUpCursor,
   selectCatchUpQuery,
   selectRoomsNeedingResumeSeed,
   buildCatchUpStartTime,
   isConnectionError,
+  oldestMessageWithStanzaId,
+  MAM_POINTER_RECOUNT_CACHE_LIMIT,
+  MAM_POINTER_STITCH_MAX_PAGES,
+  MAM_POINTER_SEED_PROBE_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
+  MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_CATCHUP_DELAY_MS,
@@ -126,134 +130,60 @@ describe('findCatchUpCursorMessage', () => {
 })
 
 // ============================================================================
-// findContinueCatchUpCursor
-// ============================================================================
-
-describe('findContinueCatchUpCursor', () => {
-  it('returns the gap-boundary timestamp when a gap marker exists, ignoring newer messages', () => {
-    // "Load missing messages": the cursor must be the gap boundary so the forward
-    // query fills the HOLE — not the global newest, which sits AFTER the hole.
-    const gapBoundary = new Date('2026-05-14T09:00:00Z')
-    const recentAfterHole = new Date('2026-06-14T12:00:00Z')
-    const messages = [{ timestamp: gapBoundary }, { timestamp: recentAfterHole }]
-    const result = findContinueCatchUpCursor(messages, gapBoundary.getTime())
-    expect(result?.timestamp.getTime()).toBe(gapBoundary.getTime())
-  })
-
-  it('returns the gap boundary even when the message cache is empty', () => {
-    const gapBoundary = new Date('2026-05-14T09:00:00Z')
-    expect(findContinueCatchUpCursor([], gapBoundary.getTime())?.timestamp.getTime()).toBe(gapBoundary.getTime())
-  })
-
-  it('falls back to the newest message when there is no gap marker', () => {
-    const older = new Date('2026-01-01T00:00:00Z')
-    const newest = new Date('2026-02-01T00:00:00Z')
-    const result = findContinueCatchUpCursor([{ timestamp: older }, { timestamp: newest }], undefined)
-    expect(result?.timestamp).toBe(newest)
-  })
-
-  it('returns undefined with no gap marker and no messages', () => {
-    expect(findContinueCatchUpCursor([], undefined)).toBeUndefined()
-  })
-})
-
-// ============================================================================
 // selectCatchUpQuery (shared cursor policy for chat + room)
 // ============================================================================
 
-describe('selectCatchUpQuery', () => {
-  const sessionStart = new Date('2026-06-14T12:00:00Z').getTime()
-
-  it('returns a forward start from the newest PRE-session message', () => {
-    const monthOld = new Date('2026-05-14T09:00:00Z')
-    const live = new Date('2026-06-14T12:00:05Z')
-    expect(selectCatchUpQuery([{ timestamp: monthOld }, { timestamp: live }], { sessionStartTime: sessionStart })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
+describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () => {
+  it('returns before:"" when the local cache is empty', () => {
+    expect(selectCatchUpQuery([])).toEqual({ before: '' })
   })
 
-  it('returns backward (before:"") when only this-session messages exist', () => {
-    expect(selectCatchUpQuery([{ timestamp: new Date('2026-06-14T12:00:05Z') }], { sessionStartTime: sessionStart })).toEqual({
-      before: '',
-    })
+  it('anchors by ARCHIVE ID when the newest pre-session message has a stanza-id', () => {
+    const messages = [
+      { timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' },
+      { timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 'live-1' }, // this session
+    ]
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ after: 'cov-42' })
   })
 
-  it('returns backward (before:"") for an empty message list', () => {
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart })).toEqual({ before: '' })
+  it('falls back to a timestamp anchor when the coverage message has no stanza-id', () => {
+    const messages = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
+    // EXACT anchor timestamp (no +1ms): the anchor re-fetches and dedupes;
+    // skipping a millisecond could skip other messages sharing it.
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
   })
 
-  it('uses the global newest when no sessionStartTime is given (legacy behavior)', () => {
-    const a = new Date('2026-01-01T00:00:00Z')
-    const b = new Date('2026-02-01T00:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: a }, { timestamp: b }])).toEqual({
-      start: '2026-02-01T00:00:00.001Z',
-    })
+  it('prefers the recorded gap boundary (id-exact) over newer cached messages', () => {
+    const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
+    expect(selectCatchUpQuery(messages, {
+      forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime(),
+      forwardGapStartId: 'gap-edge-7',
+    })).toEqual({ after: 'gap-edge-7' })
   })
 
-  it('prefers a persisted forward gap boundary over newer cached messages', () => {
-    const gapStart = new Date('2026-05-14T09:00:00Z').getTime()
-    const newerAboveGap = new Date('2026-06-01T12:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: newerAboveGap }], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
+  it('resumes a recorded gap by timestamp when it carries no id (legacy persisted gap)', () => {
+    const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
+    // Exact gap-boundary timestamp — see the fallback-anchor test above.
+    expect(selectCatchUpQuery(messages, { forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime() }))
+      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
   })
 
-  it('forward-fills from the persisted last-known timestamp when no cached message anchors the cursor', () => {
-    // Empty message cache (e.g. a persisted conversation never opened this run):
-    // fall back to the last-known preview timestamp and FORWARD-fill the gap,
-    // instead of a before:"" fetch-latest that would skip a large offline gap.
-    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: lastKnown })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
+  it('returns before:"" when every cached message is from this session', () => {
+    const messages = [{ timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 's1' }]
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ before: '' })
   })
 
-  it('ignores a fallback at/after session start so a live preview update cannot poison the cursor', () => {
-    const live = new Date('2026-06-14T12:00:05Z').getTime() // >= sessionStart
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: live })).toEqual({ before: '' })
-  })
-
-  it('prefers a real pre-session cached message over the fallback timestamp', () => {
-    const cached = new Date('2026-06-10T09:00:00Z') // pre-session, newer than fallback
-    const fallback = new Date('2026-01-01T00:00:00Z').getTime()
-    expect(selectCatchUpQuery([{ timestamp: cached }], { sessionStartTime: sessionStart, fallbackNewestTimestamp: fallback })).toEqual({
-      start: '2026-06-10T09:00:00.001Z',
-    })
-  })
-
-  it('uses the fallback when sessionStartTime is omitted (hook fetch-history path)', () => {
-    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { fallbackNewestTimestamp: lastKnown })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
-  })
-
-  it('lets a persisted gap boundary win over the fallback timestamp', () => {
-    const gapStart = new Date('2026-04-01T00:00:00Z').getTime()
-    const fallback = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: fallback })).toEqual({
-      start: '2026-04-01T00:00:00.001Z',
-    })
-  })
-})
-
-// ============================================================================
-// selectCatchUpQuery pointerStanzaId (XEP-0490 MDS marker as MAM after-cursor)
-// ============================================================================
-
-describe('selectCatchUpQuery pointerStanzaId', () => {
-  it('uses the MDS stanza-id as an RSM after-cursor when nothing else is available', () => {
-    expect(selectCatchUpQuery([], { pointerStanzaId: 'stanza-42' })).toEqual({ after: 'stanza-42' })
-  })
-  it('cached cursor still wins over the pointer', () => {
-    const messages = [{ timestamp: new Date(Date.now() - 60_000) }]
-    const q = selectCatchUpQuery(messages, { pointerStanzaId: 'stanza-42' })
-    expect(q.start).toBeDefined()
-    expect(q.after).toBeUndefined()
-  })
-  it('gap boundary still wins over everything', () => {
-    const q = selectCatchUpQuery([], { forwardGapTimestamp: Date.now() - 1000, pointerStanzaId: 's' })
-    expect(q.start).toBeDefined()
+  it('with no sessionStartTime, anchors on the GLOBAL newest message, id-exact (live fetchHistory path)', () => {
+    // Without a sessionStartTime, selectCatchUpQuery falls back to
+    // findNewestMessage instead of findCatchUpCursorMessage — this is the
+    // path fetchHistory (the live, non-catch-up caller) uses.
+    const t1 = new Date('2026-06-01T00:00:00Z')
+    const t2 = new Date('2026-06-14T12:00:00Z')
+    expect(selectCatchUpQuery([{ timestamp: t1, stanzaId: 'a' }, { timestamp: t2, stanzaId: 'b' }]))
+      .toEqual({ after: 'b' })
   })
 })
 
@@ -272,16 +202,18 @@ describe('MAM_ROOM_FORWARD_MAX_PAGES_MANUAL', () => {
 // ============================================================================
 
 describe('buildCatchUpStartTime', () => {
-  it('returns an ISO string offset by +1 ms', () => {
+  it('returns the EXACT anchor timestamp (no +1 ms — the anchor re-fetch dedupes)', () => {
+    // A +1ms offset would skip any OTHER message sharing the anchor's
+    // millisecond; the anchor itself deduplicates on re-fetch.
     const base = new Date('2025-06-15T08:30:00.000Z')
     const result = buildCatchUpStartTime(base)
-    expect(result).toBe('2025-06-15T08:30:00.001Z')
+    expect(result).toBe('2025-06-15T08:30:00.000Z')
   })
 
-  it('handles millisecond rollover correctly', () => {
+  it('preserves milliseconds verbatim', () => {
     const base = new Date('2025-06-15T08:30:00.999Z')
     const result = buildCatchUpStartTime(base)
-    expect(result).toBe('2025-06-15T08:30:01.000Z')
+    expect(result).toBe('2025-06-15T08:30:00.999Z')
   })
 
   it('does not mutate the input date', () => {
@@ -414,5 +346,43 @@ describe('MAM constants', () => {
     expect(MAM_CACHE_LOAD_LIMIT).toBe(100)
     expect(MAM_ROOM_CATCHUP_DELAY_MS).toBe(10_000)
     expect(MAM_ROOM_FORWARD_MAX_PAGES).toBe(50)
+    expect(MAM_CATCHUP_FORWARD_BAIL_PAGES).toBe(3)
+    expect(MAM_POINTER_STITCH_MAX_PAGES).toBe(10)
+    expect(MAM_POINTER_SEED_PROBE_LIMIT).toBe(25)
+  })
+
+  it('sizes the exact-recount window to everything one catch-up pass can download', () => {
+    expect(MAM_POINTER_RECOUNT_CACHE_LIMIT).toBe(
+      MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
+    )
+  })
+})
+
+// ============================================================================
+// oldestMessageWithStanzaId
+// ============================================================================
+
+describe('oldestMessageWithStanzaId', () => {
+  it('returns the oldest-timestamped message that carries a stanzaId', () => {
+    const messages = [
+      { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'newer' },
+      { timestamp: new Date('2026-06-14T08:00:00Z'), stanzaId: 'oldest-with-id' },
+      { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'mid' },
+    ]
+    expect(oldestMessageWithStanzaId(messages)?.stanzaId).toBe('oldest-with-id')
+  })
+
+  it('skips older messages WITHOUT a stanzaId (unlike mamGap.oldestMessageStanzaId)', () => {
+    const messages = [
+      { timestamp: new Date('2026-06-14T08:00:00Z') }, // own-sent, never archived
+      { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'first-archived' },
+    ]
+    expect(oldestMessageWithStanzaId(messages)?.stanzaId).toBe('first-archived')
+  })
+
+  it('ignores messages without a timestamp and returns undefined when nothing qualifies', () => {
+    expect(oldestMessageWithStanzaId([])).toBeUndefined()
+    expect(oldestMessageWithStanzaId([{ stanzaId: 'no-ts' }])).toBeUndefined()
+    expect(oldestMessageWithStanzaId([{ timestamp: new Date(), stanzaId: undefined }])).toBeUndefined()
   })
 })

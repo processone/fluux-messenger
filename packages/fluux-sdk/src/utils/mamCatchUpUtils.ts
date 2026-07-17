@@ -12,7 +12,8 @@
 // Constants
 // ============================================================================
 
-/** Max messages per forward catch-up query (used in side effects and background sync). */
+/** Max messages per forward catch-up query (used by the MAM catch-up orchestrator
+ *  and the "Load missing messages" continue-catch-up hook). */
 export const MAM_CATCHUP_FORWARD_MAX = 100
 
 /** Max messages for backward queries when no cached messages exist. */
@@ -27,10 +28,12 @@ export const MAM_CACHE_LOAD_LIMIT = 100
 /** Delay (ms) before room catch-up starts, to let rooms finish joining. */
 export const MAM_ROOM_CATCHUP_DELAY_MS = 10_000
 
-/** Max auto-pagination pages for forward room MAM catch-up.
- *  Room traffic is typically higher than 1:1, so we allow many more pages
- *  (50 × 100 = 5 000 stanzas) to close the gap after long offline periods.
- *  The loop still breaks early on `complete=true`. */
+/** The `queryRoomArchive` forward default (used when a caller doesn't pass its
+ *  own `maxAutoPages`): 50 × 100 = 5 000 stanzas, high enough to close a room
+ *  gap after long offline periods since room traffic typically outpaces 1:1.
+ *  The loop still breaks early on `complete=true`. Callers that want a
+ *  different bound (e.g. a one-page bounded context fetch) pass `maxAutoPages`
+ *  explicitly rather than relying on this default. */
 export const MAM_ROOM_FORWARD_MAX_PAGES = 50
 
 /** Max auto-pagination pages for a USER-INITIATED forward catch-up (manual "Catch up
@@ -39,6 +42,41 @@ export const MAM_ROOM_FORWARD_MAX_PAGES = 50
  *  completion instead of silently stopping mid-gap. The loop still breaks on
  *  `complete=true`; this is only a runaway backstop. */
 export const MAM_ROOM_FORWARD_MAX_PAGES_MANUAL = 500
+
+/** Max BACKWARD pages to walk past signal-only pages (reactions/receipts —
+ *  zero displayable messages) before giving up. Shared by the 1:1 and room
+ *  backward paths so both retry the same distance: a conversation/room whose
+ *  newest page is all signals must not render empty (or be marked
+ *  caught-up-to-live) while older real messages exist. */
+export const MAM_BACKWARD_SIGNAL_RETRY_PAGES = 5
+
+/** Max auto-pages for the INITIAL forward catch-up phase before bailing to a
+ *  fetch-latest (3 × 100 = 300 messages fetched exactly). Beyond this the
+ *  orchestrator jumps the window to the live edge and leaves the hole as a
+ *  recorded seam, closed lazily (scroll-up / "Load missing"). Manual repair
+ *  paths keep MAM_ROOM_FORWARD_MAX_PAGES_MANUAL and never bail. */
+export const MAM_CATCHUP_FORWARD_BAIL_PAGES = 3
+
+/** Max backward pages per catch-up pass while growing the window down to an
+ *  unresolved XEP-0490 read pointer (10 × 100 = 1000 messages). A deeper
+ *  pointer stays pending and later passes resume from the (deeper) cache —
+ *  the seam marker keeps the remaining hole honest meanwhile. */
+export const MAM_POINTER_STITCH_MAX_PAGES = 10
+
+/** Oldest-N probe size for seeding the pointer-stitch walk from the TRUE cache
+ *  bottom when Phase A ended forward-complete (no fetch-latest → no window
+ *  bottom). Small: only the first message WITH a stanza-id is needed; the
+ *  margin absorbs leading id-less rows (own-sent never archived). */
+export const MAM_POINTER_SEED_PROBE_LIMIT = 25
+
+/** Newest-N cache window for the EXACT badge recount after a XEP-0490 pointer
+ *  resolves on a non-resident entity. The per-page recount inside the merge
+ *  only sees the final page; the exact recount re-reads from IndexedDB a slice
+ *  sized to everything one catch-up pass can have downloaded above the pointer:
+ *  a fetch-latest page + a full pointer-stitch walk, plus one fetch-latest page
+ *  of slack for live messages that landed during the walk. */
+export const MAM_POINTER_RECOUNT_CACHE_LIMIT =
+  MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
 
 // ============================================================================
 // Functions
@@ -99,20 +137,46 @@ export function findCatchUpCursorMessage(
   return cursor
 }
 
-/** Result of {@link selectCatchUpQuery}: a forward `start` filter, a forward RSM
- *  `after` cursor (XEP-0490 pointer seed), or a backward `before: ''` (fetch
- *  latest) when there is no usable pre-session cursor. */
-export interface CatchUpQuery {
-  start?: string
-  before?: string
-  after?: string
+/**
+ * Find the oldest-timestamped message that CARRIES an archive stanza-id —
+ * the deepest usable RSM `before:` cursor in a cached slice.
+ *
+ * Distinct from `mamGap.oldestMessageStanzaId`, which returns the id of the
+ * oldest message (undefined when that message has none — seam correctness
+ * needs the true edge). Here a message without a stanza-id (e.g. own-sent
+ * never archived) is simply skipped: any archived message is a valid cursor
+ * to resume the backward pointer-stitch walk from.
+ *
+ * Fallback seed for the pointer-stitch walk when Phase A ended
+ * forward-complete (no fetch-latest, so no window bottom) while the XEP-0490
+ * pointer is still pending AND the true-cache-bottom probe returned nothing
+ * (cache unavailable): the walk then resumes from the deepest id in the slice
+ * at hand (typically the newest-100 peek) instead of stalling forever.
+ */
+export function oldestMessageWithStanzaId<T extends { timestamp?: Date; stanzaId?: string }>(
+  messages: T[],
+): T | undefined {
+  let oldest: T | undefined
+  for (const message of messages) {
+    if (!message.stanzaId) continue
+    const ts = message.timestamp?.getTime()
+    if (ts === undefined) continue
+    if (!oldest || ts < oldest.timestamp!.getTime()) oldest = message
+  }
+  return oldest
 }
 
-/**
- * Optional inputs for {@link selectCatchUpQuery}. All are epoch-ms timestamps;
- * grouped into an options object (rather than positional args) so the three
- * `number | undefined` values can't be transposed at a call site.
- */
+/** Result of {@link selectCatchUpQuery}: an id-exact forward `after` cursor
+ *  (the COVERAGE pointer — newest contiguously-downloaded archive id), a
+ *  timestamp `start` fallback, or a backward `before: ''` fetch-latest when
+ *  there is no local edge to resume from. */
+export interface CatchUpQuery {
+  after?: string
+  start?: string
+  before?: string
+}
+
+/** Optional inputs for {@link selectCatchUpQuery}. */
 export interface CatchUpQueryOptions {
   /** Epoch ms the session connected. The cached cursor excludes this-session
    *  messages so a live message can't poison it. Omitted → use the global newest. */
@@ -120,63 +184,50 @@ export interface CatchUpQueryOptions {
   /** Epoch ms of a recorded forward gap. When set it WINS: resume from the hole
    *  boundary instead of from newer cached messages above it. */
   forwardGapTimestamp?: number
-  /** Epoch ms of the entity's persisted preview (`lastMessage`). Last resort —
-   *  used only when no cached message and no gap give a cursor — so a persisted
-   *  conversation whose message cache is empty this run still FORWARD-fills its
-   *  offline gap instead of a `{ before: '' }` fetch-latest that grabs only the
-   *  newest page and silently skips a large gap (issue #135). */
-  fallbackNewestTimestamp?: number
-  /** XEP-0490 stanza-id of the remote read position (pendingRemoteDisplayedStanzaId).
-   *  Last-but-one resort — the MDS marker IS an archive id, so an empty-cache
-   *  catch-up on a new device can forward-page `after` it instead of a
-   *  `before: ''` fetch-latest that manufactures a "pointer beyond window". */
-  pointerStanzaId?: string
+  /** Archive id of the last downloaded message below the recorded gap
+   *  (GapInterval.startId) — preferred over the timestamp when present. */
+  forwardGapStartId?: string
 }
 
 /**
- * The single, shared catch-up cursor policy for BOTH 1:1 and MUC forward
- * catch-up (background sync + active-entity side effects). Centralized so the
- * cursor logic can't drift between the chat and room paths — which is exactly
- * how the session-start fix once landed in rooms but not 1:1.
+ * The single, shared FIRST-query policy for BOTH 1:1 and MUC catch-up
+ * (background sync + active-entity side effects), latest-first model built on
+ * the per-device COVERAGE pointer:
  *
- * Picks a forward `{ start }` from the highest-priority available anchor —
- * recorded gap boundary, else newest pre-session cached message, else the
- * persisted preview timestamp — or `{ before: '' }` to fetch the latest when
- * none is held. A fallback at/after `sessionStartTime` is ignored so a live
- * preview update arriving post-connect can't poison the cursor.
+ * - recorded gap boundary, else newest pre-session cached message → forward
+ *   from the contiguous local edge, id-exact (`after: <archive id>`) whenever
+ *   the edge carries a stanza-id — RSM ordering is defined by id, so this is
+ *   immune to same-millisecond timestamp collisions and gets an explicit
+ *   item-not-found signal when the anchor was purged. Timestamp `start` is the
+ *   fallback for edges without a stanza-id (e.g. own-sent never archived);
+ * - no usable local edge → `{ before: '' }` fetch-latest, so the entity always
+ *   renders recent history in one round-trip.
+ *
+ * The XEP-0490 READ pointer never drives this anchor (that conflation was
+ * #869's bug): the orchestrator grows the window BACKWARD to it afterwards
+ * (see MAM.catchUpConversationHistory), and the #1019 seam machinery records
+ * any disjoint edge for lazy healing.
  */
 export function selectCatchUpQuery(
-  messages: Array<{ timestamp?: Date }>,
+  messages: Array<{ timestamp?: Date; stanzaId?: string }>,
   options: CatchUpQueryOptions = {},
 ): CatchUpQuery {
-  const { sessionStartTime, forwardGapTimestamp, fallbackNewestTimestamp, pointerStanzaId } = options
+  const { sessionStartTime, forwardGapTimestamp, forwardGapStartId } = options
 
-  // A recorded forward gap wins: resume from the hole boundary.
+  // A recorded forward gap wins: resume from the hole boundary, id-exact when
+  // the seam carries its last-downloaded id.
+  if (forwardGapStartId) return { after: forwardGapStartId }
   if (forwardGapTimestamp !== undefined) {
     return { start: buildCatchUpStartTime(new Date(forwardGapTimestamp)) }
   }
 
-  // Normal case: forward from the newest message that predates the session.
   const cursor = sessionStartTime !== undefined
     ? findCatchUpCursorMessage(messages, sessionStartTime)
     : findNewestMessage(messages)
-  if (cursor?.timestamp) return { start: buildCatchUpStartTime(cursor.timestamp) }
-
-  // Last resort: the persisted preview timestamp (cache empty this run), guarded
-  // so a live preview update can't poison the cursor.
-  if (
-    fallbackNewestTimestamp !== undefined &&
-    (sessionStartTime === undefined || fallbackNewestTimestamp < sessionStartTime)
-  ) {
-    return { start: buildCatchUpStartTime(new Date(fallbackNewestTimestamp)) }
+  if (cursor?.timestamp) {
+    const stanzaId = (cursor as { stanzaId?: string }).stanzaId
+    return stanzaId ? { after: stanzaId } : { start: buildCatchUpStartTime(cursor.timestamp) }
   }
-
-  // Last-but-one resort: the XEP-0490 MDS stanza-id is itself an archive id, so
-  // a new device with an empty local cache can forward-page `after` it instead
-  // of a `before: ''` fetch-latest that would manufacture a "pointer beyond
-  // window" degrade (the read marker points past whatever the fetch-latest page
-  // happens to return).
-  if (pointerStanzaId) return { after: pointerStanzaId }
 
   return { before: '' }
 }
@@ -229,36 +280,19 @@ export function selectRoomsNeedingResumeSeed<
 }
 
 /**
- * Pick the cursor for a user-initiated "continue catch-up" (the "Load missing
- * messages" button).
- *
- * When a forward gap marker exists (`forwardGapTimestamp`), the cursor must be
- * the gap boundary so the forward query fills the HOLE — the global newest
- * message sits *after* the hole, so resuming from it would skip the gap entirely
- * (the original "Load missing" bug). Falls back to the newest message when there
- * is no recorded gap.
- *
- * @param messages - Candidate messages (any order)
- * @param forwardGapTimestamp - Epoch ms of the recorded forward gap, or undefined
- * @returns The message-like cursor to start the forward query from, or undefined
- */
-export function findContinueCatchUpCursor(
-  messages: Array<{ timestamp?: Date }>,
-  forwardGapTimestamp: number | undefined
-): { timestamp: Date } | undefined {
-  if (forwardGapTimestamp !== undefined) return { timestamp: new Date(forwardGapTimestamp) }
-  return findNewestMessage(messages)
-}
-
-/**
  * Build a MAM `start` filter value from the newest cached message.
  *
- * Adds 1 ms to avoid re-fetching the cursor message itself. This
- * pattern is used in every catch-up site (chat side effects, room side
- * effects, MAM background catch-up).
+ * Queries from the EXACT anchor timestamp (XEP-0313 `start` is inclusive):
+ * the anchor message is re-fetched and deduplicated by the merge's XEP-0359
+ * identity keys (stanzaId / originId / from+id — an id-less resident echo is
+ * patched via archive-id backfill). The former +1 ms offset skipped the
+ * anchor but could also silently skip any OTHER message sharing the anchor's
+ * millisecond. This timestamp path is only the fallback anchor — id-exact
+ * `after:` is preferred whenever the edge carries a stanza-id
+ * (see {@link selectCatchUpQuery}).
  */
 export function buildCatchUpStartTime(newestTimestamp: Date): string {
-  return new Date(newestTimestamp.getTime() + 1).toISOString()
+  return newestTimestamp.toISOString()
 }
 
 /**

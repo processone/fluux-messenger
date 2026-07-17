@@ -22,7 +22,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -32,6 +32,7 @@ import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
+import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
@@ -598,8 +599,10 @@ export interface RoomState {
   dismissPoll: (roomJid: string, messageId: string) => void
   getDismissedPollIds: (roomJid: string) => Set<string>
 
-  // IndexedDB cache loading
-  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean }) => Promise<RoomMessage[]>
+  // IndexedDB cache loading. `oldest` flips the latest-N default to the
+  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
+  // with `peek` (an oldest slice must never become the resident window).
+  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean; oldest?: boolean }) => Promise<RoomMessage[]>
   /**
    * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
    * (the anchor), rather than the latest-N slice. Room counterpart of
@@ -652,12 +655,16 @@ export interface RoomState {
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
   mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean) => void
+  /**
+   * Strip a purged archive id from the persisted gap anchor (`startId`),
+   * keeping the `start` timestamp so the next catch-up resume uses the
+   * timestamp fallback and progresses. Called via the `room:mam-anchor-purged`
+   * binding when an `after:`-anchored query hit item-not-found. Only strips a
+   * MATCHING id — a gap whose anchor already advanced is left untouched.
+   */
+  clearRoomGapAnchor: (roomJid: string, purgedStartId: string) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
-  /** Mark all rooms as needing a catch-up MAM query (called on reconnect) */
-  markAllRoomsNeedsCatchUp: () => void
-  /** Clear the needsCatchUp flag for a specific room */
-  clearRoomNeedsCatchUp: (roomJid: string) => void
   /** Update only the lastMessage preview without affecting message history */
   updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
   setTargetMessageId: (id: string | null) => void
@@ -1817,6 +1824,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
+    // Set when the resolution advanced the pointer on a NON-active room —
+    // triggers the exact cache recount below.
+    let advancedNonActive = false
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
@@ -1865,6 +1875,7 @@ export const roomStore = createStore<RoomState>()(
       // ever looks past it).
       let recomputed: notifState.EntityNotificationState | undefined
       if (resolution.kind === 'advanced') {
+        advancedNonActive = true
         recomputed = notifState.recomputeCountsFromPointer(
           {
             unreadCount: meta.unreadCount,
@@ -1907,6 +1918,63 @@ export const roomStore = createStore<RoomState>()(
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
+
+    // EXACT badge recount for a non-resident room: the sync recount above ran
+    // over only the messages slice it was handed — for a non-resident room
+    // that is just the final merged page (mergedForMarker), excluding the
+    // fetch-latest page and earlier backward pages of the same pointer-stitch
+    // walk (badge undercount: 60 unread → ~10). Re-count asynchronously over
+    // the newest cached window, sized to everything one catch-up pass can
+    // download. Runs from where the resolution lands so it also covers a
+    // live-notify marker resolving against a partial resident slice.
+    if (advancedNonActive) {
+      void (async () => {
+        try {
+          const cached = await messageCache.getRoomMessages(roomJid, {
+            limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+            latest: true,
+          })
+          if (cached.length === 0) return
+          set((state) => {
+            // Re-read state: the room may have become active while the cache
+            // read was in flight — activation recomputes counts itself, and a
+            // stale recount must not clobber it.
+            if (state.activeRoomJid === roomJid) return state
+            const meta = state.roomMeta.get(roomJid)
+            if (!meta) return state
+            const pointerState: notifState.EntityNotificationState = {
+              unreadCount: meta.unreadCount,
+              mentionsCount: meta.mentionsCount,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            }
+            const exact = notifState.recomputeCountsFromPointer(pointerState, cached, { countMentions: true })
+            if (exact === pointerState) return state
+            const newMeta = new Map(state.roomMeta)
+            newMeta.set(roomJid, {
+              ...meta,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            const room = state.rooms.get(roomJid)
+            if (!room) return { roomMeta: newMeta }
+            const newRooms = new Map(state.rooms)
+            newRooms.set(roomJid, {
+              ...room,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            return { roomMeta: newMeta, rooms: newRooms }
+          })
+        } catch {
+          // Cache read failed — keep the page-scoped count (an undercount,
+          // corrected on the next merge/activation).
+        }
+      })()
+    }
   },
 
   setTyping: (roomJid, nick, isTyping) => {
@@ -2218,14 +2286,17 @@ export const roomStore = createStore<RoomState>()(
         limit: options.limit ?? 100,
         before: options.before,
         after: options.after,
-        // When loading without 'before', get the latest messages (most recent)
-        latest: !options.before,
+        // When loading without 'before', get the latest messages (most recent).
+        // `oldest` opts out: ascending oldest-N (the true cache bottom).
+        latest: !options.before && !options.oldest,
       }
       const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions)
       // `peek`: a pure read that returns the messages WITHOUT pulling them into the
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
-      if (!options.peek && cachedMessages.length > 0) {
+      // `oldest` is always a pure read too: the cache bottom must never become
+      // the resident window (that would tear the UI off the live edge).
+      if (!options.peek && !options.oldest && cachedMessages.length > 0) {
         // A latest-N load (no `before` cursor) makes the newest window resident — this
         // is the activation / recenter path, so the window is back at the live edge.
         // A `before`-anchored load (deep scroll-back restore) is NOT the live edge.
@@ -2555,7 +2626,8 @@ export const roomStore = createStore<RoomState>()(
         existingMessages,
         mamMessages,
         direction,
-        roomTimelineConfig()
+        roomTimelineConfig(),
+        isFetchLatest
       )
       // Persist backfilled archive ids so pagination cursors survive a reload.
       for (const p of patched) {
@@ -2576,7 +2648,8 @@ export const roomStore = createStore<RoomState>()(
         direction,
         rsm.first, // Pagination cursor for fetching older messages
         newestFetchedTimestamp,
-        preserveGapMarker
+        preserveGapMarker,
+        isFetchLatest
       )
 
       // Persisted gap sync (shared transition, both directions):
@@ -2600,9 +2673,29 @@ export const roomStore = createStore<RoomState>()(
         // preview (noLocalStore/tombstone) above the true archive newest could plant
         // a spurious — click-healable — seam.
         newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
+        newestHeldBelowId: newestMessageStanzaId(existingMessages),
+        lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })
-      if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
+      // Crash-window safety (backward CLEARANCE only): the gap map is
+      // persisted synchronously (localStorage) while saveRoomMessages to
+      // IndexedDB is fire-and-forget. Deleting the gap now and crashing
+      // before the write lands leaves cache [old][HOLE][new] with no marker —
+      // a permanent silent hole. So when a backward merge would DELETE an
+      // existing gap AND carries persistable new messages, defer ONLY the
+      // deletion until the durable write resolves (below). Forward paths are
+      // self-healing (coverage anchors on cache newest) and are left
+      // untouched; a clearing merge with nothing to persist has no crash
+      // window and deletes immediately.
+      const clearedGap = state.roomGaps.get(roomJid)
+      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
+      const deferGapClear =
+        direction === 'backward' &&
+        clearedGap !== undefined &&
+        !newGaps.has(roomJid) &&
+        persistableMessages.length > 0
+      const gapsAfterMerge = deferGapClear ? state.roomGaps : newGaps
+      if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates.
@@ -2610,7 +2703,7 @@ export const roomStore = createStore<RoomState>()(
       // but only for the ACTIVE room (non-active rooms keep no resident array).
       if (newFromMAM.length === 0) {
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
-          return { mamQueryStates: newStates, roomGaps: newGaps }
+          return { mamQueryStates: newStates, roomGaps: gapsAfterMerge }
         }
         const backfilledRooms = new Map(state.rooms)
         backfilledRooms.set(roomJid, { ...room, messages: merged })
@@ -2619,14 +2712,31 @@ export const roomStore = createStore<RoomState>()(
         if (runtimeEntry) {
           backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
         }
-        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
       // history that rehydrates on open (search index too).
-      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       if (persistableMessages.length > 0) {
-        void messageCache.saveRoomMessages(persistableMessages)
+        const savePromise = messageCache.saveRoomMessages(persistableMessages)
+        if (deferGapClear) {
+          // The page is durably cached — now the gap deletion is safe.
+          void savePromise.then(() => {
+            set((s) => {
+              // State may have moved on (gap advanced or re-planted by a
+              // later merge): only delete the exact interval this merge
+              // cleared. Reference equality suffices — every gap transition
+              // (syncGap) creates a new object.
+              if (s.roomGaps.get(roomJid) !== clearedGap) return s
+              const cleared = new Map(s.roomGaps)
+              cleared.delete(roomJid)
+              saveGapsToStorage(cleared)
+              return { roomGaps: cleared }
+            })
+          })
+        } else {
+          void savePromise
+        }
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
@@ -2686,7 +2796,7 @@ export const roomStore = createStore<RoomState>()(
         }
 
         // roomRuntime deliberately untouched.
-        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
@@ -2696,18 +2806,28 @@ export const roomStore = createStore<RoomState>()(
       // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
       // (newestEvicted from the timeline machine), sliding the window off the live
       // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
-      // newest, so it never slides.
+      // newest, so it never slides. Fetch-latest lands the window AT the live edge
+      // by construction.
+      // Accepted edge case: a fresh-session bail fetch-latest while the user
+      // is deep-scrolled in THIS active room can evict resident messages via
+      // keep-newest and jump the window to live — same class as
+      // jump-to-latest. The content-anchor scroll restore then degrades to an
+      // estimate rather than an exact reposition.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
         newRuntime.set(roomJid, {
           ...existingRuntime,
           messages: merged,
-          ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
+          ...(newestEvicted
+            ? { windowAtLiveEdge: false }
+            : isFetchLatest && newFromMAM.length > 0
+              ? { windowAtLiveEdge: true }
+              : {}),
         })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
     // XEP-0490: a remote room marker may have arrived before its message.
@@ -2718,24 +2838,24 @@ export const roomStore = createStore<RoomState>()(
     }
   },
 
+  clearRoomGapAnchor: (roomJid, purgedStartId) => {
+    set((state) => {
+      const gap = state.roomGaps.get(roomJid)
+      if (!gap || gap.startId !== purgedStartId) return state
+      const newGaps = new Map(state.roomGaps)
+      const { startId: _purged, ...withoutAnchor } = gap
+      newGaps.set(roomJid, withoutAnchor)
+      saveGapsToStorage(newGaps)
+      return { roomGaps: newGaps }
+    })
+  },
+
   getRoomMAMQueryState: (roomJid) => {
     return mamState.getMAMQueryState(get().mamQueryStates, roomJid)
   },
 
   resetRoomMAMStates: () => {
     set({ mamQueryStates: new Map() })
-  },
-
-  markAllRoomsNeedsCatchUp: () => {
-    set((state) => ({
-      mamQueryStates: mamState.markAllNeedsCatchUp(state.mamQueryStates),
-    }))
-  },
-
-  clearRoomNeedsCatchUp: (roomJid) => {
-    set((state) => ({
-      mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, roomJid),
-    }))
   },
 
   /**

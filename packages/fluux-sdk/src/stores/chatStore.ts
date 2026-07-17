@@ -9,7 +9,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -17,6 +17,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
+import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
@@ -310,12 +311,16 @@ interface ChatState {
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
   mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
+  /**
+   * Strip a purged archive id from the persisted gap anchor (`startId`),
+   * keeping the `start` timestamp so the next catch-up resume uses the
+   * timestamp fallback and progresses. Called via the `chat:mam-anchor-purged`
+   * binding when an `after:`-anchored query hit item-not-found. Only strips a
+   * MATCHING id — a gap whose anchor already advanced is left untouched.
+   */
+  clearConversationGapAnchor: (conversationId: string, purgedStartId: string) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
-  /** Mark all conversations as needing a catch-up MAM query (called on reconnect) */
-  markAllNeedsCatchUp: () => void
-  /** Clear the needsCatchUp flag for a specific conversation */
-  clearNeedsCatchUp: (conversationId: string) => void
   /**
    * Update only the lastMessage preview for a conversation without affecting the messages array.
    * Used for background preview refresh to sync sidebar with server state after being offline.
@@ -338,8 +343,10 @@ interface ChatState {
    * @param updates - Partial content to merge into the preview message
    */
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
-  // IndexedDB message loading
-  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean }) => Promise<Message[]>
+  // IndexedDB message loading. `oldest` flips the latest-N default to the
+  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
+  // with `peek` (an oldest slice must never become the resident window).
+  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean; oldest?: boolean }) => Promise<Message[]>
   /**
    * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
    * (the anchor), rather than the latest-N slice. Used by scroll-position restore on return to a
@@ -1188,6 +1195,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
+        // Set when the resolution advanced the pointer on a NON-active
+        // conversation — triggers the exact cache recount below.
+        let advancedNonActive = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
@@ -1235,6 +1245,7 @@ export const chatStore = createStore<ChatState>()(
           // (parity with the hydration path in mergeMAMMessages).
           let recomputed: notifState.EntityNotificationState | undefined
           if (resolution.kind === 'advanced') {
+            advancedNonActive = true
             recomputed = notifState.recomputeCountsFromPointer(
               {
                 unreadCount: meta.unreadCount,
@@ -1273,6 +1284,62 @@ export const chatStore = createStore<ChatState>()(
           }
           return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
         })
+
+        // EXACT badge recount for a non-resident conversation: the sync
+        // recount above ran over only the messages slice it was handed — for
+        // a non-resident conversation that is just the final merged page
+        // (mergedForMarker), excluding the fetch-latest page and earlier
+        // backward pages of the same pointer-stitch walk (badge undercount:
+        // 60 unread → ~10). Re-count asynchronously over the newest cached
+        // window, sized to everything one catch-up pass can download. Runs
+        // from where the resolution lands so it also covers a live-notify
+        // marker resolving against a partial resident slice.
+        if (advancedNonActive) {
+          void (async () => {
+            try {
+              const cached = await messageCache.getMessages(conversationId, {
+                limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+                latest: true,
+              })
+              if (cached.length === 0) return
+              set((state) => {
+                // Re-read state: the conversation may have become active while
+                // the cache read was in flight — activation recomputes counts
+                // itself, and a stale recount must not clobber it.
+                if (state.activeConversationId === conversationId) return state
+                const meta = state.conversationMeta.get(conversationId)
+                if (!meta) return state
+                const pointerState: notifState.EntityNotificationState = {
+                  unreadCount: meta.unreadCount,
+                  mentionsCount: 0,
+                  lastReadAt: meta.lastReadAt,
+                  lastSeenMessageId: meta.lastSeenMessageId,
+                  firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+                }
+                const exact = notifState.recomputeCountsFromPointer(pointerState, cached)
+                if (exact === pointerState) return state
+                const newMeta = new Map(state.conversationMeta)
+                newMeta.set(conversationId, {
+                  ...meta,
+                  unreadCount: exact.unreadCount,
+                  lastSeenMessageId: exact.lastSeenMessageId,
+                })
+                const conv = state.conversations.get(conversationId)
+                if (!conv) return { conversationMeta: newMeta }
+                const newConversations = new Map(state.conversations)
+                newConversations.set(conversationId, {
+                  ...conv,
+                  unreadCount: exact.unreadCount,
+                  lastSeenMessageId: exact.lastSeenMessageId,
+                })
+                return { conversationMeta: newMeta, conversations: newConversations }
+              })
+            } catch {
+              // Cache read failed — keep the page-scoped count (an undercount,
+              // corrected on the next merge/activation).
+            }
+          })()
+        }
       },
 
       hasConversation: (id) => {
@@ -1659,7 +1726,8 @@ export const chatStore = createStore<ChatState>()(
             rawExisting,
             mamMessages,
             direction,
-            chatTimelineConfig()
+            chatTimelineConfig(),
+            isFetchLatest
           )
           // Persist backfilled archive ids so pagination cursors survive a reload.
           for (const p of patched) {
@@ -1680,7 +1748,8 @@ export const chatStore = createStore<ChatState>()(
             direction,
             rsm.first, // Pagination cursor for fetching older messages
             newestFetchedTimestamp,
-            preserveGapMarker
+            preserveGapMarker,
+            isFetchLatest
           )
 
           // Persisted gap sync (shared transition, both directions) — see
@@ -1702,8 +1771,29 @@ export const chatStore = createStore<ChatState>()(
             // preview (noLocalStore/tombstone) above the true archive newest could plant
             // a spurious — click-healable — seam.
             newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
+            newestHeldBelowId: newestMessageStanzaId(rawExisting),
+            lastFetchedArchiveId: rsm.last,
             preserveGapMarker,
           })
+
+          // Crash-window safety (backward CLEARANCE only): the gap map is
+          // persisted synchronously (localStorage) while saveMessages to
+          // IndexedDB is fire-and-forget. Deleting the gap now and crashing
+          // before the write lands leaves cache [old][HOLE][new] with no
+          // marker — a permanent silent hole. So when a backward merge would
+          // DELETE an existing gap AND carries persistable new messages,
+          // defer ONLY the deletion until the durable write resolves (below).
+          // Forward paths are self-healing (coverage anchors on cache newest)
+          // and are left untouched; a clearing merge with nothing to persist
+          // has no crash window and deletes immediately.
+          const clearedGap = state.conversationGaps.get(conversationId)
+          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
+          const deferGapClear =
+            direction === 'backward' &&
+            clearedGap !== undefined &&
+            !newGaps.has(conversationId) &&
+            persistableMessages.length > 0
+          const gapsAfterMerge = deferGapClear ? state.conversationGaps : newGaps
 
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
@@ -1712,17 +1802,33 @@ export const chatStore = createStore<ChatState>()(
           const isActive = state.activeConversationId === conversationId
           if (newMessages.length === 0) {
             if (patched.length === 0 || !isActive) {
-              return { mamQueryStates: newStates, conversationGaps: newGaps }
+              return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
             }
             const backfilledMap = new Map(state.messages)
             backfilledMap.set(conversationId, trimmed)
-            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: newGaps }
+            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
           }
 
           // Persist to IndexedDB regardless of active state (durable history).
-          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
           if (persistableMessages.length > 0) {
-            void messageCache.saveMessages(persistableMessages)
+            const savePromise = messageCache.saveMessages(persistableMessages)
+            if (deferGapClear) {
+              // The page is durably cached — now the gap deletion is safe.
+              void savePromise.then(() => {
+                set((s) => {
+                  // State may have moved on (gap advanced or re-planted by a
+                  // later merge): only delete the exact interval this merge
+                  // cleared. Reference equality suffices — every gap
+                  // transition (syncGap) creates a new object.
+                  if (s.conversationGaps.get(conversationId) !== clearedGap) return s
+                  const cleared = new Map(s.conversationGaps)
+                  cleared.delete(conversationId)
+                  return { conversationGaps: cleared }
+                })
+              })
+            } else {
+              void savePromise
+            }
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
@@ -1782,9 +1888,9 @@ export const chatStore = createStore<ChatState>()(
                   lastSeenMessageId: hydrated.lastSeenMessageId,
                 } : {}),
               })
-              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
+              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge }
             }
-            return { mamQueryStates: newStates, conversationGaps: newGaps }
+            return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
           }
 
           // ACTIVE conversation: populate the resident messages map.
@@ -1798,6 +1904,15 @@ export const chatStore = createStore<ChatState>()(
           if (newestEvicted) {
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
             newWindowAtLiveEdge.set(conversationId, false)
+          } else if (isFetchLatest && newMessages.length > 0) {
+            // Fetch-latest lands the window AT the live edge by construction.
+            // Accepted edge case: a fresh-session bail fetch-latest while the
+            // user is deep-scrolled in THIS active conversation can evict
+            // resident messages via keep-newest and jump the window to live —
+            // same class as jump-to-latest. The content-anchor scroll restore
+            // then degrades to an estimate rather than an exact reposition.
+            newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+            newWindowAtLiveEdge.set(conversationId, true)
           }
 
           if (previewUpdate) {
@@ -1805,10 +1920,10 @@ export const chatStore = createStore<ChatState>()(
             newMeta.set(conversationId, { ...meta!, lastMessage })
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, { ...conv!, lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
+          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
         // XEP-0490: a remote displayed marker may have arrived before its message.
@@ -1821,24 +1936,23 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
+      clearConversationGapAnchor: (conversationId, purgedStartId) => {
+        set((state) => {
+          const gap = state.conversationGaps.get(conversationId)
+          if (!gap || gap.startId !== purgedStartId) return state
+          const newGaps = new Map(state.conversationGaps)
+          const { startId: _purged, ...withoutAnchor } = gap
+          newGaps.set(conversationId, withoutAnchor)
+          return { conversationGaps: newGaps }
+        })
+      },
+
       getMAMQueryState: (conversationId) => {
         return mamState.getMAMQueryState(get().mamQueryStates, conversationId)
       },
 
       resetMAMStates: () => {
         set({ mamQueryStates: new Map() })
-      },
-
-      markAllNeedsCatchUp: () => {
-        set((state) => ({
-          mamQueryStates: mamState.markAllNeedsCatchUp(state.mamQueryStates),
-        }))
-      },
-
-      clearNeedsCatchUp: (conversationId) => {
-        set((state) => ({
-          mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, conversationId),
-        }))
       },
 
       updateLastMessagePreview: (conversationId, lastMessage) => {
@@ -1892,20 +2006,23 @@ export const chatStore = createStore<ChatState>()(
       // Load messages from IndexedDB cache for a conversation
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
-        const { limit = 100, before, peek } = options
+        const { limit = 100, before, peek, oldest } = options
         try {
           const cachedMessages = await messageCache.getMessages(conversationId, {
             limit,
             before,
             // When loading without 'before', get the latest messages (most recent)
-            // This prevents showing old messages and jumping to recent ones
-            latest: !before,
+            // This prevents showing old messages and jumping to recent ones.
+            // `oldest` opts out: ascending oldest-N (the true cache bottom).
+            latest: !before && !oldest,
           })
 
           // `peek`: pure read that returns the messages WITHOUT writing the store —
           // used to compute a catch-up cursor for a non-active conversation without
           // pulling its history into RAM (only the active conversation is resident).
-          if (!peek && cachedMessages.length > 0) {
+          // `oldest` is always a pure read too: the cache bottom must never
+          // become the resident window (that would tear the UI off the live edge).
+          if (!peek && !oldest && cachedMessages.length > 0) {
             // A latest-N load (no `before` cursor) makes the newest window resident —
             // this is the activation / recenter path, so the window is back at the live
             // edge. Clear any explicit `false` (absent = at the edge). A `before`-anchored

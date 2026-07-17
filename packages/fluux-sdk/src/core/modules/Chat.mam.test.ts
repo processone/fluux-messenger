@@ -876,6 +876,114 @@ describe('XMPPClient MAM', () => {
       expect(beforeEl?.children?.length || 0).toBe(0)
     })
 
+    it('backward pagination: a page with only a reaction (no displayable message) fetches the next older page', async () => {
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      const capturedIqs: any[] = []
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+
+        if (callCount === 1) {
+          // Page 1: only a reaction (fastening-style modification) — no
+          // displayable message — and the archive says there is more.
+          if (stanzaListener) {
+            const reactionMsg = createMockElement('message', { from: 'example.com' }, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+                      {
+                        name: 'message',
+                        attrs: { from: 'bob@example.com/resource', type: 'chat', id: 'reaction-stanza' },
+                        children: [
+                          {
+                            name: 'reactions',
+                            attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'msg-not-in-this-page' },
+                            children: [{ name: 'reaction', text: '👍' }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            stanzaListener(reactionMsg)
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+              children: [
+                {
+                  name: 'set',
+                  attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+                  children: [{ name: 'first', text: 'p1' }],
+                },
+              ],
+            },
+          ])
+        }
+
+        // Page 2: a real displayable message; archive complete.
+        if (stanzaListener) {
+          const realMsg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T09:00:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: 'alice@example.com', type: 'chat', id: 'real-msg' },
+                      children: [{ name: 'body', text: 'Hello from the older page' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(realMsg)
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
+
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+
+      expect(callCount).toBe(2)
+      const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
+      const secondSetEl = secondQueryEl?.children?.find((c: any) => c.name === 'set')
+      const secondBeforeEl = secondSetEl?.children?.find((c: any) => c.name === 'before')
+      expect(secondBeforeEl?.children?.[0]).toBe('p1')
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].id).toBe('real-msg')
+    })
+
     it('should skip messages without body', async () => {
       // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
@@ -2626,6 +2734,35 @@ describe('XMPPClient MAM', () => {
       const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
       expect(retryBeforeEl).toBeDefined()
       expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
+
+      // The degraded result must carry the flag so the catch-up orchestrator
+      // can recognize it's already a fetch-latest page and skip a second one.
+      expect(result.degradedToFetchLatest).toBe(true)
+    })
+
+    it('emits chat:mam-anchor-purged on the item-not-found degrade so the persisted gap anchor is stripped', async () => {
+      await connectClient()
+
+      const latestResponse = createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+      ])
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async () => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+        return latestResponse
+      })
+
+      await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
+
+      // Without this, the persisted gap keeps the purged startId: every
+      // session re-degrades and "Load missing messages" can never heal.
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-anchor-purged', {
+        conversationId: 'alice@example.com',
+        after: 'purged-stanza-id',
+      })
     })
 
     it('does not retry item-not-found when it occurs on a later page (not after-anchored first page)', async () => {
@@ -3133,6 +3270,220 @@ describe('XMPPClient MAM', () => {
       }))
     })
 
+    it('backward fetch-latest: retries past a signal-only page and emits ONE accumulated batch (parity with 1:1)', async () => {
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      const capturedIqs: any[] = []
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+
+        if (callCount === 1) {
+          // Page 1: reactions only — zero displayable messages, more available.
+          if (stanzaListener) {
+            const reactionMsg = createMockElement('message', { from: roomJid }, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-1' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+                      {
+                        name: 'message',
+                        attrs: { from: `${roomJid}/OtherUser`, type: 'groupchat', id: 'reaction-stanza' },
+                        children: [
+                          {
+                            name: 'reactions',
+                            attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'older-real-msg' },
+                            children: [{ name: 'reaction', text: '👍' }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            stanzaListener(reactionMsg)
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+              children: [
+                {
+                  name: 'set',
+                  attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+                  children: [{ name: 'first', text: 'a' }],
+                },
+              ],
+            },
+          ])
+        }
+
+        // Page 2: one real displayable message; archive complete.
+        if (stanzaListener) {
+          const realMsg = createMockElement('message', { from: roomJid }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'archive-id-2' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T09:00:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: `${roomJid}/OtherUser`, type: 'groupchat', id: 'older-real-msg' },
+                      children: [{ name: 'body', text: 'Hello from the older page' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(realMsg)
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+
+      // Two IQs; the second advances the backward cursor to page 1's oldest.
+      expect(callCount).toBe(2)
+      const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
+      const secondSetEl = secondQueryEl?.children?.find((c: any) => c.name === 'set')
+      const secondBeforeEl = secondSetEl?.children?.find((c: any) => c.name === 'before')
+      expect(secondBeforeEl?.children?.[0]).toBe('a')
+
+      // ONE room:mam-messages emit carrying the accumulated set, still flagged
+      // with the ORIGINAL fetch-latest so the page that finally carries
+      // messages is seam-checked as part of the fetch-latest.
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:mam-messages')
+      expect(mamEmits).toHaveLength(1)
+      expect(mamEmits[0][1]).toMatchObject({
+        roomJid,
+        complete: true,
+        direction: 'backward',
+        isFetchLatest: true,
+      })
+      expect((mamEmits[0][1] as { messages: unknown[] }).messages).toHaveLength(1)
+
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0].id).toBe('older-real-msg')
+    })
+
+    it('backward fetch-latest: stops at the retry cap when every page is signal-only (single empty emit)', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        callCount++
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+        if (stanzaListener) {
+          const reactionMsg = createMockElement('message', { from: roomJid }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: `archive-id-${callCount}` },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: `${roomJid}/OtherUser`, type: 'groupchat', id: `reaction-${callCount}` },
+                      children: [
+                        {
+                          name: 'reactions',
+                          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'some-target' },
+                          children: [{ name: 'reaction', text: '👍' }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(reactionMsg)
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'fin',
+            attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+            children: [
+              {
+                name: 'set',
+                attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+                children: [{ name: 'first', text: `p${callCount}` }],
+              },
+            ],
+          },
+        ])
+      })
+
+      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+
+      // Same retry cap as the 1:1 backward path.
+      expect(callCount).toBe(5)
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:mam-messages')
+      expect(mamEmits).toHaveLength(1)
+      expect((mamEmits[0][1] as { messages: unknown[] }).messages).toHaveLength(0)
+      expect(result.messages).toHaveLength(0)
+      expect(result.complete).toBe(false)
+    })
+
     it('degrades to a fetch-latest when the room after-anchor is purged (item-not-found)', async () => {
       await connectClient()
 
@@ -3174,6 +3525,46 @@ describe('XMPPClient MAM', () => {
       const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
       expect(retryBeforeEl).toBeDefined()
       expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
+
+      // The degraded result must carry the flag so the catch-up orchestrator
+      // can recognize it's already a fetch-latest page and skip a second one.
+      expect(result.degradedToFetchLatest).toBe(true)
+    })
+
+    it('emits room:mam-anchor-purged on the item-not-found degrade so the persisted gap anchor is stripped', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      const latestResponse = createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+      ])
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async () => {
+        callCount++
+        if (callCount === 1) {
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+        return latestResponse
+      })
+
+      await xmppClient.chat.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-anchor-purged', {
+        roomJid,
+        after: 'purged-stanza-id',
+      })
     })
   })
 

@@ -186,6 +186,104 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
   })
 
+  // Exact badge recount (Phase B pointer resolution, non-resident conversation):
+  // the sync recount inside applyRemoteDisplayed only sees the page it was handed
+  // (mergedForMarker = the final backward page for a non-resident conversation).
+  // The unread messages downloaded by EARLIER pages of the same walk (the
+  // fetch-latest page, previous backward pages) live only in IndexedDB — the
+  // final count must come from the cache, not the page.
+  it('recounts the badge from the full cached set when the pointer resolves during a multi-page background walk', async () => {
+    const cid = 'juliet@capulet.example'
+    const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))
+    function timedMsg(id: string, stanzaId: string, ts: Date): Message {
+      return { ...msg(id, stanzaId), timestamp: ts }
+    }
+
+    // Non-active, non-resident conversation with a pending deep pointer
+    // (new-device sync: no local read state yet).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0 })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    chatStore.getState().applyRemoteDisplayed(cid, 's-ptr')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
+
+    // Phase A fetch-latest page: 10 unread messages at the live edge; the
+    // pointer's message is NOT here → stays pending.
+    const latestPage = Array.from({ length: 10 }, (_, i) => timedMsg(`f${i}`, `sf${i}`, t(51 + i)))
+    chatStore.getState().mergeMAMMessages(cid, latestPage, { first: 'sf0' }, false, 'backward', true)
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
+
+    // Phase B backward page: contains the pointer's own message (oldest) plus
+    // 9 more unread after it.
+    const backwardPage = [
+      timedMsg('p0', 's-ptr', t(41)),
+      ...Array.from({ length: 9 }, (_, i) => timedMsg(`p${i + 1}`, `sp${i + 1}`, t(42 + i))),
+    ]
+    // The async exact recount reads the newest cached window — the union of
+    // everything the walk downloaded (both pages, chronological).
+    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([...backwardPage, ...latestPage])
+    chatStore.getState().mergeMAMMessages(cid, backwardPage, { first: 's-ptr' }, false, 'backward')
+
+    // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
+    // backward page) + 10 (fetch-latest page) = 19, NOT just the 9 visible in
+    // the final page.
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('p0')
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(19)
+    })
+    // Combined conversations mirror kept coherent.
+    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(19)
+
+    // Restore the factory default so a stale one-shot can't leak into later tests.
+    vi.mocked(messageCache.getMessages).mockReset().mockResolvedValue([])
+  })
+
+  it('skips the async cache recount when the conversation became active meanwhile', async () => {
+    const cid = 'juliet@capulet.example'
+    const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))
+    function timedMsg(id: string, stanzaId: string, ts: Date): Message {
+      return { ...msg(id, stanzaId), timestamp: ts }
+    }
+
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0 })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    chatStore.getState().applyRemoteDisplayed(cid, 's-ptr')
+
+    const page = [timedMsg('p0', 's-ptr', t(41)), timedMsg('p1', 'sp1', t(42))]
+    // Cache read resolves AFTER the conversation becomes active: gate it.
+    let releaseCache: (msgs: Message[]) => void
+    vi.mocked(messageCache.getMessages).mockReturnValueOnce(
+      new Promise<Message[]>((resolve) => { releaseCache = resolve })
+    )
+    chatStore.getState().mergeMAMMessages(cid, page, { first: 's-ptr' }, false, 'backward')
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
+
+    // User opens the conversation before the cache read lands; activation owns
+    // the recount now — the stale async result must NOT clobber it.
+    chatStore.setState({ activeConversationId: cid })
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { ...newMeta.get(cid)!, unreadCount: 0 })
+      return { conversationMeta: newMeta }
+    })
+    releaseCache!([...page, timedMsg('f0', 'sf0', t(51))])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+
+    // Restore the factory default so a stale one-shot can't leak into later tests.
+    vi.mocked(messageCache.getMessages).mockReset().mockResolvedValue([])
+  })
+
   it('resolves a pending remote marker once the message arrives via MAM merge', () => {
     const cid = 'juliet@capulet.example'
 

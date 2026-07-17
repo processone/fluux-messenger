@@ -38,6 +38,9 @@ function getRoomMessageCacheKey(message: {
     return message.stanzaId
   }
   // Fallback: composite key using roomJid:from:id
+  // Known cosmetic edge: an id-less cached copy and its stanzaId-carrying
+  // re-fetch land under different keys (double row in the raw cache); the
+  // rehydrate merge dedupes them by from:id, so the UI shows one row.
   return `${message.roomJid}:${message.from}:${message.id}`
 }
 

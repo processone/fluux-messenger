@@ -70,7 +70,7 @@ describe('continueCatchUp always clears the MAM loading flag', () => {
   it('continueChatCatchUp clears isLoading when no cursor is found (no query runs)', async () => {
     chatStore.getState().addConversation({ id: CONV, name: 'Alice', type: 'chat', unreadCount: 0 })
     chatStore.getState().setActiveConversation(CONV)
-    // No messages and no recorded gap → findContinueCatchUpCursor returns undefined.
+    // No messages and no recorded gap → selectCatchUpQuery yields no forward cursor.
 
     const { result } = renderHook(() => useChatActive(), { wrapper })
 

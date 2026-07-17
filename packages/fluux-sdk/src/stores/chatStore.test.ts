@@ -4,6 +4,7 @@ import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
+import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -227,7 +228,7 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
     })
 
-    it('backward closure: scroll-up pages shrink then clear a recorded gap', () => {
+    it('backward closure: scroll-up pages shrink then clear a recorded gap', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationGaps: new Map([[cid, {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -244,6 +245,59 @@ describe('chatStore', () => {
 
       const below = { ...createMessage(cid, 'below'), id: 'below', timestamp: new Date('2026-07-05T00:00:00Z') }
       chatStore.getState().mergeMAMMessages(cid, [below, { ...mid }], {}, false, 'backward')
+      // Clearance is deferred until the page is durably cached (crash-window
+      // safety); the mocked saveMessages resolves immediately, so waitFor.
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      })
+    })
+
+    it('backward CLEARANCE with persistable messages is deferred until the page is durably cached', async () => {
+      // Crash window: the gap deletion is persisted (localStorage) while
+      // saveMessages to IndexedDB is fire-and-forget. A crash in between
+      // leaves cache [old][HOLE][new] with no marker. The deletion must wait
+      // for the durable write.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-14T00:00:00Z').getTime(),
+      }]]) })
+
+      // Hold the IndexedDB write open to observe the window.
+      let resolveSave!: () => void
+      vi.mocked(messageCache.saveMessages).mockReturnValue(
+        new Promise<void>((resolve) => { resolveSave = resolve })
+      )
+
+      // Page crosses the gap (reaches below its start) → clearance.
+      const below = { ...createMessage(cid, 'below'), id: 'below', timestamp: new Date('2026-07-05T00:00:00Z') }
+      const above = { ...createMessage(cid, 'above'), id: 'above', timestamp: new Date('2026-07-14T06:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [below, above], {}, false, 'backward')
+
+      // Immediately after the merge — and for as long as the write is
+      // pending — the gap must still be recorded.
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
+      await Promise.resolve()
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
+
+      resolveSave()
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      })
+    })
+
+    it('backward CLEARANCE with zero new persistable messages deletes immediately', () => {
+      // Nothing new to persist → no crash window → no reason to defer.
+      chatStore.getState().addConversation(createConversation(cid))
+      const above = { ...createMessage(cid, 'above'), id: 'above', timestamp: new Date('2026-07-14T06:00:00Z') }
+      chatStore.setState({
+        messages: new Map([[cid, [above]]]),
+        conversationGaps: new Map([[cid, { start: new Date('2026-07-06T00:00:00Z').getTime() }]]),
+      })
+
+      // complete=true from above the gap, but the page is all duplicates.
+      chatStore.getState().mergeMAMMessages(cid, [{ ...above }], {}, true, 'backward')
+
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
     })
 
@@ -260,6 +314,20 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversationGaps.get(cid)).toEqual(gap)
     })
 
+    it('a signal-only incomplete forward page preserves the persisted gap and advances its coverage cursor', () => {
+      // All pages of a forward catch-up were signals (reactions/receipts): the
+      // merge carries zero displayable messages but rsm.last IS set. The gap
+      // must survive (the page proves nothing about the hole) with startId
+      // advanced to the last fetched archive id (coverage progress).
+      chatStore.getState().addConversation(createConversation(cid))
+      const start = new Date('2026-07-06T00:00:00Z').getTime()
+      chatStore.setState({ conversationGaps: new Map([[cid, { start, startId: 'old' }]]) })
+
+      chatStore.getState().mergeMAMMessages(cid, [], { last: 'sig-99' }, false, 'forward')
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({ start, startId: 'sig-99' })
+    })
+
     it('preserveGapMarker leaves an existing conversation gap untouched on a forward complete=true merge', () => {
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationGaps: new Map([[cid, { start: 1000, end: 5000 }]]) })
@@ -268,6 +336,76 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward', false, true)
 
       expect(chatStore.getState().conversationGaps.get(cid)).toEqual({ start: 1000, end: 5000 })
+    })
+  })
+
+  describe('clearConversationGapAnchor (purged MAM after-anchor heal)', () => {
+    const cid = 'alice@example.com'
+
+    it('strips a MATCHING startId but keeps the start timestamp so repair can progress', () => {
+      const start = new Date('2026-07-06T00:00:00Z').getTime()
+      chatStore.setState({ conversationGaps: new Map([[cid, { start, startId: 'purged', end: 5000, endId: 'e1' }]]) })
+
+      chatStore.getState().clearConversationGapAnchor(cid, 'purged')
+
+      const gap = chatStore.getState().conversationGaps.get(cid)
+      expect(gap).toEqual({ start, end: 5000, endId: 'e1' })
+
+      // The next resume (session catch-up or "Load missing messages") selects
+      // the timestamp fallback, not the purged id — the repair progresses.
+      expect(selectCatchUpQuery([], {
+        forwardGapTimestamp: gap?.start,
+        forwardGapStartId: gap?.startId,
+      })).toEqual({ start: new Date(start).toISOString() })
+    })
+
+    it('does NOT strip a non-matching startId (the gap anchor already advanced)', () => {
+      chatStore.setState({ conversationGaps: new Map([[cid, { start: 1000, startId: 'newer' }]]) })
+
+      chatStore.getState().clearConversationGapAnchor(cid, 'purged')
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({ start: 1000, startId: 'newer' })
+    })
+
+    it('is a no-op when no gap is recorded', () => {
+      const before = chatStore.getState().conversationGaps
+      chatStore.getState().clearConversationGapAnchor(cid, 'purged')
+      expect(chatStore.getState().conversationGaps).toBe(before)
+    })
+  })
+
+  describe('mergeMAMMessages exact-timestamp anchor re-fetch (fallback catch-up, no +1ms)', () => {
+    const cid = 'alice@example.com'
+
+    it('dedupes the re-fetched anchor by origin-id, keeps a same-millisecond sibling, and patches the anchor archive id', () => {
+      // buildCatchUpStartTime queries from the EXACT anchor timestamp, so the
+      // forward page re-includes the anchor's archive copy. The merge must
+      // dedupe it (originId), keep a different message sharing the same
+      // millisecond, and backfill the id-less resident echo with its stanzaId.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ activeConversationId: cid })
+      const T = new Date('2026-07-10T10:00:00.000Z')
+      // Resident id-less anchor: own-sent echo never stamped with an archive id.
+      const anchor: Message = {
+        type: 'chat', id: 'anchor-client-id', conversationId: cid,
+        from: 'me@example.com', body: 'anchor', timestamp: T, isOutgoing: true,
+        originId: 'o1',
+      }
+      chatStore.setState({ messages: new Map([[cid, [anchor]]]) })
+
+      const anchorArchiveCopy: Message = { ...anchor, id: 'anchor-archive-id', stanzaId: 's1' }
+      const sibling: Message = {
+        type: 'chat', id: 'sibling', conversationId: cid,
+        from: cid, body: 'same-millisecond sibling', timestamp: T, isOutgoing: false,
+        stanzaId: 's2',
+      }
+      chatStore.getState().mergeMAMMessages(cid, [anchorArchiveCopy, sibling], { last: 's2' }, true, 'forward')
+
+      const merged = chatStore.getState().messages.get(cid) ?? []
+      expect(merged).toHaveLength(2) // anchor deduped, sibling kept — no dupes
+      const mergedAnchor = merged.find((m) => m.originId === 'o1')
+      expect(mergedAnchor?.stanzaId).toBe('s1') // resident echo patched with the archive id
+      expect(merged.some((m) => m.stanzaId === 's2')).toBe(true)
     })
   })
 
@@ -3592,6 +3730,26 @@ describe('chatStore', () => {
       chatStore.getState().addMessage(chatMsgAt('live-1', 10000))
       const persisted = chatStore.persist.getOptions().partialize!(chatStore.getState())
       expect('windowAtLiveEdge' in persisted).toBe(false)
+    })
+
+    it('mergeMAMMessages flips windowAtLiveEdge true on a fetch-latest merge, but a plain backward merge does not', () => {
+      chatStore.getState().setActiveConversation(conversationId)
+      // Seed the flag false, as if a prior scroll-up slid the window off the live edge.
+      chatStore.setState((state) => {
+        const w = new Map(state.windowAtLiveEdge)
+        w.set(conversationId, false)
+        return { windowAtLiveEdge: w }
+      })
+
+      // A plain backward merge (isFetchLatest false) must not flip it back.
+      const older = chatMsgAt('older-1', 1)
+      chatStore.getState().mergeMAMMessages(conversationId, [older], {}, false, 'backward')
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+
+      // A fetch-latest merge lands the window AT the live edge by construction.
+      const fresh = chatMsgAt('fresh-1', 20000)
+      chatStore.getState().mergeMAMMessages(conversationId, [fresh], {}, false, 'backward', true)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(true)
     })
   })
 

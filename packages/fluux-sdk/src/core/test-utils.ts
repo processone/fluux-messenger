@@ -647,7 +647,9 @@ export const createMockStores = (): MockStoreBindings => ({
     // Composite getters
     getAllConversations: vi.fn().mockReturnValue([]),
     getConversationGapStart: vi.fn().mockReturnValue(undefined),
+    getConversationGapStartId: vi.fn().mockReturnValue(undefined),
     getConversationPendingStanzaId: vi.fn().mockReturnValue(undefined),
+    getActiveConversationId: vi.fn().mockReturnValue(null),
     getArchivedConversations: vi.fn().mockReturnValue([]),
     getLastMessage: vi.fn().mockReturnValue(undefined),
     getAllStoredMessages: vi.fn().mockReturnValue([]),
@@ -677,6 +679,7 @@ export const createMockStores = (): MockStoreBindings => ({
     hydratePreviewsFromCache: vi.fn().mockResolvedValue(undefined),
     // Composite getter
     getRoomGapStart: vi.fn().mockReturnValue(undefined),
+    getRoomGapStartId: vi.fn().mockReturnValue(undefined),
     getRoomPendingStanzaId: vi.fn().mockReturnValue(undefined),
     getAllRoomMessages: vi.fn().mockReturnValue([]),
   },
@@ -765,6 +768,10 @@ export const createMockXMPPClientForHooks = () => ({
     sendLinkPreview: vi.fn(),
     queryMAM: vi.fn(),
     queryRoomMAM: vi.fn(),
+  },
+  mam: {
+    catchUpConversationHistory: vi.fn(),
+    catchUpRoomHistory: vi.fn(),
   },
   muc: {
     joinRoom: vi.fn(),
@@ -922,6 +929,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     updateMessage: vi.fn(),
     triggerAnimation: vi.fn(),
     applyRemoteDisplayed: vi.fn(),
+    clearConversationGapAnchor: vi.fn(),
   } as unknown as MockStoreRefs['chat'],
   roster: {
     setContacts: vi.fn(),
@@ -955,6 +963,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     getRoom: vi.fn().mockReturnValue(undefined),
     rooms: new Map(),
     applyRemoteDisplayed: vi.fn(),
+    clearRoomGapAnchor: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),
