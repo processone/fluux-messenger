@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, laz
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
+import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
 import type { InputClass } from '../commands/types'
@@ -255,6 +256,8 @@ export function MessageComposer({
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState(0)
+  const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
   // Which glyph the send button shows (send / command / unknown). Derived from
   // the live text so it can never go stale — clearing the input after a command
   // runs, an edit cancels, etc. reverts the icon automatically, whereas a
@@ -453,6 +456,7 @@ export function MessageComposer({
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
     setText(e.target.value)
+    setCursorPosition(e.target.selectionStart)
     // inputClass is derived from `text` (see declaration), so it updates here
     // automatically — no manual sync needed.
 
@@ -577,6 +581,38 @@ export function MessageComposer({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (emojiAutocomplete.state.isActive) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        emojiAutocomplete.moveSelection('up')
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        emojiAutocomplete.moveSelection('down')
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(emojiAutocomplete.state.selectedIndex)
+        setText(newText)
+        setCursorPosition(newCursorPosition)
+        emojiAutocomplete.dismiss()
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus()
+            inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+          }
+        }, 0)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        emojiAutocomplete.dismiss()
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       // Don't submit if disabled (e.g., offline) or send-gated (e.g., whisper
@@ -603,6 +639,7 @@ export function MessageComposer({
   }
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    setCursorPosition(e.currentTarget.selectionStart)
     onSelectionChange?.(e.currentTarget.selectionStart)
   }
 
@@ -681,10 +718,11 @@ export function MessageComposer({
     setShowEmojiPicker(false)
 
     // Restore focus and set cursor after emoji
+    const newCursorPos = cursorPos + emoji.length
+    setCursorPosition(newCursorPos)
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus()
-        const newCursorPos = cursorPos + emoji.length
         inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
       }
     }, 0)
@@ -733,6 +771,27 @@ export function MessageComposer({
     <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
+
+      {/* Inline emoji autocomplete dropdown */}
+      {emojiAutocomplete.state.isActive && (
+        <EmojiAutocompleteMenu
+          matches={emojiAutocomplete.state.matches}
+          selectedIndex={emojiAutocomplete.state.selectedIndex}
+          onSelect={(idx) => {
+            const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(idx)
+            setText(newText)
+            setCursorPosition(newCursorPosition)
+            emojiAutocomplete.dismiss()
+            setTimeout(() => {
+              if (inputRef.current) {
+                inputRef.current.focus()
+                inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+              }
+            }, 0)
+          }}
+          onDismiss={emojiAutocomplete.dismiss}
+        />
+      )}
 
       <div className="composer-card bg-fluux-hover">
       {/* Edit indicator */}
