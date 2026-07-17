@@ -48,6 +48,7 @@ import type {
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,
+  PeerIdentity,
   PEPItem,
   PeerSupport,
   PluginContext,
@@ -2039,6 +2040,37 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const cached = this.peerKeys.get(peer)
     if (!cached) return 'unknown'
     return this.hostStores.verifiedPeers.isVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
+  }
+
+  /**
+   * Per-identity trust list (E2EEPlugin trait). OpenPGP has exactly one
+   * identity per peer — the primary key — so this returns a length-1 list
+   * (`id` === the fingerprint hex), or `[]` when no key is cached yet.
+   */
+  async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
+    const fp = this.getPeerFingerprint(peer)
+    if (!fp) return []
+    return [{ id: fp, fingerprint: fp, trust: await this.evaluatePeerTrust(peer) }]
+  }
+
+  /**
+   * Per-identity trust write (E2EEPlugin trait). `'verified'` pins the
+   * verified marker to the peer's CURRENT primary fingerprint;
+   * `'untrusted'` revokes verification back to TOFU (OpenPGP is single-key,
+   * so "revoke" retracts the out-of-band confirmation rather than persisting
+   * a distrust — see the design spec). No-ops when no key is cached, or when
+   * a non-empty `id` no longer matches the current fingerprint (the identity
+   * the caller compared out-of-band has since rotated).
+   */
+  async setIdentityTrust(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
+    const cur = this.getPeerFingerprint(peer)
+    if (!cur) return
+    if (id && !fingerprintsEqual(id, cur)) return
+    if (decision === 'verified') {
+      this.hostStores.verifiedPeers.setVerified(peer, cur)
+    } else {
+      this.hostStores.verifiedPeers.clearVerified(peer)
+    }
   }
 
   // ---------------------------------------------------------------------------
