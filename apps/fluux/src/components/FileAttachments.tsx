@@ -9,6 +9,7 @@ import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel, isRenderableImageMime } from '@/utils/thumbnail'
+import { downloadAttachment } from '@/utils/download'
 import type { FileAttachment } from '@fluux/sdk'
 
 /**
@@ -489,40 +490,79 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
  */
 export function FileAttachmentCard({ attachment }: AttachmentProps) {
   const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+  const isEncrypted = Boolean(attachment.encryption)
 
+  const iconWrap = (
+    <div className={`size-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+      isPdfMimeType(attachment.mediaType) ? 'bg-red-500/20 text-red-500' :
+      isEbookMimeType(attachment.mediaType) ? 'bg-purple-500/20 text-purple-500' :
+      isDocumentMimeType(attachment.mediaType) ? 'bg-blue-500/20 text-blue-500' :
+      isArchiveMimeType(attachment.mediaType) ? 'bg-yellow-500/20 text-yellow-500' :
+      'bg-fluux-muted/20 text-fluux-muted'
+    }`}>
+      {isPdfMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+       isEbookMimeType(attachment.mediaType) ? <BookOpen className="size-5" /> :
+       isDocumentMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+       isArchiveMimeType(attachment.mediaType) ? <Archive className="size-5" /> :
+       <File className="size-5" />}
+    </div>
+  )
+
+  const info = (
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-medium text-fluux-text truncate">
+        {attachment.name || t('chat.file')}
+      </p>
+      <p className="text-xs text-fluux-muted">
+        {getFileTypeLabel(attachment.mediaType)}
+        {attachment.size && ` • ${formatBytes(attachment.size)}`}
+      </p>
+    </div>
+  )
+
+  const cardClass =
+    'flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file'
+
+  // Encrypted: the URL points at ciphertext, so a plain link would save
+  // unusable bytes. Decrypt on click and save the plaintext instead.
+  if (isEncrypted) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            await downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })
+          } finally {
+            setBusy(false)
+          }
+        }}
+        className={`${cardClass} w-full text-start disabled:opacity-70`}
+        aria-label={t('common.download')}
+        tabIndex={-1}
+      >
+        {iconWrap}
+        {info}
+        {busy
+          ? <Loader2 className="size-4 text-fluux-muted animate-spin flex-shrink-0" />
+          : <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
+      </button>
+    )
+  }
+
+  // Plaintext: keep the anchor so in-browser preview (target=_blank) still works.
   return (
     <a
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
+      className={cardClass}
       tabIndex={-1}
     >
-      {/* File type icon */}
-      <div className={`size-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-        isPdfMimeType(attachment.mediaType) ? 'bg-red-500/20 text-red-500' :
-        isEbookMimeType(attachment.mediaType) ? 'bg-purple-500/20 text-purple-500' :
-        isDocumentMimeType(attachment.mediaType) ? 'bg-blue-500/20 text-blue-500' :
-        isArchiveMimeType(attachment.mediaType) ? 'bg-yellow-500/20 text-yellow-500' :
-        'bg-fluux-muted/20 text-fluux-muted'
-      }`}>
-        {isPdfMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
-         isEbookMimeType(attachment.mediaType) ? <BookOpen className="size-5" /> :
-         isDocumentMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
-         isArchiveMimeType(attachment.mediaType) ? <Archive className="size-5" /> :
-         <File className="size-5" />}
-      </div>
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-fluux-text truncate">
-          {attachment.name || t('chat.file')}
-        </p>
-        <p className="text-xs text-fluux-muted">
-          {getFileTypeLabel(attachment.mediaType)}
-          {attachment.size && ` • ${formatBytes(attachment.size)}`}
-        </p>
-      </div>
-      {/* Download icon */}
+      {iconWrap}
+      {info}
       <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
     </a>
   )
