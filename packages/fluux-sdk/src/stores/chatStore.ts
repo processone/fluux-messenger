@@ -1889,22 +1889,22 @@ export const chatStore = createStore<ChatState>()(
             }
           }
 
-          // Crash-window safety (Codex r3 #1/#2): the gap map is persisted
-          // synchronously (localStorage) while saveMessages to IndexedDB is
-          // fire-and-forget AND absorbs errors. Persisting a transition that
-          // SHRINKS the recorded hole (deletion, forward startId advance,
-          // backward end/endId shrink) before the page write commits lets a
-          // crash — or a silently failed write — skip the page forever: the
-          // resume cursor would point past data that was never stored. So ANY
-          // transition of an EXISTING gap defers until the durable write
-          // reports success. Formation (prevGap undefined) records a hole —
-          // conservative — and applies immediately. A merge with nothing
-          // persistable has no crash window and applies immediately.
+          // Crash-window safety (Codex r3 #1/#2, r4 #1): the gap map is
+          // persisted synchronously (localStorage) while saveMessages to
+          // IndexedDB is fire-and-forget AND absorbs errors. Persisting a
+          // transition whose cursors reference THIS merge's page before the
+          // write commits lets a crash — or a silently failed write — skip
+          // the page forever: the resume cursor would point past data that
+          // was never stored. That covers deletion, forward startId advance,
+          // backward end/endId shrink AND formation (a formed forward gap
+          // carries this page's rsm.last as startId). So EVERY gap transition
+          // defers until the durable write reports success when the merge
+          // carries persistable messages; with nothing persistable there is
+          // no crash window and the transition applies immediately.
           const prevGap = state.conversationGaps.get(conversationId)
           const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
           const deferGapCommit =
             newGaps !== state.conversationGaps &&
-            prevGap !== undefined &&
             persistableMessages.length > 0
           const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 

@@ -112,8 +112,13 @@ describe('roomStore', () => {
       drafts: new Map(),
       mamQueryStates: new Map(),
       roomGaps: new Map(),
+      roomCoverage: new Map(),
     })
     vi.clearAllMocks()
+    // clearAllMocks does NOT reset implementations: a test that mocks a
+    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // later test. Re-assert the factory default here so ordering can't matter.
+    vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
   })
 
   describe('message eviction on deactivation (memory windowing)', () => {
@@ -2128,7 +2133,7 @@ describe('roomStore', () => {
   describe('mergeRoomMAMMessages gap tracking (persisted roomGaps)', () => {
     const jid = 'room@conference.example.com'
 
-    it('records a persisted GapInterval when a forward catch-up ends incomplete', () => {
+    it('records a persisted GapInterval when a forward catch-up ends incomplete', async () => {
       const recent: RoomMessage = {
         type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
@@ -2142,10 +2147,12 @@ describe('roomStore', () => {
       // Forward catch-up truncated (complete=false) at the edge message.
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
-      const gap = roomStore.getState().roomGaps.get(jid)
-      expect(gap).toEqual({
-        start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
-        end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomGaps.get(jid)).toEqual({
+          start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
+          end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+        })
       })
     })
 
@@ -2158,7 +2165,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
-    it('plants a seam when a fetch-latest page lands disjoint above held history', () => {
+    it('plants a seam when a fetch-latest page lands disjoint above held history', async () => {
       const held: RoomMessage = {
         type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
@@ -2172,9 +2179,12 @@ describe('roomStore', () => {
       // backward + isFetchLatest=true = a `before:''` fetch-latest page
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
 
-      expect(roomStore.getState().roomGaps.get(jid)).toEqual({
-        start: new Date('2026-07-06T00:00:00Z').getTime(),
-        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomGaps.get(jid)).toEqual({
+          start: new Date('2026-07-06T00:00:00Z').getTime(),
+          end: new Date('2026-07-15T00:00:00Z').getTime(),
+        })
       })
       // Proven resident boundary → coverage is NOT flagged unproven (no over-suppression).
       expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).not.toBe(true)
@@ -2405,7 +2415,10 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('old-cursor')
     })
 
-    it('gap FORMATION applies immediately (conservative — records a hole)', () => {
+    it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s rsm.last)', async () => {
+      // Codex r4 #1: a formed forward gap carries rsm.last as startId — a
+      // cursor INTO this very page. Publishing it before the write commits
+      // has exactly the deletion/advance crash window.
       roomStore.getState().addRoom(createRoom(jid))
       let resolveSave!: (committed: boolean) => void
       vi.mocked(messageCache.saveRoomMessages).mockReturnValue(
@@ -2416,11 +2429,30 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'fwd', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z'), isOutgoing: false,
       }
-      // No pre-existing gap: the incomplete forward merge plants one NOW,
-      // before the durable write resolves — recording a hole is conservative.
       roomStore.getState().mergeRoomMAMMessages(jid, [m], { last: 'c1' }, false, 'forward')
-      expect(roomStore.getState().roomGaps.has(jid)).toBe(true)
+
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+      await Promise.resolve()
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+
       resolveSave(true)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('c1')
+      })
+    })
+
+    it('gap FORMATION is dropped when the durable write reports failure', async () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+
+      const m: RoomMessage = {
+        type: 'groupchat', id: 'fwd', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [m], { last: 'c1' }, false, 'forward')
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
     it('fetch-latest establishes the coverage record and it survives resetRoomMAMStates (fresh session)', async () => {
@@ -2555,7 +2587,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start: 1000, end: 5000 })
     })
 
-    it('scopes persisted gaps to the user JID (no cross-account leak)', () => {
+    it('scopes persisted gaps to the user JID (no cross-account leak)', async () => {
       localStorageMock.clear() // isolate from other tests' unscoped writes
       setStorageScopeJid('alice@example.com')
       try {
@@ -2570,6 +2602,10 @@ describe('roomStore', () => {
         }
         roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
+        // Formation defers until the page is durably cached (Codex r4 #1).
+        await vi.waitFor(() => {
+          expect(roomStore.getState().roomGaps.has(jid)).toBe(true)
+        })
         // Stored under the per-account key — NOT the bare key, NOT another account's key.
         expect(localStorageMock._store['fluux-room-gaps:alice@example.com']).toBeDefined()
         expect(localStorageMock._store['fluux-room-gaps']).toBeUndefined()
@@ -2601,7 +2637,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start: 1000, startId: 'newer' })
     })
 
-    it('persists roomGaps to localStorage so the marker survives a reload', () => {
+    it('persists roomGaps to localStorage so the marker survives a reload', async () => {
       const recent: RoomMessage = {
         type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
@@ -2613,10 +2649,13 @@ describe('roomStore', () => {
       }
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
-      const persisted = Object.values(localStorageMock._store).some(
-        (v) => typeof v === 'string' && v.includes('2026-05-14') === false && v.includes(String(new Date('2026-05-14T09:00:00Z').getTime())),
-      )
-      expect(persisted).toBe(true)
+      // Formation defers until the page is durably cached (Codex r4 #1).
+      await vi.waitFor(() => {
+        const persisted = Object.values(localStorageMock._store).some(
+          (v) => typeof v === 'string' && v.includes('2026-05-14') === false && v.includes(String(new Date('2026-05-14T09:00:00Z').getTime())),
+        )
+        expect(persisted).toBe(true)
+      })
     })
   })
 
@@ -5396,8 +5435,13 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       drafts: new Map(),
       mamQueryStates: new Map(),
       roomGaps: new Map(),
+      roomCoverage: new Map(),
     })
     vi.clearAllMocks()
+    // clearAllMocks does NOT reset implementations: a test that mocks a
+    // rejecting/false-resolving saveRoomMessages would leak it into every
+    // later test. Re-assert the factory default here so ordering can't matter.
+    vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
   })
 
   function delayedMsg(id: string, nick: string, ts: string): RoomMessage {
