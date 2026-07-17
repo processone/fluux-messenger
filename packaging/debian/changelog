@@ -1,39 +1,29 @@
-fluux-messenger (0.17.1-1) unstable; urgency=medium
+fluux-messenger (0.17.2-1) unstable; urgency=medium
 
-  * New "Pure" theme optimized for OLED and e-ink displays: flat, high-contrast chrome in pure-black and pure-white variants
-  * A "Play notification sounds" toggle in Accessibility settings, so incoming-message sounds can be turned on or off
-  * Group chats: slash commands in the composer, including /nick to change your nickname (reflected in the occupant list and timeline)
-  * Group chats: joined rooms now show a typing indicator in the sidebar, but only when a caught-up room lights up — busy or unread rooms keep their badge instead
-  * Copy a link from any message using right click menu
-  * Group chats: view a room's full topic from the Room Info modal
-  * Group chats: redesigned catch-up and read-state handling so a room no longer discards your read position on launch, adopting the standard last-read anchor used by other modern chat apps
-  * Encryption status now uses a shield, while a lock is reserved for content that cannot be read — the two metaphors are applied consistently across the chat header, message indicators, composer reminder bar, and security panel
-  * Consecutive messages you send hug their content and form clean rectangular groups
-  * Aurora refinements: gradients harmonize with your accent color per theme, a subtler typing-indicator shimmer, a room-header hairline, a light-mode send button, and refreshed login and app-icon artwork
-  * The command palette surfaces rooms where you were mentioned or whispered at the top, in the "Needs attention" group
-  * Updated dependencies (sequoia-openpgp and other Rust crates)
-  * Read markers now sync with other XMPP clients
-  * A native notification is dismissed when its conversation is read on another device, and read markers synced while a room was inactive are now applied
-  * Read-marker sync advances correctly when you reach the live edge of a conversation
-  * Authentication: the saved keychain password is kept after a transient "not authorized" error, so you are no longer logged out on the next restart
-  * Jumping to a reacted, replied-to, or poll message now works even when the target is outside the loaded window
-  * Search: the message preview stays centered on the matched message instead of drifting
-  * Room avatars render as rounded squares instead of circles consistently across the app, including in search and lists
-  * Scroll no longer repaints or jumps while a group chat catches up its archive, and returning to a room at the bottom no longer causes a one-time content jump
-  * The jump-to-last-read pill works again after jumping to the present, and the own-message hover toolbar keeps a stable position
-  * Reduced the oversized gap below the last message and tightened the conversation-header spacing on mobile
-  * Group chats: an avatar is shown again for a message following a /me action from the same sender; occupant badges stay inline in the members panel; and Quick Chat rooms detect the allow-invites configuration correctly
-  * Group chats: hardened nicknames against whitespace and invisible-character impersonation
-  * Group chats: your profile username is now used as the default nickname everywhere you join a room from
-  * Encrypted conversation previews in the sidebar now heal once their decryption key becomes available
-  * The room identity modal is centered and no longer pulls focus to its close button on open
-  * Composer: the encryption lock color matches the rest of the app, the reply accent bar is inset to clear the card corner, and the send icon reverts after a slash command runs
-  * Typing an @domain.tld address no longer turns into a fake mention
-  * Link previews: interop-correct OGP fastening with a non-blocking metadata fetch
-  * macOS: the window title is set so system media controls show "Fluux Messenger"
-  * Platform-specific settings panels no longer appear on the wrong platform
-  * Admin: ban and delete are never offered on the signed-in admin's own account
-  * The message-row hover highlight is more visible, in-body blockquotes hug their longest line, and the sidebar rail activity dot stays inside its button
-  * Command palette: no border flash on theme toggle, and the Ctrl+K separator shows correctly on non-macOS
+  * The send button responds with a press and glow-pulse animation when a message goes out
+  * Web (PWA): an unread badge on the app icon, service-worker media caching for fewer re-downloads, and repeated messages from one sender coalesced into a single "N new messages" notification
+  * The new-messages divider and the unread badge on the scroll-to-bottom button now follow your read position, staying consistent with the sidebar and read-marker sync
+  * Encryption: end-to-end-encrypted attachments now decrypt when you download or save them, not only in the inline preview, so files of every type arrive readable
+  * Desktop: file uploads and media downloads are handled by native code, making transfers of large files much faster and more reliable
+  * Updated dependencies (Rust crates)
+  * Conversation history no longer shows silent gaps: interruptions while syncing the archive are detected and healed from both directions
+  * History sync: opening a conversation you had already read elsewhere no longer shows an empty history on a new or freshly cleared device — the archive now downloads independently of your read position
+  * A conversation read on another device now opens at its live edge instead of an outdated saved scroll position after multi-device sync
+  * Encryption: a leftover unread badge from an undecryptable reaction now clears once its placeholder is dropped
+  * Web (PWA): an update already downloaded but parked is now applied automatically at launch instead of trailing the deployed build indefinitely
+  * Clicking a reaction notification now always jumps to the reacted message
+  * The sidebar keeps its scroll position when conversations reorder during catch-up
+  * Authentication: a wrong saved password no longer triggers an endless keychain retry loop
+  * Encryption: the key-backup passphrase is now used exactly as displayed, so backups restore in other XMPP clients; older backups still open and are healed to the portable format on restore
+  * Desktop: downloading an update no longer risks freezing the app while showing progress
+  * Linux: fixed a performance issue when many new messages arrived at once
+  * Group chats: the public room directory no longer lists duplicate rooms and no longer pulls in results beyond your server's directory
+  * Group chats: a room notification banner no longer reappears when the room is reopened
+  * Group chats: removed a redundant tooltip on the room header title
+  * The quoted-message and reply cards stay visually distinct when a message is selected
+  * Your own message group re-fits its width once an image inside it finishes loading
+  * The typing indicator is vertically centered between the last message and the composer
+  * macOS: the traffic-light window buttons stay centered in the app bar
+  * Web: the notification permission card in Settings uses platform-neutral wording instead of "Desktop Notifications"
 
- -- ProcessOne <contact@process-one.net>  Mon, 13 Jul 2026 12:00:00 +0000
+ -- ProcessOne <contact@process-one.net>  Fri, 17 Jul 2026 12:00:00 +0000
