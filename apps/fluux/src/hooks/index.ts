@@ -13,6 +13,7 @@ export { useFocusZones, type FocusZone, type FocusZoneRefs } from './useFocusZon
 export { useLinkPreview } from './useLinkPreview'
 export { useListKeyboardNav } from './useListKeyboardNav'
 export { useMentionAutocomplete, type MentionMatch, type MentionAutocompleteState } from './useMentionAutocomplete'
+export { useEmojiAutocomplete, type EmojiMatch, type EmojiAutocompleteState } from './useEmojiAutocomplete'
 export { useMessageCopy } from './useMessageCopy'
 export { useMessageCopyFormatter } from './useMessageCopyFormatter'
 export { useMessageRangeSelection } from './useMessageRangeSelection'
