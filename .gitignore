@@ -61,9 +61,7 @@ server/
 .output.txt
 
 # AI Tools
-.claude/*
-# ...but track shared, project-level skills (the rest of .claude/ stays local)
-!.claude/skills/
+.claude/
 .copilot/
 .gemini/
 .aider/
