@@ -37,10 +37,6 @@ export function useEmojiAutocomplete(
 
   // Detect : trigger and extract query
   const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
-    if (dismissed) {
-      return { isActive: false, query: '', triggerIndex: currentTriggerRef.current }
-    }
-
     // Look for : before cursor
     const beforeCursor = text.slice(0, cursorPosition)
 
@@ -76,6 +72,12 @@ export function useEmojiAutocomplete(
 
     // Store current trigger position for dismiss tracking
     currentTriggerRef.current = colonIndex
+
+    // If it's the exact same trigger index we dismissed, remain inactive
+    if (dismissed && colonIndex === dismissedAtTriggerRef.current) {
+      return { isActive: false, query: queryText.toLowerCase(), triggerIndex: colonIndex }
+    }
+
     return { isActive: true, query: queryText.toLowerCase(), triggerIndex: colonIndex }
   }
 
