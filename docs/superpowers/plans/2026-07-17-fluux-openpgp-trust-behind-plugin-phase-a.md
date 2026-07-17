@@ -30,7 +30,7 @@
 - `apps/fluux/src/components/contact-profile/tabs/SecurityTab.tsx` — `omemo` prop → `identities`; `OmemoDeviceList` → `PeerIdentityList` with protocol-appropriate label; capability gate (Task 2).
 - `apps/fluux/src/components/contact-profile/tabs/SecurityTab.omemo.test.tsx` — updated for the prop rename (Task 2).
 - `apps/fluux/src/e2ee/openpgpTrustRendering.regression.test.tsx` — SecurityTab section rewritten for the shared list; `getGlance`/`ChatHeader` sections untouched (Task 2).
-- `apps/fluux/public/locales/*/translation.json` (33) — neutral `contacts.encryption.identity.*` keys (Task 3).
+- `apps/fluux/src/i18n/locales/*.json` (33) — neutral `contacts.encryption.identity.*` keys (Task 3).
 - `apps/fluux/src/components/contact-profile/ContactSecurityDetail.tsx` — prop passthrough rename (Task 4).
 - `apps/fluux/src/components/ContactProfileView.tsx` — build the protocol-neutral `identities` handle for OpenPGP **and** OMEMO; wire OpenPGP verify/revoke through `setIdentityTrust` (Task 4).
 
@@ -296,7 +296,7 @@ git commit --no-gpg-sign -m "refactor(e2ee): generalize SecurityTab OmemoDeviceL
 ### Task 3: Protocol-neutral i18n keys (`contacts.encryption.identity.*`) across 33 locales
 
 **Files:**
-- Modify: `apps/fluux/public/locales/*/translation.json` (all 33)
+- Modify: `apps/fluux/src/i18n/locales/*.json` (all 33)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -317,9 +317,9 @@ The new keys (English values; the OMEMO copy generalized to be protocol-neutral,
 }
 ```
 
-- [ ] **Step 1: Add the keys to the English locale.** Insert `identity` under `contacts.encryption` in `apps/fluux/public/locales/en/translation.json`, adjacent to the existing `omemo` block. Use the surgical edit: read → `JSON.parse` → set `data.contacts.encryption.identity = {…}` → `fs.writeFileSync(path, JSON.stringify(data, null, 4) + "\n")`.
+- [ ] **Step 1: Add the keys to the English locale.** Insert `identity` under `contacts.encryption` in `apps/fluux/src/i18n/locales/en.json`, adjacent to the existing `omemo` block. Use the surgical edit: read → `JSON.parse` → set `data.contacts.encryption.identity = {…}` → `fs.writeFileSync(path, JSON.stringify(data, null, 4) + "\n")`.
 
-- [ ] **Step 2: Translate into the other 32 locales.** Claude translates all locales (per project workflow). For each `apps/fluux/public/locales/<lang>/translation.json`, add the same `identity` block with translated values (no em-dash connectors; keep `{{id}}`/`{{count}}`/`{{verified}}` placeholders verbatim). Preserve each file's key ordering by inserting adjacent to its existing `omemo` block; write with `JSON.stringify(data, null, 4) + "\n"`.
+- [ ] **Step 2: Translate into the other 32 locales.** Claude translates all locales (per project workflow). For each `apps/fluux/src/i18n/locales/<lang>.json`, add the same `identity` block with translated values (no em-dash connectors; keep `{{id}}`/`{{count}}`/`{{verified}}` placeholders verbatim). Preserve each file's key ordering by inserting adjacent to its existing `omemo` block; write with `JSON.stringify(data, null, 4) + "\n"`.
 
 - [ ] **Step 3: Keep or retire the old `omemo` keys.** Leave `contacts.encryption.omemo.*` in place for this phase (still referenced by any not-yet-migrated copy and by `SecurityTab.omemo.test.tsx` comments); a dead-key sweep is a trivial follow-up once nothing references them. Do **not** delete in Phase A.
 
@@ -327,11 +327,11 @@ The new keys (English values; the OMEMO copy generalized to be protocol-neutral,
 
 - [ ] **Step 5: Typecheck + a JSON validity check + commit.**
 
-Run: `node -e "const fs=require('fs');for(const d of fs.readdirSync('apps/fluux/public/locales')){JSON.parse(fs.readFileSync('apps/fluux/public/locales/'+d+'/translation.json','utf8'))}console.log('all locales parse')"`
+Run: `node -e "const fs=require('fs');for(const f of fs.readdirSync('apps/fluux/src/i18n/locales').filter(x=>x.endsWith('.json'))){JSON.parse(fs.readFileSync('apps/fluux/src/i18n/locales/'+f,'utf8'))}console.log('all locales parse')"`
 Expected: `all locales parse`.
 
 ```bash
-git add apps/fluux/public/locales apps/fluux/src/test-setup.ts
+git add apps/fluux/src/i18n/locales apps/fluux/src/test-setup.ts
 git commit --no-gpg-sign -m "i18n(e2ee): add protocol-neutral contacts.encryption.identity.* keys (33 locales)"
 ```
 
