@@ -396,14 +396,15 @@ describe('XMPPClient MAM', () => {
       await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
 
       // Verify chat:mam-messages was emitted with direction='backward' (no start filter)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true,
         direction: 'backward',
-        isFetchLatest: true
-      })
+        isFetchLatest: true,
+        initialBefore: '',
+      }))
     })
 
     it('should set error state on query failure', async () => {
@@ -2652,14 +2653,15 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'backward' for queries without start filter
       // The store will set isHistoryComplete=true
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
         direction: 'backward', // direction - store will set isHistoryComplete
-        isFetchLatest: true // before:'' fetch-latest candidate
-      })
+        isFetchLatest: true, // before:'' fetch-latest candidate
+        initialBefore: '',
+      }))
     })
 
     it('should build a forward RSM <after> element and treat it as forward pagination (XEP-0490 pointer-seed catch-up)', async () => {
@@ -3046,14 +3048,16 @@ describe('XMPPClient MAM', () => {
       await xmppClient.chat.queryRoomMAM({ roomJid })
 
       // Verify room:mam-messages was emitted with direction='backward' (no start filter)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
         rsm: expect.objectContaining({ first: 'first-id', last: 'last-id' }),
         complete: true,
         direction: 'backward',
-        isFetchLatest: true // no before, no start = fetch-latest
-      })
+        isFetchLatest: true, // no before, no start = fetch-latest
+        initialBefore: '',
+        fetchLatestTopId: 'last-id',
+      }))
     })
 
     it('should set error state on room MAM query failure', async () => {
@@ -3218,14 +3222,15 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'backward' for queries with before filter
       // The store will set isHistoryComplete=true
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
         direction: 'backward', // direction - store will set isHistoryComplete
-        isFetchLatest: false // real pagination cursor ('some-stanza-id'), not a fetch-latest
-      })
+        isFetchLatest: false, // real pagination cursor ('some-stanza-id'), not a fetch-latest
+        initialBefore: 'some-stanza-id',
+      }))
     })
 
     it('treats an after-only cursor as forward pagination (XEP-0490 pointer-seed catch-up)', async () => {

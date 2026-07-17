@@ -204,6 +204,12 @@ export interface ChatEvents {
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
     isFetchLatest?: boolean
+    /** The `before` cursor the query started from ('' = fetch-latest) — anchors
+     *  the persisted coverage-record extension (mamCoverage.ts). */
+    initialBefore?: string
+    /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
+     *  the coverage record's `topId`. */
+    fetchLatestTopId?: string
   }
 
   /**
@@ -217,6 +223,18 @@ export interface ChatEvents {
     conversationId: string
     /** The purged archive id the query was anchored on. */
     after: string
+  }
+
+  /**
+   * A coverage-seeded `before:` anchor (CoverageRecord.bottomId) was purged
+   * from the archive (item-not-found) and the query degraded to a
+   * fetch-latest. Bindings drop the matching coverage record so later
+   * resumes don't re-anchor on the dead id forever.
+   */
+  'chat:mam-coverage-purged': {
+    conversationId: string
+    /** The purged archive id the query was anchored on. */
+    before: string
   }
 
   /**
@@ -417,6 +435,12 @@ export interface RoomEvents {
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
     isFetchLatest?: boolean
+    /** The `before` cursor the query started from ('' = fetch-latest) — anchors
+     *  the persisted coverage-record extension (mamCoverage.ts). */
+    initialBefore?: string
+    /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
+     *  the coverage record's `topId`. */
+    fetchLatestTopId?: string
   }
 
   /**
@@ -429,6 +453,13 @@ export interface RoomEvents {
     roomJid: string
     /** The purged archive id the query was anchored on. */
     after: string
+  }
+
+  /** Room twin of `chat:mam-coverage-purged`. */
+  'room:mam-coverage-purged': {
+    roomJid: string
+    /** The purged archive id the query was anchored on. */
+    before: string
   }
 
   /** Room member affiliations discovered (XEP-0045 admin query) */

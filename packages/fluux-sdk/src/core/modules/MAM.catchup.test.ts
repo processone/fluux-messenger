@@ -794,6 +794,33 @@ describe('MAM Background Catch-Up', () => {
       )
     })
 
+    it('seeds Phase B from the persisted coverage record when no gap endId exists (Codex r3 #3)', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+      // No recorded gap, but a persisted coverage record survives the fresh
+      // session: seed from its bottomId, never from the cache-oldest island.
+      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue(undefined)
+      vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'coverage-bottom' })
+      vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
+        { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
+        return { messages: [], complete: false, rsm: { first: 'p1' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+        [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
+        { sessionStartTime: Date.now(), stitchReadPointer: true })
+
+      const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
+      expect(backward[0]?.before).toBe('coverage-bottom') // record, NOT 'island-old'
+      expect(backward.some((c) => c.before === 'island-old')).toBe(false)
+    })
+
     it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
       await connectClient()
       setupChat('mds-ptr')

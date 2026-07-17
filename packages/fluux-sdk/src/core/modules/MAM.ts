@@ -223,6 +223,9 @@ export class MAM extends BaseModule {
     let currentAfter: string | undefined = after
     let isComplete = false
     let lastRsm: RSMResponse = {}
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
@@ -313,6 +316,7 @@ export class MAM extends BaseModule {
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForwardPaginate) fetchLatestTopId = rsm.last
 
           if (isForwardPaginate) {
             // Forward catch-up: accumulate every page, advance via `after` until complete.
@@ -365,6 +369,7 @@ export class MAM extends BaseModule {
         direction,
         preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
+        ...(direction === 'backward' ? { initialBefore: before, fetchLatestTopId } : {}),
       })
 
       // Modifications whose target is not in this batch belong to a message
@@ -424,6 +429,9 @@ export class MAM extends BaseModule {
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
     let currentAfter = after
     let currentBefore = before
     // BACKWARD retry pages accumulate modifications across pages and resolve
@@ -539,6 +547,7 @@ export class MAM extends BaseModule {
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForward) fetchLatestTopId = rsm.last
 
           // Stop if archive is complete (no more messages)
           if (complete) {
@@ -598,6 +607,8 @@ export class MAM extends BaseModule {
           direction: 'backward',
           preserveGapMarker,
           isFetchLatest: !before,
+          initialBefore: before ?? '',
+          fetchLatestTopId,
         })
         this.emitUnresolvedRoomModifications(roomJid, unresolved)
       }
@@ -1125,6 +1136,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
       getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
       getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
+      getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
@@ -1292,6 +1304,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
       getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
       getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
+      getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
       getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
@@ -1319,6 +1332,7 @@ export class MAM extends BaseModule {
       getGapStart: () => number | undefined
       getGapStartId: () => string | undefined
       getGapEndId: () => string | undefined
+      getCoverageBottomId: () => string | undefined
       getCoverageUnproven: () => boolean | undefined
       getPendingStanzaId: () => string | undefined
       isActive: () => boolean
@@ -1395,12 +1409,13 @@ export class MAM extends BaseModule {
     // (The `messages` peek param is the NEWEST-100 slice and would pin the
     // seed ~100 below live forever; it remains only the cacheless fallback.)
     if (!windowBottom && io.getPendingStanzaId()) {
-      // Contiguous coverage bottom: a recorded gap's upper edge is the proven
-      // bottom of the contiguous-from-live region. Seeding from it (not the
-      // global-oldest cache row) keeps the backward walk inside the contiguous
-      // region — a disjoint search/context island below a recorded gap can no
-      // longer mis-seed the descent (finding 9).
-      const seamBottom = io.getGapEndId()
+      // Contiguous coverage bottom: prefer the recorded gap's proven upper
+      // edge, else the persisted coverage record (positive data that survives
+      // fresh sessions and gap closure — Codex r3 #3). Seeding from it (not
+      // the global-oldest cache row) keeps the backward walk inside the
+      // contiguous region — a disjoint search/context island (with or without
+      // a recorded gap) can no longer mis-seed the descent (finding 9).
+      const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
       if (seamBottom) {
         windowBottom = seamBottom
       } else if (!io.getCoverageUnproven()) {
