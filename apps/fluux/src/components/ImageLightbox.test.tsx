@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ImageLightbox } from './ImageLightbox'
 
-const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadFileSpy } = vi.hoisted(() => ({
+const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadFileSpy, downloadAttachmentSpy } = vi.hoisted(() => ({
   useAttachmentUrlSpy: vi.fn(),
   useCachedMediaUrlSpy: vi.fn(),
   downloadFileSpy: vi.fn(),
+  downloadAttachmentSpy: vi.fn(),
 }))
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
@@ -15,7 +16,10 @@ vi.mock('@/hooks', () => ({
 vi.mock('@/hooks/useCachedMediaUrl', () => ({
   useCachedMediaUrl: (u: string | undefined, e: unknown, enabled?: boolean) => useCachedMediaUrlSpy(u, e, enabled),
 }))
-vi.mock('@/utils/download', () => ({ downloadFile: (...args: unknown[]) => downloadFileSpy(...args) }))
+vi.mock('@/utils/download', () => ({
+  downloadFile: (...args: unknown[]) => downloadFileSpy(...args),
+  downloadAttachment: (...args: unknown[]) => downloadAttachmentSpy(...args),
+}))
 vi.mock('./ImageContextMenu', () => ({ ImageContextMenu: () => null }))
 vi.mock('@/hooks/useContextMenu', () => ({ useContextMenu: () => ({ handleContextMenu: vi.fn() }) }))
 
@@ -105,5 +109,53 @@ describe('ImageLightbox download button', () => {
     )
     fireEvent.click(screen.getByTitle('common.download'))
     expect(downloadFileSpy).toHaveBeenCalledWith('https://x/full.jpg', 'image', expect.anything())
+  })
+})
+
+describe('ImageLightbox encrypted download', () => {
+  const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // No resolved (decrypted) bytes: proxied + cached are both null.
+    useAttachmentUrlSpy.mockReturnValue({ url: null, isLoading: false, error: new Error('Failed to fetch') })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  it('decrypts on demand and NEVER hands the ciphertext URL to the save path', () => {
+    render(
+      <ImageLightbox
+        src="https://x/cipher.bin"
+        downloadUrl="https://x/cipher.bin"
+        encryption={encryption}
+        filename="secret.jpg"
+        onClose={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('common.download'))
+
+    // Routes through the decrypting helper with the attachment shape...
+    expect(downloadAttachmentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://x/cipher.bin', encryption }),
+      expect.anything(),
+    )
+    // ...and never saves the raw ciphertext URL directly.
+    expect(downloadFileSpy).not.toHaveBeenCalled()
+  })
+
+  it('downloads the decrypted blob directly once resolved (no re-decrypt)', () => {
+    useAttachmentUrlSpy.mockReturnValue({ url: 'blob:decrypted', isLoading: false, error: null })
+    render(
+      <ImageLightbox
+        src="https://x/cipher.bin"
+        downloadUrl="https://x/cipher.bin"
+        encryption={encryption}
+        filename="secret.jpg"
+        onClose={() => {}}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('common.download'))
+    expect(downloadFileSpy).toHaveBeenCalledWith('blob:decrypted', 'secret.jpg', expect.anything())
+    expect(downloadAttachmentSpy).not.toHaveBeenCalled()
   })
 })
