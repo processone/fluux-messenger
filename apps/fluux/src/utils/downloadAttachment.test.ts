@@ -44,6 +44,11 @@ describe('downloadAttachment', () => {
       status: 200,
       arrayBuffer: async () => new ArrayBuffer(4),
     }) as unknown as typeof fetch
+    // jsdom doesn't implement navigation; stub the click so the web download
+    // path (which sets href/download then calls anchor.click()) doesn't emit
+    // a "Not implemented: navigation" stderr warning. The assertions only
+    // check attributes set before .click() is invoked, so this is safe.
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   it('Tauri: encrypted → resolves decrypted URL and saves that, never the ciphertext URL', async () => {
