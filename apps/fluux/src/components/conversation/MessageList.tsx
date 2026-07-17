@@ -525,6 +525,7 @@ export function MessageList<T extends BaseMessage>({
     messageCount: messages.length,
     firstMessageId,
     firstNewMessageId,
+    lastSeenMessageId,
     clearFirstNewMessageId,
     targetMessageId,
     onTargetMessageConsumed,
