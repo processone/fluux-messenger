@@ -4,6 +4,7 @@ import {
   resolveNotificationTarget,
   notificationNavigateMessage,
   handleNotificationNavigateMessage,
+  webTag,
 } from './notificationNavigation'
 
 describe('resolveNotificationTarget', () => {
@@ -85,5 +86,15 @@ describe('handleNotificationNavigateMessage', () => {
     expect(handleNotificationNavigateMessage(null, handlers)).toBe(false)
     expect(navigateToConversation).not.toHaveBeenCalled()
     expect(navigateToRoom).not.toHaveBeenCalled()
+  })
+})
+
+describe('webTag', () => {
+  it('returns the bare JID for conversations', () => {
+    expect(webTag('conversation', 'alice@example.com')).toBe('alice@example.com')
+  })
+
+  it('prefixes rooms with room-', () => {
+    expect(webTag('room', 'dev@conference.example.com')).toBe('room-dev@conference.example.com')
   })
 })

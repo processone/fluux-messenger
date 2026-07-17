@@ -15,9 +15,11 @@ import {
   isTauri,
 } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
+import { newMessagesText } from '@/utils/swMessages'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
+import { webTag } from '@/utils/notificationNavigation'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
@@ -39,7 +41,7 @@ export function useDesktopNotifications(): void {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   useNotificationPermission()
   const { presenceStatus } = usePresence()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // Refs for stable access in async callbacks (useNavigateToTarget uses refs internally)
   const navigateToConversationRef = useRef(navigateToConversation)
@@ -175,15 +177,18 @@ export function useDesktopNotifications(): void {
         })
       }
     } else {
+      // Same-tag replacement swallows earlier messages, so surface the count in
+      // the body (matches the SW push path; the title stays the plain name).
+      const coalesced = conv.unreadCount > 1
       await showWebNotification(
-        title,
+        baseTitle,
         {
-          body,
+          body: coalesced ? newMessagesText(i18n.language, conv.unreadCount) : body,
           icon: avatarUrl || './icon-512.png',
-          tag: conv.id,
+          tag: webTag('conversation', conv.id),
           onClick: () => navigateToConversation(conv.id),
         },
-        { from: conv.id, type: 'conversation' },
+        { from: conv.id, type: 'conversation', count: conv.unreadCount },
       )
     }
   }
@@ -231,15 +236,18 @@ export function useDesktopNotifications(): void {
         })
       }
     } else {
+      // Coalesced room notifications drop the per-message nick: the messages
+      // may come from several senders, so the room name is the honest title.
+      const coalesced = room.unreadCount > 1
       await showWebNotification(
-        title,
+        coalesced ? room.name : title,
         {
-          body,
+          body: coalesced ? newMessagesText(i18n.language, room.unreadCount) : body,
           icon: avatarUrl || './icon-512.png',
-          tag: `room-${room.jid}`,
+          tag: webTag('room', room.jid),
           onClick: () => navigateToRoom(room.jid),
         },
-        { from: room.jid, type: 'room' },
+        { from: room.jid, type: 'room', count: room.unreadCount },
       )
     }
   }
