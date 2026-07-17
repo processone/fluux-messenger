@@ -1124,6 +1124,7 @@ export class MAM extends BaseModule {
     await this.runCatchUpHistory(messages, options, {
       getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
       getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
+      getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
       probeCacheBottom: async () =>
@@ -1289,6 +1290,7 @@ export class MAM extends BaseModule {
     await this.runCatchUpHistory(messages, options, {
       getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
       getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
+      getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
       probeCacheBottom: async () =>
@@ -1314,6 +1316,7 @@ export class MAM extends BaseModule {
     io: {
       getGapStart: () => number | undefined
       getGapStartId: () => string | undefined
+      getGapEndId: () => string | undefined
       getPendingStanzaId: () => string | undefined
       isActive: () => boolean
       probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
@@ -1389,15 +1392,19 @@ export class MAM extends BaseModule {
     // (The `messages` peek param is the NEWEST-100 slice and would pin the
     // seed ~100 below live forever; it remains only the cacheless fallback.)
     if (!windowBottom && io.getPendingStanzaId()) {
-      // Known bounded blind spot: "cache bottom" only equals true COVERAGE
-      // bottom for a CONTIGUOUS cache. A disjoint deep cached island (e.g. a
-      // bounded context fetch that jumped far below live) can seed this walk
-      // below an unresolved pointer instead of at it. Cost stays bounded
-      // (MAM_POINTER_STITCH_MAX_PAGES) and the gap self-heals on the next
-      // open/scroll, so this is left as-is rather than special-cased here.
-      const bottom = await io.probeCacheBottom()
-      windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
-        ?? oldestMessageWithStanzaId(messages)?.stanzaId
+      // Contiguous coverage bottom: a recorded gap's upper edge is the proven
+      // bottom of the contiguous-from-live region. Seeding from it (not the
+      // global-oldest cache row) keeps the backward walk inside the contiguous
+      // region — a disjoint search/context island below a recorded gap can no
+      // longer mis-seed the descent (finding 9).
+      const seamBottom = io.getGapEndId()
+      if (seamBottom) {
+        windowBottom = seamBottom
+      } else {
+        const bottom = await io.probeCacheBottom()
+        windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
+          ?? oldestMessageWithStanzaId(messages)?.stanzaId
+      }
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
       // Re-check activity EVERY iteration, not just at dispatch: a walk is up

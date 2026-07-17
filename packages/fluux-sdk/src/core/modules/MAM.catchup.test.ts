@@ -735,6 +735,34 @@ describe('MAM Background Catch-Up', () => {
       expect(calls).toHaveLength(2)
     })
 
+    it('seeds Phase B from the recorded gap upper edge, ignoring a disjoint cache island below it', async () => {
+      await connectClient()
+      // Pointer pending; Phase A completes forward with nothing to bail on.
+      vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue('mds-ptr')
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
+      // A recorded gap whose upper edge is 'seam-top' — the contiguous bottom.
+      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue('seam-top')
+      // A search island sits far below; probeCacheBottom would return it.
+      vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
+        { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
+        return { messages: [], complete: false, rsm: { first: 'p1' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+        [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
+        { sessionStartTime: Date.now(), stitchReadPointer: true })
+
+      const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
+      expect(backward[0]?.before).toBe('seam-top')       // seam edge, NOT 'island-old'
+      expect(backward.some((c) => c.before === 'island-old')).toBe(false)
+    })
+
     it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
       await connectClient()
       setupChat('mds-ptr')
@@ -980,6 +1008,33 @@ describe('MAM Background Catch-Up', () => {
       expect(calls[0]).toMatchObject({ after: 'new-9' })
       expect(calls[1]).toMatchObject({ before: 'bottom-1' })
       expect(calls).toHaveLength(2)
+    })
+
+    it('seeds Phase B from the recorded gap upper edge, ignoring a disjoint cache island below it', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+      vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(undefined)
+      // A recorded gap whose upper edge is 'seam-top' — the contiguous bottom.
+      vi.mocked(mockStores.room.getRoomGapEndId!).mockReturnValue('seam-top')
+      // A search island sits far below; probeCacheBottom would return it.
+      vi.mocked(mockStores.room.loadMessagesFromCache!).mockResolvedValue([
+        { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
+        return { messages: [], complete: false, rsm: { first: 'p1' } }
+      })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid,
+        [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
+        { sessionStartTime: Date.now(), stitchReadPointer: true })
+
+      const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
+      expect(backward[0]?.before).toBe('seam-top')       // seam edge, NOT 'island-old'
+      expect(backward.some((c) => c.before === 'island-old')).toBe(false)
     })
 
     it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
