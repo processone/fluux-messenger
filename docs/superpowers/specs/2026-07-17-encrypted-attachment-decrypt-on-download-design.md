@@ -17,8 +17,13 @@ envelope correctly and the SDK parses the `aesgcm://` reference into a
 Inline media (image / video / audio) resolves through `useAttachmentUrl`, which
 fetches the ciphertext and calls `decryptFile` before rendering — so display
 works. But every **download-to-disk** path ignores `attachment.encryption` and
-links directly at `attachment.url`, i.e. at ciphertext. Downloading an encrypted
-PDF, document, or archive therefore saves undecryptable bytes.
+links directly at `attachment.url`, i.e. at ciphertext. Downloading **any**
+encrypted attachment — of any type — therefore saves undecryptable bytes.
+
+This is type-agnostic: the fix keys solely on `attachment.encryption` being
+present, never on MIME type or filename. It must work for every attachment kind
+(images, video, audio, PDFs, documents, archives, and any other file), not just
+PDFs. PDF is merely the reported example.
 
 Observed live: a PDF from `edaveine@process-one.net` (Fluux desktop) — the OX
 message decrypts, but the file card's download link yields ciphertext.
