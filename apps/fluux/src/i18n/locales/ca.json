@@ -213,6 +213,17 @@
                 "loadError": "No s'han pogut carregar els dispositius",
                 "retry": "Torna-ho a provar"
             },
+            "identity": {
+                "summary": "{{verified}} de {{count}} verificades",
+                "deviceLabel": "Dispositiu {{id}}",
+                "openpgpKeyLabel": "Clau OpenPGP",
+                "loading": "Carregant claus…",
+                "loadError": "No s’han pogut carregar les claus",
+                "retry": "Torna-ho a provar",
+                "noKeyYet": "Encara no s’ha publicat cap clau",
+                "verify": "Verifica",
+                "revoke": "Revoca"
+            },
             "needsVerification": {
                 "title": "Verifica un dispositiu per enviar",
                 "description": "Tots els dispositius d'aquest contacte no són de confiança. Verifica almenys un dispositiu per enviar missatges xifrats.",

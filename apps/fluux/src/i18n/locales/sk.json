@@ -212,6 +212,17 @@
                 "loadError": "Zariadenia sa nepodarilo načítať",
                 "retry": "Skúsiť znova"
             },
+            "identity": {
+                "summary": "Overených {{verified}} z {{count}}",
+                "deviceLabel": "Zariadenie {{id}}",
+                "openpgpKeyLabel": "Kľúč OpenPGP",
+                "loading": "Načítavanie kľúčov…",
+                "loadError": "Kľúče sa nepodarilo načítať",
+                "retry": "Skúsiť znova",
+                "noKeyYet": "Zatiaľ nebol zverejnený žiadny kľúč",
+                "verify": "Overiť",
+                "revoke": "Odvolať"
+            },
             "needsVerification": {
                 "title": "Overte zariadenie na odoslanie",
                 "description": "Všetky zariadenia tohto kontaktu sú nedôveryhodné. Overte aspoň jedno zariadenie na odosielanie šifrovaných správ.",

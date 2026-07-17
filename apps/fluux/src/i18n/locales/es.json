@@ -213,6 +213,17 @@
                 "loadError": "No se pudieron cargar los dispositivos",
                 "retry": "Reintentar"
             },
+            "identity": {
+                "summary": "{{verified}} de {{count}} verificadas",
+                "deviceLabel": "Dispositivo {{id}}",
+                "openpgpKeyLabel": "Clave OpenPGP",
+                "loading": "Cargando claves…",
+                "loadError": "No se pudieron cargar las claves",
+                "retry": "Reintentar",
+                "noKeyYet": "Aún no se ha publicado ninguna clave",
+                "verify": "Verificar",
+                "revoke": "Revocar"
+            },
             "needsVerification": {
                 "title": "Verifica un dispositivo para enviar",
                 "description": "Todos los dispositivos de este contacto no son de confianza. Verifica al menos un dispositivo para enviar mensajes cifrados.",

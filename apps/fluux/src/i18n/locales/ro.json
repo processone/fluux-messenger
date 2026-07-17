@@ -213,6 +213,17 @@
                 "loadError": "Dispozitivele nu au putut fi încărcate",
                 "retry": "Reîncearcă"
             },
+            "identity": {
+                "summary": "{{verified}} din {{count}} verificate",
+                "deviceLabel": "Dispozitiv {{id}}",
+                "openpgpKeyLabel": "Cheie OpenPGP",
+                "loading": "Se încarcă cheile…",
+                "loadError": "Cheile nu au putut fi încărcate",
+                "retry": "Reîncearcă",
+                "noKeyYet": "Nicio cheie publicată încă",
+                "verify": "Verifică",
+                "revoke": "Revocă"
+            },
             "needsVerification": {
                 "title": "Verifică un dispozitiv pentru a trimite",
                 "description": "Toate dispozitivele acestui contact nu sunt de încredere. Verifică cel puțin un dispozitiv pentru a trimite mesaje criptate.",

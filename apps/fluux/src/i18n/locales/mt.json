@@ -213,6 +213,17 @@
                 "loadError": "Ma setgħux jitgħabbew l-apparati",
                 "retry": "Erġa' pprova"
             },
+            "identity": {
+                "summary": "{{verified}} minn {{count}} ivverifikati",
+                "deviceLabel": "Apparat {{id}}",
+                "openpgpKeyLabel": "Ċavetta OpenPGP",
+                "loading": "Qed jitgħabbew iċ-ċwievet…",
+                "loadError": "Ma stajniex intgħabbew iċ-ċwievet",
+                "retry": "Erġa’ pprova",
+                "noKeyYet": "L-ebda ċavetta ppubblikata s’issa",
+                "verify": "Ivverifika",
+                "revoke": "Irrevoka"
+            },
             "needsVerification": {
                 "title": "Ivverifika apparat biex tibgħat",
                 "description": "L-apparati kollha ta' dan il-kuntatt mhumiex fdati. Ivverifika mill-inqas apparat wieħed biex tibgħat messaġġi kriptati.",

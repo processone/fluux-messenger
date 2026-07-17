@@ -213,6 +213,17 @@
                 "loadError": "Seadmeid ei õnnestunud laadida",
                 "retry": "Proovi uuesti"
             },
+            "identity": {
+                "summary": "{{verified}} / {{count}} kinnitatud",
+                "deviceLabel": "Seade {{id}}",
+                "openpgpKeyLabel": "OpenPGP võti",
+                "loading": "Võtmete laadimine…",
+                "loadError": "Võtmeid ei õnnestunud laadida",
+                "retry": "Proovi uuesti",
+                "noKeyYet": "Võtit pole veel avaldatud",
+                "verify": "Kinnita",
+                "revoke": "Tühista"
+            },
             "needsVerification": {
                 "title": "Saatmiseks kinnita seade",
                 "description": "Selle kontakti kõik seadmed on usaldamatud. Kinnita vähemalt üks seade, et saata krüptitud sõnumeid.",

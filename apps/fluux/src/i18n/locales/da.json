@@ -211,6 +211,17 @@
                 "loadError": "Kunne ikke indlæse enheder",
                 "retry": "Prøv igen"
             },
+            "identity": {
+                "summary": "{{verified}} af {{count}} bekræftet",
+                "deviceLabel": "Enhed {{id}}",
+                "openpgpKeyLabel": "OpenPGP-nøgle",
+                "loading": "Indlæser nøgler…",
+                "loadError": "Kunne ikke indlæse nøgler",
+                "retry": "Prøv igen",
+                "noKeyYet": "Ingen nøgle offentliggjort endnu",
+                "verify": "Bekræft",
+                "revoke": "Tilbagekald"
+            },
             "needsVerification": {
                 "title": "Bekræft en enhed for at sende",
                 "description": "Alle enheder for denne kontakt er ubetroede. Bekræft mindst én enhed for at sende krypterede beskeder.",

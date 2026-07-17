@@ -211,6 +211,17 @@
                 "loadError": "Kan apparaten niet laden",
                 "retry": "Opnieuw proberen"
             },
+            "identity": {
+                "summary": "{{verified}} van {{count}} geverifieerd",
+                "deviceLabel": "Apparaat {{id}}",
+                "openpgpKeyLabel": "OpenPGP-sleutel",
+                "loading": "Sleutels laden…",
+                "loadError": "Kan sleutels niet laden",
+                "retry": "Opnieuw proberen",
+                "noKeyYet": "Nog geen sleutel gepubliceerd",
+                "verify": "Verifiëren",
+                "revoke": "Intrekken"
+            },
             "needsVerification": {
                 "title": "Verifieer een apparaat om te verzenden",
                 "description": "Alle apparaten van dit contact zijn niet vertrouwd. Verifieer minstens één apparaat om versleutelde berichten te verzenden.",

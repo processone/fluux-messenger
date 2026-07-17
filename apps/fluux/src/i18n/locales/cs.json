@@ -213,6 +213,17 @@
                 "loadError": "Zařízení se nepodařilo načíst",
                 "retry": "Zkusit znovu"
             },
+            "identity": {
+                "summary": "Ověřeno {{verified}} z {{count}}",
+                "deviceLabel": "Zařízení {{id}}",
+                "openpgpKeyLabel": "Klíč OpenPGP",
+                "loading": "Načítání klíčů…",
+                "loadError": "Klíče se nepodařilo načíst",
+                "retry": "Zkusit znovu",
+                "noKeyYet": "Zatím nebyl zveřejněn žádný klíč",
+                "verify": "Ověřit",
+                "revoke": "Odvolat"
+            },
             "needsVerification": {
                 "title": "Ověřte zařízení pro odeslání",
                 "description": "Všechna zařízení tohoto kontaktu jsou nedůvěryhodná. Ověřte alespoň jedno zařízení pro odesílání šifrovaných zpráv.",

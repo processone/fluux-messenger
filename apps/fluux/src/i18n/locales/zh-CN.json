@@ -211,6 +211,17 @@
                 "loadError": "无法加载设备",
                 "retry": "重试"
             },
+            "identity": {
+                "summary": "已验证 {{verified}} / {{count}}",
+                "deviceLabel": "设备 {{id}}",
+                "openpgpKeyLabel": "OpenPGP 密钥",
+                "loading": "正在加载密钥…",
+                "loadError": "无法加载密钥",
+                "retry": "重试",
+                "noKeyYet": "尚未发布密钥",
+                "verify": "验证",
+                "revoke": "吊销"
+            },
             "needsVerification": {
                 "title": "验证设备以发送",
                 "description": "此联系人的所有设备均不受信任。请至少验证一个设备才能发送加密消息。",

@@ -213,6 +213,17 @@
                 "loadError": "Naprav ni bilo mogoče naložiti",
                 "retry": "Poskusi znova"
             },
+            "identity": {
+                "summary": "{{verified}} od {{count}} potrjenih",
+                "deviceLabel": "Naprava {{id}}",
+                "openpgpKeyLabel": "Ključ OpenPGP",
+                "loading": "Nalaganje ključev…",
+                "loadError": "Ključev ni bilo mogoče naložiti",
+                "retry": "Poskusi znova",
+                "noKeyYet": "Ključ še ni objavljen",
+                "verify": "Potrdi",
+                "revoke": "Prekliči"
+            },
             "needsVerification": {
                 "title": "Preverite napravo za pošiljanje",
                 "description": "Vse naprave tega stika so nezaupanja vredne. Preverite vsaj eno napravo za pošiljanje šifriranih sporočil.",

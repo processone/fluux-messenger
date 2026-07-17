@@ -211,6 +211,17 @@
                 "loadError": "Det gick inte att läsa in enheterna",
                 "retry": "Försök igen"
             },
+            "identity": {
+                "summary": "{{verified}} av {{count}} verifierade",
+                "deviceLabel": "Enhet {{id}}",
+                "openpgpKeyLabel": "OpenPGP-nyckel",
+                "loading": "Läser in nycklar…",
+                "loadError": "Det gick inte att läsa in nycklar",
+                "retry": "Försök igen",
+                "noKeyYet": "Ingen nyckel publicerad ännu",
+                "verify": "Verifiera",
+                "revoke": "Återkalla"
+            },
             "needsVerification": {
                 "title": "Verifiera en enhet för att skicka",
                 "description": "Alla enheter för den här kontakten är opålitliga. Verifiera minst en enhet för att skicka krypterade meddelanden.",

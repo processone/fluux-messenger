@@ -211,6 +211,17 @@
                 "loadError": "Uređaje nije moguće učitati",
                 "retry": "Pokušaj ponovno"
             },
+            "identity": {
+                "summary": "{{verified}} od {{count}} potvrđenih",
+                "deviceLabel": "Uređaj {{id}}",
+                "openpgpKeyLabel": "OpenPGP ključ",
+                "loading": "Učitavanje ključeva…",
+                "loadError": "Ključeve nije moguće učitati",
+                "retry": "Pokušaj ponovno",
+                "noKeyYet": "Ključ još nije objavljen",
+                "verify": "Potvrdi",
+                "revoke": "Opozovi"
+            },
             "needsVerification": {
                 "title": "Provjerite uređaj za slanje",
                 "description": "Svi uređaji ovog kontakta nisu pouzdani. Provjerite barem jedan uređaj za slanje šifriranih poruka.",

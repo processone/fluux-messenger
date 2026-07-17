@@ -211,6 +211,17 @@
                 "loadError": "Níorbh fhéidir na gléasanna a lódáil",
                 "retry": "Bain triail eile as"
             },
+            "identity": {
+                "summary": "{{verified}} as {{count}} fíoraithe",
+                "deviceLabel": "Gléas {{id}}",
+                "openpgpKeyLabel": "Eochair OpenPGP",
+                "loading": "Eochracha á lódáil…",
+                "loadError": "Níorbh fhéidir na heochracha a lódáil",
+                "retry": "Bain triail eile as",
+                "noKeyYet": "Níl aon eochair foilsithe fós",
+                "verify": "Fíoraigh",
+                "revoke": "Cúlghairm"
+            },
             "needsVerification": {
                 "title": "Deimhnigh gléas chun seoladh",
                 "description": "Níl aon iontaoibh ag baint le gléasanna uile an teagmhálaí seo. Deimhnigh gléas amháin ar a laghad chun teachtaireachtaí criptithe a sheoladh.",

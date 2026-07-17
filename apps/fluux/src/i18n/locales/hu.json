@@ -211,6 +211,17 @@
                 "loadError": "Az eszközöket nem sikerült betölteni",
                 "retry": "Újra"
             },
+            "identity": {
+                "summary": "{{verified}} / {{count}} ellenőrizve",
+                "deviceLabel": "{{id}} eszköz",
+                "openpgpKeyLabel": "OpenPGP kulcs",
+                "loading": "Kulcsok betöltése…",
+                "loadError": "A kulcsokat nem sikerült betölteni",
+                "retry": "Újra",
+                "noKeyYet": "Még nincs közzétett kulcs",
+                "verify": "Ellenőrzés",
+                "revoke": "Visszavonás"
+            },
             "needsVerification": {
                 "title": "Eszköz hitelesítése a küldéshez",
                 "description": "Ennek a névjegynek minden eszköze megbízhatatlan. Hitelesíts legalább egy eszközt titkosított üzenetek küldéséhez.",

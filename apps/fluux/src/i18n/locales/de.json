@@ -213,6 +213,17 @@
                 "loadError": "Geräte konnten nicht geladen werden",
                 "retry": "Erneut versuchen"
             },
+            "identity": {
+                "summary": "{{verified}} von {{count}} verifiziert",
+                "deviceLabel": "Gerät {{id}}",
+                "openpgpKeyLabel": "OpenPGP-Schlüssel",
+                "loading": "Schlüssel werden geladen…",
+                "loadError": "Schlüssel konnten nicht geladen werden",
+                "retry": "Erneut versuchen",
+                "noKeyYet": "Noch kein Schlüssel veröffentlicht",
+                "verify": "Verifizieren",
+                "revoke": "Widerrufen"
+            },
             "needsVerification": {
                 "title": "Gerät verifizieren, um zu senden",
                 "description": "Alle Geräte dieses Kontakts sind nicht vertrauenswürdig. Verifiziere mindestens ein Gerät, um verschlüsselte Nachrichten zu senden.",

@@ -211,6 +211,17 @@
                 "loadError": "تعذّر تحميل الأجهزة",
                 "retry": "إعادة المحاولة"
             },
+            "identity": {
+                "summary": "تم التحقق من {{verified}} من {{count}}",
+                "deviceLabel": "الجهاز {{id}}",
+                "openpgpKeyLabel": "مفتاح OpenPGP",
+                "loading": "جارٍ تحميل المفاتيح…",
+                "loadError": "تعذر تحميل المفاتيح",
+                "retry": "إعادة المحاولة",
+                "noKeyYet": "لم يتم نشر أي مفتاح بعد",
+                "verify": "تحقق",
+                "revoke": "إلغاء"
+            },
             "needsVerification": {
                 "title": "تحقق من جهاز للإرسال",
                 "description": "جميع أجهزة جهة الاتصال هذه غير موثوقة. تحقق من جهاز واحد على الأقل لإرسال رسائل مشفرة.",

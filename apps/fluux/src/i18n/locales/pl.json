@@ -213,6 +213,17 @@
                 "loadError": "Nie udało się załadować urządzeń",
                 "retry": "Spróbuj ponownie"
             },
+            "identity": {
+                "summary": "{{verified}} z {{count}} zweryfikowanych",
+                "deviceLabel": "Urządzenie {{id}}",
+                "openpgpKeyLabel": "Klucz OpenPGP",
+                "loading": "Wczytywanie kluczy…",
+                "loadError": "Nie udało się wczytać kluczy",
+                "retry": "Ponów",
+                "noKeyYet": "Nie opublikowano jeszcze żadnego klucza",
+                "verify": "Zweryfikuj",
+                "revoke": "Odwołaj"
+            },
             "needsVerification": {
                 "title": "Zweryfikuj urządzenie, aby wysyłać",
                 "description": "Wszystkie urządzenia tego kontaktu są niezaufane. Zweryfikuj co najmniej jedno urządzenie, aby wysyłać zaszyfrowane wiadomości.",

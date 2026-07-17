@@ -211,6 +211,17 @@
                 "loadError": "Nepavyko įkelti įrenginių",
                 "retry": "Bandyti dar kartą"
             },
+            "identity": {
+                "summary": "Patvirtinta {{verified}} iš {{count}}",
+                "deviceLabel": "Įrenginys {{id}}",
+                "openpgpKeyLabel": "OpenPGP raktas",
+                "loading": "Įkeliami raktai…",
+                "loadError": "Nepavyko įkelti raktų",
+                "retry": "Bandyti dar kartą",
+                "noKeyYet": "Raktas dar nepaskelbtas",
+                "verify": "Patvirtinti",
+                "revoke": "Atšaukti"
+            },
             "needsVerification": {
                 "title": "Patvirtinkite įrenginį, kad galėtumėte siųsti",
                 "description": "Visi šio kontakto įrenginiai yra nepatikimi. Patvirtinkite bent vieną įrenginį, kad galėtumėte siųsti šifruotus pranešimus.",

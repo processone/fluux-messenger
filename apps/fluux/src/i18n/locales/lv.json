@@ -212,6 +212,17 @@
                 "loadError": "Neizdevās ielādēt ierīces",
                 "retry": "Mēģināt vēlreiz"
             },
+            "identity": {
+                "summary": "Apstiprināti {{verified}} no {{count}}",
+                "deviceLabel": "Ierīce {{id}}",
+                "openpgpKeyLabel": "OpenPGP atslēga",
+                "loading": "Notiek atslēgu ielāde…",
+                "loadError": "Neizdevās ielādēt atslēgas",
+                "retry": "Mēģināt vēlreiz",
+                "noKeyYet": "Atslēga vēl nav publicēta",
+                "verify": "Apstiprināt",
+                "revoke": "Atsaukt"
+            },
             "needsVerification": {
                 "title": "Apstipriniet ierīci, lai sūtītu",
                 "description": "Visas šī kontakta ierīces ir neuzticamas. Apstipriniet vismaz vienu ierīci, lai sūtītu šifrētus ziņojumus.",

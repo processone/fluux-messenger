@@ -211,6 +211,17 @@
                 "loadError": "Ekki tókst að hlaða tækjum",
                 "retry": "Reyna aftur"
             },
+            "identity": {
+                "summary": "{{verified}} af {{count}} staðfest",
+                "deviceLabel": "Tæki {{id}}",
+                "openpgpKeyLabel": "OpenPGP lykill",
+                "loading": "Sæki lykla…",
+                "loadError": "Ekki tókst að sækja lykla",
+                "retry": "Reyna aftur",
+                "noKeyYet": "Enginn lykill hefur verið birtur enn",
+                "verify": "Staðfesta",
+                "revoke": "Afturkalla"
+            },
             "needsVerification": {
                 "title": "Staðfestu tæki til að senda",
                 "description": "Öll tæki þessa tengiliðar eru óáreiðanleg. Staðfestu að minnsta kosti eitt tæki til að senda dulkóðuð skilaboð.",

@@ -213,6 +213,17 @@
                 "loadError": "Impossibile caricare i dispositivi",
                 "retry": "Riprova"
             },
+            "identity": {
+                "summary": "{{verified}} su {{count}} verificate",
+                "deviceLabel": "Dispositivo {{id}}",
+                "openpgpKeyLabel": "Chiave OpenPGP",
+                "loading": "Caricamento chiavi…",
+                "loadError": "Impossibile caricare le chiavi",
+                "retry": "Riprova",
+                "noKeyYet": "Nessuna chiave ancora pubblicata",
+                "verify": "Verifica",
+                "revoke": "Revoca"
+            },
             "needsVerification": {
                 "title": "Verifica un dispositivo per inviare",
                 "description": "Tutti i dispositivi di questo contatto non sono attendibili. Verifica almeno un dispositivo per inviare messaggi crittografati.",

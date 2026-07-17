@@ -212,6 +212,17 @@
                 "loadError": "Could not load devices",
                 "retry": "Retry"
             },
+            "identity": {
+                "summary": "{{verified}} of {{count}} verified",
+                "deviceLabel": "Device {{id}}",
+                "openpgpKeyLabel": "OpenPGP key",
+                "loading": "Loading keys…",
+                "loadError": "Couldn't load keys",
+                "retry": "Retry",
+                "noKeyYet": "No key published yet",
+                "verify": "Verify",
+                "revoke": "Revoke"
+            },
             "needsVerification": {
                 "title": "Verify a device to send",
                 "description": "Every device for this contact is untrusted. Verify at least one device to send encrypted messages.",

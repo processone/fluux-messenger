@@ -211,6 +211,17 @@
                 "loadError": "Laitteiden lataaminen epäonnistui",
                 "retry": "Yritä uudelleen"
             },
+            "identity": {
+                "summary": "{{verified}}/{{count}} vahvistettu",
+                "deviceLabel": "Laite {{id}}",
+                "openpgpKeyLabel": "OpenPGP-avain",
+                "loading": "Ladataan avaimia…",
+                "loadError": "Avainten lataus epäonnistui",
+                "retry": "Yritä uudelleen",
+                "noKeyYet": "Avainta ei ole vielä julkaistu",
+                "verify": "Vahvista",
+                "revoke": "Peru"
+            },
             "needsVerification": {
                 "title": "Vahvista laite lähettääksesi",
                 "description": "Kaikki tämän yhteystiedon laitteet ovat epäluotettavia. Vahvista vähintään yksi laite lähettääksesi salattuja viestejä.",

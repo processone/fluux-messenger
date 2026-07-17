@@ -211,6 +211,17 @@
                 "loadError": "Kunne ikke laste enheter",
                 "retry": "Prøv igjen"
             },
+            "identity": {
+                "summary": "{{verified}} av {{count}} bekreftet",
+                "deviceLabel": "Enhet {{id}}",
+                "openpgpKeyLabel": "OpenPGP-nøkkel",
+                "loading": "Laster nøkler…",
+                "loadError": "Kunne ikke laste nøkler",
+                "retry": "Prøv igjen",
+                "noKeyYet": "Ingen nøkkel publisert ennå",
+                "verify": "Bekreft",
+                "revoke": "Tilbakekall"
+            },
             "needsVerification": {
                 "title": "Bekreft en enhet for å sende",
                 "description": "Alle enheter til denne kontakten er ikke tiltrodd. Bekreft minst én enhet for å sende krypterte meldinger.",

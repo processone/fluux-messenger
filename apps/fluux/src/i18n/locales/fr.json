@@ -212,6 +212,17 @@
                 "loadError": "Impossible de charger les appareils",
                 "retry": "Réessayer"
             },
+            "identity": {
+                "summary": "{{verified}} sur {{count}} vérifiées",
+                "deviceLabel": "Appareil {{id}}",
+                "openpgpKeyLabel": "Clé OpenPGP",
+                "loading": "Chargement des clés…",
+                "loadError": "Impossible de charger les clés",
+                "retry": "Réessayer",
+                "noKeyYet": "Aucune clé publiée pour le moment",
+                "verify": "Vérifier",
+                "revoke": "Révoquer"
+            },
             "needsVerification": {
                 "title": "Vérifiez un appareil pour envoyer",
                 "description": "Tous les appareils de ce contact ne sont pas fiables. Vérifiez au moins un appareil pour envoyer des messages chiffrés.",
