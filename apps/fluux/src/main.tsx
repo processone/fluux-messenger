@@ -16,6 +16,7 @@ import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { sweepExpiredPassphrases } from '@fluux/openpgp-plugin'
+import { requestPersistentStorage } from './utils/persistStorage'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
@@ -46,6 +47,10 @@ if (!isTauri) {
   // Purge any cached passphrases past their 24h expiry as early as possible
   // (covers reopen-after-24h and stale cross-account records).
   void sweepExpiredPassphrases()
+  // Ask the browser to mark this origin's storage as persistent so the
+  // 'fluux-media' runtime cache can't push us over quota and get the whole
+  // origin (incl. IndexedDB / OMEMO device identity) evicted. Best-effort.
+  void requestPersistentStorage()
 }
 
 // Web: capture any login-prefill params from the launch URL (e.g. a shared

@@ -7,21 +7,32 @@
  *
  * ## Loading Strategy
  *
- * MAM queries follow a hybrid lazy + background approach:
+ * MAM queries follow a latest-first catch-up model, orchestrated per entity
+ * (1:1 conversation or room) by {@link MAM.runCatchUpHistory} / the
+ * `catchUpConversationHistory` / `catchUpRoomHistory` adapters:
  *
- * 1. **On connect (fast)**: Preview refresh fetches the latest message for each
- *    conversation to update sidebar previews (max=5, concurrency=3).
- * 2. **On connect (slow)**: Background catch-up populates full message history
- *    for all conversations and rooms (max=100, concurrency=2).
- * 3. **On connect (discovery)**: Query MAM for roster contacts that don't have an
- *    existing conversation, discovering messages received while offline.
- * 4. **On conversation open**: Side effects trigger a MAM query with `start` filter
- *    to fetch any remaining messages newer than the most recent cached message.
- * 5. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
- *    older messages (pagination).
+ * - **Phase A — align to live**: forward, id-exact from the held coverage
+ *   edge (the newest downloaded message's archive id), capped at
+ *   `MAM_CATCHUP_FORWARD_BAIL_PAGES`. A long gap (incomplete within the cap,
+ *   or an empty cache) bails to a `before:''` fetch-latest so the window
+ *   jumps straight to the live edge in one round-trip.
+ * - **Phase B — grow to the read pointer** (background entities only, not
+ *   the active one): while the XEP-0490 read pointer is unresolved, page
+ *   backward from the window bottom until the pointer's own message is
+ *   found, the archive start is reached, or a page-count cap is hit.
+ * - **Seams**: a gap between held history and the live edge is recorded with
+ *   its coverage archive ids (`startId`/`endId`) and healed from both
+ *   directions — forward catch-up resumes from the id-exact edge, backward
+ *   pagination shrinks/clears it as pages reach into or across it (see
+ *   `mamGap.ts`).
  *
- * This approach balances fast connection time with having messages ready when
- * the user opens any conversation.
+ * On connect, preview refresh (fast, max=5) updates sidebar previews first;
+ * background catch-up (max=100, concurrency=2) then runs the orchestrator
+ * above for every conversation and room; discovery queries MAM for roster
+ * contacts with no existing conversation. On conversation/room open, side
+ * effects re-run the same orchestrator to fetch anything newer than the
+ * cached edge. `fetchOlderHistory()` handles explicit scroll-up pagination
+ * with a `before` cursor, independent of the catch-up orchestrator.
  *
  * @module MAM
  * @category Modules
@@ -41,6 +52,11 @@ import {
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+  MAM_BACKWARD_SIGNAL_RETRY_PAGES,
+  MAM_CATCHUP_FORWARD_BAIL_PAGES,
+  MAM_POINTER_STITCH_MAX_PAGES,
+  MAM_POINTER_SEED_PROBE_LIMIT,
+  oldestMessageWithStanzaId,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -207,11 +223,26 @@ export class MAM extends BaseModule {
     let currentAfter: string | undefined = after
     let isComplete = false
     let lastRsm: RSMResponse = {}
-    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : 5 // cap to avoid infinite loops
-    // True only for the very first page of an `after`-anchored query — used to
-    // detect a purged/expired archive id (item-not-found) and degrade once to
-    // a fetch-latest instead of failing the whole catch-up.
-    const isAfterAnchored = !!after
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForwardPaginate
+      ? this.deps.stores?.chat.getConversationCoverage?.(conversationId)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = before === ''
+    let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
+    // The walk contained the record's top entry — the only accepted proof of
+    // contiguity with the existing record (Codex r4 #3), and the trigger for
+    // the floor jump.
+    let sawCoverageTop = false
+    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
 
@@ -264,11 +295,40 @@ export class MAM extends BaseModule {
           try {
             response = await this.deps.sendIQ(iq)
           } catch (iqError) {
-            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+            if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
-              return this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              // Strip the purged id from the persisted gap anchor (the degrade
+              // site is the only place that KNOWS the id is gone): otherwise
+              // every session — and every "Load missing messages" click —
+              // re-anchors on it and re-degrades forever. Keeping the gap's
+              // start timestamp lets the next resume fall back to it and progress.
+              this.deps.emitSDK('chat:mam-anchor-purged', { conversationId, after })
+              const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              // Mark the result so callers (the catch-up orchestrator) can tell
+              // this is ALREADY a fetch-latest page and skip issuing another one.
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record (this degrade site is the only place that
+              // KNOWS the id is gone) and degrade to fetch-latest.
+              logInfo(`MAM before-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: currentBefore })
+              const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // The jumped-to floor was purged MID-WALK (page > 0): drop the
+              // stale record and resume from the pre-jump cursor instead of
+              // aborting the walk — otherwise the record survives and every
+              // session re-jumps onto the dead id (Codex r4 #6).
+              logInfo(`MAM coverage floor purged mid-walk for ...@${getDomain(conversationId) || '*'} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
             }
             throw iqError
           }
@@ -292,6 +352,10 @@ export class MAM extends BaseModule {
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForwardPaginate) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           if (isForwardPaginate) {
             // Forward catch-up: accumulate every page, advance via `after` until complete.
@@ -309,7 +373,19 @@ export class MAM extends BaseModule {
             // No displayable messages but archive has more - continue with next page
             // Use the 'first' ID as the 'before' cursor for backward pagination
             if (rsm.first) {
-              currentBefore = rsm.first
+              // Known signal-only floor (persisted coverage): once this walk
+              // re-enters previously-covered territory (the page contains the
+              // record's top entry), everything down to the record's bottom is
+              // already proven signal-only — jump the cursor straight there so
+              // successive sessions descend instead of re-walking the same
+              // newest pages (Codex r3 #4).
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
                 category: 'sm',
@@ -344,6 +420,14 @@ export class MAM extends BaseModule {
         direction,
         preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
+        ...(direction === 'backward' ? {
+          initialBefore: before,
+          fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            modifications.retractions.length + modifications.corrections.length +
+            modifications.fastenings.length + modifications.reactions.length > 0,
+        } : {}),
       })
 
       // Modifications whose target is not in this batch belong to a message
@@ -394,18 +478,40 @@ export class MAM extends BaseModule {
     const roomDirection = isForward ? 'forward' : 'backward'
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
-    // Backward queries (scroll-up) remain single-page — the caller controls pagination.
     // User-initiated repair passes a higher cap (maxAutoPagesOpt) so it fills large
     // gaps to completion instead of stopping at the background limit.
-    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : 1
+    // Backward queries retry past signal-only pages (zero displayable messages)
+    // under the same cap as the 1:1 path — the caller still controls real
+    // pagination (the loop stops as soon as a page yields displayable messages).
+    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : MAM_BACKWARD_SIGNAL_RETRY_PAGES
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
+    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    // this walk; stamped as the coverage record's topId (mamCoverage.ts).
+    let fetchLatestTopId: string | undefined
+    // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
+    // and purge-detection anchor for a coverage-seeded before-cursor.
+    const coverageRecord = !isForward
+      ? this.deps.stores?.room.getRoomCoverage?.(roomJid)
+      : undefined
+    // Only a fetch-latest walk may jump DOWN to the floor; a mid-archive
+    // scroll-up cursor sits below the record and must never jump UP to it.
+    const canJumpToFloor = !before
+    let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
+    // The walk contained the record's top entry — contiguity proof and floor
+    // jump trigger (Codex r4 #3); see the 1:1 twin in queryArchive.
+    let sawCoverageTop = false
     let currentAfter = after
-    // True only for the very first page of an `after`-anchored query — used to
-    // detect a purged/expired archive id (item-not-found) and degrade once to
-    // a fetch-latest instead of failing the whole catch-up.
-    const isAfterAnchored = !!after
+    let currentBefore = before
+    // BACKWARD retry pages accumulate modifications across pages and resolve
+    // them ONCE after the loop (mirrors queryArchive's 1:1 batch model): a
+    // signal on the first, signal-only page targets a message only fetched by
+    // a later retry page — per-page resolution would drop it.
+    const backwardModifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
@@ -427,10 +533,14 @@ export class MAM extends BaseModule {
         }
 
         // Send IQ to room JID (not user's archive)
-        const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, currentAfter)
+        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore, roomJid, currentAfter)
 
         const collectedMessages: RoomMessage[] = []
-        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        // Forward pages resolve modifications per page (earlier pages are
+        // already merged in the store); backward retry pages accumulate.
+        const modifications: MAMModifications = isForward
+          ? { retractions: [], corrections: [], fastenings: [], reactions: [] }
+          : backwardModifications
         const rawEntries: RawArchiveEntry[] = []
 
         // Collector only buffers; decrypt + parse happen in the async drain below.
@@ -456,11 +566,35 @@ export class MAM extends BaseModule {
           try {
             response = await this.deps.sendIQ(iq)
           } catch (iqError) {
-            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+            if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
-              return this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              // Strip the purged id from the persisted gap anchor — see the
+              // 1:1 twin in queryArchive for the full rationale.
+              this.deps.emitSDK('room:mam-anchor-purged', { roomJid, after })
+              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              // Mark the result so callers (the catch-up orchestrator) can tell
+              // this is ALREADY a fetch-latest page and skip issuing another one.
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (page === 0 && !after && currentBefore && currentBefore === coverageRecord?.bottomId && isItemNotFoundError(iqError)) {
+              // The coverage-seeded before-anchor was purged from the archive:
+              // drop the stale record and degrade to fetch-latest (see the 1:1
+              // twin in queryArchive).
+              logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: currentBefore })
+              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              return { ...degraded, degradedToFetchLatest: true }
+            }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // Jumped-to floor purged mid-walk — resume from the pre-jump
+              // cursor (see the 1:1 twin in queryArchive; Codex r4 #6).
+              logInfo(`Room MAM coverage floor purged mid-walk for ${roomJid} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
             }
             throw iqError
           }
@@ -477,48 +611,112 @@ export class MAM extends BaseModule {
             if (msg) collectedMessages.push(msg)
           }
 
-          // Apply modifications to collected messages (full JID comparison for rooms)
-          // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
-          const unresolved = this.applyModifications(
-            collectedMessages, modifications,
-            (msg, from) => msg.from === from,
-            (from) => getResource(from) || from
-          )
+          if (isForward) {
+            // Apply modifications to collected messages (full JID comparison for rooms)
+            // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
+            const unresolved = this.applyModifications(
+              collectedMessages, modifications,
+              (msg, from) => msg.from === from,
+              (from) => getResource(from) || from
+            )
 
-          // Emit modifications targeting messages already in the store (from prior queries/cache)
-          this.emitUnresolvedRoomModifications(roomJid, unresolved)
+            // Emit modifications targeting messages already in the store (from prior queries/cache)
+            this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
-          // Emit each page's messages immediately so the store can update incrementally
-          const direction = isForward ? 'forward' : 'backward'
-          this.deps.emitSDK('room:mam-messages', {
-            roomJid,
-            messages: collectedMessages,
-            rsm,
-            complete,
-            direction,
-            preserveGapMarker,
-            isFetchLatest: !isForward && !before,
-          })
+            // Emit each page's messages immediately so the store can update incrementally
+            this.deps.emitSDK('room:mam-messages', {
+              roomJid,
+              messages: collectedMessages,
+              rsm,
+              complete,
+              direction: 'forward',
+              preserveGapMarker,
+              isFetchLatest: false,
+            })
+          }
 
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
+          if (page === 0 && !isForward) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           // Stop if archive is complete (no more messages)
           if (complete) {
             break
           }
 
-          // For forward pagination: use `last` as the next `after` cursor
-          if (isForward && rsm.last) {
-            currentAfter = rsm.last
+          if (isForward) {
+            // Forward pagination: use `last` as the next `after` cursor
+            if (rsm.last) {
+              currentAfter = rsm.last
+            } else {
+              break
+            }
           } else {
-            // No pagination cursor or single-page mode — stop
-            break
+            // BACKWARD: retry past signal-only pages (parity with the 1:1
+            // loop in queryArchive) — a room whose newest page is all
+            // reactions/receipts must not render empty (and be marked
+            // caught-up-to-live) while older real messages exist. Advance the
+            // cursor to this page's oldest and fetch the next older page.
+            if (allMessages.length > 0) {
+              break
+            }
+            if (rsm.first) {
+              // Known signal-only floor (persisted coverage) — jump below
+              // covered territory; see the 1:1 twin in queryArchive.
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
+                currentBefore = coverageRecord.bottomId
+                jumpedToFloor = true
+              } else {
+                currentBefore = rsm.first
+              }
+              this.deps.emitSDK('console:event', {
+                message: `Page ${page + 1} had no displayable messages, fetching older...`,
+                category: 'sm',
+              })
+            } else {
+              // No pagination cursor available, stop
+              break
+            }
           }
         } finally {
           unregister()
         }
+      }
+
+      // BACKWARD: ONE emit with the accumulated set (the retry pages walk
+      // contiguously down, so the union extent is the true coverage bottom)
+      // and the ORIGINAL fetch-latest flag — the page that finally carries
+      // messages must be seam-checked as part of the fetch-latest.
+      // Modifications resolve against the full accumulated set first;
+      // leftovers target store-resident messages and are emitted after the
+      // batch merge (same ordering as the 1:1 path).
+      if (!isForward) {
+        const unresolved = this.applyModifications(
+          allMessages, backwardModifications,
+          (msg, from) => msg.from === from,
+          (from) => getResource(from) || from
+        )
+        this.deps.emitSDK('room:mam-messages', {
+          roomJid,
+          messages: allMessages,
+          rsm: lastRsm,
+          complete: isComplete,
+          direction: 'backward',
+          preserveGapMarker,
+          isFetchLatest: !before,
+          initialBefore: before ?? '',
+          fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            backwardModifications.retractions.length + backwardModifications.corrections.length +
+            backwardModifications.fastenings.length + backwardModifications.reactions.length > 0,
+        })
+        this.emitUnresolvedRoomModifications(roomJid, unresolved)
       }
 
       logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
@@ -789,6 +987,12 @@ export class MAM extends BaseModule {
         max: contextSize * 2,
         start: oneHourBefore,
         preserveGapMarker: true,
+        // Bounded context fetch — one round-trip only, mirroring the 1:1
+        // branch below: queryArchive doesn't opt into forward auto-pagination
+        // here (no maxAutoPages passed), so it stops after its first page of
+        // results too. Without this, queryRoomArchive's forward branch would
+        // silently inherit its MAM_ROOM_FORWARD_MAX_PAGES (50-page) default.
+        maxAutoPages: 1,
       })
       return { messages: result.messages }
     } else {
@@ -833,11 +1037,13 @@ export class MAM extends BaseModule {
         : undefined
 
       if (isRoom) {
+        // RoomMAMQueryOptions has no `end` filter (unlike the 1:1 branch below) —
+        // rooms rely on RSM pagination + the oldestInPage/targetTime check below
+        // to stop at the target instead. `endFilter` is intentionally unused here.
         const result = await this.queryRoomArchive({
           roomJid: conversationId,
           max: 100,
           before: page === 0 ? '' : undefined,
-          ...(endFilter ? {} : {}), // For rooms, we rely on RSM pagination
         })
         // Check if we've reached the target
         const oldestInPage = result.messages.length > 0
@@ -983,26 +1189,7 @@ export class MAM extends BaseModule {
           // conversation in production) only when the cache read is empty —
           // mirroring the prior `|| conv.messages || []` chain.
           const messages = cached && cached.length > 0 ? cached : (conv.messages ?? [])
-
-          // Shared cursor policy (same as rooms) — forward from the newest
-          // pre-session message, or from a persisted gap boundary when one
-          // exists, else fetch latest. Forward catch-up paginates oldest-first
-          // to completion (maxAutoPages), matching rooms.
-          const gapStart = this.deps.stores?.chat.getConversationGapStart?.(conv.id)
-          // Last-resort anchor: if the message cache is empty this run, forward-fill
-          // from the persisted preview timestamp instead of a before:'' fetch-latest
-          // that would skip a large offline gap (issue #135).
-          const lastTimestamp = this.deps.stores?.chat.getConversationLastTimestamp?.(conv.id)
-          // Last-but-one resort: the XEP-0490 MDS stanza-id seeds a forward `after`
-          // catch-up on a new device whose local cache is empty.
-          const pointerStanzaId = this.deps.stores?.chat.getConversationPendingStanzaId?.(conv.id)
-          const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
-          await this.queryArchive({
-            with: conv.id,
-            ...q,
-            max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
-            ...((q.start || q.after) ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
-          })
+          await this.catchUpConversationHistory(conv.id, messages, { sessionStartTime, stitchReadPointer: true })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -1011,6 +1198,62 @@ export class MAM extends BaseModule {
     )
 
     logInfo(`Background catch-up for ${conversations.length} conversation(s) — complete`)
+  }
+
+  /**
+   * Latest-first catch-up orchestrator for one 1:1 conversation, shared by the
+   * active-conversation side effect and background sync.
+   *
+   * PHASE A — align to live:
+   *   cache has messages → forward from the contiguous local edge, capped at
+   *   MAM_CATCHUP_FORWARD_BAIL_PAGES (exact and cheap in the common reconnect
+   *   case). Incomplete → the gap is long: BAIL with a `before:''` fetch-latest
+   *   so the window jumps to the live edge. The incomplete forward records the
+   *   gap and the fetch-latest reconciliation (#1019 seam machinery) keeps it
+   *   honest as ONE interval, closed lazily. Empty cache → fetch-latest
+   *   directly (recent history renders in one round-trip).
+   *
+   * PHASE B — grow to the read pointer (opt-in, background entities only):
+   *   while the XEP-0490 pointer is unresolved, page BACKWARD from the window
+   *   bottom. Backward growth keeps held history contiguous BY CONSTRUCTION
+   *   (each page is adjacent to the window — no second hole can form), each
+   *   merge shrinks the recorded seam (closeGapWithBackwardPage), and the page
+   *   containing the pointer's own message resolves it (RSM `after` would
+   *   never fetch its anchor). Resolution recomputes exact unread. Stops on:
+   *   resolution, archive start (a still-pending pointer was purged — cheap
+   *   re-walk next session), missing cursor, or MAM_POINTER_STITCH_MAX_PAGES
+   *   (deeper pointers converge across passes from the deeper cache).
+   *
+   *   NOT run for the active entity: backward pages into its capped resident
+   *   window would keep-oldest-evict the live edge under the user; the
+   *   activation machinery (load-around + entry fold + spec §5 degrade) owns
+   *   the active deep-pointer UX.
+   *
+   * Merges run synchronously inside each query's emit, so reading the pending
+   * pointer between queries observes the previous merge's resolution — for
+   * non-resident entities too (mergedForMarker override).
+   */
+  async catchUpConversationHistory(
+    conversationId: string,
+    messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
+  ): Promise<void> {
+    await this.runCatchUpHistory(messages, options, {
+      getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
+      getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
+      getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
+      getCoverageBottomId: () => this.deps.stores?.chat.getConversationCoverage?.(conversationId)?.bottomId,
+      getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
+      getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
+      isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
+      probeCacheBottom: async () =>
+        ((await this.deps.stores?.chat.loadMessagesFromCache(conversationId, {
+          limit: MAM_POINTER_SEED_PROBE_LIMIT,
+          peek: true,
+          oldest: true,
+        })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
+      query: (opts) => this.queryArchive({ with: conversationId, ...opts }),
+    })
   }
 
   /**
@@ -1154,22 +1397,161 @@ export class MAM extends BaseModule {
     // just the persisted preview timestamp) so the cursor lands on the newest
     // PRE-session message and the forward query fills the whole offline gap.
     const messages = (await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT, peek: true })) || []
-    // Shared cursor policy: forward from the newest pre-session message (so a live
-    // message in the catch-up window can't poison the cursor), or from a
-    // persisted gap boundary when one exists, else fetch latest.
-    const gapStart = this.deps.stores?.room.getRoomGapStart?.(roomJid)
-    // Last-resort anchor: forward-fill from the persisted preview timestamp when the
-    // cache is empty, instead of a before:'' fetch-latest that skips a large gap.
-    const lastTimestamp = this.deps.stores?.room.getRoomLastTimestamp?.(roomJid)
-    // Last-but-one resort: the XEP-0490 MDS stanza-id seeds a forward `after`
-    // catch-up on a new device whose local cache is empty.
-    const pointerStanzaId = this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
-    await this.queryRoomArchive({
-      roomJid,
-      ...q,
-      max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+    await this.catchUpRoomHistory(roomJid, messages, { sessionStartTime, stitchReadPointer: true })
+  }
+
+  /** Room twin of {@link catchUpConversationHistory} — same Phase A/B over queryRoomArchive. */
+  async catchUpRoomHistory(
+    roomJid: string,
+    messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
+  ): Promise<void> {
+    await this.runCatchUpHistory(messages, options, {
+      getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
+      getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
+      getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
+      getCoverageBottomId: () => this.deps.stores?.room.getRoomCoverage?.(roomJid)?.bottomId,
+      getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
+      getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
+      isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
+      probeCacheBottom: async () =>
+        ((await this.deps.stores?.room.loadMessagesFromCache(roomJid, {
+          limit: MAM_POINTER_SEED_PROBE_LIMIT,
+          peek: true,
+          oldest: true,
+        })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
+      query: (opts) => this.queryRoomArchive({ roomJid, ...opts }),
     })
+  }
+
+  /**
+   * Shared Phase A/B catch-up core behind {@link catchUpConversationHistory}
+   * and {@link catchUpRoomHistory} — the full behavioral contract is documented
+   * on the chat adapter. The `io` seam carries the only per-entity differences:
+   * store getters (gap seam, XEP-0490 pending pointer, active-entity check),
+   * the true-cache-bottom probe, and the archive query transport.
+   */
+  private async runCatchUpHistory(
+    messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean },
+    io: {
+      getGapStart: () => number | undefined
+      getGapStartId: () => string | undefined
+      getGapEndId: () => string | undefined
+      getCoverageBottomId: () => string | undefined
+      getCoverageUnproven: () => boolean | undefined
+      getPendingStanzaId: () => string | undefined
+      isActive: () => boolean
+      probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
+      query: (opts: {
+        max: number
+        before?: string
+        after?: string
+        start?: string
+        maxAutoPages?: number
+      }) => Promise<{ complete: boolean; rsm: { first?: string }; degradedToFetchLatest?: boolean }>
+    },
+  ): Promise<void> {
+    const { sessionStartTime, stitchReadPointer = false } = options
+    const q = selectCatchUpQuery(messages, {
+      sessionStartTime,
+      forwardGapTimestamp: io.getGapStart(),
+      forwardGapStartId: io.getGapStartId(),
+    })
+    const isForward = !!(q.start || q.after)
+
+    // Phase A — align to live, anchored on the COVERAGE pointer (id-exact
+    // when available; `after` here is the local downloaded edge, never the
+    // XEP-0490 read pointer).
+    const initial = await io.query({
+      ...q,
+      max: isForward ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+      ...(isForward ? { maxAutoPages: MAM_CATCHUP_FORWARD_BAIL_PAGES } : {}),
+    })
+    let windowBottom: string | undefined
+    // Whether the query that established `windowBottom` reported complete:
+    // true — i.e. it exhausted the archive rather than merely landing on an
+    // intermediate page. Used below to skip a pointless Phase B walk.
+    let windowBottomComplete = false
+    if (initial.degradedToFetchLatest) {
+      // Phase A's forward query hit a purged after-anchor (item-not-found)
+      // and queryArchive/queryRoomArchive already retried it internally as a
+      // before:'' fetch-latest — `initial` IS that fetch-latest page. Treat
+      // it as the fetch-latest phase directly instead of issuing a second,
+      // fully-deduped `before: ''` bail query.
+      windowBottom = initial.rsm.first
+      windowBottomComplete = initial.complete
+    } else if (isForward && !initial.complete) {
+      const latest = await io.query({ max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
+      windowBottom = latest.rsm.first
+      windowBottomComplete = latest.complete
+    } else if (!isForward) {
+      windowBottom = initial.rsm.first
+      windowBottomComplete = initial.complete
+    }
+    // (forward && complete → contiguous to live over the cache; a pending
+    // pointer, if any, lives in the cache and the activation machinery
+    // resolves it — no backward growth needed.)
+
+    // Phase B — grow the window down to the read pointer.
+    if (!stitchReadPointer) return
+    // The fetch-latest that established `windowBottom` already exhausted the
+    // archive (complete: true) — nothing older exists, so a still-pending
+    // pointer was purged rather than merely deep. Walking backward from
+    // windowBottom would just issue one wasted page (the server would report
+    // complete: true again). Skip the walk. This does NOT apply to the
+    // cache-bottom-probe seed below — a pointer below the cache bottom is a
+    // different situation, unrelated to whether a fetch-latest here exhausted
+    // the archive.
+    if (windowBottomComplete) return
+    // Cross-session convergence: Phase A can end forward-complete with no
+    // fetch-latest (windowBottom unset) while the pointer is still pending —
+    // e.g. the session after a capped Phase B walk, whose coverage edge is
+    // already near live. Seed the backward cursor from the TRUE cache bottom:
+    // an oldest-N pure read (ascending), first message WITH an archive id.
+    // Each pass then descends genuinely below all prior coverage — never
+    // re-fetching already-cached pages — so a deep pointer converges across
+    // sessions and a purged one terminates at the archive-start `complete`.
+    // (The `messages` peek param is the NEWEST-100 slice and would pin the
+    // seed ~100 below live forever; it remains only the cacheless fallback.)
+    if (!windowBottom && io.getPendingStanzaId()) {
+      // Contiguous coverage bottom: prefer the recorded gap's proven upper
+      // edge, else the persisted coverage record (positive data that survives
+      // fresh sessions and gap closure — Codex r3 #3). Seeding from it (not
+      // the global-oldest cache row) keeps the backward walk inside the
+      // contiguous region — a disjoint search/context island (with or without
+      // a recorded gap) can no longer mis-seed the descent (finding 9).
+      const seamBottom = io.getGapEndId() ?? io.getCoverageBottomId()
+      if (seamBottom) {
+        windowBottom = seamBottom
+      } else if (!io.getCoverageUnproven()) {
+        const bottom = await io.probeCacheBottom()
+        windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
+          ?? oldestMessageWithStanzaId(messages)?.stanzaId
+      }
+      // else: no gap edge AND coverage unproven → the cache bottom isn't provably
+      // contiguous with live (a disjoint fetch-latest landed above held-below
+      // history without anchoring a seam); leave windowBottom undefined so Phase B
+      // no-ops this pass. A later fetch-latest that establishes a real boundary
+      // lets the next pass descend (finding 10).
+    }
+    for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
+      // Re-check activity EVERY iteration, not just at dispatch: a walk is up
+      // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the entity is opened
+      // its resident window is capped — further backward pages would
+      // keep-oldest-evict the live edge under the user. The activation
+      // machinery owns the active deep-pointer UX (see the Phase B doc above).
+      if (io.isActive()) return
+      if (!io.getPendingStanzaId()) return
+      if (!windowBottom) return
+      const res = await io.query({
+        before: windowBottom,
+        max: MAM_CATCHUP_FORWARD_MAX,
+      })
+      if (res.complete) return // archive start reached — a still-pending pointer is purged
+      if (!res.rsm.first || res.rsm.first === windowBottom) return
+      windowBottom = res.rsm.first
+    }
   }
 
   /**

@@ -83,7 +83,7 @@ describe('setupRoomSideEffects', () => {
 
       await vi.waitFor(() => {
         // Fresh session triggers MAM for active room, but supportsMAM is false so it's skipped
-        expect((mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
+        expect((mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
       })
 
       // supportsMAM becomes true — triggers MAM fetch via supportsMAM watcher
@@ -92,10 +92,10 @@ describe('setupRoomSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -121,17 +121,17 @@ describe('setupRoomSideEffects', () => {
       roomStore.getState().setActiveRoom('room@conference.example.com')
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
 
-      ;(mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mockClear()
+      ;(mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mockClear()
 
       roomStore.getState().updateRoom('room@conference.example.com', {
         name: 'Updated Room Name',
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should not trigger MAM fetch when supportsMAM becomes true on inactive room', async () => {
@@ -175,7 +175,7 @@ describe('setupRoomSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should not trigger MAM fetch when no room is active', async () => {
@@ -203,7 +203,7 @@ describe('setupRoomSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should not trigger MAM fetch for Quick Chat rooms even when supportsMAM becomes true', async () => {
@@ -234,7 +234,7 @@ describe('setupRoomSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -290,7 +290,7 @@ describe('setupRoomSideEffects', () => {
     it('does not reload cache or query MAM when activating a joined, resident, caught-up room', async () => {
       // Distinct jid + jid-scoped assertions: sibling tests leave their Step-2
       // fetchMAMForRoom async in flight (they only await the Step-1 load), which can
-      // fire loadMessagesFromCache/queryRoomMAM on the shared store during this test.
+      // fire loadMessagesFromCache/catchUpRoomHistory on the shared store during this test.
       const ROOM = 'reentry@conference.example.com'
       const liveMessage = {
         type: 'groupchat' as const,
@@ -329,8 +329,10 @@ describe('setupRoomSideEffects', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(loadSpy).not.toHaveBeenCalledWith(ROOM, expect.anything())
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalledWith(
-        expect.objectContaining({ roomJid: ROOM })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalledWith(
+        ROOM,
+        expect.anything(),
+        expect.anything(),
       )
       loadSpy.mockRestore()
     })
@@ -360,10 +362,10 @@ describe('setupRoomSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -414,20 +416,15 @@ describe('setupRoomSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // Cursor-policy specifics (start vs after) are covered by the orchestrator
+      // and mamCatchUpUtils tests; this asserts delegation with the cached message.
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-            start: expect.any(String),
-            max: 100,
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.arrayContaining([expect.objectContaining({ id: 'cached-msg-1' })]),
+          expect.objectContaining({}),
         )
       })
-
-      // Verify it used 'start' (forward) and NOT 'before' (backward)
-      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(call).not.toHaveProperty('before')
-      expect(new Date(call.start).getTime()).toBe(cachedTimestamp.getTime() + 1)
 
       loadSpy.mockRestore()
     })
@@ -471,15 +468,20 @@ describe('setupRoomSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // Ignoring the this-session live message is now the orchestrator's job
+      // (selectCatchUpQuery's sessionStartTime handling, covered in
+      // mamCatchUpUtils.test.ts / MAM.catchup.test.ts). This asserts the side
+      // effect forwards BOTH cached messages and a concrete sessionStartTime.
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'room@conference.example.com', start: expect.any(String) })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.arrayContaining([
+            expect.objectContaining({ id: 'old' }),
+            expect.objectContaining({ id: 'live' }),
+          ]),
+          expect.objectContaining({ sessionStartTime: expect.any(Number) }),
         )
       })
-
-      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(call).not.toHaveProperty('before')
-      expect(new Date(call.start).getTime()).toBe(monthOld.getTime() + 1)
 
       loadSpy.mockRestore()
     })
@@ -506,19 +508,15 @@ describe('setupRoomSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // Empty cache → delegates with an empty messages array; the orchestrator
+      // resolves the fetch-latest fallback (covered by orchestrator tests).
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-            before: '',
-            max: 50,
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          [],
+          expect.objectContaining({}),
         )
       })
-
-      // Verify it used 'before' (backward) and NOT 'start' (forward)
-      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(call).not.toHaveProperty('start')
     })
   })
 
@@ -545,17 +543,17 @@ describe('setupRoomSideEffects', () => {
 
       // Room wasn't joined yet, so initial MAM fetch was skipped
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
       // Self-presence arrives — room is now joined
       roomStore.getState().setRoomJoined('room@conference.example.com', true)
       mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: true })
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -596,16 +594,16 @@ describe('setupRoomSideEffects', () => {
 
       // Wait for initial MAM fetch for the active room
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
-      ;(mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mockClear()
+      ;(mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mockClear()
 
       // Non-active room joins — should not trigger MAM
       roomStore.getState().setRoomJoined('other-room@conference.example.com', true)
       mockClient._emitSDK('room:joined', { roomJid: 'other-room@conference.example.com', joined: true })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should NOT trigger MAM when room:joined fires with joined=false (leaving)', async () => {
@@ -629,15 +627,15 @@ describe('setupRoomSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
-      ;(mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mockClear()
+      ;(mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mockClear()
 
       // Room leaves — should not trigger MAM
       mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: false })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -666,7 +664,7 @@ describe('setupRoomSideEffects', () => {
       simulateSmResumption(mockClient)
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('triggers MAM when supportsMAM becomes true after SM resumption for a never-fetched room', async () => {
@@ -700,8 +698,10 @@ describe('setupRoomSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'room@conference.example.com' })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -736,8 +736,10 @@ describe('setupRoomSideEffects', () => {
       mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: true })
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'room@conference.example.com' })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -779,7 +781,7 @@ describe('setupRoomSideEffects', () => {
       mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: true })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('does NOT trigger MAM on a post-resumption room:joined for a NON-ACTIVE room', async () => {
@@ -826,7 +828,7 @@ describe('setupRoomSideEffects', () => {
       await new Promise(resolve => setTimeout(resolve, 50))
 
       // room2 is not the active room, so no foreground catch-up is needed.
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should trigger MAM correctly after SM resume then fresh session', async () => {
@@ -852,17 +854,17 @@ describe('setupRoomSideEffects', () => {
       simulateSmResumption(mockClient)
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
       // Then: disconnect and fresh session — should trigger MAM
       connectionStore.getState().setStatus('reconnecting')
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            roomJid: 'room@conference.example.com',
-          })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -908,8 +910,10 @@ describe('setupRoomSideEffects', () => {
       await roomStore.getState().activateRoom(ROOM)
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: ROOM, before: '', max: 50 })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          ROOM,
+          [],
+          expect.objectContaining({}),
         )
       })
     })
@@ -927,8 +931,10 @@ describe('setupRoomSideEffects', () => {
       await roomStore.getState().activateRoom(ROOM)
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: ROOM, before: '', max: 50 })
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          ROOM,
+          [],
+          expect.objectContaining({}),
         )
       })
     })

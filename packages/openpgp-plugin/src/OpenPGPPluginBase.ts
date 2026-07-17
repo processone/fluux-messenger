@@ -91,6 +91,7 @@ import {
 } from './fingerprintCompare'
 import { accountUserId } from './openpgpUserId'
 import type { OpenPGPHostStores, CertRejection } from './hostStores'
+import { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 import {
   sealTrustState,
   verifyTrustStateSeal,
@@ -1044,12 +1045,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
 
-    let bundles: KeyBundle[]
-    try {
-      bundles = await this.backupImportAll(ctx.account.jid, armoredMessage, passphrase)
-    } catch (err) {
-      throw this.toPluginError('restoreSecretKey', err)
-    }
+    const { bundles, workingPassphrase, usedLegacyPassphrase } =
+      await this.backupImportAllWithLegacyFallback(
+        ctx.account.jid,
+        armoredMessage,
+        passphrase,
+        'restoreSecretKey',
+      )
 
     const selection = await this.selectKeyFromBackup(bundles)
     if (!selection) {
@@ -1061,25 +1063,103 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     if (!selection.needsPicker) {
-      return this.doInstallKey(armoredMessage, passphrase, selection.selected.fingerprint)
+      const info = await this.doInstallKey(
+        armoredMessage,
+        workingPassphrase,
+        selection.selected.fingerprint,
+      )
+      if (usedLegacyPassphrase) {
+        await this.healLegacyBackupEncoding(passphrase)
+      }
+      return info
     }
 
     return {
       needsPicker: true,
       candidates: bundles,
-      backupContext: { message: armoredMessage, passphrase },
+      backupContext: { message: armoredMessage, passphrase: workingPassphrase },
+    }
+  }
+
+  /**
+   * Decrypt-probe a backup with the passphrase exactly as the user
+   * entered it, falling back to the pre-0.17.2 normalized form (#1021).
+   *
+   * Fluux ≤0.17.1 encrypted backups with `legacyNormalizeBackupPassphrase`
+   * applied, so the code the user wrote down does not open them verbatim.
+   * The fallback keeps those backups restorable; the caller learns which
+   * form worked via `usedLegacyPassphrase` so it can heal the server copy.
+   * When both forms fail, the ORIGINAL (verbatim-attempt) error surfaces —
+   * that is the failure the user can act on.
+   */
+  private async backupImportAllWithLegacyFallback(
+    accountJid: string,
+    armoredMessage: string,
+    passphrase: string,
+    op: string,
+  ): Promise<{ bundles: KeyBundle[]; workingPassphrase: string; usedLegacyPassphrase: boolean }> {
+    try {
+      const bundles = await this.backupImportAll(accountJid, armoredMessage, passphrase)
+      return { bundles, workingPassphrase: passphrase, usedLegacyPassphrase: false }
+    } catch (originalErr) {
+      const legacy = legacyNormalizeBackupPassphrase(passphrase)
+      if (legacy === prepareBackupPassphrase(passphrase)) {
+        // Normalization wouldn't change the bytes — nothing to retry.
+        throw this.toPluginError(op, originalErr)
+      }
+      try {
+        const bundles = await this.backupImportAll(accountJid, armoredMessage, legacy)
+        this.requireCtx().logger.info(
+          `${this.pluginName()}: backup opened with the legacy-normalized passphrase — pre-0.17.2 encoding detected`,
+        )
+        return { bundles, workingPassphrase: legacy, usedLegacyPassphrase: true }
+      } catch {
+        throw this.toPluginError(op, originalErr)
+      }
+    }
+  }
+
+  /**
+   * Re-publish the secret-key backup encrypted to the passphrase exactly
+   * as the user knows it. Called once, right after a legacy-encoded backup
+   * (pre-0.17.2 normalization, #1021) was successfully restored — from then
+   * on the displayed code opens the server copy in every XEP-0373 client.
+   *
+   * Best-effort by design: the restore already succeeded, so a failed
+   * re-publish only means the server copy keeps the legacy encoding until
+   * the next explicit backup.
+   *
+   * Note (web): the freshly installed local key is wrapped with the legacy
+   * form for this session. The next unlock with the displayed code recovers
+   * from the healed backup and re-wraps it verbatim — self-converging.
+   */
+  private async healLegacyBackupEncoding(passphrase: string): Promise<void> {
+    const ctx = this.requireCtx()
+    try {
+      await this.backupSecretKey(passphrase)
+      ctx.logger.info(
+        `${this.pluginName()}: re-published the secret-key backup under the verbatim passphrase (#1021 heal)`,
+      )
+    } catch (err) {
+      ctx.logger.warn(
+        `${this.pluginName()}: could not re-publish the healed backup: ${formatError(err)}`,
+      )
     }
   }
 
   async importKeyFromFile(armoredMessage: string, passphrase: string): Promise<RestoreResult> {
     const ctx = this.requireCtx()
 
-    let bundles: KeyBundle[]
-    try {
-      bundles = await this.backupImportAll(ctx.account.jid, armoredMessage, passphrase)
-    } catch (err) {
-      throw this.toPluginError('importKeyFromFile', err)
-    }
+    // Files exported by Fluux ≤0.17.1 are encrypted with the legacy
+    // normalized passphrase (#1021) — same fallback as the server restore.
+    // No heal here: there is no server copy to fix, and the file on disk
+    // is the user's artifact.
+    const { bundles, workingPassphrase } = await this.backupImportAllWithLegacyFallback(
+      ctx.account.jid,
+      armoredMessage,
+      passphrase,
+      'importKeyFromFile',
+    )
 
     const selection = await this.selectKeyFromBackup(bundles)
     if (!selection) {
@@ -1091,13 +1171,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     if (!selection.needsPicker) {
-      return this.doInstallKey(armoredMessage, passphrase, selection.selected.fingerprint)
+      return this.doInstallKey(armoredMessage, workingPassphrase, selection.selected.fingerprint)
     }
 
     return {
       needsPicker: true,
       candidates: bundles,
-      backupContext: { message: armoredMessage, passphrase },
+      backupContext: { message: armoredMessage, passphrase: workingPassphrase },
     }
   }
 

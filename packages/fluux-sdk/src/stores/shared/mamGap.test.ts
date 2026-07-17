@@ -8,6 +8,7 @@ import {
   detectFetchLatestSeam,
   closeGapWithBackwardPage,
   syncGapAfterArchiveMerge,
+  newestMessageStanzaId,
   type GapInterval,
   type ArchiveMergeGapInput,
 } from './mamGap'
@@ -132,6 +133,12 @@ describe('detectFetchLatestSeam', () => {
     expect(detectFetchLatestSeam([], 0, 0, heldBelowTs)).toBeUndefined()
     expect(detectFetchLatestSeam([{}], 1, 0, heldBelowTs)).toBeUndefined()
   })
+
+  it('no seam from an id alone: newestHeldBelowId with undefined newestHeldBelowTs', () => {
+    // A seam's start comes from the TIMESTAMP; an id without a timestamp must
+    // not be enough to invent one.
+    expect(detectFetchLatestSeam(page, 2, 0, undefined, 'held-id-without-ts')).toBeUndefined()
+  })
 })
 
 describe('closeGapWithBackwardPage', () => {
@@ -154,6 +161,12 @@ describe('closeGapWithBackwardPage', () => {
     expect(closeGapWithBackwardPage(gap, page, false)).toBe(gap)
     // Even archive-start (complete=true) below the gap must NOT clear it.
     expect(closeGapWithBackwardPage(gap, page, true)).toBe(gap)
+  })
+
+  it('is reference-stable even when pageOldestId is passed (unchanged branch ignores it)', () => {
+    const page = { oldestTs: ts('2026-07-01T00:00:00Z'), newestTs: ts('2026-07-05T00:00:00Z') }
+    const result = closeGapWithBackwardPage(gap, page, false, 'should-not-appear')
+    expect(result).toBe(gap)
   })
 
   it('clears the gap when a page from at/above it reaches archive start (complete)', () => {
@@ -205,6 +218,57 @@ describe('syncGapAfterArchiveMerge', () => {
     expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z') })
   })
 
+  it('forward resync: preserves endId when the end timestamp is unchanged', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    // Merged still has an above-gap message at exactly `end` — computeGapEnd
+    // resolves to the same value, so the recorded endId survives.
+    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-14T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
+      merged, lastFetchedArchiveId: 's2',
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-10T00:00:00Z'), end, startId: 's2', endId: 'e1' })
+  })
+
+  it('forward resync: preserves startId when the merge has no lastFetchedArchiveId (rsm.last)', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    const merged = [msg('2026-07-14T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: start, merged,
+      // No lastFetchedArchiveId — an incomplete forward merge without rsm.last.
+    }))
+    expect(out.get(id)).toEqual({ start, end, startId: 's1', endId: 'e1' })
+  })
+
+  it('forward resync: drops endId when the end timestamp moves (id for the new edge is unknown)', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    // A newer message now sits above the old end — the gap's end edge moved.
+    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-20T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
+      merged, lastFetchedArchiveId: 's2',
+    }))
+    expect(out.get(id)).toEqual({
+      start: ts('2026-07-10T00:00:00Z'), end: ts('2026-07-20T00:00:00Z'), startId: 's2',
+    })
+    expect(out.get(id)?.endId).toBeUndefined()
+  })
+
+  it('forward resync: a brand-new gap (no existing entry) still stamps only startId, never a phantom endId', () => {
+    const merged = [msg('2026-07-06T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', forwardGapTimestamp: ts('2026-07-06T00:00:00Z'), merged,
+      lastFetchedArchiveId: 's1',
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z'), startId: 's1' })
+  })
+
   it('forward: clears the gap when forwardGapTimestamp is undefined (complete catch-up)', () => {
     const gaps = new Map([[id, { start: 1000, end: 5000 }]])
     const out = syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, complete: true }))
@@ -249,5 +313,61 @@ describe('syncGapAfterArchiveMerge', () => {
     const fetched = [msg('2026-07-01T00:00:00Z')] // entirely below the gap
     const out = syncGapAfterArchiveMerge(base({ gaps, fetched, newMessagesCount: 1 }))
     expect(out).toBe(gaps)
+  })
+})
+
+describe('newestMessageStanzaId', () => {
+  it('returns the stanzaId of the newest-timestamped message when it carries one', () => {
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z'), stanzaId: 'old' },
+      { timestamp: new Date('2026-07-15T00:00:00Z'), stanzaId: 'newest' },
+      { timestamp: new Date('2026-07-12T00:00:00Z'), stanzaId: 'mid' },
+    ]
+    expect(newestMessageStanzaId(messages)).toBe('newest')
+  })
+
+  it('falls back to the next-newest message that HAS a stanzaId when the newest lacks one', () => {
+    // The newest-timestamped message (own-sent pre-echo) has no stanzaId yet —
+    // must not silently drop the id-exact resume cursor.
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z'), stanzaId: 'archived' },
+      { timestamp: new Date('2026-07-15T00:00:00Z') }, // newest, id-less
+    ]
+    expect(newestMessageStanzaId(messages)).toBe('archived')
+  })
+
+  it('returns undefined when no message carries a stanzaId', () => {
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z') },
+      { timestamp: new Date('2026-07-15T00:00:00Z') },
+    ]
+    expect(newestMessageStanzaId(messages)).toBeUndefined()
+  })
+
+  it('returns undefined for an empty array', () => {
+    expect(newestMessageStanzaId([])).toBeUndefined()
+  })
+})
+
+describe('GapInterval coverage ids', () => {
+  it('detectFetchLatestSeam stamps the last-downloaded id below and the first held id above', () => {
+    const fetched = [
+      { timestamp: new Date('2026-07-16T10:00:00Z'), stanzaId: 'win-oldest' },
+      { timestamp: new Date('2026-07-16T11:00:00Z'), stanzaId: 'win-newest' },
+    ]
+    const seam = detectFetchLatestSeam(fetched, 2, 0, new Date('2026-06-01T10:00:00Z').getTime(), 'cov-42')
+    expect(seam).toMatchObject({ startId: 'cov-42', endId: 'win-oldest' })
+  })
+
+  it('closeGapWithBackwardPage moves endId down with the shrinking edge', () => {
+    const gap = { start: 1000, end: 5000, startId: 'cov-42', endId: 'old-top' }
+    const page = { oldestTs: 3000, newestTs: 4500 }
+    const next = closeGapWithBackwardPage(gap, page, false, 'page-oldest-id')
+    expect(next).toMatchObject({ start: 1000, end: 3000, startId: 'cov-42', endId: 'page-oldest-id' })
+  })
+
+  it('deserializeGaps tolerates legacy entries without ids', () => {
+    const legacy = JSON.stringify([['a@b.c', { start: 1000, end: 2000 }]])
+    expect(deserializeGaps(legacy).get('a@b.c')).toEqual({ start: 1000, end: 2000 })
   })
 })

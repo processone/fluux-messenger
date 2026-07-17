@@ -3,7 +3,6 @@ import { chatStore, connectionStore } from '../stores'
 import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment } from '../core'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { selectCatchUpQuery, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES } from '../utils/mamCatchUpUtils'
 
 /**
  * Action-only counterpart to `useChat()`.
@@ -158,14 +157,15 @@ export function useChatActions() {
           cachedMessages = chatStore.getState().messages.get(targetId)
         }
 
-        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
-        const lastTimestamp = chatStore.getState().getConversationLastTimestamp(targetId)
-        const q = selectCatchUpQuery(cachedMessages ?? [], { forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
-
-        await client.chat.queryMAM({
-          with: conversation.id,
-          ...q,
-          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+        // Latest-first orchestrator (same as chatSideEffects' active-conversation
+        // catch-up). The ACTIVE conversation must not stitch: Phase B's
+        // keep-oldest-evict would trim its resident live edge out from under the
+        // open view. A NON-active target (e.g. background prefetch for a conversation
+        // the user isn't looking at) SHOULD stitch, so its unread region becomes
+        // contiguous with the read pointer instead of leaving a gap.
+        const isActive = targetId === chatStore.getState().activeConversationId
+        await client.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {
+          stitchReadPointer: !isActive,
         })
       } catch (error) {
         console.error('Failed to fetch history:', error)

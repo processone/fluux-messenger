@@ -34,7 +34,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
-    saveRoomMessages: vi.fn().mockResolvedValue(undefined),
+    saveRoomMessages: vi.fn().mockResolvedValue(true),
     getRoomMessages: vi.fn().mockResolvedValue([]),
     getRoomMessagesAround: vi.fn().mockResolvedValue([]),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
@@ -243,6 +243,82 @@ describe('roomStore.applyRemoteDisplayed', () => {
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.lastSeenMessageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+
+  // Exact badge recount (Phase B pointer resolution, non-resident room): the
+  // sync recount inside applyRemoteDisplayed only sees the page it was handed
+  // (mergedForMarker = the final backward page for a non-resident room). The
+  // unread/mention messages downloaded by EARLIER pages of the same walk live
+  // only in IndexedDB — the final counts must come from the cache, not the page.
+  it('recounts the badge from the full cached set when the pointer resolves during a multi-page background walk', async () => {
+    // Non-active, non-resident room with a pending deep pointer (new-device
+    // sync: no local read state yet).
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
+
+    // Phase A fetch-latest page: 10 unread messages at the live edge, one a
+    // mention; the pointer's message is NOT here → stays pending.
+    const latestPage = Array.from({ length: 10 }, (_, i) => rmsg(`f${i}`, `sf${i}`, 5100 + i * 100))
+    latestPage[3] = { ...latestPage[3], isMention: true }
+    roomStore.getState().mergeRoomMAMMessages(ROOM, latestPage, { first: 'sf0' }, false, 'backward', false, true)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
+
+    // Phase B backward page: contains the pointer's own message (oldest) plus
+    // 9 more unread after it.
+    const backwardPage = [
+      rmsg('p0', 's-ptr', 4100),
+      ...Array.from({ length: 9 }, (_, i) => rmsg(`p${i + 1}`, `sp${i + 1}`, 4200 + i * 100)),
+    ]
+    // The async exact recount reads the newest cached window — the union of
+    // everything the walk downloaded (both pages, chronological).
+    vi.mocked(messageCache.getRoomMessages).mockResolvedValueOnce([...backwardPage, ...latestPage])
+    roomStore.getState().mergeRoomMAMMessages(ROOM, backwardPage, { first: 's-ptr' }, false, 'backward')
+
+    // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
+    // backward page) + 10 (fetch-latest page, incl. 1 mention) = 19, NOT just
+    // the 9 visible in the final page.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('p0')
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(19)
+    })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
+    // Combined rooms mirror kept coherent.
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(19)
+    expect(roomStore.getState().rooms.get(ROOM)?.mentionsCount).toBe(1)
+
+    // Restore the factory default so a stale one-shot can't leak into later tests.
+    vi.mocked(messageCache.getRoomMessages).mockReset().mockResolvedValue([])
+  })
+
+  it('skips the async cache recount when the room became active meanwhile', async () => {
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')
+
+    const page = [rmsg('p0', 's-ptr', 4100), rmsg('p1', 'sp1', 4200)]
+    // Cache read resolves AFTER the room becomes active: gate it.
+    let releaseCache: (msgs: RoomMessage[]) => void
+    vi.mocked(messageCache.getRoomMessages).mockReturnValueOnce(
+      new Promise<RoomMessage[]>((resolve) => { releaseCache = resolve })
+    )
+    roomStore.getState().mergeRoomMAMMessages(ROOM, page, { first: 's-ptr' }, false, 'backward')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+
+    // User opens the room before the cache read lands; activation owns the
+    // recount now — the stale async result must NOT clobber it.
+    roomStore.setState({ activeRoomJid: ROOM })
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 0 })
+      return { roomMeta: m }
+    })
+    releaseCache!([...page, rmsg('f0', 'sf0', 5100)])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+
+    // Restore the factory default so a stale one-shot can't leak into later tests.
+    vi.mocked(messageCache.getRoomMessages).mockReset().mockResolvedValue([])
   })
 })
 

@@ -84,7 +84,7 @@ function settle(ms = 50): Promise<void> {
 function simulateDisconnect(client: ReturnType<typeof createMockClient>, opts?: { clearMocks?: boolean }) {
   connectionStore.getState().setStatus('reconnecting')
   if (opts?.clearMocks) {
-    vi.mocked(client.chat.queryMAM).mockClear()
+    vi.mocked(client.mam.catchUpConversationHistory).mockClear()
   }
 }
 
@@ -116,7 +116,7 @@ describe('Chat Network Scenario Journey Tests', () => {
       simulateSmResumption(client)
 
       await settle()
-      expect(client.chat.queryMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpConversationHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -134,8 +134,10 @@ describe('Chat Network Scenario Journey Tests', () => {
       simulateFreshSession(client)
 
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -160,13 +162,13 @@ describe('Chat Network Scenario Journey Tests', () => {
       chatStore.getState().setActiveConversation('bob@example.com')
       await settle()
 
-      vi.mocked(client.chat.queryMAM).mockClear()
+      vi.mocked(client.mam.catchUpConversationHistory).mockClear()
 
       chatStore.getState().setActiveConversation('alice@example.com')
       await settle()
 
       // Alice was the active conversation during SM resume → fetchInitiated marks it
-      expect(client.chat.queryMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpConversationHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -186,18 +188,22 @@ describe('Chat Network Scenario Journey Tests', () => {
       simulateFreshSession(client)
 
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
-      vi.mocked(client.chat.queryMAM).mockClear()
+      vi.mocked(client.mam.catchUpConversationHistory).mockClear()
 
       // Switch to bob — should trigger MAM (not yet caught up)
       chatStore.getState().setActiveConversation('bob@example.com')
 
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'bob@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'bob@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -214,7 +220,7 @@ describe('Chat Network Scenario Journey Tests', () => {
       cleanup = setupChatSideEffects(client)
 
       // Mock queryMAM to clear loading state (in production, the MAM module does this)
-      vi.mocked(client.chat.queryMAM).mockImplementation(async () => {
+      vi.mocked(client.mam.catchUpConversationHistory).mockImplementation(async () => {
         const activeId = chatStore.getState().activeConversationId
         if (activeId) chatStore.getState().setMAMLoading(activeId, false)
       })
@@ -222,7 +228,7 @@ describe('Chat Network Scenario Journey Tests', () => {
       // Cycle 1: fresh session
       simulateFreshSession(client)
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalled()
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalled()
       })
 
       // Cycle 2: disconnect → SM resume
@@ -231,7 +237,7 @@ describe('Chat Network Scenario Journey Tests', () => {
       await settle()
 
       // No MAM on SM resume
-      expect(client.chat.queryMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpConversationHistory).not.toHaveBeenCalled()
 
       // Cycle 3: disconnect → fresh session
       simulateDisconnect(client)
@@ -239,8 +245,10 @@ describe('Chat Network Scenario Journey Tests', () => {
 
       // MAM should trigger again (fetchInitiated cleared by disconnect + online)
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -262,14 +270,16 @@ describe('Chat Network Scenario Journey Tests', () => {
       await settle()
 
       // No MAM yet — server features not discovered
-      expect(client.chat.queryMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpConversationHistory).not.toHaveBeenCalled()
 
       // Server info arrives with MAM support
       enableMAM()
 
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -288,7 +298,7 @@ describe('Chat Network Scenario Journey Tests', () => {
       enableMAM()
       await settle()
 
-      expect(client.chat.queryMAM).not.toHaveBeenCalled()
+      expect(client.mam.catchUpConversationHistory).not.toHaveBeenCalled()
     })
   })
 
@@ -331,9 +341,11 @@ describe('Chat Network Scenario Journey Tests', () => {
       simulateFreshSession(client)
 
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledTimes(1)
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledTimes(1)
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })
@@ -376,11 +388,15 @@ describe('Chat Network Scenario Journey Tests', () => {
 
       // Both should trigger independently
       await vi.waitFor(() => {
-        expect(client.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ with: 'alice@example.com' })
+        expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'alice@example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
-        expect(client.chat.queryRoomMAM).toHaveBeenCalledWith(
-          expect.objectContaining({ roomJid: 'room@conference.example.com' })
+        expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          expect.any(Array),
+          expect.objectContaining({}),
         )
       })
     })

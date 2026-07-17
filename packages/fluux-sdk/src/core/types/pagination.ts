@@ -89,6 +89,12 @@ export interface MAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
@@ -133,6 +139,12 @@ export interface RoomMAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
@@ -222,15 +234,22 @@ export interface MAMQueryState {
   /** ID of oldest fetched message (rsm.first) - use as 'before' cursor for pagination */
   oldestFetchedId?: string
   /**
-   * True if conversation needs a catch-up MAM query (e.g., after reconnect).
-   * Set to true on reconnect for all conversations, cleared after catch-up query completes.
-   * Used by side effects to determine if a MAM query should run when conversation opens.
-   */
-  needsCatchUp?: boolean
-  /**
    * Epoch ms of the newest message from an incomplete forward catch-up.
    * Used to position the gap marker in the message list. Set when a forward
    * catch-up query ends with complete=false, cleared when caught up to live.
    */
   forwardGapTimestamp?: number
+  /**
+   * True when a `before:''` fetch-latest landed DISJOINT above held-below
+   * history without a proven lower boundary to anchor a seam — the preview
+   * timestamp alone must never form a seam (it may be an unarchived message),
+   * yet its presence proves held-below history exists. So no gap is recorded,
+   * and this flag records that the contiguous coverage BOTTOM is unproven.
+   *
+   * Consumed by the catch-up Phase B seeder: with no gap upper edge AND this
+   * flag set, the cache-oldest row is NOT provably contiguous with live, so the
+   * backward descent is skipped this pass. Cleared when a merge later proves a
+   * boundary (a non-empty resident extent, or a recorded gap gains an `endId`).
+   */
+  coverageBottomUnproven?: boolean
 }

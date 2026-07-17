@@ -6,6 +6,7 @@ export { fingerprintsEqual, toXep0373Fingerprint, pubkeyMetadataFingerprintAttrs
 // Backup passphrase format + generation.
 export { parseArmorPassphraseFormat } from './passphraseFormatHeader'
 export { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from './passphraseGenerator'
+export { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 
 // Web session-passphrase lock state + cache.
 export { isKeyLocked, subscribeKeyLockState, setSessionPassphrase } from './webPassphraseStore'

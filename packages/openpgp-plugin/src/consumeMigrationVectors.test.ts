@@ -48,19 +48,10 @@ interface MigrationVector {
 const TSK_PASSPHRASE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
 
 /**
- * Mirror of WebOpenPGPPlugin.normalizeBackupPassphrase (module-private there):
- * NFKD → lowercase → collapse whitespace. The real backup path encrypts under
- * the normalized passphrase, so an in-memory vector must do the same or it
- * won't decrypt back through the import path.
- */
-function normalizeBackupPassphrase(raw: string): string {
-  return raw.normalize('NFKD').toLowerCase().split(/\s+/).filter(Boolean).join(' ')
-}
-
-/**
  * Build a Fluux/Sequoia-style TSK backup entirely in memory: a fresh ECC key
  * whose binary Transferable Secret Key is wrapped in a passphrase-encrypted
  * OpenPGP MESSAGE — the exact container Fluux's web and desktop backups emit.
+ * The passphrase is used verbatim (#1021), matching the real backup path.
  * The fingerprint is read back off the generated key, so there is no hardcoded
  * value to drift and nothing is ever written to disk.
  */
@@ -74,7 +65,7 @@ async function makeTskBackupVector(): Promise<MigrationVector> {
   })
   const backup = (await openpgp.encrypt({
     message: await openpgp.createMessage({ binary: tsk.write() as Uint8Array }),
-    passwords: [normalizeBackupPassphrase(TSK_PASSPHRASE)],
+    passwords: [TSK_PASSPHRASE],
   })) as string
   return { backup, passphrase: TSK_PASSPHRASE, fingerprint: tsk.getFingerprint() }
 }

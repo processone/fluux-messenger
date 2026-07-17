@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { ImageAttachment, VideoAttachment, AudioAttachment } from './FileAttachments'
+import { ImageAttachment, VideoAttachment, AudioAttachment, FileAttachmentCard } from './FileAttachments'
 import { MessageAttachments } from './MessageAttachments'
 import { MediaAutoloadProvider } from '@/contexts'
 import { __resetApprovedMediaUrlsForTest } from '@/utils/mediaAutoload'
 import type { FileAttachment } from '@fluux/sdk'
 
 // Spy created via vi.hoisted so it exists when the hoisted vi.mock factory runs.
-const { useAttachmentUrlSpy, useCachedMediaUrlSpy } = vi.hoisted(() => ({
+const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadAttachmentSpy } = vi.hoisted(() => ({
   useAttachmentUrlSpy: vi.fn(),
   useCachedMediaUrlSpy: vi.fn(),
+  downloadAttachmentSpy: vi.fn(),
 }))
 
 // Mock react-i18next
@@ -40,6 +41,10 @@ vi.mock('@/hooks', () => ({
 // Isolate ImageAttachment from heavy children rendered on the success path.
 vi.mock('./ImageLightbox', () => ({ ImageLightbox: () => null }))
 vi.mock('./ImageContextMenu', () => ({ ImageContextMenu: () => null }))
+
+vi.mock('@/utils/download', () => ({
+  downloadAttachment: downloadAttachmentSpy,
+}))
 
 describe('FileAttachments', () => {
   beforeEach(() => {
@@ -497,5 +502,102 @@ describe('VideoAttachment onMediaLoad notify gating', () => {
     expect(el).not.toBeNull()
     fireEvent.loadedMetadata(el!)
     expect(onLoad).not.toHaveBeenCalled()
+  })
+})
+
+describe('FileAttachmentCard download', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    downloadAttachmentSpy.mockResolvedValue(undefined)
+  })
+
+  const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
+
+  it('plaintext file → renders a link to the raw URL (in-browser preview preserved)', () => {
+    const pdf: FileAttachment = {
+      url: 'https://x/doc.pdf', mediaType: 'application/pdf', name: 'doc.pdf',
+    }
+    render(<FileAttachmentCard attachment={pdf} />)
+    const link = screen.getByRole('link')
+    expect(link).toHaveAttribute('href', 'https://x/doc.pdf')
+    expect(downloadAttachmentSpy).not.toHaveBeenCalled()
+  })
+
+  it('encrypted file → clicking the card decrypts and downloads (no ciphertext link)', () => {
+    const pdf: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'application/pdf', name: 'secret.pdf', encryption,
+    }
+    render(<FileAttachmentCard attachment={pdf} />)
+    // Encrypted card is a button, not an anchor — never links to ciphertext.
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button'))
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+    expect(downloadAttachmentSpy.mock.calls[0][0]).toMatchObject({
+      url: 'https://x/cipher.bin', name: 'secret.pdf', encryption,
+    })
+  })
+
+  it('encrypted → works for a non-PDF type too (type-agnostic)', () => {
+    const zip: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'application/zip', name: 'bundle.zip', encryption,
+    }
+    render(<FileAttachmentCard attachment={zip} />)
+    fireEvent.click(screen.getByRole('button'))
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('encrypted media download controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    downloadAttachmentSpy.mockResolvedValue(undefined)
+    useAttachmentUrlSpy.mockReturnValue({ url: 'blob:play', isLoading: false, error: null })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
+
+  it('encrypted video info-bar download → button, decrypts (no ciphertext href)', () => {
+    const video: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'video/mp4', name: 'clip.mp4', encryption,
+    }
+    render(<VideoAttachment attachment={video} />)
+    const control = screen.getByLabelText('common.download')
+    expect(control).not.toHaveAttribute('href')
+    fireEvent.click(control)
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('plaintext video info-bar download → still a link to the raw URL', () => {
+    const video: FileAttachment = {
+      url: 'https://x/clip.mp4', mediaType: 'video/mp4', name: 'clip.mp4',
+    }
+    render(<VideoAttachment attachment={video} />)
+    expect(screen.getByLabelText('common.download')).toHaveAttribute('href', 'https://x/clip.mp4')
+    expect(downloadAttachmentSpy).not.toHaveBeenCalled()
+  })
+
+  it('encrypted audio info-bar download → button, decrypts', () => {
+    const audio: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'audio/mpeg', name: 'voice.mp3', encryption,
+    }
+    render(<AudioAttachment attachment={audio} />)
+    fireEvent.click(screen.getByLabelText('common.download'))
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('encrypted image error-fallback → button, decrypts (no ciphertext link)', () => {
+    const image: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'image/jpeg', name: 'secret.jpg', encryption,
+    }
+    useAttachmentUrlSpy.mockReturnValue({ url: null, isLoading: false, error: new Error('Failed to fetch') })
+
+    render(<ImageAttachment attachment={image} />)
+
+    // Encrypted error-fallback is a button, not an anchor — never links to ciphertext.
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    const control = screen.getByRole('button')
+    fireEvent.click(control)
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
   })
 })

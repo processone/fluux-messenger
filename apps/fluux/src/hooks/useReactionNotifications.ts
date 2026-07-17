@@ -88,15 +88,21 @@ export function useReactionNotifications(): void {
       }
       if (!message?.isOutgoing) return
 
+      // The reactor references the message by whatever id tier its client used —
+      // for archived messages that's the server stanza-id, not our client id. The
+      // navigation/scroll machinery (targetMessageId → getIndexForMessageId /
+      // data-message-id) resolves only the client id, so normalize to it here.
+      const canonicalMessageId = message.id
+
       // "Last message" only applies while the conversation is active and the message
       // is resident; a cache-recovered message is either non-active (→ toast) or
       // off-screen in the active conversation (→ mention), never the last message.
       const isLastMessage =
-        residentMessages && residentMessages.length > 0 ? residentMessages[residentMessages.length - 1].id === messageId : false
+        residentMessages && residentMessages.length > 0 ? residentMessages[residentMessages.length - 1].id === canonicalMessageId : false
 
       const reactorName = getLocalPart(reactorJid)
       const decision = decideReactionNotification(
-        { conversationId, messageId, reactorName, emojis, isLive },
+        { conversationId, messageId: canonicalMessageId, reactorName, emojis, isLive },
         {
           activeConversationId: chatStore.getState().activeConversationId,
           isLastMessage,
@@ -106,7 +112,7 @@ export function useReactionNotifications(): void {
 
       dispatchDecision(decision, {
         conversationId,
-        messageId,
+        messageId: canonicalMessageId,
         reactorName,
         emoji: emojis[0] ?? '',
         preview: message.body?.slice(0, 80) ?? '',
@@ -137,11 +143,15 @@ export function useReactionNotifications(): void {
       }
       if (!message || message.nick !== room.nickname) return
 
+      // MUC reactions reference the server stanza-id; navigation needs the client id
+      // (same normalization as the 1:1 path above).
+      const canonicalMessageId = message.id
+
       const isActive = state.activeRoomJid === roomJid
-      const isLastMessage = roomMessages.length > 0 ? roomMessages[roomMessages.length - 1].id === messageId : false
+      const isLastMessage = roomMessages.length > 0 ? roomMessages[roomMessages.length - 1].id === canonicalMessageId : false
 
       const decision = decideReactionNotification(
-        { conversationId: roomJid, messageId, reactorName: reactorNick, emojis, isLive },
+        { conversationId: roomJid, messageId: canonicalMessageId, reactorName: reactorNick, emojis, isLive },
         {
           activeConversationId: isActive ? roomJid : null,
           isLastMessage,
@@ -151,7 +161,7 @@ export function useReactionNotifications(): void {
 
       dispatchDecision(decision, {
         conversationId: roomJid,
-        messageId,
+        messageId: canonicalMessageId,
         reactorName: reactorNick,
         emoji: emojis[0] ?? '',
         preview: message.body?.slice(0, 80) ?? '',

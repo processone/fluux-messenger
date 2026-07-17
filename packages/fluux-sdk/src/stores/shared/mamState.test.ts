@@ -5,8 +5,6 @@ import {
   setMAMLoading,
   setMAMError,
   setMAMQueryCompleted,
-  markAllNeedsCatchUp,
-  clearNeedsCatchUp,
 } from './mamState'
 import type { MAMQueryState } from '../../core/types'
 
@@ -164,7 +162,6 @@ describe('mamState utilities', () => {
         isHistoryComplete: true,
         isCaughtUpToLive: false,
         oldestFetchedId: 'msg-oldest',
-        needsCatchUp: false,
         forwardGapTimestamp: undefined,
       })
     })
@@ -180,7 +177,6 @@ describe('mamState utilities', () => {
         isHistoryComplete: false,
         isCaughtUpToLive: true,
         oldestFetchedId: undefined, // Not updated for forward queries
-        needsCatchUp: false,
         forwardGapTimestamp: undefined, // Cleared when caught up
       })
     })
@@ -298,65 +294,31 @@ describe('mamState utilities', () => {
       expect(result.get('room-1')?.forwardGapTimestamp).toBeUndefined()
       expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
     })
-  })
 
-  describe('markAllNeedsCatchUp', () => {
-    it('marks all existing states as needing catch-up', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, hasQueried: true })
-      states.set('conv-2', { ...DEFAULT_MAM_STATE, hasQueried: true })
+    it('preserves the existing forwardGapTimestamp on an incomplete forward page with no fetched timestamp (signal-only page)', () => {
+      // A signal-only page (reactions/receipts only — zero displayable
+      // messages) yields no newestFetchedTimestamp. It proves nothing about
+      // the hole, so it must not erase the recorded marker.
+      const states = new Map<string, MAMQueryState>([
+        ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
+      ])
+      const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, undefined)
 
-      const result = markAllNeedsCatchUp(states)
-
-      expect(result.get('conv-1')?.needsCatchUp).toBe(true)
-      expect(result.get('conv-2')?.needsCatchUp).toBe(true)
-    })
-
-    it('returns empty map when given empty map', () => {
-      const states = new Map<string, MAMQueryState>()
-      const result = markAllNeedsCatchUp(states)
-      expect(result.size).toBe(0)
-    })
-
-    it('does not mutate the original map', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE })
-
-      const result = markAllNeedsCatchUp(states)
-
-      expect(result).not.toBe(states)
-      expect(states.get('conv-1')?.needsCatchUp).toBeUndefined()
+      expect(result.get('room-1')?.forwardGapTimestamp).toBe(1000)
+      expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
     })
   })
 
-  describe('clearNeedsCatchUp', () => {
-    it('clears needsCatchUp flag for specific conversation', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, needsCatchUp: true })
-      states.set('conv-2', { ...DEFAULT_MAM_STATE, needsCatchUp: true })
-
-      const result = clearNeedsCatchUp(states, 'conv-1')
-
-      expect(result.get('conv-1')?.needsCatchUp).toBe(false)
-      expect(result.get('conv-2')?.needsCatchUp).toBe(true) // Unchanged
+  describe('setMAMQueryCompleted fetch-latest', () => {
+    it('marks caught-up-to-live on a fetch-latest merge (window is at the live edge by definition)', () => {
+      const states = setMAMQueryCompleted(new Map(), 'a@b.c', false, 'backward', undefined, undefined, false, true)
+      expect(states.get('a@b.c')?.isCaughtUpToLive).toBe(true)
     })
 
-    it('returns original map when conversation not found', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE })
-
-      const result = clearNeedsCatchUp(states, 'unknown')
-
-      expect(result).toBe(states) // Same reference
-    })
-
-    it('returns original map when needsCatchUp is already false', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, needsCatchUp: false })
-
-      const result = clearNeedsCatchUp(states, 'conv-1')
-
-      expect(result).toBe(states) // Same reference
+    it('plain backward completion still does not mark caught-up-to-live', () => {
+      const states = setMAMQueryCompleted(new Map(), 'a@b.c', true, 'backward')
+      expect(states.get('a@b.c')?.isCaughtUpToLive).toBe(false)
     })
   })
+
 })

@@ -111,7 +111,7 @@ pub fn decrypt_for_download(
     key: &[u8; 32],
     iv: &[u8; 12],
 ) -> Result<Vec<u8>, String> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(*key));
     cipher
         .decrypt(iv.into(), ciphertext)
         .map_err(|_| "download_file: AES-GCM decryption failed (wrong key/IV or corrupt payload)".to_string())

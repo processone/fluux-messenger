@@ -685,6 +685,28 @@ describe('XMPPClient Message', () => {
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
     })
 
+    it('should attach a no-store hint (XEP-0334) to standalone chat states', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.getContact).mockReturnValue({
+        jid: 'online@example.com',
+        name: 'Online User',
+        presence: 'online',
+        subscription: 'both',
+      })
+
+      await xmppClient.chat.sendChatState('online@example.com', 'composing', 'chat')
+      await xmppClient.chat.sendChatState('room@conference.example.com', 'composing', 'groupchat')
+
+      expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
+      for (const [sentStanza] of mockXmppClientInstance.send.mock.calls) {
+        const hint = sentStanza.children.find((c: any) => c.name === 'no-store')
+        expect(hint).toBeDefined()
+        expect(hint.attrs.xmlns).toBe('urn:xmpp:hints')
+        expect(sentStanza.children.find((c: any) => c.name === 'body')).toBeUndefined()
+      }
+    })
+
     it('should emit room:typing for composing notification in MUC room', async () => {
       await connectClient()
 

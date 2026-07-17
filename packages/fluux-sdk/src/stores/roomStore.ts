@@ -22,7 +22,9 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { syncCoverageAfterArchiveMerge, serializeCoverage, deserializeCoverage, type CoverageRecord, type MergeArchiveExtras } from './shared/mamCoverage'
+import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -32,6 +34,7 @@ import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
+import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
@@ -189,6 +192,53 @@ function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null):
   } catch {
     // Ignore storage errors (quota exceeded, etc.)
   }
+}
+
+/**
+ * localStorage persistence for room coverage records (contiguous-with-live
+ * bottom per room — positive twin of the gap map; Codex r3 #3). Survives
+ * fresh sessions and gap closure so Phase B and the signal-only walk resume
+ * id-exactly across reloads.
+ */
+const ROOM_COVERAGE_STORAGE_KEY_BASE = 'fluux-room-coverage'
+
+function getRoomCoverageStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_COVERAGE_STORAGE_KEY_BASE, jid)
+}
+
+function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecord> {
+  try {
+    const stored = localStorage.getItem(getRoomCoverageStorageKey(jid))
+    if (stored) return deserializeCoverage(stored)
+  } catch {
+    // Ignore parse/storage errors
+  }
+  return new Map()
+}
+
+function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
+  try {
+    localStorage.setItem(getRoomCoverageStorageKey(jid), serializeCoverage(coverage))
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+// Per-room serialization of archive-page writes (Codex r4 #4): a deferred
+// gap/coverage commit applies only when every earlier in-flight page for the
+// room committed too. See shared/archiveSaveChain.ts.
+const roomArchiveSaves = createArchiveSaveChain()
+
+// Cache epoch (Codex r4 #5): bumped whenever the room cache lifecycle resets
+// (logout reset, account switch, room removal). Deferred gap/coverage commits
+// capture the epoch at merge time and no-op when it moved — a gate that was
+// already in flight when the state was torn down must not resurrect entries.
+let roomCacheEpoch = 0
+
+/** Test-only: drop all per-room archive-save chain entries. */
+export function _resetRoomArchiveSavesForTesting(): void {
+  roomArchiveSaves.clear()
+  roomCacheEpoch++
 }
 
 /**
@@ -478,6 +528,9 @@ export interface RoomState {
   mamQueryStates: Map<string, MAMQueryState>
   // Persisted history-gap intervals per room (survives reload; drives the gap marker)
   roomGaps: Map<string, GapInterval>
+  // Persisted contiguous-with-live coverage per room (positive twin of roomGaps;
+  // survives fresh sessions and gap closure). See shared/mamCoverage.ts.
+  roomCoverage: Map<string, CoverageRecord>
   // Rooms the user has acknowledged as non-anonymous (issue #37) — warn once, not
   // on every reconnect. Persisted to localStorage separately and scoped per account.
   acknowledgedNonAnonymousRooms: Set<string>
@@ -598,8 +651,10 @@ export interface RoomState {
   dismissPoll: (roomJid: string, messageId: string) => void
   getDismissedPollIds: (roomJid: string) => Set<string>
 
-  // IndexedDB cache loading
-  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean }) => Promise<RoomMessage[]>
+  // IndexedDB cache loading. `oldest` flips the latest-N default to the
+  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
+  // with `peek` (an oldest slice must never become the resident window).
+  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean; oldest?: boolean }) => Promise<RoomMessage[]>
   /**
    * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
    * (the anchor), rather than the latest-N slice. Room counterpart of
@@ -651,13 +706,22 @@ export interface RoomState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  /**
+   * Strip a purged archive id from the persisted gap anchor (`startId`),
+   * keeping the `start` timestamp so the next catch-up resume uses the
+   * timestamp fallback and progresses. Called via the `room:mam-anchor-purged`
+   * binding when an `after:`-anchored query hit item-not-found. Only strips a
+   * MATCHING id — a gap whose anchor already advanced is left untouched.
+   */
+  clearRoomGapAnchor: (roomJid: string, purgedStartId: string) => void
+  /** Persisted contiguous-with-live coverage record, if any. */
+  getRoomCoverage: (roomJid: string) => CoverageRecord | undefined
+  /** Drop the coverage record; with `ifBottomId`, only when it matches
+   *  `bottomId` (purge-event guard — the anchor is known gone). */
+  clearRoomCoverage: (roomJid: string, ifBottomId?: string) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
-  /** Mark all rooms as needing a catch-up MAM query (called on reconnect) */
-  markAllRoomsNeedsCatchUp: () => void
-  /** Clear the needsCatchUp flag for a specific room */
-  clearRoomNeedsCatchUp: (roomJid: string) => void
   /** Update only the lastMessage preview without affecting message history */
   updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
   setTargetMessageId: (id: string | null) => void
@@ -689,7 +753,8 @@ function createEmptyRoomState(
   dismissedPollIds: Map<string, Set<string>> = new Map(),
   roomGaps: Map<string, GapInterval> = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+  roomCoverage: Map<string, CoverageRecord> = new Map(),
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -703,6 +768,7 @@ function createEmptyRoomState(
     dismissedPollIds,
     mamQueryStates: new Map(),
     roomGaps,
+    roomCoverage,
     acknowledgedNonAnonymousRooms,
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
@@ -711,7 +777,7 @@ function createEmptyRoomState(
 
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage()), // Restore drafts, poll state, history gaps, and non-anon acks from localStorage
+  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage(), loadCoverageFromStorage()), // Restore drafts, poll state, history gaps, coverage, and non-anon acks from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -787,6 +853,10 @@ export const roomStore = createStore<RoomState>()(
   removeRoom: (roomJid) => {
     // Delete messages from IndexedDB (non-blocking)
     void messageCache.deleteRoomMessages(roomJid)
+    // The durable cursors describe messages that no longer exist (Codex r4
+    // #5): drop them with the cache, and invalidate in-flight deferred
+    // commits so one can't resurrect an entry for the removed room.
+    roomCacheEpoch++
 
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -801,12 +871,25 @@ export const roomStore = createStore<RoomState>()(
       const newRuntime = new Map(state.roomRuntime)
       newRuntime.delete(roomJid)
 
-      return {
+      const out: Partial<RoomState> = {
         rooms: newRooms,
         roomEntities: newEntities,
         roomMeta: newMeta,
         roomRuntime: newRuntime,
       }
+      if (state.roomGaps.has(roomJid)) {
+        const newGaps = new Map(state.roomGaps)
+        newGaps.delete(roomJid)
+        saveGapsToStorage(newGaps)
+        out.roomGaps = newGaps
+      }
+      if (state.roomCoverage.has(roomJid)) {
+        const newCoverage = new Map(state.roomCoverage)
+        newCoverage.delete(roomJid)
+        saveCoverageToStorage(newCoverage)
+        out.roomCoverage = newCoverage
+      }
+      return out
     })
   },
 
@@ -1166,10 +1249,18 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
-    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid)))
+    // In-flight archive-save gates belong to the previous account; their
+    // deferred commits must not land in the new account's maps.
+    roomArchiveSaves.clear()
+    roomCacheEpoch++
+    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid), loadCoverageFromStorage(jid)))
   },
 
   reset: () => {
+    // In-flight archive-save gates from the old session must not commit
+    // cursors into the fresh state.
+    roomArchiveSaves.clear()
+    roomCacheEpoch++
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
@@ -1180,6 +1271,7 @@ export const roomStore = createStore<RoomState>()(
     localStorage.removeItem(getRoomVotedPollsStorageKey())
     localStorage.removeItem(getRoomDismissedPollsStorageKey())
     localStorage.removeItem(getRoomGapsStorageKey())
+    localStorage.removeItem(getRoomCoverageStorageKey())
     localStorage.removeItem(getRoomNonAnonAckStorageKey())
     set(createEmptyRoomState())
   },
@@ -1817,6 +1909,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
+    // Set when the resolution advanced the pointer on a NON-active room —
+    // triggers the exact cache recount below.
+    let advancedNonActive = false
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
@@ -1865,6 +1960,7 @@ export const roomStore = createStore<RoomState>()(
       // ever looks past it).
       let recomputed: notifState.EntityNotificationState | undefined
       if (resolution.kind === 'advanced') {
+        advancedNonActive = true
         recomputed = notifState.recomputeCountsFromPointer(
           {
             unreadCount: meta.unreadCount,
@@ -1907,6 +2003,63 @@ export const roomStore = createStore<RoomState>()(
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
+
+    // EXACT badge recount for a non-resident room: the sync recount above ran
+    // over only the messages slice it was handed — for a non-resident room
+    // that is just the final merged page (mergedForMarker), excluding the
+    // fetch-latest page and earlier backward pages of the same pointer-stitch
+    // walk (badge undercount: 60 unread → ~10). Re-count asynchronously over
+    // the newest cached window, sized to everything one catch-up pass can
+    // download. Runs from where the resolution lands so it also covers a
+    // live-notify marker resolving against a partial resident slice.
+    if (advancedNonActive) {
+      void (async () => {
+        try {
+          const cached = await messageCache.getRoomMessages(roomJid, {
+            limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+            latest: true,
+          })
+          if (cached.length === 0) return
+          set((state) => {
+            // Re-read state: the room may have become active while the cache
+            // read was in flight — activation recomputes counts itself, and a
+            // stale recount must not clobber it.
+            if (state.activeRoomJid === roomJid) return state
+            const meta = state.roomMeta.get(roomJid)
+            if (!meta) return state
+            const pointerState: notifState.EntityNotificationState = {
+              unreadCount: meta.unreadCount,
+              mentionsCount: meta.mentionsCount,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            }
+            const exact = notifState.recomputeCountsFromPointer(pointerState, cached, { countMentions: true })
+            if (exact === pointerState) return state
+            const newMeta = new Map(state.roomMeta)
+            newMeta.set(roomJid, {
+              ...meta,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            const room = state.rooms.get(roomJid)
+            if (!room) return { roomMeta: newMeta }
+            const newRooms = new Map(state.rooms)
+            newRooms.set(roomJid, {
+              ...room,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            return { roomMeta: newMeta, rooms: newRooms }
+          })
+        } catch {
+          // Cache read failed — keep the page-scoped count (an undercount,
+          // corrected on the next merge/activation).
+        }
+      })()
+    }
   },
 
   setTyping: (roomJid, nick, isTyping) => {
@@ -2218,14 +2371,17 @@ export const roomStore = createStore<RoomState>()(
         limit: options.limit ?? 100,
         before: options.before,
         after: options.after,
-        // When loading without 'before', get the latest messages (most recent)
-        latest: !options.before,
+        // When loading without 'before', get the latest messages (most recent).
+        // `oldest` opts out: ascending oldest-N (the true cache bottom).
+        latest: !options.before && !options.oldest,
       }
       const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions)
       // `peek`: a pure read that returns the messages WITHOUT pulling them into the
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
-      if (!options.peek && cachedMessages.length > 0) {
+      // `oldest` is always a pure read too: the cache bottom must never become
+      // the resident window (that would tear the UI off the live edge).
+      if (!options.peek && !options.oldest && cachedMessages.length > 0) {
         // A latest-N load (no `before` cursor) makes the newest window resident — this
         // is the activation / recenter path, so the window is back at the live edge.
         // A `before`-anchored load (deep scroll-back restore) is NOT the live edge.
@@ -2532,7 +2688,7 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false) => {
+  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
     // Newest persisted timestamp (entity preview) — the seam-formation fallback
     // when the resident array is empty this run (fresh session, history on disk).
     const fallbackHeldTs = get().getRoomLastTimestamp(roomJid)
@@ -2555,7 +2711,8 @@ export const roomStore = createStore<RoomState>()(
         existingMessages,
         mamMessages,
         direction,
-        roomTimelineConfig()
+        roomTimelineConfig(),
+        isFetchLatest
       )
       // Persist backfilled archive ids so pagination cursors survive a reload.
       for (const p of patched) {
@@ -2569,15 +2726,20 @@ export const roomStore = createStore<RoomState>()(
 
       // Update MAM query state using the two-marker approach
       // This must always be updated to track query completion and cursors
-      const newStates = mamState.setMAMQueryCompleted(
+      let newStates = mamState.setMAMQueryCompleted(
         state.mamQueryStates,
         roomJid,
         complete,
         direction,
         rsm.first, // Pagination cursor for fetching older messages
         newestFetchedTimestamp,
-        preserveGapMarker
+        preserveGapMarker,
+        isFetchLatest
       )
+
+      // Newest PROVEN in-memory boundary (resident extent). Undefined when the
+      // resident array is empty (background/non-active room, fresh session).
+      const residentNewestTs = messagePageExtent(existingMessages).newestTs
 
       // Persisted gap sync (shared transition, both directions):
       // - forward: mirror the complete=false-driven forwardGapTimestamp (marker
@@ -2596,21 +2758,133 @@ export const roomStore = createStore<RoomState>()(
         newMessagesCount: newFromMAM.length,
         patchedCount: patched.length,
         isFetchLatest,
-        // Fallback trusts the preview ts to be an archived message; a non-archived
-        // preview (noLocalStore/tombstone) above the true archive newest could plant
-        // a spurious — click-healable — seam.
-        newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
+        // ONLY a proven boundary (resident extent) anchors a seam — never the
+        // preview timestamp, which may be an unarchived message (noLocalStore/
+        // tombstone) above the true archive newest and would plant a spurious
+        // seam. When the resident array is empty there is no proven boundary:
+        // detectFetchLatestSeam returns undefined and coverageBottomUnproven is
+        // flagged below instead (finding 10).
+        newestHeldBelowTs: residentNewestTs,
+        newestHeldBelowId: newestMessageStanzaId(existingMessages),
+        lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })
-      if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
+
+      // Coverage-bottom proof (finding 10). A merge proves the contiguous bottom
+      // when a resident boundary exists OR a recorded gap now carries a proven
+      // upper edge (endId) — clear any stale unproven flag. Otherwise, when a
+      // disjoint fetch-latest lands above held-below history (proven by the
+      // preview) with no seam formed, the bottom is unproven — flag it so the
+      // catch-up seeder won't trust cache-oldest as contiguous-to-live.
+      const coverageProven = residentNewestTs !== undefined || newGaps.get(roomJid)?.endId !== undefined
+      if (coverageProven) {
+        newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, false)
+      } else if (direction === 'backward' && isFetchLatest && !newGaps.has(roomJid)) {
+        const structurallyDisjoint = newFromMAM.length === mamMessages.length && patched.length === 0
+        const pageOldestTs = messagePageExtent(mamMessages).oldestTs
+        const previewBelow = fallbackHeldTs !== undefined && pageOldestTs !== undefined && pageOldestTs > fallbackHeldTs
+        if (structurallyDisjoint && previewBelow) {
+          newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, true)
+        }
+      }
+      // Crash-window safety (Codex r3 #1/#2, r4 #1): the gap map is persisted
+      // synchronously (localStorage) while saveRoomMessages to IndexedDB is
+      // fire-and-forget AND absorbs errors. Persisting a transition whose
+      // cursors reference THIS merge's page before the write commits lets a
+      // crash — or a silently failed write — skip the page forever: the
+      // resume cursor would point past data that was never stored. That
+      // covers deletion, forward startId advance, backward end/endId shrink
+      // AND formation (a formed forward gap carries this page's rsm.last as
+      // startId). So EVERY gap transition defers until the durable write
+      // reports success when the merge carries persistable messages; with
+      // nothing persistable there is no crash window and the transition
+      // applies immediately.
+      const prevGap = state.roomGaps.get(roomJid)
+      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
+      // A merge with nothing persistable still defers when earlier pages of
+      // this room are in flight (or failed): its cursor must not leap them.
+      const mustGateOnChain = persistableMessages.length > 0 || roomArchiveSaves.has(roomJid)
+      const deferGapCommit =
+        newGaps !== state.roomGaps &&
+        mustGateOnChain
+      const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
+      if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
+
+      // Persisted coverage record (Codex r3 #3/#4) — positive durable twin of
+      // the gap machinery; see mamCoverage.ts. Advancing the bottom past a
+      // page with persistable messages must wait for the durable commit: the
+      // record must never point past unstored data. A merge with nothing
+      // persistable (signal-only give-up) applies now.
+      const newCoverage = syncCoverageAfterArchiveMerge({
+        coverage: state.roomCoverage,
+        id: roomJid,
+        direction,
+        isFetchLatest,
+        preserveGapMarker,
+        rsmFirst: rsm.first,
+        fetchLatestTopId: extras?.fetchLatestTopId,
+        initialBefore: extras?.initialBefore,
+        sawCoverageTop: extras?.sawCoverageTop ?? false,
+        walkCarriedModifications: extras?.walkCarriedModifications ?? false,
+      })
+      const prevCoverage = state.roomCoverage.get(roomJid)
+      const deferCoverageCommit =
+        newCoverage !== state.roomCoverage &&
+        mustGateOnChain
+      const coverageAfterMerge = deferCoverageCommit ? state.roomCoverage : newCoverage
+      if (coverageAfterMerge !== state.roomCoverage) saveCoverageToStorage(coverageAfterMerge)
+
+      // Deferred commit of the gap/coverage transitions, gated on the given
+      // promise (this page's write chained behind every earlier in-flight
+      // page — see roomArchiveSaves). Shared by the with-messages path and
+      // the nothing-persistable-but-chain-pending path below.
+      const epochAtMerge = roomCacheEpoch
+      const scheduleDeferredCommit = (gate: Promise<boolean>) => {
+        void gate.then((committed) => {
+          if (!committed) return
+          if (roomCacheEpoch !== epochAtMerge) return
+          set((s) => {
+            // State may have moved on (a later merge advanced or re-planted
+            // the gap/record): only transition the exact value this merge
+            // computed from. Reference equality suffices — every transition
+            // creates a new object. A lost race leaves a LAGGING
+            // (conservative) cursor, never a skipping one.
+            const out: Partial<RoomState> = {}
+            if (deferGapCommit && s.roomGaps.get(roomJid) === prevGap) {
+              const next = new Map(s.roomGaps)
+              const target = newGaps.get(roomJid)
+              if (target) next.set(roomJid, target)
+              else next.delete(roomJid)
+              saveGapsToStorage(next)
+              out.roomGaps = next
+            }
+            if (deferCoverageCommit && s.roomCoverage.get(roomJid) === prevCoverage) {
+              const target = newCoverage.get(roomJid)
+              if (target) {
+                const next = new Map(s.roomCoverage)
+                next.set(roomJid, target)
+                saveCoverageToStorage(next)
+                out.roomCoverage = next
+              }
+            }
+            return Object.keys(out).length > 0 ? out : s
+          })
+        })
+      }
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates.
       // Exception: a stanzaId backfill onto existing RAM messages must persist —
       // but only for the ACTIVE room (non-active rooms keep no resident array).
       if (newFromMAM.length === 0) {
+        // Nothing of our own to persist, but earlier in-flight pages may
+        // still gate this merge's transitions: chain a no-op save so the
+        // transition applies (or is dropped) with the same ordering rules.
+        if (deferGapCommit || deferCoverageCommit) {
+          scheduleDeferredCommit(roomArchiveSaves.chain(roomJid, Promise.resolve(true)))
+        }
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
-          return { mamQueryStates: newStates, roomGaps: newGaps }
+          return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
         }
         const backfilledRooms = new Map(state.rooms)
         backfilledRooms.set(roomJid, { ...room, messages: merged })
@@ -2619,14 +2893,19 @@ export const roomStore = createStore<RoomState>()(
         if (runtimeEntry) {
           backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
         }
-        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
       // history that rehydrates on open (search index too).
-      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       if (persistableMessages.length > 0) {
-        void messageCache.saveRoomMessages(persistableMessages)
+        const savePromise = messageCache.saveRoomMessages(persistableMessages)
+        // Serialize through the per-room chain: the gate resolves true only
+        // when THIS page and every earlier in-flight page committed.
+        const commitGate = roomArchiveSaves.chain(roomJid, savePromise)
+        if (deferGapCommit || deferCoverageCommit) {
+          scheduleDeferredCommit(commitGate)
+        }
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
@@ -2686,7 +2965,7 @@ export const roomStore = createStore<RoomState>()(
         }
 
         // roomRuntime deliberately untouched.
-        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
@@ -2696,18 +2975,28 @@ export const roomStore = createStore<RoomState>()(
       // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
       // (newestEvicted from the timeline machine), sliding the window off the live
       // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
-      // newest, so it never slides.
+      // newest, so it never slides. Fetch-latest lands the window AT the live edge
+      // by construction.
+      // Accepted edge case: a fresh-session bail fetch-latest while the user
+      // is deep-scrolled in THIS active room can evict resident messages via
+      // keep-newest and jump the window to live — same class as
+      // jump-to-latest. The content-anchor scroll restore then degrades to an
+      // estimate rather than an exact reposition.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
         newRuntime.set(roomJid, {
           ...existingRuntime,
           messages: merged,
-          ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
+          ...(newestEvicted
+            ? { windowAtLiveEdge: false }
+            : isFetchLatest && newFromMAM.length > 0
+              ? { windowAtLiveEdge: true }
+              : {}),
         })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
     // XEP-0490: a remote room marker may have arrived before its message.
@@ -2718,24 +3007,38 @@ export const roomStore = createStore<RoomState>()(
     }
   },
 
+  clearRoomGapAnchor: (roomJid, purgedStartId) => {
+    set((state) => {
+      const gap = state.roomGaps.get(roomJid)
+      if (!gap || gap.startId !== purgedStartId) return state
+      const newGaps = new Map(state.roomGaps)
+      const { startId: _purged, ...withoutAnchor } = gap
+      newGaps.set(roomJid, withoutAnchor)
+      saveGapsToStorage(newGaps)
+      return { roomGaps: newGaps }
+    })
+  },
+
+  getRoomCoverage: (roomJid) => get().roomCoverage.get(roomJid),
+
+  clearRoomCoverage: (roomJid, ifBottomId) => {
+    set((state) => {
+      const existing = state.roomCoverage.get(roomJid)
+      if (!existing) return state
+      if (ifBottomId !== undefined && existing.bottomId !== ifBottomId) return state
+      const next = new Map(state.roomCoverage)
+      next.delete(roomJid)
+      saveCoverageToStorage(next)
+      return { roomCoverage: next }
+    })
+  },
+
   getRoomMAMQueryState: (roomJid) => {
     return mamState.getMAMQueryState(get().mamQueryStates, roomJid)
   },
 
   resetRoomMAMStates: () => {
     set({ mamQueryStates: new Map() })
-  },
-
-  markAllRoomsNeedsCatchUp: () => {
-    set((state) => ({
-      mamQueryStates: mamState.markAllNeedsCatchUp(state.mamQueryStates),
-    }))
-  },
-
-  clearRoomNeedsCatchUp: (roomJid) => {
-    set((state) => ({
-      mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, roomJid),
-    }))
   },
 
   /**

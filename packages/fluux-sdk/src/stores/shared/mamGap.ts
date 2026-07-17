@@ -31,6 +31,13 @@ export interface GapInterval {
   /** Epoch ms of the oldest message held *above* the gap, or undefined if the
    *  gap extends to the live edge (nothing newer is held yet). */
   end?: number
+  /** Archive id of the newest downloaded message below the gap — the per-device
+   *  COVERAGE marker; id-exact resume cursor for the heal. Optional: legacy
+   *  persisted gaps simply lack it and fall back to `start` (timestamp). */
+  startId?: string
+  /** Archive id of the oldest message held above the gap (mirrors `end`).
+   *  Optional for the same legacy-tolerance reason as `startId`. */
+  endId?: string
 }
 
 /**
@@ -63,6 +70,8 @@ export function syncGap(
   jid: string,
   start: number | undefined,
   end: number | undefined,
+  startId?: string,
+  endId?: string,
 ): Map<string, GapInterval> {
   const existing = gaps.get(jid)
 
@@ -73,10 +82,21 @@ export function syncGap(
     return next
   }
 
-  if (existing && existing.start === start && existing.end === end) return gaps
+  if (
+    existing &&
+    existing.start === start &&
+    existing.end === end &&
+    existing.startId === startId &&
+    existing.endId === endId
+  ) return gaps
 
   const next = new Map(gaps)
-  next.set(jid, end === undefined ? { start } : { start, end })
+  next.set(jid, {
+    start,
+    ...(end !== undefined ? { end } : {}),
+    ...(startId ? { startId } : {}),
+    ...(endId ? { endId } : {}),
+  })
   return next
 }
 
@@ -115,6 +135,37 @@ export function messagePageExtent(messages: Array<{ timestamp?: Date }>): PageEx
   return { oldestTs, newestTs }
 }
 
+/** stanzaId of the oldest-timestamp message in a page (undefined when absent). */
+export function oldestMessageStanzaId(
+  messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+): string | undefined {
+  let oldest: { ts: number; id?: string } | undefined
+  for (const m of messages) {
+    const ts = m.timestamp?.getTime()
+    if (ts === undefined) continue
+    if (!oldest || ts < oldest.ts) oldest = { ts, id: m.stanzaId }
+  }
+  return oldest?.id
+}
+
+/** stanzaId of the newest-timestamp message in a page that HAS a stanzaId
+ *  (undefined when none do). Skips id-less newer messages — e.g. an own-sent
+ *  pre-echo that hasn't been reflected with an archive id yet — so the
+ *  id-exact resume cursor falls back to the newest message that carries one,
+ *  rather than silently degrading to undefined. */
+export function newestMessageStanzaId(
+  messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+): string | undefined {
+  let best: { ts: number; id: string } | undefined
+  for (const m of messages) {
+    if (!m.stanzaId) continue
+    const ts = m.timestamp?.getTime()
+    if (ts === undefined) continue
+    if (!best || ts > best.ts) best = { ts, id: m.stanzaId }
+  }
+  return best?.id
+}
+
 /**
  * Detect a disjoint fetch-latest page: a backward `before:''` page that landed
  * entirely above held history without any connection proof.
@@ -130,15 +181,20 @@ export function messagePageExtent(messages: Array<{ timestamp?: Date }>): PageEx
  * @param fetched - The incoming page, as handed to the merge
  * @param newMessagesCount - How many of `fetched` survived dedupe (merge output)
  * @param patchedCount - Archive-id backfills onto held messages (merge output)
- * @param newestHeldBelowTs - Newest message held BEFORE this merge (resident
- *   newest, or the persisted preview timestamp when the resident array is empty)
+ * @param newestHeldBelowTs - Newest message held BEFORE this merge — a PROVEN
+ *   resident boundary only (resident newest, or undefined when the resident
+ *   array is empty). Never the persisted preview timestamp: an unarchived
+ *   preview must not plant a seam (finding 10).
+ * @param newestHeldBelowId - Archive id of that newest-held-below message, when
+ *   known — stamped as the seam's `startId` (id-exact resume cursor).
  * @returns The seam to record, or undefined when the page is connected/ambiguous
  */
 export function detectFetchLatestSeam(
-  fetched: Array<{ timestamp?: Date }>,
+  fetched: Array<{ timestamp?: Date; stanzaId?: string }>,
   newMessagesCount: number,
   patchedCount: number,
   newestHeldBelowTs: number | undefined,
+  newestHeldBelowId?: string,
 ): GapInterval | undefined {
   if (fetched.length === 0) return undefined
   if (newMessagesCount < fetched.length || patchedCount > 0) return undefined
@@ -146,7 +202,13 @@ export function detectFetchLatestSeam(
   const { oldestTs } = messagePageExtent(fetched)
   if (oldestTs === undefined) return undefined
   if (oldestTs <= newestHeldBelowTs) return undefined
-  return { start: newestHeldBelowTs, end: oldestTs }
+  const endId = oldestMessageStanzaId(fetched)
+  return {
+    start: newestHeldBelowTs,
+    end: oldestTs,
+    ...(newestHeldBelowId ? { startId: newestHeldBelowId } : {}),
+    ...(endId ? { endId } : {}),
+  }
 }
 
 /**
@@ -164,18 +226,28 @@ export function detectFetchLatestSeam(
  *   page's oldest);
  * - empty page: no positional info → unchanged.
  *
+ * @param pageOldestId - stanzaId of the page's oldest-timestamp message, when
+ *   known — stamped as the shrunk gap's `endId` (mirrors `end`).
  * @returns The new gap (`undefined` = clear); returns `gap` by reference when unchanged.
  */
 export function closeGapWithBackwardPage(
   gap: GapInterval,
   page: PageExtent,
   complete: boolean,
+  pageOldestId?: string,
 ): GapInterval | undefined {
   if (page.oldestTs === undefined || page.newestTs === undefined) return gap
   if (page.newestTs <= gap.start) return gap
   if (complete) return undefined
   if (page.oldestTs <= gap.start) return undefined
-  if (gap.end === undefined || page.oldestTs < gap.end) return { start: gap.start, end: page.oldestTs }
+  if (gap.end === undefined || page.oldestTs < gap.end) {
+    return {
+      start: gap.start,
+      end: page.oldestTs,
+      ...(gap.startId ? { startId: gap.startId } : {}),
+      ...(pageOldestId ? { endId: pageOldestId } : {}),
+    }
+  }
   return gap
 }
 
@@ -193,15 +265,22 @@ export interface ArchiveMergeGapInput {
   /** Merged timeline (for `computeGapEnd` on the forward path). */
   merged: Array<{ timestamp?: Date }>
   /** The incoming page, as handed to the merge. */
-  fetched: Array<{ timestamp?: Date }>
+  fetched: Array<{ timestamp?: Date; stanzaId?: string }>
   /** How many of `fetched` survived dedupe. */
   newMessagesCount: number
   /** Archive-id backfills onto held messages. */
   patchedCount: number
   /** The query was a `before:''` fetch-latest. */
   isFetchLatest: boolean
-  /** Newest message held BEFORE this merge (resident newest ?? persisted preview ts). */
+  /** Newest message held BEFORE this merge — a proven resident boundary only
+   *  (resident newest, or undefined when empty); never the preview ts (finding 10). */
   newestHeldBelowTs: number | undefined
+  /** Archive id of the newest message held BEFORE this merge (mirrors
+   *  `newestHeldBelowTs`) — stamped as a formed backward seam's `startId`. */
+  newestHeldBelowId?: string
+  /** Archive id of the last fetched message for an incomplete forward
+   *  catch-up (the merge's `rsm.last`) — stamped as the forward gap's `startId`. */
+  lastFetchedArchiveId?: string
   /** Bounded force-repair: leave the marker untouched (neither set nor cleared). */
   preserveGapMarker: boolean
 }
@@ -224,21 +303,38 @@ export interface ArchiveMergeGapInput {
 export function syncGapAfterArchiveMerge(input: ArchiveMergeGapInput): Map<string, GapInterval> {
   const {
     gaps, id, direction, complete, forwardGapTimestamp, merged, fetched,
-    newMessagesCount, patchedCount, isFetchLatest, newestHeldBelowTs, preserveGapMarker,
+    newMessagesCount, patchedCount, isFetchLatest, newestHeldBelowTs, newestHeldBelowId,
+    lastFetchedArchiveId, preserveGapMarker,
   } = input
 
   if (preserveGapMarker) return gaps
 
   if (direction === 'forward') {
+    const existing = gaps.get(id)
+    // A signal-only (empty) incomplete forward page proves nothing about the
+    // hole — it must never erase a recorded gap. The session-scoped marker
+    // (forwardGapTimestamp) normally carries the gap through this mirror, but
+    // on a fresh session mamQueryStates are empty while the gap map is
+    // persisted: preserve the recorded interval verbatim and only advance the
+    // id-exact coverage cursor (rsm.last IS set for signal-only pages).
+    if (existing && !complete && fetched.length === 0 && forwardGapTimestamp === undefined) {
+      return syncGap(gaps, id, existing.start, existing.end, lastFetchedArchiveId ?? existing.startId, existing.endId)
+    }
     const gapEnd = forwardGapTimestamp !== undefined ? computeGapEnd(merged, forwardGapTimestamp) : undefined
-    return syncGap(gaps, id, forwardGapTimestamp, gapEnd)
+    // startId: prefer this merge's rsm.last; an incomplete forward merge
+    // without one (no new page fetched) carries the existing cursor forward.
+    const startId = lastFetchedArchiveId ?? existing?.startId
+    // endId: only survives when the end edge hasn't moved — once `end`
+    // shifts, the id for the new edge is unknown until a later merge stamps it.
+    const endId = existing && existing.end === gapEnd ? existing.endId : undefined
+    return syncGap(gaps, id, forwardGapTimestamp, gapEnd, startId, endId)
   }
 
   const existing = gaps.get(id)
   const next = existing
-    ? closeGapWithBackwardPage(existing, messagePageExtent(fetched), complete)
+    ? closeGapWithBackwardPage(existing, messagePageExtent(fetched), complete, oldestMessageStanzaId(fetched))
     : isFetchLatest
-      ? detectFetchLatestSeam(fetched, newMessagesCount, patchedCount, newestHeldBelowTs)
+      ? detectFetchLatestSeam(fetched, newMessagesCount, patchedCount, newestHeldBelowTs, newestHeldBelowId)
       : undefined
-  return syncGap(gaps, id, next?.start, next?.end)
+  return syncGap(gaps, id, next?.start, next?.end, next?.startId, next?.endId)
 }

@@ -141,6 +141,55 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     expect(recoveredKey.isPrivate()).toBe(true)
   })
 
+  it('encrypts with the passphrase verbatim — displayed code unlocks, case-folded does not (#1021)', async () => {
+    // Other XEP-0373 clients (Gajim, Profanity) feed the displayed
+    // passphrase to their KDF byte-for-byte. A backup we publish must
+    // therefore be encrypted to the exact displayed string — the
+    // pre-0.17.2 lowercasing made our backups unreadable elsewhere.
+    const plugin = new TestableWebOpenPGPPlugin({ hostStores: createMockHostStores() })
+    const { ctx } = makeCtx('alice@example.com')
+    setSessionPassphrase('session-pp')
+    await plugin.init(ctx)
+
+    const code = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+    const backup = await plugin.callBackupEncrypt('alice@example.com', code)
+
+    const openpgp = await import('openpgp')
+    const exact = await openpgp.readMessage({ armoredMessage: backup })
+    await expect(
+      openpgp.decrypt({ message: exact, passwords: [code], format: 'binary' }),
+    ).resolves.toBeDefined()
+
+    const folded = await openpgp.readMessage({ armoredMessage: backup })
+    await expect(
+      openpgp.decrypt({ message: folded, passwords: [code.toLowerCase()], format: 'binary' }),
+    ).rejects.toThrow()
+  })
+
+  it('imports a foreign backup whose passphrase is mixed-case (#1021, Gajim → Fluux)', async () => {
+    // A backup created by a spec-compliant client is encrypted to the
+    // passphrase as displayed. Our import must not normalize it away.
+    const openpgp = await import('openpgp')
+    const code = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+    const { privateKey: tsk } = await openpgp.generateKey({
+      type: 'ecc',
+      curve: 'curve25519Legacy',
+      userIDs: [{ name: 'xmpp:alice@example.com' }],
+      format: 'object',
+    })
+    const fixture = (await openpgp.encrypt({
+      message: await openpgp.createMessage({ text: tsk.armor() }),
+      passwords: [code],
+    })) as string
+
+    const dest = new TestableWebOpenPGPPlugin({ hostStores: createMockHostStores() })
+    const { ctx } = makeCtx('alice@example.com')
+    await dest.init(ctx)
+
+    const recovered = await dest.callBackupImport('alice@example.com', fixture, code)
+    expect(recovered.fingerprint.toUpperCase()).toBe(tsk.getFingerprint().toUpperCase())
+  })
+
   it('decrypts a fixture produced via the Sequoia-equivalent openpgp.js path', async () => {
     // This mirrors what Sequoia's `Encryptor::with_passwords` produces:
     // the outer is a passphrase-only OpenPGP MESSAGE wrapping a TSK as

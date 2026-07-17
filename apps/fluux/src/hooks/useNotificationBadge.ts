@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useEvents, computeBadgeCount } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { notificationDebug } from '@/utils/notificationDebug'
+import { setWebAppBadge } from '@/utils/appBadge'
 
 // Check if running in Tauri (v2 uses __TAURI_INTERNALS__)
 const isTauri = () => {
@@ -158,8 +159,10 @@ export function useNotificationBadge(): void {
 
     if (isTauri()) {
       void setTauriBadge(totalCount)
-    } else if (faviconBadgeRef.current) {
-      faviconBadgeRef.current.setBadge(totalCount)
+    } else {
+      faviconBadgeRef.current?.setBadge(totalCount)
+      // Installed-PWA icon badge (Badging API): exact count while the app runs.
+      void setWebAppBadge(totalCount)
     }
   }, [conversationsUnreadCount, eventsPendingCount, roomsWithUnreadCount])
 }

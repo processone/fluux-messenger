@@ -38,6 +38,9 @@ function getRoomMessageCacheKey(message: {
     return message.stanzaId
   }
   // Fallback: composite key using roomJid:from:id
+  // Known cosmetic edge: an id-less cached copy and its stanzaId-carrying
+  // re-fetch land under different keys (double row in the raw cache); the
+  // rehydrate merge dedupes them by from:id, so the UI shows one row.
   return `${message.roomJid}:${message.from}:${message.id}`
 }
 
@@ -312,9 +315,14 @@ export async function saveMessage(message: Message): Promise<void> {
 /**
  * Save multiple chat messages to IndexedDB in a single transaction.
  * Never degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
+ *
+ * Resolves `true` iff the transaction committed — errors are absorbed (warn)
+ * and reported as `false`. Callers advancing durable cursors (gap/coverage
+ * transitions) must gate on the result: a cursor persisted past a page whose
+ * write silently failed would skip that page forever.
  */
-export async function saveMessages(messages: Message[]): Promise<void> {
-  if (messages.length === 0) return
+export async function saveMessages(messages: Message[]): Promise<boolean> {
+  if (messages.length === 0) return true
 
   try {
     const db = await getDB(getStorageScopeJid())
@@ -325,10 +333,12 @@ export async function saveMessages(messages: Message[]): Promise<void> {
       await putChatMessageGuarded(store, msg)
     }
     await tx.done
+    return true
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to save messages:', error)
     }
+    return false
   }
 }
 
@@ -742,9 +752,14 @@ export async function saveRoomMessage(message: RoomMessage): Promise<void> {
 
 /**
  * Save multiple room messages to IndexedDB in a single transaction.
+ *
+ * Resolves `true` iff the transaction committed — errors are absorbed (warn)
+ * and reported as `false`. Callers advancing durable cursors (gap/coverage
+ * transitions) must gate on the result: a cursor persisted past a page whose
+ * write silently failed would skip that page forever.
  */
-export async function saveRoomMessages(messages: RoomMessage[]): Promise<void> {
-  if (messages.length === 0) return
+export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean> {
+  if (messages.length === 0) return true
 
   try {
     const db = await getDB(getStorageScopeJid())
@@ -753,10 +768,12 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<void> {
 
     await Promise.all(messages.map((msg) => store.put(serializeRoomMessage(msg))))
     await tx.done
+    return true
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to save room messages:', error)
     }
+    return false
   }
 }
 
