@@ -244,6 +244,32 @@ describe('chatStore', () => {
       expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBe(true)
     })
 
+    it('survives an unrelated later merge that does not re-affirm the flag (finding 10 follow-up: setMAMQueryCompleted must not wipe it)', () => {
+      // Same fresh-session shape as the finding-10 test above: preview persisted,
+      // resident array EMPTY, conversation stays non-active so the resident
+      // array is never populated by either merge below.
+      const preview = { ...createMessage(cid, 'preview'), id: 'preview', timestamp: new Date('2026-07-06T00:00:00Z') }
+      chatStore.getState().addConversation({ ...createConversation(cid), lastMessage: preview })
+
+      const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
+      expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBe(true)
+
+      // Second, unrelated merge: an ordinary backward pagination page
+      // (isFetchLatest omitted). This hits neither coverage-proving branch in
+      // the store (resident stays empty because the conversation is
+      // non-active, and no gap was recorded by the first merge) — it must
+      // NOT touch coverageBottomUnproven, only setMAMQueryCompleted's shared
+      // fields.
+      const older = { ...createMessage(cid, 'older'), id: 'older', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [older], {}, false, 'backward')
+
+      // The flag must survive: setMAMQueryCompleted runs on every merge and
+      // must preserve fields it doesn't own, rather than silently wiping them
+      // in its rebuilt object literal.
+      expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBe(true)
+    })
+
     it('POSITIVE: a proven resident boundary still forms the seam on a disjoint fetch-latest (no over-suppression)', () => {
       chatStore.getState().addConversation(createConversation(cid))
       const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-06T00:00:00Z') }

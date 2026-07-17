@@ -71,7 +71,9 @@ export function setMAMError(
  * unchanged (treating undefined as false), so callers skip re-renders. Set
  * `true` when a disjoint fetch-latest landed with no proven boundary; set
  * `false` when a merge proves a boundary. Leave the flag alone by simply not
- * calling this.
+ * calling this — true only because `setMAMQueryCompleted` below (called on
+ * every merge, always before this) explicitly carries the field forward
+ * unchanged rather than rebuilding it from scratch.
  */
 export function setCoverageBottomUnproven(
   states: Map<string, MAMQueryState>,
@@ -181,6 +183,13 @@ export function setMAMQueryCompleted(
       ? oldestFetchedId
       : current.oldestFetchedId,
     forwardGapTimestamp,
+    // Not owned by this setter — preserved as-is. Set/cleared only by
+    // setCoverageBottomUnproven (called separately by the coverage-proof
+    // block in chatStore/roomStore). Every merge calls this setter, so
+    // omitting the field here would silently wipe it on any merge that
+    // doesn't re-affirm it (e.g. a later forward Phase-A page, an ordinary
+    // backward scroll, or an all-deduped merge).
+    coverageBottomUnproven: current.coverageBottomUnproven,
   })
   return newStates
 }

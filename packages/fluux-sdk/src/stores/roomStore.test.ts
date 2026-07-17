@@ -2233,6 +2233,35 @@ describe('roomStore', () => {
       expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBe(true)
     })
 
+    it('survives an unrelated later merge that does not re-affirm the flag (finding 10 follow-up: setMAMQueryCompleted must not wipe it)', () => {
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
+      }
+      // Fresh-run shape: resident array EMPTY, preview persisted. Room stays
+      // non-active so the resident array is never populated by either merge.
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held }))
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+      expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBe(true)
+
+      // Second, unrelated merge: ordinary backward pagination (isFetchLatest
+      // omitted). Hits neither coverage-proving branch (resident stays empty,
+      // no gap was recorded) — must NOT touch coverageBottomUnproven.
+      const older: RoomMessage = {
+        type: 'groupchat', id: 'older', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'older', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], {}, false, 'backward')
+
+      // The flag must survive across the unrelated merge.
+      expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBe(true)
+    })
+
     it('does NOT flag coverage unproven for a brand-new empty room whose first fetch-latest is contiguous-to-live', () => {
       // No preview, nothing held below — genuinely contiguous-to-live; must NOT
       // be suppressed (Phase B can still seed from it).
