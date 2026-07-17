@@ -2423,6 +2423,84 @@ describe('roomStore', () => {
       resolveSave(true)
     })
 
+    it('fetch-latest establishes the coverage record and it survives resetRoomMAMStates (fresh session)', async () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      const m: RoomMessage = {
+        type: 'groupchat', id: 'm1', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'sid-1',
+        body: 'm1', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [m], { first: 'sid-1', last: 'sid-1' }, false, 'backward', false, true,
+        { initialBefore: '', fetchLatestTopId: 'sid-1' })
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+      })
+      roomStore.getState().resetRoomMAMStates()
+      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'sid-1', topId: 'sid-1' })
+    })
+
+    it('signal-only give-up (zero messages) records coverage immediately (nothing to persist)', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.getState().mergeRoomMAMMessages(jid, [], { first: 'p5-first', last: 'p5-last' }, false, 'backward', false, true,
+        { initialBefore: '', fetchLatestTopId: 'p1-last' })
+      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'p5-first', topId: 'p1-last' })
+    })
+
+    it('coverage bottom advance with persistable messages defers until the durable write commits', async () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep', topId: 'top' }]]) })
+      let resolveSave!: (committed: boolean) => void
+      vi.mocked(messageCache.saveRoomMessages).mockReturnValue(new Promise<boolean>((r) => { resolveSave = r }))
+
+      const older: RoomMessage = {
+        type: 'groupchat', id: 'old', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
+        body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
+      }
+      // Plain backward page resumed id-exactly from the coverage bottom.
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deep')
+      resolveSave(true)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deeper')
+      })
+    })
+
+    it('coverage advance is dropped when the durable write reports failure', async () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })
+      vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(false)
+
+      const older: RoomMessage = {
+        type: 'groupchat', id: 'old', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'deeper',
+        body: 'old', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], { first: 'deeper' }, false, 'backward', false, false,
+        { initialBefore: 'deep' })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(roomStore.getState().getRoomCoverage(jid)?.bottomId).toBe('deep')
+    })
+
+    it('clearRoomCoverage with ifBottomId only clears a matching record', () => {
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'x' }]]) })
+      roomStore.getState().clearRoomCoverage(jid, 'other')
+      expect(roomStore.getState().getRoomCoverage(jid)).toBeDefined()
+      roomStore.getState().clearRoomCoverage(jid, 'x')
+      expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
+    })
+
+    it('windowed context fetches (preserveGapMarker) never touch the coverage record', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomCoverage: new Map([[jid, { bottomId: 'deep' }]]) })
+      const island: RoomMessage = {
+        type: 'groupchat', id: 'island', roomJid: jid, from: `${jid}/a`, nick: 'a', stanzaId: 'island-id',
+        body: 'island', timestamp: new Date('2026-06-01T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [island], { first: 'island-id' }, true, 'backward', true, true,
+        { initialBefore: '' })
+      expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'deep' })
+    })
+
     it('backward CLEARANCE with zero new persistable messages deletes immediately', () => {
       // Nothing new to persist → no crash window → no reason to defer.
       const above: RoomMessage = {
