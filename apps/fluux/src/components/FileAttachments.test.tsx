@@ -546,3 +546,43 @@ describe('FileAttachmentCard download', () => {
     expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('encrypted media download controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    downloadAttachmentSpy.mockResolvedValue(undefined)
+    useAttachmentUrlSpy.mockReturnValue({ url: 'blob:play', isLoading: false, error: null })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
+
+  it('encrypted video info-bar download → button, decrypts (no ciphertext href)', () => {
+    const video: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'video/mp4', name: 'clip.mp4', encryption,
+    }
+    render(<VideoAttachment attachment={video} />)
+    const control = screen.getByLabelText('common.download')
+    expect(control).not.toHaveAttribute('href')
+    fireEvent.click(control)
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('plaintext video info-bar download → still a link to the raw URL', () => {
+    const video: FileAttachment = {
+      url: 'https://x/clip.mp4', mediaType: 'video/mp4', name: 'clip.mp4',
+    }
+    render(<VideoAttachment attachment={video} />)
+    expect(screen.getByLabelText('common.download')).toHaveAttribute('href', 'https://x/clip.mp4')
+    expect(downloadAttachmentSpy).not.toHaveBeenCalled()
+  })
+
+  it('encrypted audio info-bar download → button, decrypts', () => {
+    const audio: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'audio/mpeg', name: 'voice.mp3', encryption,
+    }
+    render(<AudioAttachment attachment={audio} />)
+    fireEvent.click(screen.getByLabelText('common.download'))
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
+})

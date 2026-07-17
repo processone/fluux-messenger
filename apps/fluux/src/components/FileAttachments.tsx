@@ -2,6 +2,7 @@ import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX, Image as ImageIcon } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { AttachmentDownloadButton } from './AttachmentDownloadButton'
 import { ImageLightbox } from './ImageLightbox'
 import { ImageContextMenu } from './ImageContextMenu'
 import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
@@ -141,6 +142,36 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // shifts — and a burst of such invalidations feeds the message-list
   // ResizeObserver scroll-correction loop on WebKitGTK.
   if (error || !effectiveSrc || loadError) {
+    const inner = (
+      <div
+        className="flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors text-fluux-muted"
+        style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
+      >
+        <ImageOff className="size-6 flex-shrink-0" />
+        <p className="text-sm font-medium truncate max-w-full">
+          {attachment.name || t('chat.imageUnavailable')}
+        </p>
+        <p className="text-xs">
+          {t('chat.imageUnavailable')}
+          {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
+        </p>
+        <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+      </div>
+    )
+    if (attachment.encryption) {
+      return (
+        <button
+          type="button"
+          onClick={() => void downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })}
+          className="block pt-2 group/file w-full text-start"
+          style={{ maxWidth: `${maxWidthPx}px` }}
+          aria-label={t('common.download')}
+          tabIndex={-1}
+        >
+          {inner}
+        </button>
+      )
+    }
     return (
       <a
         href={attachment.url}
@@ -150,20 +181,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
       >
-        <div
-          className="flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors text-fluux-muted"
-          style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
-        >
-          <ImageOff className="size-6 flex-shrink-0" />
-          <p className="text-sm font-medium truncate max-w-full">
-            {attachment.name || t('chat.imageUnavailable')}
-          </p>
-          <p className="text-xs">
-            {t('chat.imageUnavailable')}
-            {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
-          </p>
-          <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
-        </div>
+        {inner}
       </a>
     )
   }
@@ -317,15 +335,11 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
             </div>
           )}
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name || 'video'}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="ms-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         </div>
       </div>
@@ -367,15 +381,11 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
             </span>
           )}
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         </div>
       )}
@@ -452,15 +462,11 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
         </div>
         {!hasError && (
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name || 'audio'}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         )}
       </div>
