@@ -2824,7 +2824,8 @@ export const roomStore = createStore<RoomState>()(
         rsmFirst: rsm.first,
         fetchLatestTopId: extras?.fetchLatestTopId,
         initialBefore: extras?.initialBefore,
-        connectedToHeld: newFromMAM.length < mamMessages.length || patched.length > 0,
+        sawCoverageTop: extras?.sawCoverageTop ?? false,
+        walkCarriedModifications: extras?.walkCarriedModifications ?? false,
       })
       const prevCoverage = state.roomCoverage.get(roomJid)
       const deferCoverageCommit =

@@ -210,6 +210,13 @@ export interface ChatEvents {
     /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
+    /** The walk contained the existing coverage record's top entry (id-exact
+     *  contiguity proof — Codex r4 #3). */
+    sawCoverageTop?: boolean
+    /** The walk carried corrections/retractions/reactions/fastenings — their
+     *  cache effects are fire-and-forget, so coverage must not certify over
+     *  them (Codex r4 #2). */
+    walkCarriedModifications?: boolean
   }
 
   /**
@@ -441,6 +448,13 @@ export interface RoomEvents {
     /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
+    /** The walk contained the existing coverage record's top entry (id-exact
+     *  contiguity proof — Codex r4 #3). */
+    sawCoverageTop?: boolean
+    /** The walk carried corrections/retractions/reactions/fastenings — their
+     *  cache effects are fire-and-forget, so coverage must not certify over
+     *  them (Codex r4 #2). */
+    walkCarriedModifications?: boolean
   }
 
   /**

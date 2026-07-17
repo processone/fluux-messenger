@@ -1958,7 +1958,8 @@ export const chatStore = createStore<ChatState>()(
             rsmFirst: rsm.first,
             fetchLatestTopId: extras?.fetchLatestTopId,
             initialBefore: extras?.initialBefore,
-            connectedToHeld: newMessages.length < mamMessages.length || patched.length > 0,
+            sawCoverageTop: extras?.sawCoverageTop ?? false,
+            walkCarriedModifications: extras?.walkCarriedModifications ?? false,
           })
           const prevCoverage = state.conversationCoverage.get(conversationId)
           const deferCoverageCommit =

@@ -2960,6 +2960,10 @@ describe('XMPPClient MAM', () => {
         isFetchLatest: true,
         initialBefore: '',
         fetchLatestTopId: 'p1-last',
+        // The walked pages carried reactions: their cache effects are
+        // fire-and-forget, so the store must NOT certify this walk as
+        // coverage (Codex r4 #2) — the flag blocks record formation.
+        walkCarriedModifications: true,
       })
       expect((mamEmits[0][1] as { rsm: { first?: string } }).rsm.first).toBe('p5-first')
     })

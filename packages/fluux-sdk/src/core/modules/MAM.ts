@@ -235,6 +235,10 @@ export class MAM extends BaseModule {
     // scroll-up cursor sits below the record and must never jump UP to it.
     const canJumpToFloor = before === ''
     let jumpedToFloor = false
+    // The walk contained the record's top entry — the only accepted proof of
+    // contiguity with the existing record (Codex r4 #3), and the trigger for
+    // the floor jump.
+    let sawCoverageTop = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
@@ -335,6 +339,9 @@ export class MAM extends BaseModule {
           isComplete = complete
           lastRsm = rsm
           if (page === 0 && !isForwardPaginate) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           if (isForwardPaginate) {
             // Forward catch-up: accumulate every page, advance via `after` until complete.
@@ -358,8 +365,7 @@ export class MAM extends BaseModule {
               // already proven signal-only — jump the cursor straight there so
               // successive sessions descend instead of re-walking the same
               // newest pages (Codex r3 #4).
-              if (canJumpToFloor && coverageRecord?.topId && !jumpedToFloor &&
-                  rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {
@@ -399,7 +405,14 @@ export class MAM extends BaseModule {
         direction,
         preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
-        ...(direction === 'backward' ? { initialBefore: before, fetchLatestTopId } : {}),
+        ...(direction === 'backward' ? {
+          initialBefore: before,
+          fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            modifications.retractions.length + modifications.corrections.length +
+            modifications.fastenings.length + modifications.reactions.length > 0,
+        } : {}),
       })
 
       // Modifications whose target is not in this batch belong to a message
@@ -471,6 +484,9 @@ export class MAM extends BaseModule {
     // scroll-up cursor sits below the record and must never jump UP to it.
     const canJumpToFloor = !before
     let jumpedToFloor = false
+    // The walk contained the record's top entry — contiguity proof and floor
+    // jump trigger (Codex r4 #3); see the 1:1 twin in queryArchive.
+    let sawCoverageTop = false
     let currentAfter = after
     let currentBefore = before
     // BACKWARD retry pages accumulate modifications across pages and resolve
@@ -596,6 +612,9 @@ export class MAM extends BaseModule {
           isComplete = complete
           lastRsm = rsm
           if (page === 0 && !isForward) fetchLatestTopId = rsm.last
+          if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+            sawCoverageTop = true
+          }
 
           // Stop if archive is complete (no more messages)
           if (complete) {
@@ -621,8 +640,7 @@ export class MAM extends BaseModule {
             if (rsm.first) {
               // Known signal-only floor (persisted coverage) — jump below
               // covered territory; see the 1:1 twin in queryArchive.
-              if (canJumpToFloor && coverageRecord?.topId && !jumpedToFloor &&
-                  rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
+              if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {
@@ -665,6 +683,10 @@ export class MAM extends BaseModule {
           isFetchLatest: !before,
           initialBefore: before ?? '',
           fetchLatestTopId,
+          sawCoverageTop,
+          walkCarriedModifications:
+            backwardModifications.retractions.length + backwardModifications.corrections.length +
+            backwardModifications.fastenings.length + backwardModifications.reactions.length > 0,
         })
         this.emitUnresolvedRoomModifications(roomJid, unresolved)
       }

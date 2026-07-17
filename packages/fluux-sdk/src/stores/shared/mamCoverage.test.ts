@@ -13,7 +13,8 @@ const base = (over: Partial<ArchiveMergeCoverageInput> = {}): ArchiveMergeCovera
   direction: 'backward',
   isFetchLatest: true,
   preserveGapMarker: false,
-  connectedToHeld: false,
+  sawCoverageTop: false,
+  walkCarriedModifications: false,
   ...over,
 })
 
@@ -36,12 +37,44 @@ describe('syncCoverageAfterArchiveMerge', () => {
     expect(out.get('a@b')).toEqual({ bottomId: 'new-deep', topId: 'new-top' })
   })
 
-  it('connected fetch-latest keeps the deeper existing bottom, refreshes topId', () => {
+  it('a walk that SAW the existing topId keeps the deeper bottom, refreshes topId', () => {
+    // Codex r4 #3: only re-entering the covered region (the walk contained
+    // the record's top entry) proves contiguity with the existing record.
     const coverage = new Map([['a@b', { bottomId: 'deep', topId: 'old-top' }]])
     const out = syncCoverageAfterArchiveMerge(
-      base({ coverage, rsmFirst: 'shallow', fetchLatestTopId: 'new-top', connectedToHeld: true })
+      base({ coverage, rsmFirst: 'shallow', fetchLatestTopId: 'new-top', sawCoverageTop: true })
     )
     expect(out.get('a@b')).toEqual({ bottomId: 'deep', topId: 'new-top' })
+  })
+
+  it('dedupe against arbitrary local data does NOT keep the old bottom (island overlap is no proof)', () => {
+    // Codex r4 #3 scenario: coverage [100..200], fetchContext island
+    // [280..320] resident, fetch-latest [301..400] dedupes against the
+    // island. Keeping bottomId=100 would certify the hole [201..279].
+    // Without sighting the record's topId, the record must be REPLACED by
+    // the walked window.
+    const coverage = new Map([['a@b', { bottomId: 'id-100', topId: 'id-200' }]])
+    const out = syncCoverageAfterArchiveMerge(
+      base({ coverage, rsmFirst: 'id-301', fetchLatestTopId: 'id-400', sawCoverageTop: false })
+    )
+    expect(out.get('a@b')).toEqual({ bottomId: 'id-301', topId: 'id-400' })
+  })
+
+  it('a walk that carried modifications never certifies coverage (their cache writes are fire-and-forget)', () => {
+    // Codex r4 #2: corrections/retractions/reactions on walked pages are
+    // applied via unawaited cache updates (and dropped entirely for
+    // non-resident targets). Certifying the walk would let a later floor
+    // jump skip them forever — so it must not form, extend, or refresh a
+    // record.
+    const empty = new Map<string, CoverageRecord>()
+    expect(syncCoverageAfterArchiveMerge(
+      base({ coverage: empty, rsmFirst: 'deep', fetchLatestTopId: 'top', walkCarriedModifications: true })
+    )).toBe(empty)
+
+    const existing = new Map([['a@b', { bottomId: 'deep', topId: 'top' }]])
+    expect(syncCoverageAfterArchiveMerge(
+      base({ coverage: existing, isFetchLatest: false, initialBefore: 'deep', rsmFirst: 'deeper', walkCarriedModifications: true })
+    )).toBe(existing)
   })
 
   it('plain backward page extends the bottom only when resumed exactly from it', () => {

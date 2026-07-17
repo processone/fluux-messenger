@@ -33,6 +33,12 @@ export interface MergeArchiveExtras {
   initialBefore?: string
   /** rsm.last of the FIRST page of a backward walk (newest covered entry). */
   fetchLatestTopId?: string
+  /** The walk contained the existing coverage record's top entry — the only
+   *  accepted proof of contiguity with the record (Codex r4 #3). */
+  sawCoverageTop?: boolean
+  /** The walk carried corrections/retractions/reactions/fastenings, whose
+   *  cache effects are fire-and-forget — certification is blocked (r4 #2). */
+  walkCarriedModifications?: boolean
 }
 
 /** Serialize the coverage map for localStorage (`[id, CoverageRecord][]`). */
@@ -65,15 +71,21 @@ export interface ArchiveMergeCoverageInput {
   rsmFirst?: string
   fetchLatestTopId?: string
   initialBefore?: string
-  /** Any dedupe hit or archive-id backfill — proof the page connects to held history. */
-  connectedToHeld: boolean
+  /** The walk contained the existing record's top entry (id-exact sighting).
+   *  Dedupe against arbitrary resident data is NOT accepted: overlapping a
+   *  fetchContext island proves nothing about the record's region (r4 #3). */
+  sawCoverageTop: boolean
+  /** The walk carried modifications (see MergeArchiveExtras) — blocks any
+   *  certification: their cache effects are not durably confirmed (r4 #2). */
+  walkCarriedModifications: boolean
 }
 
 /**
  * Pure coverage transition, called from both stores' archive merges.
  *
- * - fetch-latest, connected to held history, record exists → the deeper
- *   existing bottom stands; only the walk top refreshes;
+ * - a walk that carried modifications never certifies anything (r4 #2);
+ * - fetch-latest that SAW the existing record's top entry → the deeper
+ *   existing bottom stands; only the walk top refreshes (r4 #3);
  * - fetch-latest otherwise (disjoint or first-ever, INCLUDING a signal-only
  *   give-up with zero displayable messages) → replace with the walk extent;
  * - plain backward page → extend the bottom ONLY when the query resumed
@@ -86,15 +98,16 @@ export interface ArchiveMergeCoverageInput {
 export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput): Map<string, CoverageRecord> {
   const {
     coverage, id, direction, isFetchLatest, preserveGapMarker,
-    rsmFirst, fetchLatestTopId, initialBefore, connectedToHeld,
+    rsmFirst, fetchLatestTopId, initialBefore, sawCoverageTop, walkCarriedModifications,
   } = input
   if (preserveGapMarker) return coverage
   if (direction !== 'backward') return coverage
+  if (walkCarriedModifications) return coverage
   const existing = coverage.get(id)
 
   if (isFetchLatest) {
     if (!rsmFirst) return coverage
-    if (connectedToHeld && existing) {
+    if (sawCoverageTop && existing) {
       if (fetchLatestTopId && fetchLatestTopId !== existing.topId) {
         const next = new Map(coverage)
         next.set(id, { ...existing, topId: fetchLatestTopId })
