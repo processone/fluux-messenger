@@ -41,6 +41,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const { t } = useTranslation()
   const isImage = isRenderableImageMime(attachment.mediaType)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState(false)
   const imageMenu = useContextMenu()
 
   // Use thumbnail if available, otherwise fall back to main URL. Encryption
@@ -155,15 +156,25 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           {t('chat.imageUnavailable')}
           {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
         </p>
-        <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+        {downloadBusy
+          ? <Loader2 className="size-4 animate-spin flex-shrink-0" />
+          : <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
       </div>
     )
     if (attachment.encryption) {
       return (
         <button
           type="button"
-          onClick={() => void downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })}
-          className="block pt-2 group/file w-full text-start"
+          disabled={downloadBusy}
+          onClick={async () => {
+            setDownloadBusy(true)
+            try {
+              await downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })
+            } finally {
+              setDownloadBusy(false)
+            }
+          }}
+          className="block pt-2 group/file w-full text-start disabled:opacity-70"
           style={{ maxWidth: `${maxWidthPx}px` }}
           aria-label={t('common.download')}
           tabIndex={-1}

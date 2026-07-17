@@ -585,4 +585,19 @@ describe('encrypted media download controls', () => {
     fireEvent.click(screen.getByLabelText('common.download'))
     expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('encrypted image error-fallback → button, decrypts (no ciphertext link)', () => {
+    const image: FileAttachment = {
+      url: 'https://x/cipher.bin', mediaType: 'image/jpeg', name: 'secret.jpg', encryption,
+    }
+    useAttachmentUrlSpy.mockReturnValue({ url: null, isLoading: false, error: new Error('Failed to fetch') })
+
+    render(<ImageAttachment attachment={image} />)
+
+    // Encrypted error-fallback is a button, not an anchor — never links to ciphertext.
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    const control = screen.getByRole('button')
+    fireEvent.click(control)
+    expect(downloadAttachmentSpy).toHaveBeenCalledTimes(1)
+  })
 })
