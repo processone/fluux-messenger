@@ -1145,7 +1145,12 @@ export class Chat extends BaseModule {
       if (contact?.presence === 'offline') return
     }
 
-    const message = xml('message', { to: recipient, type }, xml(state, { xmlns: NS_CHATSTATES }))
+    // XEP-0334: standalone chat states are transient — tell the server not to
+    // archive them (and, per the same convention, not to wake devices for them).
+    const message = xml('message', { to: recipient, type },
+      xml(state, { xmlns: NS_CHATSTATES }),
+      xml('no-store', { xmlns: NS_HINTS }),
+    )
     await this.deps.sendStanza(message)
   }
 
