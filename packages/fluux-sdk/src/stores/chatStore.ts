@@ -1870,24 +1870,24 @@ export const chatStore = createStore<ChatState>()(
             }
           }
 
-          // Crash-window safety (backward CLEARANCE only): the gap map is
-          // persisted synchronously (localStorage) while saveMessages to
-          // IndexedDB is fire-and-forget. Deleting the gap now and crashing
-          // before the write lands leaves cache [old][HOLE][new] with no
-          // marker — a permanent silent hole. So when a backward merge would
-          // DELETE an existing gap AND carries persistable new messages,
-          // defer ONLY the deletion until the durable write resolves (below).
-          // Forward paths are self-healing (coverage anchors on cache newest)
-          // and are left untouched; a clearing merge with nothing to persist
-          // has no crash window and deletes immediately.
-          const clearedGap = state.conversationGaps.get(conversationId)
+          // Crash-window safety (Codex r3 #1/#2): the gap map is persisted
+          // synchronously (localStorage) while saveMessages to IndexedDB is
+          // fire-and-forget AND absorbs errors. Persisting a transition that
+          // SHRINKS the recorded hole (deletion, forward startId advance,
+          // backward end/endId shrink) before the page write commits lets a
+          // crash — or a silently failed write — skip the page forever: the
+          // resume cursor would point past data that was never stored. So ANY
+          // transition of an EXISTING gap defers until the durable write
+          // reports success. Formation (prevGap undefined) records a hole —
+          // conservative — and applies immediately. A merge with nothing
+          // persistable has no crash window and applies immediately.
+          const prevGap = state.conversationGaps.get(conversationId)
           const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
-          const deferGapClear =
-            direction === 'backward' &&
-            clearedGap !== undefined &&
-            !newGaps.has(conversationId) &&
+          const deferGapCommit =
+            newGaps !== state.conversationGaps &&
+            prevGap !== undefined &&
             persistableMessages.length > 0
-          const gapsAfterMerge = deferGapClear ? state.conversationGaps : newGaps
+          const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
@@ -1906,18 +1906,23 @@ export const chatStore = createStore<ChatState>()(
           // Persist to IndexedDB regardless of active state (durable history).
           if (persistableMessages.length > 0) {
             const savePromise = messageCache.saveMessages(persistableMessages)
-            if (deferGapClear) {
-              // The page is durably cached — now the gap deletion is safe.
-              void savePromise.then(() => {
+            if (deferGapCommit) {
+              // The page is durably cached — now the transition is safe.
+              void savePromise.then((committed) => {
+                if (!committed) return
                 set((s) => {
-                  // State may have moved on (gap advanced or re-planted by a
-                  // later merge): only delete the exact interval this merge
-                  // cleared. Reference equality suffices — every gap
-                  // transition (syncGap) creates a new object.
-                  if (s.conversationGaps.get(conversationId) !== clearedGap) return s
-                  const cleared = new Map(s.conversationGaps)
-                  cleared.delete(conversationId)
-                  return { conversationGaps: cleared }
+                  // State may have moved on (a later merge advanced or
+                  // re-planted the gap): only transition the exact interval
+                  // this merge computed from. Reference equality suffices —
+                  // every gap transition (syncGap) creates a new object. A
+                  // lost race leaves a LAGGING (conservative) cursor, never
+                  // a skipping one.
+                  if (s.conversationGaps.get(conversationId) !== prevGap) return s
+                  const next = new Map(s.conversationGaps)
+                  const target = newGaps.get(conversationId)
+                  if (target) next.set(conversationId, target)
+                  else next.delete(conversationId)
+                  return { conversationGaps: next }
                 })
               })
             } else {
