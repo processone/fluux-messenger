@@ -1125,6 +1125,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
       getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
       getGapEndId: () => this.deps.stores?.chat.getConversationGapEndId?.(conversationId),
+      getCoverageUnproven: () => this.deps.stores?.chat.getConversationCoverageUnproven?.(conversationId),
       getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
       isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
       probeCacheBottom: async () =>
@@ -1291,6 +1292,7 @@ export class MAM extends BaseModule {
       getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
       getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
       getGapEndId: () => this.deps.stores?.room.getRoomGapEndId?.(roomJid),
+      getCoverageUnproven: () => this.deps.stores?.room.getRoomCoverageUnproven?.(roomJid),
       getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
       isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
       probeCacheBottom: async () =>
@@ -1317,6 +1319,7 @@ export class MAM extends BaseModule {
       getGapStart: () => number | undefined
       getGapStartId: () => string | undefined
       getGapEndId: () => string | undefined
+      getCoverageUnproven: () => boolean | undefined
       getPendingStanzaId: () => string | undefined
       isActive: () => boolean
       probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
@@ -1400,11 +1403,16 @@ export class MAM extends BaseModule {
       const seamBottom = io.getGapEndId()
       if (seamBottom) {
         windowBottom = seamBottom
-      } else {
+      } else if (!io.getCoverageUnproven()) {
         const bottom = await io.probeCacheBottom()
         windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
           ?? oldestMessageWithStanzaId(messages)?.stanzaId
       }
+      // else: no gap edge AND coverage unproven → the cache bottom isn't provably
+      // contiguous with live (a disjoint fetch-latest landed above held-below
+      // history without anchoring a seam); leave windowBottom undefined so Phase B
+      // no-ops this pass. A later fetch-latest that establishes a real boundary
+      // lets the next pass descend (finding 10).
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
       // Re-check activity EVERY iteration, not just at dispatch: a walk is up

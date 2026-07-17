@@ -228,6 +228,51 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
     })
 
+    it('does not plant a seam from a preview timestamp when the resident array is empty; flags coverage unproven instead (finding 10)', () => {
+      // Fresh-session shape: preview (meta.lastMessage) persisted, resident array
+      // EMPTY. The preview may be an unarchived message (noLocalStore/tombstone),
+      // so it must NOT anchor a seam — but its presence proves held-below history.
+      const preview = { ...createMessage(cid, 'preview'), id: 'preview', timestamp: new Date('2026-07-06T00:00:00Z') }
+      chatStore.getState().addConversation({ ...createConversation(cid), lastMessage: preview })
+
+      const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
+
+      // No spurious seam from the (possibly unarchived) preview.
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      // Coverage is flagged unproven so the seeder won't treat cache-oldest as contiguous.
+      expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBe(true)
+    })
+
+    it('POSITIVE: a proven resident boundary still forms the seam on a disjoint fetch-latest (no over-suppression)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-06T00:00:00Z') }
+      chatStore.getState().addMessage(held)
+
+      const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
+
+      // Resident boundary proven → the seam is still recorded as before.
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      })
+      // A proven boundary means coverage is NOT flagged unproven.
+      expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).not.toBe(true)
+    })
+
+    it('does NOT flag coverage unproven for a brand-new empty conversation whose first fetch-latest is contiguous-to-live', () => {
+      // No preview, nothing held below — the first fetch-latest is genuinely
+      // contiguous-to-live. It must NOT be suppressed (Phase B can seed from it).
+      chatStore.getState().addConversation(createConversation(cid))
+
+      const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fresh], {}, true, 'backward', true)
+
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+      expect(chatStore.getState().getMAMQueryState(cid).coverageBottomUnproven).toBeFalsy()
+    })
+
     it('backward closure: scroll-up pages shrink then clear a recorded gap', async () => {
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState({ conversationGaps: new Map([[cid, {

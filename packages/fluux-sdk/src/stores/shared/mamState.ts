@@ -65,6 +65,27 @@ export function setMAMError(
 }
 
 /**
+ * Set/clear the `coverageBottomUnproven` flag for one entity.
+ *
+ * Copy-on-write: returns the SAME map reference when the effective value is
+ * unchanged (treating undefined as false), so callers skip re-renders. Set
+ * `true` when a disjoint fetch-latest landed with no proven boundary; set
+ * `false` when a merge proves a boundary. Leave the flag alone by simply not
+ * calling this.
+ */
+export function setCoverageBottomUnproven(
+  states: Map<string, MAMQueryState>,
+  id: string,
+  value: boolean
+): Map<string, MAMQueryState> {
+  const current = states.get(id) || DEFAULT_MAM_STATE
+  if (!!current.coverageBottomUnproven === value) return states
+  const newStates = new Map(states)
+  newStates.set(id, { ...current, coverageBottomUnproven: value })
+  return newStates
+}
+
+/**
  * Query direction for MAM queries.
  */
 export type MAMQueryDirection = 'backward' | 'forward'

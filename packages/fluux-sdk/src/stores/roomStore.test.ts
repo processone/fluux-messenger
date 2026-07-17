@@ -2176,6 +2176,8 @@ describe('roomStore', () => {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
         end: new Date('2026-07-15T00:00:00Z').getTime(),
       })
+      // Proven resident boundary → coverage is NOT flagged unproven (no over-suppression).
+      expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).not.toBe(true)
     })
 
     it('does NOT plant a seam when the fetch-latest page overlaps held history (dedupe)', () => {
@@ -2210,12 +2212,13 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
-    it('falls back to the persisted preview timestamp when the resident array is empty', () => {
+    it('does not plant a seam from a preview timestamp when the resident array is empty; flags coverage unproven instead (finding 10)', () => {
       const held: RoomMessage = {
         type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
       }
       // Fresh-run shape: resident array EMPTY, preview (meta.lastMessage) persisted.
+      // The preview may be an unarchived message → it must NOT anchor a seam.
       roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held }))
 
       const fetched: RoomMessage = {
@@ -2224,10 +2227,25 @@ describe('roomStore', () => {
       }
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
 
-      expect(roomStore.getState().roomGaps.get(jid)).toEqual({
-        start: new Date('2026-07-06T00:00:00Z').getTime(),
-        end: new Date('2026-07-15T00:00:00Z').getTime(),
-      })
+      // No spurious seam from the (possibly unarchived) preview.
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+      // Coverage flagged unproven so the seeder won't treat cache-oldest as contiguous.
+      expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBe(true)
+    })
+
+    it('does NOT flag coverage unproven for a brand-new empty room whose first fetch-latest is contiguous-to-live', () => {
+      // No preview, nothing held below — genuinely contiguous-to-live; must NOT
+      // be suppressed (Phase B can still seed from it).
+      roomStore.getState().addRoom(createRoom(jid, { joined: true }))
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+      expect(roomStore.getState().getRoomMAMQueryState(jid).coverageBottomUnproven).toBeFalsy()
     })
 
     it('backward closure: a scroll-up page reaching into the gap shrinks it; crossing clears it', async () => {

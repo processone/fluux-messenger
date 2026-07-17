@@ -763,6 +763,37 @@ describe('MAM Background Catch-Up', () => {
       expect(backward.some((c) => c.before === 'island-old')).toBe(false)
     })
 
+    it('does NOT descend Phase B from the cache bottom when coverage is flagged unproven and no gap edge exists (finding 10)', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+      // No recorded gap edge, but a prior disjoint fetch-latest flagged the
+      // contiguous bottom unproven: the cache-oldest row is NOT provably
+      // contiguous with live, so the probe must be skipped and Phase B no-op.
+      vi.mocked(mockStores.chat.getConversationGapEndId!).mockReturnValue(undefined)
+      vi.mocked(mockStores.chat.getConversationCoverageUnproven!).mockReturnValue(true)
+      vi.mocked(mockStores.chat.loadMessagesFromCache!).mockResolvedValue([
+        { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
+        return { messages: [], complete: false, rsm: { first: 'p1' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+        [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
+        { sessionStartTime: Date.now(), stitchReadPointer: true })
+
+      // No backward query issued — the cache bottom probe is not trusted.
+      const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
+      expect(backward).toHaveLength(0)
+      expect(mockStores.chat.loadMessagesFromCache).not.toHaveBeenCalledWith(
+        'alice@example.com', expect.objectContaining({ oldest: true }),
+      )
+    })
+
     it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
       await connectClient()
       setupChat('mds-ptr')
@@ -1035,6 +1066,33 @@ describe('MAM Background Catch-Up', () => {
       const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
       expect(backward[0]?.before).toBe('seam-top')       // seam edge, NOT 'island-old'
       expect(backward.some((c) => c.before === 'island-old')).toBe(false)
+    })
+
+    it('does NOT descend Phase B from the cache bottom when coverage is flagged unproven and no gap edge exists (finding 10)', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+      vi.mocked(mockStores.room.getRoomGapEndId!).mockReturnValue(undefined)
+      vi.mocked(mockStores.room.getRoomCoverageUnproven!).mockReturnValue(true)
+      vi.mocked(mockStores.room.loadMessagesFromCache!).mockResolvedValue([
+        { id: 'island-old', stanzaId: 'island-old', timestamp: new Date('2020-01-01T00:00:00Z') },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
+        return { messages: [], complete: false, rsm: { first: 'p1' } }
+      })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid,
+        [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
+        { sessionStartTime: Date.now(), stitchReadPointer: true })
+
+      const backward = calls.filter((c) => c.before !== undefined && c.before !== '')
+      expect(backward).toHaveLength(0)
+      expect(mockStores.room.loadMessagesFromCache).not.toHaveBeenCalledWith(
+        roomJid, expect.objectContaining({ oldest: true }),
+      )
     })
 
     it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {

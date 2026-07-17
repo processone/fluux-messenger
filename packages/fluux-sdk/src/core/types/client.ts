@@ -84,6 +84,10 @@ export interface StoreBindings {
     // Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
     // the proven upper edge of the contiguous-from-live region.
     getConversationGapEndId?: (conversationId: string) => string | undefined
+    // True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
+    // as unproven (no gap edge, no resident boundary) — the seeder must not
+    // trust cache-oldest as contiguous-to-live (finding 10).
+    getConversationCoverageUnproven?: (conversationId: string) => boolean | undefined
     // XEP-0490 stanza-id of the remote read position, kept unresolved when it
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.
@@ -122,6 +126,10 @@ export interface StoreBindings {
     // Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
     // the proven upper edge of the contiguous-from-live region.
     getRoomGapEndId?: (roomJid: string) => string | undefined
+    // True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
+    // as unproven (no gap edge, no resident boundary) — the seeder must not
+    // trust cache-oldest as contiguous-to-live (finding 10).
+    getRoomCoverageUnproven?: (roomJid: string) => boolean | undefined
     // XEP-0490 stanza-id of the remote read position, kept unresolved when it
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.
