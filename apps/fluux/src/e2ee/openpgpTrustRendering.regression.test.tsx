@@ -93,8 +93,7 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
       <SecurityTab
         state={{ kind: 'encrypted', protocolId: 'openpgp', fingerprint: 'ABCD1234', trust: 'verified' }}
         peerJid="alice@x"
-        identities={identities}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop} onEnableEncryption={noop}
+        identities={identities} onEnableEncryption={noop}
       />,
     )
     await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalledWith('alice@x'))
@@ -110,8 +109,7 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
       <SecurityTab
         state={{ kind: 'encrypted', protocolId: 'openpgp', fingerprint: 'ABCD1234', trust: 'tofu' }}
         peerJid="alice@x"
-        identities={identities}
-        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop} onEnableEncryption={noop}
+        identities={identities} onEnableEncryption={noop}
       />,
     )
     await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalledWith('alice@x'))

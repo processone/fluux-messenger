@@ -7,9 +7,6 @@ import { SecurityTab } from './tabs/SecurityTab'
 
 interface ContactSecurityDetailProps {
   state: ConversationEncryptionState
-  onVerify: () => void
-  onRequestRevoke: () => void
-  onDisableEncryption: () => void
   onEnableEncryption: () => void
   onClose: () => void
   peerJid?: string
@@ -18,9 +15,6 @@ interface ContactSecurityDetailProps {
 
 export function ContactSecurityDetail({
   state,
-  onVerify,
-  onRequestRevoke,
-  onDisableEncryption,
   onEnableEncryption,
   onClose,
   peerJid,
@@ -47,9 +41,6 @@ export function ContactSecurityDetail({
       <div className="flex-1 overflow-y-auto min-h-0">
         <SecurityTab
           state={state}
-          onVerify={onVerify}
-          onRequestRevoke={onRequestRevoke}
-          onDisableEncryption={onDisableEncryption}
           onEnableEncryption={onEnableEncryption}
           peerJid={peerJid}
           identities={identities}

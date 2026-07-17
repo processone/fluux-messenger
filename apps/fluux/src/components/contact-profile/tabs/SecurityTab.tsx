@@ -7,9 +7,6 @@ import { trustVisual, trustStateVisual, trustLabel } from '@/e2ee/trustVisual'
 
 interface SecurityTabProps {
   state: ConversationEncryptionState
-  onVerify: () => void
-  onRequestRevoke: () => void
-  onDisableEncryption: () => void
   onEnableEncryption: () => void
   /** Present when a per-identity handle is available for this conversation. */
   peerJid?: string
@@ -28,9 +25,6 @@ interface SecurityTabProps {
 
 export function SecurityTab({
   state,
-  onVerify,
-  onRequestRevoke,
-  onDisableEncryption,
   onEnableEncryption,
   peerJid,
   identities,
@@ -127,68 +121,6 @@ export function SecurityTab({
 
         {state.kind === 'encrypted' && identities && peerJid && (
           <PeerIdentityList peerJid={peerJid} identities={identities} />
-        )}
-
-        {state.kind === 'encrypted' && !(identities && peerJid) && (
-          <>
-            <ExplanationPanel
-              icon={
-                state.trust === 'verified' ? (
-                  <ShieldCheck className={`size-5 ${trustVisual('verified').colorClass} flex-shrink-0`} />
-                ) : (
-                  <Shield className="size-5 text-fluux-muted flex-shrink-0" />
-                )
-              }
-              title={
-                state.trust === 'verified'
-                  ? t('contacts.encryption.verified')
-                  : t('contacts.encryption.tofu')
-              }
-              tone={state.trust === 'verified' ? 'success' : 'neutral'}
-            />
-
-            <div>
-              <label className="block text-xs text-fluux-muted mb-1 px-1">
-                {t('contacts.encryption.fingerprintLabel')}
-              </label>
-              <div className="rounded-lg bg-fluux-bg/40 px-3 py-2">
-                <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
-                  {formatFingerprint(state.fingerprint)}
-                </code>
-              </div>
-            </div>
-
-            {state.trust !== 'verified' && (
-              <button
-                type="button"
-                onClick={onVerify}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
-              >
-                <ShieldCheck className="size-4" />
-                {t('contacts.encryption.verifyButton')}
-              </button>
-            )}
-
-            {state.trust === 'verified' && (
-              <button
-                type="button"
-                onClick={onRequestRevoke}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error border border-fluux-red rounded-lg transition-colors text-sm min-h-[44px]"
-              >
-                <ShieldOff className="size-4" />
-                {t('contacts.encryption.removeVerification')}
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onDisableEncryption}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
-            >
-              <ShieldOff className="size-4" />
-              {t('contacts.encryption.disableForContact')}
-            </button>
-          </>
         )}
       </div>
     </div>

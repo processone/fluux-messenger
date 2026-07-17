@@ -7,7 +7,6 @@ import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -29,7 +28,7 @@ interface ContactProfileViewProps {
   isInRoster?: boolean
 }
 
-type PendingConfirm = 'remove' | 'block' | 'revokeVerify' | null
+type PendingConfirm = 'remove' | 'block' | null
 
 export function ContactProfileView({
   contact,
@@ -61,7 +60,6 @@ export function ContactProfileView({
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
   const { client } = useXMPPContext()
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
-  const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
 
   const handleDisableEncryption = useCallback(() => {
@@ -117,29 +115,10 @@ export function ContactProfileView({
     }
   }, [identityPlugin, activeProtocol, contact.jid, identityReloadKey, t, handleDisableEncryption])
 
-  // Fallback verify handler for the bespoke single-fingerprint panel
-  // (rendered only when `identitiesProp` is null — i.e. the active plugin
-  // doesn't expose the per-identity trait). Routes through the same
-  // plugin-backed trust write as `onVerifyDevice` above when the plugin
-  // supports it.
+  // Used by the shared `VerifyPeerDialog` confirm handler below to persist
+  // the trust decision once the user confirms a match for a device/key
+  // surfaced through `identitiesProp.onVerifyDevice`.
   const setIdentityTrust = identityPlugin?.setIdentityTrust?.bind(identityPlugin)
-  const handleVerify = () => {
-    if (encryptionState.kind !== 'encrypted') return
-    const syntheticIdentity: PeerIdentity = {
-      id: encryptionState.fingerprint,
-      fingerprint: encryptionState.fingerprint,
-      trust: encryptionState.trust,
-    }
-    if (identityPlugin?.getOwnFingerprint) {
-      void Promise.resolve(identityPlugin.getOwnFingerprint()).then((fp) => {
-        setDialogOwnFp(fp)
-        setVerifyDevice(syntheticIdentity)
-      })
-    } else {
-      setDialogOwnFp(null)
-      setVerifyDevice(syntheticIdentity)
-    }
-  }
 
   // Lazily query last activity for offline roster contacts
   useLastActivity(
@@ -236,8 +215,6 @@ export function ContactProfileView({
       onRemoveContact()
     } else if (pendingConfirm === 'block') {
       void blockJid(contact.jid)
-    } else if (pendingConfirm === 'revokeVerify') {
-      clearVerified(contact.jid)
     }
     setPendingConfirm(null)
   }
@@ -254,13 +231,7 @@ export function ContactProfileView({
           message: t('contacts.blockConfirm', { name: contact.name }),
           confirmLabel: t('contacts.block'),
         }
-      : pendingConfirm === 'revokeVerify'
-        ? {
-            title: t('contacts.encryption.removeVerification'),
-            message: t('contacts.encryption.removeVerificationConfirm', { name: contact.name }),
-            confirmLabel: t('contacts.encryption.removeVerification'),
-          }
-        : null
+      : null
 
   return (
     <>
@@ -330,9 +301,6 @@ export function ContactProfileView({
             state={encryptionState}
             peerJid={contact.jid}
             identities={identitiesProp}
-            onVerify={handleVerify}
-            onRequestRevoke={() => setPendingConfirm('revokeVerify')}
-            onDisableEncryption={handleDisableEncryption}
             onEnableEncryption={handleEnableEncryption}
             onClose={() => setSecurityOpen(false)}
           />

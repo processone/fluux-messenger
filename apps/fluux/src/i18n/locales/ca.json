@@ -218,9 +218,9 @@
                 "deviceLabel": "Dispositiu {{id}}",
                 "openpgpKeyLabel": "Clau OpenPGP",
                 "loading": "Carregant claus…",
-                "loadError": "No s’han pogut carregar les claus",
+                "loadError": "No s'han pogut carregar les claus",
                 "retry": "Torna-ho a provar",
-                "noKeyYet": "Encara no s’ha publicat cap clau",
+                "noKeyYet": "Encara no s'ha publicat cap clau",
                 "verify": "Verifica",
                 "revoke": "Revoca"
             },

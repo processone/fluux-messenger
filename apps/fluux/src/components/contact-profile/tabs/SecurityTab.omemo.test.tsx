@@ -29,9 +29,6 @@ describe('SecurityTab — OMEMO per-identity list', () => {
         state={omemoState()}
         peerJid="bob@x"
         identities={identities}
-        onVerify={noop}
-        onRequestRevoke={noop}
-        onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
@@ -50,9 +47,6 @@ describe('SecurityTab — OMEMO per-identity list', () => {
         state={omemoState()}
         peerJid="bob@x"
         identities={identities}
-        onVerify={noop}
-        onRequestRevoke={noop}
-        onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
@@ -70,9 +64,6 @@ describe('SecurityTab — OMEMO per-identity list', () => {
         state={omemoState()}
         peerJid="bob@x"
         identities={identities}
-        onVerify={noop}
-        onRequestRevoke={noop}
-        onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
@@ -94,9 +85,6 @@ describe('SecurityTab — OMEMO per-identity list', () => {
         state={omemoState()}
         peerJid="bob@x"
         identities={identities}
-        onVerify={noop}
-        onRequestRevoke={noop}
-        onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
@@ -114,9 +102,6 @@ describe('SecurityTab — OMEMO per-identity list', () => {
         state={omemoState()}
         peerJid="bob@x"
         identities={identities}
-        onVerify={noop}
-        onRequestRevoke={noop}
-        onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
