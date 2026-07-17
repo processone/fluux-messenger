@@ -239,4 +239,17 @@ export interface MAMQueryState {
    * catch-up query ends with complete=false, cleared when caught up to live.
    */
   forwardGapTimestamp?: number
+  /**
+   * True when a `before:''` fetch-latest landed DISJOINT above held-below
+   * history without a proven lower boundary to anchor a seam — the preview
+   * timestamp alone must never form a seam (it may be an unarchived message),
+   * yet its presence proves held-below history exists. So no gap is recorded,
+   * and this flag records that the contiguous coverage BOTTOM is unproven.
+   *
+   * Consumed by the catch-up Phase B seeder: with no gap upper edge AND this
+   * flag set, the cache-oldest row is NOT provably contiguous with live, so the
+   * backward descent is skipped this pass. Cleared when a merge later proves a
+   * boundary (a non-empty resident extent, or a recorded gap gains an `endId`).
+   */
+  coverageBottomUnproven?: boolean
 }

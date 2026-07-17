@@ -2641,7 +2641,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Update MAM query state using the two-marker approach
       // This must always be updated to track query completion and cursors
-      const newStates = mamState.setMAMQueryCompleted(
+      let newStates = mamState.setMAMQueryCompleted(
         state.mamQueryStates,
         roomJid,
         complete,
@@ -2651,6 +2651,10 @@ export const roomStore = createStore<RoomState>()(
         preserveGapMarker,
         isFetchLatest
       )
+
+      // Newest PROVEN in-memory boundary (resident extent). Undefined when the
+      // resident array is empty (background/non-active room, fresh session).
+      const residentNewestTs = messagePageExtent(existingMessages).newestTs
 
       // Persisted gap sync (shared transition, both directions):
       // - forward: mirror the complete=false-driven forwardGapTimestamp (marker
@@ -2669,14 +2673,35 @@ export const roomStore = createStore<RoomState>()(
         newMessagesCount: newFromMAM.length,
         patchedCount: patched.length,
         isFetchLatest,
-        // Fallback trusts the preview ts to be an archived message; a non-archived
-        // preview (noLocalStore/tombstone) above the true archive newest could plant
-        // a spurious — click-healable — seam.
-        newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
+        // ONLY a proven boundary (resident extent) anchors a seam — never the
+        // preview timestamp, which may be an unarchived message (noLocalStore/
+        // tombstone) above the true archive newest and would plant a spurious
+        // seam. When the resident array is empty there is no proven boundary:
+        // detectFetchLatestSeam returns undefined and coverageBottomUnproven is
+        // flagged below instead (finding 10).
+        newestHeldBelowTs: residentNewestTs,
         newestHeldBelowId: newestMessageStanzaId(existingMessages),
         lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })
+
+      // Coverage-bottom proof (finding 10). A merge proves the contiguous bottom
+      // when a resident boundary exists OR a recorded gap now carries a proven
+      // upper edge (endId) — clear any stale unproven flag. Otherwise, when a
+      // disjoint fetch-latest lands above held-below history (proven by the
+      // preview) with no seam formed, the bottom is unproven — flag it so the
+      // catch-up seeder won't trust cache-oldest as contiguous-to-live.
+      const coverageProven = residentNewestTs !== undefined || newGaps.get(roomJid)?.endId !== undefined
+      if (coverageProven) {
+        newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, false)
+      } else if (direction === 'backward' && isFetchLatest && !newGaps.has(roomJid)) {
+        const structurallyDisjoint = newFromMAM.length === mamMessages.length && patched.length === 0
+        const pageOldestTs = messagePageExtent(mamMessages).oldestTs
+        const previewBelow = fallbackHeldTs !== undefined && pageOldestTs !== undefined && pageOldestTs > fallbackHeldTs
+        if (structurallyDisjoint && previewBelow) {
+          newStates = mamState.setCoverageBottomUnproven(newStates, roomJid, true)
+        }
+      }
       // Crash-window safety (backward CLEARANCE only): the gap map is
       // persisted synchronously (localStorage) while saveRoomMessages to
       // IndexedDB is fire-and-forget. Deleting the gap now and crashing
