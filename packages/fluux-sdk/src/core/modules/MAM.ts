@@ -235,6 +235,9 @@ export class MAM extends BaseModule {
     // scroll-up cursor sits below the record and must never jump UP to it.
     const canJumpToFloor = before === ''
     let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
     // The walk contained the record's top entry — the only accepted proof of
     // contiguity with the existing record (Codex r4 #3), and the trigger for
     // the floor jump.
@@ -316,6 +319,17 @@ export class MAM extends BaseModule {
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // The jumped-to floor was purged MID-WALK (page > 0): drop the
+              // stale record and resume from the pre-jump cursor instead of
+              // aborting the walk — otherwise the record survives and every
+              // session re-jumps onto the dead id (Codex r4 #6).
+              logInfo(`MAM coverage floor purged mid-walk for ...@${getDomain(conversationId) || '*'} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -366,6 +380,7 @@ export class MAM extends BaseModule {
               // successive sessions descend instead of re-walking the same
               // newest pages (Codex r3 #4).
               if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {
@@ -484,6 +499,9 @@ export class MAM extends BaseModule {
     // scroll-up cursor sits below the record and must never jump UP to it.
     const canJumpToFloor = !before
     let jumpedToFloor = false
+    // The cursor the walk would have used had it not jumped — the recovery
+    // resume point when the jumped-to floor turns out purged (Codex r4 #6).
+    let preJumpCursor: string | undefined
     // The walk contained the record's top entry — contiguity proof and floor
     // jump trigger (Codex r4 #3); see the 1:1 twin in queryArchive.
     let sawCoverageTop = false
@@ -569,6 +587,15 @@ export class MAM extends BaseModule {
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
               return { ...degraded, degradedToFetchLatest: true }
             }
+            if (jumpedToFloor && preJumpCursor && coverageRecord && currentBefore === coverageRecord.bottomId && isItemNotFoundError(iqError)) {
+              // Jumped-to floor purged mid-walk — resume from the pre-jump
+              // cursor (see the 1:1 twin in queryArchive; Codex r4 #6).
+              logInfo(`Room MAM coverage floor purged mid-walk for ${roomJid} — resuming from pre-jump cursor`)
+              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: coverageRecord.bottomId })
+              currentBefore = preJumpCursor
+              preJumpCursor = undefined // one recovery per walk
+              continue
+            }
             throw iqError
           }
           const { complete, rsm } = this.parseMAMResponse(response)
@@ -641,6 +668,7 @@ export class MAM extends BaseModule {
               // Known signal-only floor (persisted coverage) — jump below
               // covered territory; see the 1:1 twin in queryArchive.
               if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
+                preJumpCursor = rsm.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {

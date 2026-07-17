@@ -2968,6 +2968,114 @@ describe('XMPPClient MAM', () => {
       expect((mamEmits[0][1] as { rsm: { first?: string } }).rsm.first).toBe('p5-first')
     })
 
+    it('a floor purged AFTER the jump falls back to the pre-jump cursor and continues the walk (Codex r4 #6)', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'purged-floor', topId: 'known-top' })
+
+      const capturedIqs: any[] = []
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const queryId = queryChild?.attrs?.queryid || 'test'
+        const setEl = queryChild?.children?.find((c: any) => c.name === 'set')
+        const beforeVal = setEl?.children?.find((c: any) => c.name === 'before')?.children?.[0]
+
+        if (callCount === 1) {
+          // Page 1 (before:''): signal-only, contains the record's top entry → jump next.
+          if (stanzaListener) {
+            stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'known-top' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:05:00Z' } },
+                      {
+                        name: 'message',
+                        attrs: { from: 'alice@example.com', type: 'chat', id: 'receipt-carrier' },
+                        children: [{ name: 'received', attrs: { xmlns: 'urn:xmpp:receipts', id: 'x' } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ]))
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'false' },
+              children: [
+                {
+                  name: 'set',
+                  attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+                  children: [{ name: 'first', text: 'p1-first' }, { name: 'last', text: 'known-top' }],
+                },
+              ],
+            },
+          ])
+        }
+
+        if (beforeVal === 'purged-floor') {
+          // Page 2: the jumped-to floor was purged from the archive.
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+
+        // Page 3: recovered on the pre-jump cursor; real message, complete.
+        if (stanzaListener) {
+          stanzaListener(createMockElement('message', { from: 'alice@example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: 'real-1' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-10T09:00:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: 'alice@example.com', type: 'chat', id: 'older-real-msg' },
+                      children: [{ name: 'body', text: 'Recovered' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ]))
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: '' })
+
+      // Walk recovered: purge emitted, pre-jump cursor used, message found.
+      expect(callCount).toBe(3)
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-coverage-purged', {
+        conversationId: 'alice@example.com',
+        before: 'purged-floor',
+      })
+      const thirdQueryEl = capturedIqs[2].children?.find((c: any) => c.name === 'query')
+      const thirdSetEl = thirdQueryEl?.children?.find((c: any) => c.name === 'set')
+      expect(thirdSetEl?.children?.find((c: any) => c.name === 'before')?.children?.[0]).toBe('p1-first')
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0].id).toBe('older-real-msg')
+    })
+
     it('purged before-anchor equal to the coverage bottom degrades to fetch-latest and emits coverage-purged', async () => {
       await connectClient()
       vi.mocked(mockStores.chat.getConversationCoverage!).mockReturnValue({ bottomId: 'purged-id' })
