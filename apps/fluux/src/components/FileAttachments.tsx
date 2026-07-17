@@ -2,6 +2,7 @@ import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX, Image as ImageIcon } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { AttachmentDownloadButton } from './AttachmentDownloadButton'
 import { ImageLightbox } from './ImageLightbox'
 import { ImageContextMenu } from './ImageContextMenu'
 import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
@@ -9,6 +10,7 @@ import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel, isRenderableImageMime } from '@/utils/thumbnail'
+import { downloadAttachment } from '@/utils/download'
 import type { FileAttachment } from '@fluux/sdk'
 
 /**
@@ -39,6 +41,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const { t } = useTranslation()
   const isImage = isRenderableImageMime(attachment.mediaType)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [downloadBusy, setDownloadBusy] = useState(false)
   const imageMenu = useContextMenu()
 
   // Use thumbnail if available, otherwise fall back to main URL. Encryption
@@ -140,6 +143,46 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // shifts — and a burst of such invalidations feeds the message-list
   // ResizeObserver scroll-correction loop on WebKitGTK.
   if (error || !effectiveSrc || loadError) {
+    const inner = (
+      <div
+        className="flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors text-fluux-muted"
+        style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
+      >
+        <ImageOff className="size-6 flex-shrink-0" />
+        <p className="text-sm font-medium truncate max-w-full">
+          {attachment.name || t('chat.imageUnavailable')}
+        </p>
+        <p className="text-xs">
+          {t('chat.imageUnavailable')}
+          {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
+        </p>
+        {downloadBusy
+          ? <Loader2 className="size-4 animate-spin flex-shrink-0" />
+          : <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
+      </div>
+    )
+    if (attachment.encryption) {
+      return (
+        <button
+          type="button"
+          disabled={downloadBusy}
+          onClick={async () => {
+            setDownloadBusy(true)
+            try {
+              await downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })
+            } finally {
+              setDownloadBusy(false)
+            }
+          }}
+          className="block pt-2 group/file w-full text-start disabled:opacity-70"
+          style={{ maxWidth: `${maxWidthPx}px` }}
+          aria-label={t('common.download')}
+          tabIndex={-1}
+        >
+          {inner}
+        </button>
+      )
+    }
     return (
       <a
         href={attachment.url}
@@ -149,20 +192,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
       >
-        <div
-          className="flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors text-fluux-muted"
-          style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
-        >
-          <ImageOff className="size-6 flex-shrink-0" />
-          <p className="text-sm font-medium truncate max-w-full">
-            {attachment.name || t('chat.imageUnavailable')}
-          </p>
-          <p className="text-xs">
-            {t('chat.imageUnavailable')}
-            {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
-          </p>
-          <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
-        </div>
+        {inner}
       </a>
     )
   }
@@ -316,15 +346,11 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
             </div>
           )}
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name || 'video'}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="ms-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         </div>
       </div>
@@ -366,15 +392,11 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
             </span>
           )}
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         </div>
       )}
@@ -451,15 +473,11 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
         </div>
         {!hasError && (
           <Tooltip content={t('common.download')} position="top">
-            <a
-              href={attachment.url}
-              download={attachment.name || 'audio'}
+            <AttachmentDownloadButton
+              attachment={attachment}
               className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-              aria-label={t('common.download')}
-              tabIndex={-1}
-            >
-              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
-            </a>
+              iconClassName="size-4 text-fluux-muted hover:text-fluux-text"
+            />
           </Tooltip>
         )}
       </div>
@@ -489,40 +507,79 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
  */
 export function FileAttachmentCard({ attachment }: AttachmentProps) {
   const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+  const isEncrypted = Boolean(attachment.encryption)
 
+  const iconWrap = (
+    <div className={`size-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+      isPdfMimeType(attachment.mediaType) ? 'bg-red-500/20 text-red-500' :
+      isEbookMimeType(attachment.mediaType) ? 'bg-purple-500/20 text-purple-500' :
+      isDocumentMimeType(attachment.mediaType) ? 'bg-blue-500/20 text-blue-500' :
+      isArchiveMimeType(attachment.mediaType) ? 'bg-yellow-500/20 text-yellow-500' :
+      'bg-fluux-muted/20 text-fluux-muted'
+    }`}>
+      {isPdfMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+       isEbookMimeType(attachment.mediaType) ? <BookOpen className="size-5" /> :
+       isDocumentMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+       isArchiveMimeType(attachment.mediaType) ? <Archive className="size-5" /> :
+       <File className="size-5" />}
+    </div>
+  )
+
+  const info = (
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-medium text-fluux-text truncate">
+        {attachment.name || t('chat.file')}
+      </p>
+      <p className="text-xs text-fluux-muted">
+        {getFileTypeLabel(attachment.mediaType)}
+        {attachment.size && ` • ${formatBytes(attachment.size)}`}
+      </p>
+    </div>
+  )
+
+  const cardClass =
+    'flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file'
+
+  // Encrypted: the URL points at ciphertext, so a plain link would save
+  // unusable bytes. Decrypt on click and save the plaintext instead.
+  if (isEncrypted) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            await downloadAttachment(attachment, { errorMessage: t('common.downloadFailed') })
+          } finally {
+            setBusy(false)
+          }
+        }}
+        className={`${cardClass} w-full text-start disabled:opacity-70`}
+        aria-label={t('common.download')}
+        tabIndex={-1}
+      >
+        {iconWrap}
+        {info}
+        {busy
+          ? <Loader2 className="size-4 text-fluux-muted animate-spin flex-shrink-0" />
+          : <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />}
+      </button>
+    )
+  }
+
+  // Plaintext: keep the anchor so in-browser preview (target=_blank) still works.
   return (
     <a
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
+      className={cardClass}
       tabIndex={-1}
     >
-      {/* File type icon */}
-      <div className={`size-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-        isPdfMimeType(attachment.mediaType) ? 'bg-red-500/20 text-red-500' :
-        isEbookMimeType(attachment.mediaType) ? 'bg-purple-500/20 text-purple-500' :
-        isDocumentMimeType(attachment.mediaType) ? 'bg-blue-500/20 text-blue-500' :
-        isArchiveMimeType(attachment.mediaType) ? 'bg-yellow-500/20 text-yellow-500' :
-        'bg-fluux-muted/20 text-fluux-muted'
-      }`}>
-        {isPdfMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
-         isEbookMimeType(attachment.mediaType) ? <BookOpen className="size-5" /> :
-         isDocumentMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
-         isArchiveMimeType(attachment.mediaType) ? <Archive className="size-5" /> :
-         <File className="size-5" />}
-      </div>
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-fluux-text truncate">
-          {attachment.name || t('chat.file')}
-        </p>
-        <p className="text-xs text-fluux-muted">
-          {getFileTypeLabel(attachment.mediaType)}
-          {attachment.size && ` • ${formatBytes(attachment.size)}`}
-        </p>
-      </div>
-      {/* Download icon */}
+      {iconWrap}
+      {info}
       <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
     </a>
   )
