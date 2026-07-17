@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { chatStore } from './chatStore'
+import { chatStore, _resetChatArchiveSavesForTesting } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
@@ -99,6 +99,8 @@ describe('chatStore', () => {
     // rejecting/false-resolving saveMessages would leak it into every later
     // test. Re-assert the factory default here so ordering can't matter.
     vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
+    // A failed save poisons the per-conversation chain by design — drop it between tests.
+    _resetChatArchiveSavesForTesting()
   })
 
   afterEach(() => {
@@ -614,6 +616,33 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(cid, [island], { first: 'island-id' }, true, 'backward', true, true,
         { initialBefore: '' })
       expect(chatStore.getState().getConversationCoverage(cid)).toEqual({ bottomId: 'deep' })
+    })
+
+    it('a later page cannot advance the gap past an earlier page whose write failed (per-conversation save chain)', async () => {
+      // Codex r4 #4 (chat twin): overlapping merges must not let page N+1's
+      // cursor advance leap over a failed page N.
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-01T00:00:00Z').getTime(),
+        startId: 'cursor-0',
+      }]]) })
+
+      let resolveN!: (ok: boolean) => void
+      let resolveN1!: (ok: boolean) => void
+      vi.mocked(messageCache.saveMessages)
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN = r }))
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN1 = r }))
+
+      const mN = { ...createMessage(cid, 'n'), id: 'n', timestamp: new Date('2026-07-02T00:00:00Z') }
+      const mN1 = { ...createMessage(cid, 'n1'), id: 'n1', timestamp: new Date('2026-07-03T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [mN], { last: 'cursor-N' }, false, 'forward')
+      chatStore.getState().mergeMAMMessages(cid, [mN1], { last: 'cursor-N1' }, false, 'forward')
+
+      resolveN(false)
+      resolveN1(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      expect(chatStore.getState().conversationGaps.get(cid)?.startId).toBe('cursor-0')
     })
 
     it('backward CLEARANCE with zero new persistable messages deletes immediately', () => {

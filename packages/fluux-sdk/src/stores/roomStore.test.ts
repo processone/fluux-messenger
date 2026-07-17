@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { roomStore } from './roomStore'
+import { roomStore, _resetRoomArchiveSavesForTesting } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { getLocalPart } from '../core/jid'
@@ -119,6 +119,8 @@ describe('roomStore', () => {
     // rejecting/false-resolving saveRoomMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
     vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
+    // A failed save poisons the per-room chain by design — drop it between tests.
+    _resetRoomArchiveSavesForTesting()
   })
 
   describe('message eviction on deactivation (memory windowing)', () => {
@@ -2438,6 +2440,70 @@ describe('roomStore', () => {
       resolveSave(true)
       await vi.waitFor(() => {
         expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('c1')
+      })
+    })
+
+    it('a later page cannot advance the gap past an earlier page whose write failed (per-room save chain)', async () => {
+      // Codex r4 #4: room forward catch-up merges page by page, each with its
+      // own IndexedDB transaction. If page N's write fails but page N+1's
+      // succeeds, N+1's deferred advance must NOT apply — the cursor would
+      // leap over the never-stored page N.
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomGaps: new Map([[jid, {
+        start: new Date('2026-07-01T00:00:00Z').getTime(),
+        startId: 'cursor-0',
+      }]]) })
+
+      let resolveN!: (ok: boolean) => void
+      let resolveN1!: (ok: boolean) => void
+      vi.mocked(messageCache.saveRoomMessages)
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN = r }))
+        .mockReturnValueOnce(new Promise<boolean>((r) => { resolveN1 = r }))
+
+      const mN: RoomMessage = {
+        type: 'groupchat', id: 'n', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'n', timestamp: new Date('2026-07-02T00:00:00Z'), isOutgoing: false,
+      }
+      const mN1: RoomMessage = {
+        type: 'groupchat', id: 'n1', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'n1', timestamp: new Date('2026-07-03T00:00:00Z'), isOutgoing: false,
+      }
+      // Page N then page N+1, both in flight before either write settles.
+      roomStore.getState().mergeRoomMAMMessages(jid, [mN], { last: 'cursor-N' }, false, 'forward')
+      roomStore.getState().mergeRoomMAMMessages(jid, [mN1], { last: 'cursor-N1' }, false, 'forward')
+
+      resolveN(false)
+      resolveN1(true)
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+
+      // Frozen at the pre-walk cursor: page N was never stored.
+      expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('cursor-0')
+    })
+
+    it('sequential successful pages advance the gap fully; overlapping ones lag but never skip', async () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomGaps: new Map([[jid, {
+        start: new Date('2026-07-01T00:00:00Z').getTime(),
+        startId: 'cursor-0',
+      }]]) })
+
+      const mN: RoomMessage = {
+        type: 'groupchat', id: 'n', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'n', timestamp: new Date('2026-07-02T00:00:00Z'), isOutgoing: false,
+      }
+      const mN1: RoomMessage = {
+        type: 'groupchat', id: 'n1', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'n1', timestamp: new Date('2026-07-03T00:00:00Z'), isOutgoing: false,
+      }
+      // Real-world shape: the IDB write resolves before the next page's merge
+      // (network RTT >> IDB commit) → each advance lands.
+      roomStore.getState().mergeRoomMAMMessages(jid, [mN], { last: 'cursor-N' }, false, 'forward')
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('cursor-N')
+      })
+      roomStore.getState().mergeRoomMAMMessages(jid, [mN1], { last: 'cursor-N1' }, false, 'forward')
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('cursor-N1')
       })
     })
 
@@ -5442,6 +5508,8 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     // rejecting/false-resolving saveRoomMessages would leak it into every
     // later test. Re-assert the factory default here so ordering can't matter.
     vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
+    // A failed save poisons the per-room chain by design — drop it between tests.
+    _resetRoomArchiveSavesForTesting()
   })
 
   function delayedMsg(id: string, nick: string, ts: string): RoomMessage {
