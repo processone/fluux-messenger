@@ -59,9 +59,15 @@ vi.mock('@/stores/verifiedPeerKeysStore', () => ({
   },
 }))
 
+// `setForcedPlaintext` is hoisted to module scope (rather than recreated
+// inside the selector) to mirror real zustand action stability — actions
+// keep the same reference across renders, and `ContactProfileView` relies
+// on that stability to memoize the `identities` handle it hands to
+// `SecurityTab` (see the "memoizes" test below).
+const mockSetForcedPlaintext = vi.fn()
 vi.mock('@/stores/conversationPlaintextOverrideStore', () => ({
   useConversationPlaintextOverrideStore: (selector: (s: { setForcedPlaintext: ReturnType<typeof vi.fn> }) => unknown) => {
-    const state = { setForcedPlaintext: vi.fn() }
+    const state = { setForcedPlaintext: mockSetForcedPlaintext }
     return selector ? selector(state) : state
   },
 }))
@@ -142,6 +148,72 @@ describe('ContactProfileView', () => {
     fireEvent.click(screen.getByRole('button', { name: /chat.verifyPeer.confirmByFingerprint/ }))
 
     await waitFor(() => expect(setIdentityTrust).toHaveBeenCalledWith('bob@x', '111', 'verified'))
+  })
+
+  it('verifying an OpenPGP identity calls setIdentityTrust(peer, id, "verified") through the shared identities handle', async () => {
+    const setIdentityTrust = vi.fn().mockResolvedValue(undefined)
+    const openpgpPlugin = {
+      listPeerIdentities: vi.fn().mockResolvedValue([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'tofu' }]),
+      getOwnFingerprint: vi.fn().mockReturnValue('ccdd'),
+      setIdentityTrust,
+    }
+    mockEncryptionState.mockReturnValue({
+      kind: 'encrypted' as const,
+      fingerprint: 'ABCD1234',
+      trust: 'tofu' as const,
+    })
+    mockClient.mockReturnValue({
+      client: {
+        e2ee: {
+          getPlugin: (id: string) => (id === 'openpgp' ? openpgpPlugin : null),
+        },
+      },
+    })
+
+    render(<ContactProfileView {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Encrypted, not verified' }))
+    expect(await screen.findByTestId('omemo-verify-ABCD1234')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('omemo-verify-ABCD1234'))
+
+    await waitFor(() => expect(screen.getByText('chat.verifyPeer.dialogTitle')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /chat.verifyPeer.showFullFingerprints/ }))
+    fireEvent.click(screen.getByRole('button', { name: /chat.verifyPeer.confirmByFingerprint/ }))
+
+    await waitFor(() =>
+      expect(setIdentityTrust).toHaveBeenCalledWith('sofia@process-one.net', 'ABCD1234', 'verified'),
+    )
+  })
+
+  it('revoking an OpenPGP identity calls setIdentityTrust(peer, id, "untrusted") through the shared identities handle', async () => {
+    const setIdentityTrust = vi.fn().mockResolvedValue(undefined)
+    const openpgpPlugin = {
+      listPeerIdentities: vi.fn().mockResolvedValue([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'verified' }]),
+      getOwnFingerprint: vi.fn().mockReturnValue('ccdd'),
+      setIdentityTrust,
+    }
+    mockEncryptionState.mockReturnValue({
+      kind: 'encrypted' as const,
+      fingerprint: 'ABCD1234',
+      trust: 'verified' as const,
+    })
+    mockClient.mockReturnValue({
+      client: {
+        e2ee: {
+          getPlugin: (id: string) => (id === 'openpgp' ? openpgpPlugin : null),
+        },
+      },
+    })
+
+    render(<ContactProfileView {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verified and encrypted' }))
+    expect(await screen.findByTestId('omemo-revoke-ABCD1234')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('omemo-revoke-ABCD1234'))
+
+    await waitFor(() =>
+      expect(setIdentityTrust).toHaveBeenCalledWith('sofia@process-one.net', 'ABCD1234', 'untrusted'),
+    )
   })
 
   it('memoizes the omemo prop so it is not reconstructed on every parent re-render', async () => {

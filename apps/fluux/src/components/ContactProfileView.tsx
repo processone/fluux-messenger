@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import { type Contact, type PeerIdentity, type VCardInfo, useBlocking, useXMPPContext } from '@fluux/sdk'
@@ -54,7 +54,6 @@ export function ContactProfileView({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
-  const [showVerifyDialog, setShowVerifyDialog] = useState(false)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
   const [vcard, setVcard] = useState<VCardInfo | null>(null)
 
@@ -62,50 +61,85 @@ export function ContactProfileView({
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
   const { client } = useXMPPContext()
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
-  const setVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
   const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
-  const plugin = client.e2ee?.getPlugin('openpgp') as
-    | { getOwnFingerprint?: () => string | null }
-    | null
-    | undefined
-  const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
 
-  const omemoPlugin = client.e2ee?.getPlugin('omemo:2') as
-    | {
-        listPeerIdentities: (peer: string) => Promise<PeerIdentity[]>
-        getOwnFingerprint: () => Promise<string | null>
-        setIdentityTrust: (peer: string, id: string, decision: 'verified' | 'untrusted') => Promise<void>
-      }
-    | null
-    | undefined
-  const isOmemoConversation = encryptionState.kind === 'encrypted' && encryptionState.protocolId === 'omemo:2'
+  const handleDisableEncryption = useCallback(() => {
+    setForcedPlaintext(contact.jid, true)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: contact.jid }, true)
+  }, [client.e2ee, contact.jid, setForcedPlaintext])
+
+  // Resolve the plugin driving THIS conversation and, if it exposes the
+  // per-identity trait, build the shared identities handle. OMEMO and OpenPGP
+  // both flow through this now.
+  const activeProtocol =
+    encryptionState.kind === 'encrypted' ? (encryptionState.protocolId ?? 'openpgp') : null
+  const identityPlugin = activeProtocol
+    ? (client.e2ee?.getPlugin(activeProtocol) as {
+        listPeerIdentities?: (peer: string) => Promise<PeerIdentity[]>
+        getOwnFingerprint: () => string | null | Promise<string | null>
+        setIdentityTrust?: (peer: string, id: string, decision: 'verified' | 'untrusted') => Promise<void>
+      } | null | undefined)
+    : null
 
   const [verifyDevice, setVerifyDevice] = useState<PeerIdentity | null>(null)
-  const [omemoOwnFp, setOmemoOwnFp] = useState<string | null>(null)
-  const [omemoReloadKey, setOmemoReloadKey] = useState(0)
+  const [dialogOwnFp, setDialogOwnFp] = useState<string | null>(null)
+  const [identityReloadKey, setIdentityReloadKey] = useState(0)
 
   // Memoized so SecurityTab's fetch effect (which depends on the whole
-  // `omemo` object) doesn't refetch + flash its loading spinner on every
-  // unrelated parent re-render — only when the plugin, target peer, or an
-  // explicit reload actually changes.
-  const omemoProp = useMemo(() => {
-    if (!isOmemoConversation || !omemoPlugin?.listPeerIdentities) return null
+  // `identities` object) doesn't refetch + flash its loading spinner on
+  // every unrelated parent re-render — only when the plugin, target peer,
+  // or an explicit reload actually changes.
+  const identitiesProp = useMemo(() => {
+    if (!identityPlugin?.listPeerIdentities || !identityPlugin.setIdentityTrust) return null
+    const setTrust = identityPlugin.setIdentityTrust.bind(identityPlugin)
+    const isOmemo = activeProtocol === 'omemo:2'
     return {
-      listPeerIdentities: omemoPlugin.listPeerIdentities,
+      listPeerIdentities: identityPlugin.listPeerIdentities.bind(identityPlugin),
+      rowLabel: (id: PeerIdentity) =>
+        isOmemo
+          ? t('contacts.encryption.identity.deviceLabel', { id: id.id })
+          : t('contacts.encryption.identity.openpgpKeyLabel'),
       onVerifyDevice: (identity: PeerIdentity) => {
-        void omemoPlugin.getOwnFingerprint().then((fp) => {
-          setOmemoOwnFp(fp)
+        void Promise.resolve(identityPlugin.getOwnFingerprint()).then((fp) => {
+          setDialogOwnFp(fp)
           setVerifyDevice(identity)
         })
       },
       onRevokeDevice: async (identity: PeerIdentity) => {
-        await omemoPlugin.setIdentityTrust(contact.jid, identity.id, 'untrusted')
-        setOmemoReloadKey((n) => n + 1)
+        await setTrust(contact.jid, identity.id, 'untrusted')
+        setIdentityReloadKey((n) => n + 1)
       },
-      reloadKey: omemoReloadKey,
+      reloadKey: identityReloadKey,
+      // OpenPGP keeps its "disable for contact" affordance; OMEMO unchanged (unset).
+      showDisableButton: activeProtocol === 'openpgp',
+      onDisableEncryption: handleDisableEncryption,
     }
-  }, [isOmemoConversation, omemoPlugin, contact.jid, omemoReloadKey])
+  }, [identityPlugin, activeProtocol, contact.jid, identityReloadKey, t, handleDisableEncryption])
+
+  // Fallback verify handler for the bespoke single-fingerprint panel
+  // (rendered only when `identitiesProp` is null — i.e. the active plugin
+  // doesn't expose the per-identity trait). Routes through the same
+  // plugin-backed trust write as `onVerifyDevice` above when the plugin
+  // supports it.
+  const setIdentityTrust = identityPlugin?.setIdentityTrust?.bind(identityPlugin)
+  const handleVerify = () => {
+    if (encryptionState.kind !== 'encrypted') return
+    const syntheticIdentity: PeerIdentity = {
+      id: encryptionState.fingerprint,
+      fingerprint: encryptionState.fingerprint,
+      trust: encryptionState.trust,
+    }
+    if (identityPlugin?.getOwnFingerprint) {
+      void Promise.resolve(identityPlugin.getOwnFingerprint()).then((fp) => {
+        setDialogOwnFp(fp)
+        setVerifyDevice(syntheticIdentity)
+      })
+    } else {
+      setDialogOwnFp(null)
+      setVerifyDevice(syntheticIdentity)
+    }
+  }
 
   // Lazily query last activity for offline roster contacts
   useLastActivity(
@@ -122,11 +156,10 @@ export function ContactProfileView({
     setIsEditing(false)
     setError(null)
     setPendingConfirm(null)
-    setShowVerifyDialog(false)
     setPepNickname(null)
     setVcard(null)
     setVerifyDevice(null)
-    setOmemoOwnFp(null)
+    setDialogOwnFp(null)
   }, [contact.jid, contact.name])
 
   // PEP nickname fetch
@@ -190,11 +223,6 @@ export function ContactProfileView({
     setEditName(contact.name)
     setError(null)
     setIsEditing(false)
-  }
-
-  const handleDisableEncryption = () => {
-    setForcedPlaintext(contact.jid, true)
-    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: contact.jid }, true)
   }
 
   const handleEnableEncryption = () => {
@@ -301,8 +329,8 @@ export function ContactProfileView({
           <ContactSecurityDetail
             state={encryptionState}
             peerJid={contact.jid}
-            omemo={omemoProp}
-            onVerify={() => setShowVerifyDialog(true)}
+            identities={identitiesProp}
+            onVerify={handleVerify}
             onRequestRevoke={() => setPendingConfirm('revokeVerify')}
             onDisableEncryption={handleDisableEncryption}
             onEnableEncryption={handleEnableEncryption}
@@ -322,33 +350,18 @@ export function ContactProfileView({
         />
       )}
 
-      {showVerifyDialog && encryptionState.kind === 'encrypted' && ownJid && (
-        <VerifyPeerDialog
-          peerName={contact.name}
-          peerJid={contact.jid}
-          peerFingerprint={encryptionState.fingerprint}
-          ownJid={ownJid}
-          ownFingerprint={ownFingerprint}
-          onConfirm={(fingerprint) => {
-            setVerified(contact.jid, fingerprint)
-            setShowVerifyDialog(false)
-          }}
-          onCancel={() => setShowVerifyDialog(false)}
-        />
-      )}
-
-      {verifyDevice && omemoPlugin && ownJid && (
+      {verifyDevice && setIdentityTrust && ownJid && (
         <VerifyPeerDialog
           peerName={contact.name}
           peerJid={contact.jid}
           peerFingerprint={verifyDevice.fingerprint}
           ownJid={ownJid}
-          ownFingerprint={omemoOwnFp}
+          ownFingerprint={dialogOwnFp}
           alreadyVerified={verifyDevice.trust === 'verified'}
           onConfirm={() => {
-            void omemoPlugin.setIdentityTrust(contact.jid, verifyDevice.id, 'verified').then(() => {
+            void setIdentityTrust(contact.jid, verifyDevice.id, 'verified').then(() => {
               setVerifyDevice(null)
-              setOmemoReloadKey((n) => n + 1)
+              setIdentityReloadKey((n) => n + 1)
             })
           }}
           onCancel={() => setVerifyDevice(null)}

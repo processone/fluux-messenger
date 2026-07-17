@@ -15,27 +15,24 @@
 // These tests MUST pass against the current, unmodified code — they are a
 // regression net, not TDD-red-first.
 import { describe, it, expect, vi } from 'vitest'
-import { render, fireEvent, act } from '@testing-library/react'
+import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { ShieldCheck, Lock } from 'lucide-react'
+import type { PeerIdentity } from '@fluux/sdk'
 import { SecurityTab } from '@/components/contact-profile/tabs/SecurityTab'
 import { getGlance } from '@/components/contact-profile/cards/SecurityGlanceCard'
 import { ChatHeader } from '@/components/ChatHeader'
-import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import type { Contact } from '@fluux/sdk'
 
 const noop = () => {}
 const identity = (k: string) => k
 
-function renderTab(state: ConversationEncryptionState) {
-  return render(
-    <SecurityTab
-      state={state}
-      onVerify={noop}
-      onRequestRevoke={noop}
-      onDisableEncryption={noop}
-      onEnableEncryption={noop}
-    />,
-  )
+function makeOpenpgp(list: PeerIdentity[]) {
+  return {
+    listPeerIdentities: vi.fn().mockResolvedValue(list),
+    onVerifyDevice: vi.fn(),
+    onRevokeDevice: vi.fn().mockResolvedValue(undefined),
+    rowLabel: () => 'OpenPGP key',
+  }
 }
 
 // ChatHeader render harness — mirrors ChatHeader.test.tsx's mocks (same
@@ -90,37 +87,38 @@ function renderHeader(trust: 'verified' | 'tofu', firstSeen?: boolean) {
 }
 
 describe('OpenPGP trust rendering (characterization — must not change under Component-0)', () => {
-  it('SecurityTab: verified → ShieldCheck teal + Remove-verification button, no Verify button', () => {
-    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'verified' })
-    const shieldCheck = container.querySelector('.lucide-shield-check')
-    expect(shieldCheck).not.toBeNull()
-    expect(shieldCheck!.getAttribute('class')).toContain('text-fluux-encryption')
-    // `removeVerification` is not in the test i18n resource subset, so
-    // react-i18next falls back to rendering the raw key text — that's the
-    // current, pinned behavior (see test-setup.ts).
-    expect(container.textContent).toContain('contacts.encryption.removeVerification')
-    // `verifyButton` IS in the test i18n subset (translates to "Verify
-    // fingerprint"), but the verified state must not render the button at
-    // all — assert on the real translated string.
-    expect(container.textContent).not.toContain('Verify fingerprint')
+  it('SecurityTab (OpenPGP identity): verified → ShieldCheck teal badge + revoke', async () => {
+    const identities = makeOpenpgp([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'verified' }])
+    const { container } = render(
+      <SecurityTab
+        state={{ kind: 'encrypted', protocolId: 'openpgp', fingerprint: 'ABCD1234', trust: 'verified' }}
+        peerJid="alice@x"
+        identities={identities}
+        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop} onEnableEncryption={noop}
+      />,
+    )
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalledWith('alice@x'))
+    const badge = container.querySelector('span.inline-flex') as HTMLElement
+    expect(badge.className).toContain('text-fluux-encryption')
+    expect(container.querySelector('.lucide-shield-check')).not.toBeNull()
+    expect(container.querySelector('[data-testid="omemo-revoke-ABCD1234"]')).not.toBeNull()
   })
 
-  it('SecurityTab: tofu (not verified) → gray Shield + Verify button', () => {
-    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' })
-    const plainShield = container.querySelector('.lucide-shield')
-    expect(plainShield).not.toBeNull()
-    expect(plainShield!.getAttribute('class')).toContain('text-fluux-muted')
-    // `verifyButton` IS in the test i18n subset — assert the real translated string.
-    expect(container.textContent).toContain('Verify fingerprint')
-    expect(container.textContent).not.toContain('contacts.encryption.removeVerification')
-  })
-
-  it('SecurityTab: tofu (firstSeen) → gray Shield + Verify button, no Remove button', () => {
-    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu', firstSeen: true })
-    expect(container.querySelector('.lucide-shield')).not.toBeNull()
-    // `verifyButton` IS in the test i18n subset — assert the real translated string.
-    expect(container.textContent).toContain('Verify fingerprint')
-    expect(container.textContent).not.toContain('contacts.encryption.removeVerification')
+  it('SecurityTab (OpenPGP identity): tofu → plain Shield + verify button', async () => {
+    const identities = makeOpenpgp([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'tofu' }])
+    const { container } = render(
+      <SecurityTab
+        state={{ kind: 'encrypted', protocolId: 'openpgp', fingerprint: 'ABCD1234', trust: 'tofu' }}
+        peerJid="alice@x"
+        identities={identities}
+        onVerify={noop} onRequestRevoke={noop} onDisableEncryption={noop} onEnableEncryption={noop}
+      />,
+    )
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalledWith('alice@x'))
+    const badge = container.querySelector('span.inline-flex') as HTMLElement
+    expect(badge.className).toContain('text-fluux-muted')
+    expect(badge.querySelector('.lucide-shield-check')).toBeNull()
+    expect(container.querySelector('[data-testid="omemo-verify-ABCD1234"]')).not.toBeNull()
   })
 
   it('getGlance: verified → ShieldCheck/glanceVerified/success', () => {

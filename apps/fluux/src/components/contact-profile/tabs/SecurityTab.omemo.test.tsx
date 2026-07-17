@@ -9,17 +9,18 @@ function omemoState() {
   return { kind: 'encrypted' as const, protocolId: 'omemo:2' as const, fingerprint: '', trust: 'tofu' as const }
 }
 
-function makeOmemo(identities: PeerIdentity[]) {
+function makeOmemo(list: PeerIdentity[]) {
   return {
-    listPeerIdentities: vi.fn().mockResolvedValue(identities),
+    listPeerIdentities: vi.fn().mockResolvedValue(list),
     onVerifyDevice: vi.fn(),
     onRevokeDevice: vi.fn().mockResolvedValue(undefined),
+    rowLabel: (id: PeerIdentity) => `Device ${id.id}`,
   }
 }
 
 describe('SecurityTab — OMEMO per-identity list', () => {
   it('renders one row per device with fingerprint and a trust badge', async () => {
-    const omemo = makeOmemo([
+    const identities = makeOmemo([
       { id: '111', fingerprint: 'aabbccdd', trust: 'verified' },
       { id: '222', fingerprint: 'eeff0011', trust: 'tofu' },
     ])
@@ -27,35 +28,35 @@ describe('SecurityTab — OMEMO per-identity list', () => {
       <SecurityTab
         state={omemoState()}
         peerJid="bob@x"
-        omemo={omemo}
+        identities={identities}
         onVerify={noop}
         onRequestRevoke={noop}
         onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
-    await waitFor(() => expect(omemo.listPeerIdentities).toHaveBeenCalledWith('bob@x'))
-    // Device labels rendered (i18n returns the key in tests).
-    expect(await screen.findByText(/Device.*111|contacts\.encryption\.omemo\.deviceLabel/)).toBeTruthy()
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalledWith('bob@x'))
+    // Device labels rendered via rowLabel.
+    expect(await screen.findByText('Device 111')).toBeTruthy()
     // Verified badge label key present.
     expect(screen.getByText('contacts.encryption.trust.verified')).toBeTruthy()
     expect(screen.getByText('contacts.encryption.trust.tofu')).toBeTruthy()
   })
 
   it('a device with no key shows the verify action disabled', async () => {
-    const omemo = makeOmemo([{ id: '333', fingerprint: '', trust: 'unknown' }])
+    const identities = makeOmemo([{ id: '333', fingerprint: '', trust: 'unknown' }])
     const { container } = render(
       <SecurityTab
         state={omemoState()}
         peerJid="bob@x"
-        omemo={omemo}
+        identities={identities}
         onVerify={noop}
         onRequestRevoke={noop}
         onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
-    await waitFor(() => expect(omemo.listPeerIdentities).toHaveBeenCalled())
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalled())
     const verifyBtn = container.querySelector('button[data-testid="omemo-verify-333"]') as HTMLButtonElement | null
     expect(verifyBtn).not.toBeNull()
     expect(verifyBtn!.disabled).toBe(true)
@@ -63,47 +64,48 @@ describe('SecurityTab — OMEMO per-identity list', () => {
 
   it('clicking Verify on a keyed device calls onVerifyDevice with the identity', async () => {
     const identity: PeerIdentity = { id: '111', fingerprint: 'aabbccdd', trust: 'tofu' }
-    const omemo = makeOmemo([identity])
+    const identities = makeOmemo([identity])
     const { container } = render(
       <SecurityTab
         state={omemoState()}
         peerJid="bob@x"
-        omemo={omemo}
+        identities={identities}
         onVerify={noop}
         onRequestRevoke={noop}
         onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
-    await waitFor(() => expect(omemo.listPeerIdentities).toHaveBeenCalled())
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalled())
     const btn = container.querySelector('button[data-testid="omemo-verify-111"]') as HTMLButtonElement
     btn.click()
-    expect(omemo.onVerifyDevice).toHaveBeenCalledWith(identity)
+    expect(identities.onVerifyDevice).toHaveBeenCalledWith(identity)
   })
 
   it('shows an error + retry when listPeerIdentities rejects', async () => {
-    const omemo = {
+    const identities = {
       listPeerIdentities: vi.fn().mockRejectedValue(new Error('net')),
       onVerifyDevice: vi.fn(),
       onRevokeDevice: vi.fn(),
+      rowLabel: (id: PeerIdentity) => `Device ${id.id}`,
     }
     render(
       <SecurityTab
         state={omemoState()}
         peerJid="bob@x"
-        omemo={omemo}
+        identities={identities}
         onVerify={noop}
         onRequestRevoke={noop}
         onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
-    expect(await screen.findByText('contacts.encryption.omemo.loadError')).toBeTruthy()
-    expect(screen.getByText('contacts.encryption.omemo.retry')).toBeTruthy()
+    expect(await screen.findByText('contacts.encryption.identity.loadError')).toBeTruthy()
+    expect(screen.getByText('contacts.encryption.identity.retry')).toBeTruthy()
   })
 
   it('an untrusted device renders the danger cue (text-fluux-error + ShieldAlert), distinct from a calm tofu device', async () => {
-    const omemo = makeOmemo([
+    const identities = makeOmemo([
       { id: '444', fingerprint: 'ff112233', trust: 'untrusted' },
       { id: '555', fingerprint: 'aa998877', trust: 'tofu' },
     ])
@@ -111,14 +113,14 @@ describe('SecurityTab — OMEMO per-identity list', () => {
       <SecurityTab
         state={omemoState()}
         peerJid="bob@x"
-        omemo={omemo}
+        identities={identities}
         onVerify={noop}
         onRequestRevoke={noop}
         onDisableEncryption={noop}
         onEnableEncryption={noop}
       />,
     )
-    await waitFor(() => expect(omemo.listPeerIdentities).toHaveBeenCalled())
+    await waitFor(() => expect(identities.listPeerIdentities).toHaveBeenCalled())
 
     const untrustedVerifyBtn = container.querySelector(
       '[data-testid="omemo-verify-444"]',

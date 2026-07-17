@@ -13,7 +13,7 @@ interface ContactSecurityDetailProps {
   onEnableEncryption: () => void
   onClose: () => void
   peerJid?: string
-  omemo?: React.ComponentProps<typeof SecurityTab>['omemo']
+  identities?: React.ComponentProps<typeof SecurityTab>['identities']
 }
 
 export function ContactSecurityDetail({
@@ -24,7 +24,7 @@ export function ContactSecurityDetail({
   onEnableEncryption,
   onClose,
   peerJid,
-  omemo,
+  identities,
 }: ContactSecurityDetailProps) {
   const { t } = useTranslation()
 
@@ -52,7 +52,7 @@ export function ContactSecurityDetail({
           onDisableEncryption={onDisableEncryption}
           onEnableEncryption={onEnableEncryption}
           peerJid={peerJid}
-          omemo={omemo}
+          identities={identities}
         />
       </div>
     </ModalOverlay>
