@@ -45,7 +45,11 @@ Grounding also documented three *pre-existing* races in this path (see §6) that
 ## Design Decisions
 
 1. **Plugin owns the data; the sync mirror lives in the plugin.** A new `verifiedKeys.ts` module + an in-memory `Map` hydrated at init, exposing sync reads, sync-notifying writes, and async persistence.
-2. **The seal blob, its init flag, and the sync-version counter move too.** They are plugin-internal (no app consumers) and belong with the data. On desktop this relocates them from `localStorage` to the keychain-backed store — a **security upgrade**, since the seal exists precisely to detect `localStorage` tampering and is now itself much harder to forge.
+2. **The seal blob, its init flag, and the sync-version counter move too.** They are plugin-internal (no app consumers) and belong with the data.
+
+   **What the desktop backend actually is** (the name `TauriKeychainStorageBackend` misleads): it is *not* per-key keychain traffic. Per `apps/fluux/src-tauri/src/e2ee_store.rs`, values are sealed with **AES-256-GCM** into a per-account file `<base_dir>/e2ee-store/<sanitized-jid>.json` (`key → base64(nonce||ct||tag)`); the OS keychain holds only a **single 32-byte per-account master key**, read "at most once per account per `Store` instance and cached in memory — this keeps the hot path off the keychain." On hosts with no keychain it falls back to a `0600` master-key file, surfaced via a `fallback_used` flag; values are **always** AEAD-sealed, never cleartext.
+
+   So the move is `localStorage` (plaintext, trivially tamperable) → **AEAD-sealed at-rest file with a keychain-held key**. That is a genuine **security upgrade** — the seal exists precisely to detect `localStorage` tampering, and it is now itself sealed. On a keychain-absent host the guarantee degrades honestly to file-permission + AEAD rather than keychain-backed, which the store already reports.
 3. **Pins and key-change alerts stay app-side for now.** They have their own reactive app consumers (`useConversationEncryptionState.ts:176-178`, `:158-163`). The seal continues to snapshot them via `hostStores`. This is *not* incoherent: the seal is the detector, and hardening the detector while the detected data stays in `localStorage` strictly improves tamper detection. Moving them is a recorded follow-up.
 4. **Per-account isolation comes from the backend.** Both `TauriKeychainStorageBackend` and `IndexedDBStorageBackend` are constructed with `manager.getAccountJid()`, so each account has its own backend instance; `createPluginStorage` then namespaces per plugin id. The plugin does **not** re-derive scoping. This invariant is documented and test-pinned (it is how OMEMO already works).
 5. **Writes are awaited at the UI boundary.** The verify/revoke handlers await the plugin's write before showing the success toast, so a failed persist can no longer report success (`ChatView.tsx:347-355`, `:473-478` today toast synchronously).
@@ -72,6 +76,8 @@ New `packages/openpgp-plugin/src/verifiedKeys.ts`:
 loadAll(storage): Promise<Record<string,string>>     // hydrate; defensive against corrupt blobs
 persist(storage, map): Promise<void>
 ```
+
+**I/O profile (justifies hydrate-once).** `e2ee_store.rs`'s `get` and `put` each `read_map` — read + parse the *entire* per-account JSON file — and `put` additionally re-serializes and rewrites it (`:321-360`). Reads must therefore not be on a hot path. The design below hydrates **once** at init into the in-memory mirror and never reads the store again for the session, so the only store traffic is one full-file rewrite per user-initiated verify/revoke — negligible for a deliberate human action. This makes the sync mirror doubly justified: it is required by the three sync readers (Finding 2) *and* it is the correct shape for this backend's I/O cost.
 
 `OpenPGPPluginBase` gains a `VerifiedKeysCache` (in-memory `Map<bareJid, fpHex>`) with:
 - `isVerified(jid, fp): boolean` — sync; `fingerprintsEqual` comparison (preserves the Sequoia-UPPERCASE ↔ openpgp.js-lowercase normalization the current store does at `verifiedPeerKeysStore.ts:121-127`).
@@ -141,6 +147,12 @@ Migrate the three reactive consumers (`useConversationEncryptionState.ts:148`, `
 - M2c-2 (protocol picker) and M2c-3 (own-device management).
 - The deferred i18n dead-key sweep (`contacts.encryption.removeVerification*`, `contacts.encryption.omemo.*`).
 
+## Resolved review question — keychain traffic
+
+*Raised in review:* "we do not want to push too many read/write operations to the keychain — maybe the keychain only contains a key that allows to encrypt/decrypt the local storage?"
+
+**That is already the implemented architecture** (see decision 2): one 32-byte per-account master key in the keychain, read at most once per `Store` instance and cached in memory; all bulk data in an AES-256-GCM-sealed per-account file. No design change needed — only the spec's original "moves onto the keychain" wording was wrong, and is corrected above. The remaining cost is **file** I/O (full read+parse per op, full rewrite per `put`), which the hydrate-once mirror already confines to one rewrite per user-initiated verify/revoke.
+
 ## Open Question for Review
 
-B0 changes where desktop E2EE plugin storage lives for **all** plugins (OMEMO already uses the keychain backend; OpenPGP moves onto it). Confirm this is acceptable rather than, say, giving OpenPGP its own backend instance — the shared-instance choice relies on `createPluginStorage`'s per-plugin-id namespacing, which grounding verified is already in place.
+B0 puts desktop OpenPGP on the **same shared per-account backend instance** OMEMO already uses, relying on `createPluginStorage`'s per-plugin-id namespacing (`e2ee/openpgp` vs `e2ee/omemo:2`), which grounding verified is in place. Note this means both plugins share one sealed account file, and `e2ee_store.rs` serializes concurrent same-account writes. Confirm that is acceptable versus giving OpenPGP its own backend instance (separate file, no write contention with OMEMO's heavier traffic).
