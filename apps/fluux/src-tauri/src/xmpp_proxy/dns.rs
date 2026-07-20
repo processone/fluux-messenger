@@ -39,9 +39,35 @@ pub struct XmppEndpoint {
 impl XmppEndpoint {
     /// Returns the hostname to use for TLS SNI and certificate verification.
     /// Uses the XMPP domain if available (SRV resolution), otherwise the host.
+    ///
+    /// This is the U-label (Unicode) form for internationalized domains; callers
+    /// pass it through [`to_ascii_host`] at the DNS and TLS boundaries.
     pub fn tls_name(&self) -> &str {
         self.domain.as_deref().unwrap_or(&self.host)
     }
+}
+
+/// Convert a hostname to its IDNA A-label ("punycode") form for DNS resolution
+/// and TLS.
+///
+/// `rustls::pki_types::ServerName` and most system resolvers accept ASCII names
+/// only, so an internationalized domain such as `ツ.com` must be converted to
+/// `xn--bdk.com` before either — otherwise the handshake fails with the opaque
+/// "invalid dns name" (issue #1042). Certificates for IDNs likewise carry the
+/// A-label in their `dNSName` SAN, so this is also the form to verify against.
+///
+/// Already-ASCII hostnames, existing A-labels, and IP literals pass through
+/// unchanged (uppercase is lowercased, which DNS and certificate matching treat
+/// as equivalent). The non-strict IDNA profile is deliberate: it tolerates
+/// hostnames that are common in practice but not valid IDNA, such as
+/// `my_host.local`, which must keep working.
+///
+/// Deliberately NOT applied to the XMPP domainpart on the wire: RFC 7622 §3.2.1
+/// requires domainpart slots (JIDs, the stream header `to=`) to carry U-labels
+/// and forbids A-labels. Only the DNS and TLS layers get the ASCII form.
+pub fn to_ascii_host(host: &str) -> Result<String, String> {
+    idna::domain_to_ascii(host)
+        .map_err(|e| format!("Invalid internationalized domain name '{}': {}", host, e))
 }
 
 /// Result of parsing the server input string.
@@ -541,6 +567,59 @@ mod tests {
                 Some("diebesban.de".to_string())
             )
         );
+    }
+
+    // --- to_ascii_host() tests ---
+
+    /// The bug from #1042: a Unicode domain reaches rustls, which rejects it with
+    /// "invalid dns name". `to_ascii_host` must yield the A-label instead.
+    #[test]
+    fn test_to_ascii_host_converts_unicode_to_a_label() {
+        assert_eq!(to_ascii_host("ツ.com").unwrap(), "xn--bdk.com");
+        assert_eq!(to_ascii_host("xmpp.ツ.com").unwrap(), "xmpp.xn--bdk.com");
+    }
+
+    /// Already-ASCII names must survive untouched, so the conversion can sit on
+    /// the hot path for every connection without changing existing behaviour.
+    #[test]
+    fn test_to_ascii_host_passes_through_ascii() {
+        assert_eq!(to_ascii_host("example.com").unwrap(), "example.com");
+        assert_eq!(
+            to_ascii_host("chat.process-one.net").unwrap(),
+            "chat.process-one.net"
+        );
+        assert_eq!(to_ascii_host("localhost").unwrap(), "localhost");
+    }
+
+    /// A-labels are already the target form; converting twice must be a no-op.
+    #[test]
+    fn test_to_ascii_host_is_idempotent_on_a_labels() {
+        assert_eq!(to_ascii_host("xn--bdk.com").unwrap(), "xn--bdk.com");
+    }
+
+    /// IP literals go through the same code path (`ParsedServer::Direct` keeps
+    /// them as `host`), so they must not be mangled or rejected. IPv6 arrives
+    /// already debracketed.
+    #[test]
+    fn test_to_ascii_host_preserves_ip_literals() {
+        assert_eq!(to_ascii_host("127.0.0.1").unwrap(), "127.0.0.1");
+        assert_eq!(to_ascii_host("::1").unwrap(), "::1");
+    }
+
+    /// Regression guard: hostnames that connect today must keep connecting.
+    /// Underscores and trailing dots are not valid IDNA but are common in the
+    /// wild, and `domain_to_ascii` (non-strict) lets them through.
+    #[test]
+    fn test_to_ascii_host_accepts_non_idna_hostnames() {
+        assert_eq!(to_ascii_host("my_host.local").unwrap(), "my_host.local");
+        assert_eq!(to_ascii_host("example.com.").unwrap(), "example.com.");
+    }
+
+    /// DNS and certificate matching are case-insensitive, so lowercasing (which
+    /// IDNA does as part of mapping) is safe and expected.
+    #[test]
+    fn test_to_ascii_host_lowercases() {
+        assert_eq!(to_ascii_host("EXAMPLE.com").unwrap(), "example.com");
     }
 
     // --- XmppEndpoint::tls_name() tests ---

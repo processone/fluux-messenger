@@ -21,6 +21,8 @@ use std::time::Duration;
 
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use tokio::net::{lookup_host, TcpStream};
+
+use super::dns::to_ascii_host;
 use tracing::info;
 
 /// RFC 8305 "Connection Attempt Delay": how long to wait before starting the
@@ -164,7 +166,11 @@ pub async fn connect_tcp(
     attempt_delay: Duration,
     overall_timeout: Duration,
 ) -> Result<TcpStream, String> {
-    let addrs: Vec<SocketAddr> = lookup_host((host, port))
+    // Resolve the A-label: `lookup_host` goes through the system resolver, and
+    // getaddrinfo does not reliably handle Unicode hostnames across platforms.
+    // Errors keep reporting the U-label the user actually typed.
+    let ascii_host = to_ascii_host(host)?;
+    let addrs: Vec<SocketAddr> = lookup_host((ascii_host.as_str(), port))
         .await
         .map_err(|e| format!("DNS resolution failed for {}:{}: {}", host, port, e))?
         .collect();
