@@ -128,11 +128,18 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   if (!anyEnabled) return
 
   try {
-    // --- OpenPGP (unchanged behavior) ---
+    // --- OpenPGP (web unchanged; desktop now persists via its own sealed store) ---
     if (isOpenpgpEnabled() && !manager.getPlugin('openpgp')) {
       if (isTauri()) {
-        // Desktop: Rust crypto via Tauri IPC. Key is managed by the OS keychain;
-        // no user passphrase needed for day-to-day use.
+        // Desktop OpenPGP gets its OWN sealed store (`<jid>__openpgp.json`).
+        // Without this its ctx.storage would be the default in-memory backend
+        // and would not survive a restart. A dedicated store also keeps its
+        // write lifecycle independent of OMEMO's much heavier traffic.
+        const { TauriKeychainStorageBackend } = await import('./TauriKeychainStorageBackend')
+        client.setE2EEStorageBackend(
+          new TauriKeychainStorageBackend(manager.getAccountJid(), undefined, 'openpgp'),
+          'openpgp',
+        )
         const { invoke } = await import('@tauri-apps/api/core')
         await manager.register(new SequoiaPgpPlugin({ invoke, hostStores: openpgpHostStores, fileIO: openpgpFileIO }))
       } else {
@@ -148,13 +155,11 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
     }
 
     // --- OMEMO (desktop-only; sealed keychain store) ---
-    // Interop note: both the OpenPGP-web branch above and this branch call
-    // `client.setE2EEStorageBackend`. That's safe today because they never
-    // run on the same platform at once — OpenPGP-web uses IndexedDB and is
-    // web-only, OMEMO is Tauri-only, and SequoiaPgpPlugin (desktop OpenPGP)
-    // owns its own Rust-side store and ignores `ctx.storage` entirely. If
-    // OpenPGP ever moves onto the generic storage backend on desktop too,
-    // this needs a shared multi-namespace backend instead of last-write-wins.
+    // Each plugin resolves its own storage backend independently: desktop
+    // OpenPGP above registers a per-plugin override keyed by 'openpgp' and
+    // keeps writing to `<jid>__openpgp.json`. This call sets the DEFAULT
+    // backend (no pluginId), so OMEMO keeps writing to the legacy
+    // `<jid>.json` exactly as before — the two sealed files are independent.
     if (isOmemoEnabled() && isTauri() && !manager.getPlugin('omemo:2')) {
       const { TauriKeychainStorageBackend } = await import('./TauriKeychainStorageBackend')
       client.setE2EEStorageBackend(new TauriKeychainStorageBackend(manager.getAccountJid()))

@@ -24,7 +24,11 @@ function fromB64(s: string): Uint8Array {
  */
 export class TauriKeychainStorageBackend implements StorageBackend {
   private invokePromise: Promise<InvokeFn> | null = null
-  constructor(private readonly accountJid: string, private readonly injectedInvoke?: InvokeFn) {}
+  constructor(
+    private readonly accountJid: string,
+    private readonly injectedInvoke?: InvokeFn,
+    private readonly storeName?: string,
+  ) {}
 
   private async invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
     if (this.injectedInvoke) return this.injectedInvoke<T>(cmd, args)
@@ -33,17 +37,26 @@ export class TauriKeychainStorageBackend implements StorageBackend {
     return invoke<T>(cmd, args)
   }
 
+  /** Command args shared by every call: account, plus `store` when this
+   *  backend owns a dedicated sealed file. Omitting `store` resolves to the
+   *  legacy `<jid>.json` on the Rust side. */
+  private baseArgs(): Record<string, unknown> {
+    return this.storeName === undefined
+      ? { account: this.accountJid }
+      : { account: this.accountJid, store: this.storeName }
+  }
+
   async get(key: string): Promise<Uint8Array | null> {
-    const b64 = await this.invoke<string | null>('e2ee_store_get', { account: this.accountJid, key })
+    const b64 = await this.invoke<string | null>('e2ee_store_get', { ...this.baseArgs(), key })
     return b64 == null ? null : fromB64(b64)
   }
   async put(key: string, value: Uint8Array): Promise<void> {
-    await this.invoke<void>('e2ee_store_put', { account: this.accountJid, key, valueB64: toB64(value) })
+    await this.invoke<void>('e2ee_store_put', { ...this.baseArgs(), key, valueB64: toB64(value) })
   }
   async delete(key: string): Promise<void> {
-    await this.invoke<void>('e2ee_store_delete', { account: this.accountJid, key })
+    await this.invoke<void>('e2ee_store_delete', { ...this.baseArgs(), key })
   }
   async list(prefix: string): Promise<string[]> {
-    return this.invoke<string[]>('e2ee_store_list', { account: this.accountJid, prefix })
+    return this.invoke<string[]>('e2ee_store_list', { ...this.baseArgs(), prefix })
   }
 }

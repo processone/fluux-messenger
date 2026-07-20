@@ -47,4 +47,67 @@ describe('TauriKeychainStorageBackend', () => {
     await b.put('trust/1', new Uint8Array([2]))
     expect((await b.list('session/')).sort()).toEqual(['session/1'])
   })
+
+  describe('store name routing', () => {
+    it('omits the store arg when no storeName is given (legacy file)', async () => {
+      const invoke = vi.fn().mockResolvedValue(null)
+      const b = new TauriKeychainStorageBackend('a@x', invoke)
+      await b.get('k')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_get', { account: 'a@x', key: 'k' })
+    })
+
+    it('passes the store arg when a storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue(null)
+      const b = new TauriKeychainStorageBackend('a@x', invoke, 'openpgp')
+      await b.get('k')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_get', { account: 'a@x', key: 'k', store: 'openpgp' })
+    })
+
+    it('put omits the store arg when no storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue(undefined)
+      const b = new TauriKeychainStorageBackend('a@x', invoke)
+      await b.put('k', new Uint8Array([1]))
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_put', { account: 'a@x', key: 'k', valueB64: expect.any(String) })
+    })
+
+    it('put passes the store arg when a storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue(undefined)
+      const b = new TauriKeychainStorageBackend('a@x', invoke, 'openpgp')
+      await b.put('k', new Uint8Array([1]))
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_put', {
+        account: 'a@x',
+        key: 'k',
+        valueB64: expect.any(String),
+        store: 'openpgp',
+      })
+    })
+
+    it('delete omits the store arg when no storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue(undefined)
+      const b = new TauriKeychainStorageBackend('a@x', invoke)
+      await b.delete('k')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_delete', { account: 'a@x', key: 'k' })
+    })
+
+    it('delete passes the store arg when a storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue(undefined)
+      const b = new TauriKeychainStorageBackend('a@x', invoke, 'openpgp')
+      await b.delete('k')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_delete', { account: 'a@x', key: 'k', store: 'openpgp' })
+    })
+
+    it('list omits the store arg when no storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue([])
+      const b = new TauriKeychainStorageBackend('a@x', invoke)
+      await b.list('prefix/')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_list', { account: 'a@x', prefix: 'prefix/' })
+    })
+
+    it('list passes the store arg when a storeName is given', async () => {
+      const invoke = vi.fn().mockResolvedValue([])
+      const b = new TauriKeychainStorageBackend('a@x', invoke, 'openpgp')
+      await b.list('prefix/')
+      expect(invoke).toHaveBeenCalledWith('e2ee_store_list', { account: 'a@x', prefix: 'prefix/', store: 'openpgp' })
+    })
+  })
 })

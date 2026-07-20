@@ -9,6 +9,7 @@ import { E2EEPluginError } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { registerE2EEPlugins } from './registerPlugins'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { TauriKeychainStorageBackend } from './TauriKeychainStorageBackend'
 
 // Force the desktop path: no dynamic IndexedDB/openpgp.js imports, and the
 // SequoiaPgpPlugin constructor is stubbed below.
@@ -32,6 +33,7 @@ function makeClient(register: () => Promise<void>): XMPPClient {
       getAccountJid: () => 'me@example.com',
       setForcedPlaintext: vi.fn(),
     },
+    setE2EEStorageBackend: vi.fn(),
   } as unknown as XMPPClient
 }
 
@@ -94,5 +96,27 @@ describe('registerE2EEPlugins failure surfacing', () => {
     const state = useEncryptionSettingsStore.getState()
     expect(state.registrationError).toBeNull()
     expect(state.pluginRegisteredAt).toBe(1)
+  })
+})
+
+describe('registerE2EEPlugins desktop OpenPGP storage backend', () => {
+  beforeEach(() => {
+    useEncryptionSettingsStore.setState({
+      openpgpEnabled: true,
+      omemoEnabled: false,
+      pluginRegisteredAt: 0,
+      registrationError: null,
+    })
+  })
+
+  it('routes desktop OpenPGP to its own sealed store, registered under the "openpgp" plugin id', async () => {
+    const client = makeClient(() => Promise.resolve())
+
+    await registerE2EEPlugins(client)
+
+    expect(client.setE2EEStorageBackend).toHaveBeenCalledWith(
+      expect.any(TauriKeychainStorageBackend),
+      'openpgp',
+    )
   })
 })
