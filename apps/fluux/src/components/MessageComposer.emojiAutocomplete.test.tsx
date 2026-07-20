@@ -227,6 +227,26 @@ describe('MessageComposer emoji overlay coordination', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  it('completes a full shortcode as soon as the closing colon is typed', async () => {
+    renderComposer()
+    const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+
+    // Typing the open shortcode is what pulls the emoji data into memory.
+    typeEmojiToken()
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    fireEvent.change(textarea, {
+      target: { value: ':heart:', selectionStart: 7, selectionEnd: 7 },
+    })
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue('❤️')
+    })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   it('does not reuse the previous draft caret when the parent swaps the value', async () => {
     render(<SwappableDraftComposer />)
     const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement

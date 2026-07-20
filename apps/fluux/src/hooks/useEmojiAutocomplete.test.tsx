@@ -47,6 +47,7 @@ describe('useEmojiAutocomplete', () => {
     it('parses a trigger into a stable position-and-token identity', () => {
       expect(matchEmojiAutocompleteTrigger('hello :Hea', 10)).toEqual({
         query: 'hea',
+        closed: false,
         triggerIndex: 6,
         token: 'Hea',
         identity: JSON.stringify([6, 'Hea']),
@@ -56,6 +57,7 @@ describe('useEmojiAutocomplete', () => {
     it('uses the caret rather than the end of the message to locate the trigger', () => {
       expect(matchEmojiAutocompleteTrigger('say :hea and continue', 8)).toEqual({
         query: 'hea',
+        closed: false,
         triggerIndex: 4,
         token: 'hea',
         identity: JSON.stringify([4, 'hea']),
@@ -127,6 +129,29 @@ describe('useEmojiAutocomplete', () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':thumbs up', 10))
       expect(result.current.state.isActive).toBe(false)
     })
+
+    it('reads a closing colon as part of the shortcode rather than the query', () => {
+      expect(matchEmojiAutocompleteTrigger('say :+1:', 8)).toMatchObject({
+        query: '+1',
+        closed: true,
+        triggerIndex: 4,
+        token: '+1:',
+      })
+    })
+
+    it('marks an unterminated shortcode as open', () => {
+      expect(matchEmojiAutocompleteTrigger('say :+1', 7)).toMatchObject({
+        query: '+1',
+        closed: false,
+      })
+    })
+
+    // A closed shortcode carries no emoticon ambiguity — nobody types `:v:` as a
+    // smiley — so the two-character floor only applies while it is still open.
+    it('accepts a single-character query once the shortcode is closed', () => {
+      expect(matchEmojiAutocompleteTrigger(':v:', 3)).toMatchObject({ query: 'v', closed: true })
+      expect(matchEmojiAutocompleteTrigger(':v', 2)).toBeNull()
+    })
   })
 
   describe('matching and sorting', () => {
@@ -191,6 +216,45 @@ describe('useEmojiAutocomplete', () => {
       ])
     })
 
+    // Ties used to fall back to `id.localeCompare`, which put :-1: 👎 ahead of
+    // :+1: 👍 for "thumbs" purely because "-" sorts before "+".
+    it('breaks a keyword tie on how much of the keyword the query covers', () => {
+      const matches = matchEmojiAutocomplete({
+        emojis: {
+          '-1': {
+            name: 'Thumbs Down',
+            skins: [{ native: '👎' }],
+            keywords: ['-1', 'thumbsdown', 'no', 'dislike'],
+          },
+          '+1': {
+            name: 'Thumbs Up',
+            skins: [{ native: '👍' }],
+            keywords: ['+1', 'thumbsup', 'yes', 'good'],
+          },
+        },
+      }, 'thumbs')
+
+      expect(matches.map((match) => match.id)).toEqual(['+1', '-1'])
+    })
+
+    it('breaks a shortcode-prefix tie on the shortest matching shortcode', () => {
+      const matches = matchEmojiAutocomplete({
+        emojis: {
+          headphones: { name: 'Headphone', skins: [{ native: '🎧' }], keywords: [] },
+          headstone: { name: 'Headstone', skins: [{ native: '🪦' }], keywords: [] },
+          heart_decoration: { name: 'Heart Decoration', skins: [{ native: '💟' }], keywords: [] },
+          heart: { name: 'Red Heart', skins: [{ native: '❤️' }], keywords: [] },
+        },
+      }, 'hea')
+
+      expect(matches.map((match) => match.id)).toEqual([
+        'heart',
+        'headstone',
+        'headphones',
+        'heart_decoration',
+      ])
+    })
+
     it('normalizes case and canonically equivalent Unicode before matching', () => {
       const matches = matchEmojiAutocomplete({
         emojis: {
@@ -230,6 +294,41 @@ describe('useEmojiAutocomplete', () => {
       const ids = result.current.state.matches.map(m => m.id)
       expect(ids).toContain('+1')
       expect(ids).toContain('heart')
+    })
+  })
+
+  describe('closed shortcode completion', () => {
+    /** Completion only resolves once the emoji data is in memory. */
+    async function renderLoadedHook(text: string, cursor: number) {
+      const { result } = renderHook(
+        ({ text: t, cursor: c }) => useEmojiAutocomplete(t, c),
+        { initialProps: { text, cursor } }
+      )
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+      return result
+    }
+
+    it('resolves an exact shortcode once the closing colon is typed', async () => {
+      const result = await renderLoadedHook('love :hea', 9)
+
+      expect(result.current.completeClosedShortcode('love :heart:', 12)).toEqual({
+        newText: 'love ❤️',
+        newCursorPosition: 5 + '❤️'.length,
+      })
+    })
+
+    it('leaves a closed shortcode alone when nothing matches it exactly', async () => {
+      const result = await renderLoadedHook('love :hea', 9)
+
+      expect(result.current.completeClosedShortcode('love :hea:', 10)).toBeNull()
+    })
+
+    it('ignores a shortcode that is still open', async () => {
+      const result = await renderLoadedHook('love :hea', 9)
+
+      expect(result.current.completeClosedShortcode('love :heart', 11)).toBeNull()
     })
   })
 

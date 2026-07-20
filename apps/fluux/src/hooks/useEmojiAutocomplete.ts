@@ -26,9 +26,16 @@ export interface EmojiAutocompleteData {
 
 export interface EmojiAutocompleteTrigger {
   query: string
+  /** Whether the shortcode was terminated by a closing colon, as in `:+1:`. */
+  closed: boolean
   triggerIndex: number
   token: string
   identity: string
+}
+
+export interface EmojiCompletion {
+  newText: string
+  newCursorPosition: number
 }
 
 const MAX_EMOJI_MATCHES = 8
@@ -65,10 +72,19 @@ export function matchEmojiAutocompleteTrigger(
   if (colonIndex === -1) return null
 
   const token = beforeCursor.slice(colonIndex + 1)
-  if (token.length < MIN_EMOJI_QUERY_LENGTH || /\s/.test(token)) return null
+  if (/\s/.test(token)) return null
+
+  // A trailing colon terminates the shortcode — it is punctuation, not query
+  // text — so `:+1:` searches for "+1" the same way `:+1` does.
+  const closed = token.endsWith(':')
+  const query = closed ? token.slice(0, -1) : token
+  // The two-character floor only guards the open form, where `:D` and `:p` are
+  // emoticons rather than shortcode prefixes. Nobody types `:v:` as a smiley.
+  if (query.length < (closed ? 1 : MIN_EMOJI_QUERY_LENGTH)) return null
 
   return {
-    query: normalizeEmojiSearchText(token),
+    query: normalizeEmojiSearchText(query),
+    closed,
     triggerIndex: colonIndex,
     token,
     identity: JSON.stringify([colonIndex, token]),
@@ -110,10 +126,29 @@ function useEmojiAutocompleteData(enabled: boolean): EmojiAutocompleteData | nul
   return emojiData
 }
 
+/** Length of the shortest keyword the query is a prefix of, or null when none match. */
+function shortestKeywordPrefixLength(
+  keywords: string[] | undefined,
+  normalizedQuery: string,
+): number | null {
+  let shortest: number | null = null
+
+  for (const keyword of keywords ?? []) {
+    const normalized = normalizeEmojiSearchText(keyword)
+    if (!normalized.startsWith(normalizedQuery)) continue
+    if (shortest === null || normalized.length < shortest) shortest = normalized.length
+  }
+
+  return shortest
+}
+
 /**
  * Match and rank emoji suggestions independently of the source data's insertion order.
  * Exact shortcode matches come first, followed by shortcode prefixes, keyword prefixes,
- * and name matches. The result limit is applied only after all candidates are ranked.
+ * and name matches. Within a tier the query covering more of the matched text wins, so
+ * "thumbs" prefers `thumbsup` over `thumbsdown` and "hea" prefers `heart` over
+ * `heart_decoration`, rather than falling back to how the shortcodes happen to sort.
+ * The result limit is applied only after all candidates are ranked.
  */
 export function matchEmojiAutocomplete(
   data: EmojiAutocompleteData,
@@ -123,39 +158,62 @@ export function matchEmojiAutocomplete(
   const normalizedQuery = normalizeEmojiSearchText(query)
   if (!normalizedQuery || limit <= 0 || !data.emojis) return []
 
-  const rankedMatches: Array<EmojiMatch & { rank: number }> = []
+  const rankedMatches: Array<EmojiMatch & { rank: number; matchLength: number }> = []
 
   for (const [id, emoji] of Object.entries(data.emojis)) {
     const native = emoji.skins?.[0]?.native
     if (!native) continue
 
     const normalizedId = normalizeEmojiSearchText(id)
-    const isExactIdMatch = normalizedId === normalizedQuery
-    const isIdPrefixMatch = normalizedId.startsWith(normalizedQuery)
-    const isKeywordPrefixMatch = emoji.keywords?.some((keyword) =>
-      normalizeEmojiSearchText(keyword).startsWith(normalizedQuery)
-    ) ?? false
-    const isNameMatch = normalizeEmojiSearchText(emoji.name).includes(normalizedQuery)
+    let rank = -1
+    let matchLength = 0
 
-    const rank = isExactIdMatch
-      ? 0
-      : isIdPrefixMatch
-        ? 1
-        : isKeywordPrefixMatch
-          ? 2
-          : isNameMatch
-            ? 3
-            : -1
+    if (normalizedId === normalizedQuery) {
+      rank = 0
+      matchLength = normalizedId.length
+    } else if (normalizedId.startsWith(normalizedQuery)) {
+      rank = 1
+      matchLength = normalizedId.length
+    } else {
+      const keywordLength = shortestKeywordPrefixLength(emoji.keywords, normalizedQuery)
+      const normalizedName = normalizeEmojiSearchText(emoji.name)
+
+      if (keywordLength !== null) {
+        rank = 2
+        matchLength = keywordLength
+      } else if (normalizedName.includes(normalizedQuery)) {
+        rank = 3
+        matchLength = normalizedName.length
+      }
+    }
 
     if (rank >= 0) {
-      rankedMatches.push({ id, name: emoji.name, native, rank })
+      rankedMatches.push({ id, name: emoji.name, native, rank, matchLength })
     }
   }
 
   return rankedMatches
-    .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+    .sort((a, b) => a.rank - b.rank || a.matchLength - b.matchLength || a.id.localeCompare(b.id))
     .slice(0, limit)
     .map(({ id, name, native }) => ({ id, name, native }))
+}
+
+/** The emoji whose shortcode is exactly `query`, used to resolve a closed `:name:`. */
+export function findExactEmojiShortcode(
+  data: EmojiAutocompleteData,
+  query: string,
+): EmojiMatch | null {
+  const normalizedQuery = normalizeEmojiSearchText(query)
+  if (!normalizedQuery || !data.emojis) return null
+
+  for (const [id, emoji] of Object.entries(data.emojis)) {
+    const native = emoji.skins?.[0]?.native
+    if (native && normalizeEmojiSearchText(id) === normalizedQuery) {
+      return { id, name: emoji.name, native }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -170,7 +228,8 @@ export function useEmojiAutocomplete(
   cursorPosition: number | null,
 ): {
   state: EmojiAutocompleteState
-  selectMatch: (index: number) => { newText: string; newCursorPosition: number }
+  selectMatch: (index: number) => EmojiCompletion
+  completeClosedShortcode: (text: string, cursorPosition: number) => EmojiCompletion | null
   moveSelection: (direction: 'up' | 'down') => void
   dismiss: () => void
 } {
@@ -219,6 +278,31 @@ export function useEmojiAutocomplete(
     return { newText, newCursorPosition }
   }
 
+  /**
+   * Resolve `:name:` the moment the closing colon lands, the way every other
+   * chat client does — no menu, no extra keystroke. Takes the incoming text and
+   * caret rather than reading state so the caller can apply it during the same
+   * change event that produced them.
+   */
+  const completeClosedShortcode = (
+    nextText: string,
+    nextCursorPosition: number,
+  ): EmojiCompletion | null => {
+    if (!emojiData) return null
+
+    const nextTrigger = matchEmojiAutocompleteTrigger(nextText, nextCursorPosition)
+    if (!nextTrigger?.closed) return null
+
+    const match = findExactEmojiShortcode(emojiData, nextTrigger.query)
+    if (!match) return null
+
+    return {
+      newText:
+        nextText.slice(0, nextTrigger.triggerIndex) + match.native + nextText.slice(nextCursorPosition),
+      newCursorPosition: nextTrigger.triggerIndex + match.native.length,
+    }
+  }
+
   const moveSelection = (direction: 'up' | 'down') => {
     if (matches.length === 0) return
 
@@ -245,6 +329,7 @@ export function useEmojiAutocomplete(
       matches,
     },
     selectMatch,
+    completeClosedShortcode,
     moveSelection,
     dismiss,
   }

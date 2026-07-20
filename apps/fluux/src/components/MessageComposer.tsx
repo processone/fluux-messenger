@@ -498,8 +498,20 @@ export function MessageComposer({
     // *warning*. Arm the interaction grace so warnings stay quiet while typing;
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
-    setText(e.target.value)
-    setCaret({ text: e.target.value, position: e.target.selectionStart })
+    // A completed `:name:` resolves to the emoji straight away, so the closing
+    // colon never lands in the message. Gated like the menu: an overlay that
+    // owns the composer keeps its own completion semantics.
+    const closedShortcode = hasExternalOverlay
+      ? null
+      : emojiAutocomplete.completeClosedShortcode(e.target.value, e.target.selectionStart)
+    if (closedShortcode) {
+      setText(closedShortcode.newText)
+      setCaret({ text: closedShortcode.newText, position: closedShortcode.newCursorPosition })
+      restoreTextareaCursor(inputRef, closedShortcode.newCursorPosition)
+    } else {
+      setText(e.target.value)
+      setCaret({ text: e.target.value, position: e.target.selectionStart })
+    }
     // inputClass is derived from `text` (see declaration), so it updates here
     // automatically — no manual sync needed.
 
