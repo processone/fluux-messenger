@@ -14,6 +14,66 @@ export interface EmojiAutocompleteState {
   matches: EmojiMatch[]
 }
 
+interface EmojiAutocompleteDataEntry {
+  name: string
+  keywords?: string[]
+  skins?: Array<{ native?: string }>
+}
+
+interface EmojiAutocompleteData {
+  emojis?: Record<string, EmojiAutocompleteDataEntry>
+}
+
+const MAX_EMOJI_MATCHES = 8
+
+/**
+ * Match and rank emoji suggestions independently of the source data's insertion order.
+ * Exact shortcode matches come first, followed by shortcode prefixes, keyword prefixes,
+ * and name matches. The result limit is applied only after all candidates are ranked.
+ */
+export function matchEmojiAutocomplete(
+  data: EmojiAutocompleteData,
+  query: string,
+  limit = MAX_EMOJI_MATCHES,
+): EmojiMatch[] {
+  const normalizedQuery = query.toLowerCase()
+  if (!normalizedQuery || limit <= 0 || !data.emojis) return []
+
+  const rankedMatches: Array<EmojiMatch & { rank: number }> = []
+
+  for (const [id, emoji] of Object.entries(data.emojis)) {
+    const native = emoji.skins?.[0]?.native
+    if (!native) continue
+
+    const normalizedId = id.toLowerCase()
+    const isExactIdMatch = normalizedId === normalizedQuery
+    const isIdPrefixMatch = normalizedId.startsWith(normalizedQuery)
+    const isKeywordPrefixMatch = emoji.keywords?.some((keyword) =>
+      keyword.toLowerCase().startsWith(normalizedQuery)
+    ) ?? false
+    const isNameMatch = emoji.name.toLowerCase().includes(normalizedQuery)
+
+    const rank = isExactIdMatch
+      ? 0
+      : isIdPrefixMatch
+        ? 1
+        : isKeywordPrefixMatch
+          ? 2
+          : isNameMatch
+            ? 3
+            : -1
+
+    if (rank >= 0) {
+      rankedMatches.push({ id, name: emoji.name, native, rank })
+    }
+  }
+
+  return rankedMatches
+    .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id))
+    .slice(0, limit)
+    .map(({ id, name, native }) => ({ id, name, native }))
+}
+
 /**
  * Hook for inline emoji autocomplete in the message composer.
  *
@@ -33,7 +93,7 @@ export function useEmojiAutocomplete(
   const [dismissed, setDismissed] = useState(false)
   const dismissedAtTriggerRef = useRef<number>(-1)
   const currentTriggerRef = useRef<number>(-1)
-  const [emojiData, setEmojiData] = useState<any>(null)
+  const [emojiData, setEmojiData] = useState<EmojiAutocompleteData | null>(null)
 
   // Detect : trigger and extract query
   const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
@@ -99,32 +159,7 @@ export function useEmojiAutocomplete(
   const matches = useMemo((): EmojiMatch[] => {
     if (!isActive || !emojiData || !query) return []
 
-    const list: EmojiMatch[] = []
-    const emojis = emojiData.emojis
-    if (!emojis) return []
-
-    for (const [id, emojiObj] of Object.entries<any>(emojis)) {
-      const native = emojiObj.skins?.[0]?.native
-      if (!native) continue
-
-      const isIdMatch = id.startsWith(query)
-      const isKeywordMatch = emojiObj.keywords?.some((kw: string) => kw.startsWith(query))
-      const isNameMatch = emojiObj.name.toLowerCase().includes(query)
-
-      if (isIdMatch || isKeywordMatch || isNameMatch) {
-        list.push({ id, name: emojiObj.name, native })
-      }
-      if (list.length >= 8) break // Limit to 8 matches for UX clean look
-    }
-
-    // Sort matches: prioritize exact shortcode match, then prefix matches, then alphabetize
-    return list.sort((a, b) => {
-      if (a.id === query) return -1
-      if (b.id === query) return 1
-      if (a.id.startsWith(query) && !b.id.startsWith(query)) return -1
-      if (!a.id.startsWith(query) && b.id.startsWith(query)) return 1
-      return a.id.localeCompare(b.id)
-    })
+    return matchEmojiAutocomplete(emojiData, query)
   }, [isActive, query, emojiData])
 
   // Reset selection index when matches change

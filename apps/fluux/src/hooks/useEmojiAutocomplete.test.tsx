@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useEmojiAutocomplete } from './useEmojiAutocomplete'
+import { matchEmojiAutocomplete, useEmojiAutocomplete } from './useEmojiAutocomplete'
 
 // Mock the emoji database with a smaller subset of test emojis
 vi.mock('@emoji-mart/data', () => ({
@@ -70,6 +70,67 @@ describe('useEmojiAutocomplete', () => {
   })
 
   describe('matching and sorting', () => {
+    it('keeps an exact shortcode first when more than eight broader matches precede it', () => {
+      const broadMatches = Object.fromEntries(
+        Array.from({ length: 8 }, (_, index) => [
+          `broad_${index}`,
+          {
+            name: `Heart symbol ${index}`,
+            skins: [{ native: `symbol-${index}` }],
+            keywords: [],
+          },
+        ])
+      )
+
+      const matches = matchEmojiAutocomplete({
+        emojis: {
+          ...broadMatches,
+          heart: {
+            name: 'Red Heart',
+            skins: [{ native: '❤️' }],
+            keywords: ['love'],
+          },
+        },
+      }, 'heart')
+
+      expect(matches).toHaveLength(8)
+      expect(matches[0]).toEqual({ id: 'heart', name: 'Red Heart', native: '❤️' })
+    })
+
+    it('ranks shortcode prefixes ahead of keyword and name matches', () => {
+      const matches = matchEmojiAutocomplete({
+        emojis: {
+          named: {
+            name: 'Heart symbol',
+            skins: [{ native: '🫀' }],
+            keywords: [],
+          },
+          keyword: {
+            name: 'Love Letter',
+            skins: [{ native: '💌' }],
+            keywords: ['heartfelt'],
+          },
+          heart_eyes: {
+            name: 'Smiling Face with Heart-Eyes',
+            skins: [{ native: '😍' }],
+            keywords: ['love'],
+          },
+          heart: {
+            name: 'Red Heart',
+            skins: [{ native: '❤️' }],
+            keywords: ['love'],
+          },
+        },
+      }, 'heart')
+
+      expect(matches.map((match) => match.id)).toEqual([
+        'heart',
+        'heart_eyes',
+        'keyword',
+        'named',
+      ])
+    })
+
     it('should match and load mock emojis on active trigger', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':hea', 4))
       
