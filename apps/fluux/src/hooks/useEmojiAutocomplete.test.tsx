@@ -33,12 +33,32 @@ vi.mock('@emoji-mart/data', () => ({
 
 describe('useEmojiAutocomplete', () => {
   describe('trigger detection', () => {
+    it.each([
+      [':Hea', 4, 0],
+      ['hello :Hea', 10, 6],
+    ])('finds a trigger at a supported boundary in %j', (text, cursor, triggerIndex) => {
+      expect(matchEmojiAutocompleteTrigger(text, cursor)).toMatchObject({
+        query: 'hea',
+        triggerIndex,
+        token: 'Hea',
+      })
+    })
+
     it('parses a trigger into a stable position-and-token identity', () => {
       expect(matchEmojiAutocompleteTrigger('hello :Hea', 10)).toEqual({
         query: 'hea',
         triggerIndex: 6,
         token: 'Hea',
         identity: JSON.stringify([6, 'Hea']),
+      })
+    })
+
+    it('uses the caret rather than the end of the message to locate the trigger', () => {
+      expect(matchEmojiAutocompleteTrigger('say :hea and continue', 8)).toEqual({
+        query: 'hea',
+        triggerIndex: 4,
+        token: 'hea',
+        identity: JSON.stringify([4, 'hea']),
       })
     })
 
@@ -145,6 +165,20 @@ describe('useEmojiAutocomplete', () => {
       ])
     })
 
+    it('normalizes case and canonically equivalent Unicode before matching', () => {
+      const matches = matchEmojiAutocomplete({
+        emojis: {
+          'cafe\u0301': {
+            name: 'Cafe\u0301',
+            skins: [{ native: '☕' }],
+            keywords: ['COFFEE'],
+          },
+        },
+      }, 'CAFÉ')
+
+      expect(matches).toEqual([{ id: 'cafe\u0301', name: 'Cafe\u0301', native: '☕' }])
+    })
+
     it('should match and load mock emojis on active trigger', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete(':hea', 4))
       
@@ -192,6 +226,23 @@ describe('useEmojiAutocomplete', () => {
       const { newText, newCursorPosition } = result.current.selectMatch(0)
       expect(newText).toBe('check this ❤️ and continue')
       expect(newCursorPosition).toBe(13) // trigger index (11) + ❤️ length (2)
+    })
+
+    it('leaves text and cursor unchanged for an invalid selection', async () => {
+      const { result } = renderHook(() => useEmojiAutocomplete('say :hea later', 8))
+
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+
+      expect(result.current.selectMatch(-1)).toEqual({
+        newText: 'say :hea later',
+        newCursorPosition: 8,
+      })
+      expect(result.current.selectMatch(99)).toEqual({
+        newText: 'say :hea later',
+        newCursorPosition: 8,
+      })
     })
 
     it('should allow cycle keyboard navigation', async () => {
@@ -259,6 +310,30 @@ describe('useEmojiAutocomplete', () => {
       })
 
       rerender({ text: 'x :hea', cursor: 6 })
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+    })
+
+    it('reactivates a dismissed token after the trigger disappears', async () => {
+      const { result, rerender } = renderHook(
+        ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
+        { initialProps: { text: ':hea', cursor: 4 } }
+      )
+
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+
+      act(() => {
+        result.current.dismiss()
+      })
+      rerender({ text: '', cursor: 0 })
+      await waitFor(() => {
+        expect(result.current.state.query).toBe('')
+      })
+
+      rerender({ text: ':hea', cursor: 4 })
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
       })

@@ -33,6 +33,10 @@ export interface EmojiAutocompleteTrigger {
 
 const MAX_EMOJI_MATCHES = 8
 
+function normalizeEmojiSearchText(value: string): string {
+  return value.normalize('NFKC').toLowerCase()
+}
+
 /** Pure: find the emoji shortcode token immediately before the caret. */
 export function matchEmojiAutocompleteTrigger(
   text: string,
@@ -58,7 +62,7 @@ export function matchEmojiAutocompleteTrigger(
   if (!token || /\s/.test(token)) return null
 
   return {
-    query: token.toLowerCase(),
+    query: normalizeEmojiSearchText(token),
     triggerIndex: colonIndex,
     token,
     identity: JSON.stringify([colonIndex, token]),
@@ -110,7 +114,7 @@ export function matchEmojiAutocomplete(
   query: string,
   limit = MAX_EMOJI_MATCHES,
 ): EmojiMatch[] {
-  const normalizedQuery = query.toLowerCase()
+  const normalizedQuery = normalizeEmojiSearchText(query)
   if (!normalizedQuery || limit <= 0 || !data.emojis) return []
 
   const rankedMatches: Array<EmojiMatch & { rank: number }> = []
@@ -119,13 +123,13 @@ export function matchEmojiAutocomplete(
     const native = emoji.skins?.[0]?.native
     if (!native) continue
 
-    const normalizedId = id.toLowerCase()
+    const normalizedId = normalizeEmojiSearchText(id)
     const isExactIdMatch = normalizedId === normalizedQuery
     const isIdPrefixMatch = normalizedId.startsWith(normalizedQuery)
     const isKeywordPrefixMatch = emoji.keywords?.some((keyword) =>
-      keyword.toLowerCase().startsWith(normalizedQuery)
+      normalizeEmojiSearchText(keyword).startsWith(normalizedQuery)
     ) ?? false
-    const isNameMatch = emoji.name.toLowerCase().includes(normalizedQuery)
+    const isNameMatch = normalizeEmojiSearchText(emoji.name).includes(normalizedQuery)
 
     const rank = isExactIdMatch
       ? 0
@@ -185,6 +189,11 @@ export function useEmojiAutocomplete(
   // A changed token represents a new completion interaction, even at the same position.
   useEffect(() => {
     setSelectedIndex(0)
+    setDismissedTriggerIdentity((dismissedIdentity) =>
+      dismissedIdentity !== null && dismissedIdentity !== triggerIdentity
+        ? null
+        : dismissedIdentity
+    )
   }, [triggerIdentity])
 
   const selectMatch = (index: number): { newText: string; newCursorPosition: number } => {

@@ -46,6 +46,30 @@ function ControlledComposer() {
   )
 }
 
+function CustomRoomInputComposer() {
+  const [value, setValue] = useState('')
+  return (
+    <MessageComposer
+      placeholder="Message room"
+      onSend={vi.fn().mockResolvedValue(true)}
+      value={value}
+      onValueChange={setValue}
+      renderInput={({ mergedRef, value: inputValue, onChange, onKeyDown, onSelect, placeholder, ariaProps }) => (
+        <textarea
+          ref={mergedRef}
+          value={inputValue}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          onSelect={onSelect}
+          placeholder={placeholder}
+          data-testid="custom-room-input"
+          {...ariaProps}
+        />
+      )}
+    />
+  )
+}
+
 function typeEmojiToken() {
   const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
   fireEvent.change(textarea, {
@@ -98,9 +122,15 @@ describe('MessageComposer emoji overlay coordination', () => {
     expect(textarea).toHaveAttribute('aria-activedescendant', nextOption.id)
     expect(option).toHaveAttribute('aria-selected', 'false')
     expect(nextOption).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(textarea, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(textarea)
+    expect(textarea).toHaveAttribute('aria-activedescendant', option.id)
+    expect(option).toHaveAttribute('aria-selected', 'true')
+    expect(nextOption).toHaveAttribute('aria-selected', 'false')
   })
 
-  it('completes from the keyboard and restores the cursor in uncontrolled mode', async () => {
+  it('completes from the keyboard through the uncontrolled direct-chat input path', async () => {
     renderComposer()
     typeEmojiToken()
 
@@ -127,6 +157,29 @@ describe('MessageComposer emoji overlay coordination', () => {
     const option = await screen.findByRole('option', { name: ':heart: Red Heart' })
     fireEvent.mouseDown(option)
     fireEvent.click(option)
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue('❤️')
+      expect(textarea.selectionStart).toBe('❤️'.length)
+      expect(document.activeElement).toBe(textarea)
+    })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('passes autocomplete behavior through the custom room input and completes with Tab', async () => {
+    render(<CustomRoomInputComposer />)
+
+    const textarea = screen.getByTestId('custom-room-input') as HTMLTextAreaElement
+    fireEvent.change(textarea, {
+      target: { value: ':hea', selectionStart: 4, selectionEnd: 4 },
+    })
+
+    const option = await screen.findByRole('option', { name: ':heart: Red Heart' })
+    expect(textarea).toHaveAttribute('role', 'combobox')
+    expect(textarea).toHaveAttribute('aria-controls', screen.getByRole('listbox').id)
+    expect(textarea).toHaveAttribute('aria-activedescendant', option.id)
+
+    fireEvent.keyDown(textarea, { key: 'Tab' })
 
     await waitFor(() => {
       expect(textarea).toHaveValue('❤️')
