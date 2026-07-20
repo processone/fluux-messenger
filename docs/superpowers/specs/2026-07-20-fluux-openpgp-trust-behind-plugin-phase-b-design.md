@@ -60,6 +60,8 @@ Four sub-phases, each independently reviewable and green.
 
 ### B0 — Prerequisite: persistent, per-plugin desktop storage for OpenPGP
 
+> **Split out — B0 has its own implementation plan:** `docs/superpowers/plans/2026-07-20-fluux-e2ee-per-plugin-storage-backend.md`. It spans three layers (SDK public API, Rust IPC, app wiring) and ships on its own merit, independently of B1–B3. The sections below remain the design of record for it.
+
 Two defects to fix together: OpenPGP has no persistent backend on desktop (Finding 1), and there is no way to give it its own store. Decision (review): **OpenPGP gets its own sealed file**, routed via new SDK per-plugin backend support, so its lifecycle is independent of OMEMO's and the two never contend on writes.
 
 **B0.1 — SDK: per-plugin storage backends.**
