@@ -20,6 +20,20 @@ export const WELL_KNOWN_MUC_SERVERS = [
 export type WellKnownMucServer = typeof WELL_KNOWN_MUC_SERVERS[number]
 
 /**
+ * Presence priority advertised by this client (RFC 6121 §4.7.2.3, range -128..127).
+ *
+ * Sent on both broadcast presence and directed MUC presence — the two must match.
+ * MUC services arbitrate between a user's sessions sharing one nick by priority:
+ * ejabberd's `mod_muc_room:find_jid_by_nick/2` elects the strictly-highest-priority
+ * session as the nick's "representative" (tie → most recent joiner) and broadcasts
+ * only that session's presence, including the user's own status-110 self-echo.
+ * Directed presence without a <priority> reads as 0, so omitting it here makes this
+ * client lose that election to any later-joining client permanently — its away/dnd
+ * would be stored server-side but never broadcast to the room.
+ */
+export const PRESENCE_PRIORITY = '50'
+
+/**
  * Admin commands to hide from the command list in the sidebar.
  *
  * These commands are excluded because they are redundant with dedicated UI

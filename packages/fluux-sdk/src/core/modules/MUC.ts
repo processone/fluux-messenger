@@ -6,6 +6,7 @@ import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import { parseBookmarkItem } from '../bookmarkItem'
+import { PRESENCE_PRIORITY } from '../config'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -773,6 +774,7 @@ export class MUC extends BaseModule {
     if (currentStatus) {
       presenceChildren.push(xml('status', {}, currentStatus))
     }
+    presenceChildren.push(xml('priority', {}, PRESENCE_PRIORITY))
 
     const presence = xml(
       'presence',
@@ -885,6 +887,7 @@ export class MUC extends BaseModule {
       if (showValue) children.push(xml('show', {}, showValue))
     }
     if (currentStatus) children.push(xml('status', {}, currentStatus))
+    children.push(xml('priority', {}, PRESENCE_PRIORITY))
 
     const presence = xml('presence', { to: `${roomJid}/${trimmed}` }, ...children)
     logInfo(`Changing nick in ${roomJid} to ${trimmed}`)
@@ -945,6 +948,7 @@ export class MUC extends BaseModule {
       if (status) {
         children.push(xml('status', {}, status))
       }
+      children.push(xml('priority', {}, PRESENCE_PRIORITY))
 
       const presence = xml(
         'presence',
