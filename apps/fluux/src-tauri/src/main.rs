@@ -2385,8 +2385,8 @@ mod tests {
             state.set(!v);
             v
         };
-        let (p1, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
-        let (p2, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
+        let (p1, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, probe);
+        let (p2, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, probe);
         assert!(!p1.display_active);
         assert!(p2.display_active);
     }
