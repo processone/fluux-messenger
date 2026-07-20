@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 
 export interface EmojiMatch {
   id: string
@@ -14,17 +14,91 @@ export interface EmojiAutocompleteState {
   matches: EmojiMatch[]
 }
 
-interface EmojiAutocompleteDataEntry {
+export interface EmojiAutocompleteDataEntry {
   name: string
   keywords?: string[]
   skins?: Array<{ native?: string }>
 }
 
-interface EmojiAutocompleteData {
+export interface EmojiAutocompleteData {
   emojis?: Record<string, EmojiAutocompleteDataEntry>
 }
 
+export interface EmojiAutocompleteTrigger {
+  query: string
+  triggerIndex: number
+  token: string
+  identity: string
+}
+
 const MAX_EMOJI_MATCHES = 8
+
+/** Pure: find the emoji shortcode token immediately before the caret. */
+export function matchEmojiAutocompleteTrigger(
+  text: string,
+  cursorPosition: number,
+): EmojiAutocompleteTrigger | null {
+  const beforeCursor = text.slice(0, cursorPosition)
+  let colonIndex = -1
+
+  for (let index = beforeCursor.length - 1; index >= 0; index--) {
+    if (beforeCursor[index] === ':') {
+      if (index === 0 || /\s/.test(beforeCursor[index - 1])) {
+        colonIndex = index
+        break
+      }
+    }
+
+    if (/\s/.test(beforeCursor[index])) break
+  }
+
+  if (colonIndex === -1) return null
+
+  const token = beforeCursor.slice(colonIndex + 1)
+  if (!token || /\s/.test(token)) return null
+
+  return {
+    query: token.toLowerCase(),
+    triggerIndex: colonIndex,
+    token,
+    identity: JSON.stringify([colonIndex, token]),
+  }
+}
+
+type EmojiAutocompleteDataModule = { default: EmojiAutocompleteData }
+type EmojiAutocompleteDataLoader = () => Promise<EmojiAutocompleteDataModule>
+
+/** Load emoji data without leaking import failures into the composer or console. */
+export async function loadEmojiAutocompleteData(
+  loader: EmojiAutocompleteDataLoader = () => import('@emoji-mart/data'),
+): Promise<EmojiAutocompleteData | null> {
+  try {
+    const module = await loader()
+    return module.default
+  } catch {
+    return null
+  }
+}
+
+/** Keep asynchronous data loading independent from trigger parsing and result matching. */
+function useEmojiAutocompleteData(enabled: boolean): EmojiAutocompleteData | null {
+  const [emojiData, setEmojiData] = useState<EmojiAutocompleteData | null>(null)
+
+  useEffect(() => {
+    if (!enabled || emojiData) return
+
+    let cancelled = false
+    void loadEmojiAutocompleteData().then((data) => {
+      if (!cancelled && data) setEmojiData(data)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, emojiData])
+
+  return emojiData
+}
 
 /**
  * Match and rank emoji suggestions independently of the source data's insertion order.
@@ -90,88 +164,28 @@ export function useEmojiAutocomplete(
   dismiss: () => void
 } {
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [dismissed, setDismissed] = useState(false)
-  const dismissedAtTriggerRef = useRef<number>(-1)
-  const currentTriggerRef = useRef<number>(-1)
-  const [emojiData, setEmojiData] = useState<EmojiAutocompleteData | null>(null)
-
-  // Detect : trigger and extract query
-  const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
-    // Look for : before cursor
-    const beforeCursor = text.slice(0, cursorPosition)
-
-    // Find the last : that could be an emoji trigger
-    // Must be at start or preceded by whitespace
-    let colonIndex = -1
-    for (let i = beforeCursor.length - 1; i >= 0; i--) {
-      if (beforeCursor[i] === ':') {
-        // Check if at start or preceded by whitespace
-        if (i === 0 || /\s/.test(beforeCursor[i - 1])) {
-          colonIndex = i
-          break
-        }
-      }
-      // Stop if we hit whitespace (emoji shortcode must not contain spaces)
-      if (/\s/.test(beforeCursor[i])) {
-        break
-      }
-    }
-
-    if (colonIndex === -1) {
-      return { isActive: false, query: '', triggerIndex: -1 }
-    }
-
-    // Extract query (text between : and cursor)
-    const queryText = beforeCursor.slice(colonIndex + 1)
-
-    // Query must be non-empty (to avoid triggering on a bare colon ":")
-    // and must not contain whitespace
-    if (!queryText || /\s/.test(queryText)) {
-      return { isActive: false, query: '', triggerIndex: -1 }
-    }
-
-    // Store current trigger position for dismiss tracking
-    currentTriggerRef.current = colonIndex
-
-    // If it's the exact same trigger index we dismissed, remain inactive
-    if (dismissed && colonIndex === dismissedAtTriggerRef.current) {
-      return { isActive: false, query: queryText.toLowerCase(), triggerIndex: colonIndex }
-    }
-
-    return { isActive: true, query: queryText.toLowerCase(), triggerIndex: colonIndex }
-  }
-
-  const { isActive, query, triggerIndex } = detectTrigger()
-
-  // Dynamically load emoji data when trigger becomes active
-  // Keeps initial bundle clean from ~150KB of emoji data
-  useEffect(() => {
-    if (isActive && !emojiData) {
-      import('@emoji-mart/data')
-        .then((m) => {
-          setEmojiData(m.default)
-        })
-        .catch(console.error)
-    }
-  }, [isActive, emojiData])
+  const [dismissedTriggerIdentity, setDismissedTriggerIdentity] = useState<string | null>(null)
+  const trigger = useMemo(
+    () => matchEmojiAutocompleteTrigger(text, cursorPosition),
+    [text, cursorPosition],
+  )
+  const triggerIdentity = trigger?.identity ?? null
+  const isTriggerActive = trigger !== null && triggerIdentity !== dismissedTriggerIdentity
+  const query = trigger?.query ?? ''
+  const triggerIndex = trigger?.triggerIndex ?? -1
+  const emojiData = useEmojiAutocompleteData(isTriggerActive)
 
   // Build matches list
   const matches = useMemo((): EmojiMatch[] => {
-    if (!isActive || !emojiData || !query) return []
+    if (!isTriggerActive || !emojiData || !query) return []
 
     return matchEmojiAutocomplete(emojiData, query)
-  }, [isActive, query, emojiData])
+  }, [isTriggerActive, query, emojiData])
 
-  // Reset selection index when matches change
+  // A changed token represents a new completion interaction, even at the same position.
   useEffect(() => {
     setSelectedIndex(0)
-  }, [matches.length])
-
-  // Reset dismissed state when the trigger disappears or changes to a different position
-  if (dismissed && (triggerIndex === -1 || (triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current))) {
-    setDismissed(false)
-    dismissedAtTriggerRef.current = -1
-  }
+  }, [triggerIdentity])
 
   const selectMatch = (index: number): { newText: string; newCursorPosition: number } => {
     const match = matches[index]
@@ -202,14 +216,13 @@ export function useEmojiAutocomplete(
   }
 
   const dismiss = () => {
-    dismissedAtTriggerRef.current = currentTriggerRef.current
-    setDismissed(true)
+    setDismissedTriggerIdentity(triggerIdentity)
     setSelectedIndex(0)
   }
 
   return {
     state: {
-      isActive: isActive && matches.length > 0,
+      isActive: isTriggerActive && matches.length > 0,
       query,
       triggerIndex,
       selectedIndex,

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { matchEmojiAutocomplete, useEmojiAutocomplete } from './useEmojiAutocomplete'
+import {
+  loadEmojiAutocompleteData,
+  matchEmojiAutocomplete,
+  matchEmojiAutocompleteTrigger,
+  useEmojiAutocomplete,
+} from './useEmojiAutocomplete'
 
 // Mock the emoji database with a smaller subset of test emojis
 vi.mock('@emoji-mart/data', () => ({
@@ -28,6 +33,15 @@ vi.mock('@emoji-mart/data', () => ({
 
 describe('useEmojiAutocomplete', () => {
   describe('trigger detection', () => {
+    it('parses a trigger into a stable position-and-token identity', () => {
+      expect(matchEmojiAutocompleteTrigger('hello :Hea', 10)).toEqual({
+        query: 'hea',
+        triggerIndex: 6,
+        token: 'Hea',
+        identity: JSON.stringify([6, 'Hea']),
+      })
+    })
+
     it('should not be active when no colon is typed', () => {
       const { result } = renderHook(() => useEmojiAutocomplete('hello world', 11))
       expect(result.current.state.isActive).toBe(false)
@@ -159,6 +173,14 @@ describe('useEmojiAutocomplete', () => {
     })
   })
 
+  describe('data loading', () => {
+    it('silently disables autocomplete when emoji data fails to load', async () => {
+      const data = await loadEmojiAutocompleteData(() => Promise.reject(new Error('chunk unavailable')))
+
+      expect(data).toBeNull()
+    })
+  })
+
   describe('selection and keyboard navigation', () => {
     it('should replace target string with selected emoji', async () => {
       const { result } = renderHook(() => useEmojiAutocomplete('check this :hea and continue', 15))
@@ -197,7 +219,7 @@ describe('useEmojiAutocomplete', () => {
       expect(result.current.state.selectedIndex).toBe(1) // wrapped back
     })
 
-    it('should allow dismissing selection', async () => {
+    it('keeps the dismissed token closed until its identity changes', async () => {
       const { result, rerender } = renderHook(
         ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
         { initialProps: { text: ':hea', cursor: 4 } }
@@ -212,9 +234,34 @@ describe('useEmojiAutocomplete', () => {
       })
       expect(result.current.state.isActive).toBe(false)
 
-      // Rerendering with same trigger shouldn't reactivate it
-      rerender({ text: ':heart', cursor: 6 })
+      rerender({ text: ':hea', cursor: 4 })
       expect(result.current.state.isActive).toBe(false)
+
+      // Extending the token creates a new trigger identity and re-enables matching.
+      rerender({ text: ':heart', cursor: 6 })
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+    })
+
+    it('treats the same token at a different position as a new trigger', async () => {
+      const { result, rerender } = renderHook(
+        ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
+        { initialProps: { text: ':hea', cursor: 4 } }
+      )
+
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+
+      act(() => {
+        result.current.dismiss()
+      })
+
+      rerender({ text: 'x :hea', cursor: 6 })
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
     })
   })
 })
