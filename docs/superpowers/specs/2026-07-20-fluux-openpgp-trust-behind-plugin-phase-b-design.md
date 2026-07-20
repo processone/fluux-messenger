@@ -58,15 +58,32 @@ Grounding also documented three *pre-existing* races in this path (see §6) that
 
 Four sub-phases, each independently reviewable and green.
 
-### B0 — Prerequisite: fix desktop storage-backend ordering
+### B0 — Prerequisite: persistent, per-plugin desktop storage for OpenPGP
 
-`apps/fluux/src/e2ee/registerPlugins.ts`:
-- Hoist `client.setE2EEStorageBackend(new TauriKeychainStorageBackend(manager.getAccountJid()))` to run **once, before any `manager.register(...)`**, unconditionally when `isTauri()`.
-- Remove the now-redundant `setE2EEStorageBackend` from the OMEMO branch and the stale last-write-wins comment (`:150-157`) — `createPluginStorage` already namespaces `e2ee/openpgp` vs `e2ee/omemo:2`, so one shared per-account instance is correct.
-- Web path unchanged (IndexedDB already set before register).
-- **Test:** desktop registration yields a `ctx.storage` that survives a simulated restart (round-trip through the keychain backend), and OpenPGP/OMEMO namespaces do not collide.
+Two defects to fix together: OpenPGP has no persistent backend on desktop (Finding 1), and there is no way to give it its own store. Decision (review): **OpenPGP gets its own sealed file**, routed via new SDK per-plugin backend support, so its lifecycle is independent of OMEMO's and the two never contend on writes.
 
-This lands and ships on its own merit: it fixes a real (currently latent) desktop persistence defect and removes a documented hazard.
+**B0.1 — SDK: per-plugin storage backends.**
+- `E2EEManager` keeps its existing `storage: StorageBackend` as the **default** and gains `storageByPlugin: Map<string, StorageBackend>`.
+- `setStorage(backend)` unchanged (sets the default); add `setStorage(backend, pluginId)` to register a per-plugin override. Mirror on `XMPPClient.setE2EEStorageBackend(backend, pluginId?)`.
+- In `register` (`E2EEManager.ts:156`): `const backend = this.storageByPlugin.get(id) ?? this.storage` then `createPluginStorage(backend, 'e2ee/' + id)`.
+- **Keep the `e2ee/${id}` key prefix even when a plugin has its own backend.** It is load-bearing for backward compatibility: OMEMO's existing sealed data is already stored under `e2ee/omemo:2\0…` keys, and dropping the prefix would orphan it.
+- The existing "must be called before the plugin registers" constraint (by-value capture, documented at `E2EEManager.ts:134-141`) still applies and now applies per plugin id.
+
+**B0.2 — Rust: a `store` namespace param.**
+- `e2ee_store.rs` currently derives the path from the account alone: `<base_dir>/e2ee-store/<sanitize_jid(account)>.json` (`:196`). Add an optional `store` parameter to `Store::{get,put,delete,list}` and the four Tauri commands.
+- Path becomes `<sanitized-jid>.json` when `store` is absent/default, and `<sanitized-jid>__<store>.json` otherwise. **Defaulting to the current filename is required** so OMEMO's live sealed file is untouched and needs no data migration.
+- Validate `store` as a short conservative slug (`[a-z0-9-]{1,32}`) — it reaches a filename, so it gets the same care `validate_account` (`:483`) applies today.
+- **One master key per account, shared across that account's store files.** Keychain traffic is therefore unchanged (still one key, read at most once per `Store` instance). Do not mint per-store keys.
+- `TauriKeychainStorageBackend(accountJid, storeName?)` passes it through as a `store` arg (Tauri v2 camelCase→snake_case applies).
+
+**B0.3 — App wiring** (`apps/fluux/src/e2ee/registerPlugins.ts`):
+- Desktop: before registering OpenPGP, `client.setE2EEStorageBackend(new TauriKeychainStorageBackend(jid, 'openpgp'), 'openpgp')` → sealed file `<jid>__openpgp.json`. OMEMO continues to receive the default backend (no `store`) → `<jid>.json`, byte-identical to today.
+- Remove the stale last-write-wins comment (`:150-157`); it no longer describes the design.
+- Web: OMEMO is desktop-only, so no contention exists; OpenPGP-web keeps its `IndexedDBStorageBackend`, now routed through the same per-plugin path for consistency. No new database.
+
+**Tests:** desktop OpenPGP `ctx.storage` round-trips across a simulated restart (the Finding-1 regression); OpenPGP and OMEMO resolve to **different files** and cannot read each other's keys; an omitted `store` param still resolves to the legacy `<jid>.json` (OMEMO back-compat); `store` slug validation rejects path-traversal-ish input; per-plugin override falls back to the default backend when unset.
+
+B0 is independently valuable and ships on its own merit: it fixes a real (currently latent) desktop persistence defect and removes a documented hazard, regardless of the rest of Phase B.
 
 ### B1 — Plugin-owned verified store with a synchronous mirror
 
@@ -122,14 +139,14 @@ Migrate the three reactive consumers (`useConversationEncryptionState.ts:148`, `
 1. Fingerprint-binding holds at every read path: a key whose current fingerprint ≠ the stored one is not verified (`fingerprintsEqual` normalization preserved).
 2. The migration never loses or fabricates a verified marker; it is idempotent and never overwrites plugin-owned data.
 3. Post-migration the seal verifies cleanly (`sealed`, not `compromised`) for unchanged state; `verifyTrustStateSeal` verdicts are unchanged for equivalent inputs.
-4. Per-account isolation holds: account A's verified data is unreachable from account B (backend is per-account).
+4. Per-account isolation holds: account A's verified data is unreachable from account B (backend is per-account). Per-plugin isolation holds too: OpenPGP and OMEMO resolve to different sealed files and cannot read each other's keys, and OMEMO's existing file/keys are byte-unchanged by B0.
 5. Desktop verified data survives an app restart (the B0 defect stays fixed) — this is the regression B0 exists to prevent.
 6. The re-entrancy guard still suppresses republish-on-apply across async persistence.
-7. `encrypt()` gating (pin-mismatch, own-key-conflict) untouched. Crypto core and Sequoia vectors untouched — no backup-byte change, **no vector regeneration**.
+7. `encrypt()` gating (pin-mismatch, own-key-conflict) untouched. Crypto core and Sequoia vectors untouched — no backup-byte change, **no vector regeneration**. (B0 *does* change `src-tauri/src/e2ee_store.rs`, but only its path/namespace handling — the AES-256-GCM sealing, master-key derivation, and keychain access are untouched.)
 
 ## Testing Strategy
 
-- **B0:** registration-order test (desktop backend persistent + namespace isolation).
+- **B0:** SDK per-plugin backend resolution (override used when set, default when not; prefix retained); Rust `store`-param tests (default path == legacy `<jid>.json`, namespaced path, slug validation) in the `e2ee_store.rs` suite; app registration test (desktop OpenPGP storage persists across a simulated restart; OpenPGP and OMEMO resolve to different files and cannot read each other's keys).
 - **B1:** `verifiedKeys.ts` unit tests (round-trip, corrupt blob, fingerprint normalization); cache tests (sync read-after-write, sync notify ordering, snapshot stability).
 - **B2:** rewritten hook/MessageBubble tests preserving the warm-start fast path, live trust color, and verify→immediate-green behavior; ChatView await-before-toast.
 - **B3:** migration round-trip (scoped key, unscoped legacy key, empty, corrupt, re-run idempotency); post-migration seal verifies `sealed`; one regression test per race fixed (2/3/4) plus the guard test (1).
@@ -153,6 +170,8 @@ Migrate the three reactive consumers (`useConversationEncryptionState.ts:148`, `
 
 **That is already the implemented architecture** (see decision 2): one 32-byte per-account master key in the keychain, read at most once per `Store` instance and cached in memory; all bulk data in an AES-256-GCM-sealed per-account file. No design change needed — only the spec's original "moves onto the keychain" wording was wrong, and is corrected above. The remaining cost is **file** I/O (full read+parse per op, full rewrite per `put`), which the hydrate-once mirror already confines to one rewrite per user-initiated verify/revoke.
 
-## Open Question for Review
+## Resolved review question — shared vs. own backend
 
-B0 puts desktop OpenPGP on the **same shared per-account backend instance** OMEMO already uses, relying on `createPluginStorage`'s per-plugin-id namespacing (`e2ee/openpgp` vs `e2ee/omemo:2`), which grounding verified is in place. Note this means both plugins share one sealed account file, and `e2ee_store.rs` serializes concurrent same-account writes. Confirm that is acceptable versus giving OpenPGP its own backend instance (separate file, no write contention with OMEMO's heavier traffic).
+*Raised in review:* should OpenPGP share OMEMO's per-account sealed file, or get its own?
+
+**Decision: its own**, for independent lifecycle and no write contention with OMEMO's much heavier traffic (session records, prekeys), which `e2ee_store.rs` serializes per account. Grounding showed this is not achievable by instantiating a second backend object — the Rust path is keyed by account alone (`:196`) and `E2EEManager` derives every plugin's storage from one backend (`:156`) — so B0 adds SDK per-plugin backend routing **and** a Rust `store` namespace param (see B0.1/B0.2). Routing goes through the SDK rather than constructor injection so both plugins keep using the standard `ctx.storage` seam, avoiding a new OpenPGP-vs-OMEMO asymmetry of exactly the kind this initiative retires.
