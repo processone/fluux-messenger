@@ -70,6 +70,26 @@ function CustomRoomInputComposer() {
   )
 }
 
+/**
+ * ChatView and RoomView read the active conversation from the store rather than
+ * taking it as a prop, so the composer is not remounted when the user switches
+ * conversations — only its controlled value is swapped.
+ */
+function SwappableDraftComposer() {
+  const [value, setValue] = useState('')
+  return (
+    <>
+      <button onClick={() => setValue('see you at :heart_eyes later')}>swap-draft</button>
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value={value}
+        onValueChange={setValue}
+      />
+    </>
+  )
+}
+
 function typeEmojiToken() {
   const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
   fireEvent.change(textarea, {
@@ -204,6 +224,28 @@ describe('MessageComposer emoji overlay coordination', () => {
     })
 
     expect(textarea).toHaveValue(':hea\n')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('does not reuse the previous draft caret when the parent swaps the value', async () => {
+    render(<SwappableDraftComposer />)
+    const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+
+    // Draft A: caret sits at 15, right after ":hea".
+    fireEvent.change(textarea, {
+      target: { value: 'chat about :hea', selectionStart: 15, selectionEnd: 15 },
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    // Draft B arrives with no user input. Slicing it at the stale caret would
+    // yield "see you at :hea" and reopen completion on a caret that never moved.
+    fireEvent.click(screen.getByText('swap-draft'))
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue('see you at :heart_eyes later')
+    })
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 

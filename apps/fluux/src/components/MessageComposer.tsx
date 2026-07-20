@@ -277,7 +277,12 @@ export function MessageComposer({
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
-  const [cursorPosition, setCursorPosition] = useState(0)
+  // A caret offset only means something for the text it was measured against.
+  // Storing the two together lets an externally swapped value — a conversation
+  // switch, a mention or command insertion, an edit recall — be recognised as
+  // "caret unknown" instead of being sliced at a caret from the previous draft.
+  const [caret, setCaret] = useState<{ text: string; position: number } | null>(null)
+  const cursorPosition = caret?.text === text ? caret.position : null
   const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
   const emojiAutocompleteListboxId = `${useId()}-emoji-autocomplete`
   // External overlays are already ordered by their owner (help, command, then
@@ -494,7 +499,7 @@ export function MessageComposer({
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
     setText(e.target.value)
-    setCursorPosition(e.target.selectionStart)
+    setCaret({ text: e.target.value, position: e.target.selectionStart })
     // inputClass is derived from `text` (see declaration), so it updates here
     // automatically — no manual sync needed.
 
@@ -621,7 +626,7 @@ export function MessageComposer({
   const selectEmoji = (index: number) => {
     const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(index)
     setText(newText)
-    setCursorPosition(newCursorPosition)
+    setCaret({ text: newText, position: newCursorPosition })
     emojiAutocomplete.dismiss()
     restoreTextareaCursor(inputRef, newCursorPosition)
   }
@@ -677,7 +682,7 @@ export function MessageComposer({
   }
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    setCursorPosition(e.currentTarget.selectionStart)
+    setCaret({ text: e.currentTarget.value, position: e.currentTarget.selectionStart })
     onSelectionChange?.(e.currentTarget.selectionStart)
   }
 
@@ -757,7 +762,7 @@ export function MessageComposer({
 
     // Restore focus and set cursor after emoji
     const newCursorPos = cursorPos + emoji.length
-    setCursorPosition(newCursorPos)
+    setCaret({ text: newText, position: newCursorPos })
     restoreTextareaCursor(inputRef, newCursorPos)
   }
 

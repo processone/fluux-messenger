@@ -32,6 +32,12 @@ export interface EmojiAutocompleteTrigger {
 }
 
 const MAX_EMOJI_MATCHES = 8
+/**
+ * A single character after the colon is an emoticon (`:D`, `:p`, `:3`), not a
+ * shortcode prefix. Matching those would open completion on almost every one and
+ * let it swallow the Enter meant to send the message, so require two characters.
+ */
+const MIN_EMOJI_QUERY_LENGTH = 2
 
 function normalizeEmojiSearchText(value: string): string {
   return value.normalize('NFKC').toLowerCase()
@@ -59,7 +65,7 @@ export function matchEmojiAutocompleteTrigger(
   if (colonIndex === -1) return null
 
   const token = beforeCursor.slice(colonIndex + 1)
-  if (!token || /\s/.test(token)) return null
+  if (token.length < MIN_EMOJI_QUERY_LENGTH || /\s/.test(token)) return null
 
   return {
     query: normalizeEmojiSearchText(token),
@@ -160,7 +166,8 @@ export function matchEmojiAutocomplete(
  */
 export function useEmojiAutocomplete(
   text: string,
-  cursorPosition: number,
+  /** `null` when the caret is unknown for the current text — no trigger is possible. */
+  cursorPosition: number | null,
 ): {
   state: EmojiAutocompleteState
   selectMatch: (index: number) => { newText: string; newCursorPosition: number }
@@ -170,7 +177,7 @@ export function useEmojiAutocomplete(
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [dismissedTriggerIdentity, setDismissedTriggerIdentity] = useState<string | null>(null)
   const trigger = useMemo(
-    () => matchEmojiAutocompleteTrigger(text, cursorPosition),
+    () => (cursorPosition === null ? null : matchEmojiAutocompleteTrigger(text, cursorPosition)),
     [text, cursorPosition],
   )
   const triggerIdentity = trigger?.identity ?? null
@@ -198,8 +205,8 @@ export function useEmojiAutocomplete(
 
   const selectMatch = (index: number): { newText: string; newCursorPosition: number } => {
     const match = matches[index]
-    if (!match) {
-      return { newText: text, newCursorPosition: cursorPosition }
+    if (!match || cursorPosition === null) {
+      return { newText: text, newCursorPosition: cursorPosition ?? text.length }
     }
 
     // Replace :query with the emoji character

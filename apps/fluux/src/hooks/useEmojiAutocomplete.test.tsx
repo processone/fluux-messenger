@@ -72,13 +72,39 @@ describe('useEmojiAutocomplete', () => {
       expect(result.current.state.isActive).toBe(false)
     })
 
-    it('should be active when colon and characters are typed at start of text after data loads', async () => {
-      const { result } = renderHook(() => useEmojiAutocomplete(':+', 2))
-      
+    // `:D`, `:p`, `:3` and friends are emoticons, not shortcode prefixes. A
+    // one-character token matches dozens of emojis, and completion would then
+    // swallow the Enter that was meant to send the message.
+    it.each([':d', ':D', ':p', ':o', ':v', ':x', ':3', 'haha :D'])(
+      'ignores the one-character token in %j so the emoticon can still be sent',
+      (text) => {
+        expect(matchEmojiAutocompleteTrigger(text, text.length)).toBeNull()
+      }
+    )
+
+    it('closes completion once the token shrinks back to a single character', async () => {
+      const { result, rerender } = renderHook(
+        ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
+        { initialProps: { text: ':he', cursor: 3 } }
+      )
+
+      // Waiting for the active state proves the emoji data finished loading, so
+      // the assertion below cannot pass merely because matching had not started.
       await waitFor(() => {
         expect(result.current.state.isActive).toBe(true)
       })
-      expect(result.current.state.query).toBe('+')
+
+      rerender({ text: ':h', cursor: 2 })
+      expect(result.current.state.isActive).toBe(false)
+    })
+
+    it('should be active when colon and characters are typed at start of text after data loads', async () => {
+      const { result } = renderHook(() => useEmojiAutocomplete(':+1', 3))
+
+      await waitFor(() => {
+        expect(result.current.state.isActive).toBe(true)
+      })
+      expect(result.current.state.query).toBe('+1')
       expect(result.current.state.triggerIndex).toBe(0)
     })
 
