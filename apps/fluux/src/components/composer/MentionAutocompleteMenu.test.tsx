@@ -51,6 +51,35 @@ describe('MentionAutocompleteMenu', () => {
     expect(onSelect).toHaveBeenCalledWith(2)
   })
 
+  // The popover is capped at max-h-48 and scrolls, so a selection driven past
+  // the visible edge by the arrow keys has to be brought back into view.
+  it('keeps the newly selected option in view', () => {
+    const scrollIntoView = vi.fn()
+    vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(scrollIntoView)
+
+    const { rerender } = render(
+      <MentionAutocompleteMenu id="mentions" matches={MATCHES} selectedIndex={0} onSelect={vi.fn()} />
+    )
+    scrollIntoView.mockClear()
+
+    rerender(
+      <MentionAutocompleteMenu id="mentions" matches={MATCHES} selectedIndex={2} onSelect={vi.fn()} />
+    )
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(scrollIntoView.mock.instances[0]).toBe(screen.getAllByRole('option')[2])
+  })
+
+  // Pressing an option must not blur the textarea, or the caret the completion
+  // is about to rewrite is gone by the time the click lands.
+  it('does not steal focus from the composer when an option is pressed', () => {
+    renderMenu()
+
+    const notPrevented = fireEvent.mouseDown(screen.getAllByRole('option')[1])
+
+    expect(notPrevented).toBe(false)
+  })
+
   it('renders nothing when there is nothing to suggest', () => {
     const { container } = render(
       <MentionAutocompleteMenu id="mentions" matches={[]} selectedIndex={0} onSelect={vi.fn()} />

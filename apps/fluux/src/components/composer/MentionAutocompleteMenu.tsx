@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Users } from 'lucide-react'
 import { Avatar } from '../Avatar'
@@ -23,6 +24,12 @@ export function MentionAutocompleteMenu({
   onSelect,
 }: MentionAutocompleteMenuProps) {
   const { t } = useTranslation()
+  const selectedRef = useRef<HTMLButtonElement>(null)
+
+  // Keep the keyboard-highlighted item visible as selection moves past the popover edges.
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [selectedIndex])
 
   if (matches.length === 0) return null
 
@@ -38,10 +45,12 @@ export function MentionAutocompleteMenu({
         <button
           key={match.nick}
           id={autocompleteOptionId(id, match.nick)}
+          ref={idx === selectedIndex ? selectedRef : undefined}
           type="button"
           role="option"
           aria-selected={idx === selectedIndex}
           tabIndex={-1}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(idx)}
           className={`w-full px-3 py-2 text-start text-sm flex items-center gap-2 transition-colors
                      ${idx === selectedIndex
