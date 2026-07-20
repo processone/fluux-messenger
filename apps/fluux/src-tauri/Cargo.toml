@@ -42,6 +42,12 @@ tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-native-certs = "0.8"
 hickory-resolver = "0.26"
+# IDNA (RFC 5890) A-label conversion for internationalized domains. DNS and
+# rustls' ServerName accept ASCII names only, so a Unicode domain must be
+# punycoded before resolution and the TLS handshake. Already present in the
+# dependency tree via hickory-resolver/url; declared here because the proxy
+# calls it directly.
+idna = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
