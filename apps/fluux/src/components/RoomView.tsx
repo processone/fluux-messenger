@@ -16,7 +16,7 @@ import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
-import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
+import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
 import { OccupantModerationModal } from './OccupantModerationModal'
@@ -2092,7 +2092,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   )
 
   // Custom input renderer with mention highlighting
-  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
+  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder, ariaProps }: {
     inputRef: React.RefObject<HTMLTextAreaElement | null>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
@@ -2101,6 +2101,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
     onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
+    ariaProps: ComposerAutocompleteAriaProps
   }) => {
     // Enhanced keydown handler for mentions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -2248,6 +2249,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           spellCheck={true}
           autoCorrect="on"
           autoCapitalize="sentences"
+          {...ariaProps}
           className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_OVERLAY_CLASSES}`}
           style={{ caretColor: 'var(--fluux-text, #e4e4e7)' }}
         />
@@ -2317,6 +2319,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         typingNotificationsEnabled={shouldSendTypingNotifications}
         renderInput={renderMentionInput}
         aboveInput={aboveInputNode}
+        hasExternalOverlay={aboveInputNode !== null}
         resolveInput={resolveInput}
         classifyInput={classifyInput}
         commandsEnabled={!whisperTarget}
@@ -2437,4 +2440,3 @@ function renderInputWithMentions(text: string, references: MentionReference[]): 
 
   return <>{parts}</>
 }
-

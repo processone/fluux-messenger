@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, useId, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
 import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
-import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
+import { EmojiAutocompleteMenu, emojiAutocompleteOptionId } from './composer/EmojiAutocompleteMenu'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
 import type { InputClass } from '../commands/types'
@@ -80,6 +80,11 @@ interface UploadState {
   clearError: () => void
 }
 
+export type ComposerAutocompleteAriaProps = Pick<
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  'role' | 'aria-label' | 'aria-autocomplete' | 'aria-expanded' | 'aria-controls' | 'aria-activedescendant'
+>
+
 /** Pending attachment staged for sending (not yet sent) */
 export interface PendingAttachment {
   file: File
@@ -131,9 +136,12 @@ interface MessageComposerProps {
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
     onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
+    ariaProps: ComposerAutocompleteAriaProps
   }) => ReactNode
   /** Content to render above the input (e.g., mention autocomplete dropdown) */
   aboveInput?: ReactNode
+  /** Whether a higher-priority command, mention, or help overlay currently owns the composer overlay slot. */
+  hasExternalOverlay?: boolean
   /** Text value (controlled) - if provided, component is controlled */
   value?: string
   /** Text change handler (for controlled mode) */
@@ -207,6 +215,7 @@ export function MessageComposer({
   typingNotificationsEnabled = true,
   renderInput,
   aboveInput,
+  hasExternalOverlay = false,
   value: controlledValue,
   onValueChange,
   onSelectionChange,
@@ -258,6 +267,21 @@ export function MessageComposer({
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
   const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
+  const emojiAutocompleteListboxId = `${useId()}-emoji-autocomplete`
+  // External overlays are already ordered by their owner (help, command, then
+  // mention). Inline emoji completion is the final fallback in that priority.
+  const isEmojiAutocompleteActive = !hasExternalOverlay && emojiAutocomplete.state.isActive
+  const selectedEmojiMatch = emojiAutocomplete.state.matches[emojiAutocomplete.state.selectedIndex]
+  const composerAutocompleteAriaProps: ComposerAutocompleteAriaProps = {
+    role: 'combobox',
+    'aria-label': effectivePlaceholder,
+    'aria-autocomplete': 'list',
+    'aria-expanded': isEmojiAutocompleteActive,
+    'aria-controls': isEmojiAutocompleteActive ? emojiAutocompleteListboxId : undefined,
+    'aria-activedescendant': isEmojiAutocompleteActive && selectedEmojiMatch
+      ? emojiAutocompleteOptionId(emojiAutocompleteListboxId, selectedEmojiMatch.id)
+      : undefined,
+  }
   // Which glyph the send button shows (send / command / unknown). Derived from
   // the live text so it can never go stale — clearing the input after a command
   // runs, an edit cancels, etc. reverts the icon automatically, whereas a
@@ -316,6 +340,14 @@ export function MessageComposer({
   useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
+
+  // Inline completion owns the composer overlay slot while active. Close the
+  // toolbar drawers so only one popover can occupy the area above the composer.
+  useEffect(() => {
+    if (!isEmojiAutocompleteActive) return
+    setShowAttachMenu(false)
+    setShowEmojiPicker(false)
+  }, [isEmojiAutocompleteActive])
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -581,7 +613,7 @@ export function MessageComposer({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (emojiAutocomplete.state.isActive) {
+    if (isEmojiAutocompleteActive) {
       if (e.key === 'ArrowUp') {
         e.preventDefault()
         emojiAutocomplete.moveSelection('up')
@@ -742,6 +774,7 @@ export function MessageComposer({
       spellCheck={true}
       autoCorrect="on"
       autoCapitalize="sentences"
+      {...composerAutocompleteAriaProps}
       className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES} [grid-area:input]`}
     />
   )
@@ -773,8 +806,9 @@ export function MessageComposer({
       {aboveInput}
 
       {/* Inline emoji autocomplete dropdown */}
-      {emojiAutocomplete.state.isActive && (
+      {isEmojiAutocompleteActive && (
         <EmojiAutocompleteMenu
+          id={emojiAutocompleteListboxId}
           matches={emojiAutocomplete.state.matches}
           selectedIndex={emojiAutocomplete.state.selectedIndex}
           onSelect={(idx) => {
@@ -1060,6 +1094,7 @@ export function MessageComposer({
               onSelect: handleSelect,
               onPaste: handlePaste,
               placeholder: effectivePlaceholder,
+              ariaProps: composerAutocompleteAriaProps,
             })}
           </div>
         ) : (
