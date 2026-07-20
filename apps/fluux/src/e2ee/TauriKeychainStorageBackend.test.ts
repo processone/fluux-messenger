@@ -54,6 +54,11 @@ describe('TauriKeychainStorageBackend', () => {
       const b = new TauriKeychainStorageBackend('a@x', invoke)
       await b.get('k')
       expect(invoke).toHaveBeenCalledWith('e2ee_store_get', { account: 'a@x', key: 'k' })
+      // toHaveBeenCalledWith uses toEqual semantics, which treats an absent key
+      // as equal to a present-but-undefined one. Assert genuine absence so a
+      // future `{ ...args, store: this.storeName }` refactor (which would send
+      // `store: undefined` and break the legacy `<jid>.json` path) fails here.
+      expect(invoke.mock.calls[0][1]).not.toHaveProperty('store')
     })
 
     it('passes the store arg when a storeName is given', async () => {
@@ -68,6 +73,7 @@ describe('TauriKeychainStorageBackend', () => {
       const b = new TauriKeychainStorageBackend('a@x', invoke)
       await b.put('k', new Uint8Array([1]))
       expect(invoke).toHaveBeenCalledWith('e2ee_store_put', { account: 'a@x', key: 'k', valueB64: expect.any(String) })
+      expect(invoke.mock.calls[0][1]).not.toHaveProperty('store')
     })
 
     it('put passes the store arg when a storeName is given', async () => {
@@ -87,6 +93,7 @@ describe('TauriKeychainStorageBackend', () => {
       const b = new TauriKeychainStorageBackend('a@x', invoke)
       await b.delete('k')
       expect(invoke).toHaveBeenCalledWith('e2ee_store_delete', { account: 'a@x', key: 'k' })
+      expect(invoke.mock.calls[0][1]).not.toHaveProperty('store')
     })
 
     it('delete passes the store arg when a storeName is given', async () => {
@@ -101,6 +108,7 @@ describe('TauriKeychainStorageBackend', () => {
       const b = new TauriKeychainStorageBackend('a@x', invoke)
       await b.list('prefix/')
       expect(invoke).toHaveBeenCalledWith('e2ee_store_list', { account: 'a@x', prefix: 'prefix/' })
+      expect(invoke.mock.calls[0][1]).not.toHaveProperty('store')
     })
 
     it('list passes the store arg when a storeName is given', async () => {

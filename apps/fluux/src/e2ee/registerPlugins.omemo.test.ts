@@ -39,6 +39,12 @@ describe('registerE2EEPlugins with OMEMO', () => {
     // A single-argument call: no `store` name baked into the backend and no
     // pluginId override, matching the pre-existing OMEMO behavior exactly.
     expect(client.setE2EEStorageBackend).toHaveBeenCalledWith(expect.any(TauriKeychainStorageBackend))
+    // Guard against constructing it as (jid, undefined, 'omemo'), which would
+    // still satisfy `expect.any(TauriKeychainStorageBackend)` above but would
+    // orphan OMEMO's data onto a new sealed store instead of the legacy
+    // `<jid>.json` file. Inspect the actual constructed instance's storeName.
+    const constructedBackend = client.setE2EEStorageBackend.mock.calls[0][0] as TauriKeychainStorageBackend
+    expect((constructedBackend as unknown as { storeName?: string }).storeName).toBeUndefined()
   })
   it('does NOT register OMEMO when omemoEnabled is false', async () => {
     useEncryptionSettingsStore.getState().setOmemoEnabled(false)

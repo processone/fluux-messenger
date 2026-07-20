@@ -131,9 +131,11 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
     // --- OpenPGP (web unchanged; desktop now persists via its own sealed store) ---
     if (isOpenpgpEnabled() && !manager.getPlugin('openpgp')) {
       if (isTauri()) {
-        // Desktop OpenPGP gets its OWN sealed store (`<jid>__openpgp.json`).
-        // Without this its ctx.storage would be the default in-memory backend
-        // and would not survive a restart. A dedicated store also keeps its
+        // Desktop OpenPGP gets its OWN sealed store (`<jid>__openpgp.json`),
+        // dedicated and persistent, ready for a later phase to move OpenPGP's
+        // trust data onto ctx.storage (SequoiaPgpPlugin doesn't touch
+        // ctx.storage yet). Without this, ctx.storage would fall back to the
+        // non-persistent in-memory default. A dedicated store also keeps its
         // write lifecycle independent of OMEMO's much heavier traffic.
         const { TauriKeychainStorageBackend } = await import('./TauriKeychainStorageBackend')
         client.setE2EEStorageBackend(
