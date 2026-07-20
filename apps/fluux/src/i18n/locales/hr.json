@@ -428,7 +428,8 @@
         "invitationsHeading": "Pozivnice",
         "nickChanged": "{{oldNick}} sada je poznat kao {{newNick}}",
         "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
-        "nickHiddenChars": "Ime sadrži skrivene znakove"
+        "nickHiddenChars": "Ime sadrži skrivene znakove",
+        "mentionSuggestions": "Prijedlozi spominjanja"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",
@@ -596,7 +597,8 @@
         "loadVideo": "Učitaj video",
         "loadAudio": "Učitaj zvuk",
         "loadFilePreview": "Učitaj pretpregled",
-        "showLinkImage": "Prikaži sliku"
+        "showLinkImage": "Prikaži sliku",
+        "emojiSuggestions": "Prijedlozi emojija"
     },
     "dates": {
         "today": "Danas",

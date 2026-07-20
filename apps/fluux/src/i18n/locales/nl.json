@@ -428,7 +428,8 @@
         "invitationsHeading": "Uitnodigingen",
         "nickChanged": "{{oldNick}} heet nu {{newNick}}",
         "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
-        "nickHiddenChars": "De naam bevat verborgen tekens"
+        "nickHiddenChars": "De naam bevat verborgen tekens",
+        "mentionSuggestions": "Vermeldingssuggesties"
     },
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",
@@ -595,7 +596,8 @@
         "loadVideo": "Video laden",
         "loadAudio": "Audio laden",
         "loadFilePreview": "Voorbeeld laden",
-        "showLinkImage": "Afbeelding tonen"
+        "showLinkImage": "Afbeelding tonen",
+        "emojiSuggestions": "Emoji-suggesties"
     },
     "dates": {
         "today": "Vandaag",

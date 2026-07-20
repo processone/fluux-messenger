@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
 import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
-import { EmojiAutocompleteMenu, emojiAutocompleteOptionId } from './composer/EmojiAutocompleteMenu'
+import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
+import { composerAutocompleteAriaProps, type ComposerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
 import type { InputClass } from '../commands/types'
@@ -92,10 +93,7 @@ interface UploadState {
   clearError: () => void
 }
 
-export type ComposerAutocompleteAriaProps = Pick<
-  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
-  'role' | 'aria-label' | 'aria-autocomplete' | 'aria-expanded' | 'aria-controls' | 'aria-activedescendant'
->
+export type { ComposerAutocompleteAriaProps }
 
 /** Pending attachment staged for sending (not yet sent) */
 export interface PendingAttachment {
@@ -289,16 +287,14 @@ export function MessageComposer({
   // mention). Inline emoji completion is the final fallback in that priority.
   const isEmojiAutocompleteActive = !hasExternalOverlay && emojiAutocomplete.state.isActive
   const selectedEmojiMatch = emojiAutocomplete.state.matches[emojiAutocomplete.state.selectedIndex]
-  const composerAutocompleteAriaProps: ComposerAutocompleteAriaProps = {
-    role: 'combobox',
-    'aria-label': effectivePlaceholder,
-    'aria-autocomplete': 'list',
-    'aria-expanded': isEmojiAutocompleteActive,
-    'aria-controls': isEmojiAutocompleteActive ? emojiAutocompleteListboxId : undefined,
-    'aria-activedescendant': isEmojiAutocompleteActive && selectedEmojiMatch
-      ? emojiAutocompleteOptionId(emojiAutocompleteListboxId, selectedEmojiMatch.id)
-      : undefined,
-  }
+  // Emoji completion is the composer's own overlay. An owner of the external
+  // overlay slot (a room's mention list) replaces these with its own.
+  const autocompleteAriaProps = composerAutocompleteAriaProps({
+    label: effectivePlaceholder,
+    listboxId: emojiAutocompleteListboxId,
+    isOpen: isEmojiAutocompleteActive,
+    activeOptionKey: selectedEmojiMatch?.id,
+  })
   // Which glyph the send button shows (send / command / unknown). Derived from
   // the live text so it can never go stale — clearing the input after a command
   // runs, an edit cancels, etc. reverts the icon automatically, whereas a
@@ -792,7 +788,7 @@ export function MessageComposer({
       spellCheck={true}
       autoCorrect="on"
       autoCapitalize="sentences"
-      {...composerAutocompleteAriaProps}
+      {...autocompleteAriaProps}
       className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES} [grid-area:input]`}
     />
   )
@@ -1101,7 +1097,7 @@ export function MessageComposer({
               onSelect: handleSelect,
               onPaste: handlePaste,
               placeholder: effectivePlaceholder,
-              ariaProps: composerAutocompleteAriaProps,
+              ariaProps: autocompleteAriaProps,
             })}
           </div>
         ) : (

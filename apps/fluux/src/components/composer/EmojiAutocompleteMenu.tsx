@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { autocompleteOptionId } from './autocompleteAria'
 import type { EmojiMatch } from '../../hooks/useEmojiAutocomplete'
 
 interface EmojiAutocompleteMenuProps {
@@ -9,14 +11,11 @@ interface EmojiAutocompleteMenuProps {
   onDismiss: () => void
 }
 
-export function emojiAutocompleteOptionId(listboxId: string, matchId: string): string {
-  return `${listboxId}-option-${encodeURIComponent(matchId)}`
-}
-
 /**
  * Inline emoji completion dropdown popover rendered above the message composer input field.
  */
 export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, onDismiss }: EmojiAutocompleteMenuProps) {
+  const { t } = useTranslation()
   const selectedRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -43,12 +42,13 @@ export function EmojiAutocompleteMenu({ id, matches, selectedIndex, onSelect, on
       id={id}
       ref={menuRef}
       role="listbox"
+      aria-label={t('chat.emojiSuggestions')}
       className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto fluux-popover rounded-lg z-30 flex flex-col"
     >
       {matches.map((match, idx) => (
         <button
           key={match.id}
-          id={emojiAutocompleteOptionId(id, match.id)}
+          id={autocompleteOptionId(id, match.id)}
           ref={idx === selectedIndex ? selectedRef : undefined}
           type="button"
           role="option"

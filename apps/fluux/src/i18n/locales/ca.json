@@ -430,7 +430,8 @@
         "invitationsHeading": "Invitacions",
         "nickChanged": "{{oldNick}} ara es coneix com a {{newNick}}",
         "nickEdgeWhitespace": "El nom té espais addicionals als extrems",
-        "nickHiddenChars": "El nom conté caràcters ocults"
+        "nickHiddenChars": "El nom conté caràcters ocults",
+        "mentionSuggestions": "Suggeriments de mencions"
     },
     "events": {
         "invitedBy": "Convidat per {{name}}",
@@ -598,7 +599,8 @@
         "loadVideo": "Carrega el vídeo",
         "loadAudio": "Carrega l'àudio",
         "loadFilePreview": "Carrega la previsualització",
-        "showLinkImage": "Mostra la imatge"
+        "showLinkImage": "Mostra la imatge",
+        "emojiSuggestions": "Suggeriments d'emoji"
     },
     "dates": {
         "today": "Avui",

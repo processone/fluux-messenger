@@ -430,7 +430,8 @@
         "invitationsHeading": "Pozvánky",
         "nickChanged": "{{oldNick}} je nyní znám jako {{newNick}}",
         "nickEdgeWhitespace": "Jméno obsahuje mezery na okrajích",
-        "nickHiddenChars": "Jméno obsahuje skryté znaky"
+        "nickHiddenChars": "Jméno obsahuje skryté znaky",
+        "mentionSuggestions": "Návrhy zmínek"
     },
     "events": {
         "invitedBy": "Pozval(a) {{name}}",
@@ -599,7 +600,8 @@
         "loadVideo": "Načíst video",
         "loadAudio": "Načíst zvuk",
         "loadFilePreview": "Načíst náhled",
-        "showLinkImage": "Zobrazit obrázek"
+        "showLinkImage": "Zobrazit obrázek",
+        "emojiSuggestions": "Návrhy emoji"
     },
     "dates": {
         "today": "Dnes",

@@ -127,7 +127,8 @@ describe('MessageComposer emoji overlay coordination', () => {
       expect(textarea).toHaveAttribute('aria-expanded', 'true')
     })
 
-    const listbox = screen.getByRole('listbox')
+    // t() falls through to the key for anything outside the test i18n subset.
+    const listbox = screen.getByRole('listbox', { name: 'chat.emojiSuggestions' })
     const option = screen.getByRole('option', { name: ':heart: Red Heart' })
     const nextOption = screen.getByRole('option', { name: ':heart_eyes: Smiling Face with Heart-Eyes' })
     expect(listbox).toHaveAttribute('id')
