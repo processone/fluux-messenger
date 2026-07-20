@@ -692,6 +692,7 @@ describe('useNotificationEvents', () => {
           lastSeenMessageId: undefined,
           lastMessage: {
             id: 'm1',
+            body: 'Offline message',
             timestamp: new Date(),
             isOutgoing: false,
             isDelayed: true,
@@ -739,6 +740,7 @@ describe('useNotificationEvents', () => {
         lastSeenMessageId: undefined,
         lastMessage: {
           id: 'm9',
+          body: 'Hello',
           timestamp: new Date(),
           isOutgoing: false,
           isDelayed: false,
@@ -974,6 +976,48 @@ describe('useNotificationEvents', () => {
   // still false and unreadCount is not yet zeroed.
   describe('conversation notification idempotency', () => {
     const convId = 'dave@example.com'
+
+    it('does not notify for a bodiless encrypted control placeholder', () => {
+      const onConversationMessage = vi.fn()
+      const now = new Date()
+      const real = { id: 'real', body: 'ping', timestamp: new Date(now.getTime() - 60 * 1000), isOutgoing: false }
+      const placeholder = {
+        id: 'signal',
+        body: '',
+        timestamp: now,
+        isOutgoing: false,
+        encryptedPayload: '<message><openpgp>...</openpgp></message>',
+      }
+
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      act(() => {
+        pinArrival(convId, real)
+        mockConversations.set(convId, {
+          id: convId,
+          name: 'Dave',
+          unreadCount: 1,
+          lastSeenMessageId: undefined,
+          lastMessage: real,
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+
+      act(() => {
+        pinArrival(convId, placeholder)
+        mockConversations.set(convId, {
+          ...mockConversations.get(convId),
+          unreadCount: 2,
+          // addMessage keeps the real message as the preview because the
+          // encrypted placeholder has no displayable content.
+          lastMessage: real,
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+    })
 
     it('does not re-notify when a reopen swaps the preview off a bodiless placeholder', () => {
       const onConversationMessage = vi.fn()

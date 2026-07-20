@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { chatStore, roomStore, connectionStore } from '../stores'
-import { shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
+import { isPreviewableMessage, shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
 
 /**
@@ -184,6 +184,12 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
           // Mark it seen before deciding: a delivery we chose NOT to notify for
           // has still been handled, and must not be reconsidered on every tick.
           prevArrived.set(conv.id, arrived.id)
+
+          // An undecrypted bodiless stanza may later resolve to a reaction or
+          // retraction rather than a user-visible message. It is deliberately
+          // excluded from previews, and must not post a blank notification or
+          // play the message sound while its contents are still unknown.
+          if (!isPreviewableMessage(arrived)) continue
 
           const isActive = conv.id === activeConversationId
           const notify = shouldNotifyConversation(
