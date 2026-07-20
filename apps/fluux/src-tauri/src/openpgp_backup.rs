@@ -480,8 +480,9 @@ mod tests {
     // shared fixture is also consumed by the web-side consumeMigrationVectors).
     #[test]
     fn imports_real_openkeychain_numeric9x4_backup() {
-        let backup =
-            include_str!("../../src/e2ee/fixtures/openkeychain_numeric9x4_backup.asc");
+        let backup = include_str!(
+            "../../../../packages/openpgp-plugin/src/fixtures/openkeychain_numeric9x4_backup.asc"
+        );
         let recovered = decrypt_all_tsks_with_passphrase(
             backup,
             "0228-6308-1219-5990-0322-8950-3981-3061-6394",
