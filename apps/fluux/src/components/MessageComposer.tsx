@@ -36,6 +36,18 @@ const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 const COMPOSING_UI_TIMEOUT_MS = 1500
 
+function restoreTextareaCursor(
+  inputRef: RefObject<HTMLTextAreaElement | null>,
+  position: number,
+) {
+  setTimeout(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.focus()
+    input.setSelectionRange(position, position)
+  }, 0)
+}
+
 // Base textarea classes - exported for custom renderInput implementations to reuse.
 // `no-focus-ring` opts the textarea out of the global `.user-interacted *:focus`
 // outline (index.css): the composer card's own `:focus-within` accent edge is the
@@ -368,13 +380,7 @@ export function MessageComposer({
       setText(editingMessage.body)
       setEditAttachmentRemoved(false) // Reset attachment removal state
       // Focus and move cursor to end
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
-          const len = editingMessage.body.length
-          inputRef.current.setSelectionRange(len, len)
-        }
-      }, 0)
+      restoreTextareaCursor(inputRef, editingMessage.body.length)
     } else if (!editingMessage) {
       // Reset when editing is cancelled
       lastEditedMessageIdRef.current = null
@@ -612,6 +618,14 @@ export function MessageComposer({
     }
   }
 
+  const selectEmoji = (index: number) => {
+    const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(index)
+    setText(newText)
+    setCursorPosition(newCursorPosition)
+    emojiAutocomplete.dismiss()
+    restoreTextareaCursor(inputRef, newCursorPosition)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (isEmojiAutocompleteActive) {
       if (e.key === 'ArrowUp') {
@@ -624,18 +638,10 @@ export function MessageComposer({
         emojiAutocomplete.moveSelection('down')
         return
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
+      // Shift+Enter remains the native newline gesture even while completion is open.
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
         e.preventDefault()
-        const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(emojiAutocomplete.state.selectedIndex)
-        setText(newText)
-        setCursorPosition(newCursorPosition)
-        emojiAutocomplete.dismiss()
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.focus()
-            inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
-          }
-        }, 0)
+        selectEmoji(emojiAutocomplete.state.selectedIndex)
         return
       }
       if (e.key === 'Escape') {
@@ -752,12 +758,7 @@ export function MessageComposer({
     // Restore focus and set cursor after emoji
     const newCursorPos = cursorPos + emoji.length
     setCursorPosition(newCursorPos)
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
-      }
-    }, 0)
+    restoreTextareaCursor(inputRef, newCursorPos)
   }
 
   // Default input renderer (simple textarea)
@@ -811,18 +812,7 @@ export function MessageComposer({
           id={emojiAutocompleteListboxId}
           matches={emojiAutocomplete.state.matches}
           selectedIndex={emojiAutocomplete.state.selectedIndex}
-          onSelect={(idx) => {
-            const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(idx)
-            setText(newText)
-            setCursorPosition(newCursorPosition)
-            emojiAutocomplete.dismiss()
-            setTimeout(() => {
-              if (inputRef.current) {
-                inputRef.current.focus()
-                inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
-              }
-            }, 0)
-          }}
+          onSelect={selectEmoji}
           onDismiss={emojiAutocomplete.dismiss}
         />
       )}

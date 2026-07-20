@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MessageComposer } from './MessageComposer'
@@ -29,6 +30,18 @@ function renderComposer(props: Partial<React.ComponentProps<typeof MessageCompos
       placeholder="Type a message"
       onSend={vi.fn().mockResolvedValue(true)}
       {...props}
+    />
+  )
+}
+
+function ControlledComposer() {
+  const [value, setValue] = useState('')
+  return (
+    <MessageComposer
+      placeholder="Type a message"
+      onSend={vi.fn().mockResolvedValue(true)}
+      value={value}
+      onValueChange={setValue}
     />
   )
 }
@@ -87,6 +100,60 @@ describe('MessageComposer emoji overlay coordination', () => {
     expect(nextOption).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('completes from the keyboard and restores the cursor in uncontrolled mode', async () => {
+    renderComposer()
+    typeEmojiToken()
+
+    const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue('❤️')
+      expect(textarea.selectionStart).toBe('❤️'.length)
+      expect(document.activeElement).toBe(textarea)
+    })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('completes from a click and restores the cursor in controlled mode', async () => {
+    render(<ControlledComposer />)
+    typeEmojiToken()
+
+    const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
+    const option = await screen.findByRole('option', { name: ':heart: Red Heart' })
+    fireEvent.mouseDown(option)
+    fireEvent.click(option)
+
+    await waitFor(() => {
+      expect(textarea).toHaveValue('❤️')
+      expect(textarea.selectionStart).toBe('❤️'.length)
+      expect(document.activeElement).toBe(textarea)
+    })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('preserves Shift+Enter as a newline while suggestions are open', async () => {
+    renderComposer()
+    typeEmojiToken()
+
+    const textarea = screen.getByRole('combobox', { name: 'Type a message' }) as HTMLTextAreaElement
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+    })
+
+    expect(fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })).toBe(true)
+    fireEvent.change(textarea, {
+      target: { value: ':hea\n', selectionStart: 5, selectionEnd: 5 },
+    })
+
+    expect(textarea).toHaveValue(':hea\n')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   it('gives an external composer overlay priority over emoji completion', async () => {
     const { rerender } = renderComposer({
       aboveInput: <div data-testid="external-overlay" />,
@@ -120,7 +187,9 @@ describe('MessageComposer emoji overlay coordination', () => {
     await waitFor(() => {
       expect(screen.getByText(':heart:')).toBeInTheDocument()
     })
-    expect(screen.queryByText('Create Poll')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Create Poll')).not.toBeInTheDocument()
+    })
   })
 
   it('closes the full emoji picker when emoji completion opens', async () => {
