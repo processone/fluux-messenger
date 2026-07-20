@@ -55,6 +55,7 @@
 
 ### Rich Messaging
 - **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting)
+- **Emoji Autocomplete** - Type `:` and a keyword to complete emojis inline, with arrow-key navigation and Enter or Tab to insert
 - **Message Retraction & Moderation** - Delete your own messages or moderate room messages with full audit trail
 - **Link Previews** - Automatic Open Graph previews for shared URLs
 - **File Sharing** - HTTP uploads with drag-and-drop, thumbnails, progress indicators, image lightbox, and text file preview
