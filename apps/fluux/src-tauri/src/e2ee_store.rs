@@ -6,20 +6,32 @@
 //! deliberately generic — opaque `key -> bytes` — so it is also the seam a
 //! future Rust crypto engine would use.
 //!
-//! Layout, per account (JID):
-//!   `<base_dir>/e2ee-store/<sanitized-jid>.json`  key -> base64(nonce||ct||tag)
-//!   `<base_dir>/e2ee-store/<sanitized-jid>.mk`    raw 32-byte master key (0600 fallback only)
+//! Layout, per account (JID) and optional `store` namespace:
+//!   `<base_dir>/e2ee-store/<sanitized-jid>.json`             default store (`store: None`)
+//!   `<base_dir>/e2ee-store/<sanitized-jid>__<store>.json`    namespaced store, e.g. a
+//!                                                             plugin owning a dedicated file
+//!   `<base_dir>/e2ee-store/<sanitized-jid>.mk`               raw 32-byte master key (0600
+//!                                                             fallback only) — deliberately
+//!                                                             NEVER namespaced; see below
+//!
+//! `store: None` always resolves to the legacy, un-namespaced path so existing
+//! on-disk data (OMEMO's) keeps its exact file across this addition.
 //!
 //! The master key is read from the keychain (or fallback file) at most once per
 //! account per `Store` instance and cached in memory — this keeps the hot path
 //! off the keychain and makes the seal deterministic across get/put within a
-//! session.
+//! session. There is exactly one master key per account, shared across all of
+//! that account's `store` files: the key path and the `master_keys` cache are
+//! keyed by account only, never by `store`, so adding a namespaced store never
+//! mints a new keychain entry.
 //!
-//! The public surface (`Store` + get/put/delete/list) is wrapped by the Tauri
-//! commands below (`e2ee_store_get`/`put`/`delete`/`list`, M2b Task 2), which
-//! resolve the per-user app data dir, base64-encode bytes across the IPC
-//! boundary, validate the `account` param is a plausible bare JID, and
-//! serialize concurrent same-account writes.
+//! The public surface (`Store` + get/put/delete/list and their namespaced
+//! `_in` counterparts) is wrapped by the Tauri commands below
+//! (`e2ee_store_get`/`put`/`delete`/`list`, M2b Task 2), which resolve the
+//! per-user app data dir, base64-encode bytes across the IPC boundary,
+//! validate the `account` param is a plausible bare JID and (when present)
+//! the `store` param is a conservative filename slug, and serialize
+//! concurrent writes to the same on-disk file (account + store).
 use aes_gcm::aead::{Aead, Generate, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use std::collections::{BTreeMap, HashMap};
@@ -187,16 +199,41 @@ impl Store {
         Ok(d)
     }
 
-    /// Per-account sealed-value JSON file. `dir()` creation is deferred to
-    /// write time, so this is a pure path builder.
-    pub fn file_path(&self, account: &str) -> PathBuf {
+    /// Per-account, per-store sealed-value JSON file. `store: None` resolves to
+    /// the legacy `<jid>.json` path so existing plugin data (OMEMO's) keeps its
+    /// exact file. `dir()` creation is deferred to write time, so this is a
+    /// pure path builder.
+    pub fn file_path_for(&self, account: &str, store: Option<&str>) -> PathBuf {
+        let stem = match store {
+            None => sanitize_jid(account),
+            Some(s) => format!("{}__{}", sanitize_jid(account), s),
+        };
         self.base_dir
             .join("e2ee-store")
-            .join(format!("{}.json", sanitize_jid(account)))
+            .join(format!("{stem}.json"))
+    }
+
+    /// Back-compat wrapper: the legacy, un-namespaced path. Only the
+    /// namespaced `handle_*`/command layer is wired into production callers
+    /// today; this (and the other back-compat wrappers below) are kept for
+    /// the module's existing tests, which exercise the public surface
+    /// directly. Narrowly allow the resulting dead-code warning rather than
+    /// widening the module-level lint.
+    #[allow(dead_code)]
+    pub fn file_path(&self, account: &str) -> PathBuf {
+        self.file_path_for(account, None)
+    }
+
+    /// Master-key fallback file. Deliberately NOT namespaced: one master key
+    /// per account is shared across that account's store files, so the
+    /// keychain holds a single entry per account regardless of how many
+    /// stores exist.
+    fn mk_path_for(&self, account: &str) -> PathBuf {
+        self.file_path_for(account, None).with_extension("mk")
     }
 
     fn mk_path(&self, account: &str) -> PathBuf {
-        self.file_path(account).with_extension("mk")
+        self.mk_path_for(account)
     }
 
     /// Load (cache) or create the per-account 32-byte master key.
@@ -254,8 +291,8 @@ impl Store {
     /// Persist a freshly-minted master key to the keychain.
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn write_keychain(&self, account: &str, k: &[u8; KEY_LEN]) -> Result<(), String> {
-        let entry =
-            keyring::Entry::new(KEYCHAIN_SERVICE, account).map_err(|e| format!("keychain open: {e}"))?;
+        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
+            .map_err(|e| format!("keychain open: {e}"))?;
         entry
             .set_password(&b64_encode(k))
             .map_err(|e| format!("keychain set: {e}"))
@@ -317,23 +354,39 @@ impl Store {
         Ok(k)
     }
 
-    fn read_map(&self, account: &str) -> Result<BTreeMap<String, String>, String> {
-        match std::fs::read(self.file_path(account)) {
+    fn read_map_in(
+        &self,
+        account: &str,
+        store: Option<&str>,
+    ) -> Result<BTreeMap<String, String>, String> {
+        match std::fs::read(self.file_path_for(account, store)) {
             Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| format!("parse store: {e}")),
             Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
             Err(e) => Err(format!("read store: {e}")),
         }
     }
 
-    fn write_map(&self, account: &str, map: &BTreeMap<String, String>) -> Result<(), String> {
+    fn write_map_in(
+        &self,
+        account: &str,
+        store: Option<&str>,
+        map: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
         self.dir().map_err(|e| e.to_string())?;
         let bytes = serde_json::to_vec(map).map_err(|e| e.to_string())?;
-        write_0600(&self.file_path(account), &bytes).map_err(|e| e.to_string())
+        write_0600(&self.file_path_for(account, store), &bytes).map_err(|e| e.to_string())
     }
 
-    /// Fetch and unseal the value for `key`, or `None` if absent.
-    pub fn get(&self, account: &str, key: &str) -> Result<Option<Vec<u8>>, String> {
-        let map = self.read_map(account)?;
+    /// Fetch and unseal the value for `key` in `store`, or `None` if absent.
+    /// The master key is shared across stores (see [`Store::mk_path_for`]), so
+    /// only the on-disk *file* is namespaced here.
+    pub fn get_in(
+        &self,
+        account: &str,
+        store: Option<&str>,
+        key: &str,
+    ) -> Result<Option<Vec<u8>>, String> {
+        let map = self.read_map_in(account, store)?;
         match map.get(key) {
             None => Ok(None),
             Some(sealed_b64) => {
@@ -343,31 +396,71 @@ impl Store {
         }
     }
 
-    /// Seal `value` and store it under `key`, replacing any existing value.
-    pub fn put(&self, account: &str, key: &str, value: &[u8]) -> Result<(), String> {
+    /// Seal `value` and store it under `key` in `store`, replacing any
+    /// existing value.
+    pub fn put_in(
+        &self,
+        account: &str,
+        store: Option<&str>,
+        key: &str,
+        value: &[u8],
+    ) -> Result<(), String> {
         let sealed = self.seal(account, value)?;
-        let mut map = self.read_map(account)?;
+        let mut map = self.read_map_in(account, store)?;
         map.insert(key.to_string(), b64_encode(&sealed));
-        self.write_map(account, &map)
+        self.write_map_in(account, store, &map)
     }
 
-    /// Remove `key`. A missing key is a no-op (not an error).
-    pub fn delete(&self, account: &str, key: &str) -> Result<(), String> {
-        let mut map = self.read_map(account)?;
+    /// Remove `key` from `store`. A missing key is a no-op (not an error).
+    pub fn delete_in(&self, account: &str, store: Option<&str>, key: &str) -> Result<(), String> {
+        let mut map = self.read_map_in(account, store)?;
         if map.remove(key).is_some() {
-            self.write_map(account, &map)?;
+            self.write_map_in(account, store, &map)?;
         }
         Ok(())
     }
 
-    /// List all keys for `account` whose name starts with `prefix`.
-    pub fn list(&self, account: &str, prefix: &str) -> Result<Vec<String>, String> {
+    /// List all keys in `store` for `account` whose name starts with `prefix`.
+    pub fn list_in(
+        &self,
+        account: &str,
+        store: Option<&str>,
+        prefix: &str,
+    ) -> Result<Vec<String>, String> {
         Ok(self
-            .read_map(account)?
+            .read_map_in(account, store)?
             .keys()
             .filter(|k| k.starts_with(prefix))
             .cloned()
             .collect())
+    }
+
+    /// Fetch and unseal the value for `key`, or `None` if absent. Back-compat
+    /// wrapper kept for the module's existing tests (see `file_path` above).
+    #[allow(dead_code)]
+    pub fn get(&self, account: &str, key: &str) -> Result<Option<Vec<u8>>, String> {
+        self.get_in(account, None, key)
+    }
+
+    /// Seal `value` and store it under `key`, replacing any existing value.
+    /// Back-compat wrapper kept for the module's existing tests.
+    #[allow(dead_code)]
+    pub fn put(&self, account: &str, key: &str, value: &[u8]) -> Result<(), String> {
+        self.put_in(account, None, key, value)
+    }
+
+    /// Remove `key`. A missing key is a no-op (not an error). Back-compat
+    /// wrapper kept for the module's existing tests.
+    #[allow(dead_code)]
+    pub fn delete(&self, account: &str, key: &str) -> Result<(), String> {
+        self.delete_in(account, None, key)
+    }
+
+    /// List all keys for `account` whose name starts with `prefix`.
+    /// Back-compat wrapper kept for the module's existing tests.
+    #[allow(dead_code)]
+    pub fn list(&self, account: &str, prefix: &str) -> Result<Vec<String>, String> {
+        self.list_in(account, None, prefix)
     }
 
     fn seal(&self, account: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
@@ -494,52 +587,98 @@ fn validate_account(account: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Process-wide per-account locks, keyed by the sanitized (on-disk) account
-/// name so two account strings that `sanitize_jid` would collapse onto the
-/// same file are also serialized against each other. `put`/`delete` hold the
-/// relevant lock for their full read-modify-write so concurrent writers to
-/// the same account can't interleave and lose an update.
+/// Reject anything that isn't a short, conservative slug. The value reaches a
+/// filename, so this is deliberately stricter than `validate_account`.
+fn validate_store(store: Option<&str>) -> Result<(), String> {
+    let Some(s) = store else { return Ok(()) };
+    if s.is_empty()
+        || s.len() > 32
+        || !s
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err("invalid store".to_string());
+    }
+    Ok(())
+}
+
+/// Process-wide per-file locks, keyed by the sanitized on-disk file stem
+/// (account + store) so writers to DIFFERENT store files do not serialize
+/// against each other, while writers to the same file still do. `put`/`delete`
+/// hold the relevant lock for their full read-modify-write so concurrent
+/// writers to the same file can't interleave and lose an update.
 static ACCOUNT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
 
-fn account_lock(account: &str) -> Arc<Mutex<()>> {
+fn account_lock(account: &str, store: Option<&str>) -> Arc<Mutex<()>> {
     let registry = ACCOUNT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut map = registry.lock().unwrap_or_else(|e| e.into_inner());
-    map.entry(sanitize_jid(account))
+    let stem = match store {
+        None => sanitize_jid(account),
+        Some(s) => format!("{}__{}", sanitize_jid(account), s),
+    };
+    map.entry(stem)
         .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone()
 }
 
 /// Inner logic for `e2ee_store_get`, exercised directly by tests against a
 /// temp-dir `Store` (no `AppHandle` needed).
-fn handle_get(store: &Store, account: &str, key: &str) -> Result<Option<String>, String> {
+fn handle_get(
+    store: &Store,
+    account: &str,
+    store_ns: Option<&str>,
+    key: &str,
+) -> Result<Option<String>, String> {
     validate_account(account)?;
-    Ok(store.get(account, key)?.map(|b| b64_encode(&b)))
+    validate_store(store_ns)?;
+    Ok(store
+        .get_in(account, store_ns, key)?
+        .map(|b| b64_encode(&b)))
 }
 
 /// Inner logic for `e2ee_store_put`. Decodes `value_b64` before acquiring the
 /// account lock (cheap, no I/O) and holds the lock across the store write.
-fn handle_put(store: &Store, account: &str, key: &str, value_b64: &str) -> Result<(), String> {
+fn handle_put(
+    store: &Store,
+    account: &str,
+    store_ns: Option<&str>,
+    key: &str,
+    value_b64: &str,
+) -> Result<(), String> {
     validate_account(account)?;
+    validate_store(store_ns)?;
     let value = b64_decode(value_b64)?;
-    let lock = account_lock(account);
+    let lock = account_lock(account, store_ns);
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-    store.put(account, key, &value)
+    store.put_in(account, store_ns, key, &value)
 }
 
 /// Inner logic for `e2ee_store_delete`.
-fn handle_delete(store: &Store, account: &str, key: &str) -> Result<(), String> {
+fn handle_delete(
+    store: &Store,
+    account: &str,
+    store_ns: Option<&str>,
+    key: &str,
+) -> Result<(), String> {
     validate_account(account)?;
-    let lock = account_lock(account);
+    validate_store(store_ns)?;
+    let lock = account_lock(account, store_ns);
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
-    store.delete(account, key)
+    store.delete_in(account, store_ns, key)
 }
 
 /// Inner logic for `e2ee_store_list`. Reads are not serialized against the
 /// account lock: `write_map` lands via an atomic rename, so a concurrent read
 /// only ever observes a fully-old or fully-new file, never a torn one.
-fn handle_list(store: &Store, account: &str, prefix: &str) -> Result<Vec<String>, String> {
+fn handle_list(
+    store: &Store,
+    account: &str,
+    store_ns: Option<&str>,
+    prefix: &str,
+) -> Result<Vec<String>, String> {
     validate_account(account)?;
-    store.list(account, prefix)
+    validate_store(store_ns)?;
+    store.list_in(account, store_ns, prefix)
 }
 
 fn store_for(app: &tauri::AppHandle) -> Result<Store, String> {
@@ -554,33 +693,47 @@ fn store_for(app: &tauri::AppHandle) -> Result<Store, String> {
 pub fn e2ee_store_get(
     app: tauri::AppHandle,
     account: String,
+    store: Option<String>,
     key: String,
 ) -> Result<Option<String>, String> {
-    handle_get(&store_for(&app)?, &account, &key)
+    handle_get(&store_for(&app)?, &account, store.as_deref(), &key)
 }
 
 #[tauri::command]
 pub fn e2ee_store_put(
     app: tauri::AppHandle,
     account: String,
+    store: Option<String>,
     key: String,
     value_b64: String,
 ) -> Result<(), String> {
-    handle_put(&store_for(&app)?, &account, &key, &value_b64)
+    handle_put(
+        &store_for(&app)?,
+        &account,
+        store.as_deref(),
+        &key,
+        &value_b64,
+    )
 }
 
 #[tauri::command]
-pub fn e2ee_store_delete(app: tauri::AppHandle, account: String, key: String) -> Result<(), String> {
-    handle_delete(&store_for(&app)?, &account, &key)
+pub fn e2ee_store_delete(
+    app: tauri::AppHandle,
+    account: String,
+    store: Option<String>,
+    key: String,
+) -> Result<(), String> {
+    handle_delete(&store_for(&app)?, &account, store.as_deref(), &key)
 }
 
 #[tauri::command]
 pub fn e2ee_store_list(
     app: tauri::AppHandle,
     account: String,
+    store: Option<String>,
     prefix: String,
 ) -> Result<Vec<String>, String> {
-    handle_list(&store_for(&app)?, &account, &prefix)
+    handle_list(&store_for(&app)?, &account, store.as_deref(), &prefix)
 }
 
 #[cfg(test)]
@@ -598,6 +751,16 @@ mod tests {
         ONCE.call_once(|| {
             keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
         });
+    }
+
+    /// Shared temp-dir `Store` builder for tests that don't need a specific
+    /// keychain-behavior variant. The `TempDir` must be kept alive by the
+    /// caller for the duration of the test (it deletes the directory on drop).
+    fn test_store() -> (Store, tempfile::TempDir) {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        let store = Store::for_testing(dir.path().to_path_buf());
+        (store, dir)
     }
 
     #[test]
@@ -763,19 +926,19 @@ mod tests {
         let store = Store::for_testing(dir.path().to_path_buf());
         let value_b64 = b64_encode(b"hello e2ee");
 
-        handle_put(&store, "alice@example.com", "session/1", &value_b64).unwrap();
+        handle_put(&store, "alice@example.com", None, "session/1", &value_b64).unwrap();
         assert_eq!(
-            handle_get(&store, "alice@example.com", "session/1").unwrap(),
+            handle_get(&store, "alice@example.com", None, "session/1").unwrap(),
             Some(value_b64)
         );
         assert_eq!(
-            handle_list(&store, "alice@example.com", "session/").unwrap(),
+            handle_list(&store, "alice@example.com", None, "session/").unwrap(),
             vec!["session/1".to_string()]
         );
 
-        handle_delete(&store, "alice@example.com", "session/1").unwrap();
+        handle_delete(&store, "alice@example.com", None, "session/1").unwrap();
         assert_eq!(
-            handle_get(&store, "alice@example.com", "session/1").unwrap(),
+            handle_get(&store, "alice@example.com", None, "session/1").unwrap(),
             None
         );
     }
@@ -786,24 +949,24 @@ mod tests {
         let store = Store::for_testing_no_keychain(dir.path().to_path_buf());
         let value_b64 = b64_encode(b"x");
 
-        assert!(handle_get(&store, "", "k").is_err(), "empty account");
+        assert!(handle_get(&store, "", None, "k").is_err(), "empty account");
         assert!(
-            handle_get(&store, "no-at-sign", "k").is_err(),
+            handle_get(&store, "no-at-sign", None, "k").is_err(),
             "missing '@'"
         );
         assert!(
-            handle_put(&store, "bad\u{0000}acct@x", "k", &value_b64).is_err(),
+            handle_put(&store, "bad\u{0000}acct@x", None, "k", &value_b64).is_err(),
             "control character"
         );
-        assert!(handle_delete(&store, "", "k").is_err());
-        assert!(handle_list(&store, "", "prefix").is_err());
+        assert!(handle_delete(&store, "", None, "k").is_err());
+        assert!(handle_list(&store, "", None, "prefix").is_err());
     }
 
     #[test]
     fn handle_put_rejects_invalid_base64() {
         let dir = tempdir().unwrap();
         let store = Store::for_testing_no_keychain(dir.path().to_path_buf());
-        assert!(handle_put(&store, "a@x", "k", "not valid base64!!").is_err());
+        assert!(handle_put(&store, "a@x", None, "k", "not valid base64!!").is_err());
     }
 
     #[test]
@@ -818,14 +981,14 @@ mod tests {
         let t1 = std::thread::spawn(move || {
             b1.wait();
             for i in 0..N {
-                handle_put(&s1, "race@x", &format!("k1/{i}"), &b64_encode(&[1])).unwrap();
+                handle_put(&s1, "race@x", None, &format!("k1/{i}"), &b64_encode(&[1])).unwrap();
             }
         });
         let (s2, b2) = (store.clone(), barrier.clone());
         let t2 = std::thread::spawn(move || {
             b2.wait();
             for i in 0..N {
-                handle_put(&s2, "race@x", &format!("k2/{i}"), &b64_encode(&[2])).unwrap();
+                handle_put(&s2, "race@x", None, &format!("k2/{i}"), &b64_encode(&[2])).unwrap();
             }
         });
         t1.join().unwrap();
@@ -834,8 +997,8 @@ mod tests {
         // Without per-account serialization this is a classic lost-update:
         // both threads read-modify-write the same JSON map, so whichever
         // write lands last silently drops keys written by the other thread.
-        assert_eq!(handle_list(&store, "race@x", "k1/").unwrap().len(), N);
-        assert_eq!(handle_list(&store, "race@x", "k2/").unwrap().len(), N);
+        assert_eq!(handle_list(&store, "race@x", None, "k1/").unwrap().len(), N);
+        assert_eq!(handle_list(&store, "race@x", None, "k2/").unwrap().len(), N);
     }
 
     #[test]
@@ -852,5 +1015,96 @@ mod tests {
             map.get("k2").unwrap(),
             "same plaintext must seal to different bytes (random nonce)"
         );
+    }
+
+    // --- Namespaced `store` tests --------------------------------------------
+
+    #[test]
+    fn default_store_uses_legacy_path() {
+        let (store, _tmp) = test_store();
+        assert_eq!(
+            store.file_path_for("a@x", None),
+            store.file_path("a@x"),
+            "omitting the store param must resolve to the legacy <jid>.json"
+        );
+    }
+
+    #[test]
+    fn namespaced_store_uses_separate_file() {
+        let (store, _tmp) = test_store();
+        let legacy = store.file_path_for("a@x", None);
+        let named = store.file_path_for("a@x", Some("openpgp"));
+        assert_ne!(legacy, named);
+        assert!(named.to_string_lossy().contains("__openpgp"));
+    }
+
+    #[test]
+    fn namespaced_and_default_stores_are_isolated() {
+        let (store, _tmp) = test_store();
+        store.put_in("a@x", None, "k", b"default").unwrap();
+        store.put_in("a@x", Some("openpgp"), "k", b"pgp").unwrap();
+        assert_eq!(store.get_in("a@x", None, "k").unwrap().unwrap(), b"default");
+        assert_eq!(
+            store.get_in("a@x", Some("openpgp"), "k").unwrap().unwrap(),
+            b"pgp"
+        );
+        // list must not leak across stores
+        assert_eq!(
+            store.list_in("a@x", Some("openpgp"), "").unwrap(),
+            vec!["k".to_string()]
+        );
+    }
+
+    #[test]
+    fn stores_share_one_master_key_file() {
+        let (store, _tmp) = test_store();
+        store.put_in("a@x", None, "k", b"v").unwrap();
+        store.put_in("a@x", Some("openpgp"), "k", b"v").unwrap();
+        // The master-key path is the UN-namespaced one, so both stores resolve to
+        // the same key rather than minting one per store.
+        assert_eq!(
+            store.mk_path_for("a@x"),
+            store.file_path_for("a@x", None).with_extension("mk"),
+            "master-key path must not be namespaced per store"
+        );
+        // And on a fallback (no-keychain) host that means at most ONE .mk on disk,
+        // even though two sealed store files now exist.
+        let dir = store
+            .file_path_for("a@x", None)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let mk_count = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "mk"))
+            .count();
+        assert!(
+            mk_count <= 1,
+            "expected at most one master-key file, found {mk_count}"
+        );
+        // Both files really do exist (otherwise the assertions above are vacuous).
+        assert!(store.file_path_for("a@x", None).exists());
+        assert!(store.file_path_for("a@x", Some("openpgp")).exists());
+    }
+
+    #[test]
+    fn validate_store_rejects_bad_slugs() {
+        assert!(validate_store(Some("openpgp")).is_ok());
+        assert!(validate_store(Some("omemo-2")).is_ok());
+        assert!(validate_store(None).is_ok());
+        let too_long = "x".repeat(33);
+        let bad: [&str; 7] = [
+            "../escape",
+            "UPPER",
+            "with space",
+            "with/slash",
+            "with.dot",
+            "",
+            too_long.as_str(),
+        ];
+        for b in bad {
+            assert!(validate_store(Some(b)).is_err(), "should reject {b:?}");
+        }
     }
 }
