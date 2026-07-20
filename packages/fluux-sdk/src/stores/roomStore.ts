@@ -1358,7 +1358,21 @@ export const roomStore = createStore<RoomState>()(
       // Get the last non-ignored message for sidebar preview. Use the appended set
       // (not the possibly-gated resident array) so the preview still advances to the
       // incoming message even when the window has slid off the live edge.
-      const lastMessage = findLastNonIgnoredMessage(appendedMessages, roomJid, existing.nickToJidCache) ?? existing.lastMessage
+      //
+      // appendLive appends at the END without sorting, so a DELAYED arrival
+      // (gateway/offline replay, or the MAM {ids} fetch behind deferred
+      // poll-closed verification, which emits the ORIGINAL POLL — older than the
+      // poll-closed that triggered it) becomes the array's last element and would
+      // drag the preview backwards. Dedupe can't protect us: appendLive keys off
+      // the RESIDENT array, which is empty off the active room. roomMeta is
+      // persisted, so an ungated assignment survives a reload. tie: 'replace' so a
+      // replay burst sharing one second-precision <delay/> stamp still advances.
+      const heldLastMessage = existingMeta?.lastMessage ?? existing.lastMessage
+      const previewCandidate = findLastNonIgnoredMessage(appendedMessages, roomJid, existing.nickToJidCache)
+      const lastMessage =
+        previewCandidate && shouldReplaceLastMessage(heldLastMessage, previewCandidate, 'replace')
+          ? previewCandidate
+          : heldLastMessage
 
       // Update lastInteractedAt so the room bubbles up in the sidebar:
       // - Active room: always update (user is viewing it)
