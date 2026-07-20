@@ -1057,10 +1057,23 @@ export const chatStore = createStore<ChatState>()(
               { treatDelayedAsNew: true }
             )
 
-            // Keep a bodiless signal placeholder (e.g. an undecrypted encrypted
-            // reaction) from becoming the preview — fall back to the existing
-            // lastMessage when the incoming message has nothing to show.
-            const previewMessage = isPreviewableMessage(msg) ? msg : meta.lastMessage
+            // Sidebar preview policy, shared with every bulk-merge path so the
+            // four call sites can't drift again. Falls back to the existing
+            // lastMessage when the arrival must not become the preview:
+            // - a bodiless signal placeholder (e.g. an undecrypted encrypted
+            //   reaction) has nothing to show, and
+            // - a DELAYED arrival (offline replay, s2s catch-up, gateway
+            //   history) can be older than what we already know — appendLive
+            //   puts it last in the resident array, and for a backgrounded
+            //   conversation that array is empty, so nothing dedupes it away.
+            //   Without the gate it drags the sidebar back to an older message
+            //   and that regression persists to localStorage.
+            // 'replace' on ties: arrival order breaks equal timestamps, which
+            // second-precision <delay/> stamps make common in a replay burst.
+            const previewMessage =
+              isPreviewableMessage(msg) && shouldReplaceLastMessage(meta.lastMessage, msg, 'replace')
+                ? msg
+                : meta.lastMessage
 
             // Update metadata map
             const newMeta = new Map(state.conversationMeta)

@@ -57,6 +57,20 @@ export function isPreviewableMessage(msg: PreviewableMessage): boolean {
 }
 
 /**
+ * How a timestamp TIE between the existing preview and the candidate resolves.
+ *
+ * - `'keep'` (default) — the incumbent wins. Correct for bulk merges, where the
+ *   candidate is the newest of a re-scanned array and a tie means "same message
+ *   or nothing newer": replacing would churn the sidebar for no visible change.
+ * - `'replace'` — the candidate wins. Correct for the LIVE arrival path, where
+ *   arrival order is the tie-break: XEP-0203 `<delay/>` stamps are commonly
+ *   second-precision, so an offline/gateway replay burst lands with identical
+ *   timestamps. Keeping the incumbent there would freeze the sidebar on the
+ *   FIRST message of the burst and show the oldest of the batch.
+ */
+export type LastMessageTiePolicy = 'keep' | 'replace'
+
+/**
  * Decide whether a previewable `candidate` should replace the current
  * `existing` lastMessage.
  *
@@ -65,21 +79,31 @@ export function isPreviewableMessage(msg: PreviewableMessage): boolean {
  * - the existing preview is a non-previewable placeholder (e.g. a stuck
  *   bodiless encrypted reaction) — a real message always supersedes it, even
  *   if the placeholder's timestamp is newer, OR
- * - the candidate is strictly newer than the existing preview.
+ * - the candidate is newer than the existing preview (`tie` decides equality).
+ *
+ * A strictly OLDER candidate never wins, whatever the tie policy: that is the
+ * whole point of the gate. A delayed message (offline replay, s2s catch-up, a
+ * gateway stamping history) can arrive long after we already know something
+ * newer, and must not drag the sidebar preview backwards.
  *
  * The caller is expected to pass a previewable candidate (e.g. the result of
  * {@link findLastPreviewableMessage}).
  *
  * @param existing - The current lastMessage (may be undefined)
  * @param candidate - The previewable candidate message
+ * @param tie - Tie-break policy, see {@link LastMessageTiePolicy}
  * @returns true if candidate should become the new lastMessage
  */
 export function shouldReplaceLastMessage<T extends PreviewableMessage & MessageWithTimestamp>(
   existing: T | undefined,
-  candidate: T
+  candidate: T,
+  tie: LastMessageTiePolicy = 'keep'
 ): boolean {
   if (!existing) return true
   if (!isPreviewableMessage(existing)) return true
+  // Swapping the arguments reuses the one comparison primitive: "existing is
+  // not strictly newer than candidate" === "candidate is not strictly older".
+  if (tie === 'replace') return !shouldUpdateLastMessage(candidate, existing)
   return shouldUpdateLastMessage(existing, candidate)
 }
 
