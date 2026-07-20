@@ -20,8 +20,7 @@
 //! resolve the per-user app data dir, base64-encode bytes across the IPC
 //! boundary, validate the `account` param is a plausible bare JID, and
 //! serialize concurrent same-account writes.
-use aes_gcm::aead::rand_core::RngCore;
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::aead::{Aead, Generate, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write as _;
@@ -373,14 +372,19 @@ impl Store {
 
     fn seal(&self, account: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let key = self.master_key(account)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
-        let mut nonce_bytes = [0u8; NONCE_LEN];
-        OsRng.fill_bytes(&mut nonce_bytes);
+        let key_arr: Key<Aes256Gcm> = key.into();
+        let cipher = Aes256Gcm::new(&key_arr);
+        // `Nonce::generate()` (the `aead::Generate` trait, `getrandom` feature)
+        // draws from the OS's ambient CSPRNG — the 0.11 replacement for the
+        // 0.10-era `OsRng.fill_bytes(..)`. MUST stay CSPRNG-backed: a nonce
+        // MUST be unique per message under a given key, or AES-GCM confidentiality
+        // (and authenticity) breaks.
+        let nonce = Nonce::generate();
         let ct = cipher
-            .encrypt(Nonce::from_slice(&nonce_bytes), plaintext)
+            .encrypt(&nonce, plaintext)
             .map_err(|e| format!("seal: {e}"))?;
         let mut out = Vec::with_capacity(NONCE_LEN + ct.len());
-        out.extend_from_slice(&nonce_bytes);
+        out.extend_from_slice(&nonce);
         out.extend_from_slice(&ct);
         Ok(out)
     }
@@ -390,9 +394,12 @@ impl Store {
             return Err("sealed value too short".into());
         }
         let key = self.master_key(account)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let key_arr: Key<Aes256Gcm> = key.into();
+        let cipher = Aes256Gcm::new(&key_arr);
+        let nonce = Nonce::try_from(&sealed[..NONCE_LEN])
+            .map_err(|_| "unseal: malformed nonce".to_string())?;
         cipher
-            .decrypt(Nonce::from_slice(&sealed[..NONCE_LEN]), &sealed[NONCE_LEN..])
+            .decrypt(&nonce, &sealed[NONCE_LEN..])
             .map_err(|e| format!("unseal (tampered or wrong key): {e}"))
     }
 }
@@ -417,9 +424,9 @@ fn parse_keychain_key(account: &str, encoded: &str) -> Result<[u8; KEY_LEN], Str
 }
 
 fn random_key() -> [u8; KEY_LEN] {
-    let mut k = [0u8; KEY_LEN];
-    OsRng.fill_bytes(&mut k);
-    k
+    // OS-entropy CSPRNG via `aead::Generate` (the `getrandom` feature), same
+    // security property as the 0.10-era `OsRng.fill_bytes(..)` this replaces.
+    Generate::generate()
 }
 
 /// Write `bytes` to `path` with 0600 permissions, atomically: the data lands in
