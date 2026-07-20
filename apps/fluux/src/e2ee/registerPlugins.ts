@@ -138,6 +138,12 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
         // non-persistent in-memory default. A dedicated store also keeps its
         // write lifecycle independent of OMEMO's much heavier traffic.
         const { TauriKeychainStorageBackend } = await import('./TauriKeychainStorageBackend')
+        // NOTE: the store slug here ('openpgp') just happens to match the
+        // plugin id. They are NOT the same thing — the slug becomes part of
+        // an on-disk filename and must satisfy Rust's `validate_store`
+        // (`[a-z0-9-]{1,32}`), which the 'omemo:2' plugin id below would
+        // fail (':' is not allowed). Don't pass a plugin id here without
+        // checking it against that rule first.
         client.setE2EEStorageBackend(
           new TauriKeychainStorageBackend(manager.getAccountJid(), undefined, 'openpgp'),
           'openpgp',

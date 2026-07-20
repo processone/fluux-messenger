@@ -114,6 +114,19 @@ fn sanitize_jid(jid: &str) -> String {
         .collect()
 }
 
+/// Shared `<sanitized-jid>[__<store>]` stem used by both the on-disk path
+/// (`file_path_for`) and the process-wide lock key (`account_lock`). These
+/// two call sites must always agree byte-for-byte, or the lock silently
+/// stops guarding the file it is meant to serialize access to — so this is
+/// the single definition both build on rather than two copies kept in sync
+/// by hand.
+fn file_stem(account: &str, store: Option<&str>) -> String {
+    match store {
+        None => sanitize_jid(account),
+        Some(s) => format!("{}__{}", sanitize_jid(account), s),
+    }
+}
+
 impl Store {
     /// Production constructor: keychain-backed, rooted at `base_dir`.
     pub fn new(base_dir: PathBuf) -> Self {
@@ -204,10 +217,7 @@ impl Store {
     /// exact file. `dir()` creation is deferred to write time, so this is a
     /// pure path builder.
     pub fn file_path_for(&self, account: &str, store: Option<&str>) -> PathBuf {
-        let stem = match store {
-            None => sanitize_jid(account),
-            Some(s) => format!("{}__{}", sanitize_jid(account), s),
-        };
+        let stem = file_stem(account, store);
         self.base_dir
             .join("e2ee-store")
             .join(format!("{stem}.json"))
@@ -612,10 +622,7 @@ static ACCOUNT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLoc
 fn account_lock(account: &str, store: Option<&str>) -> Arc<Mutex<()>> {
     let registry = ACCOUNT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
     let mut map = registry.lock().unwrap_or_else(|e| e.into_inner());
-    let stem = match store {
-        None => sanitize_jid(account),
-        Some(s) => format!("{}__{}", sanitize_jid(account), s),
-    };
+    let stem = file_stem(account, store);
     map.entry(stem)
         .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone()
@@ -1021,11 +1028,24 @@ mod tests {
 
     #[test]
     fn default_store_uses_legacy_path() {
+        // Asserting `file_path_for(.., None) == file_path(..)` would be
+        // tautological: `file_path` is DEFINED as `file_path_for(.., None)`,
+        // so the two sides are the same expression and this could never
+        // fail, including under the exact regression it's meant to guard
+        // (OMEMO's live sealed data must keep resolving to `<jid>.json`).
+        // Assert the concrete on-disk filename instead. "a@x" sanitizes to
+        // itself (`@` is in the allowed charset), so the legacy filename is
+        // literally `a@x.json`.
         let (store, _tmp) = test_store();
+        let path = store.file_path_for("a@x", None);
+        let name = path.file_name().unwrap().to_str().unwrap();
         assert_eq!(
-            store.file_path_for("a@x", None),
-            store.file_path("a@x"),
+            name, "a@x.json",
             "omitting the store param must resolve to the legacy <jid>.json"
+        );
+        assert!(
+            !name.contains("__"),
+            "legacy path must not carry a namespace separator: {name}"
         );
     }
 
@@ -1057,7 +1077,13 @@ mod tests {
 
     #[test]
     fn stores_share_one_master_key_file() {
-        let (store, _tmp) = test_store();
+        // `test_store()` builds the keychain-backed `Store` (a mock keyring
+        // is installed for it), so the master key is never written to disk
+        // and a `.mk`-count assertion against it is vacuously 0 regardless
+        // of namespacing. Use the no-keychain fallback constructor instead
+        // so a real 0600 `.mk` file is minted and the count means something.
+        let dir = tempdir().unwrap();
+        let store = Store::for_testing_no_keychain(dir.path().to_path_buf());
         store.put_in("a@x", None, "k", b"v").unwrap();
         store.put_in("a@x", Some("openpgp"), "k", b"v").unwrap();
         // The master-key path is the UN-namespaced one, so both stores resolve to
@@ -1067,21 +1093,23 @@ mod tests {
             store.file_path_for("a@x", None).with_extension("mk"),
             "master-key path must not be namespaced per store"
         );
-        // And on a fallback (no-keychain) host that means at most ONE .mk on disk,
-        // even though two sealed store files now exist.
-        let dir = store
+        // On this fallback (no-keychain) host, writing to the default AND a
+        // namespaced store for the same account must mint exactly ONE .mk
+        // file. A strict equality (not `<= 1`) is what would actually catch
+        // a regression where the .mk path became namespaced per store.
+        let store_dir = store
             .file_path_for("a@x", None)
             .parent()
             .unwrap()
             .to_path_buf();
-        let mk_count = std::fs::read_dir(&dir)
+        let mk_count = std::fs::read_dir(&store_dir)
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().is_some_and(|x| x == "mk"))
             .count();
-        assert!(
-            mk_count <= 1,
-            "expected at most one master-key file, found {mk_count}"
+        assert_eq!(
+            mk_count, 1,
+            "expected exactly one master-key file, found {mk_count}"
         );
         // Both files really do exist (otherwise the assertions above are vacuous).
         assert!(store.file_path_for("a@x", None).exists());
