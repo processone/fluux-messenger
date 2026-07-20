@@ -165,6 +165,19 @@ Migrate the three reactive consumers (`useConversationEncryptionState.ts:148`, `
 - Hook unification (routing `useConversationEncryptionState`'s OpenPGP trust through `getPeerTrust`) — still deferred; async-vs-sync churn with no consumer-visible change.
 - M2c-2 (protocol picker) and M2c-3 (own-device management).
 - The deferred i18n dead-key sweep (`contacts.encryption.removeVerification*`, `contacts.encryption.omemo.*`).
+- A per-plugin store name on the **web** backend — see the note below.
+
+## Follow-up note — web storage naming (only if OMEMO ships on web)
+
+B0 gives desktop OpenPGP its own sealed file. The web mirror was **considered and deliberately rejected**: `IndexedDBStorageBackend` keeps its single database per account (`fluux-e2ee-<sanitizedJid>`, object store `kv`) and takes no store-name parameter.
+
+Two reasons: OMEMO is desktop-only, so on web only OpenPGP ever registers — there is no second plugin to contend or collide with (YAGNI); and Task 1's per-plugin resolution falls back to the default backend when no override is set, so the web path needs no wiring change at all.
+
+**The rule to apply if OMEMO ever ships on web — the incumbent keeps the existing name, the newcomer gets the suffix.** Give **OMEMO** the new suffixed database (`fluux-e2ee-<jid>-omemo`) and leave **OpenPGP on the default, unsuffixed name**. Renaming OpenPGP's database would orphan the **encrypted private key** web OpenPGP already stores through `ctx.storage` under `e2ee/openpgp\0…` keys, stranding every existing web user at "no identity" and forcing a re-import or regeneration.
+
+This is the same invariant B0 applies on desktop, where OMEMO (the incumbent) keeps the legacy `<jid>.json` and OpenPGP (the newcomer) gets `<jid>__openpgp.json`. The direction is easy to get backwards — it depends on which plugin already has data on that platform, not on which plugin the current work happens to be about.
+
+If the parameter is added then, prefer a **separate database** (`fluux-e2ee-<jid>-<store>`) over a second object store inside the existing one: it needs no `DB_VERSION` bump and no `onupgradeneeded` migration.
 
 ## Resolved review question — keychain traffic
 
