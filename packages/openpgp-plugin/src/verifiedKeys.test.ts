@@ -1,16 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { loadVerifiedMap, persistVerifiedMap, VERIFIED_STORAGE_KEY } from './verifiedKeys'
-import type { PluginStorage } from '@fluux/sdk'
+import { memStorage } from './testSupport/memStorage'
 
-function memStorage(seed?: Record<string, Uint8Array>): PluginStorage {
-  const m = new Map<string, Uint8Array>(Object.entries(seed ?? {}))
-  return {
-    get: async (k) => m.get(k) ?? null,
-    put: async (k, v) => void m.set(k, v),
-    delete: async (k) => void m.delete(k),
-    list: async (p) => [...m.keys()].filter((k) => k.startsWith(p)),
-  }
-}
 const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o))
 
 describe('verifiedKeys persistence', () => {
