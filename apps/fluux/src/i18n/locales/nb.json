@@ -179,6 +179,7 @@
             "removeVerification": "Fjern bekreftelse",
             "removeVerificationConfirm": "Fjerne bekreftelse for {{name}}s nøkkel? Du må bekrefte på nytt via en annen kanal.",
             "removeVerificationSuccess": "Bekreftelse fjernet",
+            "removeVerificationFailed": "Kunne ikke fjerne bekreftelsen. Prøv igjen",
             "disableForContact": "Deaktiver kryptering for denne kontakten",
             "notAvailableTitle": "Kryptering er ikke tilgjengelig",
             "notAvailableDescription": "Denne kontakten har ikke publisert en OpenPGP-nøkkel. Meldinger sendes i klartekst.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Kodene stemmer, verifiser på nytt",
             "alreadyVerifiedBanner": "Denne nøkkelen er allerede verifisert. Du kan verifisere på nytt hvis du er i tvil.",
             "confirmSuccess": "Fingeravtrykk verifisert",
+            "confirmFailed": "Kunne ikke verifisere fingeravtrykket. Prøv igjen",
             "revokeAction": "Fjern bekreftelse"
         },
         "keyChangeBanner": {

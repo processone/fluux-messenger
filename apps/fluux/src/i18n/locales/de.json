@@ -181,6 +181,7 @@
             "removeVerification": "Verifizierung entfernen",
             "removeVerificationConfirm": "Verifizierung des Schlüssels von {{name}} entfernen? Sie müssen über einen zweiten Kanal erneut verifizieren.",
             "removeVerificationSuccess": "Verifizierung entfernt",
+            "removeVerificationFailed": "Die Verifizierung konnte nicht entfernt werden. Versuche es erneut",
             "disableForContact": "Verschlüsselung für diesen Kontakt deaktivieren",
             "notAvailableTitle": "Verschlüsselung nicht verfügbar",
             "notAvailableDescription": "Dieser Kontakt hat keinen OpenPGP-Schlüssel veröffentlicht. Nachrichten werden im Klartext gesendet.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Codes stimmen überein, erneut verifizieren",
             "alreadyVerifiedBanner": "Dieser Schlüssel wurde bereits verifiziert. Sie können ihn erneut verifizieren, wenn Sie Zweifel haben.",
             "confirmSuccess": "Fingerabdruck verifiziert",
+            "confirmFailed": "Der Fingerabdruck konnte nicht verifiziert werden. Versuche es erneut",
             "revokeAction": "Verifizierung entfernen"
         },
         "keyChangeBanner": {

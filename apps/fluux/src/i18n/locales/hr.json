@@ -179,6 +179,7 @@
             "removeVerification": "Ukloni provjeru",
             "removeVerificationConfirm": "Ukloniti provjeru za ključ od {{name}}? Morat ćete ga ponovo provjeriti putem drugog kanala.",
             "removeVerificationSuccess": "Provjera uklonjena",
+            "removeVerificationFailed": "Nije moguće ukloniti provjeru. Pokušajte ponovno",
             "disableForContact": "Onemogući šifriranje za ovaj kontakt",
             "notAvailableTitle": "Šifriranje nije dostupno",
             "notAvailableDescription": "Ovaj kontakt nije objavio OpenPGP ključ. Poruke će se slati u običnom tekstu.",
@@ -619,6 +620,7 @@
             "reconfirmAction": "Kodovi se podudaraju, ponovno provjeri",
             "alreadyVerifiedBanner": "Ovaj ključ je već provjeren. Možete ga ponovo provjeriti ako imate sumnje.",
             "confirmSuccess": "Otisak provjeren",
+            "confirmFailed": "Nije moguće provjeriti otisak. Pokušajte ponovno",
             "revokeAction": "Ukloni potvrdu"
         },
         "keyChangeBanner": {

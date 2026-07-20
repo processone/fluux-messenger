@@ -179,6 +179,7 @@
             "removeVerification": "Fjarlægja staðfestingu",
             "removeVerificationConfirm": "Fjarlægja staðfestingu fyrir lykil {{name}}? Þú þarft að staðfesta aftur í gegnum annan rás.",
             "removeVerificationSuccess": "Staðfesting fjarlægð",
+            "removeVerificationFailed": "Ekki tókst að fjarlægja staðfestinguna. Reyndu aftur",
             "disableForContact": "Slökkva á dulritun fyrir þennan tengilið",
             "notAvailableTitle": "Dulritun ekki tiltæk",
             "notAvailableDescription": "Þessi tengiliður hefur ekki birt OpenPGP-lykil. Skilaboð verða send ódulrituð.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Kóðarnir passa, staðfesta aftur",
             "alreadyVerifiedBanner": "Þessi lykill hefur þegar verið staðfestur. Þú getur endurstaðfest ef þig grunar eitthvað.",
             "confirmSuccess": "Fingrafar staðfest",
+            "confirmFailed": "Ekki tókst að staðfesta fingrafarið. Reyndu aftur",
             "revokeAction": "Fjarlægja staðfestingu"
         },
         "keyChangeBanner": {

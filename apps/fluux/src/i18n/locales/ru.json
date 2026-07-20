@@ -179,6 +179,7 @@
             "removeVerification": "Удалить верификацию",
             "removeVerificationConfirm": "Удалить верификацию ключа {{name}}? Вам потребуется повторить проверку через другой канал.",
             "removeVerificationSuccess": "Верификация удалена",
+            "removeVerificationFailed": "Не удалось удалить верификацию. Попробуйте снова",
             "disableForContact": "Отключить шифрование для этого контакта",
             "notAvailableTitle": "Шифрование недоступно",
             "notAvailableDescription": "Этот контакт не опубликовал ключ OpenPGP. Сообщения будут отправлены в открытом виде.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Коды совпадают, подтвердить заново",
             "alreadyVerifiedBanner": "Этот ключ уже был верифицирован. Вы можете верифицировать повторно, если есть сомнения.",
             "confirmSuccess": "Отпечаток проверен",
+            "confirmFailed": "Не удалось проверить отпечаток. Попробуйте снова",
             "revokeAction": "Снять подтверждение"
         },
         "keyChangeBanner": {

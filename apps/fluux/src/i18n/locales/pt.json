@@ -181,6 +181,7 @@
             "removeVerification": "Remover verificação",
             "removeVerificationConfirm": "Remover a verificação da chave de {{name}}? Terá de verificar novamente através de um segundo canal.",
             "removeVerificationSuccess": "Verificação removida",
+            "removeVerificationFailed": "Não foi possível remover a verificação. Tenta novamente",
             "disableForContact": "Desativar a encriptação para este contacto",
             "notAvailableTitle": "Encriptação indisponível",
             "notAvailableDescription": "Este contacto não publicou uma chave OpenPGP. As mensagens serão enviadas em texto simples.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Os códigos correspondem, reverificar",
             "alreadyVerifiedBanner": "Esta chave já foi verificada. Podes verificar novamente se tiveres alguma dúvida.",
             "confirmSuccess": "Impressão digital verificada",
+            "confirmFailed": "Não foi possível verificar a impressão digital. Tenta novamente",
             "revokeAction": "Remover verificação"
         },
         "keyChangeBanner": {

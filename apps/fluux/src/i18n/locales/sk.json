@@ -180,6 +180,7 @@
             "removeVerification": "Odstrániť overenie",
             "removeVerificationConfirm": "Odstrániť overenie kľúča {{name}}? Budete musieť znova overiť prostredníctvom druhého kanála.",
             "removeVerificationSuccess": "Overenie odstránené",
+            "removeVerificationFailed": "Nepodarilo sa odstrániť overenie. Skúste znova",
             "disableForContact": "Zakázať šifrovanie pre tento kontakt",
             "notAvailableTitle": "Šifrovanie nie je k dispozícii",
             "notAvailableDescription": "Tento kontakt nezverejnil OpenPGP kľúč. Správy sa odošlú v čistom texte.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Kódy sa zhodujú, znova overiť",
             "alreadyVerifiedBanner": "Tento kľúč už bol overený. Môžete ho znova overiť, ak máte pochybnosti.",
             "confirmSuccess": "Odtlačok overený",
+            "confirmFailed": "Nepodarilo sa overiť odtlačok. Skúste znova",
             "revokeAction": "Odstrániť overenie"
         },
         "keyChangeBanner": {

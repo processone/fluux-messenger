@@ -181,6 +181,7 @@
             "removeVerification": "Odebrat ověření",
             "removeVerificationConfirm": "Odebrat ověření klíče {{name}}? Budete muset klíč znovu ověřit prostřednictvím druhého kanálu.",
             "removeVerificationSuccess": "Ověření odebráno",
+            "removeVerificationFailed": "Nepodařilo se odebrat ověření. Zkuste to znovu",
             "disableForContact": "Zakázat šifrování pro tento kontakt",
             "notAvailableTitle": "Šifrování není k dispozici",
             "notAvailableDescription": "Tento kontakt nezveřejnil klíč OpenPGP. Zprávy budou odeslány v prostém textu.",
@@ -622,6 +623,7 @@
             "reconfirmAction": "Kódy se shodují, znovu ověřit",
             "alreadyVerifiedBanner": "Tento klíč již byl ověřen. Můžete jej znovu ověřit, pokud máte pochybnosti.",
             "confirmSuccess": "Otisk ověřen",
+            "confirmFailed": "Nepodařilo se ověřit otisk. Zkuste to znovu",
             "revokeAction": "Odebrat ověření"
         },
         "keyChangeBanner": {

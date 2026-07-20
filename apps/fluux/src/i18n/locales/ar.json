@@ -179,6 +179,7 @@
             "removeVerification": "إزالة التوثيق",
             "removeVerificationConfirm": "إزالة التوثيق لمفتاح {{name}}؟ ستحتاج إلى إعادة التوثيق عبر قناة ثانية.",
             "removeVerificationSuccess": "تمت إزالة التوثيق",
+            "removeVerificationFailed": "تعذّر إزالة التوثيق. حاول مرة أخرى",
             "disableForContact": "تعطيل التشفير لجهة الاتصال هذه",
             "notAvailableTitle": "التشفير غير متاح",
             "notAvailableDescription": "لم ينشر جهة الاتصال هذه مفتاح OpenPGP. ستُرسل الرسائل بنص عادي.",
@@ -622,6 +623,7 @@
             "reconfirmAction": "الرموز متطابقة, أعد التحقق",
             "alreadyVerifiedBanner": "تم التحقق من هذا المفتاح مسبقاً. يمكنك إعادة التحقق إذا كان لديك أي شك.",
             "confirmSuccess": "تم التحقق من البصمة",
+            "confirmFailed": "تعذّر التحقق من البصمة. حاول مرة أخرى",
             "revokeAction": "إزالة التحقق"
         },
         "keyChangeBanner": {

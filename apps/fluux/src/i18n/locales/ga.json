@@ -179,6 +179,7 @@
             "removeVerification": "Bain an fíorú",
             "removeVerificationConfirm": "An bhfuil tú ag iarraidh an fíorú a bhaint de eochair {{name}}? Beidh ort fíorú arís trí chainéal eile.",
             "removeVerificationSuccess": "Fíorú bainte",
+            "removeVerificationFailed": "Níorbh fhéidir an fíorú a bhaint. Bain triail eile as",
             "disableForContact": "Díchumasaigh criptiú don teagmháil seo",
             "notAvailableTitle": "Níl criptiú ar fáil",
             "notAvailableDescription": "Níor fhoilsigh an teagmháil seo eochair OpenPGP. Cuirfear teachtaireachtaí sa ghnáth-théacs.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Comhoireann na cóid, ath-fhíoraigh",
             "alreadyVerifiedBanner": "Tá an eochair seo fíoraithe cheana féin. Is féidir leat é a ath-fhíorú má tá amhras ort.",
             "confirmSuccess": "Méarlorg fíoraithe",
+            "confirmFailed": "Níorbh fhéidir an méarlorg a fhíorú. Bain triail eile as",
             "revokeAction": "Bain an fíorú"
         },
         "keyChangeBanner": {

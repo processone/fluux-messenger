@@ -181,6 +181,7 @@
             "removeVerification": "Eliminar verificación",
             "removeVerificationConfirm": "¿Eliminar la verificación de la clave de {{name}}? Deberás volver a verificar a través de un segundo canal.",
             "removeVerificationSuccess": "Verificación eliminada",
+            "removeVerificationFailed": "No se pudo eliminar la verificación. Inténtalo de nuevo",
             "disableForContact": "Desactivar el cifrado para este contacto",
             "notAvailableTitle": "Cifrado no disponible",
             "notAvailableDescription": "Este contacto no ha publicado una clave OpenPGP. Los mensajes se enviarán en texto plano.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Los códigos coinciden, re-verificar",
             "alreadyVerifiedBanner": "Esta clave ya ha sido verificada. Puedes volver a verificarla si tienes alguna duda.",
             "confirmSuccess": "Huella verificada",
+            "confirmFailed": "No se pudo verificar la huella. Inténtalo de nuevo",
             "revokeAction": "Eliminar verificación"
         },
         "keyChangeBanner": {

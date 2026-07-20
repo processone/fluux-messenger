@@ -179,6 +179,7 @@
             "removeVerification": "Verificatie verwijderen",
             "removeVerificationConfirm": "Verificatie voor de sleutel van {{name}} verwijderen? Je moet opnieuw verifiëren via een tweede kanaal.",
             "removeVerificationSuccess": "Verificatie verwijderd",
+            "removeVerificationFailed": "Kon de verificatie niet verwijderen. Probeer opnieuw",
             "disableForContact": "Versleuteling voor dit contact uitschakelen",
             "notAvailableTitle": "Versleuteling niet beschikbaar",
             "notAvailableDescription": "Dit contact heeft geen OpenPGP-sleutel gepubliceerd. Berichten worden in platte tekst verzonden.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Codes komen overeen, opnieuw verifiëren",
             "alreadyVerifiedBanner": "Deze sleutel is al geverifieerd. U kunt opnieuw verifiëren als u twijfels heeft.",
             "confirmSuccess": "Vingerafdruk geverifieerd",
+            "confirmFailed": "Kon de vingerafdruk niet verifiëren. Probeer opnieuw",
             "revokeAction": "Verificatie verwijderen"
         },
         "keyChangeBanner": {

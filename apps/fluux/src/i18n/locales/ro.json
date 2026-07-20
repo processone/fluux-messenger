@@ -181,6 +181,7 @@
             "removeVerification": "Elimină verificarea",
             "removeVerificationConfirm": "Eliminați verificarea pentru cheia lui {{name}}? Va trebui să reverificați printr-un al doilea canal.",
             "removeVerificationSuccess": "Verificare eliminată",
+            "removeVerificationFailed": "Nu s-a putut elimina verificarea. Încearcă din nou",
             "disableForContact": "Dezactivează criptarea pentru acest contact",
             "notAvailableTitle": "Criptarea nu este disponibilă",
             "notAvailableDescription": "Acest contact nu a publicat o cheie OpenPGP. Mesajele vor fi trimise în text simplu.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Codurile se potrivesc, re-verifică",
             "alreadyVerifiedBanner": "Această cheie a fost deja verificată. Puteți reverifica dacă aveți îndoieli.",
             "confirmSuccess": "Amprentă verificată",
+            "confirmFailed": "Nu s-a putut verifica amprenta. Încearcă din nou",
             "revokeAction": "Elimină verificarea"
         },
         "keyChangeBanner": {

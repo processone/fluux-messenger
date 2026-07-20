@@ -179,6 +179,7 @@
             "removeVerification": "Зняць праверку",
             "removeVerificationConfirm": "Зняць праверку ключа {{name}}? Вам прыйдзецца пераправерыць праз другі канал.",
             "removeVerificationSuccess": "Праверка знята",
+            "removeVerificationFailed": "Не ўдалося зняць праверку. Паспрабуйце зноў",
             "disableForContact": "Адключыць шыфраванне для гэтага кантакту",
             "notAvailableTitle": "Шыфраванне недаступнае",
             "notAvailableDescription": "Гэты кантакт не апублікаваў ключ OpenPGP. Паведамленні будуць адпраўлены ў адкрытым выглядзе.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Коды супадаюць, пацвердзіць яшчэ раз",
             "alreadyVerifiedBanner": "Гэты ключ ужо быў верыфікаваны. Вы можаце паўторна верыфікаваць, калі ёсць сумненні.",
             "confirmSuccess": "Адбітак правераны",
+            "confirmFailed": "Не ўдалося праверыць адбітак. Паспрабуйце зноў",
             "revokeAction": "Зняць праверку"
         },
         "keyChangeBanner": {

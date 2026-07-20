@@ -179,6 +179,7 @@
             "removeVerification": "Poista vahvistus",
             "removeVerificationConfirm": "Poistetaanko vahvistus {{name}}n avaimelta? Sinun täytyy vahvistaa uudelleen toisen kanavan kautta.",
             "removeVerificationSuccess": "Vahvistus poistettu",
+            "removeVerificationFailed": "Vahvistuksen poistaminen epäonnistui. Yritä uudelleen",
             "disableForContact": "Poista salaus käytöstä tälle yhteystiedolle",
             "notAvailableTitle": "Salaus ei käytettävissä",
             "notAvailableDescription": "Tämä yhteystieto ei ole julkaissut OpenPGP-avainta. Viestit lähetetään selkokielisinä.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Koodit täsmäävät, vahvista uudelleen",
             "alreadyVerifiedBanner": "Tämä avain on jo vahvistettu. Voit vahvistaa sen uudelleen, jos sinulla on epäilyksiä.",
             "confirmSuccess": "Sormenjälki vahvistettu",
+            "confirmFailed": "Sormenjäljen vahvistaminen epäonnistui. Yritä uudelleen",
             "revokeAction": "Poista varmennus"
         },
         "keyChangeBanner": {

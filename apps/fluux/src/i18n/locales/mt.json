@@ -181,6 +181,7 @@
             "removeVerification": "Neħħi l-verifikazzjoni",
             "removeVerificationConfirm": "Tneħħi l-verifikazzjoni tal-aħjar ta' {{name}}? Tkun trid tivverifika mill-ġdid permezz ta' kanal ieħor.",
             "removeVerificationSuccess": "Verifikazzjoni mneħħija",
+            "removeVerificationFailed": "Ma stajtx tneħħi l-verifikazzjoni. Erġa' pprova",
             "disableForContact": "Itfi l-kriptaġġ għal dan il-kuntatt",
             "notAvailableTitle": "Il-kriptaġġ mhux disponibbli",
             "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f’test ċar.",
@@ -623,6 +624,7 @@
             "reconfirmAction": "Il-kodiċijiet jaqblu, erġa' vverifika",
             "alreadyVerifiedBanner": "Din il-ċavetta diġà ġiet ivverifikata. Tista' riverifika jekk għandek xi dubji.",
             "confirmSuccess": "Marka tas-saba' verifikata",
+            "confirmFailed": "Ma stajtx tivverifika l-marka tas-saba'. Erġa' pprova",
             "revokeAction": "Neħħi l-verifika"
         },
         "keyChangeBanner": {

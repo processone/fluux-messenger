@@ -180,6 +180,7 @@
             "removeVerification": "Retirer la vérification",
             "removeVerificationConfirm": "Retirer la vérification de la clé de {{name}} ? Vous devrez la re-vérifier via un second canal.",
             "removeVerificationSuccess": "Vérification retirée",
+            "removeVerificationFailed": "Impossible de retirer la vérification. Réessayez",
             "disableForContact": "Désactiver le chiffrement pour ce contact",
             "notAvailableTitle": "Chiffrement non disponible",
             "notAvailableDescription": "Ce contact n’a pas publié de clé OpenPGP. Les messages seront envoyés en clair.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Codes identiques, re-vérifier",
             "alreadyVerifiedBanner": "Cette clé a déjà été vérifiée. Vous pouvez re-vérifier si vous avez un doute.",
             "confirmSuccess": "Empreinte vérifiée",
+            "confirmFailed": "Impossible de vérifier l'empreinte. Réessayez",
             "revokeAction": "Retirer la vérification"
         },
         "keyChangeBanner": {

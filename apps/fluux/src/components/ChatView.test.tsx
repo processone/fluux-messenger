@@ -14,6 +14,7 @@ vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ChatView } from './ChatView'
 import type { Message, Contact, Conversation } from '@fluux/sdk'
+import { useToastStore } from '@/stores/toastStore'
 
 // Helper to create test messages
 const createMessage = (overrides: Partial<Message> = {}): Message => ({
@@ -56,6 +57,15 @@ const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 
 // Mutable encryption state — set per test
 let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
+
+// Mutable client.e2ee — set per test to exercise the verify/revoke handlers'
+// plugin resolution. Defaults to `null` so the bulk of the suite (which
+// doesn't touch E2EE) keeps exercising the `disabled` branch, same as before.
+type MockOpenpgpPlugin = {
+  getOwnFingerprint?: ReturnType<typeof vi.fn>
+  setIdentityTrust?: ReturnType<typeof vi.fn>
+}
+let mockE2EEClient: { getPlugin: (id: string) => MockOpenpgpPlugin | null } | null = null
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', async (importOriginal) => ({
@@ -166,7 +176,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   // so the EncryptionChip renders nothing and these tests stay
   // unaffected by E2EE UX changes.
   useXMPPContext: () => ({
-    client: { e2ee: null },
+    client: { e2ee: mockE2EEClient },
   }),
   // Used by auroraSenderColor (imported by ChatMessageBubble)
   generateConsistentColorHexSync: () => '#4a90d9',
@@ -363,6 +373,11 @@ vi.mock('lucide-react', () => ({
   User: () => <span data-testid="icon-user">User</span>,
   MoreVertical: () => <span data-testid="icon-more-vertical">More</span>,
   MessageCircle: () => <span data-testid="icon-message-circle">MessageCircle</span>,
+  // Used by VerifyPeerDialog, rendered when the verify/revoke tests open it
+  // from the chat header.
+  AlertTriangle: () => <span data-testid="icon-alert-triangle">AlertTriangle</span>,
+  Check: () => <span data-testid="icon-check">Check</span>,
+  ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)
@@ -424,6 +439,7 @@ describe('ChatView', () => {
     mockSupportsMAM = true
     mockActiveMAMState = { hasQueried: true, isLoading: false }
     mockEncryptionState = { kind: 'disabled' }
+    mockE2EEClient = null
 
     // Reset mock functions
     vi.clearAllMocks()
@@ -894,6 +910,125 @@ describe('ChatView', () => {
 
       // Should not show loading (MAM not supported)
       expect(screen.queryByText('Loading messages...')).not.toBeInTheDocument()
+    })
+  })
+
+  // Regression coverage for the chat-header verify/revoke bypass: both
+  // handlers must route through the OpenPGP plugin's setIdentityTrust
+  // (the plugin dual-writes into the legacy mirror itself) instead of
+  // writing the legacy verifiedPeerKeysStore directly, which silently
+  // never reached the plugin-owned VerifiedKeysCache the rest of the app
+  // reads from.
+  describe('Verify/revoke peer identity routes through the OpenPGP plugin', () => {
+    beforeEach(() => {
+      mockActiveConversation = {
+        id: 'alice@example.com',
+        name: 'Alice Smith',
+        type: 'chat',
+        unreadCount: 0,
+      }
+      mockContacts = [createContact()]
+      useToastStore.setState({ toasts: [] })
+    })
+
+    // Drives the header's encryption icon -> popover -> menu item, the only
+    // path that opens VerifyPeerDialog from ChatView (mirrors how a user
+    // actually reaches it; ChatHeader's `open` popover state is real, not
+    // mocked).
+    async function openVerifyDialogFromHeader() {
+      const trigger = await screen.findByRole('button', {
+        name: /chat\.(verifyPeer\.chipAriaLabel|encryption\.encryptedTo)/,
+      })
+      fireEvent.click(trigger)
+      const menuItem = await screen.findByRole('button', {
+        name: /chat\.verifyPeer\.(dialogTitle|menuViewVerified)/,
+      })
+      fireEvent.click(menuItem)
+      await screen.findByText('chat.verifyPeer.dialogTitle')
+    }
+
+    it('handleVerifyConfirm calls setIdentityTrust(peer, fingerprint, "verified") and shows a success toast only after it resolves', async () => {
+      const setIdentityTrust = vi.fn().mockResolvedValue(undefined)
+      mockE2EEClient = {
+        getPlugin: (id) =>
+          id === 'openpgp' ? { getOwnFingerprint: vi.fn(() => 'own-fp'), setIdentityTrust } : null,
+      }
+      mockEncryptionState = { kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' }
+
+      render(<ChatView />)
+      await openVerifyDialogFromHeader()
+
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.showFullFingerprints/ }))
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.confirmByFingerprint/ }))
+
+      await waitFor(() =>
+        expect(setIdentityTrust).toHaveBeenCalledWith('alice@example.com', 'ABCD1234', 'verified'),
+      )
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((toast) => toast.type === 'success')).toBe(true)
+      })
+    })
+
+    it('does not show a success toast and surfaces an error toast when setIdentityTrust rejects', async () => {
+      const setIdentityTrust = vi.fn().mockRejectedValue(new Error('boom'))
+      mockE2EEClient = {
+        getPlugin: (id) =>
+          id === 'openpgp' ? { getOwnFingerprint: vi.fn(() => 'own-fp'), setIdentityTrust } : null,
+      }
+      mockEncryptionState = { kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' }
+
+      render(<ChatView />)
+      await openVerifyDialogFromHeader()
+
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.showFullFingerprints/ }))
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.confirmByFingerprint/ }))
+
+      await waitFor(() => expect(setIdentityTrust).toHaveBeenCalled())
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((toast) => toast.type === 'error')).toBe(true)
+      })
+      expect(useToastStore.getState().toasts.some((toast) => toast.type === 'success')).toBe(false)
+    })
+
+    it('handleRevokeConfirm calls setIdentityTrust(peer, fingerprint, "untrusted")', async () => {
+      const setIdentityTrust = vi.fn().mockResolvedValue(undefined)
+      mockE2EEClient = {
+        getPlugin: (id) =>
+          id === 'openpgp' ? { getOwnFingerprint: vi.fn(() => 'own-fp'), setIdentityTrust } : null,
+      }
+      mockEncryptionState = { kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'verified' }
+
+      render(<ChatView />)
+      await openVerifyDialogFromHeader()
+
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.revokeAction/ }))
+
+      await waitFor(() =>
+        expect(setIdentityTrust).toHaveBeenCalledWith('alice@example.com', 'ABCD1234', 'untrusted'),
+      )
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((toast) => toast.type === 'success')).toBe(true)
+      })
+    })
+
+    it('surfaces an error toast (never a success toast) instead of crashing when the OpenPGP plugin is unavailable', async () => {
+      mockE2EEClient = null // plugin not registered / OpenPGP disabled
+      mockEncryptionState = { kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' }
+
+      render(<ChatView />)
+      await openVerifyDialogFromHeader()
+
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.showFullFingerprints/ }))
+      fireEvent.click(screen.getByRole('button', { name: /chat\.verifyPeer\.confirmByFingerprint/ }))
+
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((toast) => toast.type === 'error')).toBe(true)
+      })
+      expect(useToastStore.getState().toasts.some((toast) => toast.type === 'success')).toBe(false)
     })
   })
 })

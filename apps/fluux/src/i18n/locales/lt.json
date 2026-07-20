@@ -179,6 +179,7 @@
             "removeVerification": "Pašalinti patvirtinimą",
             "removeVerificationConfirm": "Pašalinti {{name}} rakto patvirtinimą? Turėsite iš naujo patvirtinti per antrą kanalą.",
             "removeVerificationSuccess": "Patvirtinimas pašalintas",
+            "removeVerificationFailed": "Nepavyko pašalinti patvirtinimo. Bandykite dar kartą",
             "disableForContact": "Išjungti šifravimą šiam kontaktui",
             "notAvailableTitle": "Šifravimas neprieinamas",
             "notAvailableDescription": "Šis kontaktas nepaskelbė OpenPGP rakto. Pranešimai bus siunčiami atviru tekstu.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Kodai sutampa, patvirtinti iš naujo",
             "alreadyVerifiedBanner": "Šis raktas jau buvo patvirtintas. Galite patvirtinti iš naujo, jei kyla abejonių.",
             "confirmSuccess": "Pirštų atspaudas patvirtintas",
+            "confirmFailed": "Nepavyko patvirtinti piršto atspaudo. Bandykite dar kartą",
             "revokeAction": "Pašalinti patvirtinimą"
         },
         "keyChangeBanner": {

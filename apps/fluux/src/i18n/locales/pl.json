@@ -181,6 +181,7 @@
             "removeVerification": "Usuń weryfikację",
             "removeVerificationConfirm": "Usunąć weryfikację klucza {{name}}? Musisz ponownie zweryfikować przez drugi kanał.",
             "removeVerificationSuccess": "Weryfikacja usunięta",
+            "removeVerificationFailed": "Nie udało się usunąć weryfikacji. Spróbuj ponownie",
             "disableForContact": "Wyłącz szyfrowanie dla tego kontaktu",
             "notAvailableTitle": "Szyfrowanie niedostępne",
             "notAvailableDescription": "Ten kontakt nie opublikował klucza OpenPGP. Wiadomości będą wysyłane jawnym tekstem.",
@@ -622,6 +623,7 @@
             "reconfirmAction": "Kody zgadzają się, zweryfikuj ponownie",
             "alreadyVerifiedBanner": "Ten klucz został już zweryfikowany. Możesz zweryfikować ponownie, jeśli masz wątpliwości.",
             "confirmSuccess": "Odcisk zweryfikowany",
+            "confirmFailed": "Nie udało się zweryfikować odcisku. Spróbuj ponownie",
             "revokeAction": "Usuń weryfikację"
         },
         "keyChangeBanner": {

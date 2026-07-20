@@ -181,6 +181,7 @@
             "removeVerification": "Eemalda kinnitamine",
             "removeVerificationConfirm": "Eemaldada {{name}} võtme kinnitamine? Peate uuesti kontrollima teise kanali kaudu.",
             "removeVerificationSuccess": "Kinnitamine eemaldatud",
+            "removeVerificationFailed": "Kinnituse eemaldamine ebaõnnestus. Proovi uuesti",
             "disableForContact": "Keela krüpteerimine selle kontakti jaoks",
             "notAvailableTitle": "Krüpteerimine pole saadaval",
             "notAvailableDescription": "See kontakt pole avaldanud OpenPGP võtit. Sõnumid saadetakse selgelt loetavana.",
@@ -620,6 +621,7 @@
             "reconfirmAction": "Koodid ühtivad, kinnita uuesti",
             "alreadyVerifiedBanner": "See võti on juba kinnitatud. Saate selle uuesti kinnitada, kui teil on kahtlusi.",
             "confirmSuccess": "Sõrmejälg kinnitatud",
+            "confirmFailed": "Sõrmejälje kinnitamine ebaõnnestus. Proovi uuesti",
             "revokeAction": "Eemalda kinnitus"
         },
         "keyChangeBanner": {

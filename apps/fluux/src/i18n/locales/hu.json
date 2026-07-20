@@ -179,6 +179,7 @@
             "removeVerification": "Ellenőrzés eltávolítása",
             "removeVerificationConfirm": "Eltávolítja {{name}} kulcsának ellenőrzését? Újra kell ellenőriznie egy második csatornán keresztül.",
             "removeVerificationSuccess": "Ellenőrzés eltávolítva",
+            "removeVerificationFailed": "Nem sikerült eltávolítani az ellenőrzést. Próbálja újra",
             "disableForContact": "Titkosítás letiltása ennek a partnernek",
             "notAvailableTitle": "A titkosítás nem érhető el",
             "notAvailableDescription": "Ez a partner nem tett közzé OpenPGP-kulcsot. Az üzenetek titkosítatlanul kerülnek elküldésre.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "A kódok egyeznek, újra ellenőrzés",
             "alreadyVerifiedBanner": "Ez a kulcs már ellenőrizve van. Újra ellenőrizheti, ha kétségei vannak.",
             "confirmSuccess": "Ujjlenyomat ellenőrizve",
+            "confirmFailed": "Nem sikerült ellenőrizni az ujjlenyomatot. Próbálja újra",
             "revokeAction": "Ellenőrzés eltávolítása"
         },
         "keyChangeBanner": {

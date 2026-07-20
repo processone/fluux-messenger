@@ -179,6 +179,7 @@
             "removeVerification": "הסר אימות",
             "removeVerificationConfirm": "להסיר את האימות עבור המפתח של {{name}}? יהיה עליך לאמת מחדש דרך ערוץ שני.",
             "removeVerificationSuccess": "האימות הוסר",
+            "removeVerificationFailed": "לא ניתן להסיר את האימות. נסה שוב",
             "disableForContact": "השבתת ההצפנה עבור איש קשר זה",
             "notAvailableTitle": "הצפנה אינה זמינה",
             "notAvailableDescription": "איש קשר זה לא פרסם מפתח OpenPGP. ההודעות יישלחו ללא הצפנה.",
@@ -619,6 +620,7 @@
             "reconfirmAction": "הקודים תואמים, אמת מחדש",
             "alreadyVerifiedBanner": "מפתח זה כבר אומת. ניתן לאמת מחדש אם יש לך ספקות.",
             "confirmSuccess": "טביעת אצבע אומתה",
+            "confirmFailed": "לא ניתן לאמת את טביעת האצבע. נסה שוב",
             "revokeAction": "הסר אימות"
         },
         "keyChangeBanner": {

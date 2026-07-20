@@ -181,6 +181,7 @@
             "removeVerification": "Elimina la verificació",
             "removeVerificationConfirm": "Eliminar la verificació per la clau de {{name}}? Haureu de verificar-la de nou per un segon canal.",
             "removeVerificationSuccess": "Verificació eliminada",
+            "removeVerificationFailed": "No s'ha pogut eliminar la verificació. Torna-ho a provar",
             "disableForContact": "Desactiva el xifratge per a aquest contacte",
             "notAvailableTitle": "Xifratge no disponible",
             "notAvailableDescription": "Aquest contacte no ha publicat cap clau OpenPGP. Els missatges s’enviaran en text pla.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "Els codis coincideixen, re-verificar",
             "alreadyVerifiedBanner": "Aquesta clau ja ha estat verificada. Podeu tornar a verificar-la si teniu dubtes.",
             "confirmSuccess": "Empremta verificada",
+            "confirmFailed": "No s'ha pogut verificar l'empremta. Torna-ho a provar",
             "revokeAction": "Elimina la verificació"
         },
         "keyChangeBanner": {

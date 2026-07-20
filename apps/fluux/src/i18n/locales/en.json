@@ -180,6 +180,7 @@
             "removeVerification": "Remove verification",
             "removeVerificationConfirm": "Remove verification for {{name}}'s key? You'll need to re-verify via a second channel.",
             "removeVerificationSuccess": "Verification removed",
+            "removeVerificationFailed": "Couldn't remove verification. Try again",
             "disableForContact": "Disable encryption for this contact",
             "notAvailableTitle": "Encryption not available",
             "notAvailableDescription": "This contact has not published an OpenPGP key. Messages will be sent in plaintext.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Codes match, re-verify",
             "alreadyVerifiedBanner": "This key has already been verified. You can re-verify if you have any doubts.",
             "confirmSuccess": "Fingerprint verified",
+            "confirmFailed": "Couldn't verify the fingerprint. Try again",
             "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {

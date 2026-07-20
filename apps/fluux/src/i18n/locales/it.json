@@ -181,6 +181,7 @@
             "removeVerification": "Rimuovi verifica",
             "removeVerificationConfirm": "Rimuovere la verifica della chiave di {{name}}? Sarà necessario verificare nuovamente tramite un secondo canale.",
             "removeVerificationSuccess": "Verifica rimossa",
+            "removeVerificationFailed": "Impossibile rimuovere la verifica. Riprova",
             "disableForContact": "Disattiva la crittografia per questo contatto",
             "notAvailableTitle": "Crittografia non disponibile",
             "notAvailableDescription": "Questo contatto non ha pubblicato una chiave OpenPGP. I messaggi verranno inviati in chiaro.",
@@ -621,6 +622,7 @@
             "reconfirmAction": "I codici corrispondono, ri-verifica",
             "alreadyVerifiedBanner": "Questa chiave è già stata verificata. Puoi riverificarla se hai dubbi.",
             "confirmSuccess": "Impronta verificata",
+            "confirmFailed": "Impossibile verificare l'impronta. Riprova",
             "revokeAction": "Rimuovi verifica"
         },
         "keyChangeBanner": {

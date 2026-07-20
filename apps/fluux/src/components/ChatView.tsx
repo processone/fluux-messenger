@@ -4,7 +4,6 @@ import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, type Message, type ContactIdentity } from '@fluux/sdk'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -315,14 +314,57 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     activeConversation?.type ?? 'chat',
   )
   const { client } = useXMPPContext()
-  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
-  const clearPeerVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const addToast = useToastStore((s) => s.addToast)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const [verifyDialogState, setVerifyDialogState] = useState<
     | { open: false }
     | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
   >({ open: false })
+
+  // Resolves the OpenPGP plugin — the sole source of truth for verified-key
+  // state (see the plugin-owned VerifiedKeysCache). Mirrors how
+  // ContactProfileView.tsx resolves the same plugin so both entry points to
+  // per-identity trust go through one path, instead of one calling the
+  // plugin and the other bypassing it with a direct legacy-store write.
+  type OpenpgpVerifyPlugin = {
+    getOwnFingerprint?: () => string | null
+    setIdentityTrust?: (peer: string, id: string, decision: 'verified' | 'untrusted') => Promise<void>
+  }
+  const getOpenpgpPlugin = useCallback(
+    (): OpenpgpVerifyPlugin | null => (client.e2ee?.getPlugin('openpgp') as OpenpgpVerifyPlugin | null) ?? null,
+    [client],
+  )
+
+  // Shared verify/revoke apply: awaits the plugin call so the success toast
+  // never fires ahead of the actual write, surfaces a failure toast (via the
+  // same addToast channel every other async failure in this file uses) when
+  // the plugin call throws, and handles the plugin being unavailable (not
+  // registered, OpenPGP disabled) explicitly rather than crashing or
+  // silently claiming success.
+  const applyIdentityTrust = useCallback(
+    async (
+      peer: string,
+      id: string,
+      decision: 'verified' | 'untrusted',
+      successKey: string,
+      failureKey: string,
+    ) => {
+      const plugin = getOpenpgpPlugin()
+      if (!plugin?.setIdentityTrust) {
+        addToast('error', t(failureKey))
+        return
+      }
+      try {
+        await plugin.setIdentityTrust(peer, id, decision)
+        addToast('success', t(successKey))
+      } catch (err) {
+        addToast('error', t(failureKey))
+        console.error('[Fluux] setIdentityTrust failed:', err)
+      }
+    },
+    [getOpenpgpPlugin, addToast, t],
+  )
+
   const handleOpenVerify = useCallback(() => {
     if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
     // Open the verify dialog for both encrypted (verify current key) and blocked
@@ -334,26 +376,42 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           ? encryptionState.advertisedFingerprint
           : null
     if (!peerFingerprint) return
-    const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { getOwnFingerprint?: () => string | null }
-      | null
-      | undefined
     setVerifyDialogState({
       open: true,
       peerJid: activeConversation.id,
       peerFingerprint,
-      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
+      ownFingerprint: getOpenpgpPlugin()?.getOwnFingerprint?.() ?? null,
     })
-  }, [client, activeConversation, encryptionState])
+  }, [getOpenpgpPlugin, activeConversation, encryptionState])
   const handleVerifyConfirm = useCallback(
     (fingerprint: string) => {
       if (!verifyDialogState.open) return
-      setPeerVerified(verifyDialogState.peerJid, fingerprint)
+      const peerJid = verifyDialogState.peerJid
       setVerifyDialogState({ open: false })
-      addToast('success', t('chat.verifyPeer.confirmSuccess'))
+      // OpenPGP has exactly one identity per peer, so `id` === the confirmed
+      // fingerprint (see OpenPGPPluginBase.listPeerIdentities/setIdentityTrust).
+      void applyIdentityTrust(
+        peerJid,
+        fingerprint,
+        'verified',
+        'chat.verifyPeer.confirmSuccess',
+        'chat.verifyPeer.confirmFailed',
+      )
     },
-    [verifyDialogState, setPeerVerified, addToast, t],
+    [verifyDialogState, applyIdentityTrust],
   )
+  const handleRevokeConfirm = useCallback(() => {
+    if (!verifyDialogState.open) return
+    const { peerJid, peerFingerprint } = verifyDialogState
+    setVerifyDialogState({ open: false })
+    void applyIdentityTrust(
+      peerJid,
+      peerFingerprint,
+      'untrusted',
+      'contacts.encryption.removeVerificationSuccess',
+      'contacts.encryption.removeVerificationFailed',
+    )
+  }, [verifyDialogState, applyIdentityTrust])
 
   const handleDisableEncryption = useCallback(() => {
     if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
@@ -469,12 +527,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
           onConfirm={handleVerifyConfirm}
           onCancel={() => setVerifyDialogState({ open: false })}
-          onRevoke={() => {
-            if (!verifyDialogState.open) return
-            clearPeerVerified(verifyDialogState.peerJid)
-            setVerifyDialogState({ open: false })
-            addToast('success', t('contacts.encryption.removeVerificationSuccess'))
-          }}
+          onRevoke={handleRevokeConfirm}
         />
       )}
 

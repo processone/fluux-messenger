@@ -179,6 +179,7 @@
             "removeVerification": "移除验证",
             "removeVerificationConfirm": "移除对 {{name}} 密钥的验证？您需要通过第二通道重新验证。",
             "removeVerificationSuccess": "验证已移除",
+            "removeVerificationFailed": "无法移除验证。请重试",
             "disableForContact": "为此联系人禁用加密",
             "notAvailableTitle": "加密不可用",
             "notAvailableDescription": "此联系人未发布 OpenPGP 密钥。消息将以明文形式发送。",
@@ -618,6 +619,7 @@
             "reconfirmAction": "验证码匹配，重新验证",
             "alreadyVerifiedBanner": "此密钥已通过验证。如果您有任何疑问，可以重新验证。",
             "confirmSuccess": "指纹已验证",
+            "confirmFailed": "无法验证指纹。请重试",
             "revokeAction": "移除验证"
         },
         "keyChangeBanner": {

@@ -179,6 +179,7 @@
             "removeVerification": "Ta bort verifiering",
             "removeVerificationConfirm": "Ta bort verifieringen för {{name}}s nyckel? Du måste verifiera igen via en annan kanal.",
             "removeVerificationSuccess": "Verifiering borttagen",
+            "removeVerificationFailed": "Kunde inte ta bort verifieringen. Försök igen",
             "disableForContact": "Inaktivera kryptering för denna kontakt",
             "notAvailableTitle": "Kryptering inte tillgänglig",
             "notAvailableDescription": "Den här kontakten har inte publicerat någon OpenPGP-nyckel. Meddelanden skickas i klartext.",
@@ -618,6 +619,7 @@
             "reconfirmAction": "Koderna stämmer, verifiera igen",
             "alreadyVerifiedBanner": "Denna nyckel har redan verifierats. Du kan reverifiera om du har tvivel.",
             "confirmSuccess": "Fingeravtryck verifierat",
+            "confirmFailed": "Kunde inte verifiera fingeravtrycket. Försök igen",
             "revokeAction": "Ta bort verifiering"
         },
         "keyChangeBanner": {
