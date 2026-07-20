@@ -5,6 +5,7 @@ import { isNoLocalStore } from '../core/types/message-internal'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
+import { ignoreStore } from './ignoreStore'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -1399,6 +1400,101 @@ describe('roomStore', () => {
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.unreadCount).toBe(1)
+    })
+
+    describe('lastMessage preview — delayed arrivals must not regress the sidebar', () => {
+      // MUC twin of the chatStore regression. The preview was derived from the
+      // appended array with NO timestamp gate, so a delayed arrival older than
+      // the current preview dragged the sidebar backwards — and roomMeta is
+      // persisted, so it survived a reload.
+      //
+      // The reachable route is not join-time history replay (that is
+      // oldest-to-newest, and MUC.ts requests maxstanzas=0 on MAM-capable rooms,
+      // so it self-corrects). It is MAM.fetchRoomMessageById: a live
+      // <poll-closed> whose original poll is not resident triggers a deferred
+      // MAM {ids} fetch, which emits `room:message` carrying the ORIGINAL POLL —
+      // isDelayed, previewable (isPreviewableMessage is true for msg.poll), and
+      // older than the poll-closed by construction. appendLive cannot dedupe it
+      // because the resident array is empty off the active room.
+      const ROOM = 'test@conference.example.com'
+
+      function delayed(id: string, body: string, at: string): RoomMessage {
+        return { ...createMessage(id, ROOM, 'alice', body), timestamp: new Date(at), isDelayed: true }
+      }
+
+      /** Fresh-run shape: preview persisted, resident array EMPTY. */
+      function seedPersistedPreview(preview: RoomMessage): void {
+        roomStore.getState().addRoom(createRoom(ROOM, { joined: true, lastMessage: preview }))
+        const meta = roomStore.getState().roomMeta.get(ROOM)
+        if (meta) {
+          roomStore.setState({
+            roomMeta: new Map(roomStore.getState().roomMeta).set(ROOM, { ...meta, lastMessage: preview }),
+          })
+        }
+      }
+
+      it('keeps the newer preview when an older delayed message arrives', () => {
+        seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
+
+        roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+
+        expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Poll closed')
+        expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.body).toBe('Poll closed')
+      })
+
+      it('does not drag lastInteractedAt backwards with the preview', () => {
+        // lastInteractedAt is derived from the preview timestamp — a regressed
+        // preview would also demote the room's sidebar ordering.
+        seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
+
+        roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+
+        const lastInteractedAt = roomStore.getState().rooms.get(ROOM)?.lastInteractedAt
+        expect(lastInteractedAt?.getTime()).toBe(new Date('2026-07-18T12:00:00Z').getTime())
+      })
+
+      it('still stores the older delayed message in the timeline', () => {
+        seedPersistedPreview(delayed('closed-1', 'Poll closed', '2026-07-18T12:00:00Z'))
+
+        roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
+
+        const bodies = (roomStore.getState().rooms.get(ROOM)?.messages ?? []).map((m) => m.body)
+        expect(bodies).toContain('Original poll')
+      })
+
+      it('advances the preview across a replay burst sharing one second-precision delay stamp', () => {
+        const stamp = '2026-07-18T09:00:00Z'
+        seedPersistedPreview(delayed('burst-1', 'Burst 1', stamp))
+
+        roomStore.getState().addMessage(ROOM, delayed('burst-2', 'Burst 2', stamp))
+        roomStore.getState().addMessage(ROOM, delayed('burst-3', 'Burst 3', stamp))
+
+        expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Burst 3')
+      })
+
+      it('advances the preview for a live message newer than the persisted preview', () => {
+        seedPersistedPreview(delayed('old-1', 'Older', '2026-07-18T09:00:00Z'))
+
+        roomStore.getState().addMessage(ROOM, {
+          ...createMessage('live-1', ROOM, 'bob', 'Fresh live message'),
+          timestamp: new Date('2026-07-18T12:00:00Z'),
+        })
+
+        expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Fresh live message')
+      })
+
+      it('still skips an ignored sender when the candidate is newer', () => {
+        // The ignored-sender scan must survive the new timestamp gate.
+        seedPersistedPreview(delayed('old-1', 'Visible', '2026-07-18T09:00:00Z'))
+        ignoreStore.getState().addIgnored(ROOM, { identifier: 'spammer', displayName: 'spammer' })
+
+        roomStore.getState().addMessage(ROOM, {
+          ...createMessage('spam-1', ROOM, 'spammer', 'Spam'),
+          timestamp: new Date('2026-07-18T12:00:00Z'),
+        })
+
+        expect(roomStore.getState().rooms.get(ROOM)?.lastMessage?.body).toBe('Visible')
+      })
     })
   })
 
