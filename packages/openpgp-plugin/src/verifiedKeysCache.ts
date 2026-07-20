@@ -68,3 +68,31 @@ export class VerifiedKeysCache {
     return persistVerifiedMap(this.storage, this.getAll())
   }
 }
+
+function inMemoryPluginStorage(): PluginStorage {
+  const map = new Map<string, Uint8Array>()
+  return {
+    get: async (key) => map.get(key) ?? null,
+    put: async (key, value) => void map.set(key, value),
+    delete: async (key) => void map.delete(key),
+    list: async (prefix) => [...map.keys()].filter((k) => k.startsWith(prefix)),
+  }
+}
+
+/**
+ * An empty, immediately-usable `VerifiedKeysCache` over throwaway in-memory
+ * storage — never persisted, never hydrated from anything real.
+ *
+ * `OpenPGPPluginBase` uses this as `verifiedKeys`'s field initializer so the
+ * field is never `undefined` between construction and `init()` (previously
+ * a `!`-asserted field: any trust read before `init()` ran — e.g. a test
+ * driving trait methods directly — crashed with "Cannot read properties of
+ * undefined"). `init()` unconditionally replaces this placeholder with the
+ * real `ctx.storage`-backed cache before doing anything else, so a hydrated
+ * plugin always reads through the real cache; only the brief pre-init
+ * window can observe this placeholder, and it correctly reports "not
+ * verified" for everything since it holds no data.
+ */
+export function createInMemoryVerifiedKeysCache(): VerifiedKeysCache {
+  return new VerifiedKeysCache(inMemoryPluginStorage())
+}

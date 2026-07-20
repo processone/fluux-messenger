@@ -7,11 +7,17 @@
 // directly (that's `verifiedKeysCache.test.ts`'s job).
 import { describe, it, expect } from 'vitest'
 import { E2EEPluginError, type PluginStorage } from '@fluux/sdk'
-import { getVerifiedKeysCache, makeTestBase, makeTestCtx } from './testSupport/baseHarness'
+import {
+  callBuildInboundSecurityContext,
+  getVerifiedKeysCache,
+  makeTestBase,
+  makeTestCtx,
+  seedPeerKey,
+} from './testSupport/baseHarness'
 import { memStorage } from './testSupport/memStorage'
 import { persistVerifiedMap } from './verifiedKeys'
 import { VerifiedKeysCache } from './verifiedKeysCache'
-import type { KeyBundle } from './OpenPGPPluginBase'
+import type { DecryptOutput, KeyBundle } from './OpenPGPPluginBase'
 
 const ACCOUNT = 'alice@example.com'
 
@@ -83,5 +89,57 @@ describe('OpenPGPPluginBase — verified-cache hydration in init()', () => {
     await expect(base.init(ctx)).resolves.toBeUndefined()
 
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD')).toBe(true)
+  })
+})
+
+function decryptOutput(overrides: Partial<DecryptOutput> = {}): DecryptOutput {
+  return {
+    plaintext: '',
+    signatureVerified: true,
+    signerFingerprint: 'ABCD1234',
+    signaturePresent: true,
+    ...overrides,
+  }
+}
+
+// Task 4: the trust-read sites (evaluatePeerTrust / buildInboundSecurityContext)
+// now read `this.verifiedKeys` (the plugin-owned cache) instead of
+// `hostStores.verifiedPeers` (the legacy app-side store). These tests drive
+// the base directly via `makeTestBase()` (no `init()`), seeding the cache
+// through its own write API — Task 5 wires up dual-writes from the real
+// trust-write paths, so seeding here is deliberately direct.
+describe('OpenPGPPluginBase — trust reads come from the plugin-owned cache', () => {
+  it('getPeerTrust reports verified from the cache when the legacy store is empty', async () => {
+    const { base, verified } = makeTestBase()
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
+
+    expect(verified.getAll()).toEqual({}) // legacy store never touched
+    expect(await base.getPeerTrust('bob@x')).toBe('verified')
+  })
+
+  it('buildInboundSecurityContext marks the message verified from the cache when the legacy store is empty', async () => {
+    const { base, verified } = makeTestBase()
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
+
+    expect(verified.getAll()).toEqual({})
+    const context = callBuildInboundSecurityContext(base, 'bob@x', decryptOutput())
+    expect(context.trust).toBe('verified')
+  })
+
+  it('a fingerprint change still demotes the peer to tofu (fingerprint-binding survives the move)', async () => {
+    const { base } = makeTestBase()
+    // Cache verified the OLD fingerprint; the peer's cached key has since rotated.
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'OLDFP0000')
+    seedPeerKey(base, 'bob@x', 'NEWFP9999')
+
+    expect(await base.getPeerTrust('bob@x')).toBe('tofu')
+    const context = callBuildInboundSecurityContext(
+      base,
+      'bob@x',
+      decryptOutput({ signerFingerprint: 'NEWFP9999' }),
+    )
+    expect(context.trust).toBe('tofu')
   })
 })

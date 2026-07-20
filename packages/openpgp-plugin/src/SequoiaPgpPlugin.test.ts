@@ -11,6 +11,7 @@ import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import { createMockHostStores, type MockHostStores } from './testing/mockHostStores'
 import type { OpenPGPFileIO } from './hostStores'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
+import { getVerifiedKeysCache } from './testSupport/baseHarness'
 import {
   E2EEPluginError,
   InMemoryStorageBackend,
@@ -3417,7 +3418,10 @@ describe('SequoiaPgpPlugin', () => {
       const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const peerFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      hostStores.verifiedPeers.setVerified('bob@example.com', peerFp)
+      // Trust reads come from the plugin-owned cache (Task 4). Writes are
+      // still legacy-store-only until Task 5's dual-write, so seed the
+      // cache directly here rather than through `hostStores.verifiedPeers`.
+      await getVerifiedKeysCache(alice.plugin).setVerified('bob@example.com', peerFp)
 
       const trust = await alice.plugin.getPeerTrust('bob@example.com')
       expect(trust).toBe('verified')
@@ -3439,8 +3443,11 @@ describe('SequoiaPgpPlugin', () => {
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
       // Mark alice as verified on bob's side BEFORE the inbound message
-      // arrives, so the decrypt path observes the verification.
-      hostStores.verifiedPeers.setVerified('alice@example.com', alice.plugin.getOwnFingerprint()!)
+      // arrives, so the decrypt path observes the verification. Trust reads
+      // come from bob's OWN plugin-owned cache (Task 4) — seed it directly
+      // rather than the shared legacy `hostStores`, since writes aren't
+      // dual-written to the cache until Task 5.
+      await getVerifiedKeysCache(bob.plugin).setVerified('alice@example.com', alice.plugin.getOwnFingerprint()!)
 
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hello, verified bob'))
@@ -3654,7 +3661,11 @@ describe('SequoiaPgpPlugin', () => {
       expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(newBob.fingerprint)
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
       expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBe(newBob.fingerprint)
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
+      // Trust reads come from the plugin-owned cache (Task 4), but
+      // `acceptPeerKeyChange` still writes only to the legacy
+      // `hostStores.verifiedPeers` — dual-write lands in Task 5. Until
+      // then, a write here is correctly invisible to `getPeerTrust`.
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
     })
 
     it('acceptPeerKeyChange rolls back pin and preserves alert when the fetch fails', async () => {

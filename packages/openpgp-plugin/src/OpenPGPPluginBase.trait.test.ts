@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeTestBase, seedPeerKey } from './testSupport/baseHarness'
+import { getVerifiedKeysCache, makeTestBase, seedPeerKey } from './testSupport/baseHarness'
 
 describe('OpenPGPPluginBase — per-identity trait', () => {
   it('listPeerIdentities returns [] when no key is cached', async () => {
@@ -8,17 +8,18 @@ describe('OpenPGPPluginBase — per-identity trait', () => {
   })
 
   it('listPeerIdentities returns a length-1 identity (id === fingerprint) with tofu trust for a cached-but-unverified key', async () => {
-    const { base, verified } = makeTestBase()
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
-    verified.isVerified = () => false
+    // Trust reads come from the plugin-owned cache (Task 4); leaving it
+    // unseeded is the "unverified" condition.
     const list = await base.listPeerIdentities('bob@x')
     expect(list).toEqual([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'tofu' }])
   })
 
   it('listPeerIdentities reports verified trust when the marker matches the cached fingerprint', async () => {
-    const { base, verified } = makeTestBase()
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
-    verified.isVerified = (jid, fp) => jid === 'bob@x' && fp === 'ABCD1234'
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
     const list = await base.listPeerIdentities('bob@x')
     expect(list[0].trust).toBe('verified')
   })

@@ -4,7 +4,7 @@
 // Mirrors the concrete-subclass-with-stubbed-abstracts pattern; reuses the
 // package's existing `createMockHostStores` for the `hostStores` seam.
 // Test utility only — never re-exported from the package index.
-import type { BareJID, PluginContext, PluginStorage, XMPPPrimitives } from '@fluux/sdk'
+import type { BareJID, PluginContext, PluginStorage, SecurityContext, XMPPPrimitives } from '@fluux/sdk'
 import { OpenPGPPluginBase, type KeyBundle, type CertValidation, type DecryptOutput } from '../OpenPGPPluginBase'
 import { createMockHostStores, type MockHostStores } from '../testing/mockHostStores'
 import type { VerifiedKeysCache } from '../verifiedKeysCache'
@@ -148,12 +148,32 @@ export function seedPeerKey(base: TestOpenPGPPlugin, jid: BareJID, fingerprint: 
 }
 
 /**
- * Reach the base instance's `protected verifiedKeys` cache after `init()`
- * has hydrated/seeded it. `protected` blocks direct access from outside the
- * class hierarchy at the type level even though `TestOpenPGPPlugin` (a real
- * subclass) could read it directly — this cast-based accessor mirrors
- * {@link seedPeerKey}'s pattern for the same reason.
+ * Reach a base instance's `protected verifiedKeys` cache after `init()` has
+ * hydrated/seeded it. `protected` blocks direct access from outside the
+ * class hierarchy at the type level even though any real subclass
+ * (`TestOpenPGPPlugin`, `SequoiaPgpPlugin`, `WebOpenPGPPlugin`, …) could read
+ * it directly — this cast-based accessor mirrors {@link seedPeerKey}'s
+ * pattern for the same reason. Typed against `OpenPGPPluginBase` (not just
+ * `TestOpenPGPPlugin`) so platform-plugin integration tests can use it too,
+ * to seed cache reads directly while writes are still legacy-store-only
+ * (pre-Task-5 dual-write).
  */
-export function getVerifiedKeysCache(base: TestOpenPGPPlugin): VerifiedKeysCache {
+export function getVerifiedKeysCache(base: OpenPGPPluginBase): VerifiedKeysCache {
   return (base as unknown as { verifiedKeys: VerifiedKeysCache }).verifiedKeys
+}
+
+/**
+ * Invoke the base instance's private `buildInboundSecurityContext(peer, output)`
+ * — same cast-based access pattern as {@link getVerifiedKeysCache}, needed
+ * because there is no public entry point that exercises just this trust
+ * computation without also driving the full envelope/signature decrypt path.
+ */
+export function callBuildInboundSecurityContext(
+  base: OpenPGPPluginBase,
+  peer: BareJID,
+  output: DecryptOutput,
+): SecurityContext {
+  return (
+    base as unknown as { buildInboundSecurityContext(peer: BareJID, output: DecryptOutput): SecurityContext }
+  ).buildInboundSecurityContext(peer, output)
 }

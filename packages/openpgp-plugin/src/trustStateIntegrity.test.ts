@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { E2EEPluginError } from '@fluux/sdk'
-import { sealTrustState, verifyTrustStateSeal } from './trustStateIntegrity'
+import { buildCanonicalSnapshot, sealTrustState, verifyTrustStateSeal } from './trustStateIntegrity'
 import { createMockHostStores, type MockHostStores } from './testing/mockHostStores'
 
 const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
@@ -26,70 +26,115 @@ beforeEach(() => {
 describe('verifyTrustStateSeal: key-unavailable classification', () => {
   it('returns awaiting-key (not compromised) when decrypt fails because the secret key is unavailable', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptUnavailable = async () => {
       throw new E2EEPluginError('permanent', 'key-unrecoverable', 'cannot unlock')
     }
-    const res = await verifyTrustStateSeal(decryptUnavailable, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptUnavailable, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('awaiting-key')
   })
 
   it('returns awaiting-key when decrypt fails with a key-locked (transient) error', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptLocked = async () => {
       throw new E2EEPluginError('transient', 'key-locked', 'key is locked')
     }
-    const res = await verifyTrustStateSeal(decryptLocked, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptLocked, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('awaiting-key')
   })
 
   it('still returns compromised when decrypt fails for a non-key reason', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptBroken = async () => { throw new Error('garbage') }
-    const res = await verifyTrustStateSeal(decryptBroken, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptBroken, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('compromised')
   })
 
   it('still returns compromised when the seal decrypts but pins no longer match', async () => {
     setPins({ 'peer@example.com': 'OLDFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     setPins({ 'peer@example.com': 'TAMPERED' }) // mutate after sealing
     const decryptOriginal = async (ciphertext: string) => ({
       plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(decryptOriginal, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptOriginal, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('compromised')
   })
 
   it('still returns compromised on a foreign signature (decrypt succeeded => key was usable)', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptForeign = async (ciphertext: string) => ({
       plaintext: ciphertext, signatureVerified: true, signerFingerprint: 'FFFFFFFF', signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(decryptForeign, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptForeign, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('compromised')
   })
 
   it('returns sealed when decrypt succeeds and pins match', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptOk = async (ciphertext: string) => ({
       plaintext: ciphertext, signatureVerified: true, signerFingerprint: OWN_FP, signaturePresent: true,
     })
-    const res = await verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, isKeyUnavailable)
+    const res = await verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, {}, isKeyUnavailable)
     expect(res.status).toBe('sealed')
   })
 
   it('defaults to current behavior when no predicate is passed (decrypt failure => compromised)', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
-    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host)
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, {})
     const decryptUnavailable = async () => {
       throw new E2EEPluginError('permanent', 'key-unrecoverable', 'cannot unlock')
     }
-    const res = await verifyTrustStateSeal(decryptUnavailable, OWN_PUBLIC, OWN_FP, host)
+    const res = await verifyTrustStateSeal(decryptUnavailable, OWN_PUBLIC, OWN_FP, host, {})
+    expect(res.status).toBe('compromised')
+  })
+})
+
+// Task 4: `verified` is threaded in explicitly by the caller (the plugin
+// passes `this.verifiedKeys.getAll()`) rather than read from
+// `hostStores.verifiedPeers.getAll()`. These tests prove the snapshot and
+// the seal/verify round trip both key off the injected map, by seeding the
+// legacy store with DIFFERENT data than what's passed in.
+describe('buildCanonicalSnapshot: verified section comes from the injected map, not hostStores', () => {
+  it('reflects the injected map even when the legacy store holds different data', () => {
+    host.verifiedPeers.setVerified('legacy@example.com', 'LEGACYFP')
+    const snapshot = buildCanonicalSnapshot(host, { 'cache@example.com': 'CACHEFP' })
+    expect(snapshot.verified).toEqual({ 'cache@example.com': 'CACHEFP' })
+  })
+})
+
+describe('sealTrustState / verifyTrustStateSeal: verified map is threaded through, not re-read from hostStores', () => {
+  const decryptOk = async (ciphertext: string) => ({
+    plaintext: ciphertext,
+    signatureVerified: true,
+    signerFingerprint: OWN_FP,
+    signaturePresent: true,
+  })
+
+  it('round-trips as sealed off the injected map while the legacy store disagrees', async () => {
+    host.verifiedPeers.setVerified('legacy@example.com', 'LEGACYFP')
+    const cacheVerified = { 'cache@example.com': 'CACHEFP' }
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, cacheVerified)
+
+    const res = await verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, cacheVerified, isKeyUnavailable)
+    expect(res.status).toBe('sealed')
+  })
+
+  it('detects a change to the injected map between seal and verify, independent of the (untouched) legacy store', async () => {
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, { 'cache@example.com': 'CACHEFP' })
+
+    const res = await verifyTrustStateSeal(
+      decryptOk,
+      OWN_PUBLIC,
+      OWN_FP,
+      host,
+      { 'cache@example.com': 'TAMPERED' },
+      isKeyUnavailable,
+    )
     expect(res.status).toBe('compromised')
   })
 })

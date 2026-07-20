@@ -101,7 +101,7 @@ import {
 } from './trustStateIntegrity'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 import { isSecretKeyUnavailableError } from './keyUnavailable'
-import { VerifiedKeysCache } from './verifiedKeysCache'
+import { VerifiedKeysCache, createInMemoryVerifiedKeysCache } from './verifiedKeysCache'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -392,8 +392,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   protected readonly hostStores: OpenPGPHostStores
 
-  /** Plugin-owned verified-key state; the source of truth from B1 onward. */
-  protected verifiedKeys!: VerifiedKeysCache
+  /**
+   * Plugin-owned verified-key state; the source of truth from B1 onward.
+   * Initialized to an empty in-memory placeholder so the field is never
+   * `undefined` — a trust read that somehow runs before `init()` (e.g. a
+   * test driving trait methods directly) sees an empty cache and correctly
+   * reports "not verified" instead of crashing. `init()` unconditionally
+   * replaces this with the real `ctx.storage`-backed cache before doing
+   * anything else, so a hydrated plugin always reads through the real one.
+   */
+  protected verifiedKeys: VerifiedKeysCache = createInMemoryVerifiedKeysCache()
 
   constructor(opts: { hostStores: OpenPGPHostStores }) {
     this.hostStores = opts.hostStores
@@ -628,6 +636,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
         ownPublicArmored,
         this.hostStores,
+        this.verifiedKeys.getAll(),
       )
       this.hostStores.trustStateStatus.set('sealed')
     } catch {
@@ -645,6 +654,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ownPublicArmored,
       ownFingerprint,
       this.hostStores,
+      this.verifiedKeys.getAll(),
       isSecretKeyUnavailableError,
     )
     const reason = details && details.length ? ` (${details.join('; ')})` : ''
@@ -677,6 +687,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
       ownPublicArmored,
       this.hostStores,
+      this.verifiedKeys.getAll(),
     )
   }
 
@@ -1326,7 +1337,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         ownFingerprint,
       )
       if (!remote) return
-      const local = this.hostStores.verifiedPeers.getAll()
+      const local = this.verifiedKeys.getAll()
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
       for (const { jid, fingerprint } of plan.toSet) this.hostStores.verifiedPeers.setVerified(jid, fingerprint)
@@ -2052,7 +2063,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
     const cached = this.peerKeys.get(peer)
     if (!cached) return 'unknown'
-    return this.hostStores.verifiedPeers.isVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
+    return this.verifiedKeys.isVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
   }
 
   /**
@@ -2214,7 +2225,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       cached && output.signerFingerprint && fingerprintsEqual(cached.fingerprint, output.signerFingerprint)
     let trust: SecurityContext['trust']
     if (output.signatureVerified && fingerprintMatches) {
-      trust = this.hostStores.verifiedPeers.isVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
+      trust = this.verifiedKeys.isVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
     }

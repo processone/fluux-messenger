@@ -36,12 +36,14 @@ function sortedStringify(obj: unknown): string {
   return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort())
 }
 
-export function buildCanonicalSnapshot(hostStores: OpenPGPHostStores): TrustStateSnapshot {
+export function buildCanonicalSnapshot(
+  hostStores: OpenPGPHostStores,
+  verified: Record<string, string>,
+): TrustStateSnapshot {
   const pins = { ...hostStores.pinnedPrimaryFingerprints.getAll() }
-  const verified = { ...hostStores.verifiedPeers.getAll() }
   const alerts = { ...hostStores.keyChangeAlerts.getAll() }
   const syncVersion = loadAppliedVerificationsVersion()
-  return { v: 1, sealedAt: new Date().toISOString(), pins, verified, alerts, syncVersion }
+  return { v: 1, sealedAt: new Date().toISOString(), pins, verified: { ...verified }, alerts, syncVersion }
 }
 
 function payloadsMatch(a: TrustStateSnapshot, b: TrustStateSnapshot): { match: boolean; details: string[] } {
@@ -53,9 +55,8 @@ function payloadsMatch(a: TrustStateSnapshot, b: TrustStateSnapshot): { match: b
   return { match: details.length === 0, details }
 }
 
-function storesAreEmpty(hostStores: OpenPGPHostStores): boolean {
+function storesAreEmpty(hostStores: OpenPGPHostStores, verified: Record<string, string>): boolean {
   const pins = hostStores.pinnedPrimaryFingerprints.getAll()
-  const verified = hostStores.verifiedPeers.getAll()
   const alerts = hostStores.keyChangeAlerts.getAll()
   return (
     Object.keys(pins).length === 0 &&
@@ -92,8 +93,9 @@ export async function sealTrustState(
   encryptFn: EncryptFn,
   ownPublicArmored: string,
   hostStores: OpenPGPHostStores,
+  verified: Record<string, string>,
 ): Promise<void> {
-  const snapshot = buildCanonicalSnapshot(hostStores)
+  const snapshot = buildCanonicalSnapshot(hostStores, verified)
   const json = JSON.stringify(snapshot)
   const armored = await encryptFn(json, ownPublicArmored)
   try {
@@ -113,12 +115,13 @@ export async function verifyTrustStateSeal(
   ownPublicArmored: string,
   ownFingerprint: string,
   hostStores: OpenPGPHostStores,
+  verified: Record<string, string>,
   isKeyUnavailable: (err: unknown) => boolean = () => false,
 ): Promise<{ status: TrustStateStatus; details?: string[] }> {
   const sealArmored = localStorage.getItem(getSealKey())
 
   if (!sealArmored) {
-    if (storesAreEmpty(hostStores)) return { status: 'uninitialized' }
+    if (storesAreEmpty(hostStores, verified)) return { status: 'uninitialized' }
     if (!isInitialized()) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal was removed but stores contain data'] }
   }
@@ -131,7 +134,7 @@ export async function verifyTrustStateSeal(
     // unrecoverable) is NOT a tamper signal — there is simply no
     // verdict yet. Only a decrypt failure with a usable key is suspicious.
     if (isKeyUnavailable(err)) return { status: 'awaiting-key' }
-    if (storesAreEmpty(hostStores)) return { status: 'pending-seal' }
+    if (storesAreEmpty(hostStores, verified)) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal could not be decrypted'] }
   }
 
@@ -140,7 +143,7 @@ export async function verifyTrustStateSeal(
     !decrypted.signerFingerprint ||
     !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
   ) {
-    if (storesAreEmpty(hostStores)) return { status: 'pending-seal' }
+    if (storesAreEmpty(hostStores, verified)) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal has invalid or foreign signature'] }
   }
 
@@ -154,7 +157,7 @@ export async function verifyTrustStateSeal(
 
   lastKnownPayload = payload
 
-  const current = buildCanonicalSnapshot(hostStores)
+  const current = buildCanonicalSnapshot(hostStores, verified)
   const { match, details } = payloadsMatch(payload, current)
   if (!match) {
     return { status: 'compromised', details }
@@ -173,8 +176,9 @@ export async function clearCompromisedAndReseal(
   encryptFn: EncryptFn,
   ownPublicArmored: string,
   hostStores: OpenPGPHostStores,
+  verified: Record<string, string>,
 ): Promise<void> {
-  await sealTrustState(encryptFn, ownPublicArmored, hostStores)
+  await sealTrustState(encryptFn, ownPublicArmored, hostStores, verified)
   lastKnownPayload = null
   hostStores.trustStateStatus.set('sealed')
 }
