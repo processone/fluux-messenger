@@ -7,8 +7,14 @@ import { fileURLToPath } from 'node:url'
  * Finding 4 (Phase B1 final review): nothing STRUCTURAL stops a future base
  * method (or a subclass) from calling
  * `this.hostStores.verifiedPeers.setVerified(...)` / `.clearVerified(...)`
- * directly and skipping the plugin-owned `VerifiedKeysCache` — the exact
- * gap that let the `ChatView` verify/revoke bypass reach review undetected.
+ * directly and skipping the plugin-owned `VerifiedKeysCache`, inside THIS
+ * package. Scope note (re-review Finding 4): this guard only scans
+ * `packages/openpgp-plugin` — it does NOT scan `apps/fluux` and so could
+ * never have caught the historical `ChatView.tsx` verify/revoke bypass,
+ * which lived in the app. What it guards is narrower and still real: a
+ * future addition inside this package that reaches past
+ * `setVerifiedDual`/`clearVerifiedDual` and writes `hostStores.verifiedPeers`
+ * directly, silently diverging the cache and the legacy mirror.
  *
  * This test is the durable guard: it reads every production source file in
  * this package and asserts the full set of `hostStores.verifiedPeers.*`
@@ -63,12 +69,67 @@ function collectProductionSourceFiles(dir: string): string[] {
   return out
 }
 
+/**
+ * Strips line comments and block comments (a doc comment mentioning
+ * `hostStores.verifiedPeers.getAll()` in prose would otherwise be a false
+ * positive) while leaving string/template literal CONTENTS alone, so a
+ * comment-stripped slash inside a string doesn't corrupt the rest of the
+ * file. Not a full TS tokenizer (doesn't special-case regex literals), but
+ * sufficient for scanning this package's source for a specific dotted call
+ * expression.
+ */
+function stripComments(src: string): string {
+  let out = ''
+  let i = 0
+  const n = src.length
+  while (i < n) {
+    const c = src[i]
+    const next = src[i + 1]
+    if (c === '/' && next === '/') {
+      while (i < n && src[i] !== '\n') i++
+      continue
+    }
+    if (c === '/' && next === '*') {
+      i += 2
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++
+      i += 2
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c
+      out += c
+      i++
+      while (i < n && src[i] !== quote) {
+        if (src[i] === '\\') {
+          out += src[i]
+          i++
+          if (i < n) {
+            out += src[i]
+            i++
+          }
+          continue
+        }
+        out += src[i]
+        i++
+      }
+      if (i < n) {
+        out += src[i]
+        i++
+      }
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
 describe('dual-write invariant guard (Finding 4)', () => {
   it('every hostStores.verifiedPeers reference in production source is one of the five sanctioned dual-write sites', () => {
     const files = collectProductionSourceFiles(SRC_DIR)
     const hits: string[] = []
     for (const file of files) {
-      const content = readFileSync(file, 'utf8')
+      const content = stripComments(readFileSync(file, 'utf8'))
       const base = file.split('/').pop() as string
       for (const match of content.matchAll(REFERENCE_PATTERN)) {
         hits.push(`${base}:${match[1]}`)
@@ -80,7 +141,7 @@ describe('dual-write invariant guard (Finding 4)', () => {
       'A hostStores.verifiedPeers reference was added outside the sanctioned dual-write sites. ' +
         'Writes must go through setVerifiedDual/clearVerifiedDual (or read through the ' +
         'VerifiedKeysCache) or the cache and the legacy mirror can silently diverge — this is ' +
-        'exactly the bypass class that slipped past review in ChatView.tsx before Finding 1/2 fixed it.',
+        'exactly the class of bypass this guard exists to catch inside this package.',
     ).toEqual(SANCTIONED)
   })
 })

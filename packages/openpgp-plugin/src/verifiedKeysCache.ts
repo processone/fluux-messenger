@@ -39,10 +39,37 @@ import { loadVerifiedMap, persistVerifiedMap } from './verifiedKeys'
  * `ChatView.tsx` / `ContactProfileView.tsx`, which all show an error toast
  * instead of silently claiming success) — which is the honest outcome for
  * a state change the app told the user succeeded.
+ *
+ * ## Write serialization: no interleaved persist attempts
+ *
+ * `persist()` snapshots `getAll()` synchronously and then awaits
+ * `storage.put`. If two writes were allowed to have their `persist()` calls
+ * in flight at once, they could settle out of order: e.g. write A (bob)
+ * starts, write B (carol) starts and its snapshot already includes bob
+ * (since B's synchronous mutation always runs after A's), B's `put`
+ * resolves first, THEN A's `put` rejects and A's rollback deletes bob from
+ * memory — leaving memory BEHIND disk (disk still has bob from B's
+ * snapshot). That is the mirror image of the problem the rollback exists to
+ * prevent: a seal could now snapshot memory as "not verified" while disk
+ * (and a peer's cross-device sync) says otherwise, which is just as capable
+ * of manufacturing a false verdict as memory running ahead.
+ *
+ * `setVerified` / `clearVerified` / `seed` therefore run their
+ * persist-and-rollback step through `enqueueWrite`, a promise-chain mutex:
+ * each write's persist attempt (and any rollback) only begins once the
+ * previous one has fully settled, so two `persist()` calls can never race.
+ * The in-memory MUTATION itself stays synchronous and outside the queue
+ * (callers must keep observing it immediately, without awaiting) — only the
+ * async persist/rollback is serialized. A rejected write does not poison
+ * the chain: `enqueueWrite` runs the next step regardless of whether the
+ * previous one resolved or rejected, and normalizes the chain back to an
+ * always-resolving promise so later `.then` calls never short-circuit.
  */
 export class VerifiedKeysCache {
   private map = new Map<string, string>()
   private hydrated = false
+  /** Promise-chain mutex — see the class doc's "Write serialization" section. */
+  private writeChain: Promise<void> = Promise.resolve()
 
   constructor(private readonly storage: PluginStorage) {}
 
@@ -73,18 +100,31 @@ export class VerifiedKeysCache {
    * Sets `jid`'s verified fingerprint and persists it. On a `persist()`
    * rejection, the in-memory mutation is rolled back before rethrowing —
    * see the class doc comment for why memory must never run ahead of disk.
+   *
+   * Rejects an empty `fingerprint` synchronously rather than storing it: an
+   * empty-fingerprint entry would live in memory, get swept into a
+   * trust-state seal via `getAll()`, and then be silently dropped by
+   * `persistVerifiedMap`'s write-side filter — vanishing on the next
+   * `hydrate()` and manufacturing the exact seal/reload mismatch the
+   * write-side filter exists to close. `isVerified` already treats an empty
+   * fingerprint as never-verified, so storing one is meaningless anyway.
    */
   async setVerified(jid: string, fingerprint: string): Promise<void> {
+    if (!fingerprint) {
+      throw new Error('VerifiedKeysCache.setVerified: fingerprint must not be empty')
+    }
     const hadEntry = this.map.has(jid)
     const previous = this.map.get(jid)
     this.map.set(jid, fingerprint)
-    try {
-      await this.persist()
-    } catch (err) {
-      if (hadEntry) this.map.set(jid, previous as string)
-      else this.map.delete(jid)
-      throw err
-    }
+    return this.enqueueWrite(async () => {
+      try {
+        await this.persist()
+      } catch (err) {
+        if (hadEntry) this.map.set(jid, previous as string)
+        else this.map.delete(jid)
+        throw err
+      }
+    })
   }
 
   /**
@@ -96,12 +136,14 @@ export class VerifiedKeysCache {
     if (!this.map.has(jid)) return
     const previous = this.map.get(jid) as string
     this.map.delete(jid)
-    try {
-      await this.persist()
-    } catch (err) {
-      this.map.set(jid, previous)
-      throw err
-    }
+    return this.enqueueWrite(async () => {
+      try {
+        await this.persist()
+      } catch (err) {
+        this.map.set(jid, previous)
+        throw err
+      }
+    })
   }
 
   /**
@@ -116,16 +158,40 @@ export class VerifiedKeysCache {
     const entries = Object.entries(map)
     if (entries.length === 0) return
     this.map = new Map(entries)
-    try {
-      await this.persist()
-    } catch (err) {
-      this.map = new Map()
-      throw err
-    }
+    return this.enqueueWrite(async () => {
+      try {
+        await this.persist()
+      } catch (err) {
+        this.map = new Map()
+        throw err
+      }
+    })
   }
 
   private persist(): Promise<void> {
     return persistVerifiedMap(this.storage, this.getAll())
+  }
+
+  /**
+   * Chains `step` (a persist-and-rollback attempt) behind every previously
+   * enqueued write, so no two writes' `persist()` calls can ever be in
+   * flight at once — see the class doc's "Write serialization" section.
+   *
+   * `this.writeChain.then(step, step)` runs `step` next regardless of
+   * whether the previous link resolved OR rejected, so one write's failure
+   * never blocks the next write from running. `writeChain` is then reset to
+   * a promise that always resolves (swallowing both outcomes), so a
+   * rejection never poisons subsequent `.then` chaining either. The
+   * REJECTION itself is still returned to this write's own caller via
+   * `result`, unaffected by that normalization.
+   */
+  private enqueueWrite(step: () => Promise<void>): Promise<void> {
+    const result = this.writeChain.then(step, step)
+    this.writeChain = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
   }
 }
 
