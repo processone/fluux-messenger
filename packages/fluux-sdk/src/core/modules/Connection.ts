@@ -1047,7 +1047,7 @@ export class Connection extends BaseModule {
     let probeMode = 'sm-ack'
 
     try {
-      const sm = clientAtStart.streamManagement as any
+      const sm = clientAtStart.streamManagement
       if (sm?.enabled) {
         const ackReceived = await this.waitForSmAck(timeoutMs)
         if (this.xmpp && this.xmpp !== clientAtStart) {
@@ -1065,7 +1065,7 @@ export class Connection extends BaseModule {
         // IQs correctly, which misconfigured deployments answer with errors
         // (#515: Openfire returning <remote-server-not-found/>).
         probeMode = 'ping'
-        const iqCaller = (clientAtStart as any).iqCaller
+        const iqCaller = clientAtStart.iqCaller
         if (iqCaller) {
           const ping = xml(
             'iq',
@@ -1130,8 +1130,8 @@ export class Connection extends BaseModule {
       // Cleanup helper
       const cleanup = (timeoutId: ReturnType<typeof setTimeout>) => {
         clearTimeout(timeoutId)
-        ;(client as any)?.off?.('nonza', handleNonza)
-        ;(client as any)?.off?.('disconnect', handleDisconnect)
+        client?.off?.('nonza', handleNonza)
+        client?.off?.('disconnect', handleDisconnect)
       }
 
       // Listen for <a/> nonza - defined as a hoisted function for cleanup reference
@@ -1152,15 +1152,15 @@ export class Connection extends BaseModule {
         }
       }
 
-      ;(client as any)?.on?.('nonza', handleNonza)
-      ;(client as any)?.on?.('disconnect', handleDisconnect)
+      client?.on?.('nonza', handleNonza)
+      client?.on?.('disconnect', handleDisconnect)
 
       // Timeout - must be set up before send() to be in scope for cleanup
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true
-          ;(client as any)?.off?.('nonza', handleNonza)
-          ;(client as any)?.off?.('disconnect', handleDisconnect)
+          client?.off?.('nonza', handleNonza)
+          client?.off?.('disconnect', handleDisconnect)
           resolve(false)
         }
       }, timeoutMs)
@@ -1580,7 +1580,7 @@ export class Connection extends BaseModule {
     // xmpp.js default storage is in-memory only — tokens would be lost on page reload.
     // This enables password-less reconnection for up to 14 days on web.
     // Token saving is gated on rememberSession — users must opt in via "Remember Me".
-    const fastModule = (xmppClient as any).fast
+    const fastModule = xmppClient.fast
     if (fastModule) {
       const bareJid = getBareJid(jid)
       fastModule.fetchToken = () => fetchFastToken(bareJid)
@@ -1606,7 +1606,7 @@ export class Connection extends BaseModule {
     // Request 10-minute SM resumption timeout (XEP-0198)
     // The server may grant less, but this allows longer session survival
     // during brief disconnections (e.g., network switches, laptop sleep)
-    const sm = xmppClient.streamManagement as any
+    const sm = xmppClient.streamManagement
     if (sm) {
       sm.preferredMaximum = 600 // 10 minutes in seconds
 
@@ -1647,8 +1647,8 @@ export class Connection extends BaseModule {
     const NS_SASL2 = 'urn:xmpp:sasl:2'
     const NS_BIND2 = 'urn:xmpp:bind:0'
     let inlineSmNegotiated = false
-    if (typeof (xmppClient as any).prependListener === 'function') {
-      ;(xmppClient as any).prependListener('element', (element: Element) => {
+    if (typeof xmppClient.prependListener === 'function') {
+      xmppClient.prependListener('element', (element: Element) => {
         if (element.is('success', NS_SASL2)) {
           const bound = element.getChild('bound', NS_BIND2)
           inlineSmNegotiated = !!(
@@ -1660,13 +1660,13 @@ export class Connection extends BaseModule {
           return
         }
         if (!element.is('features', NS_JABBER_STREAM)) return
-        const sm = (xmppClient as any).streamManagement
+        const sm = xmppClient.streamManagement
         const smNegotiated = inlineSmNegotiated || !!sm?.enabled
         inlineSmNegotiated = false // one-shot: consumed by the first features element
         if (!smNegotiated) return
         const smFeature = element.getChild('sm', NS_SM)
         if (smFeature) {
-          ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
+          element.children = element.children.filter((c: unknown) => c !== smFeature)
         }
       })
     }
@@ -1689,7 +1689,7 @@ export class Connection extends BaseModule {
    * - Full control over post-connect logic (roster, presence, carbons)
    */
   private disableBuiltInReconnect(xmppClient: Client): void {
-    const reconnect = (xmppClient as any)?.reconnect
+    const reconnect = xmppClient?.reconnect
     if (reconnect?.stop) {
       reconnect.stop()
     }
@@ -1705,7 +1705,7 @@ export class Connection extends BaseModule {
     this.smResumeCompleted = false
 
     if (!smState || !this.xmpp?.streamManagement) return
-    const sm = this.xmpp.streamManagement as any
+    const sm = this.xmpp.streamManagement
     sm.id = smState.id
     sm.inbound = smState.inbound
     // Hydrate sm.outbound to the count the server is expected to report in
@@ -1743,7 +1743,7 @@ export class Connection extends BaseModule {
     }
 
     // Listen for SM fail events (stanzas lost during resume or send)
-    const sm = this.xmpp.streamManagement as any
+    const sm = this.xmpp.streamManagement
     if (sm?.on) {
       sm.on('fail', (stanza: unknown) => {
         const stanzaStr = stanza instanceof Error ? stanza.message : String(stanza)
@@ -1763,7 +1763,7 @@ export class Connection extends BaseModule {
       // earlier) and sets resolved=true, making this a no-op there.
       sm.on('resumed', () => {
         if (resolved) return
-        const smLive = this.xmpp?.streamManagement as any
+        const smLive = this.xmpp?.streamManagement
         const previd = smLive?.id || ''
         const inbound = smLive ? (smLive.inbound || 0) : 0
         const outbound = smLive
@@ -1781,7 +1781,7 @@ export class Connection extends BaseModule {
             void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
           }
           setTimeout(() => {
-            const smObj = this.xmpp?.streamManagement as any
+            const smObj = this.xmpp?.streamManagement
             if (smObj) {
               smObj.id = previd
               smObj.enabled = true
@@ -1798,7 +1798,7 @@ export class Connection extends BaseModule {
     // xmpp.js's SM plugin does NOT emit 'enabled' or 'resumed' events on its
     // EventEmitter when we manually hydrate SM state, so we intercept the raw
     // stanzas to reliably update our cache and persistence.
-    ;(this.xmpp as any).on('nonza', (nonza: Element) => {
+    this.xmpp.on('nonza', (nonza: Element) => {
       if (nonza.is('enabled', 'urn:xmpp:sm:3')) {
         // SM successfully enabled (new session)
         const smId = nonza.attrs.id ? String(nonza.attrs.id).slice(0, 8) + '...' : 'none'
@@ -1823,7 +1823,7 @@ export class Connection extends BaseModule {
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death).
         // Read from the live SM object since xmpp.js has already processed the attrs.
-        const smObj = this.xmpp?.streamManagement as any
+        const smObj = this.xmpp?.streamManagement
         if (smObj?.id) {
           // New session: outbound starts at 0 (xmpp.js resets on <enabled/>).
           this.smPersistence.updateCache(smObj.id, smObj.inbound || 0, 0)
@@ -1834,7 +1834,7 @@ export class Connection extends BaseModule {
       } else if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
         // SM session successfully resumed
         const previd = nonza.attrs.previd as string
-        const smLive = this.xmpp?.streamManagement as any
+        const smLive = this.xmpp?.streamManagement
         const inbound = smLive ? smLive.inbound : 0
         // xmpp.js resumed() already processed ackQueue(h) and spliced outbound_q,
         // so sm.outbound + sm.outbound_q.length reflects the new total sent count.
@@ -1853,7 +1853,7 @@ export class Connection extends BaseModule {
         // Delay to run after xmpp.js's SM plugin finishes processing,
         // which otherwise resets the state after our update.
         setTimeout(() => {
-          const smObj = this.xmpp?.streamManagement as any
+          const smObj = this.xmpp?.streamManagement
           if (smObj) {
             smObj.id = previd
             smObj.enabled = true
@@ -1894,7 +1894,7 @@ export class Connection extends BaseModule {
     // If the socket closes before 'online' or 'error' fires (e.g., proxy TCP
     // connect failed, network not ready after wake), reject immediately instead
     // of waiting for the 30s reconnect attempt timeout.
-    ;(this.xmpp as any).on('disconnect', () => {
+    this.xmpp.on('disconnect', () => {
       logInfo(`Connection handshake disconnect (resolved=${resolved})`)
       if (resolved) return
       resolved = true
@@ -2009,7 +2009,7 @@ export class Connection extends BaseModule {
     })
 
     // Register IQ handlers using iq-callee
-    const iqCallee = (this.xmpp as any).iqCallee
+    const iqCallee = this.xmpp.iqCallee
     if (iqCallee) {
       // Roster pushes (type="set") - handled by emitting stanza event
       iqCallee.set('jabber:iq:roster', 'query', (context: { stanza: Element }) => {
@@ -2153,7 +2153,7 @@ export class Connection extends BaseModule {
     // events. Without this guard, those stale events would interfere with the
     // reconnect already in progress.
     const registeredClient = this.xmpp
-    ;(this.xmpp as any).on('disconnect', (context: { clean: boolean; reason?: unknown }) => {
+    this.xmpp.on('disconnect', (context: { clean: boolean; reason?: unknown }) => {
       const wasClean = context?.clean ?? false
       // Extract close code for file log diagnostics
       const rawReason = context?.reason
@@ -2465,7 +2465,7 @@ export class Connection extends BaseModule {
 
       // Defensive check: verify xmpp.js client is not already online.
       // This shouldn't happen in normal flow, but guards against edge cases.
-      if (this.xmpp && (this.xmpp as any).status === 'online') {
+      if (this.xmpp && this.xmpp.status === 'online') {
         this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
         this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:already-online')
         await this.handleConnectionSuccess(false, 'Reconnected', previouslyJoinedRooms)

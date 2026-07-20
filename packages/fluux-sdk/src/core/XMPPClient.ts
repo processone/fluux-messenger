@@ -1545,7 +1545,7 @@ export class XMPPClient {
   async sendRawXml(xmlString: string): Promise<void> {
     const xmpp = this.requireTransport()
     try {
-      await (xmpp as any).write(xmlString)
+      await xmpp.write(xmlString)
     } catch (err) {
       this.repairAndRethrowSendError(err)
     }
@@ -1566,7 +1566,7 @@ export class XMPPClient {
       this.reconnectIfStatusOnline(`Client null but status online${suffix} - triggering reconnect`)
       throw new Error('Not connected')
     }
-    if (options.checkSocket && !(xmpp as any).socket) {
+    if (options.checkSocket && !xmpp.socket) {
       this.reconnectIfStatusOnline(`Socket null but status online${suffix} - triggering reconnect`)
       throw new Error('Socket not available')
     }
@@ -1771,7 +1771,7 @@ export class XMPPClient {
   protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {
     const xmpp = this.requireTransport('IQ', { checkSocket: true })
     try {
-      const request = (xmpp as any).iqCaller.request(iq)
+      const request = xmpp.iqCaller.request(iq)
       if (timeoutMs != null) {
         return await Promise.race([
           request,

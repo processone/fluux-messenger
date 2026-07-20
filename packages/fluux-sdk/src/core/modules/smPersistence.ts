@@ -12,6 +12,22 @@ import type { ResolutionLogger } from './serverResolution'
 /** SM timeout — state older than this is considered stale (10 minutes). */
 const SM_TIMEOUT_MS = 10 * 60 * 1000
 
+/**
+ * The slice of the live xmpp.js client that SM capture reads.
+ *
+ * Deliberately narrower than `Client`: `getState` only ever reads the four
+ * Stream Management counters, so callers (and test doubles) need not stand up
+ * a whole client to be typed correctly.
+ */
+export interface SmStateSource {
+  streamManagement?: {
+    id?: string | null
+    inbound?: number
+    outbound?: number
+    outbound_q?: unknown[]
+  } | null
+}
+
 /** Cached SM state: lives in memory, survives socket death. */
 export interface SmStateCache {
   id: string
@@ -82,10 +98,10 @@ export class SmPersistence {
    *
    * @param xmpp - The xmpp.js client instance (may be null after socket death)
    */
-  getState(xmpp: any): SmStateCache | null {
+  getState(xmpp: SmStateSource | null): SmStateCache | null {
     // Try to get live state from the xmpp client
     if (xmpp?.streamManagement) {
-      const sm = xmpp.streamManagement as any
+      const sm = xmpp.streamManagement
       if (sm.id) {
         // Capture total outbound: already-acked (sm.outbound) + still-pending (outbound_q).
         // Server's <resumed h=N/> counts *every* stanza it received, acked or not — so

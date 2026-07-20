@@ -122,7 +122,6 @@ export function parse(uri: string): AesgcmUriParts {
   const httpsUrl = 'https://' + withoutFragment.slice('aesgcm://'.length)
   try {
     // Validate — `new URL` will reject obvious garbage.
-    // eslint-disable-next-line no-new
     new URL(httpsUrl)
   } catch {
     throw new Error('AesgcmUri: body is not a valid URL')
