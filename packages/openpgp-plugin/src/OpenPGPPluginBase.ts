@@ -407,6 +407,30 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this.hostStores = opts.hostStores
   }
 
+  /**
+   * Dual-write helpers (Phase B1 Task 5): every verified-state mutation must
+   * land in BOTH the plugin-owned cache (source of truth for trust reads —
+   * see `evaluatePeerTrust`) and the legacy `hostStores.verifiedPeers`
+   * mirror (still read by app-side UI and still what feeds cross-device
+   * sync publishing).
+   *
+   * Cache first, then the mirror: the mirror's synchronous `subscribe`
+   * fan-out is what drives the `_syncingFromRemoteCount`-guarded
+   * sync-publish scheduling and the trust-state seal, so the cache must
+   * already be consistent before that fan-out fires. The cache write is
+   * awaited — never fire-and-forget — so a dropped write can't silently
+   * diverge the cache from the mirror.
+   */
+  private async setVerifiedDual(jid: BareJID, fingerprint: string): Promise<void> {
+    await this.verifiedKeys.setVerified(jid, fingerprint)
+    this.hostStores.verifiedPeers.setVerified(jid, fingerprint)
+  }
+
+  private async clearVerifiedDual(jid: BareJID): Promise<void> {
+    await this.verifiedKeys.clearVerified(jid)
+    this.hostStores.verifiedPeers.clearVerified(jid)
+  }
+
   // ---------------------------------------------------------------------------
   // Abstract crypto methods — implemented by each platform subclass
   // ---------------------------------------------------------------------------
@@ -1340,8 +1364,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const local = this.verifiedKeys.getAll()
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
-      for (const { jid, fingerprint } of plan.toSet) this.hostStores.verifiedPeers.setVerified(jid, fingerprint)
-      for (const jid of plan.toClear) this.hostStores.verifiedPeers.clearVerified(jid)
+      for (const { jid, fingerprint } of plan.toSet) await this.setVerifiedDual(jid, fingerprint)
+      for (const jid of plan.toClear) await this.clearVerifiedDual(jid)
       saveAppliedVerificationsVersion(plan.version)
       this.scheduleTrustStateSeal()
     } catch {
@@ -1760,7 +1784,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const targetFp = alert.currentFingerprint
     const previousFp = alert.previousFingerprint
 
-    this.hostStores.verifiedPeers.clearVerified(peer)
+    await this.clearVerifiedDual(peer)
     this.hostStores.pinnedPrimaryFingerprints.set(peer, targetFp)
 
     const result = await this.refetchAndCachePeerKey(peer)
@@ -1778,7 +1802,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (asVerified) {
       const cached = this.peerKeys.get(peer)
       if (cached && cached.fingerprint === targetFp) {
-        this.hostStores.verifiedPeers.setVerified(peer, targetFp)
+        await this.setVerifiedDual(peer, targetFp)
       }
     }
   }
@@ -2091,9 +2115,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!cur) return
     if (id && !fingerprintsEqual(id, cur)) return
     if (decision === 'verified') {
-      this.hostStores.verifiedPeers.setVerified(peer, cur)
+      await this.setVerifiedDual(peer, cur)
     } else {
-      this.hostStores.verifiedPeers.clearVerified(peer)
+      await this.clearVerifiedDual(peer)
     }
   }
 

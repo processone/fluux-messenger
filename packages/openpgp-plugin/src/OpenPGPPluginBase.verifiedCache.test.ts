@@ -143,3 +143,61 @@ describe('OpenPGPPluginBase — trust reads come from the plugin-owned cache', (
     expect(context.trust).toBe('tofu')
   })
 })
+
+// Task 5: every verified-state write must land in BOTH the plugin-owned
+// cache and the legacy `hostStores.verifiedPeers` mirror. `setIdentityTrust`
+// is exercised directly here since it needs no XMPP/PEP wiring; the other
+// write sites (`acceptPeerKeyChange`, verification-sync apply) are covered
+// against a full plugin instance in `SequoiaPgpPlugin.test.ts`, since they
+// depend on peer-key fetch / PEP plumbing this harness doesn't stub.
+describe('OpenPGPPluginBase — setIdentityTrust dual-writes cache and legacy mirror', () => {
+  it("setIdentityTrust('verified') writes to both the cache and the legacy mirror", async () => {
+    const { base, verified } = makeTestBase()
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
+
+    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(true)
+    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(true)
+  })
+
+  it("setIdentityTrust('untrusted') clears both the cache and the legacy mirror", async () => {
+    const { base, verified } = makeTestBase()
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
+    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(true)
+    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(true)
+
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'untrusted')
+
+    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(false)
+    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(false)
+  })
+
+  it('end-to-end: getPeerTrust (which reads ONLY the cache) sees a setIdentityTrust write', async () => {
+    // evaluatePeerTrust reads exclusively from `this.verifiedKeys` (see the
+    // "trust reads come from the plugin-owned cache" block above) — so this
+    // closes the write -> read loop: if the cache half of the dual-write
+    // were dropped, this would still read 'tofu'.
+    const { base } = makeTestBase()
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
+
+    expect(await base.getPeerTrust('bob@x')).toBe('verified')
+  })
+
+  it('persists the dual-write: a fresh VerifiedKeysCache over the same storage sees it', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
+
+    const reloaded = new VerifiedKeysCache(ctx.storage)
+    await reloaded.hydrate()
+    expect(reloaded.isVerified('bob@x', 'ABCD1234')).toBe(true)
+  })
+})
