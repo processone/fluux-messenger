@@ -4,15 +4,22 @@
 // Mirrors the concrete-subclass-with-stubbed-abstracts pattern; reuses the
 // package's existing `createMockHostStores` for the `hostStores` seam.
 // Test utility only — never re-exported from the package index.
-import type { BareJID } from '@fluux/sdk'
+import type { BareJID, PluginContext, PluginStorage, XMPPPrimitives } from '@fluux/sdk'
 import { OpenPGPPluginBase, type KeyBundle, type CertValidation, type DecryptOutput } from '../OpenPGPPluginBase'
 import { createMockHostStores, type MockHostStores } from '../testing/mockHostStores'
+import type { VerifiedKeysCache } from '../verifiedKeysCache'
+import { memStorage } from './memStorage'
 
 /** Concrete subclass whose abstract crypto methods are never exercised by
- * the trait tests — each throws if accidentally called. */
+ * the trait tests — each throws if accidentally called. `ensureKeyMaterial`
+ * is the exception: it's driven through `init()` by the verified-cache
+ * tests, so it delegates to a settable `ensureKeyMaterialImpl` (defaulting
+ * to the same "not implemented" throw) instead of being hardcoded. */
 class TestOpenPGPPlugin extends OpenPGPPluginBase {
-  protected ensureKeyMaterial(_accountJid: string): Promise<KeyBundle> {
-    throw new Error('TestOpenPGPPlugin: ensureKeyMaterial not implemented')
+  ensureKeyMaterialImpl: (accountJid: string) => Promise<KeyBundle> = () =>
+    Promise.reject(new Error('TestOpenPGPPlugin: ensureKeyMaterial not implemented'))
+  protected ensureKeyMaterial(accountJid: string): Promise<KeyBundle> {
+    return this.ensureKeyMaterialImpl(accountJid)
   }
   protected encryptToRecipient(
     _senderAccountJid: string,
@@ -101,8 +108,52 @@ export function makeTestBase(): { base: TestOpenPGPPlugin; verified: MockHostSto
   return { base, verified: hostStores.verifiedPeers, calls }
 }
 
+/**
+ * Build a `PluginContext` that can drive `init()` end to end: disco
+ * advertises PEP support (so `probePepSupport` passes) and every PEP
+ * primitive is a no-op that succeeds, so `ensureIdentity`'s publish steps
+ * clear without a real XMPP transport. `storage` defaults to a fresh
+ * `memStorage()` — pass one explicitly to pre-populate it (e.g. via
+ * `persistVerifiedMap`) before calling `init()`.
+ */
+export function makeTestCtx(accountJid: BareJID, opts?: { storage?: PluginStorage }): PluginContext {
+  const xmpp: XMPPPrimitives = {
+    sendStanza: async () => {},
+    queryDisco: async () => ({
+      features: [
+        { var: 'http://jabber.org/protocol/pubsub' },
+        { var: 'http://jabber.org/protocol/pubsub#publish-options' },
+      ],
+      identities: [{ category: 'pubsub', type: 'pep' }],
+    }),
+    publishPEP: async () => {},
+    retractPEP: async () => {},
+    deletePEP: async () => {},
+    queryPEP: async () => [],
+    subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+  return {
+    storage: opts?.storage ?? memStorage(),
+    xmpp,
+    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    account: { jid: accountJid },
+    reportSecurityContextUpdate: () => {},
+  }
+}
+
 /** Insert a fake peer key into the base instance's private `peerKeys` map. */
 export function seedPeerKey(base: TestOpenPGPPlugin, jid: BareJID, fingerprint: string): void {
   const peerKeys = (base as unknown as { peerKeys: Map<BareJID, KeyBundle> }).peerKeys
   peerKeys.set(jid, { fingerprint, publicArmored: '', keychainBacked: false })
+}
+
+/**
+ * Reach the base instance's `protected verifiedKeys` cache after `init()`
+ * has hydrated/seeded it. `protected` blocks direct access from outside the
+ * class hierarchy at the type level even though `TestOpenPGPPlugin` (a real
+ * subclass) could read it directly — this cast-based accessor mirrors
+ * {@link seedPeerKey}'s pattern for the same reason.
+ */
+export function getVerifiedKeysCache(base: TestOpenPGPPlugin): VerifiedKeysCache {
+  return (base as unknown as { verifiedKeys: VerifiedKeysCache }).verifiedKeys
 }

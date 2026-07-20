@@ -101,6 +101,7 @@ import {
 } from './trustStateIntegrity'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 import { isSecretKeyUnavailableError } from './keyUnavailable'
+import { VerifiedKeysCache } from './verifiedKeysCache'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -391,6 +392,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   protected readonly hostStores: OpenPGPHostStores
 
+  /** Plugin-owned verified-key state; the source of truth from B1 onward. */
+  protected verifiedKeys!: VerifiedKeysCache
+
   constructor(opts: { hostStores: OpenPGPHostStores }) {
     this.hostStores = opts.hostStores
   }
@@ -519,6 +523,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   async init(ctx: PluginContext): Promise<void> {
     this.ctx = ctx
+    // Hydrate the verified-key cache before init resolves. Trust can be read
+    // (evaluatePeerTrust / buildInboundSecurityContext) even on the paths that
+    // return early below without activating subscriptions, and a cold cache
+    // would silently downgrade a verified peer to `tofu`.
+    this.verifiedKeys = new VerifiedKeysCache(ctx.storage)
+    await this.verifiedKeys.hydrate()
+    // One-time seed from the legacy app-side store (still live in B1). `seed`
+    // is a no-op once the plugin owns data, so this cannot clobber it.
+    await this.verifiedKeys.seed(this.hostStores.verifiedPeers.getAll())
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
