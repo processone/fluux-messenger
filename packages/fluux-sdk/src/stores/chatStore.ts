@@ -214,6 +214,24 @@ interface ChatState {
   // is rebuilt from the newest window, so a stale `false` would wrongly gate live
   // messages. This is why the flag lives here and NOT in the persisted conversationMeta.
   windowAtLiveEdge: Map<string, boolean>
+  // The last message that genuinely ARRIVED in each conversation, as opposed to
+  // the last message we currently DISPLAY (conversationMeta.lastMessage).
+  //
+  // Written only by addMessage, past the duplicate early-returns — so it changes
+  // exactly once per delivered message and never for a duplicate echo, a MAM or
+  // cache merge, or a preview swap. That makes it the authoritative "a message
+  // arrived" signal for notification consumers, which must not fire twice for
+  // one message.
+  //
+  // lastMessage cannot serve that role: it is display state and legitimately
+  // moves BACKWARDS as well as forwards (a merge demotes it off a bodiless
+  // placeholder onto an older previewable message; addMessage sets it from an
+  // offline-replay message with no timestamp guard). Diffing it re-reads an
+  // already-delivered message as new — see useNotificationEvents.
+  //
+  // EPHEMERAL: never persisted (absent from partialize). A restored arrival
+  // would be re-read as a fresh delivery on the next launch.
+  lastArrivedMessage: Map<string, Message>
 
   // Computed
   activeConversation: () => Conversation | null
@@ -578,7 +596,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -596,6 +614,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
     windowAtLiveEdge: new Map(),
+    lastArrivedMessage: new Map(),
   }
 }
 
@@ -605,7 +624,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -644,7 +663,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -1007,6 +1026,15 @@ export const chatStore = createStore<ChatState>()(
             append.kind === 'appended' ? append.messages : convMessages
           )
 
+          // Record the arrival. Both surviving append kinds are genuine
+          // deliveries — 'appended' spliced into the resident window, 'gated'
+          // held out of a window slid back into history — and the duplicate
+          // kinds already returned above. This is the signal notification
+          // consumers diff; see the field's declaration for why the sidebar
+          // preview cannot be used instead.
+          const newArrived = new Map(state.lastArrivedMessage)
+          newArrived.set(msg.conversationId, msg)
+
           const conv = state.conversations.get(msg.conversationId)
           const meta = state.conversationMeta.get(msg.conversationId)
           if (conv && meta) {
@@ -1072,14 +1100,15 @@ export const chatStore = createStore<ChatState>()(
                   conversations: newConversations,
                   archivedConversations: newArchived,
                   firstNewMessageMarkers: newMarkers,
+                  lastArrivedMessage: newArrived,
                 }
               }
             }
 
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived }
           }
 
-          return { messages: newMessages }
+          return { messages: newMessages, lastArrivedMessage: newArrived }
         })
       },
 
