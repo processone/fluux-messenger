@@ -16,11 +16,34 @@ const mockRooms = new Map()
 let mockActiveRoomJid: string | null = null
 let mockWindowVisible = false
 
+// Simulated chatStore.lastArrivedMessage — the store's "a message was
+// delivered" signal, which addMessage writes and no merge or preview swap
+// touches.
+//
+// Default: a conversation's lastMessage is also treated as its latest arrival,
+// which is the ordinary case and keeps every test that just sets a lastMessage
+// exercising the real decision path (rather than passing vacuously because no
+// arrival was ever recorded). A test that needs a preview to move WITHOUT a
+// delivery pins the arrival with pinArrival() — the pin then wins over the
+// derived value for that conversation.
+const mockArrivedMessages = new Map()
+
+const pinArrival = (conversationId: string, message: unknown) => {
+  mockArrivedMessages.set(conversationId, message)
+}
+
 // Helper to trigger store subscriptions
 const triggerChatStoreUpdate = () => {
+  const lastArrivedMessage = new Map(mockArrivedMessages)
+  for (const [id, conv] of mockConversations) {
+    if (!lastArrivedMessage.has(id) && conv.lastMessage) {
+      lastArrivedMessage.set(id, conv.lastMessage)
+    }
+  }
   const state = {
     conversations: mockConversations,
     activeConversationId: mockActiveConversationId,
+    lastArrivedMessage,
   }
   chatStoreSubscribers.forEach(sub => sub(state))
 }
@@ -61,6 +84,7 @@ describe('useNotificationEvents', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     mockConversations.clear()
+    mockArrivedMessages.clear()
     mockRooms.clear()
     mockActiveConversationId = null
     mockActiveRoomJid = null
@@ -829,7 +853,8 @@ describe('useNotificationEvents', () => {
   // history) also trips — even though the newest message is unchanged. Without
   // an identity guard this resurrects a banner for a message already delivered,
   // matching the observed "notification reappears when I open the room" bug.
-  // The 1:1 path is already immune (it dedupes by lastMessage.id).
+  // The 1:1 path detects arrivals by lastMessage.id and has its own guard —
+  // see "conversation notification idempotency" below.
   describe('room notification idempotency', () => {
     const roomJid = 'tech@conference.example.com'
 
@@ -932,6 +957,164 @@ describe('useNotificationEvents', () => {
       })
       expect(onRoomMessage).toHaveBeenCalledTimes(2)
       expect(onRoomMessage.mock.calls[1][1].id).toBe('second')
+    })
+  })
+
+  // The 1:1 twin of the room re-hydration bug (#999). The conversation path
+  // dedupes on lastMessage.id, which holds only while that id is stable across a
+  // cache re-hydration. It is not always stable: when the stored preview is a
+  // NON-previewable placeholder (a bodiless encrypted signal), the reopen merge
+  // runs derivePreviewAfterMerge → shouldReplaceLastMessage, whose
+  // `!isPreviewableMessage(existing)` branch swaps the preview to the newest
+  // *previewable* message — an OLDER message with a DIFFERENT id. That id change
+  // reads as "new message" to the dedupe.
+  //
+  // Nothing downstream catches it during the reopen window: activateConversation
+  // awaits loadMessagesFromCache BEFORE setActiveConversation, so isActive is
+  // still false and unreadCount is not yet zeroed.
+  describe('conversation notification idempotency', () => {
+    const convId = 'dave@example.com'
+
+    it('does not re-notify when a reopen swaps the preview off a bodiless placeholder', () => {
+      const onConversationMessage = vi.fn()
+      const now = new Date()
+      const earlier = new Date(now.getTime() - 60 * 1000)
+      const real1 = { id: 'real-1', body: 'ping', timestamp: earlier, isOutgoing: false }
+      const signal2 = { id: 'signal-2', body: '', timestamp: now, isOutgoing: false }
+
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      // A real incoming message arrives and is notified.
+      act(() => {
+        pinArrival(convId, real1)
+        mockConversations.set(convId, {
+          id: convId,
+          name: 'Dave',
+          unreadCount: 1,
+          lastSeenMessageId: undefined,
+          lastMessage: real1,
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+
+      // A bodiless encrypted signal is delivered: newest, but NOT previewable.
+      act(() => {
+        pinArrival(convId, signal2)
+        mockConversations.set(convId, {
+          ...mockConversations.get(convId),
+          unreadCount: 2,
+          lastMessage: signal2,
+        })
+        triggerChatStoreUpdate()
+      })
+      onConversationMessage.mockClear()
+
+      // Reopen: loadMessagesFromCache merges the cached slice and the preview
+      // policy demotes the placeholder back to the newest previewable message
+      // ('real-1' — older, different id). setActiveConversation has NOT run yet,
+      // so isActive is false and unreadCount is still > 0. Crucially NOTHING was
+      // delivered, so the arrival signal stays pinned on 'signal-2'.
+      act(() => {
+        mockConversations.set(convId, {
+          ...mockConversations.get(convId),
+          lastMessage: real1,
+        })
+        triggerChatStoreUpdate()
+      })
+
+      // A preview demotion is not a delivery — no banner may be re-posted.
+      expect(onConversationMessage).not.toHaveBeenCalled()
+    })
+
+    // Second, wider trigger — no placeholder and no E2EE required. addMessage
+    // sets the preview from the incoming message with NO timestamp guard
+    // (chatStore.ts:1035), unlike every merge path, so a delayed/offline-replay
+    // message moves lastMessage BACKWARDS. Notifying for that delayed message is
+    // intended (#586). The damage comes on the next merge: shouldReplaceLastMessage
+    // sees a strictly-newer candidate and restores the previous newest message,
+    // whose id differs from the regressed preview — so a message already notified
+    // is notified a second time.
+    it('does not re-notify the newest message when a merge restores it after a regressed preview', () => {
+      const onConversationMessage = vi.fn()
+      const newestAt = new Date()
+      const olderAt = new Date(newestAt.getTime() - 5 * 60 * 1000)
+      const newest = { id: 'newest', body: 'latest', timestamp: newestAt, isOutgoing: false }
+      const offline = { id: 'offline', body: 'sent while you were away', timestamp: olderAt, isOutgoing: false }
+
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      // Newest message arrives and is notified.
+      act(() => {
+        pinArrival(convId, newest)
+        mockConversations.set(convId, {
+          id: convId,
+          name: 'Dave',
+          unreadCount: 1,
+          lastSeenMessageId: undefined,
+          lastMessage: newest,
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+
+      // Offline replay: an OLDER message is delivered via addMessage, which has
+      // no timestamp guard — the preview regresses. This IS a delivery and must
+      // still notify (#586), even though it moves the preview backwards.
+      act(() => {
+        pinArrival(convId, offline)
+        mockConversations.set(convId, {
+          ...mockConversations.get(convId),
+          unreadCount: 2,
+          lastMessage: offline,
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationMessage).toHaveBeenCalledTimes(2)
+      expect(onConversationMessage.mock.calls[1][1].id).toBe('offline')
+      onConversationMessage.mockClear()
+
+      // Any later merge (reopen cache load or MAM page) picks the newest
+      // previewable message and restores 'newest' — already notified above.
+      // Nothing was delivered, so the arrival stays pinned on 'offline'.
+      act(() => {
+        mockConversations.set(convId, {
+          ...mockConversations.get(convId),
+          lastMessage: newest,
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationMessage).not.toHaveBeenCalled()
+    })
+
+    // The arrival signal also carries the notification BODY. Previously the
+    // banner was built from conv.lastMessage, so a delivery landing while the
+    // preview pointed elsewhere (a bodiless placeholder demoted to an older
+    // message) announced the wrong text.
+    it('notifies with the delivered message, not the current preview', () => {
+      const onConversationMessage = vi.fn()
+      const now = new Date()
+      const preview = { id: 'preview-old', body: 'an older previewable line', timestamp: new Date(now.getTime() - 60 * 1000), isOutgoing: false }
+      const delivered = { id: 'delivered', body: 'the actual new message', timestamp: now, isOutgoing: false }
+
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      act(() => {
+        pinArrival(convId, delivered)
+        mockConversations.set(convId, {
+          id: convId,
+          name: 'Dave',
+          unreadCount: 1,
+          lastSeenMessageId: undefined,
+          lastMessage: preview,
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+      expect(onConversationMessage.mock.calls[0][1].id).toBe('delivered')
+      expect(onConversationMessage.mock.calls[0][1].body).toBe('the actual new message')
     })
   })
 })
