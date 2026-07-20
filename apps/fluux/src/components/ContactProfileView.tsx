@@ -7,6 +7,7 @@ import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useApplyIdentityTrust } from '@/hooks/useApplyIdentityTrust'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -61,6 +62,14 @@ export function ContactProfileView({
   const { client } = useXMPPContext()
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
+  // Shared verify/revoke apply (see useApplyIdentityTrust): awaits the
+  // plugin call, shows a success toast only once it resolves, and surfaces
+  // an error toast on rejection instead of leaving an unhandled promise
+  // rejection (previously the verify dialog just stayed open silently on a
+  // failed write — see Phase B1 final-review Finding 1). Same hook ChatView
+  // uses for its chat-header verify/revoke, so the two entry points can't
+  // drift apart again.
+  const applyIdentityTrust = useApplyIdentityTrust()
 
   const handleDisableEncryption = useCallback(() => {
     setForcedPlaintext(contact.jid, true)
@@ -327,9 +336,17 @@ export function ContactProfileView({
           ownFingerprint={dialogOwnFp}
           alreadyVerified={verifyDevice.trust === 'verified'}
           onConfirm={() => {
-            void setIdentityTrust(contact.jid, verifyDevice.id, 'verified').then(() => {
-              setVerifyDevice(null)
-              setIdentityReloadKey((n) => n + 1)
+            const identityId = verifyDevice.id
+            setVerifyDevice(null)
+            void applyIdentityTrust(
+              () => identityPlugin,
+              contact.jid,
+              identityId,
+              'verified',
+              'chat.verifyPeer.confirmSuccess',
+              'chat.verifyPeer.confirmFailed',
+            ).then((ok) => {
+              if (ok) setIdentityReloadKey((n) => n + 1)
             })
           }}
           onCancel={() => setVerifyDevice(null)}

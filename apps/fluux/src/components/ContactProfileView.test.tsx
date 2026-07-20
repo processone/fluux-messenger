@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Contact } from '@fluux/sdk'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useToastStore } from '@/stores/toastStore'
 import { ContactProfileView } from './ContactProfileView'
 
 const defaultEncryptionState: ConversationEncryptionState = {
@@ -95,7 +96,10 @@ const props = {
 }
 
 describe('ContactProfileView', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useToastStore.setState({ toasts: [] })
+  })
   afterEach(() => {
     mockEncryptionState.mockReturnValue(defaultEncryptionState)
     mockClient.mockReturnValue(defaultClient)
@@ -183,6 +187,57 @@ describe('ContactProfileView', () => {
     await waitFor(() =>
       expect(setIdentityTrust).toHaveBeenCalledWith('sofia@process-one.net', 'ABCD1234', 'verified'),
     )
+    await waitFor(() => {
+      const toasts = useToastStore.getState().toasts
+      expect(toasts.some((toast) => toast.type === 'success')).toBe(true)
+    })
+  })
+
+  // Regression coverage for Finding 1 of the Phase B1 final review:
+  // `setIdentityTrust` now awaits a keychain/IPC/disk write and can reject.
+  // Before the fix, the confirm handler chained a bare `.then()` with no
+  // `.catch()`, so a rejection became an unhandled promise rejection, the
+  // dialog silently stayed open, and the identity list never refreshed —
+  // the user had no idea the verify failed. This proves the fix routes
+  // through the same shared `useApplyIdentityTrust` helper ChatView uses:
+  // an error toast on rejection, never a success toast, and the promise
+  // never surfaces as unhandled.
+  it('surfaces an error toast (never a success toast) instead of hanging when setIdentityTrust rejects', async () => {
+    const setIdentityTrust = vi.fn().mockRejectedValue(new Error('boom'))
+    const openpgpPlugin = {
+      listPeerIdentities: vi.fn().mockResolvedValue([{ id: 'ABCD1234', fingerprint: 'ABCD1234', trust: 'tofu' }]),
+      getOwnFingerprint: vi.fn().mockReturnValue('ccdd'),
+      setIdentityTrust,
+    }
+    mockEncryptionState.mockReturnValue({
+      kind: 'encrypted' as const,
+      fingerprint: 'ABCD1234',
+      trust: 'tofu' as const,
+    })
+    mockClient.mockReturnValue({
+      client: {
+        e2ee: {
+          getPlugin: (id: string) => (id === 'openpgp' ? openpgpPlugin : null),
+        },
+      },
+    })
+
+    render(<ContactProfileView {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Encrypted, not verified' }))
+    expect(await screen.findByTestId('omemo-verify-ABCD1234')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('omemo-verify-ABCD1234'))
+
+    await waitFor(() => expect(screen.getByText('chat.verifyPeer.dialogTitle')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /chat.verifyPeer.showFullFingerprints/ }))
+    fireEvent.click(screen.getByRole('button', { name: /chat.verifyPeer.confirmByFingerprint/ }))
+
+    await waitFor(() => expect(setIdentityTrust).toHaveBeenCalled())
+    await waitFor(() => {
+      const toasts = useToastStore.getState().toasts
+      expect(toasts.some((toast) => toast.type === 'error')).toBe(true)
+    })
+    expect(useToastStore.getState().toasts.some((toast) => toast.type === 'success')).toBe(false)
   })
 
   it('revoking an OpenPGP identity calls setIdentityTrust(peer, id, "untrusted") through the shared identities handle', async () => {

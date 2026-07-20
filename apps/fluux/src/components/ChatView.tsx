@@ -4,8 +4,8 @@ import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, type Message, type ContactIdentity } from '@fluux/sdk'
-import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
+import { useApplyIdentityTrust } from '@/hooks/useApplyIdentityTrust'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
 import { OmemoSwitchNotice } from './OmemoSwitchNotice'
@@ -314,7 +314,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     activeConversation?.type ?? 'chat',
   )
   const { client } = useXMPPContext()
-  const addToast = useToastStore((s) => s.addToast)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const [verifyDialogState, setVerifyDialogState] = useState<
     | { open: false }
@@ -335,34 +334,23 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     [client],
   )
 
-  // Shared verify/revoke apply: awaits the plugin call so the success toast
-  // never fires ahead of the actual write, surfaces a failure toast (via the
-  // same addToast channel every other async failure in this file uses) when
-  // the plugin call throws, and handles the plugin being unavailable (not
-  // registered, OpenPGP disabled) explicitly rather than crashing or
-  // silently claiming success.
+  // Shared verify/revoke apply (see useApplyIdentityTrust): awaits the
+  // plugin call so the success toast never fires ahead of the actual
+  // write, surfaces a failure toast when the call throws, and handles the
+  // plugin being unavailable (not registered, OpenPGP disabled) explicitly
+  // rather than crashing or silently claiming success. Extracted into a
+  // shared hook so this entry point and ContactProfileView's per-identity
+  // verify/revoke can't drift apart again.
+  const applyIdentityTrustShared = useApplyIdentityTrust()
   const applyIdentityTrust = useCallback(
-    async (
+    (
       peer: string,
       id: string,
       decision: 'verified' | 'untrusted',
       successKey: string,
       failureKey: string,
-    ) => {
-      const plugin = getOpenpgpPlugin()
-      if (!plugin?.setIdentityTrust) {
-        addToast('error', t(failureKey))
-        return
-      }
-      try {
-        await plugin.setIdentityTrust(peer, id, decision)
-        addToast('success', t(successKey))
-      } catch (err) {
-        addToast('error', t(failureKey))
-        console.error('[Fluux] setIdentityTrust failed:', err)
-      }
-    },
-    [getOpenpgpPlugin, addToast, t],
+    ) => applyIdentityTrustShared(getOpenpgpPlugin, peer, id, decision, successKey, failureKey),
+    [applyIdentityTrustShared, getOpenpgpPlugin],
   )
 
   const handleOpenVerify = useCallback(() => {

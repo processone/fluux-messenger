@@ -10,6 +10,7 @@ import type {
   DecryptResult,
 } from '@fluux/sdk'
 import type { KeyBundle } from '@fluux/openpgp-plugin'
+import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',
@@ -155,6 +156,32 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
 
   tryClaimInbound() {
     return null
+  }
+
+  /**
+   * Per-identity trust write (E2EEPlugin trait), mirroring the real
+   * `OpenPGPPluginBase.setIdentityTrust`: OpenPGP is single-key per peer,
+   * so `'verified'` pins the marker to the peer's current fingerprint and
+   * `'untrusted'` clears it. Writes straight to `useVerifiedPeerKeysStore`
+   * — the same store `demo.tsx` seeds `ava@fluux.chat`'s verification into
+   * and the chat header / contact profile chip both read from — so the
+   * demo's verify/revoke flow actually flips the chip instead of hitting
+   * the "plugin unavailable" branch (this plugin doesn't extend
+   * `OpenPGPPluginBase`, so it needs its own trait implementation; without
+   * it every demo verify surfaced a red error toast instead of succeeding).
+   * No-ops when the peer has no known fingerprint, or when a non-empty
+   * `id` no longer matches the current one (stale identity reference).
+   */
+  async setIdentityTrust(peer: string, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
+    await delay(200)
+    const cur = this.getPeerFingerprint(peer)
+    if (!cur) return
+    if (id && id !== cur) return
+    if (decision === 'verified') {
+      setPeerVerified(peer, cur)
+    } else {
+      clearPeerVerified(peer)
+    }
   }
 
   // --- Settings-panel methods (called via casts) ---

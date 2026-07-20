@@ -94,4 +94,58 @@ describe('VerifiedKeysCache', () => {
     await c.seed({ 'bob@x': 'STALE', 'carol@x': 'ALSOSTALE' })
     expect(c.getAll()).toEqual({ 'bob@x': 'REAL' })
   })
+
+  // Finding 3: a failed persist must never leave the in-memory map ahead of
+  // disk — otherwise a later unrelated trust change can trigger a
+  // trust-state seal that snapshots the never-persisted entry, and on next
+  // launch hydrate() won't reproduce it, manufacturing a false "compromised"
+  // tamper verdict from what was really a transient disk/keychain error.
+  describe('rollback on a failed persist', () => {
+    function rejectingStorage() {
+      const s = memStorage()
+      s.put = async () => { throw new Error('disk full') }
+      return s
+    }
+
+    it('setVerified: rolls back a NEW entry so isVerified is false afterwards, not true', async () => {
+      const c = new VerifiedKeysCache(rejectingStorage())
+      await expect(c.setVerified('bob@x', 'ABCD')).rejects.toThrow('disk full')
+      expect(c.isVerified('bob@x', 'ABCD')).toBe(false)
+      expect(c.getAll()).toEqual({})
+    })
+
+    it('setVerified: rolls back to the PREVIOUS fingerprint when overwriting an existing entry', async () => {
+      const s = memStorage()
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      await c.setVerified('bob@x', 'OLD')
+      s.put = async () => { throw new Error('disk full') }
+      await expect(c.setVerified('bob@x', 'NEW')).rejects.toThrow('disk full')
+      expect(c.isVerified('bob@x', 'NEW')).toBe(false)
+      expect(c.isVerified('bob@x', 'OLD')).toBe(true)
+    })
+
+    it('clearVerified: rolls back the deletion so the entry is still verified afterwards', async () => {
+      const s = memStorage()
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+      s.put = async () => { throw new Error('disk full') }
+      await expect(c.clearVerified('bob@x')).rejects.toThrow('disk full')
+      expect(c.isVerified('bob@x', 'ABCD')).toBe(true)
+    })
+
+    it('clearVerified: no-ops (no persist attempt, nothing to roll back) when the jid has no entry', async () => {
+      const c = new VerifiedKeysCache(rejectingStorage())
+      await c.hydrate()
+      await expect(c.clearVerified('nobody@x')).resolves.toBeUndefined()
+    })
+
+    it('seed: rolls back to empty when persisting the seed fails', async () => {
+      const c = new VerifiedKeysCache(rejectingStorage())
+      await expect(c.seed({ 'bob@x': 'ABCD' })).rejects.toThrow('disk full')
+      expect(c.isVerified('bob@x', 'ABCD')).toBe(false)
+      expect(c.getAll()).toEqual({})
+    })
+  })
 })

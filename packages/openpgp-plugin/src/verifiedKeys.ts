@@ -36,5 +36,16 @@ export async function persistVerifiedMap(
   storage: PluginStorage,
   map: Record<string, string>,
 ): Promise<void> {
-  await storage.put(VERIFIED_STORAGE_KEY, enc.encode(JSON.stringify(map)))
+  // Filter at the write boundary to exactly what `loadVerifiedMap` accepts
+  // on read (non-empty strings only). Without this, a value the writer
+  // accepts but the loader would reject survives in memory for the rest of
+  // the session, gets included in a trust-state seal snapshot, and then
+  // silently vanishes on the next `hydrate()` — a seal/reload mismatch that
+  // manufactures a false "trust state compromised" alarm from a value that
+  // was never actually persistable.
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(map)) {
+    if (typeof v === 'string' && v.length > 0) out[k] = v
+  }
+  await storage.put(VERIFIED_STORAGE_KEY, enc.encode(JSON.stringify(out)))
 }
