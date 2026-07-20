@@ -166,6 +166,36 @@ const weakDescriptor: E2EEProtocolDescriptor = {
   },
 }
 
+/**
+ * Minimal plugin whose `init()` stashes the received {@link PluginContext}
+ * on the instance so a test can reach `plugin.ctx.storage`. Distinct from
+ * {@link FakePlugin} (used for selection/dispatch tests) which needs a full
+ * descriptor + xmlns per call site — this is only for storage-routing tests
+ * that don't care about encrypt/decrypt behavior.
+ */
+function fakePlugin(id: string): E2EEPlugin & { ctx: PluginContext } {
+  const descriptor: E2EEProtocolDescriptor = {
+    id,
+    displayName: id,
+    securityLevel: 10,
+    features: {
+      forwardSecrecy: false,
+      postCompromiseSecurity: false,
+      multiDevice: false,
+      groupChat: false,
+      asynchronous: false,
+      deniability: false,
+    },
+  }
+  const plugin = new FakePlugin(descriptor, `urn:test:${id}`) as unknown as E2EEPlugin & {
+    ctx: PluginContext
+  }
+  plugin.init = async (ctx: PluginContext) => {
+    plugin.ctx = ctx
+  }
+  return plugin
+}
+
 describe('E2EEManager — diagnostic logger', () => {
   it('exposes the injected logger via getDiagnosticLogger()', () => {
     const { logger } = makeSpyLogger()
@@ -1256,5 +1286,53 @@ describe('E2EEManager — configure', () => {
   it('throws when no plugin is registered under the id', async () => {
     const mgr = makeManager()
     await expect(mgr.configure('omemo:2', {})).rejects.toThrow(/no plugin registered/)
+  })
+})
+
+describe('E2EEManager — per-plugin storage backend routing', () => {
+  it('uses the default backend when no per-plugin override is set', async () => {
+    const dflt = new InMemoryStorageBackend()
+    const mgr = new E2EEManager({ storage: dflt, xmpp: makeXmpp(), account: { jid: 'a@x' } })
+    const plugin = fakePlugin('openpgp')
+    await mgr.register(plugin)
+    await plugin.ctx.storage.put('k', new Uint8Array([1]))
+    expect(await dflt.get('e2ee/openpgp k')).toEqual(new Uint8Array([1]))
+  })
+
+  it('uses the per-plugin override when set, leaving the default for others', async () => {
+    const dflt = new InMemoryStorageBackend()
+    const own = new InMemoryStorageBackend()
+    const mgr = new E2EEManager({ storage: dflt, xmpp: makeXmpp(), account: { jid: 'a@x' } })
+    mgr.setStorage(own, 'openpgp')
+    const pgp = fakePlugin('openpgp')
+    const omemo = fakePlugin('omemo:2')
+    await mgr.register(pgp)
+    await mgr.register(omemo)
+    await pgp.ctx.storage.put('k', new Uint8Array([1]))
+    await omemo.ctx.storage.put('k', new Uint8Array([2]))
+    expect(await own.get('e2ee/openpgp k')).toEqual(new Uint8Array([1]))
+    expect(await dflt.get('e2ee/openpgp k')).toBeNull()
+    expect(await dflt.get('e2ee/omemo:2 k')).toEqual(new Uint8Array([2]))
+  })
+
+  it('retains the e2ee/<id> key prefix even with a dedicated backend (OMEMO back-compat)', async () => {
+    const own = new InMemoryStorageBackend()
+    const mgr = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: makeXmpp(), account: { jid: 'a@x' } })
+    mgr.setStorage(own, 'openpgp')
+    const pgp = fakePlugin('openpgp')
+    await mgr.register(pgp)
+    await pgp.ctx.storage.put('k', new Uint8Array([7]))
+    expect(await own.list('e2ee/openpgp')).toContain('e2ee/openpgp k')
+  })
+
+  it('setStorage() with no pluginId still replaces the default (backward compatible)', async () => {
+    const first = new InMemoryStorageBackend()
+    const second = new InMemoryStorageBackend()
+    const mgr = new E2EEManager({ storage: first, xmpp: makeXmpp(), account: { jid: 'a@x' } })
+    mgr.setStorage(second)
+    const plugin = fakePlugin('openpgp')
+    await mgr.register(plugin)
+    await plugin.ctx.storage.put('k', new Uint8Array([3]))
+    expect(await second.get('e2ee/openpgp k')).toEqual(new Uint8Array([3]))
   })
 })

@@ -34,6 +34,14 @@ export interface E2EEManagerOptions {
   account: AccountInfo
   logger?: Logger
   capabilityCache?: CapabilityCacheOptions
+  /**
+   * Per-plugin backend overrides, keyed by plugin id. A plugin id present
+   * here receives its own backend at {@link E2EEManager.register} time
+   * instead of the shared `storage` default — used to give a plugin an
+   * independent store (separate sealed file, no write contention). Ids
+   * absent from this map fall back to `storage`.
+   */
+  storageByPlugin?: ReadonlyMap<string, StorageBackend>
 }
 
 /** Listener for plugin-driven security-context upgrades. See {@link E2EEManager.onSecurityContextUpdated}. */
@@ -83,6 +91,13 @@ export class E2EEManager {
   private readonly pins = new Map<string, PinnedStrategy>()
   private readonly capabilityCache: CapabilityCache
   private storage: StorageBackend
+  /**
+   * Per-plugin backend overrides. A plugin id present here receives its own
+   * backend at {@link register} time instead of the shared default — used to
+   * give a plugin an independent store (separate sealed file, no write
+   * contention). Absent ids fall back to {@link storage}.
+   */
+  private readonly storageByPlugin = new Map<string, StorageBackend>()
   private readonly xmpp: XMPPPrimitives
   private readonly account: AccountInfo
   private readonly logger: Logger
@@ -107,6 +122,9 @@ export class E2EEManager {
     this.account = options.account
     this.logger = options.logger ?? silentLogger
     this.capabilityCache = new CapabilityCache(options.capabilityCache)
+    if (options.storageByPlugin) {
+      for (const [id, backend] of options.storageByPlugin) this.storageByPlugin.set(id, backend)
+    }
   }
 
   /**
@@ -138,9 +156,18 @@ export class E2EEManager {
    * The primary use case is injecting a persistent backend (e.g.
    * IndexedDB on web) after the manager has been constructed but before
    * plugins are wired in.
+   *
+   * Pass `pluginId` to scope the backend to a single plugin instead of
+   * replacing the shared default — e.g. giving one plugin its own
+   * dedicated store. Omitting it keeps the original meaning: replace the
+   * default backend used by every plugin without an override.
    */
-  setStorage(backend: StorageBackend): void {
-    this.storage = backend
+  setStorage(backend: StorageBackend, pluginId?: string): void {
+    if (pluginId === undefined) {
+      this.storage = backend
+      return
+    }
+    this.storageByPlugin.set(pluginId, backend)
   }
 
   /**
@@ -152,8 +179,12 @@ export class E2EEManager {
     if (this.plugins.has(id)) {
       throw new Error(`E2EE plugin already registered: ${id}`)
     }
+    const backend = this.storageByPlugin.get(id) ?? this.storage
     const ctx: PluginContext = {
-      storage: createPluginStorage(this.storage, `e2ee/${id}`),
+      // NOTE: the `e2ee/${id}` prefix is retained even for a dedicated
+      // backend — existing plugin data (e.g. OMEMO's) is stored under these
+      // prefixed keys, so dropping it would orphan it.
+      storage: createPluginStorage(backend, `e2ee/${id}`),
       xmpp: this.xmpp,
       logger: this.logger,
       account: this.account,

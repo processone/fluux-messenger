@@ -888,6 +888,31 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
     })
   })
 
+  describe('per-plugin storage backend routing (setE2EEStorageBackend)', () => {
+    it('carries a per-plugin backend override into a manager built later', async () => {
+      // setE2EEStorageBackend(backend, pluginId) called BEFORE the manager
+      // exists (e.g. during app boot, before the first 'online') must still
+      // route that plugin's storage once ensureE2EEManager() builds the
+      // manager — the override cannot be lost just because it predates
+      // construction.
+      const client = new XMPPClient({ debug: false })
+      ;(client as unknown as { currentJid: string }).currentJid = 'me@example.com/web'
+
+      const own = new InMemoryStorageBackend()
+      client.setE2EEStorageBackend(own, 'dummy-plaintext')
+
+      ;(client as unknown as { ensureE2EEManager: () => void }).ensureE2EEManager()
+      const plugin = new DummyPlaintextPlugin()
+      await client.e2ee!.register(plugin)
+      const ctx = (plugin as unknown as { ctx: { storage: { put: (k: string, v: Uint8Array) => Promise<void> } } }).ctx
+
+      await ctx.storage.put('k', new Uint8Array([9]))
+
+      // Landed in the dedicated backend, under the back-compat e2ee/<id> prefix.
+      expect(await own.get('e2ee/dummy-plaintext k')).toEqual(new Uint8Array([9]))
+    })
+  })
+
   describe('key-unlocked wiring (ensureE2EEManager)', () => {
     it('decrypts a stashed message when the plugin signals notifyKeyUnlocked()', async () => {
       // End-to-end guard for the centralized restore→retry trigger. Build the

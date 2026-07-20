@@ -175,6 +175,7 @@ export class XMPPClient {
   private storageAdapter?: StorageAdapter
   private shouldAutoReconnect?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
+  private readonly e2eeStorageByPlugin = new Map<string, StorageBackend>()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
   private stateSnapshot?: StateSnapshot
@@ -1616,10 +1617,20 @@ export class XMPPClient {
    * The primary use case is injecting a persistent IndexedDB backend on web
    * (where the default InMemoryStorageBackend would lose key material on
    * page reload).
+   *
+   * Pass `pluginId` to scope the backend to a single plugin — e.g. giving
+   * one plugin its own dedicated store — instead of replacing the shared
+   * default. The override is retained even if called before the manager
+   * exists, so a later `ensureE2EEManager()` build still routes that plugin
+   * to it.
    */
-  setE2EEStorageBackend(backend: StorageBackend): void {
-    this.e2eeStorageBackend = backend
-    this.e2ee?.setStorage(backend)
+  setE2EEStorageBackend(backend: StorageBackend, pluginId?: string): void {
+    if (pluginId === undefined) {
+      this.e2eeStorageBackend = backend
+    } else {
+      this.e2eeStorageByPlugin.set(pluginId, backend)
+    }
+    this.e2ee?.setStorage(backend, pluginId)
   }
 
   /**
@@ -1669,6 +1680,7 @@ export class XMPPClient {
 
     this.e2ee = new E2EEManager({
       storage: this.e2eeStorageBackend,
+      storageByPlugin: this.e2eeStorageByPlugin,
       xmpp: this.buildE2EEPrimitives(),
       account: { jid: bareJid },
       logger: e2eeLogger,
