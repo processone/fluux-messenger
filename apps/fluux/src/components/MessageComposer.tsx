@@ -84,6 +84,13 @@ export interface MessageComposerHandle {
   focus: () => void
   getText: () => string
   setText: (text: string) => void
+  /**
+   * Position the caret after the parent rewrote the text itself (a room
+   * inserting a mention). Programmatically replacing a textarea's value leaves
+   * the caret at the end, so the insertion point has to be restored explicitly
+   * — the same step the composer's own emoji completion performs inline.
+   */
+  placeCaret: (text: string, position: number) => void
 }
 
 interface UploadState {
@@ -281,6 +288,16 @@ export function MessageComposer({
   // "caret unknown" instead of being sliced at a caret from the previous draft.
   const [caret, setCaret] = useState<{ text: string; position: number } | null>(null)
   const cursorPosition = caret?.text === text ? caret.position : null
+  // The single place the caret is recorded. Owners of the external overlay slot
+  // drive their own completion (room mentions, slash commands) off the reported
+  // position, so anything that moves the caret — typing included, not just
+  // selection events — has to go through here or their menus never open.
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
+  const updateCaret = useCallback((nextText: string, position: number) => {
+    setCaret({ text: nextText, position })
+    onSelectionChangeRef.current?.(position)
+  }, [])
   const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
   const emojiAutocompleteListboxId = `${useId()}-emoji-autocomplete`
   // External overlays are already ordered by their owner (help, command, then
@@ -346,7 +363,11 @@ export function MessageComposer({
     focus: () => inputRef.current?.focus(),
     getText: () => text,
     setText: (t: string) => setText(t),
-  }), [text, setText])
+    placeCaret: (t: string, position: number) => {
+      updateCaret(t, position)
+      restoreTextareaCursor(inputRef, position)
+    },
+  }), [text, setText, updateCaret])
 
   // Close menus when clicking outside
   const closeAttachMenu = () => setShowAttachMenu(false)
@@ -502,11 +523,11 @@ export function MessageComposer({
       : emojiAutocomplete.completeClosedShortcode(e.target.value, e.target.selectionStart)
     if (closedShortcode) {
       setText(closedShortcode.newText)
-      setCaret({ text: closedShortcode.newText, position: closedShortcode.newCursorPosition })
+      updateCaret(closedShortcode.newText, closedShortcode.newCursorPosition)
       restoreTextareaCursor(inputRef, closedShortcode.newCursorPosition)
     } else {
       setText(e.target.value)
-      setCaret({ text: e.target.value, position: e.target.selectionStart })
+      updateCaret(e.target.value, e.target.selectionStart)
     }
     // inputClass is derived from `text` (see declaration), so it updates here
     // automatically — no manual sync needed.
@@ -634,7 +655,7 @@ export function MessageComposer({
   const selectEmoji = (index: number) => {
     const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(index)
     setText(newText)
-    setCaret({ text: newText, position: newCursorPosition })
+    updateCaret(newText, newCursorPosition)
     emojiAutocomplete.dismiss()
     restoreTextareaCursor(inputRef, newCursorPosition)
   }
@@ -690,8 +711,7 @@ export function MessageComposer({
   }
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    setCaret({ text: e.currentTarget.value, position: e.currentTarget.selectionStart })
-    onSelectionChange?.(e.currentTarget.selectionStart)
+    updateCaret(e.currentTarget.value, e.currentTarget.selectionStart)
   }
 
   // Handle clipboard paste - stage files as pending attachment
@@ -770,7 +790,7 @@ export function MessageComposer({
 
     // Restore focus and set cursor after emoji
     const newCursorPos = cursorPos + emoji.length
-    setCaret({ text: newText, position: newCursorPos })
+    updateCaret(newText, newCursorPos)
     restoreTextareaCursor(inputRef, newCursorPos)
   }
 

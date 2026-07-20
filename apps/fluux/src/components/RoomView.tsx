@@ -1793,6 +1793,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     focus: () => composerRef.current?.focus(),
     getText: () => composerRef.current?.getText() || '',
     setText: (t: string) => composerRef.current?.setText(t),
+    placeCaret: (t: string, position: number) => composerRef.current?.placeCaret(t, position),
   }), [])
 
   // Stable callback for draft restoration (resets mention references)
@@ -1871,11 +1872,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     const { newText, newCursorPosition, reference } = selectMatch(index)
     setText(newText)
     setReferences(prev => [...prev, reference])
-    // Focus and set cursor position after state update
-    setTimeout(() => {
-      composerRef.current?.focus()
-    }, 0)
-    setCursorPosition(newCursorPosition)
+    // Restores focus, drops the caret after the mention rather than at the end
+    // of the message, and reports the new position back for the next lookup.
+    composerRef.current?.placeCaret(newText, newCursorPosition)
   }
 
   // Auto-focus composer when starting a reply
