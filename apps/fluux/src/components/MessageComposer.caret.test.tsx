@@ -1,7 +1,15 @@
 import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer'
+
+/** The composer reports each of its renders to the (mocked) render-loop detector. */
+function composerRenderCount(): number {
+  return (detectRenderLoop as ReturnType<typeof vi.fn>).mock.calls.filter(
+    (call) => call[0] === 'MessageComposer'
+  ).length
+}
 
 vi.mock('@emoji-mart/data', () => ({
   default: {
@@ -55,6 +63,35 @@ describe('MessageComposer caret reporting', () => {
     fireEvent.select(textarea)
 
     expect(onSelectionChange).toHaveBeenCalledWith(3)
+  })
+
+  /**
+   * The caret is stored as an object so it can be paired with its text, but a
+   * fresh object on every selection event would re-render where the previous
+   * plain number let React bail out. Selection events that do not move the caret
+   * must stay free.
+   */
+  it('does not re-render when a selection event lands on the caret it already had', () => {
+    const textarea = renderComposer(vi.fn())
+    fireEvent.change(textarea, {
+      target: { value: 'stable text', selectionStart: 5, selectionEnd: 5 },
+    })
+
+    const beforeStationary = composerRenderCount()
+    for (let i = 0; i < 10; i++) {
+      textarea.selectionStart = textarea.selectionEnd = 5
+      fireEvent.select(textarea)
+    }
+    expect(composerRenderCount() - beforeStationary).toBe(0)
+
+    // Control: a caret that actually moves must still re-render, or the
+    // assertion above would pass simply because nothing is wired up.
+    const beforeMoving = composerRenderCount()
+    for (let i = 0; i < 10; i++) {
+      textarea.selectionStart = textarea.selectionEnd = i
+      fireEvent.select(textarea)
+    }
+    expect(composerRenderCount() - beforeMoving).toBe(10)
   })
 
   /**

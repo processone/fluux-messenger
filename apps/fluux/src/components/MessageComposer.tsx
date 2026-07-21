@@ -295,7 +295,14 @@ export function MessageComposer({
   const onSelectionChangeRef = useRef(onSelectionChange)
   onSelectionChangeRef.current = onSelectionChange
   const updateCaret = useCallback((nextText: string, position: number) => {
-    setCaret({ text: nextText, position })
+    // Keeping the previous object when nothing moved lets React bail out, the way
+    // it did when this was a plain number: a selection event that lands on the
+    // caret it already had should not cost a render.
+    setCaret((previous) =>
+      previous && previous.text === nextText && previous.position === position
+        ? previous
+        : { text: nextText, position }
+    )
     onSelectionChangeRef.current?.(position)
   }, [])
   const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
