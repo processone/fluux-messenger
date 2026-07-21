@@ -13,6 +13,7 @@ import type { OpenPGPFileIO } from './hostStores'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getVerifiedKeysCache } from './testSupport/baseHarness'
 import { persistVerifiedMap } from './verifiedKeys'
+import { loadAppliedVerificationsVersion } from './verificationSync'
 import {
   E2EEPluginError,
   InMemoryStorageBackend,
@@ -4100,6 +4101,94 @@ describe('SequoiaPgpPlugin', () => {
       // the plugin-owned cache while leaving bob untouched.
       expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       expect(getVerifiedKeysCache(plugin).isVerified('bob@example.com', 'BOB_FP')).toBe(true)
+    })
+
+    // Regresses the version-counter regression (Phase B3 Task 1): the
+    // publish scheduler reserves `nextVersion` at fire time but used to
+    // persist it only AFTER the network round-trip resolved. If a remote
+    // apply (a genuinely newer snapshot from another device) lands and
+    // persists a HIGHER version while our own publish is still in flight,
+    // the in-flight publish's post-resolve save must not stomp it back down
+    // — that would re-open the replay gate for the just-applied snapshot and
+    // desync `TrustStateSnapshot.syncVersion` from the persisted value
+    // (surfacing as a spurious "trust state compromised" banner).
+    //
+    // Drives this through the REAL publish path (`ctx.xmpp.publishPEP`
+    // gated on a controllable deferred) and the REAL remote-apply path
+    // (`verificationsCb`), never `saveAppliedVerificationsVersion` directly
+    // — otherwise this would test the accessor, not the race.
+    it('does not lower the persisted version when a remote apply lands mid-publish', async () => {
+      vi.useFakeTimers()
+      try {
+        let verificationsCb: ((item: PEPItem) => void) | null = null
+        let currentItem: PEPItem | null = null
+        const { ctx } = makeContext('me@example.com')
+        ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+          if (node === VERIFICATIONS_NODE) verificationsCb = cb
+          return { unsubscribe: () => {} }
+        }
+        ctx.xmpp.queryPEP = async (_jid, node) =>
+          node === VERIFICATIONS_NODE && currentItem ? [currentItem] : []
+
+        // Gate ONLY the verifications-node publish round-trip so the test
+        // controls exactly when it resolves, to interleave the remote apply
+        // inside the window — init() also publishes the identity key over
+        // the same `publishPEP`, which must resolve normally or init() never
+        // returns.
+        let releasePublish!: () => void
+        const publishGate = new Promise<void>((resolve) => {
+          releasePublish = resolve
+        })
+        const innerPublishPEP = ctx.xmpp.publishPEP
+        ctx.xmpp.publishPEP = async (node, item, options) => {
+          if (node === VERIFICATIONS_NODE) {
+            await publishGate
+          }
+          return innerPublishPEP(node, item, options)
+        }
+
+        const fp = 'FP_RACE_TEST'
+        fake.accounts.set('me@example.com', {
+          fingerprint: fp,
+          publicArmored: makeOpenPgpArmor(
+            'PGP PUBLIC KEY BLOCK',
+            `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+          ),
+          keychainBacked: true,
+        })
+        await plugin.init(ctx)
+        expect(verificationsCb).not.toBeNull()
+        // Flush init()'s own fire-and-forget syncVerificationsFromServer()
+        // (empty queryPEP result, since currentItem is still null).
+        await Promise.resolve()
+        await Promise.resolve()
+
+        // A local verify reserves version 1 and schedules the debounced
+        // publish, which fires after 500ms and immediately blocks on the
+        // gated publishPEP.
+        await getVerifiedKeysCache(plugin).setVerified('carol@example.com', 'CAROL_FP')
+        await vi.advanceTimersByTimeAsync(500)
+
+        // While the publish is still in flight, another device's snapshot
+        // (version 7 — genuinely newer than our reserved 1) arrives and is
+        // applied through the real remote-sync path.
+        currentItem = buildVerificationsPepItem(fp, { 'dave@example.com': 'DAVE_FP' }, 7)
+        verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(loadAppliedVerificationsVersion()).toBe(7)
+
+        // Now let the in-flight publish resolve.
+        releasePublish()
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(0)
+
+        // The publish's post-resolve save must not have stomped the higher,
+        // remotely-applied version back down to its own stale reservation.
+        expect(loadAppliedVerificationsVersion()).toBe(7)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

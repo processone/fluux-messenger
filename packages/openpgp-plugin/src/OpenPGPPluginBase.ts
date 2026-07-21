@@ -1476,6 +1476,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // Reserve the next version above the highest we've applied/published.
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
+      // Persist the reservation BEFORE publishing, not after. Monotonicity —
+      // never handing out the same version twice — is the property that
+      // matters, not contiguity: publishing takes a network round-trip, and
+      // a remote apply that lands during that window can persist a higher
+      // version (a genuinely newer snapshot from another device). Saving
+      // this reservation only after publish resolves would then stomp that
+      // higher version back down to this stale one, re-opening the replay
+      // gate for the snapshot that was just applied and desyncing
+      // `TrustStateSnapshot.syncVersion` from the persisted value — which
+      // surfaces to the user as a spurious "trust state compromised" banner.
+      // A version left unpublished by a failed/aborted publish is a harmless
+      // gap, never replayed because nothing signs it.
+      saveAppliedVerificationsVersion(nextVersion)
       void publishVerificationsToServer(
         ctx,
         (plaintext, recipientKey) =>
@@ -1485,7 +1498,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         nextVersion,
       )
         .then(() => {
-          saveAppliedVerificationsVersion(nextVersion)
           this.scheduleTrustStateSeal()
         })
         .catch(() => {})
