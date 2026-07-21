@@ -37,6 +37,7 @@ import {
   usePinnedPrimaryFingerprintsStore,
 } from '../stores/pinnedPrimaryFingerprintsStore'
 import { setTrustStateStatus, getTrustStateStatus } from '../stores/trustStateStatusStore'
+import { setVerifiedKeysView } from './verifiedPeersView'
 
 /**
  * Adapter over the six app trust stores, injected into the OpenPGP plugins.
@@ -149,7 +150,11 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
           'openpgp',
         )
         const { invoke } = await import('@tauri-apps/api/core')
-        await manager.register(new SequoiaPgpPlugin({ invoke, hostStores: openpgpHostStores, fileIO: openpgpFileIO }))
+        const openpgpPlugin = new SequoiaPgpPlugin({ invoke, hostStores: openpgpHostStores, fileIO: openpgpFileIO })
+        await manager.register(openpgpPlugin)
+        // Give the app's reactive verified-fingerprint reads a live view onto
+        // this plugin instance now that registration succeeded.
+        setVerifiedKeysView(openpgpPlugin.getVerifiedKeysView())
       } else {
         // Web: openpgp.js crypto. Private key is stored encrypted in IndexedDB;
         // the user must enter a passphrase each session to unlock it.
@@ -158,7 +163,9 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
         await backend.open()
         client.setE2EEStorageBackend(backend)
         const { WebOpenPGPPlugin } = await import('@fluux/openpgp-plugin')
-        await manager.register(new WebOpenPGPPlugin({ hostStores: openpgpHostStores }))
+        const openpgpPlugin = new WebOpenPGPPlugin({ hostStores: openpgpHostStores })
+        await manager.register(openpgpPlugin)
+        setVerifiedKeysView(openpgpPlugin.getVerifiedKeysView())
       }
     }
 
@@ -205,6 +212,10 @@ export async function unregisterE2EEPlugins(client: XMPPClient): Promise<void> {
     if (id === 'omemo:2' && isOmemoEnabled()) continue
     try {
       await manager.unregister(id)
+      // The plugin is gone; the app's reactive verified-fingerprint reads
+      // must fall back to null rather than serve a view onto a torn-down
+      // instance.
+      if (id === 'openpgp') setVerifiedKeysView(null)
     } catch (err) {
       console.error(`[Fluux] E2EE unregister ${id} failed:`, err)
     }

@@ -20,7 +20,7 @@ vi.mock('@fluux/openpgp-plugin', async (importOriginal) => {
   return {
     ...actual,
     SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {
-      return {}
+      return { getVerifiedKeysView: () => null }
     }),
   }
 })
