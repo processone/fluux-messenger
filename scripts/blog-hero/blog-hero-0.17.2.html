@@ -39,11 +39,12 @@
      so the icon rail and the sidebar with its green Join button — the highest
      saturation thing in the frame, and meaningless here — fall outside), and the
      shot is the emoji-autocomplete capture itself, so the feature reads in situ.
-     Top edge starts at source y 145, below the image attachment fragment. */
-  .stage { position: absolute; left: 520px; top: 70px; z-index: 2; }
+     Top edge starts at source y 145, below the image attachment fragment.
+     Axis-aligned, unlike 0.17.0/0.17.1: the tilt read as a gimmick and made the
+     UI text sit on a slant. It bleeds off the right frame edge instead. */
+  .stage { position: absolute; left: 520px; top: 56px; z-index: 2; }
   .shot { position: relative; width: 760px; height: 563px; border-radius: 14px; overflow: hidden;
-    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,140,255,0.25);
-    transform: rotate(-1.5deg); }
+    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,140,255,0.25); }
   .shot img { width: 1101px; position: absolute; left: -248px; top: -125px; }
 </style></head>
 <body>
