@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { adminStore } from '../stores'
+import { adminStore } from '../stores/adminStore'
 import { useAdminStore } from '../react/storeHooks'
 import { USER_COMMANDS } from './adminCommands'
 

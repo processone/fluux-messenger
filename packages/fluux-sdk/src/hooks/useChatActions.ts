@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { chatStore, connectionStore } from '../stores'
+import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment } from '../core'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'

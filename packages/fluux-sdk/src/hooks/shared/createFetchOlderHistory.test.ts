@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFetchOlderHistory, type FetchOlderHistoryDeps } from './createFetchOlderHistory'
 import type { MAMQueryState } from '../../core/types'
-import { connectionStore } from '../../stores'
+import { connectionStore } from '../../stores/connectionStore'
 
-// Mock the connection store to return 'online' status
-vi.mock('../../stores', () => ({
+// Mock the connection store to return 'online' status.
+// Mocks the concrete module, not the '../../stores' barrel: source modules import
+// the concrete store files so the barrel is never in their module graph.
+vi.mock('../../stores/connectionStore', () => ({
   connectionStore: {
     getState: vi.fn(() => ({ status: 'online' })),
   },
