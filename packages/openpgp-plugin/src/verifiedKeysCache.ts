@@ -255,17 +255,17 @@ export class VerifiedKeysCache implements VerifiedKeysView {
   }
 
   /**
-   * Resolves once every write enqueued as of this call — and any write that
-   * gets enqueued while this call is still waiting — has fully settled
-   * (persisted, or rolled back after a failed persist). Read-only: it does
-   * not enqueue anything itself and never blocks `setVerified`/
-   * `clearVerified`/`seed`, which keep racing ahead against `writeChain`
-   * exactly as before.
+   * Resolves with a snapshot (`getAll()`) taken once every write enqueued as
+   * of this call — and any write that gets enqueued while this call is
+   * still waiting — has fully settled (persisted, or rolled back after a
+   * failed persist). Read-only: it does not enqueue anything itself and
+   * never blocks `setVerified`/`clearVerified`/`seed`, which keep racing
+   * ahead against `writeChain` exactly as before.
    *
    * Exists so a consumer that must never observe an optimistic, not-yet-
    * persisted mutation (`OpenPGPPluginBase`'s debounced cross-device
-   * publish — B3 Task 3) can `await cache.whenIdle()` immediately before
-   * reading `getAll()`, restoring "published implies persisted" even though
+   * publish — B3 Task 3) can `await cache.getSettled()` immediately before
+   * publishing, restoring "published implies persisted" even though
    * `subscribe()`'s notification itself still fires on the optimistic
    * mutation (see this class's doc comment for why that stays synchronous).
    *
@@ -275,21 +275,40 @@ export class VerifiedKeysCache implements VerifiedKeysView {
    * be missed — the awaited promise settles without ever reflecting the
    * later write. Looping until the captured reference matches the live
    * field closes that gap: each iteration re-reads `writeChain` after
-   * awaiting it, and only returns once an await produces no further
-   * reassignment, i.e. nothing new was enqueued while we were waiting.
+   * awaiting it, and only reads `getAll()` once an await produces no
+   * further reassignment, i.e. nothing new was enqueued while we were
+   * waiting.
+   *
+   * The read is deliberately folded into the SAME synchronous continuation
+   * as the stability check — `return this.getAll()`, not a separate
+   * statement the caller runs after `await`ing this method. An earlier
+   * version exposed the check alone (`whenIdle(): Promise<void>`) and left
+   * the caller to call `getAll()` in a follow-up statement; that split adds
+   * exactly one more microtask hop between "the chain is confirmed stable"
+   * and "the map is read," and a write's synchronous mutation can land in
+   * that hop — observed in practice against the real two-entry remote-apply
+   * loop (`OpenPGPPluginBase.syncVerificationsFromServer`), whose
+   * `setVerifiedDual`/`setVerified` async wrappers resume at a hop depth
+   * that can race a caller resuming from a separately-awaited `whenIdle()`.
+   * The published map then contains an entry that was never persisted —
+   * exactly the defect this method exists to prevent. Returning the
+   * snapshot from inside the same function body — no `await` between the
+   * stability check and the `getAll()` call — makes that ordering
+   * impossible to get wrong at the call site.
    *
    * Never rejects: `enqueueWrite` already normalizes `writeChain` to a
    * promise that always resolves, swallowing both outcomes (see its doc
    * comment) — a persist failure surfaces to that write's OWN caller via
    * the promise `setVerified`/`clearVerified`/`seed` returned, not here. So
-   * a rejected write cannot leave `whenIdle()` permanently pending; it just
-   * settles (resolves) like every other write once its rollback completes.
+   * a rejected write cannot leave `getSettled()` permanently pending; it
+   * just settles (resolves) like every other write once its rollback
+   * completes.
    */
-  async whenIdle(): Promise<void> {
+  async getSettled(): Promise<Record<string, string>> {
     let chain = this.writeChain
     for (;;) {
       await chain
-      if (chain === this.writeChain) return
+      if (chain === this.writeChain) return this.getAll()
       chain = this.writeChain
     }
   }

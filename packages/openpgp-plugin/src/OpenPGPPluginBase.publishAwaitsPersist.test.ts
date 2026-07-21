@@ -9,11 +9,14 @@
 // reschedules another publish), but only after briefly handing another
 // device state this device could not itself reproduce after a restart.
 //
-// The fix has the publish path await `VerifiedKeysCache.whenIdle()` — a
-// promise that resolves once the cache's write queue has drained — before
-// reading `getAll()`, so a publish only ever reflects state that has
-// actually settled (persisted, or rolled back). This restores the pre-B2
-// Task 7 invariant: published implies persisted.
+// The fix has the publish path await `VerifiedKeysCache.getSettled()` — a
+// promise that resolves, once the cache's write queue has drained, with the
+// settled snapshot itself (read from the SAME synchronous continuation that
+// confirms the drain, not a separate follow-up `getAll()` call — an earlier
+// version split those two and reopened this exact bug via a one-microtask
+// gap; see `getSettled()`'s doc comment), so a publish only ever reflects
+// state that has actually settled (persisted, or rolled back). This
+// restores the pre-B2 Task 7 invariant: published implies persisted.
 import { describe, it, expect, vi } from 'vitest'
 import type { PEPItem, PluginStorage, XMLElementData } from '@fluux/sdk'
 import { getVerifiedKeysCache, makeTestBase, makeTestCtx } from './testSupport/baseHarness'

@@ -234,6 +234,14 @@ const SIGNATURE_BUFFER_TTL_MS = 10 * 60 * 1000
 const SIGNCRYPT_CLOCK_SKEW_MS = 7 * 24 * 60 * 60 * 1000
 const PROBE_NEGATIVE_TTL_SECONDS = 300
 const PROBE_TRANSIENT_TTL_SECONDS = 30
+/**
+ * Threshold above which `publishSettledVerifications` logs how long it
+ * waited for `VerifiedKeysCache.getSettled()` to drain. Blocking the
+ * publish on a stalled persist is correct (see that method's doc comment),
+ * but silent — this makes an abnormally long drain diagnosable rather than
+ * indistinguishable from "no local verification changes yet."
+ */
+const SLOW_DRAIN_WARN_MS = 2000
 
 // ---------------------------------------------------------------------------
 // Shared error helpers
@@ -1572,10 +1580,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * snapshot if a guarded (remote-sync) write landed in that window. Reading
    * at fire time always publishes the freshest state.
    *
-   * The actual `getAll()` read (and the network publish) happens in
+   * The actual map read (and the network publish) happens in
    * {@link publishSettledVerifications}, which awaits
-   * `verifiedKeys.whenIdle()` first — see that method's doc comment for why
-   * (B3 Task 3: publish only ever reflects persisted state).
+   * `verifiedKeys.getSettled()` first — see that method's doc comment for
+   * why (B3 Task 3: publish only ever reflects persisted state).
    */
   private scheduleVerificationsPublish(): void {
     if (this._publishVerificationTimeout !== null) {
@@ -1590,7 +1598,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
       // Persist the reservation BEFORE publishing, not after — and, just as
-      // importantly, BEFORE awaiting `verifiedKeys.whenIdle()` below, not
+      // importantly, BEFORE awaiting `verifiedKeys.getSettled()` below, not
       // after. Monotonicity — the persisted version never decreasing — is
       // the property that matters, not contiguity, and not uniqueness:
       // publishing takes a network round-trip (now preceded by a
@@ -1617,7 +1625,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // registration order, both debounced 500 ms), so this save always
       // lands before `buildCanonicalSnapshot` next reads the version. This
       // save happening synchronously here (unconditionally, not gated on
-      // `whenIdle()`) keeps that ordering intact even when the write-drain
+      // `getSettled()`) keeps that ordering intact even when the write-drain
       // wait below runs long — only the map READ and the network publish
       // wait for persistence; the version reservation never does.
       // Shortening the seal's debounce below this one, or reordering the
@@ -1629,8 +1637,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Awaits `verifiedKeys.whenIdle()` before reading `getAll()` and
-   * publishing — B3 Task 3, fixing an edge introduced by Task 7.
+   * Awaits `verifiedKeys.getSettled()` before publishing — B3 Task 3, fixing
+   * an edge introduced by Task 7.
    *
    * `verifiedKeys.subscribe(...)`'s notification (which schedules the
    * debounce that leads here) fires the moment a mutation lands in memory —
@@ -1648,6 +1656,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * ever reflects state that has actually settled (persisted, or rolled
    * back after a failed persist) — never a bare optimistic mutation.
    *
+   * `getSettled()` returns the settled snapshot directly, from the SAME
+   * synchronous continuation that confirms the write queue is drained —
+   * NOT a separate `getAll()` call the caller makes afterward. An earlier
+   * version of this fix split those into `whenIdle()` (a bare drain signal)
+   * plus a follow-up `getAll()` here; that split reopened the exact bug
+   * this task exists to close, because it added a microtask hop between
+   * "drain confirmed" and "map read" for another write's synchronous
+   * mutation to land in — see `VerifiedKeysCache.getSettled()`'s doc
+   * comment for the mechanics. Do not reintroduce that split.
+   *
    * Only the map read and the network publish wait on this; the version
    * reservation ({@link scheduleVerificationsPublish}'s
    * `saveAppliedVerificationsVersion` call) happens BEFORE this method is
@@ -1660,12 +1678,27 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     ownPublicArmored: string,
     version: number,
   ): Promise<void> {
-    await this.verifiedKeys.whenIdle()
-    // `shutdown()` may have run while we were waiting for the write queue
-    // to drain — bail out the same way the rest of this path already does
-    // when `ctx` goes away mid-flight (e.g. `sealTrustStateNow`).
-    if (!this.ctx) return
-    const verifications = this.verifiedKeys.getAll()
+    const drainStarted = this.now()
+    const verifications = await this.verifiedKeys.getSettled()
+    const drainMs = this.now() - drainStarted
+    if (drainMs > SLOW_DRAIN_WARN_MS) {
+      // A stalled `storage.put` blocks every publish indefinitely (correct
+      // under "published ⇒ persisted" — see the class doc above), and each
+      // new trust change still burns a version number and enqueues another
+      // pending drain wait while it's stuck. That failure is otherwise
+      // invisible, so log it here for diagnosability.
+      ctx.logger.debug(
+        `${this.pluginName()}: verified-keys write queue took ${drainMs}ms to settle before publish (version ${version})`,
+      )
+    }
+    // `shutdown()` (possibly followed by a fresh `init()`) may have run
+    // while we were waiting for the write queue to drain. Compare against
+    // the `ctx` captured at timer-fire, not just truthiness of `this.ctx`:
+    // a shutdown()+init() cycle completing mid-drain leaves `this.ctx`
+    // truthy again but pointing at a DIFFERENT (new) session, which would
+    // otherwise let this publish go out on the torn-down session's
+    // `ctx.xmpp`.
+    if (this.ctx !== ctx) return
     try {
       await publishVerificationsToServer(
         ctx,

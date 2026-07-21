@@ -460,13 +460,13 @@ describe('VerifiedKeysCache', () => {
   })
 
   // B3 Task 3: `OpenPGPPluginBase`'s debounced cross-device publish awaits
-  // this before reading `getAll()`, so a publish only ever reflects state
-  // that has actually settled — see `whenIdle`'s doc comment.
-  describe('whenIdle', () => {
-    it('resolves immediately when there is no write in flight', async () => {
+  // this before publishing, so a publish only ever reflects state that has
+  // actually settled — see `getSettled`'s doc comment.
+  describe('getSettled', () => {
+    it('resolves immediately with an empty snapshot when there is no write in flight', async () => {
       const c = new VerifiedKeysCache(memStorage())
       await c.hydrate()
-      await expect(c.whenIdle()).resolves.toBeUndefined()
+      await expect(c.getSettled()).resolves.toEqual({})
     })
 
     it('does not resolve until a pending persist settles', async () => {
@@ -484,25 +484,25 @@ describe('VerifiedKeysCache', () => {
       await c.hydrate()
 
       const write = c.setVerified('bob@x', 'ABCD')
-      let idleSettled = false
-      const idle = c.whenIdle().then(() => {
-        idleSettled = true
+      let settledResult: Record<string, string> | null = null
+      const settled = c.getSettled().then((snapshot) => {
+        settledResult = snapshot
       })
 
-      // Give any stray microtasks a chance to run — `whenIdle()` must still
-      // not have resolved, because the persist is still gated.
+      // Give any stray microtasks a chance to run — `getSettled()` must
+      // still not have resolved, because the persist is still gated.
       await Promise.resolve()
       await Promise.resolve()
-      expect(idleSettled).toBe(false)
+      expect(settledResult).toBeNull()
 
       release()
       await write
-      await idle
-      expect(idleSettled).toBe(true)
+      await settled
+      expect(settledResult).toEqual({ 'bob@x': 'ABCD' })
     })
 
     it('waits for a write enqueued WHILE it is already waiting (chain reassignment)', async () => {
-      // Regression coverage for the loop in `whenIdle()`: a naive single
+      // Regression coverage for the loop in `getSettled()`: a naive single
       // `await this.writeChain` would capture the chain BEFORE the second
       // write is enqueued and could resolve without ever reflecting it.
       let releaseFirst: () => void = () => {}
@@ -521,26 +521,26 @@ describe('VerifiedKeysCache', () => {
       await c.hydrate()
 
       const writeA = c.setVerified('bob@x', 'ABCD')
-      const idle = c.whenIdle()
+      const settled = c.getSettled()
 
-      // Enqueue a second write while `whenIdle()` is still awaiting the
+      // Enqueue a second write while `getSettled()` is still awaiting the
       // first write's (gated) persist.
       const writeB = c.setVerified('carol@x', 'EF01')
 
-      let idleSettled = false
-      void idle.then(() => {
-        idleSettled = true
+      let settledResult: Record<string, string> | null = null
+      void settled.then((snapshot) => {
+        settledResult = snapshot
       })
       await Promise.resolve()
       await Promise.resolve()
-      expect(idleSettled).toBe(false)
+      expect(settledResult).toBeNull()
 
       releaseFirst()
       await writeA
       await writeB
-      await idle
+      await settled
 
-      expect(idleSettled).toBe(true)
+      expect(settledResult).toEqual({ 'bob@x': 'ABCD', 'carol@x': 'EF01' })
       expect(c.isVerified('bob@x', 'ABCD')).toBe(true)
       expect(c.isVerified('carol@x', 'EF01')).toBe(true)
     })
@@ -559,13 +559,104 @@ describe('VerifiedKeysCache', () => {
       await c.hydrate()
 
       const write = c.setVerified('bob@x', 'ABCD').catch((err: unknown) => err)
-      const idle = c.whenIdle()
+      const settled = c.getSettled()
 
       release()
       await write
-      await expect(idle).resolves.toBeUndefined()
-      // The rollback ran: the optimistic entry did not survive the failure.
+      // The rollback ran: the optimistic entry did not survive the failure,
+      // and the snapshot `getSettled()` returns reflects that — never the
+      // never-persisted optimistic mutation.
+      await expect(settled).resolves.toEqual({})
       expect(c.isVerified('bob@x', 'ABCD')).toBe(false)
+    })
+
+    // Regression test for the review finding on B3 Task 3: an earlier
+    // version of this method split the drain-check from the read —
+    // `whenIdle(): Promise<void>` confirmed the write queue was stable, and
+    // the CALLER made a separate, later `getAll()` call. That split adds a
+    // microtask hop between "confirmed stable" and "map read" that a second
+    // write's synchronous mutation can land in, publishing an entry whose
+    // persist never ran. `getSettled()` closes it by returning `getAll()`
+    // from the SAME synchronous continuation that confirms stability — see
+    // the method's doc comment.
+    //
+    // This models the real two-entry `syncVerificationsFromServer` apply
+    // loop: `setVerifiedDual` (`await verifiedKeys.setVerified(...)`) wraps
+    // an extra async hop around each entry, so entry 1 (dave) settling and
+    // entry 2 (erin) being enqueued lands at a specific microtask depth
+    // relative to a caller awaiting the cache's own drain signal. Rather
+    // than pin the test to one exact tick count — brittle against
+    // engine-level microtask-scheduling changes — it sweeps a small range
+    // of "how many microtask ticks after the apply loop starts do we call
+    // getSettled()" and asserts the invariant holds at every one of them.
+    // (Empirically, a `whenIdle()` + separate `getAll()` split violates the
+    // invariant at exactly one offset in this range — confirmed via the
+    // mandated deliberate-break below — which is why the sweep matters more
+    // than any single offset.)
+    it('never returns a snapshot containing an entry whose persist has not settled (two-entry apply-loop gap)', async () => {
+      for (let headstartTicks = 0; headstartTicks <= 8; headstartTicks++) {
+        const gateErin = new Promise<void>(() => {
+          // Deliberately never resolves: erin's persist must never be
+          // observed as "settled" during this test, so any snapshot that
+          // contains erin is unambiguously a violation, not a timing
+          // coincidence.
+        })
+        const backing = new Map<string, Uint8Array>()
+        let putCalls = 0
+        const storage = {
+          get: async (k: string) => backing.get(k) ?? null,
+          put: async (k: string, v: Uint8Array) => {
+            putCalls += 1
+            if (putCalls === 2) await gateErin
+            backing.set(k, v)
+          },
+          delete: async (k: string) => void backing.delete(k),
+          list: async (p: string) => [...backing.keys()].filter((k) => k.startsWith(p)),
+        }
+        const c = new VerifiedKeysCache(storage)
+        await c.hydrate()
+
+        // Mirrors `OpenPGPPluginBase.setVerifiedDual`: an async wrapper
+        // that just awaits `verifiedKeys.setVerified(...)`.
+        const setVerifiedDual = async (jid: string, fp: string) => {
+          await c.setVerified(jid, fp)
+        }
+
+        // Mirrors `syncVerificationsFromServer`'s apply loop: entries are
+        // applied sequentially, each fully awaited before the next starts.
+        const applyLoop = (async () => {
+          let pending = setVerifiedDual('dave@x', 'DAVE_FP')
+          await pending
+          pending = setVerifiedDual('erin@x', 'ERIN_FP')
+          await pending
+        })()
+
+        // Simulates the debounced publish firing `headstartTicks` after the
+        // apply loop starts (dave's persist resolves immediately here, so
+        // this sweeps exactly when relative to that resolution the drain
+        // check runs).
+        for (let i = 0; i < headstartTicks; i++) await Promise.resolve()
+
+        const settled = c.getSettled()
+        let settledResult: Record<string, string> | null = null
+        void settled.then((snapshot) => {
+          settledResult = snapshot
+        })
+
+        // Flush generously. `applyLoop` can never fully finish (erin's gate
+        // never releases), so this cannot hang: either `settled` already
+        // resolved, or it's correctly still pending on erin's persist.
+        for (let i = 0; i < 30; i++) await Promise.resolve()
+
+        if (settledResult !== null) {
+          expect(settledResult, `headstartTicks=${headstartTicks}`).not.toHaveProperty('erin@x')
+        }
+        // else: getSettled() is still (correctly) blocked on erin's
+        // never-resolving persist — also a pass, just not observable here
+        // without hanging the test.
+
+        void applyLoop
+      }
     })
   })
 })
