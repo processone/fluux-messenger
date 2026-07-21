@@ -3883,7 +3883,11 @@ describe('SequoiaPgpPlugin', () => {
         await Promise.resolve()
         await Promise.resolve()
 
-        hostStores.verifiedPeers.setVerified('carol@example.com', 'CAROL_FP')
+        // Task 7: the publish subscription now hangs off the plugin-owned
+        // cache, not the legacy `hostStores.verifiedPeers` mirror — write
+        // through the cache to trigger it (mirrors the real write path,
+        // `setVerifiedDual`, which writes the cache first).
+        await getVerifiedKeysCache(plugin).setVerified('carol@example.com', 'CAROL_FP')
 
         // Advance past the 500 ms debounce.
         await vi.advanceTimersByTimeAsync(600)
@@ -4005,9 +4009,11 @@ describe('SequoiaPgpPlugin', () => {
         })
         await plugin.init(ctx)
 
-        hostStores.verifiedPeers.setVerified('alice@example.com', 'ALICE_FP')
+        // Task 7: write through the cache (real trigger for the publish
+        // subscription now) rather than the legacy mirror directly.
+        await getVerifiedKeysCache(plugin).setVerified('alice@example.com', 'ALICE_FP')
         await vi.advanceTimersByTimeAsync(600)
-        hostStores.verifiedPeers.clearVerified('alice@example.com')
+        await getVerifiedKeysCache(plugin).clearVerified('alice@example.com')
         await vi.advanceTimersByTimeAsync(600)
 
         // The empty map is published (not skipped), overwriting the server node.

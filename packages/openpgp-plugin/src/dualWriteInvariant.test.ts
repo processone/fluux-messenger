@@ -18,12 +18,17 @@ import { fileURLToPath } from 'node:url'
  *
  * This test is the durable guard: it reads every production source file in
  * this package and asserts the full set of `hostStores.verifiedPeers.*`
- * references is EXACTLY the five sanctioned ones in `OpenPGPPluginBase.ts`:
+ * references is EXACTLY the three sanctioned ones in `OpenPGPPluginBase.ts`:
  *
  *   - `setVerifiedDual`'s body   → `.setVerified(...)`
  *   - `clearVerifiedDual`'s body → `.clearVerified(...)`
  *   - `init()`'s one-time seed   → `.getAll()`
- *   - `activateSubscriptions()`'s two `.subscribe(...)` registrations
+ *
+ * Phase B2 Task 7 moved `activateSubscriptions()`'s two `.subscribe(...)`
+ * registrations (debounced publish + trust-state reseal) off this mirror and
+ * onto `this.verifiedKeys.subscribe(...)` — the plugin-owned cache — so the
+ * mirror no longer has any subscribers inside this package. It is still
+ * dual-written (still read by app-side UI) until Task 8 removes it entirely.
  *
  * Every OTHER verified-state write must go through `setVerifiedDual` /
  * `clearVerifiedDual` (which keep the cache and the mirror consistent) —
@@ -49,8 +54,6 @@ const SANCTIONED = [
   'OpenPGPPluginBase.ts:clearVerified',
   'OpenPGPPluginBase.ts:getAll',
   'OpenPGPPluginBase.ts:setVerified',
-  'OpenPGPPluginBase.ts:subscribe',
-  'OpenPGPPluginBase.ts:subscribe',
 ].sort()
 
 function collectProductionSourceFiles(dir: string): string[] {
@@ -125,7 +128,7 @@ function stripComments(src: string): string {
 }
 
 describe('dual-write invariant guard (Finding 4)', () => {
-  it('every hostStores.verifiedPeers reference in production source is one of the five sanctioned dual-write sites', () => {
+  it('every hostStores.verifiedPeers reference in production source is one of the three sanctioned dual-write sites', () => {
     const files = collectProductionSourceFiles(SRC_DIR)
     const hits: string[] = []
     for (const file of files) {

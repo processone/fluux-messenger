@@ -5,8 +5,14 @@
 // `hostStores.verifiedPeers` store. Drives the real `init()` path via the
 // harness in `testSupport/baseHarness.ts` rather than calling the cache
 // directly (that's `verifiedKeysCache.test.ts`'s job).
-import { describe, it, expect } from 'vitest'
-import { E2EEPluginError, type PluginStorage } from '@fluux/sdk'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  E2EEPluginError,
+  type PEPItem,
+  type PluginStorage,
+  type XMLElementData,
+  type XMPPPrimitives,
+} from '@fluux/sdk'
 import {
   callBuildInboundSecurityContext,
   getVerifiedKeysCache,
@@ -17,6 +23,7 @@ import {
 import { memStorage } from './testSupport/memStorage'
 import { persistVerifiedMap } from './verifiedKeys'
 import { VerifiedKeysCache } from './verifiedKeysCache'
+import { VERIFICATIONS_NODE } from './verificationSync'
 import type { DecryptOutput, KeyBundle } from './OpenPGPPluginBase'
 
 const ACCOUNT = 'alice@example.com'
@@ -266,5 +273,179 @@ describe('OpenPGPPluginBase — getVerifiedKeysView()', () => {
 
     expect(notified).toBe(true)
     unsubscribe()
+  })
+})
+
+// Task 7: `activateSubscriptions()`'s two verification-driven registrations
+// (debounced publish + trust-state reseal) move from `hostStores.verifiedPeers`
+// (the legacy mirror) onto `this.verifiedKeys.subscribe(...)` (the plugin-owned
+// cache). These tests write directly through `getVerifiedKeysCache(base)` —
+// bypassing the mirror entirely, same as the "trust reads" block above — so a
+// passing test here can ONLY be explained by the cache's subscribe firing,
+// never the mirror's.
+describe('OpenPGPPluginBase — verified-cache subscriptions drive publish + reseal (Task 7)', () => {
+  /** `encryptToRecipient` stubbed to the identity function: publish/seal only
+   * need SOME string round-trip in these tests, not real OpenPGP crypto. */
+  function makePublishableBase(): ReturnType<typeof makeTestBase> {
+    const harness = makeTestBase()
+    harness.base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    ;(
+      harness.base as unknown as {
+        encryptToRecipient: (jid: string, key: string, plaintext: string) => Promise<string>
+      }
+    ).encryptToRecipient = async (_jid, _key, plaintext) => plaintext
+    return harness
+  }
+
+  /** Flush the fire-and-forget `syncVerificationsFromServer()` kicked off by
+   * `activateSubscriptions()` so `_syncingFromRemoteCount` is back to 0
+   * before a test's own writes — mirrors the flush in
+   * `SequoiaPgpPlugin.test.ts`'s cross-device-sync tests. */
+  async function flushInitSync(): Promise<void> {
+    await Promise.resolve()
+    await Promise.resolve()
+  }
+
+  function guardedCount(base: ReturnType<typeof makeTestBase>['base']): {
+    increment: () => void
+    decrement: () => void
+  } {
+    const cast = base as unknown as { _syncingFromRemoteCount: number }
+    return {
+      increment: () => cast._syncingFromRemoteCount++,
+      decrement: () => cast._syncingFromRemoteCount--,
+    }
+  }
+
+  function sealTimeoutPending(base: ReturnType<typeof makeTestBase>['base']): boolean {
+    return (
+      (base as unknown as { _trustStateSealTimeout: unknown })._trustStateSealTimeout !== null
+    )
+  }
+
+  /** Typed `publishPEP` spy — explicit params so `.mock.calls` destructures
+   * as `[node, item, options?]` instead of collapsing to an untyped `[]`. */
+  function makePublishSpy() {
+    return vi.fn(
+      async (
+        _node: string,
+        _item: PEPItem,
+        _options?: Parameters<XMPPPrimitives['publishPEP']>[2],
+      ) => {},
+    )
+  }
+
+  /** Decode a `publishVerificationsToServer` PEP item back to its JSON
+   * payload. `encryptToRecipient` is stubbed to the identity function above,
+   * so the "armored" ciphertext IS the plaintext JSON — only the outer
+   * base64 (applied by `publishVerificationsToServer` itself) needs undoing. */
+  function decodePublishedVerifications(item: PEPItem): { verifications: Record<string, string> } {
+    const dataChild = item.payload.children.find(
+      (c): c is XMLElementData => typeof c !== 'string' && c.name === 'data',
+    )
+    const text = dataChild?.children[0]
+    if (typeof text !== 'string') throw new Error('no data child in published item')
+    const json = decodeURIComponent(escape(atob(text)))
+    return JSON.parse(json) as { verifications: Record<string, string> }
+  }
+
+  it('a local verify (write through the cache) triggers a debounced publish', async () => {
+    vi.useFakeTimers()
+    try {
+      const { base } = makePublishableBase()
+      const ctx = makeTestCtx(ACCOUNT)
+      const publishSpy = makePublishSpy()
+      ctx.xmpp.publishPEP = publishSpy
+      await base.init(ctx)
+      await flushInitSync()
+      publishSpy.mockClear()
+
+      await getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+      await vi.advanceTimersByTimeAsync(600)
+
+      const verificationCalls = publishSpy.mock.calls.filter(([node]) => node === VERIFICATIONS_NODE)
+      expect(verificationCalls.length).toBeGreaterThanOrEqual(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a remote-sync apply (guard active) does NOT trigger a publish', async () => {
+    vi.useFakeTimers()
+    try {
+      const { base } = makePublishableBase()
+      const ctx = makeTestCtx(ACCOUNT)
+      const publishSpy = makePublishSpy()
+      ctx.xmpp.publishPEP = publishSpy
+      await base.init(ctx)
+      await flushInitSync()
+      publishSpy.mockClear()
+
+      // Simulate the window `syncVerificationsFromServer` holds open around
+      // its own dual-write: increment before the mutation (as it does before
+      // its first await), mutate the cache, decrement after (as its `finally`
+      // does) — the notification lands synchronously inside that window.
+      const guard = guardedCount(base)
+      guard.increment()
+      await getVerifiedKeysCache(base).setVerified('eve@x', 'EVE_FP')
+      guard.decrement()
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      const verificationCalls = publishSpy.mock.calls.filter(([node]) => node === VERIFICATIONS_NODE)
+      expect(verificationCalls).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a verified-state change still schedules a trust-state reseal', async () => {
+    const { base } = makePublishableBase()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+    await flushInitSync()
+
+    expect(sealTimeoutPending(base)).toBe(false)
+
+    await getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+
+    expect(sealTimeoutPending(base)).toBe(true)
+  })
+
+  it('the published map reflects state at fire time, not at schedule time', async () => {
+    vi.useFakeTimers()
+    try {
+      const { base } = makePublishableBase()
+      const ctx = makeTestCtx(ACCOUNT)
+      const publishSpy = makePublishSpy()
+      ctx.xmpp.publishPEP = publishSpy
+      await base.init(ctx)
+      await flushInitSync()
+      publishSpy.mockClear()
+
+      // Schedules the debounced publish; under the OLD (schedule-time-capture)
+      // behaviour this call's argument would be `{ carol }` only.
+      await getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+
+      // A guarded mutation lands AFTER scheduling but BEFORE the debounce
+      // fires — it does not itself reschedule, but it does change what
+      // `verifiedKeys.getAll()` returns.
+      const guard = guardedCount(base)
+      guard.increment()
+      await getVerifiedKeysCache(base).setVerified('dave@x', 'DAVE_FP')
+      guard.decrement()
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      const verificationCalls = publishSpy.mock.calls.filter(([node]) => node === VERIFICATIONS_NODE)
+      expect(verificationCalls).toHaveLength(1)
+      const item = verificationCalls[0][1] as PEPItem
+      const decoded = decodePublishedVerifications(item)
+      // Fire-time read: both carol AND dave, proving the map wasn't captured
+      // at schedule time (which would have missed dave).
+      expect(decoded.verifications).toEqual({ 'carol@x': 'CAROL_FP', 'dave@x': 'DAVE_FP' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

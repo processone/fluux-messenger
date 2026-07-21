@@ -426,15 +426,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * Dual-write helpers (Phase B1 Task 5): every verified-state mutation must
    * land in BOTH the plugin-owned cache (source of truth for trust reads —
    * see `evaluatePeerTrust`) and the legacy `hostStores.verifiedPeers`
-   * mirror (still read by app-side UI and still what feeds cross-device
-   * sync publishing).
+   * mirror (still read by app-side UI; still dual-written until Task 8
+   * removes it).
    *
-   * Cache first, then the mirror: the mirror's synchronous `subscribe`
-   * fan-out is what drives the `_syncingFromRemoteCount`-guarded
-   * sync-publish scheduling and the trust-state seal, so the cache must
-   * already be consistent before that fan-out fires. The cache write is
-   * awaited — never fire-and-forget — so a dropped write can't silently
-   * diverge the cache from the mirror.
+   * Cache first, then the mirror: as of Task 7, the cache's own synchronous
+   * `subscribe` fan-out is what drives the `_syncingFromRemoteCount`-guarded
+   * sync-publish scheduling and the trust-state seal (the mirror's
+   * subscribers no longer feed either), so the cache write's notification
+   * fires as a direct consequence of this call, before the mirror is
+   * touched. The cache write is awaited — never fire-and-forget — so a
+   * dropped write can't silently diverge the cache from the mirror.
    */
   private async setVerifiedDual(jid: BareJID, fingerprint: string): Promise<void> {
     await this.verifiedKeys.setVerified(jid, fingerprint)
@@ -635,9 +636,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     ctx.xmpp.subscribePEP(ctx.account.jid, VERIFICATIONS_NODE, () => {
       void this.syncVerificationsFromServer()
     })
-    this._verificationStoreUnsub = this.hostStores.verifiedPeers.subscribe((verifiedMap) => {
+    this._verificationStoreUnsub = this.verifiedKeys.subscribe(() => {
       if (this._syncingFromRemoteCount === 0) {
-        this.scheduleVerificationsPublish(verifiedMap)
+        this.scheduleVerificationsPublish()
       }
     })
 
@@ -645,7 +646,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       this.hostStores.pinnedPrimaryFingerprints.subscribe(() => {
         this.scheduleTrustStateSeal()
       }),
-      this.hostStores.verifiedPeers.subscribe(() => {
+      this.verifiedKeys.subscribe(() => {
         this.scheduleTrustStateSeal()
       }),
       this.hostStores.keyChangeAlerts.subscribe(() => {
@@ -1390,7 +1391,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  private scheduleVerificationsPublish(verifications: Record<string, string>): void {
+  /**
+   * Debounced publish, scheduled from `this.verifiedKeys.subscribe(...)`
+   * (Task 7). Deliberately takes no argument: the map is read from
+   * `this.verifiedKeys.getAll()` when the timeout FIRES, not when it is
+   * scheduled. An earlier version accepted the map as a parameter — captured
+   * at schedule time and reused 500 ms later — which could publish a stale
+   * snapshot if a guarded (remote-sync) write landed in that window. Reading
+   * at fire time always publishes the freshest state.
+   */
+  private scheduleVerificationsPublish(): void {
     if (this._publishVerificationTimeout !== null) {
       clearTimeout(this._publishVerificationTimeout)
     }
@@ -1399,6 +1409,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (!this.ownBundle || !this.ctx) return
       const ctx = this.ctx
       const ownPublicArmored = this.ownBundle.publicArmored
+      const verifications = this.verifiedKeys.getAll()
       // Reserve the next version above the highest we've applied/published.
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
