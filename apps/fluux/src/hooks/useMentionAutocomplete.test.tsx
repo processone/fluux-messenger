@@ -218,7 +218,9 @@ describe('useMentionAutocomplete', () => {
       expect(newCursorPosition).toBe(7)
     })
 
-    it('should insert mention in the middle of text', () => {
+    // The trailing space is padding, not part of the mention: when the caret is
+    // already followed by one, inserting another leaves a visible double space.
+    it('should insert mention in the middle of text without doubling the space', () => {
       const occupants = createOccupants(['alice', 'bob'])
       const { result } = renderHook(() =>
         useMentionAutocomplete('hey @a check this', 6, occupants, ownNickname, roomJid)
@@ -227,8 +229,34 @@ describe('useMentionAutocomplete', () => {
       const aliceIndex = result.current.state.matches.findIndex((m) => m.nick === 'alice')
       const { newText, newCursorPosition } = result.current.selectMatch(aliceIndex)
 
-      expect(newText).toBe('hey @alice  check this')
+      expect(newText).toBe('hey @alice check this')
+      // Past the space either way, so typing continues on the far side of it.
       expect(newCursorPosition).toBe(11)
+    })
+
+    it('should still pad the mention when nothing follows the caret', () => {
+      const occupants = createOccupants(['alice', 'bob'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('hey @a', 6, occupants, ownNickname, roomJid)
+      )
+
+      const aliceIndex = result.current.state.matches.findIndex((m) => m.nick === 'alice')
+      const { newText, newCursorPosition } = result.current.selectMatch(aliceIndex)
+
+      expect(newText).toBe('hey @alice ')
+      expect(newCursorPosition).toBe(11)
+    })
+
+    it('should not pad when the caret is followed by a newline', () => {
+      const occupants = createOccupants(['alice', 'bob'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('hey @a\nnext line', 6, occupants, ownNickname, roomJid)
+      )
+
+      const aliceIndex = result.current.state.matches.findIndex((m) => m.nick === 'alice')
+      const { newText } = result.current.selectMatch(aliceIndex)
+
+      expect(newText).toBe('hey @alice\nnext line')
     })
 
     it('should return correct reference for user mention', () => {

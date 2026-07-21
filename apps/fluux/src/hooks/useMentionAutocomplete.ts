@@ -158,12 +158,17 @@ export function useMentionAutocomplete(
       throw new Error('Invalid match index')
     }
 
-    // Replace @query with @nick (add space after)
+    // Replace @query with @nick, padded by a single trailing space. The space is
+    // padding rather than part of the mention, so completing before existing text
+    // that already starts with whitespace must not add a second one.
     const beforeTrigger = text.slice(0, triggerIndex)
     const afterCursor = text.slice(cursorPosition)
-    const replacement = `@${match.nick} `
+    const mention = `@${match.nick}`
+    const replacement = /^\s/.test(afterCursor) ? mention : `${mention} `
     const newText = beforeTrigger + replacement + afterCursor
-    const newCursorPosition = triggerIndex + replacement.length
+    // Land past the separating space either way, so typing continues on its far
+    // side instead of between the mention and the space.
+    const newCursorPosition = triggerIndex + mention.length + 1
 
     // Build reference
     // URI is xmpp:room@conf/nick for users, xmpp:room@conf for @all

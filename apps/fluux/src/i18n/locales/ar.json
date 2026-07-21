@@ -428,7 +428,8 @@
         "invitationsHeading": "الدعوات",
         "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}",
         "nickEdgeWhitespace": "يحتوي الاسم على مسافات إضافية في الأطراف",
-        "nickHiddenChars": "يحتوي الاسم على أحرف مخفية"
+        "nickHiddenChars": "يحتوي الاسم على أحرف مخفية",
+        "mentionSuggestions": "اقتراحات الإشارات"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",
@@ -599,7 +600,8 @@
         "loadVideo": "تحميل الفيديو",
         "loadAudio": "تحميل الصوت",
         "loadFilePreview": "تحميل المعاينة",
-        "showLinkImage": "عرض الصورة"
+        "showLinkImage": "عرض الصورة",
+        "emojiSuggestions": "اقتراحات الرموز التعبيرية"
     },
     "dates": {
         "today": "اليوم",

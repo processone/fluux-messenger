@@ -430,7 +430,8 @@
         "invitationsHeading": "Zaproszenia",
         "nickChanged": "{{oldNick}} jest teraz znany jako {{newNick}}",
         "nickEdgeWhitespace": "Nazwa ma dodatkowe spacje na brzegach",
-        "nickHiddenChars": "Nazwa zawiera ukryte znaki"
+        "nickHiddenChars": "Nazwa zawiera ukryte znaki",
+        "mentionSuggestions": "Podpowiedzi wzmianek"
     },
     "events": {
         "invitedBy": "Zaproszony przez {{name}}",
@@ -599,7 +600,8 @@
         "loadVideo": "Załaduj wideo",
         "loadAudio": "Załaduj audio",
         "loadFilePreview": "Załaduj podgląd",
-        "showLinkImage": "Pokaż obraz"
+        "showLinkImage": "Pokaż obraz",
+        "emojiSuggestions": "Podpowiedzi emoji"
     },
     "dates": {
         "today": "Dzisiaj",

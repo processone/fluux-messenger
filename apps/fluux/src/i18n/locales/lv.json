@@ -429,7 +429,8 @@
         "invitationsHeading": "Ielūgumi",
         "nickChanged": "{{oldNick}} tagad zināms kā {{newNick}}",
         "nickEdgeWhitespace": "Vārdam ir papildu atstarpes malās",
-        "nickHiddenChars": "Vārds satur slēptas rakstzīmes"
+        "nickHiddenChars": "Vārds satur slēptas rakstzīmes",
+        "mentionSuggestions": "Pieminējumu ieteikumi"
     },
     "events": {
         "invitedBy": "Uzaicināja {{name}}",
@@ -597,7 +598,8 @@
         "loadVideo": "Ielādēt videoklipu",
         "loadAudio": "Ielādēt audio",
         "loadFilePreview": "Ielādēt priekšskatījumu",
-        "showLinkImage": "Rādīt attēlu"
+        "showLinkImage": "Rādīt attēlu",
+        "emojiSuggestions": "Emoji ieteikumi"
     },
     "dates": {
         "today": "Šodien",

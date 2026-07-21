@@ -428,7 +428,8 @@
         "invitationsHeading": "Kvietimai",
         "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}",
         "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
-        "nickHiddenChars": "Varde yra paslėptų simbolių"
+        "nickHiddenChars": "Varde yra paslėptų simbolių",
+        "mentionSuggestions": "Paminėjimų pasiūlymai"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",
@@ -597,7 +598,8 @@
         "loadVideo": "Įkelti vaizdo įrašą",
         "loadAudio": "Įkelti garsą",
         "loadFilePreview": "Įkelti peržiūrą",
-        "showLinkImage": "Rodyti nuotrauką"
+        "showLinkImage": "Rodyti nuotrauką",
+        "emojiSuggestions": "Emoji pasiūlymai"
     },
     "dates": {
         "today": "Šiandien",

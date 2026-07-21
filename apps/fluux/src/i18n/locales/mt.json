@@ -430,7 +430,8 @@
         "invitationsHeading": "Stedini",
         "nickChanged": "{{oldNick}} issa magħruf bħala {{newNick}}",
         "nickEdgeWhitespace": "L-isem għandu spazji żejda fit-truf",
-        "nickHiddenChars": "L-isem fih karattri moħbija"
+        "nickHiddenChars": "L-isem fih karattri moħbija",
+        "mentionSuggestions": "Suġġerimenti ta' msemmija"
     },
     "events": {
         "invitedBy": "Mistieden minn {{name}}",
@@ -600,7 +601,8 @@
         "loadVideo": "Itgħabba l-vidjo",
         "loadAudio": "Itgħabba l-awdjo",
         "loadFilePreview": "Itgħabba l-anteprima",
-        "showLinkImage": "Uri l-immaġni"
+        "showLinkImage": "Uri l-immaġni",
+        "emojiSuggestions": "Suġġerimenti ta' emoji"
     },
     "dates": {
         "today": "Illum",

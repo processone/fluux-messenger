@@ -27,6 +27,7 @@ describe('useConversationDraft', () => {
         getText: vi.fn(() => ''),
         focus: vi.fn(),
         setText: vi.fn(),
+        placeCaret: vi.fn(),
       },
     }
   })

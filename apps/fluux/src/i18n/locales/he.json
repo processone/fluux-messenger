@@ -428,7 +428,8 @@
         "invitationsHeading": "הזמנות",
         "nickChanged": "{{oldNick}} ידוע כעת בשם {{newNick}}",
         "nickEdgeWhitespace": "השם מכיל רווחים נוספים בקצוות",
-        "nickHiddenChars": "השם מכיל תווים נסתרים"
+        "nickHiddenChars": "השם מכיל תווים נסתרים",
+        "mentionSuggestions": "הצעות אזכור"
     },
     "events": {
         "invitedBy": "הוזמן על ידי {{name}}",
@@ -596,7 +597,8 @@
         "loadVideo": "טען סרטון",
         "loadAudio": "טען שמע",
         "loadFilePreview": "טען תצוגה מקדימה",
-        "showLinkImage": "הצג תמונה"
+        "showLinkImage": "הצג תמונה",
+        "emojiSuggestions": "הצעות אמוג'י"
     },
     "dates": {
         "today": "היום",

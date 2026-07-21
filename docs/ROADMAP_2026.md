@@ -133,6 +133,10 @@ Engage with the XMPP MLS XEP effort. Implement once the wire format stabilises.
 
 ## Polish & Backlog
 
+- **Localized emoji completion** — use locale-specific Unicode/CLDR annotations for
+  emoji names and search terms in composer autocomplete, while preserving canonical
+  shortcodes and English aliases for compatibility and fallback search.
+
 - **Filter muted users from search results** — the per-room ignore (mute) list is
   applied in the room view (messages, mentions, typing indicators and reactions are
   hidden) but not in cross-room search. Messages, mentions and reactions from muted

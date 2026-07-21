@@ -429,7 +429,8 @@
         "invitationsHeading": "Pozvánky",
         "nickChanged": "{{oldNick}} je teraz známy ako {{newNick}}",
         "nickEdgeWhitespace": "Meno obsahuje medzery na okrajoch",
-        "nickHiddenChars": "Meno obsahuje skryté znaky"
+        "nickHiddenChars": "Meno obsahuje skryté znaky",
+        "mentionSuggestions": "Návrhy zmienok"
     },
     "events": {
         "invitedBy": "Pozval {{name}}",
@@ -598,7 +599,8 @@
         "loadVideo": "Načítať video",
         "loadAudio": "Načítať zvuk",
         "loadFilePreview": "Načítať náhľad",
-        "showLinkImage": "Zobraziť obrázok"
+        "showLinkImage": "Zobraziť obrázok",
+        "emojiSuggestions": "Návrhy emoji"
     },
     "dates": {
         "today": "Dnes",

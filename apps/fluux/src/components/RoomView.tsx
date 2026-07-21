@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
@@ -8,15 +8,16 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { Avatar } from './Avatar'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
-import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
-import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
+import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, type ComposerAutocompleteAriaProps, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
+import { MentionAutocompleteMenu } from './composer/MentionAutocompleteMenu'
+import { composerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
 import { OccupantModerationModal } from './OccupantModerationModal'
@@ -1792,6 +1793,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     focus: () => composerRef.current?.focus(),
     getText: () => composerRef.current?.getText() || '',
     setText: (t: string) => composerRef.current?.setText(t),
+    placeCaret: (t: string, position: number) => composerRef.current?.placeCaret(t, position),
   }), [])
 
   // Stable callback for draft restoration (resets mention references)
@@ -1863,17 +1865,16 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     roomJid,
     messageNicks
   )
+  const mentionListboxId = `${useId()}-mention-autocomplete`
 
   // Handle mention selection
   const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
     setText(newText)
     setReferences(prev => [...prev, reference])
-    // Focus and set cursor position after state update
-    setTimeout(() => {
-      composerRef.current?.focus()
-    }, 0)
-    setCursorPosition(newCursorPosition)
+    // Restores focus, drops the caret after the mention rather than at the end
+    // of the message, and reports the new position back for the next lookup.
+    composerRef.current?.placeCaret(newText, newCursorPosition)
   }
 
   // Auto-focus composer when starting a reply
@@ -2027,47 +2028,14 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   }, [text])
 
   // Mention autocomplete dropdown
-  const mentionDropdown = mentionState.isActive && mentionState.matches.length > 0 ? (
-    <div
-      className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto
-                 fluux-popover rounded-lg z-30"
-    >
-      {mentionState.matches.map((match, idx) => (
-        <button
-          key={match.nick}
-          type="button"
-          onClick={() => handleMentionSelect(idx)}
-          className={`w-full px-3 py-2 text-start text-sm flex items-center gap-2 transition-colors
-                     ${idx === mentionState.selectedIndex
-                       ? 'bg-fluux-brand text-fluux-text-on-accent'
-                       : 'hover:bg-fluux-hover text-fluux-text'}`}
-        >
-          {/* Avatar */}
-          {match.isAll ? (
-            <div className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-fluux-brand">
-              <Users className="size-3.5 text-fluux-text-on-accent" />
-            </div>
-          ) : (
-            <Avatar
-              identifier={match.nick}
-              name={match.nick}
-              size="xs"
-            />
-          )}
-          <span className="font-medium">@{match.nick}</span>
-          {match.isAll && (
-            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-fluux-text-on-accent/70' : 'text-fluux-muted'}`}>
-              {t('rooms.notifyEveryone')}
-            </span>
-          )}
-          {match.role === 'moderator' && !match.isAll && (
-            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-fluux-text-on-accent/70' : 'text-fluux-muted'}`}>
-              {t('rooms.mod')}
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
+  const isMentionListboxOpen = mentionState.isActive && mentionState.matches.length > 0
+  const mentionDropdown = isMentionListboxOpen ? (
+    <MentionAutocompleteMenu
+      id={mentionListboxId}
+      matches={mentionState.matches}
+      selectedIndex={mentionState.selectedIndex}
+      onSelect={handleMentionSelect}
+    />
   ) : null
 
   // Popovers rendered above the composer, in priority order: help panel, then
@@ -2092,7 +2060,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   )
 
   // Custom input renderer with mention highlighting
-  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
+  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder, ariaProps }: {
     inputRef: React.RefObject<HTMLTextAreaElement | null>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
@@ -2101,7 +2069,20 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
     onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
+    ariaProps: ComposerAutocompleteAriaProps
   }) => {
+    // While the mention list owns the overlay slot the composer's own emoji
+    // completion is suppressed, so its aria props describe a closed popup.
+    // Announce the list the user can actually see instead.
+    const inputAriaProps = isMentionListboxOpen
+      ? composerAutocompleteAriaProps({
+          label: placeholder,
+          listboxId: mentionListboxId,
+          isOpen: true,
+          activeOptionKey: mentionState.matches[mentionState.selectedIndex]?.nick,
+        })
+      : ariaProps
+
     // Enhanced keydown handler for mentions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Handle backspace/delete within a mention - delete the whole mention at once
@@ -2248,6 +2229,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           spellCheck={true}
           autoCorrect="on"
           autoCapitalize="sentences"
+          {...inputAriaProps}
           className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_OVERLAY_CLASSES}`}
           style={{ caretColor: 'var(--fluux-text, #e4e4e7)' }}
         />
@@ -2317,6 +2299,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         typingNotificationsEnabled={shouldSendTypingNotifications}
         renderInput={renderMentionInput}
         aboveInput={aboveInputNode}
+        hasExternalOverlay={aboveInputNode !== null}
         resolveInput={resolveInput}
         classifyInput={classifyInput}
         commandsEnabled={!whisperTarget}
@@ -2437,4 +2420,3 @@ function renderInputWithMentions(text: string, references: MentionReference[]): 
 
   return <>{parts}</>
 }
-

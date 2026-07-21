@@ -428,7 +428,8 @@
         "invitationsHeading": "Покани",
         "nickChanged": "{{oldNick}} вече е познат като {{newNick}}",
         "nickEdgeWhitespace": "Името съдържа излишни интервали в краищата",
-        "nickHiddenChars": "Името съдържа скрити знаци"
+        "nickHiddenChars": "Името съдържа скрити знаци",
+        "mentionSuggestions": "Предложения за споменавания"
     },
     "events": {
         "invitedBy": "Поканен от {{name}}",
@@ -595,7 +596,8 @@
         "loadVideo": "Зареди видео",
         "loadAudio": "Зареди аудио",
         "loadFilePreview": "Зареди преглед",
-        "showLinkImage": "Покажи изображение"
+        "showLinkImage": "Покажи изображение",
+        "emojiSuggestions": "Предложения за емоджи"
     },
     "dates": {
         "today": "Днес",
