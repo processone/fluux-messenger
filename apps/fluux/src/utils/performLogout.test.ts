@@ -3,6 +3,8 @@ import { hasFastToken } from '@fluux/sdk'
 import { performLogout } from './performLogout'
 import { getReconnectIntent } from './reconnectIntent'
 import { saveSession, getSession } from '@/hooks/useSessionPersistence'
+import { setVerifiedKeysView, getVerifiedFingerprintNow } from '@/e2ee/verifiedPeersView'
+import type { VerifiedKeysView } from '@fluux/openpgp-plugin'
 
 // Keep real reconnectIntent / clearAutoReconnectCredentials / clearSession (the
 // behaviours under test). Only stub the heavy/native edges.
@@ -79,5 +81,46 @@ describe('performLogout', () => {
     expect(getSession()).toBeNull()
     expect(getReconnectIntent()).toBe('logged-out')
     expect(mockReset).toHaveBeenCalled()
+  })
+
+  // Finding 2 (B2 Task 3 review): the app never reloads the page on logout,
+  // and `unregisterE2EEPlugins` (the only other place that clears this
+  // holder) early-`continue`s when no OpenPGP plugin is currently
+  // registered. Without this, account A's live verified-keys view survives
+  // in the module-level holder into account B's session — a cross-account
+  // fingerprint leak if B logs in with OpenPGP disabled. Covers both
+  // `shouldCleanLocalData` branches since the clear must run unconditionally.
+  describe('clears the verified-keys view holder (cross-account leak)', () => {
+    const fakeView: VerifiedKeysView = {
+      isVerified: (jid, fp) => jid === 'alice@example.com' && fp === 'STALE-FP',
+      getVerifiedFingerprint: (jid) => (jid === 'alice@example.com' ? 'STALE-FP' : null),
+      getSnapshot: () => ({ 'alice@example.com': 'STALE-FP' }),
+      subscribe: () => () => {},
+    }
+
+    beforeEach(() => {
+      setVerifiedKeysView(fakeView)
+      expect(getVerifiedFingerprintNow('alice@example.com')).toBe('STALE-FP')
+    })
+
+    it('clears it on the keep-data logout path', async () => {
+      await performLogout({
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        jid: JID,
+        shouldCleanLocalData: false,
+      })
+
+      expect(getVerifiedFingerprintNow('alice@example.com')).toBeNull()
+    })
+
+    it('clears it on the clean-local-data logout path', async () => {
+      await performLogout({
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        jid: JID,
+        shouldCleanLocalData: true,
+      })
+
+      expect(getVerifiedFingerprintNow('alice@example.com')).toBeNull()
+    })
   })
 })

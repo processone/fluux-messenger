@@ -19,7 +19,19 @@ const holderListeners = new Set<() => void>()
 let unsubscribeFromView: (() => void) | null = null
 
 function notifyHolder(): void {
-  for (const listener of holderListeners) listener()
+  // Snapshot before iterating (a listener may subscribe/unsubscribe during
+  // notification) and isolate each listener with try/catch, mirroring
+  // `VerifiedKeysCache.notify` (packages/openpgp-plugin/src/verifiedKeysCache.ts).
+  // `setVerifiedKeysView` is called from inside `registerE2EEPlugins`'s try
+  // block, so an uncaught throw here would be mistaken for a registration
+  // failure even though registration itself already succeeded.
+  for (const listener of [...holderListeners]) {
+    try {
+      listener()
+    } catch {
+      // One bad subscriber must not stop the others or abort registration.
+    }
+  }
 }
 
 /**
@@ -37,7 +49,13 @@ export function setVerifiedKeysView(view: VerifiedKeysView | null): void {
   notifyHolder()
 }
 
-function subscribe(listener: () => void): () => void {
+/**
+ * Exported (beyond `useVerifiedFingerprint`'s internal use via
+ * `useSyncExternalStore`) so tests can attach a raw listener directly and
+ * exercise `notifyHolder`'s isolation contract without going through React's
+ * own scheduling/error-boundary behavior. See `verifiedPeersView.test.ts`.
+ */
+export function subscribe(listener: () => void): () => void {
   holderListeners.add(listener)
   return () => holderListeners.delete(listener)
 }

@@ -4,6 +4,7 @@ import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 import { markLoggedOut } from '@/utils/reconnectIntent'
 import { clearCachedPassphrase } from '@fluux/openpgp-plugin'
+import { setVerifiedKeysView } from '@/e2ee/verifiedPeersView'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
 const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
@@ -34,6 +35,14 @@ export interface PerformLogoutDeps {
 export async function performLogout({ disconnect, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
   // 1. Record logout intent FIRST — see module docstring. Must precede any await.
   markLoggedOut()
+  // Drop the module-level holder onto account A's plugin-owned verified-keys
+  // view. Unlike `unregisterE2EEPlugins` (which only clears the holder when a
+  // plugin is currently registered and is never called from here — this app
+  // never reloads the page on logout), this must run unconditionally on every
+  // logout: if the next login has OpenPGP disabled, a stale view would keep
+  // serving account A's verified fingerprints for account B's JIDs for the
+  // rest of the session. Synchronous and side-effect-free when already null.
+  setVerifiedKeysView(null)
   // Forget any 24h-cached web passphrase: a deliberate logout should not leave
   // the key unlockable without re-entry. Best-effort; never blocks logout. On
   // desktop there is no record, so this is a harmless no-op.

@@ -19,7 +19,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createElement } from 'react'
 import { render, act } from '@testing-library/react'
 import type { VerifiedKeysView } from '@fluux/openpgp-plugin'
-import { setVerifiedKeysView, useVerifiedFingerprint, getVerifiedFingerprintNow } from './verifiedPeersView'
+import { setVerifiedKeysView, useVerifiedFingerprint, getVerifiedFingerprintNow, subscribe } from './verifiedPeersView'
 
 /** Minimal fake `VerifiedKeysView` with a controllable notify. */
 function createFakeView(initial: Record<string, string> = {}): VerifiedKeysView & {
@@ -149,5 +149,41 @@ describe('verifiedPeersView', () => {
     expect(renderCount).toBe(rendersAfterMount + 1)
     expect(container.textContent).toBe('null')
     expect(getVerifiedFingerprintNow('erin@example.com')).toBeNull()
+  })
+
+  // Finding 3 (B2 Task 3 review): `setVerifiedKeysView` runs inside
+  // `registerE2EEPlugins`'s try block. A throwing holder listener must not
+  // propagate out of `setVerifiedKeysView` (that would be mistaken for a
+  // registration failure on a registration that actually succeeded), and
+  // must not stop other listeners from firing — mirroring the plugin-side
+  // precedent, `VerifiedKeysCache.notify`. Attaches raw listeners via the
+  // exported `subscribe` directly (bypassing React) so the assertion targets
+  // `notifyHolder`'s own try/catch rather than React's independent
+  // error-boundary/scheduling behavior.
+  it('isolates a throwing listener: other listeners still fire and the throw does not propagate', () => {
+    const throwing = vi.fn(() => {
+      throw new Error('boom')
+    })
+    const ok = vi.fn()
+    const unsubscribeThrowing = subscribe(throwing)
+    const unsubscribeOk = subscribe(ok)
+
+    const view = createFakeView({ 'frank@example.com': 'GGGG7777' })
+
+    expect(() => setVerifiedKeysView(view)).not.toThrow()
+
+    expect(throwing).toHaveBeenCalledTimes(1)
+    expect(ok).toHaveBeenCalledTimes(1)
+    expect(getVerifiedFingerprintNow('frank@example.com')).toBe('GGGG7777')
+
+    // A second notification (view->view relay, e.g. the view's own
+    // `subscribe(notifyHolder)` firing) must keep isolating the same way.
+    // No React component is mounted here, so no `act()` wrapper is needed.
+    view.set('frank@example.com', 'HHHH8888')
+    expect(throwing).toHaveBeenCalledTimes(2)
+    expect(ok).toHaveBeenCalledTimes(2)
+
+    unsubscribeThrowing()
+    unsubscribeOk()
   })
 })
