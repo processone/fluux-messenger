@@ -2,8 +2,7 @@
  * One-shot upgrade paths for OpenPGP trust-state data that used to live
  * directly in `localStorage`, now that Phase B3 moves it behind
  * `PluginStorage` (Task 4: the verification-sync applied/published version
- * counter; Task 5 will extend this module for the trust-state seal blob and
- * its init flag).
+ * counter; Task 5: the trust-state seal blob and its init flag).
  *
  * Mirrors `legacyVerifiedPeersSeed.ts`'s shape exactly: pure, read-only
  * `readLegacy*` functions that never mutate `localStorage`, a separate
@@ -15,14 +14,20 @@
  * pre-account-scoping unscoped key, same reasoning as
  * `legacyVerifiedPeersSeed.ts`: an install that neither ran the scoping
  * migration nor any later dual-write may still have only the pre-migration
- * unscoped blob. When both exist, the migration never picks the "wrong"
- * (lower) one — see {@link migrateLegacySyncVersion}'s doc comment for why
- * this differs from `legacyVerifiedPeersSeed.ts`'s "scoped always wins"
- * rule. Both keys are always reported for removal when either was read, so
- * neither survives as an orphan that could resurface on a later launch.
+ * unscoped blob. For the sync-version counter, when both exist, the
+ * migration never picks the "wrong" (lower) one — see
+ * {@link migrateLegacySyncVersion}'s doc comment for why this differs from
+ * `legacyVerifiedPeersSeed.ts`'s "scoped always wins" rule. For the trust
+ * seal (Task 5), the seal is DATA (an opaque blob), not a monotonic
+ * quantity, so {@link migrateLegacyTrustSeal} follows `legacyVerifiedPeersSeed.ts`'s
+ * own "scoped wins" rule instead. Both keys are always reported for removal
+ * when either was read, so neither survives as an orphan that could
+ * resurface on a later launch.
  */
 import { buildScopedStorageKey } from '@fluux/sdk'
+import type { PluginStorage } from '@fluux/sdk'
 import type { SyncVersionCache } from './syncVersionCache'
+import { hasStoredSeal, writeSealBytes, writeInitFlag } from './trustStateIntegrity'
 
 const LEGACY_VERSION_KEY_BASE = 'fluux-e2ee-verifications-version'
 
@@ -145,4 +150,142 @@ export async function migrateLegacySyncVersion(
   }
   await cache.set(version)
   removeLegacySyncVersionKeys(keysToRemove)
+}
+
+// ---------------------------------------------------------------------------
+// Task 5: trust-state integrity seal blob + init flag
+// ---------------------------------------------------------------------------
+
+const LEGACY_SEAL_KEY_BASE = 'fluux-e2ee-trust-state-seal'
+const LEGACY_INIT_FLAG_KEY_BASE = 'fluux-e2ee-trust-integrity-init'
+
+function legacyScopedSealKey(accountBareJid: string): string {
+  return buildScopedStorageKey(LEGACY_SEAL_KEY_BASE, accountBareJid)
+}
+
+function legacyScopedInitFlagKey(accountBareJid: string): string {
+  return buildScopedStorageKey(LEGACY_INIT_FLAG_KEY_BASE, accountBareJid)
+}
+
+export interface LegacyTrustSealRead {
+  /**
+   * The armored seal blob from whichever legacy key held it, preferring the
+   * scoped key over the pre-scoping unscoped one (this is DATA, like
+   * `legacyVerifiedPeersSeed.ts`'s verified-peers map — not a monotonic
+   * quantity like the sync-version counter above, so "prefer scoped" is the
+   * right rule here, not "max"). `null` when neither legacy key held a
+   * value.
+   */
+  sealArmored: string | null
+  /**
+   * Whether EITHER legacy key recorded "we have sealed before". Read
+   * independently of which seal blob won above: if either legacy install
+   * ever completed a seal, that fact must survive the migration.
+   */
+  initialized: boolean
+  /**
+   * The raw localStorage key(s) to remove after a successful seed. May be
+   * non-empty even when `sealArmored` is `null` (e.g. a stray init flag with
+   * no accompanying blob) so the caller can clean up a legacy key it will
+   * never use again.
+   */
+  keysToRemove: string[]
+}
+
+/**
+ * Read-only: never mutates `localStorage`. Checks both the scoped and
+ * unscoped keys for the seal blob AND the init flag independently (four
+ * `localStorage` reads total), same unconditional-check reasoning as
+ * {@link readLegacySyncVersion} — unlike `readLegacyVerifiedPeers`, which
+ * only consults the unscoped key when the scoped one is absent.
+ * Returns an all-empty read on any `localStorage` failure (unavailable,
+ * disabled) — the caller treats that identically to "nothing to seed".
+ */
+export function readLegacyTrustSeal(accountBareJid: string): LegacyTrustSealRead {
+  try {
+    const scopedSealKey = legacyScopedSealKey(accountBareJid)
+    const scopedSeal = localStorage.getItem(scopedSealKey)
+    const unscopedSealIsDistinct = scopedSealKey !== LEGACY_SEAL_KEY_BASE
+    const unscopedSeal = unscopedSealIsDistinct ? localStorage.getItem(LEGACY_SEAL_KEY_BASE) : null
+
+    const scopedInitKey = legacyScopedInitFlagKey(accountBareJid)
+    const scopedInit = localStorage.getItem(scopedInitKey)
+    const unscopedInitIsDistinct = scopedInitKey !== LEGACY_INIT_FLAG_KEY_BASE
+    const unscopedInit = unscopedInitIsDistinct ? localStorage.getItem(LEGACY_INIT_FLAG_KEY_BASE) : null
+
+    const keysToRemove: string[] = []
+    if (scopedSeal !== null) keysToRemove.push(scopedSealKey)
+    if (unscopedSealIsDistinct && unscopedSeal !== null) keysToRemove.push(LEGACY_SEAL_KEY_BASE)
+    if (scopedInit !== null) keysToRemove.push(scopedInitKey)
+    if (unscopedInitIsDistinct && unscopedInit !== null) keysToRemove.push(LEGACY_INIT_FLAG_KEY_BASE)
+
+    return {
+      sealArmored: scopedSeal ?? unscopedSeal,
+      initialized: scopedInit === '1' || unscopedInit === '1',
+      keysToRemove,
+    }
+  } catch {
+    // localStorage unavailable — nothing to seed.
+    return { sealArmored: null, initialized: false, keysToRemove: [] }
+  }
+}
+
+/**
+ * Best-effort removal of the legacy key(s) after a successful seed. A
+ * failure here is harmless: the plugin-owned `PluginStorage` now owns the
+ * data, and {@link migrateLegacyTrustSeal} is a no-op once it does, so a
+ * leftover legacy key is simply never read again.
+ */
+export function removeLegacyTrustSealKeys(keys: string[]): void {
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      // Best-effort — see the doc comment above.
+    }
+  }
+}
+
+/**
+ * One-shot upgrade path, called once per `OpenPGPPluginBase.init()`
+ * (alongside {@link migrateLegacySyncVersion}, before any trust-state seal
+ * verification can run): if `storage` doesn't already hold a sealed blob,
+ * read the legacy `localStorage` key(s), copy the blob (and, if the blob
+ * copy succeeds, the init flag too) into `storage`, and remove the legacy
+ * key(s) — whether or not there was anything to seed.
+ *
+ * ## Why the flag is written only alongside a blob, never alone
+ *
+ * `verifyTrustStateSeal` treats "no seal blob, but the init flag says we've
+ * sealed before, and the stores hold data" as `compromised` — see
+ * `trustStateIntegrity.ts`'s "seal was removed but stores contain data"
+ * branch. If this migration ever wrote the NEW init flag without the NEW
+ * blob actually landing first, that exact condition would fire on the very
+ * next verify, manufacturing a tamper warning purely from an incomplete
+ * migration. So the blob write is always attempted first and awaited before
+ * the flag write is even considered, and BOTH must be durably persisted
+ * before the legacy keys — the only remaining copies — are removed. (The
+ * one exception: if the legacy state was already `initialized` with no
+ * accompanying blob — e.g. a pre-existing corrupt/tampered install — that
+ * flag-only truth is carried forward as-is rather than silently dropped,
+ * which would launder a real tamper signal into a fresh, silent reseal.)
+ *
+ * Guards on `hasStoredSeal(storage)` BEFORE touching `localStorage` at all —
+ * so an install that already upgraded (or never had legacy data) never
+ * re-reads, and therefore never removes, the legacy key on every subsequent
+ * launch. Mirrors `migrateLegacySyncVersion`'s guard exactly.
+ */
+export async function migrateLegacyTrustSeal(
+  storage: PluginStorage,
+  accountBareJid: string,
+): Promise<void> {
+  if (await hasStoredSeal(storage)) return
+  const { sealArmored, initialized, keysToRemove } = readLegacyTrustSeal(accountBareJid)
+  if (sealArmored !== null) {
+    await writeSealBytes(storage, sealArmored)
+  }
+  if (sealArmored !== null || initialized) {
+    await writeInitFlag(storage)
+  }
+  removeLegacyTrustSealKeys(keysToRemove)
 }

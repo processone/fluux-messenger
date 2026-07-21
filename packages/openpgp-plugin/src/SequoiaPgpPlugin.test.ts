@@ -2886,6 +2886,16 @@ describe('SequoiaPgpPlugin', () => {
       // deterministically here).
       const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB } = makeContext('me@example.com')
+      // Since B3 Task 5, the trust-state seal lives in `ctx.storage`
+      // (previously a `localStorage` key shared globally by account JID,
+      // which is why this test used to get away with two independent
+      // `makeContext()` contexts). Share the SAME storage backend as ctxA
+      // to simulate what's actually true in production: the host hands the
+      // same account's plugin the same persistent backend across sessions
+      // (see `E2EEManager.register` / the B0 per-account sealed store) — a
+      // brand-new backend here would simulate a different device, not a
+      // relaunch of the same one.
+      ctxB.storage = ctxA.storage
       ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
         id: 'current',
         payload: {
@@ -2895,6 +2905,16 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await pluginB.init(ctxB)
+      // `init()`'s own `activateSubscriptions()` already kicked off a fire-
+      // and-forget `verifyTrustStateOnInit()` against the REAL (working)
+      // decrypt, which now resolves via genuine PluginStorage reads instead
+      // of the old synchronous `localStorage` ones — flush it to completion
+      // (settling to `sealed`, since the seal is unchanged) before arming
+      // the one-shot decrypt failure below, or that natural call can land
+      // AFTER the test's explicit one and clobber `awaiting-key` back to
+      // `sealed`.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(hostStores.trustStateStatus.get()).toBe('sealed')
       const passthroughB = pluginB as unknown as {
         verifyTrustStateOnInit(): Promise<void>
       }
@@ -2924,6 +2944,13 @@ describe('SequoiaPgpPlugin', () => {
       ctx.logger.info = (message: string) => { infoCalls.push(message) }
 
       await plugin.init(ctx)
+      // `activateSubscriptions()` kicks off `verifyTrustStateOnInit()` fire-
+      // and-forget (`void this.verifyTrustStateOnInit()`); `init()` itself
+      // does not wait for it. Since B3 Task 5, the seal/init-flag reads
+      // inside it are genuine PluginStorage calls (previously synchronous
+      // `localStorage` reads), so the verdict log can land a tick or two
+      // after `init()` resolves — flush microtasks/timers before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       // A trust-state verdict log must be emitted (status can be any non-trivial
       // value: pending-seal on first run, sealed on subsequent, etc.)
@@ -2936,6 +2963,9 @@ describe('SequoiaPgpPlugin', () => {
       ctx.logger.info = (message: string) => { infoCalls.push(message) }
 
       await plugin.init(ctx)
+      // See the previous test's comment: the verdict log is fire-and-forget
+      // relative to `init()`, and needs a flush to have landed.
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       const verdictLog = infoCalls.find((m) => /trust.?state/i.test(m))
       expect(verdictLog).toBeDefined()

@@ -87,7 +87,7 @@ import {
   saveAppliedVerificationsVersion,
 } from './verificationSync'
 import { SyncVersionCache, createInMemorySyncVersionCache } from './syncVersionCache'
-import { migrateLegacySyncVersion } from './legacyTrustStateSeed'
+import { migrateLegacySyncVersion, migrateLegacyTrustSeal } from './legacyTrustStateSeed'
 import {
   fingerprintsEqual,
   toXep0373Fingerprint,
@@ -735,6 +735,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // One-time upgrade seed from the legacy localStorage-backed sync-version
     // counter — see `legacyTrustStateSeed.ts`'s doc comment.
     await migrateLegacySyncVersion(this.syncVersion, getBareJid(ctx.account.jid))
+    // One-time upgrade seed from the legacy localStorage-backed trust-state
+    // integrity seal blob + init flag (B3 Task 5) — must run before any
+    // trust-state seal verification (`activateSubscriptions()` below drives
+    // `verifyTrustStateOnInit()`), same ordering reasoning as the
+    // sync-version migration above.
+    await migrateLegacyTrustSeal(ctx.storage, getBareJid(ctx.account.jid))
     // Rehydrate peer key cache so keys are available before MAM arrives.
     const cached = loadPeerKeyCache(ctx.account.jid)
     for (const [jid, bundle] of cached) {
@@ -842,6 +848,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         ownPublicArmored,
         this.hostStores,
         this.verifiedKeys.getAll(),
+        this.ctx.storage,
       )
       this.hostStores.trustStateStatus.set('sealed')
     } catch {
@@ -853,17 +860,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ownFingerprint = this.ownBundle?.fingerprint
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
-    const jid = this.ctx.account.jid
+    // Capture `ctx` before the awaits below (B3 Task 5 added another —
+    // `verifyTrustStateSeal`'s seal/init-flag reads are now PluginStorage
+    // calls, not synchronous `localStorage` reads) so a `shutdown()` (or a
+    // shutdown()+init() cycle) that completes while this is in flight is
+    // detected below by identity, not just by `this.ctx` being non-null —
+    // mirrors `publishSettledVerifications`'s guard for the same race.
+    const ctx = this.ctx
+    const jid = ctx.account.jid
     const { status, details } = await verifyTrustStateSeal(
       (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
       ownPublicArmored,
       ownFingerprint,
       this.hostStores,
       this.verifiedKeys.getAll(),
+      ctx.storage,
       isSecretKeyUnavailableError,
     )
+    if (this.ctx !== ctx) return
     const reason = details && details.length ? ` (${details.join('; ')})` : ''
-    this.ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
+    ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
     if (status === 'pending-seal') {
       await this.sealTrustStateNow()
       return
@@ -893,6 +909,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ownPublicArmored,
       this.hostStores,
       this.verifiedKeys.getAll(),
+      this.ctx.storage,
     )
   }
 
