@@ -319,7 +319,10 @@ export function RenderLoopWarningBanner() {
   const base = last[0]?.timestamp ?? 0
 
   return (
-    <div className="fixed inset-x-2 top-2 z-[9998] rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs shadow-lg backdrop-blur">
+    <div
+      id="fluux-render-loop-warning"
+      className="fixed inset-x-2 top-2 z-[9998] rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs shadow-lg backdrop-blur"
+    >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="font-semibold text-amber-300">
           ⚠️ Render loop warning: {warning.componentName} ({warning.renderCount} renders/{warning.windowMs}ms)
