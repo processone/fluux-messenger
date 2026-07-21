@@ -1,10 +1,10 @@
 /**
  * Cross-device synchronisation of peer verification records.
  *
- * Publishes the local `verifiedPeerKeysStore` map to a private PEP node
+ * Publishes the plugin-owned `VerifiedKeysCache` map to a private PEP node
  * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) sign+encrypted
  * to the user's own OpenPGP key. Other devices of the same account receive a
- * PEP headline, fetch the node, decrypt it, and reconcile their store.
+ * PEP headline, fetch the node, decrypt it, and reconcile their cache.
  *
  * Crypto is abstracted behind {@link EncryptFn}/{@link DecryptFn} so this
  * module works with both the Sequoia/Tauri backend and the openpgp.js web

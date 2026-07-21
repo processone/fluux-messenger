@@ -4,57 +4,35 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * Finding 4 (Phase B1 final review): nothing STRUCTURAL stops a future base
- * method (or a subclass) from calling
+ * Originally (Finding 4, Phase B1 final review): nothing STRUCTURAL stopped
+ * a future base method (or a subclass) from calling
  * `this.hostStores.verifiedPeers.setVerified(...)` / `.clearVerified(...)`
  * directly and skipping the plugin-owned `VerifiedKeysCache`, inside THIS
- * package. Scope note (re-review Finding 4): this guard only scans
- * `packages/openpgp-plugin` — it does NOT scan `apps/fluux` and so could
- * never have caught the historical `ChatView.tsx` verify/revoke bypass,
- * which lived in the app. What it guards is narrower and still real: a
- * future addition inside this package that reaches past
- * `setVerifiedDual`/`clearVerifiedDual` and writes `hostStores.verifiedPeers`
- * directly, silently diverging the cache and the legacy mirror.
+ * package — so this test enumerated the sanctioned dual-write call sites and
+ * failed if a new, unreviewed one appeared.
  *
- * This test is the durable guard: it reads every production source file in
- * this package and asserts the full set of `hostStores.verifiedPeers.*`
- * references is EXACTLY the three sanctioned ones in `OpenPGPPluginBase.ts`:
+ * Phase B2 Task 8 deleted `hostStores.verifiedPeers` entirely:
+ * `OpenPGPHostStores` no longer declares the field, and
+ * `setVerifiedDual`/`clearVerifiedDual` write only the plugin-owned cache.
+ * The sanctioned list that finding produced is now empty by construction —
+ * there is nothing left to enumerate. Rather than delete this guard, it is
+ * retargeted to the inverse, stronger property: no reference to
+ * `hostStores.verifiedPeers` exists ANYWHERE in this package's production
+ * source, full stop. This keeps a live regression net against the coupling
+ * coming back — e.g. a copy-pasted dual-write snippet from an old branch, or
+ * a future contributor reinventing a "mirror" for some other consumer.
  *
- *   - `setVerifiedDual`'s body   → `.setVerified(...)`
- *   - `clearVerifiedDual`'s body → `.clearVerified(...)`
- *   - `init()`'s one-time seed   → `.getAll()`
- *
- * Phase B2 Task 7 moved `activateSubscriptions()`'s two `.subscribe(...)`
- * registrations (debounced publish + trust-state reseal) off this mirror and
- * onto `this.verifiedKeys.subscribe(...)` — the plugin-owned cache — so the
- * mirror no longer has any subscribers inside this package. It is still
- * dual-written (still read by app-side UI) until Task 8 removes it entirely.
- *
- * Every OTHER verified-state write must go through `setVerifiedDual` /
- * `clearVerifiedDual` (which keep the cache and the mirror consistent) —
- * never call `hostStores.verifiedPeers` directly from anywhere else. If
- * this test fails, a new call site was added that bypasses the dual-write
- * helpers; either route it through them, or through `verifiedKeys` directly
- * for a pure cache read, and update the sanctioned list below only if the
- * new site is a deliberate, reviewed addition to the dual-write contract.
- *
- * Test files (and the `testSupport`/`testing` helper directories used only
- * by tests) are excluded from the scan: they legitimately poke the legacy
- * mirror directly to set up fixtures (e.g. simulating pre-existing legacy
- * data before a plugin `init()` seeds from it, or recording calls through
- * an override), which isn't the production bypass this guard exists to
- * catch.
+ * Same production-source-only scope as before: test files and the
+ * `testSupport`/`testing`/`fixtures` helper directories are excluded, since
+ * a NEGATIVE fixture (proving some code path does NOT consult
+ * `hostStores.verifiedPeers`) or a historical regression test may
+ * legitimately still reference the now-removed shape in a comment or a
+ * deliberately-absent mock.
  */
 
 const SRC_DIR = dirname(fileURLToPath(import.meta.url))
-const REFERENCE_PATTERN = /hostStores\.verifiedPeers\.(\w+)/g
+const REFERENCE_PATTERN = /hostStores\.verifiedPeers\b/g
 const EXCLUDED_DIRS = new Set(['testSupport', 'testing', 'fixtures'])
-
-const SANCTIONED = [
-  'OpenPGPPluginBase.ts:clearVerified',
-  'OpenPGPPluginBase.ts:getAll',
-  'OpenPGPPluginBase.ts:setVerified',
-].sort()
 
 function collectProductionSourceFiles(dir: string): string[] {
   const out: string[] = []
@@ -74,12 +52,12 @@ function collectProductionSourceFiles(dir: string): string[] {
 
 /**
  * Strips line comments and block comments (a doc comment mentioning
- * `hostStores.verifiedPeers.getAll()` in prose would otherwise be a false
- * positive) while leaving string/template literal CONTENTS alone, so a
+ * `hostStores.verifiedPeers` in prose would otherwise be a false positive)
+ * while leaving string/template literal CONTENTS alone, so a
  * comment-stripped slash inside a string doesn't corrupt the rest of the
  * file. Not a full TS tokenizer (doesn't special-case regex literals), but
- * sufficient for scanning this package's source for a specific dotted call
- * expression.
+ * sufficient for scanning this package's source for a specific dotted
+ * property reference.
  */
 function stripComments(src: string): string {
   let out = ''
@@ -127,24 +105,24 @@ function stripComments(src: string): string {
   return out
 }
 
-describe('dual-write invariant guard (Finding 4)', () => {
-  it('every hostStores.verifiedPeers reference in production source is one of the three sanctioned dual-write sites', () => {
+describe('legacy verified-peers mirror stays deleted (Finding 4 follow-up, Phase B2 Task 8)', () => {
+  it('no hostStores.verifiedPeers reference remains in production source', () => {
     const files = collectProductionSourceFiles(SRC_DIR)
     const hits: string[] = []
     for (const file of files) {
       const content = stripComments(readFileSync(file, 'utf8'))
       const base = file.split('/').pop() as string
-      for (const match of content.matchAll(REFERENCE_PATTERN)) {
-        hits.push(`${base}:${match[1]}`)
+      for (const _match of content.matchAll(REFERENCE_PATTERN)) {
+        hits.push(base)
       }
     }
 
     expect(
-      hits.sort(),
-      'A hostStores.verifiedPeers reference was added outside the sanctioned dual-write sites. ' +
-        'Writes must go through setVerifiedDual/clearVerifiedDual (or read through the ' +
-        'VerifiedKeysCache) or the cache and the legacy mirror can silently diverge — this is ' +
-        'exactly the class of bypass this guard exists to catch inside this package.',
-    ).toEqual(SANCTIONED)
+      hits,
+      'A hostStores.verifiedPeers reference was found in production source. Phase B2 Task 8 deleted the ' +
+        'legacy mirror entirely — OpenPGPHostStores no longer declares a verifiedPeers field, and ' +
+        'setVerifiedDual/clearVerifiedDual write only the plugin-owned VerifiedKeysCache. Route ' +
+        'verified-state writes through those two methods instead of reintroducing this reference.',
+    ).toEqual([])
   })
 })

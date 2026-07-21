@@ -6,7 +6,7 @@
 // Test utility only — never re-exported from the package index.
 import type { BareJID, PluginContext, PluginStorage, SecurityContext, XMPPPrimitives } from '@fluux/sdk'
 import { OpenPGPPluginBase, type KeyBundle, type CertValidation, type DecryptOutput } from '../OpenPGPPluginBase'
-import { createMockHostStores, type MockHostStores } from '../testing/mockHostStores'
+import { createMockHostStores } from '../testing/mockHostStores'
 import type { VerifiedKeysCache } from '../verifiedKeysCache'
 import { memStorage } from './memStorage'
 
@@ -84,28 +84,36 @@ export interface TrustCallLog {
 
 /**
  * Build a `TestOpenPGPPlugin` wired to an in-memory `hostStores` mock.
- * `verified` is `hostStores.verifiedPeers` itself — tests may reassign its
- * methods (e.g. `verified.isVerified = () => false`) to control trust
- * evaluation. `calls` independently records every `setVerified`/
- * `clearVerified` invocation regardless of such overrides.
+ * `calls` records every write through the plugin-owned `VerifiedKeysCache`
+ * (the single write funnel since Phase B2 Task 8 deleted the legacy
+ * `hostStores.verifiedPeers` mirror this used to also record) — wrapping
+ * the cache's own `setVerified`/`clearVerified` directly on the instance,
+ * the same cast-based-access pattern {@link getVerifiedKeysCache} uses.
+ * Wraps the PRE-init placeholder cache (`OpenPGPPluginBase`'s field
+ * initializer): if a caller subsequently drives `init()`, that replaces
+ * `verifiedKeys` with a fresh, unwrapped `VerifiedKeysCache` over
+ * `ctx.storage`, and `calls` stops recording. No current caller of
+ * `makeTestBase()` combines `calls` with `init()` — if a future test needs
+ * both, re-wrap via `getVerifiedKeysCache(base)` again after `init()`.
  */
-export function makeTestBase(): { base: TestOpenPGPPlugin; verified: MockHostStores['verifiedPeers']; calls: TrustCallLog } {
+export function makeTestBase(): { base: TestOpenPGPPlugin; calls: TrustCallLog } {
   const hostStores = createMockHostStores()
   const calls: TrustCallLog = { setVerified: [], clearVerified: [] }
 
-  const originalSetVerified = hostStores.verifiedPeers.setVerified.bind(hostStores.verifiedPeers)
-  const originalClearVerified = hostStores.verifiedPeers.clearVerified.bind(hostStores.verifiedPeers)
-  hostStores.verifiedPeers.setVerified = (jid, fp) => {
+  const base = new TestOpenPGPPlugin({ hostStores })
+  const cache = getVerifiedKeysCache(base)
+  const originalSetVerified = cache.setVerified.bind(cache)
+  const originalClearVerified = cache.clearVerified.bind(cache)
+  cache.setVerified = (jid, fp) => {
     calls.setVerified.push([jid, fp])
-    originalSetVerified(jid, fp)
+    return originalSetVerified(jid, fp)
   }
-  hostStores.verifiedPeers.clearVerified = (jid) => {
+  cache.clearVerified = (jid) => {
     calls.clearVerified.push([jid])
-    originalClearVerified(jid)
+    return originalClearVerified(jid)
   }
 
-  const base = new TestOpenPGPPlugin({ hostStores })
-  return { base, verified: hostStores.verifiedPeers, calls }
+  return { base, calls }
 }
 
 /**

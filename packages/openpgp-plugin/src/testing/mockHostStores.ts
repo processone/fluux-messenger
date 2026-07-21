@@ -15,45 +15,17 @@ export interface MockHostStores extends OpenPGPHostStores {
   _reset(): void
 }
 
-function fpEqual(a: string, b: string): boolean {
-  return a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase()
-}
-
 export function createMockHostStores(): MockHostStores {
-  let verified: Record<string, string> = {}
   let pinned: Record<string, string> = {}
   let alerts: Record<string, KeyChangeAlert> = {}
   let rejections: Record<string, CertRejection[]> = {}
   let conflict: OwnKeyConflict | null = null
   let status: TrustStateStatus = 'uninitialized'
 
-  const verifiedListeners = new Set<(m: Record<string, string>) => void>()
   const pinnedListeners = new Set<() => void>()
   const alertListeners = new Set<() => void>()
 
   return {
-    verifiedPeers: {
-      isVerified: (jid, fp) => {
-        const s = verified[jid]
-        return s !== undefined && fpEqual(s, fp)
-      },
-      setVerified: (jid, fp) => {
-        if (verified[jid] === fp) return
-        verified = { ...verified, [jid]: fp }
-        verifiedListeners.forEach((l) => l(verified))
-      },
-      clearVerified: (jid) => {
-        if (!(jid in verified)) return
-        verified = { ...verified }
-        delete verified[jid]
-        verifiedListeners.forEach((l) => l(verified))
-      },
-      getAll: () => verified,
-      subscribe: (l) => {
-        verifiedListeners.add(l)
-        return () => verifiedListeners.delete(l)
-      },
-    },
     certRejections: {
       record: (jid, r) => {
         rejections = { ...rejections, [jid]: r }
@@ -116,13 +88,11 @@ export function createMockHostStores(): MockHostStores {
       get: () => status,
     },
     _reset: () => {
-      verified = {}
       pinned = {}
       alerts = {}
       rejections = {}
       conflict = null
       status = 'uninitialized'
-      verifiedListeners.clear()
       pinnedListeners.clear()
       alertListeners.clear()
     },

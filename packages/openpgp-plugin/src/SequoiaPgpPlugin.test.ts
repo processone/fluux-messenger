@@ -12,6 +12,7 @@ import { createMockHostStores, type MockHostStores } from './testing/mockHostSto
 import type { OpenPGPFileIO } from './hostStores'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getVerifiedKeysCache } from './testSupport/baseHarness'
+import { persistVerifiedMap } from './verifiedKeys'
 import {
   E2EEPluginError,
   InMemoryStorageBackend,
@@ -3432,7 +3433,7 @@ describe('SequoiaPgpPlugin', () => {
       // should miss and bob stays at TOFU.
       const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
-      hostStores.verifiedPeers.setVerified('charlie@example.com', 'unrelated-fp')
+      await getVerifiedKeysCache(alice.plugin).setVerified('charlie@example.com', 'unrelated-fp')
 
       const trust = await alice.plugin.getPeerTrust('bob@example.com')
       expect(trust).toBe('tofu')
@@ -3563,7 +3564,7 @@ describe('SequoiaPgpPlugin', () => {
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
       // User has verified the OLD cert out of band.
-      hostStores.verifiedPeers.setVerified('bob@example.com', oldFp)
+      await getVerifiedKeysCache(alice.plugin).setVerified('bob@example.com', oldFp)
 
       const newBob = await simulateBobRotation(alice)
       expect(newBob.fingerprint).not.toBe(oldFp)
@@ -3575,7 +3576,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(oldFp)
       // Verification stays valid (it was against the OLD cert, which
       // is what we still cache).
-      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBe(oldFp)
+      expect(getVerifiedKeysCache(alice.plugin).isVerified('bob@example.com', oldFp)).toBe(true)
       // …but a key-change alert must have been recorded so the UI
       // surfaces the rotation to the user.
       const alert = hostStores.keyChangeAlerts.get('bob@example.com')
@@ -3623,10 +3624,6 @@ describe('SequoiaPgpPlugin', () => {
       const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      hostStores.verifiedPeers.setVerified('bob@example.com', oldFp)
-      // Task 5: acceptPeerKeyChange dual-writes, so seed the cache too —
-      // otherwise the "cache cleared" assertion below can't distinguish
-      // "already empty" from "actually cleared".
       await getVerifiedKeysCache(alice.plugin).setVerified('bob@example.com', oldFp)
 
       const newBob = await simulateBobRotation(alice)
@@ -3641,9 +3638,6 @@ describe('SequoiaPgpPlugin', () => {
       // peerKeys refreshed.
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
       // Verification dropped — accept-without-verifying never lifts trust.
-      // Both the legacy mirror AND the plugin-owned cache must be cleared
-      // (Task 5 dual-write).
-      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBeNull()
       expect(getVerifiedKeysCache(alice.plugin).isVerified('bob@example.com', oldFp)).toBe(false)
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
 
@@ -3667,13 +3661,10 @@ describe('SequoiaPgpPlugin', () => {
       // Pin + cached cert + verification all moved to NEW fp in lockstep.
       expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(newBob.fingerprint)
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBe(newBob.fingerprint)
-      // Task 5: `acceptPeerKeyChange` dual-writes, so the plugin-owned cache
-      // must ALSO see the new fingerprint as verified…
       expect(getVerifiedKeysCache(alice.plugin).isVerified('bob@example.com', newBob.fingerprint)).toBe(
         true,
       )
-      // …and `getPeerTrust` — which reads exclusively from that cache — must
+      // `getPeerTrust` — which reads exclusively from that cache — must
       // report 'verified', closing the write -> read loop end to end.
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
     })
@@ -3754,7 +3745,7 @@ describe('SequoiaPgpPlugin', () => {
 
       // Verification was NOT recorded — the key we fetched differs from
       // the one the user was presented with in the verify dialog.
-      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBeNull()
+      expect(getVerifiedKeysCache(alice.plugin).getVerifiedFingerprint('bob@example.com')).toBeNull()
     })
 
     it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
@@ -3815,7 +3806,7 @@ describe('SequoiaPgpPlugin', () => {
       return JSON.parse(decodeURIComponent(escape(atob(payloadB64))))
     }
 
-    it('seeds the local verified-peers store from the server node on init', async () => {
+    it('seeds the plugin-owned cache from the server node on init', async () => {
       const { ctx, peerPublish } = makeContext('me@example.com')
       // Pre-seed so we know the fingerprint before init.
       const fp = 'FP_SYNC_TEST'
@@ -3836,10 +3827,8 @@ describe('SequoiaPgpPlugin', () => {
       // syncVerificationsFromServer is fire-and-forget; let promises settle.
       await new Promise((r) => setTimeout(r, 0))
 
-      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
-      // Task 5: the verification-sync apply (`plan.toSet`) must dual-write —
-      // the plugin-owned cache has to see it too, since that's what trust
-      // reads consult.
+      // The verification-sync apply (`plan.toSet`) writes the plugin-owned
+      // cache, since that's what trust reads consult.
       expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
     })
 
@@ -3864,7 +3853,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(ctx)
       await new Promise((r) => setTimeout(r, 0))
 
-      expect(hostStores.verifiedPeers.isVerified('mallory@example.com', 'MALLORY_FP')).toBe(false)
+      expect(getVerifiedKeysCache(plugin).isVerified('mallory@example.com', 'MALLORY_FP')).toBe(false)
     })
 
     it('publishes the verifications PEP node after a local verification is added', async () => {
@@ -3937,7 +3926,7 @@ describe('SequoiaPgpPlugin', () => {
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
 
-      expect(hostStores.verifiedPeers.isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
+      expect(getVerifiedKeysCache(plugin).isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
     })
 
     it('_syncingFromRemote guard prevents a re-publish when a remote update is processed', async () => {
@@ -4025,7 +4014,7 @@ describe('SequoiaPgpPlugin', () => {
         verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
         for (let i = 0; i < 10; i++) await Promise.resolve()
         await vi.advanceTimersByTimeAsync(600)
-        expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+        expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       } finally {
         vi.useRealTimers()
       }
@@ -4056,8 +4045,8 @@ describe('SequoiaPgpPlugin', () => {
       currentItem = buildVerificationsPepItem(fp, { 'bob@example.com': 'BOB_FP' }, 5)
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
-      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
-      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(getVerifiedKeysCache(plugin).isVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
 
       // The server replays an OLDER snapshot (version 1) that still trusts alice.
       currentItem = buildVerificationsPepItem(
@@ -4069,8 +4058,8 @@ describe('SequoiaPgpPlugin', () => {
       await new Promise((r) => setTimeout(r, 0))
 
       // Rollback rejected: alice is NOT resurrected, bob is untouched.
-      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
-      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(getVerifiedKeysCache(plugin).isVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })
 
     it('clears a locally-verified peer that a newer remote snapshot drops', async () => {
@@ -4093,10 +4082,13 @@ describe('SequoiaPgpPlugin', () => {
         keychainBacked: true,
       })
 
-      // Seed local state BEFORE init so the store subscription (attached during
-      // init) does not schedule a publish from these writes.
-      hostStores.verifiedPeers.setVerified('alice@example.com', 'ALICE_FP')
-      hostStores.verifiedPeers.setVerified('bob@example.com', 'BOB_FP')
+      // Seed the plugin-owned storage directly BEFORE init — so the cache's
+      // own subscription (attached during init) does not schedule a publish
+      // from these writes, and so this test exercises the remote-clear path
+      // on its own terms rather than coupling to the legacy-localStorage
+      // upgrade seed (covered separately in
+      // `OpenPGPPluginBase.legacySeed.test.ts`).
+      await persistVerifiedMap(ctx.storage, { 'alice@example.com': 'ALICE_FP', 'bob@example.com': 'BOB_FP' })
       await plugin.init(ctx)
 
       // Another device published a newer snapshot (version 5) that dropped alice.
@@ -4104,12 +4096,8 @@ describe('SequoiaPgpPlugin', () => {
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
 
-      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
-      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
-      // Task 5: the verification-sync apply (`plan.toClear`) must dual-write
-      // — the plugin-owned cache must drop alice too (init()'s one-time seed
-      // already carried both alice and bob into the cache from the legacy
-      // store before this remote update arrived).
+      // The verification-sync apply (`plan.toClear`) must drop alice from
+      // the plugin-owned cache while leaving bob untouched.
       expect(getVerifiedKeysCache(plugin).isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       expect(getVerifiedKeysCache(plugin).isVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })

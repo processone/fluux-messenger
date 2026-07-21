@@ -1,10 +1,13 @@
 // Verifies that `init()` hydrates the plugin-owned `VerifiedKeysCache`
 // (Task 2) before it resolves — on EVERY exit path, including the early
 // returns for key-locked / needs-identity-decision / key-unrecoverable that
-// skip `activateSubscriptions()` — and seeds it once from the legacy
-// `hostStores.verifiedPeers` store. Drives the real `init()` path via the
+// skip `activateSubscriptions()`. Drives the real `init()` path via the
 // harness in `testSupport/baseHarness.ts` rather than calling the cache
 // directly (that's `verifiedKeysCache.test.ts`'s job).
+//
+// The legacy-localStorage upgrade seed (Phase B2 Task 8, replacing the
+// `hostStores.verifiedPeers` mirror this file used to seed from) has its own
+// dedicated coverage in `OpenPGPPluginBase.legacySeed.test.ts`.
 import { describe, it, expect, vi } from 'vitest'
 import {
   E2EEPluginError,
@@ -53,34 +56,12 @@ describe('OpenPGPPluginBase — verified-cache hydration in init()', () => {
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD')).toBe(true)
   })
 
-  it('seeds the cache from the legacy store on first run', async () => {
-    const { base, verified } = makeTestBase()
-    base.ensureKeyMaterialImpl = async () => canonicalBundle()
-    verified.setVerified('bob@x', 'ABCD') // legacy store has data; plugin storage is empty
-    const ctx = makeTestCtx(ACCOUNT)
-
-    await base.init(ctx)
-
-    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD')).toBe(true)
-    // And it was actually persisted, not just held in memory.
-    const reloaded = new VerifiedKeysCache(ctx.storage)
-    await reloaded.hydrate()
-    expect(reloaded.isVerified('bob@x', 'ABCD')).toBe(true)
-  })
-
-  it('does NOT re-seed when the plugin store already has data', async () => {
-    const { base, verified } = makeTestBase()
-    base.ensureKeyMaterialImpl = async () => canonicalBundle()
-    const storage = await storageWithVerified({ 'bob@x': 'REAL' })
-    verified.setVerified('bob@x', 'STALE') // legacy disagrees with plugin-owned data
-    const ctx = makeTestCtx(ACCOUNT, { storage })
-
-    await base.init(ctx)
-
-    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'REAL')).toBe(true)
-    expect(getVerifiedKeysCache(base).isVerified('bob@x', 'STALE')).toBe(false)
-    expect(getVerifiedKeysCache(base).getAll()).toEqual({ 'bob@x': 'REAL' })
-  })
+  // The legacy-localStorage upgrade seed ("seeds the cache from the legacy
+  // store on first run" / "does NOT re-seed when the plugin store already
+  // has data", pre-Task-8 versions of this file) moved to
+  // `OpenPGPPluginBase.legacySeed.test.ts`, which covers it against real
+  // localStorage instead of the (now-deleted) `hostStores.verifiedPeers`
+  // mock.
 
   it('a verified peer reads as verified immediately after init (no cold-cache window)', async () => {
     // Exercises the key-locked early return (~:537), which skips
@@ -110,27 +91,24 @@ function decryptOutput(overrides: Partial<DecryptOutput> = {}): DecryptOutput {
 }
 
 // Task 4: the trust-read sites (evaluatePeerTrust / buildInboundSecurityContext)
-// now read `this.verifiedKeys` (the plugin-owned cache) instead of
-// `hostStores.verifiedPeers` (the legacy app-side store). These tests drive
-// the base directly via `makeTestBase()` (no `init()`), seeding the cache
-// through its own write API — Task 5 wires up dual-writes from the real
-// trust-write paths, so seeding here is deliberately direct.
+// read `this.verifiedKeys` (the plugin-owned cache), which since Task 8 is
+// the ONLY place verified state lives (the legacy `hostStores.verifiedPeers`
+// app-side store is gone). These tests drive the base directly via
+// `makeTestBase()` (no `init()`), seeding the cache through its own write API.
 describe('OpenPGPPluginBase — trust reads come from the plugin-owned cache', () => {
-  it('getPeerTrust reports verified from the cache when the legacy store is empty', async () => {
-    const { base, verified } = makeTestBase()
+  it('getPeerTrust reports verified from the cache', async () => {
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
     await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
 
-    expect(verified.getAll()).toEqual({}) // legacy store never touched
     expect(await base.getPeerTrust('bob@x')).toBe('verified')
   })
 
-  it('buildInboundSecurityContext marks the message verified from the cache when the legacy store is empty', async () => {
-    const { base, verified } = makeTestBase()
+  it('buildInboundSecurityContext marks the message verified from the cache', async () => {
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
     await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
 
-    expect(verified.getAll()).toEqual({})
     const context = callBuildInboundSecurityContext(base, 'bob@x', decryptOutput())
     expect(context.trust).toBe('verified')
   })
@@ -151,41 +129,39 @@ describe('OpenPGPPluginBase — trust reads come from the plugin-owned cache', (
   })
 })
 
-// Task 5: every verified-state write must land in BOTH the plugin-owned
-// cache and the legacy `hostStores.verifiedPeers` mirror. `setIdentityTrust`
-// is exercised directly here since it needs no XMPP/PEP wiring; the other
+// Task 5 introduced the dual-write (plugin-owned cache + legacy
+// `hostStores.verifiedPeers` mirror); Task 8 deleted the mirror leg, so
+// `setIdentityTrust` now writes only the cache. `setIdentityTrust` is
+// exercised directly here since it needs no XMPP/PEP wiring; the other
 // write sites (`acceptPeerKeyChange`, verification-sync apply) are covered
 // against a full plugin instance in `SequoiaPgpPlugin.test.ts`, since they
 // depend on peer-key fetch / PEP plumbing this harness doesn't stub.
-describe('OpenPGPPluginBase — setIdentityTrust dual-writes cache and legacy mirror', () => {
-  it("setIdentityTrust('verified') writes to both the cache and the legacy mirror", async () => {
-    const { base, verified } = makeTestBase()
+describe('OpenPGPPluginBase — setIdentityTrust writes through the single cache funnel', () => {
+  it("setIdentityTrust('verified') writes the cache", async () => {
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
 
     await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
 
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(true)
-    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(true)
   })
 
-  it("setIdentityTrust('untrusted') clears both the cache and the legacy mirror", async () => {
-    const { base, verified } = makeTestBase()
+  it("setIdentityTrust('untrusted') clears the cache", async () => {
+    const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
     await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(true)
-    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(true)
 
     await base.setIdentityTrust('bob@x', 'ABCD1234', 'untrusted')
 
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'ABCD1234')).toBe(false)
-    expect(verified.isVerified('bob@x', 'ABCD1234')).toBe(false)
   })
 
   it('end-to-end: getPeerTrust (which reads ONLY the cache) sees a setIdentityTrust write', async () => {
     // evaluatePeerTrust reads exclusively from `this.verifiedKeys` (see the
     // "trust reads come from the plugin-owned cache" block above) — so this
-    // closes the write -> read loop: if the cache half of the dual-write
-    // were dropped, this would still read 'tofu'.
+    // closes the write -> read loop: if `setIdentityTrust` didn't reach the
+    // cache, this would still read 'tofu'.
     const { base } = makeTestBase()
     seedPeerKey(base, 'bob@x', 'ABCD1234')
 
@@ -194,7 +170,7 @@ describe('OpenPGPPluginBase — setIdentityTrust dual-writes cache and legacy mi
     expect(await base.getPeerTrust('bob@x')).toBe('verified')
   })
 
-  it('persists the dual-write: a fresh VerifiedKeysCache over the same storage sees it', async () => {
+  it('persists the write: a fresh VerifiedKeysCache over the same storage sees it', async () => {
     const { base } = makeTestBase()
     base.ensureKeyMaterialImpl = async () => canonicalBundle()
     const ctx = makeTestCtx(ACCOUNT)

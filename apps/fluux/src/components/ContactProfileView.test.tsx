@@ -52,14 +52,6 @@ vi.mock('@fluux/sdk/react', async (importOriginal) => {
   }
 })
 
-// Mock app-level stores
-vi.mock('@/stores/verifiedPeerKeysStore', () => ({
-  useVerifiedPeerKeysStore: (selector: (s: { setVerified: ReturnType<typeof vi.fn>; clearVerified: ReturnType<typeof vi.fn> }) => unknown) => {
-    const state = { setVerified: vi.fn(), clearVerified: vi.fn() }
-    return selector ? selector(state) : state
-  },
-}))
-
 // `setForcedPlaintext` is hoisted to module scope (rather than recreated
 // inside the selector) to mirror real zustand action stability — actions
 // keep the same reference across renders, and `ContactProfileView` relies

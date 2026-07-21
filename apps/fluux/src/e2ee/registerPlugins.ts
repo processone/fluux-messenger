@@ -17,12 +17,6 @@ import { isOpenpgpEnabled, isOmemoEnabled, useEncryptionSettingsStore } from '..
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { classifyBoundaryError, SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
 import type { OpenPGPHostStores, OpenPGPFileIO } from '@fluux/openpgp-plugin'
-import {
-  isPeerVerified,
-  setPeerVerified,
-  clearPeerVerified,
-  useVerifiedPeerKeysStore,
-} from '../stores/verifiedPeerKeysStore'
 import { recordCertRejections, clearCertRejections } from '../stores/certRejectionStore'
 import {
   recordKeyChangeAlert,
@@ -40,24 +34,20 @@ import { setTrustStateStatus, getTrustStateStatus } from '../stores/trustStateSt
 import { setVerifiedKeysView } from './verifiedPeersView'
 
 /**
- * Adapter over the six app trust stores, injected into the OpenPGP plugins.
+ * Adapter over the five app trust stores, injected into the OpenPGP plugins.
  * Delegates to the stores' imperative helpers; the store data + localStorage
  * keys are untouched, so this is behavior-preserving. The subscribe methods
  * guard on the exact store slice the base watched.
+ *
+ * Verified-peer trust used to be a sixth group here, backed by the app-side
+ * `verifiedPeerKeysStore` and dual-written by the plugin. Phase B2 Task 8
+ * deleted both: the plugin-owned `VerifiedKeysCache` is now the sole source
+ * of truth, seeded once from that store's legacy localStorage key on
+ * upgrade (see `@fluux/openpgp-plugin`'s `legacyVerifiedPeersSeed.ts`), and
+ * exposed to the app read-side via `getVerifiedKeysView()` /
+ * `verifiedPeersView.ts` below.
  */
 const openpgpHostStores: OpenPGPHostStores = {
-  verifiedPeers: {
-    isVerified: isPeerVerified,
-    setVerified: setPeerVerified,
-    clearVerified: clearPeerVerified,
-    getAll: () => useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid,
-    subscribe: (listener) =>
-      useVerifiedPeerKeysStore.subscribe((state, prev) => {
-        if (state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid) {
-          listener(state.verifiedFingerprintByJid)
-        }
-      }),
-  },
   certRejections: {
     record: recordCertRejections,
     clear: clearCertRejections,

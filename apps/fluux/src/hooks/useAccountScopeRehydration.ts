@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { useConnectionStatus, getBareJid } from '@fluux/sdk'
-import { rehydrateVerifiedPeerKeys } from '../stores/verifiedPeerKeysStore'
 import { rehydratePinnedPrimaryFingerprints } from '../stores/pinnedPrimaryFingerprintsStore'
 import { rehydrateKeyChangeAlerts } from '../stores/keyChangeAlertsStore'
 import { rehydratePlaintextOverrides } from '../stores/conversationPlaintextOverrideStore'
@@ -16,6 +15,13 @@ import { rehydrateEncryptionSettings } from '../stores/encryptionSettingsStore'
  * keys — they need to reload from the correct scoped key after
  * setStorageScopeJid() runs.
  *
+ * Verified-peer trust used to be rehydrated here too
+ * (`rehydrateVerifiedPeerKeys`), but Phase B2 Task 8 deleted the app-side
+ * `verifiedPeerKeysStore` it targeted. Per-account isolation for verified
+ * state now comes from the OpenPGP plugin's own per-account `ctx.storage`
+ * and `init()` re-running (and re-hydrating its `VerifiedKeysCache`) on
+ * every account switch — no app-side rehydrate call needed.
+ *
  * Must be called in App.tsx BEFORE the registerE2EEPlugins effect so the
  * stores are populated before the plugin reads them.
  */
@@ -28,7 +34,6 @@ export function useAccountScopeRehydration(): void {
     if (!bareJid || bareJid === prevJidRef.current) return
     prevJidRef.current = bareJid
 
-    rehydrateVerifiedPeerKeys()
     rehydratePinnedPrimaryFingerprints()
     rehydrateKeyChangeAlerts()
     rehydratePlaintextOverrides()

@@ -17,19 +17,6 @@ describe('OpenPGPHostStores mock conformance', () => {
     expect(asInterface).toBeDefined()
   })
 
-  it('verifiedPeers round-trips and fires subscribers with the new map', () => {
-    const seen: Array<Record<string, string>> = []
-    host.verifiedPeers.subscribe((m) => seen.push(m))
-    host.verifiedPeers.setVerified('a@x', 'FP1')
-    expect(host.verifiedPeers.isVerified('a@x', 'fp1')).toBe(true) // normalized compare
-    expect(host.verifiedPeers.getAll()).toEqual({ 'a@x': 'FP1' })
-    host.verifiedPeers.setVerified('a@x', 'FP1') // idempotent → no extra fire
-    expect(seen).toHaveLength(1)
-    host.verifiedPeers.clearVerified('a@x')
-    expect(host.verifiedPeers.getAll()).toEqual({})
-    expect(seen).toHaveLength(2)
-  })
-
   it('pinned + keyChangeAlerts + ownKeyConflict + trustStateStatus behave', () => {
     host.pinnedPrimaryFingerprints.set('b@x', 'PIN')
     expect(host.pinnedPrimaryFingerprints.get('b@x')).toBe('PIN')

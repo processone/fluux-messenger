@@ -5,7 +5,7 @@ import { buildScopedStorageKey } from '@fluux/sdk'
  * Key-change alerts: per-peer entries that say "this peer was once
  * verified, but their advertised fingerprint has changed since then —
  * the user should be told and prompted to re-verify". Alerts are a
- * companion to {@link verifiedPeerKeysStore}: when the plugin demotes
+ * companion to the OpenPGP plugin's verified-key cache: when the plugin demotes
  * a verification because the cached fingerprint changed, it pushes an
  * alert here so the chat header can surface a banner.
  *

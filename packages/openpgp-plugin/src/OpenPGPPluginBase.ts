@@ -92,6 +92,7 @@ import {
 } from './fingerprintCompare'
 import { accountUserId } from './openpgpUserId'
 import type { OpenPGPHostStores, CertRejection } from './hostStores'
+import { readLegacyVerifiedPeers, removeLegacyVerifiedPeersKeys } from './legacyVerifiedPeersSeed'
 import { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 import {
   sealTrustState,
@@ -423,28 +424,41 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   /**
-   * Dual-write helpers (Phase B1 Task 5): every verified-state mutation must
-   * land in BOTH the plugin-owned cache (source of truth for trust reads —
-   * see `evaluatePeerTrust`) and the legacy `hostStores.verifiedPeers`
-   * mirror (still read by app-side UI; still dual-written until Task 8
-   * removes it).
-   *
-   * Cache first, then the mirror: as of Task 7, the cache's own synchronous
-   * `subscribe` fan-out is what drives the `_syncingFromRemoteCount`-guarded
-   * sync-publish scheduling and the trust-state seal (the mirror's
-   * subscribers no longer feed either), so the cache write's notification
-   * fires as a direct consequence of this call, before the mirror is
-   * touched. The cache write is awaited — never fire-and-forget — so a
-   * dropped write can't silently diverge the cache from the mirror.
+   * Single write funnel for verified-state mutations. Through Phase B2 Task
+   * 7 this dual-wrote the plugin-owned cache AND the legacy
+   * `hostStores.verifiedPeers` mirror; Task 8 deleted the mirror entirely
+   * (`OpenPGPHostStores` no longer declares the field), so this now just
+   * forwards to the cache. Kept as a named method — rather than inlining
+   * `this.verifiedKeys.setVerified(...)` at each call site — so every
+   * verified-state write still funnels through one place, the way it did
+   * when there were two destinations to keep in lockstep.
    */
   private async setVerifiedDual(jid: BareJID, fingerprint: string): Promise<void> {
     await this.verifiedKeys.setVerified(jid, fingerprint)
-    this.hostStores.verifiedPeers.setVerified(jid, fingerprint)
   }
 
   private async clearVerifiedDual(jid: BareJID): Promise<void> {
     await this.verifiedKeys.clearVerified(jid)
-    this.hostStores.verifiedPeers.clearVerified(jid)
+  }
+
+  /**
+   * One-shot upgrade path, called once per `init()`: if the plugin-owned
+   * cache is still empty, read the legacy `verifiedPeerKeysStore`
+   * localStorage key(s) (see `legacyVerifiedPeersSeed.ts`), seed the cache
+   * from them, and remove the legacy key(s) on success.
+   *
+   * Guards on the cache already being non-empty BEFORE touching
+   * localStorage at all — not just relying on `VerifiedKeysCache.seed`'s own
+   * no-op-if-populated check — so an install that already upgraded (or
+   * never had legacy data) never re-reads, and therefore never removes, the
+   * legacy key on every subsequent launch.
+   */
+  private async seedLegacyVerifiedPeers(accountJid: string): Promise<void> {
+    if (Object.keys(this.verifiedKeys.getAll()).length > 0) return
+    const { map, keysToRemove } = readLegacyVerifiedPeers(getBareJid(accountJid))
+    if (Object.keys(map).length === 0) return
+    await this.verifiedKeys.seed(map)
+    removeLegacyVerifiedPeersKeys(keysToRemove)
   }
 
   // ---------------------------------------------------------------------------
@@ -577,12 +591,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // would silently downgrade a verified peer to `tofu`.
     this.verifiedKeys = new VerifiedKeysCache(ctx.storage)
     await this.verifiedKeys.hydrate()
-    // One-time seed from the legacy app-side store (still live in B1). `seed`
-    // is a no-op once the plugin owns data, so this cannot clobber it.
-    await this.verifiedKeys.seed(this.hostStores.verifiedPeers.getAll())
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
+    // One-time upgrade seed from the legacy localStorage-backed verified-
+    // peers store (removed as of Phase B2 Task 8) — see
+    // `seedLegacyVerifiedPeers`'s doc comment.
+    await this.seedLegacyVerifiedPeers(ctx.account.jid)
     // Rehydrate peer key cache so keys are available before MAM arrives.
     const cached = loadPeerKeyCache(ctx.account.jid)
     for (const [jid, bundle] of cached) {

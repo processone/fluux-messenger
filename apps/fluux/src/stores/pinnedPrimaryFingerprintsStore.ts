@@ -5,7 +5,7 @@ import { buildScopedStorageKey } from '@fluux/sdk'
  * Per-peer primary-key fingerprint pins — the cryptographic anchor of
  * Fluux's server-tampering defenses.
  *
- * Distinct from {@link verifiedPeerKeysStore}:
+ * Distinct from the OpenPGP plugin's verified-key cache:
  *
  * - **Pin**: "this is the primary fingerprint Fluux currently trusts to
  *   encrypt to this peer." Auto-set on first contact (TOFU) and changed

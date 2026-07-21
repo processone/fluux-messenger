@@ -1,14 +1,21 @@
 /**
  * Host-store seam for the OpenPGP plugin.
  *
- * `OpenPGPPluginBase` reads and writes six pieces of app-owned trust state
- * (verified peers, cert rejections, key-change alerts, own-key conflict,
- * pinned primary fingerprints, trust-state integrity status). Rather than
- * importing the app's Zustand stores directly (which would pin the package
- * to `apps/fluux/src`), the base reaches them through an injected
+ * `OpenPGPPluginBase` reads and writes five pieces of app-owned trust state
+ * (cert rejections, key-change alerts, own-key conflict, pinned primary
+ * fingerprints, trust-state integrity status). Rather than importing the
+ * app's Zustand stores directly (which would pin the package to
+ * `apps/fluux/src`), the base reaches them through an injected
  * `OpenPGPHostStores` adapter. The app implements it at plugin registration,
  * delegating to the real stores; the store DATA stays app-side, so every UI
  * subscription and localStorage key is untouched.
+ *
+ * Verified-peer trust state used to be a sixth group here (`verifiedPeers`),
+ * dual-written alongside the plugin-owned `VerifiedKeysCache`. Phase B2
+ * Task 8 deleted that mirror — and the app-side `verifiedPeerKeysStore` it
+ * wrapped — entirely; the cache is now the sole source of truth, seeded
+ * once from the legacy localStorage key on upgrade (see
+ * `legacyVerifiedPeersSeed.ts`).
  */
 
 // ---- Contract types (structurally identical to the app store definitions) ----
@@ -48,16 +55,6 @@ export type TrustStateStatus =
 // ---- The adapter interface ----
 
 export interface OpenPGPHostStores {
-  verifiedPeers: {
-    /** True when the user has confirmed `fingerprint` for `jid` out-of-band. */
-    isVerified(jid: string, fingerprint: string): boolean
-    setVerified(jid: string, fingerprint: string): void
-    clearVerified(jid: string): void
-    /** The whole bare-JID → verified-fingerprint map (read for sync/seal). */
-    getAll(): Record<string, string>
-    /** Fires (with the new map) whenever the verified map changes. */
-    subscribe(listener: (verifiedMap: Record<string, string>) => void): () => void
-  }
   certRejections: {
     record(jid: string, rejections: CertRejection[]): void
     clear(jid: string): void

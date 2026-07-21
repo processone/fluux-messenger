@@ -95,13 +95,13 @@ describe('verifyTrustStateSeal: key-unavailable classification', () => {
 })
 
 // Task 4: `verified` is threaded in explicitly by the caller (the plugin
-// passes `this.verifiedKeys.getAll()`) rather than read from
-// `hostStores.verifiedPeers.getAll()`. These tests prove the snapshot and
-// the seal/verify round trip both key off the injected map, by seeding the
-// legacy store with DIFFERENT data than what's passed in.
+// passes `this.verifiedKeys.getAll()`) rather than read from `hostStores`.
+// Phase B2 Task 8 went further and deleted `hostStores.verifiedPeers`
+// entirely, so there is no longer a second, potentially-disagreeing source
+// to read from at all — these tests prove the snapshot and the seal/verify
+// round trip key off the injected map alone.
 describe('buildCanonicalSnapshot: verified section comes from the injected map, not hostStores', () => {
-  it('reflects the injected map even when the legacy store holds different data', () => {
-    host.verifiedPeers.setVerified('legacy@example.com', 'LEGACYFP')
+  it('reflects exactly the injected map', () => {
     const snapshot = buildCanonicalSnapshot(host, { 'cache@example.com': 'CACHEFP' })
     expect(snapshot.verified).toEqual({ 'cache@example.com': 'CACHEFP' })
   })
@@ -115,8 +115,7 @@ describe('sealTrustState / verifyTrustStateSeal: verified map is threaded throug
     signaturePresent: true,
   })
 
-  it('round-trips as sealed off the injected map while the legacy store disagrees', async () => {
-    host.verifiedPeers.setVerified('legacy@example.com', 'LEGACYFP')
+  it('round-trips as sealed off the injected map', async () => {
     const cacheVerified = { 'cache@example.com': 'CACHEFP' }
     await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, cacheVerified)
 
@@ -124,7 +123,7 @@ describe('sealTrustState / verifyTrustStateSeal: verified map is threaded throug
     expect(res.status).toBe('sealed')
   })
 
-  it('detects a change to the injected map between seal and verify, independent of the (untouched) legacy store', async () => {
+  it('detects a change to the injected map between seal and verify', async () => {
     await sealTrustState(passthroughEncrypt, OWN_PUBLIC, host, { 'cache@example.com': 'CACHEFP' })
 
     const res = await verifyTrustStateSeal(
