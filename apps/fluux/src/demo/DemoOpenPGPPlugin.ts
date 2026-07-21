@@ -9,8 +9,8 @@ import type {
   EncryptedPayload,
   DecryptResult,
 } from '@fluux/sdk'
-import type { KeyBundle } from '@fluux/openpgp-plugin'
-import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
+import type { KeyBundle, VerifiedKeysView } from '@fluux/openpgp-plugin'
+import { fingerprintsEqual } from '@fluux/openpgp-plugin'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',
@@ -50,6 +50,74 @@ interface DemoE2EEState {
 }
 
 /**
+ * Small in-memory holder for demo verified-key state, satisfying the same
+ * `VerifiedKeysView` contract the real plugins expose via
+ * `OpenPGPPluginBase.getVerifiedKeysView()` (`VerifiedKeysCache` in
+ * `@fluux/openpgp-plugin`). `DemoOpenPGPPlugin` doesn't extend
+ * `OpenPGPPluginBase` (no `PluginStorage`, no PEP, no real crypto), so it
+ * can't reuse `VerifiedKeysCache` directly — but the app's read path
+ * (`useVerifiedFingerprint` / `useConversationEncryptionState`, via
+ * `apps/fluux/src/e2ee/verifiedPeersView.ts`) doesn't care which class
+ * implements the interface, only that it does.
+ *
+ * Mirrors `VerifiedKeysCache`'s two load-bearing properties:
+ * - `getSnapshot()` is referentially stable between mutations (cached,
+ *   invalidated on write) — required by `useSyncExternalStore`'s
+ *   infinite-loop guard.
+ * - `isVerified` compares fingerprints via `fingerprintsEqual` (case- and
+ *   whitespace-insensitive), not `===`, so this demo stand-in can't be
+ *   stricter than the real plugin it's standing in for.
+ */
+class DemoVerifiedKeysHolder implements VerifiedKeysView {
+  private map = new Map<string, string>()
+  private listeners = new Set<() => void>()
+  /** Cached immutable snapshot; invalidated (set to null) on every mutation. */
+  private snapshot: Record<string, string> | null = null
+
+  isVerified(jid: string, fingerprint: string): boolean {
+    if (!fingerprint) return false
+    const stored = this.map.get(jid)
+    return stored !== undefined && fingerprintsEqual(stored, fingerprint)
+  }
+
+  getVerifiedFingerprint(jid: string): string | null {
+    return this.map.get(jid) ?? null
+  }
+
+  getSnapshot(): Record<string, string> {
+    if (this.snapshot === null) this.snapshot = Object.freeze(Object.fromEntries(this.map))
+    return this.snapshot
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  setVerified(jid: string, fingerprint: string): void {
+    this.map.set(jid, fingerprint)
+    this.notify()
+  }
+
+  clearVerified(jid: string): void {
+    if (!this.map.has(jid)) return
+    this.map.delete(jid)
+    this.notify()
+  }
+
+  private notify(): void {
+    this.snapshot = null
+    for (const listener of [...this.listeners]) {
+      try {
+        listener()
+      } catch {
+        // One bad subscriber must not stop the others.
+      }
+    }
+  }
+}
+
+/**
  * In-memory OpenPGP plugin for demo mode.
  *
  * Implements both the SDK's E2EEPlugin interface and all the extra
@@ -67,6 +135,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
 
   private state: DemoE2EEState
   private ctx: PluginContext | null = null
+  private readonly verifiedKeys = new DemoVerifiedKeysHolder()
 
   constructor(opts?: { forceConflict?: boolean }) {
     this.state = {
@@ -76,6 +145,13 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
       backupFingerprint: opts?.forceConflict ? DEMO_FINGERPRINT : null,
       forceNoLocalKey: opts?.forceConflict ?? false,
     }
+    // Boot seed: Ava's identity is pre-verified so the encryption badge is
+    // visible on her conversation from first paint. Previously seeded from
+    // `demo.tsx` into the (now-deleted) `useVerifiedPeerKeysStore`; moved
+    // here so the seed lives with the fingerprint it seeds (`probePeer`/
+    // `getPeerFingerprint` already hardcode `DEMO_AVA_FINGERPRINT` for this
+    // same peer) instead of depending on demo.tsx's construction order.
+    this.verifiedKeys.setVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
   }
 
   // --- E2EEPlugin interface ---
@@ -162,15 +238,16 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
    * Per-identity trust write (E2EEPlugin trait), mirroring the real
    * `OpenPGPPluginBase.setIdentityTrust`: OpenPGP is single-key per peer,
    * so `'verified'` pins the marker to the peer's current fingerprint and
-   * `'untrusted'` clears it. Writes straight to `useVerifiedPeerKeysStore`
-   * — the same store `demo.tsx` seeds `ava@fluux.chat`'s verification into
-   * and the chat header / contact profile chip both read from — so the
-   * demo's verify/revoke flow actually flips the chip instead of hitting
-   * the "plugin unavailable" branch (this plugin doesn't extend
-   * `OpenPGPPluginBase`, so it needs its own trait implementation; without
-   * it every demo verify surfaced a red error toast instead of succeeding).
-   * No-ops when the peer has no known fingerprint, or when a non-empty
-   * `id` no longer matches the current one (stale identity reference).
+   * `'untrusted'` clears it. Writes straight to this plugin's own
+   * `verifiedKeys` holder (see `getVerifiedKeysView()`) — the chat header /
+   * contact profile chip read that view via `apps/fluux/src/e2ee/
+   * verifiedPeersView.ts`, so the demo's verify/revoke flow actually flips
+   * the chip instead of hitting the "plugin unavailable" branch (this
+   * plugin doesn't extend `OpenPGPPluginBase`, so it needs its own trait
+   * implementation; without it every demo verify surfaced a red error
+   * toast instead of succeeding). No-ops when the peer has no known
+   * fingerprint, or when a non-empty `id` no longer matches the current
+   * one (stale identity reference).
    */
   async setIdentityTrust(peer: string, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
     await delay(200)
@@ -178,10 +255,23 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     if (!cur) return
     if (id && id !== cur) return
     if (decision === 'verified') {
-      setPeerVerified(peer, cur)
+      this.verifiedKeys.setVerified(peer, cur)
     } else {
-      clearPeerVerified(peer)
+      this.verifiedKeys.clearVerified(peer)
     }
+  }
+
+  /**
+   * Read-only view onto this plugin's verified-key state, satisfying the
+   * same contract the real plugins expose via `OpenPGPPluginBase.
+   * getVerifiedKeysView()`. `demo.tsx` wires this into `apps/fluux/src/e2ee/
+   * verifiedPeersView.ts` (`setVerifiedKeysView`) after registering the
+   * plugin — the demo path builds its `E2EEManager` by hand and never runs
+   * `registerE2EEPlugins`/`registerPlugins.ts`, so that Task-3 wiring's
+   * usual call site doesn't apply here and demo.tsx must call this itself.
+   */
+  getVerifiedKeysView(): VerifiedKeysView {
+    return this.verifiedKeys
   }
 
   // --- Settings-panel methods (called via casts) ---

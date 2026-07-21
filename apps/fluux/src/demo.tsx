@@ -14,12 +14,12 @@ import { HashRouter } from 'react-router-dom'
 import { XMPPProvider, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
-import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
+import { DemoOpenPGPPlugin } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
-import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
+import { setVerifiedKeysView } from './e2ee/verifiedPeersView'
 import { setSessionPassphrase } from '@fluux/openpgp-plugin'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
@@ -132,7 +132,15 @@ void demoClient.e2ee.register(demoOpenpgpPlugin).then(() => {
   useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
   useEncryptionSettingsStore.getState().notifyPluginRegistered()
 })
-useVerifiedPeerKeysStore.getState().setVerified('ava@fluux.chat', DEMO_AVA_FINGERPRINT)
+// The demo builds its E2EEManager by hand above and never runs
+// registerE2EEPlugins/registerPlugins.ts, so that module's usual
+// `setVerifiedKeysView(plugin.getVerifiedKeysView())` call site doesn't run
+// for the demo plugin. Without this, the chat header / contact profile
+// verified chip (which reads exclusively through `verifiedPeersView.ts`)
+// would never reflect the demo plugin's verified state, including the Ava
+// seed below (now owned by the plugin itself — see DemoOpenPGPPlugin's
+// constructor).
+setVerifiedKeysView(demoOpenpgpPlugin.getVerifiedKeysView())
 setSessionPassphrase('demo')
 
 // Expose demo client and stores for automation (screenshot scripts, testing)
