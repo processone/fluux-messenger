@@ -76,7 +76,7 @@ describe('OpenPGPPluginBase.init() — legacy verified-peers upgrade seed (Phase
     expect(reloaded.isVerified('bob@x', 'ABCD1234')).toBe(true)
   })
 
-  it('both scoped and unscoped present -> the scoped one wins, no entry lost', async () => {
+  it('both scoped and unscoped present -> the scoped one wins, no entry lost, BOTH legacy keys removed', async () => {
     localStorage.setItem(scopedLegacyKey(), JSON.stringify({ 'bob@x': 'SCOPED_FP' }))
     localStorage.setItem(LEGACY_KEY_BASE, JSON.stringify({ 'carol@x': 'UNSCOPED_FP' }))
     const { base } = makeTestBase()
@@ -92,6 +92,44 @@ describe('OpenPGPPluginBase.init() — legacy verified-peers upgrade seed (Phase
     const reloaded = new VerifiedKeysCache(ctx.storage)
     await reloaded.hydrate()
     expect(reloaded.getAll()).toEqual({ 'bob@x': 'SCOPED_FP' })
+
+    // Finding 1 regression guard: the unscoped blob is an orphan the moment
+    // the scoped key wins. If it survived, a later cache-empty relaunch
+    // (e.g. after the user revokes every verification) would fall back to
+    // it and resurrect 'carol@x' -> 'UNSCOPED_FP' from the dead.
+    expect(localStorage.getItem(scopedLegacyKey())).toBeNull()
+    expect(localStorage.getItem(LEGACY_KEY_BASE)).toBeNull()
+  })
+
+  it('both present -> after seeding, revoking every verification and relaunching does NOT resurrect the orphaned unscoped entry', async () => {
+    localStorage.setItem(scopedLegacyKey(), JSON.stringify({ 'bob@x': 'SCOPED_FP' }))
+    localStorage.setItem(LEGACY_KEY_BASE, JSON.stringify({ 'carol@x': 'UNSCOPED_FP' }))
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+
+    await base.init(ctx)
+    expect(getVerifiedKeysCache(base).getAll()).toEqual({ 'bob@x': 'SCOPED_FP' })
+
+    // Both legacy keys are gone at this point (asserted above); simulate the
+    // user revoking every verification, which legitimately empties the
+    // plugin-owned cache.
+    await getVerifiedKeysCache(base).clearVerified('bob@x')
+    expect(getVerifiedKeysCache(base).getAll()).toEqual({})
+
+    // Relaunch: fresh plugin instance, same PluginStorage (now empty), and
+    // localStorage untouched since the revoke (still has whatever the
+    // seed left behind). Before the Finding 1 fix, the orphaned unscoped
+    // blob would still be sitting there and `init()`'s cache-empty guard
+    // would fall back to it, resurrecting 'carol@x'.
+    const { base: base2 } = makeTestBase()
+    base2.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx2 = makeTestCtx(ACCOUNT, { storage: ctx.storage })
+
+    await base2.init(ctx2)
+
+    expect(getVerifiedKeysCache(base2).getAll()).toEqual({})
+    expect(getVerifiedKeysCache(base2).getVerifiedFingerprint('carol@x')).toBeNull()
   })
 
   it('PluginStorage already populated -> the legacy key is NOT re-read and cannot clobber plugin-owned data', async () => {
@@ -117,6 +155,22 @@ describe('OpenPGPPluginBase.init() — legacy verified-peers upgrade seed (Phase
     expect(getVerifiedKeysCache(base).isVerified('bob@x', 'STALE_LEGACY_FP')).toBe(false)
     // Untouched — since it was never read, it was never removed either.
     expect(localStorage.getItem(scopedLegacyKey())).not.toBeNull()
+  })
+
+  it('legacy SCOPED key is corrupt (unparseable) -> nothing to seed, but the key is still removed so it is not re-read on every future launch', async () => {
+    localStorage.setItem(scopedLegacyKey(), 'not json{{{')
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+
+    await base.init(ctx)
+
+    expect(getVerifiedKeysCache(base).getAll()).toEqual({})
+    // Finding 2 regression guard: `readLegacyVerifiedPeers` reports the
+    // corrupt key in `keysToRemove` even though `map` is `{}`; the caller
+    // must remove it anyway, or it survives forever and gets re-read (and
+    // re-ignored) on every subsequent launch.
+    expect(localStorage.getItem(scopedLegacyKey())).toBeNull()
   })
 
   it('after a successful seed, the legacy key is removed and a second init is a no-op', async () => {
@@ -148,7 +202,10 @@ describe('readLegacyVerifiedPeers / removeLegacyVerifiedPeersKeys (pure read hel
     expect(readLegacyVerifiedPeers(ACCOUNT)).toEqual({ map: {}, keysToRemove: [] })
   })
 
-  it('tolerates a corrupt (non-JSON) scoped blob by treating it as empty', () => {
+  it('tolerates a corrupt (non-JSON) scoped blob by treating it as empty, but still reports the key for removal', () => {
+    // `map: {}` here does NOT mean "nothing to remove" — see the
+    // OpenPGPPluginBase.init() describe block above for the caller test
+    // proving this corrupt key actually gets deleted, not just reported.
     localStorage.setItem(scopedLegacyKey(), 'not json{{{')
     expect(readLegacyVerifiedPeers(ACCOUNT)).toEqual({ map: {}, keysToRemove: [scopedLegacyKey()] })
   })

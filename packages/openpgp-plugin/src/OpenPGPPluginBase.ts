@@ -445,7 +445,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * One-shot upgrade path, called once per `init()`: if the plugin-owned
    * cache is still empty, read the legacy `verifiedPeerKeysStore`
    * localStorage key(s) (see `legacyVerifiedPeersSeed.ts`), seed the cache
-   * from them, and remove the legacy key(s) on success.
+   * from them, and remove the legacy key(s) — whether or not there was
+   * anything to seed. `readLegacyVerifiedPeers` can report `keysToRemove`
+   * for a corrupt/empty blob too (`map: {}`), and that key must still be
+   * deleted here or it survives forever, silently re-read (and re-ignored)
+   * on every future launch.
    *
    * Guards on the cache already being non-empty BEFORE touching
    * localStorage at all — not just relying on `VerifiedKeysCache.seed`'s own
@@ -456,7 +460,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async seedLegacyVerifiedPeers(accountJid: string): Promise<void> {
     if (Object.keys(this.verifiedKeys.getAll()).length > 0) return
     const { map, keysToRemove } = readLegacyVerifiedPeers(getBareJid(accountJid))
-    if (Object.keys(map).length === 0) return
+    if (Object.keys(map).length === 0) {
+      removeLegacyVerifiedPeersKeys(keysToRemove)
+      return
+    }
     await this.verifiedKeys.seed(map)
     removeLegacyVerifiedPeersKeys(keysToRemove)
   }

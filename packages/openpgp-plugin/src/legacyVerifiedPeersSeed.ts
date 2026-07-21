@@ -21,10 +21,16 @@
  * `fluux-e2ee-verified-peers:<bare-jid>` key, deleting the unscoped one).
  * An install that neither ran that migration NOR the B1 dual-write may
  * still have only the pre-migration unscoped blob, so both shapes are
- * checked here. When both exist, the scoped key wins outright (same
- * behaviour the legacy store itself had: it only ever consulted the
- * unscoped key when the scoped one was absent) — no merge, so a
- * since-superseded unscoped leftover can never resurrect a revoked entry.
+ * checked here. When both exist, the scoped key wins outright for the
+ * SEEDED DATA (same behaviour the legacy store itself had: it only ever
+ * consulted the unscoped key when the scoped one was absent) — no merge.
+ * But BOTH keys are reported in `keysToRemove` in that case: leaving the
+ * unscoped blob behind would let it resurface on a later launch — e.g. the
+ * user revokes every verification, the plugin cache legitimately empties
+ * again, and the next `init()` (finding the cache empty and the scoped key
+ * already gone) would fall back to the stale unscoped blob and resurrect
+ * verifications the user explicitly revoked. Removing both up front closes
+ * that gap.
  */
 import { buildScopedStorageKey } from '@fluux/sdk'
 
@@ -59,9 +65,12 @@ export interface LegacyVerifiedPeersRead {
   /** Bare JID -> verified fingerprint, or `{}` when nothing was found. */
   map: Record<string, string>
   /**
-   * The raw localStorage key(s) that held `map`, so the caller can remove
-   * them after a successful seed. Empty when `map` is empty. Never more
-   * than one key — see the "scoped wins outright" note in the module doc.
+   * The raw localStorage key(s) to remove after a successful seed. Usually
+   * one key, but when BOTH the scoped and unscoped blobs exist, this holds
+   * both — the scoped one wins for `map`, but the unscoped leftover must
+   * still be deleted so it can't resurrect a later-revoked entry (see the
+   * module doc). May be non-empty even when `map` is `{}` (e.g. a corrupt
+   * blob) so the caller can clean up a legacy key it will never use again.
    */
   keysToRemove: string[]
 }
@@ -79,7 +88,14 @@ export function readLegacyVerifiedPeers(accountBareJid: string): LegacyVerifiedP
     const scopedKey = legacyScopedKey(accountBareJid)
     const scopedRaw = localStorage.getItem(scopedKey)
     if (scopedRaw) {
-      return { map: parseLegacyBlob(scopedRaw), keysToRemove: [scopedKey] }
+      const keysToRemove = [scopedKey]
+      // The scoped blob wins the data, but an orphaned unscoped leftover
+      // must be removed too — see the module doc for why leaving it behind
+      // can resurrect a revoked verification on a later launch.
+      if (scopedKey !== LEGACY_VERIFIED_PEERS_KEY_BASE && localStorage.getItem(LEGACY_VERIFIED_PEERS_KEY_BASE) !== null) {
+        keysToRemove.push(LEGACY_VERIFIED_PEERS_KEY_BASE)
+      }
+      return { map: parseLegacyBlob(scopedRaw), keysToRemove }
     }
     // Only ever consult the unscoped key when the scoped one is absent —
     // mirrors the legacy store's own migration order exactly.

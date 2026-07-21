@@ -100,14 +100,14 @@ describe('verifyTrustStateSeal: key-unavailable classification', () => {
 // entirely, so there is no longer a second, potentially-disagreeing source
 // to read from at all — these tests prove the snapshot and the seal/verify
 // round trip key off the injected map alone.
-describe('buildCanonicalSnapshot: verified section comes from the injected map, not hostStores', () => {
+describe('buildCanonicalSnapshot: verified section reflects the injected map exactly', () => {
   it('reflects exactly the injected map', () => {
     const snapshot = buildCanonicalSnapshot(host, { 'cache@example.com': 'CACHEFP' })
     expect(snapshot.verified).toEqual({ 'cache@example.com': 'CACHEFP' })
   })
 })
 
-describe('sealTrustState / verifyTrustStateSeal: verified map is threaded through, not re-read from hostStores', () => {
+describe('sealTrustState / verifyTrustStateSeal: seal/verify round-trip keys off the injected map', () => {
   const decryptOk = async (ciphertext: string) => ({
     plaintext: ciphertext,
     signatureVerified: true,
