@@ -15,7 +15,7 @@
 
 
 
-<video src="https://github.com/user-attachments/assets/bba5778b-5024-4dbb-a6df-4c54428f3180" controls muted width="760"></video>
+<video src="https://github.com/user-attachments/assets/78db5134-5acd-4307-99db-2aa9f9bc8929" controls muted width="760"></video>
 
 *A quick tour — messaging, group rooms, end-to-end encryption, and theming.*
 
