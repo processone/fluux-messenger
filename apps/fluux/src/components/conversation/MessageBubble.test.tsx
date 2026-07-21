@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
-import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
+import { setVerifiedKeysView } from '@/e2ee/verifiedPeersView'
+import type { VerifiedKeysView } from '@fluux/openpgp-plugin'
 import type { DensityMode } from '@/stores/settingsStore'
 
 // Mock i18next
@@ -77,6 +78,39 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
     formatTime: () => '14:30',
     timeFormat: '24h',
     ...overrides,
+  }
+}
+
+/**
+ * Minimal fake `VerifiedKeysView`, mirroring the one in
+ * `useConversationEncryptionState.test.tsx` / `verifiedPeersView.test.ts`.
+ * Seeds the plugin-backed view that `useVerifiedFingerprint` reads via the
+ * app-side holder (`setVerifiedKeysView`), with a genuinely notifying
+ * `subscribe` so live-update assertions actually exercise the reactive path.
+ */
+function createFakeVerifiedKeysView(
+  initial: Record<string, string> = {},
+): VerifiedKeysView & { set(jid: string, fp: string): void; clear(jid: string): void } {
+  let map = { ...initial }
+  const listeners = new Set<() => void>()
+  return {
+    isVerified: (jid, fp) => map[jid] === fp,
+    getVerifiedFingerprint: (jid) => map[jid] ?? null,
+    getSnapshot: () => map,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    set(jid, fp) {
+      map = { ...map, [jid]: fp }
+      for (const l of listeners) l()
+    },
+    clear(jid) {
+      const next = { ...map }
+      delete next[jid]
+      map = next
+      for (const l of listeners) l()
+    },
   }
 }
 
@@ -334,6 +368,18 @@ describe('MessageBubble', () => {
   })
 
   describe('Security Context', () => {
+    // Seed the plugin-backed VerifiedKeysView (the seam `useVerifiedFingerprint`
+    // reads) rather than the legacy store. A fresh, empty view per test gives
+    // isolation without needing an explicit clear-before-use.
+    let view: ReturnType<typeof createFakeVerifiedKeysView>
+    beforeEach(() => {
+      view = createFakeVerifiedKeysView()
+      setVerifiedKeysView(view)
+    })
+    afterEach(() => {
+      setVerifiedKeysView(null)
+    })
+
     // Regression: the memo comparator used to ignore `securityContext`,
     // so a trust upgrade (the openpgp plugin promoting an `untrusted`
     // message to `trusted` once the sender's PEP key arrives) would be
@@ -377,7 +423,6 @@ describe('MessageBubble', () => {
       // displayed trust from the live verification store.
       const peer = 'verifytest@example.com'
       const fingerprint = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
-      clearPeerVerified(peer)
       const props = createDefaultProps({
         message: createTestMessage({
           from: peer,
@@ -391,10 +436,10 @@ describe('MessageBubble', () => {
         container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
       ).not.toBeNull()
 
-      // User confirms the peer's fingerprint out-of-band — a store update only,
+      // User confirms the peer's fingerprint out-of-band — a view update only,
       // no prop/securityContext change on the message.
       act(() => {
-        setPeerVerified(peer, fingerprint)
+        view.set(peer, fingerprint)
       })
 
       expect(
@@ -403,13 +448,12 @@ describe('MessageBubble', () => {
       expect(
         container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
       ).toBeNull()
-      clearPeerVerified(peer)
     })
 
     it('downgrades a verified lock back to tofu when verification is cleared', () => {
       const peer = 'verifytest2@example.com'
       const fingerprint = 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000'
-      setPeerVerified(peer, fingerprint)
+      view.set(peer, fingerprint)
       const props = createDefaultProps({
         message: createTestMessage({
           from: peer,
@@ -422,7 +466,7 @@ describe('MessageBubble', () => {
       ).not.toBeNull()
 
       act(() => {
-        clearPeerVerified(peer)
+        view.clear(peer)
       })
 
       expect(

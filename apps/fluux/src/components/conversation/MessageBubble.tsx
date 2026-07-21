@@ -8,7 +8,7 @@ import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'reac
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useVerifiedFingerprint } from '@/e2ee/verifiedPeersView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
 import { NickText, NickSentence } from '../NickText'
@@ -359,15 +359,18 @@ export const MessageBubble = memo(function MessageBubble({
   // Trust color must track verification LIVE, not freeze at decrypt time.
   // The plugin bakes `verified`/`tofu` onto the message when it's decrypted; if
   // the user verifies the peer later, that baked value never updates. So derive
-  // the displayed trust from the live verification store — but confirm the
-  // verified fingerprint against THIS message's signing key (resolveDisplayTrust),
-  // so a rotated or server-substituted key can't inherit a stale verified lock.
-  // The store only changes on explicit verify/un-verify (never during
-  // sync/typing), so this per-peer subscription is cheap.
-  const verifiedFingerprint = useVerifiedPeerKeysStore(
-    (s) => s.verifiedFingerprintByJid[getBareJid(message.from)],
+  // the displayed trust from the live, plugin-backed verified-keys view — but
+  // confirm the verified fingerprint against THIS message's signing key
+  // (resolveDisplayTrust), so a rotated or server-substituted key can't
+  // inherit a stale verified lock. The view only changes on explicit
+  // verify/un-verify (never during sync/typing), so this per-peer
+  // subscription is cheap.
+  const verifiedFingerprint = useVerifiedFingerprint(getBareJid(message.from))
+  const displayTrust = resolveDisplayTrust(
+    message.securityContext,
+    verifiedFingerprint ?? undefined,
+    message.isOutgoing,
   )
-  const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint, message.isOutgoing)
 
   // Density-aware avatar: reads only `densityMode` (narrow selector) so this row
   // only re-renders on a density change, NOT on message append or composing toggle.
