@@ -3,6 +3,24 @@ import { fingerprintsEqual } from './fingerprintCompare'
 import { loadVerifiedMap, persistVerifiedMap } from './verifiedKeys'
 
 /**
+ * Narrow, READ-ONLY view of verified-key state. Exposes exactly the reads
+ * `VerifiedKeysCache` supports for reactive consumers (the app-side hook,
+ * `useSyncExternalStore`-style) — deliberately NO write members. B1 shipped
+ * a Critical where `ChatView` wrote verified state directly and bypassed the
+ * plugin, silently no-opping the chat-header Verify action; app-side writes
+ * must keep going through `OpenPGPPluginBase.setIdentityTrust` so the plugin
+ * stays the single writer. `VerifiedKeysCache` satisfies this structurally
+ * (`implements VerifiedKeysView`) so any accidental drift between the two is
+ * a compile error, not a runtime surprise.
+ */
+export interface VerifiedKeysView {
+  isVerified(jid: string, fingerprint: string): boolean
+  getVerifiedFingerprint(jid: string): string | null
+  getSnapshot(): Record<string, string>
+  subscribe(listener: () => void): () => void
+}
+
+/**
  * Plugin-owned verified-key state with a SYNCHRONOUS read surface.
  *
  * The plugin's trust paths (`evaluatePeerTrust`, `buildInboundSecurityContext`)
@@ -65,7 +83,7 @@ import { loadVerifiedMap, persistVerifiedMap } from './verifiedKeys'
  * previous one resolved or rejected, and normalizes the chain back to an
  * always-resolving promise so later `.then` calls never short-circuit.
  */
-export class VerifiedKeysCache {
+export class VerifiedKeysCache implements VerifiedKeysView {
   private map = new Map<string, string>()
   private hydrated = false
   /** Promise-chain mutex — see the class doc's "Write serialization" section. */

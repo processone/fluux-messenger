@@ -44,6 +44,11 @@ export type { RemoteIdentityState } from './secretKeyProbe'
 export { OpenPGPPluginBase, OPENPGP_DESCRIPTOR, classifyBoundaryError } from './OpenPGPPluginBase'
 export type { KeyBundle, RestoreResult, DecryptOutput, CertValidation } from './OpenPGPPluginBase'
 
+// Narrow, read-only reactive view onto plugin-owned verified-key state
+// (`OpenPGPPluginBase.getVerifiedKeysView()`). Writes must go through
+// `setIdentityTrust` — see the type's own doc comment for why.
+export type { VerifiedKeysView } from './verifiedKeysCache'
+
 // App-layer recovery signals raised by the web unlock auto-recovery path.
 export { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 

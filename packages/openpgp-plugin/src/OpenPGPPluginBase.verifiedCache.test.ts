@@ -201,3 +201,70 @@ describe('OpenPGPPluginBase — setIdentityTrust dual-writes cache and legacy mi
     expect(reloaded.isVerified('bob@x', 'ABCD1234')).toBe(true)
   })
 })
+
+// Task 2: `getVerifiedKeysView()` exposes a narrow, READ-ONLY handle onto the
+// plugin-owned cache — Task 3 (app-side hook) and Task 6 both consume it
+// instead of reaching the `protected verifiedKeys` field directly. It must
+// reflect every read the cache itself supports (isVerified /
+// getVerifiedFingerprint / getSnapshot / subscribe), backed by the SAME
+// underlying cache instance, not a copy that can drift.
+describe('OpenPGPPluginBase — getVerifiedKeysView()', () => {
+  it('isVerified reflects a write made through the cache', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+
+    const view = base.getVerifiedKeysView()
+    expect(view.isVerified('bob@x', 'ABCD1234')).toBe(false)
+
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
+
+    expect(view.isVerified('bob@x', 'ABCD1234')).toBe(true)
+  })
+
+  it('getVerifiedFingerprint returns null for an unknown peer', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+
+    const view = base.getVerifiedKeysView()
+    expect(view.getVerifiedFingerprint('nobody@x')).toBeNull()
+  })
+
+  it('getSnapshot is referentially stable until the next mutation', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+
+    const view = base.getVerifiedKeysView()
+    const before = view.getSnapshot()
+    expect(view.getSnapshot()).toBe(before)
+
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
+
+    const after = view.getSnapshot()
+    expect(after).not.toBe(before)
+    expect(after).toEqual({ 'bob@x': 'ABCD1234' })
+  })
+
+  it('subscribe fires when the underlying cache changes', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+
+    const view = base.getVerifiedKeysView()
+    let notified = false
+    const unsubscribe = view.subscribe(() => {
+      notified = true
+    })
+
+    await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
+
+    expect(notified).toBe(true)
+    unsubscribe()
+  })
+})

@@ -101,7 +101,7 @@ import {
 } from './trustStateIntegrity'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 import { isSecretKeyUnavailableError } from './keyUnavailable'
-import { VerifiedKeysCache, createInMemoryVerifiedKeysCache } from './verifiedKeysCache'
+import { VerifiedKeysCache, createInMemoryVerifiedKeysCache, type VerifiedKeysView } from './verifiedKeysCache'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -405,6 +405,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   constructor(opts: { hostStores: OpenPGPHostStores }) {
     this.hostStores = opts.hostStores
+  }
+
+  /**
+   * Narrow, READ-ONLY view of verified-key state for the host app's reactive
+   * reads (`useSyncExternalStore`-style). Deliberately exposes no writes:
+   * B1 shipped a Critical where `ChatView` wrote verified state directly and
+   * bypassed the plugin, silently no-opping the chat-header Verify action —
+   * app-side verify/revoke must keep going through {@link setIdentityTrust}
+   * so the plugin stays the single writer. The return type is the narrow
+   * `VerifiedKeysView`, not `VerifiedKeysCache` itself, so writes aren't
+   * reachable through the app's static type even though the same instance
+   * is returned.
+   */
+  getVerifiedKeysView(): VerifiedKeysView {
+    return this.verifiedKeys
   }
 
   /**
