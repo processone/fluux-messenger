@@ -10,6 +10,18 @@
  * subscribes before a plugin exists (or after one is torn down) stays
  * subscribed: `setVerifiedKeysView` always notifies the holder's listeners,
  * even when there is no view to relay further notifications from.
+ *
+ * Cross-account safety: this module has a SINGLE module-level `currentView`,
+ * not one per account. Today that's safe only because `performLogout` clears
+ * it (`setVerifiedKeysView(null)`) before a next login can register a
+ * different account's plugin — `useAccountScopeRehydration` used to also
+ * clear it on account-JID change, but that call was removed as redundant
+ * with the logout path. There is currently no code path that switches the
+ * *active* account's JID without an intervening logout. If multi-account
+ * support ever allows that (e.g. switching between two already-logged-in
+ * accounts without a full logout), this holder will need an explicit clear
+ * on JID change again, or it will keep serving one account's verified-key
+ * view to the other's UI.
  */
 import { useSyncExternalStore } from 'react'
 import type { VerifiedKeysView } from '@fluux/openpgp-plugin'

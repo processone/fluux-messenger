@@ -21,6 +21,18 @@ class TestOpenPGPPlugin extends OpenPGPPluginBase {
   protected ensureKeyMaterial(accountJid: string): Promise<KeyBundle> {
     return this.ensureKeyMaterialImpl(accountJid)
   }
+  /**
+   * Hook set by {@link makeTestBase} so its `calls` recorder survives a
+   * `replaceVerifiedKeys()` swap (i.e. `init()`). `OpenPGPPluginBase` only
+   * ever replaces `verifiedKeys` through this protected method, so
+   * overriding it here is the one place a test subclass can observe every
+   * swap — see {@link makeTestBase}'s doc comment for why this matters.
+   */
+  onVerifiedKeysReplaced: ((cache: VerifiedKeysCache) => void) | null = null
+  protected replaceVerifiedKeys(next: VerifiedKeysCache): void {
+    super.replaceVerifiedKeys(next)
+    this.onVerifiedKeysReplaced?.(next)
+  }
   protected encryptToRecipient(
     _senderAccountJid: string,
     _recipientPublicArmored: string,
@@ -83,25 +95,13 @@ export interface TrustCallLog {
 }
 
 /**
- * Build a `TestOpenPGPPlugin` wired to an in-memory `hostStores` mock.
- * `calls` records every write through the plugin-owned `VerifiedKeysCache`
- * (the single write funnel since Phase B2 Task 8 deleted the legacy
- * `hostStores.verifiedPeers` mirror this used to also record) — wrapping
- * the cache's own `setVerified`/`clearVerified` directly on the instance,
- * the same cast-based-access pattern {@link getVerifiedKeysCache} uses.
- * Wraps the PRE-init placeholder cache (`OpenPGPPluginBase`'s field
- * initializer): if a caller subsequently drives `init()`, that replaces
- * `verifiedKeys` with a fresh, unwrapped `VerifiedKeysCache` over
- * `ctx.storage`, and `calls` stops recording. No current caller of
- * `makeTestBase()` combines `calls` with `init()` — if a future test needs
- * both, re-wrap via `getVerifiedKeysCache(base)` again after `init()`.
+ * Wrap `cache.setVerified` / `cache.clearVerified` in place so every call
+ * pushes onto `calls` before delegating to the original implementation.
+ * Idempotent per-instance concern: called once for the pre-init placeholder
+ * cache and again for every replacement `init()` installs, via
+ * `TestOpenPGPPlugin.onVerifiedKeysReplaced` — see {@link makeTestBase}.
  */
-export function makeTestBase(): { base: TestOpenPGPPlugin; calls: TrustCallLog } {
-  const hostStores = createMockHostStores()
-  const calls: TrustCallLog = { setVerified: [], clearVerified: [] }
-
-  const base = new TestOpenPGPPlugin({ hostStores })
-  const cache = getVerifiedKeysCache(base)
+function instrumentVerifiedKeysCache(cache: VerifiedKeysCache, calls: TrustCallLog): void {
   const originalSetVerified = cache.setVerified.bind(cache)
   const originalClearVerified = cache.clearVerified.bind(cache)
   cache.setVerified = (jid, fp) => {
@@ -112,6 +112,33 @@ export function makeTestBase(): { base: TestOpenPGPPlugin; calls: TrustCallLog }
     calls.clearVerified.push([jid])
     return originalClearVerified(jid)
   }
+}
+
+/**
+ * Build a `TestOpenPGPPlugin` wired to an in-memory `hostStores` mock.
+ * `calls` records every write through the plugin-owned `VerifiedKeysCache`
+ * (the single write funnel since Phase B2 Task 8 deleted the legacy
+ * `hostStores.verifiedPeers` mirror this used to also record) — wrapping
+ * the cache's own `setVerified`/`clearVerified` directly on the instance,
+ * the same cast-based-access pattern {@link getVerifiedKeysCache} uses.
+ *
+ * Survives `init()`: wrapping only the PRE-init placeholder cache used to
+ * mean a subsequent `init()` silently swapped in a fresh, unwrapped
+ * `VerifiedKeysCache` and `calls` stopped recording — the assertions in
+ * callers that never combined `calls` with `init()` still passed, but
+ * vacuously (`toEqual([])` can never fail once recording has gone dark).
+ * `TestOpenPGPPlugin.onVerifiedKeysReplaced` fires on every swap
+ * `replaceVerifiedKeys()` performs (i.e. every `init()`, including a second
+ * one), so this re-wraps the replacement cache too and `calls` keeps
+ * recording for the instance's whole lifetime.
+ */
+export function makeTestBase(): { base: TestOpenPGPPlugin; calls: TrustCallLog } {
+  const hostStores = createMockHostStores()
+  const calls: TrustCallLog = { setVerified: [], clearVerified: [] }
+
+  const base = new TestOpenPGPPlugin({ hostStores })
+  instrumentVerifiedKeysCache(getVerifiedKeysCache(base), calls)
+  base.onVerifiedKeysReplaced = (next) => instrumentVerifiedKeysCache(next, calls)
 
   return { base, calls }
 }

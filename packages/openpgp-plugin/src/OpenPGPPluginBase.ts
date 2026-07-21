@@ -102,7 +102,12 @@ import {
 } from './trustStateIntegrity'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 import { isSecretKeyUnavailableError } from './keyUnavailable'
-import { VerifiedKeysCache, createInMemoryVerifiedKeysCache, type VerifiedKeysView } from './verifiedKeysCache'
+import {
+  VerifiedKeysCache,
+  VerifiedKeysViewIndirection,
+  createInMemoryVerifiedKeysCache,
+  type VerifiedKeysView,
+} from './verifiedKeysCache'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -404,6 +409,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   protected verifiedKeys: VerifiedKeysCache = createInMemoryVerifiedKeysCache()
 
+  /**
+   * Lazily-created, stable handle returned by {@link getVerifiedKeysView}.
+   * Created on first call so a caller that never asks for a view pays
+   * nothing; once created it lives for the plugin instance's whole lifetime
+   * and is kept pointed at the current {@link verifiedKeys} by
+   * {@link replaceVerifiedKeys}. See `VerifiedKeysViewIndirection`'s doc
+   * comment for the hazard this closes.
+   */
+  private _verifiedKeysView: VerifiedKeysViewIndirection | null = null
+
   constructor(opts: { hostStores: OpenPGPHostStores }) {
     this.hostStores = opts.hostStores
   }
@@ -418,9 +433,35 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * `VerifiedKeysView`, not `VerifiedKeysCache` itself, so writes aren't
    * reachable through the app's static type even though the same instance
    * is returned.
+   *
+   * Returns a stable `VerifiedKeysViewIndirection`, NOT `this.verifiedKeys`
+   * directly. `init()` unconditionally replaces `this.verifiedKeys` with a
+   * fresh `ctx.storage`-backed cache (see that field's doc comment); handing
+   * out the field's value directly would let a caller that acquires the view
+   * BEFORE `init()` runs — or across a second `init()` — keep reading a
+   * discarded cache forever, with every lookup silently reporting "not
+   * verified" and no error to signal it. The indirection reads through to
+   * whichever cache is current and re-relays `subscribe`rs across a swap
+   * (see {@link replaceVerifiedKeys}), so acquisition order stops mattering.
    */
   getVerifiedKeysView(): VerifiedKeysView {
-    return this.verifiedKeys
+    if (!this._verifiedKeysView) {
+      this._verifiedKeysView = new VerifiedKeysViewIndirection(this.verifiedKeys)
+    }
+    return this._verifiedKeysView
+  }
+
+  /**
+   * Single funnel for replacing the live `verifiedKeys` cache — used by
+   * {@link init} every time it swaps in a fresh `ctx.storage`-backed cache.
+   * Keeps `getVerifiedKeysView()`'s indirection (if one was ever created)
+   * pointed at the new cache, so it survives the swap instead of going
+   * silently stale. Always call this instead of assigning `this.verifiedKeys`
+   * directly.
+   */
+  protected replaceVerifiedKeys(next: VerifiedKeysCache): void {
+    this.verifiedKeys = next
+    this._verifiedKeysView?.rebind(next)
   }
 
   /**
@@ -596,7 +637,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // (evaluatePeerTrust / buildInboundSecurityContext) even on the paths that
     // return early below without activating subscriptions, and a cold cache
     // would silently downgrade a verified peer to `tofu`.
-    this.verifiedKeys = new VerifiedKeysCache(ctx.storage)
+    this.replaceVerifiedKeys(new VerifiedKeysCache(ctx.storage))
     await this.verifiedKeys.hydrate()
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)

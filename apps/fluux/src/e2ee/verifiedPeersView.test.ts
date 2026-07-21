@@ -134,6 +134,38 @@ describe('verifiedPeersView', () => {
     expect(subscribeSpy.mock.calls.length).toBe(subscribeCallsAfterMount)
   })
 
+  // Finding 3 (B2 final review): `setVerifiedKeysView(viewB)` must stop
+  // relaying `viewA`'s notifications — the `unsubscribeFromView?.()` call at
+  // the top of `setVerifiedKeysView` is what does that. Deleting that call
+  // leaves the suite green everywhere else (every other test only ever sets
+  // ONE view per test, or replaces it via `null`/a fresh view without ever
+  // re-triggering the STALE one afterward) — this is the one test that
+  // actually exercises the stale-view leg.
+  //
+  // Asserts against a RAW listener attached via the exported `subscribe`
+  // (same technique as the "isolates a throwing listener" test below),
+  // rather than a rendered `Probe`: `useSyncExternalStore` skips re-rendering
+  // when a notify fires but the snapshot value it reads is unchanged, and a
+  // leaked `viewA` notification wouldn't change what `getVerifiedFingerprintNow`
+  // returns (that still reads through `currentView`, i.e. `viewB`) — so a
+  // render-count assertion would pass even with the bug reintroduced.
+  it('replacing the view unsubscribes from the previous one (a stale-view notification does not leak through)', () => {
+    const viewA = createFakeView({ 'gina@example.com': 'IIII9999' })
+    setVerifiedKeysView(viewA)
+
+    const viewB = createFakeView({ 'gina@example.com': 'JJJJ0000' })
+    setVerifiedKeysView(viewB)
+
+    const listener = vi.fn()
+    const unsubscribe = subscribe(listener)
+
+    // A change on the now-stale viewA must not reach the holder's listeners.
+    viewA.set('gina@example.com', 'KKKK1111')
+
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
   it('clearing the view (unregister) reverts to null and notifies', () => {
     const view = createFakeView({ 'erin@example.com': 'FFFF6666' })
     setVerifiedKeysView(view)

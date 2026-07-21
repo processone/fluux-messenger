@@ -185,6 +185,29 @@ describe('OpenPGPPluginBase — setIdentityTrust writes through the single cache
   })
 })
 
+// Finding 2 (B2-final-review): `makeTestBase()`'s `calls` recorder wraps
+// `setVerified`/`clearVerified` on whichever `VerifiedKeysCache` is live.
+// Before the fix it only wrapped the PRE-init placeholder cache — `init()`
+// silently replaced `verifiedKeys` with an unwrapped instance and `calls`
+// stopped recording, which would have made assertions like
+// `expect(calls.setVerified).toEqual([])` elsewhere in this suite
+// unfalsifiable (they'd pass whether or not the recorder was still live) the
+// moment a test combined `calls` with `init()`. This test drives `init()`
+// BEFORE writing, so it can only pass if the recorder followed the swap.
+describe("OpenPGPPluginBase — makeTestBase()'s calls recorder survives init()", () => {
+  it('records a setIdentityTrust write made after init() replaced the cache', async () => {
+    const { base, calls } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+    const ctx = makeTestCtx(ACCOUNT)
+    await base.init(ctx)
+    seedPeerKey(base, 'bob@x', 'ABCD1234')
+
+    await base.setIdentityTrust('bob@x', 'ABCD1234', 'verified')
+
+    expect(calls.setVerified).toEqual([['bob@x', 'ABCD1234']])
+  })
+})
+
 // Task 2: `getVerifiedKeysView()` exposes a narrow, READ-ONLY handle onto the
 // plugin-owned cache — Task 3 (app-side hook) and Task 6 both consume it
 // instead of reaching the `protected verifiedKeys` field directly. It must
@@ -248,6 +271,48 @@ describe('OpenPGPPluginBase — getVerifiedKeysView()', () => {
     await getVerifiedKeysCache(base).setVerified('bob@x', 'ABCD1234')
 
     expect(notified).toBe(true)
+    unsubscribe()
+  })
+
+  // Regresses the B2-final-review Finding 1 ordering hazard: prior to the
+  // `VerifiedKeysViewIndirection` fix, `getVerifiedKeysView()` returned
+  // `this.verifiedKeys` directly, so a view acquired here — BEFORE `init()`
+  // installs the real, `ctx.storage`-backed cache — would keep pointing at
+  // the discarded pre-init placeholder forever: every read silently reports
+  // "not verified" and `subscribe` never fires, with nothing to signal the
+  // view has gone stale. Today's actual call ordering (app-side callers
+  // always await `register()`/`init()` before calling `getVerifiedKeysView()`)
+  // hid this; nothing enforced it.
+  it('a view acquired BEFORE init() reflects post-init() state (ordering hazard closed)', async () => {
+    const { base } = makeTestBase()
+    base.ensureKeyMaterialImpl = async () => canonicalBundle()
+
+    // Acquire the view against the pre-init placeholder cache.
+    const view = base.getVerifiedKeysView()
+    expect(view.getVerifiedFingerprint('bob@x')).toBeNull()
+
+    let notified = false
+    const unsubscribe = view.subscribe(() => {
+      notified = true
+    })
+
+    const storage = await storageWithVerified({ 'bob@x': 'ABCD' })
+    const ctx = makeTestCtx(ACCOUNT, { storage })
+    await base.init(ctx)
+
+    // The pre-init view now reads through the real, hydrated cache — not
+    // the discarded placeholder.
+    expect(view.getVerifiedFingerprint('bob@x')).toBe('ABCD')
+    // `hydrate()` notifies once init() swaps in the real cache; the
+    // pre-init subscriber, relayed across that swap, must hear it.
+    expect(notified).toBe(true)
+
+    // And it keeps working for LATER changes on the post-init cache too,
+    // not just the hydrate-time notification.
+    notified = false
+    await getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+    expect(notified).toBe(true)
+
     unsubscribe()
   })
 })

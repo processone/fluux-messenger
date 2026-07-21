@@ -277,6 +277,93 @@ export class VerifiedKeysCache implements VerifiedKeysView {
   }
 }
 
+/**
+ * Stable, READ-ONLY indirection onto whatever `VerifiedKeysCache` is
+ * currently live. Solves a call-ordering hazard in
+ * `OpenPGPPluginBase.getVerifiedKeysView()`: `init()` unconditionally
+ * replaces the base's `verifiedKeys` field with a fresh, `ctx.storage`-backed
+ * cache (see that method's doc comment), so a view acquired by *returning
+ * the field's current value* would keep pointing at whatever cache was live
+ * at the moment of the call — the pre-init in-memory placeholder if acquired
+ * early, or a stale cache if `init()` runs again later (multi-account /
+ * re-registration). That failure is silent: every read just reports
+ * "not verified" forever, with nothing to indicate the view is stale.
+ *
+ * This class is handed out once per plugin instance and never itself
+ * replaced. Reads (`isVerified` / `getVerifiedFingerprint` / `getSnapshot`)
+ * always delegate to whatever cache {@link rebind} last pointed at, so they
+ * are correct regardless of when the caller acquired the view. `subscribe`
+ * relays notifications from the CURRENT underlying cache and re-subscribes
+ * to the new one on every {@link rebind}, so a listener registered before an
+ * `init()` (or across a second `init()`) keeps firing on the replacement
+ * cache's changes without the caller having to know a swap happened.
+ */
+export class VerifiedKeysViewIndirection implements VerifiedKeysView {
+  private current: VerifiedKeysCache
+  private readonly listeners = new Set<() => void>()
+  private unsubscribeFromCurrent: (() => void) | null = null
+
+  constructor(initial: VerifiedKeysCache) {
+    this.current = initial
+  }
+
+  isVerified(jid: string, fingerprint: string): boolean {
+    return this.current.isVerified(jid, fingerprint)
+  }
+
+  getVerifiedFingerprint(jid: string): string | null {
+    return this.current.getVerifiedFingerprint(jid)
+  }
+
+  getSnapshot(): Record<string, string> {
+    return this.current.getSnapshot()
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    if (this.listeners.size === 1) {
+      this.unsubscribeFromCurrent = this.current.subscribe(() => this.notifyAll())
+    }
+    return () => {
+      this.listeners.delete(listener)
+      if (this.listeners.size === 0) {
+        this.unsubscribeFromCurrent?.()
+        this.unsubscribeFromCurrent = null
+      }
+    }
+  }
+
+  /**
+   * Point this indirection at `next`. Called by
+   * `OpenPGPPluginBase.replaceVerifiedKeys()` every time it swaps the live
+   * cache (i.e. on every `init()`). No-ops when `next` is already current
+   * (defensive; `replaceVerifiedKeys` always constructs a fresh instance
+   * today, so this branch is not expected to trigger in practice). Moves any
+   * active relay subscription onto `next` BEFORE the caller hydrates it, so
+   * a hydrate-triggered notification reaches listeners registered on this
+   * indirection.
+   */
+  rebind(next: VerifiedKeysCache): void {
+    if (next === this.current) return
+    this.unsubscribeFromCurrent?.()
+    this.unsubscribeFromCurrent = null
+    this.current = next
+    if (this.listeners.size > 0) {
+      this.unsubscribeFromCurrent = this.current.subscribe(() => this.notifyAll())
+    }
+  }
+
+  private notifyAll(): void {
+    for (const l of [...this.listeners]) {
+      try {
+        l()
+      } catch {
+        // One bad subscriber must not stop the others.
+      }
+    }
+  }
+}
+
 function inMemoryPluginStorage(): PluginStorage {
   const map = new Map<string, Uint8Array>()
   return {
