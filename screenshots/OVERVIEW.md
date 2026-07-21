@@ -23,6 +23,11 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | <a href="./05-poll-dark.png"><img src="./05-poll-dark.png" width="400" alt="Polls"/></a> | <a href="./06-code-block-dark.png"><img src="./06-code-block-dark.png" width="400" alt="Code Blocks"/></a> |
 | *Emoji voting with single/multi-vote modes and live tallies*                             | *Syntax-highlighted code blocks with language detection*                                                   |
 
+| Emoji Autocomplete                                                                                                                       |
+|--------------------------------------------------------------------------------------------------------------------------------------------|
+| <a href="./31-emoji-autocomplete-dark.png"><img src="./31-emoji-autocomplete-dark.png" width="400" alt="Emoji Autocomplete"/></a>        |
+| *Type `:` and a keyword to complete emoji inline, with arrow-key navigation*                                                              |
+
 ## Security & Privacy
 
 | Encrypted Chat                                                                                                        | Encryption Settings                                                                                                                  |

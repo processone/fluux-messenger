@@ -485,6 +485,36 @@ test('30b — Message Identity — sender colors + own-edge (light)', async ({ p
   await capture(page, '30-message-identity-light')
 })
 
+// ── Emoji Autocomplete (0.17.2) ────────────────────────────────────
+// Captures the colon-triggered emoji completion popover above the composer.
+// The trigger needs at least two characters after the colon (see
+// MIN_EMOJI_QUERY_LENGTH in useEmojiAutocomplete), and the popover is dismissed
+// by a pointerdown outside it — so type into the textarea and never click away.
+//
+// ":check" is deliberate: it returns exactly 5 matches, and 5 rows are the most
+// that fit the popover's max-h-48 without the last one being cut mid-text. Most
+// queries saturate MAX_EMOJI_MATCHES (8) and render a clipped final row, which
+// reads as sloppy in the marketing crops that reuse this shot.
+
+test('31 — Emoji autocomplete in composer (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'messages')
+  // James Chen's thread is text-only. Emma Wilson's ends with an image
+  // attachment that sits right above the composer, and a screenshot-inside-a-
+  // screenshot is a distracting grey slab in the marketing crops of this shot.
+  await selectItem(page, 'James Chen')
+
+  const composer = page.locator('textarea').first()
+  await composer.click()
+  // Leading words give the popover a realistic sentence to complete, and the
+  // preceding space is what lets the colon register as a shortcode trigger.
+  await composer.pressSequentially("That's the last one :check", { delay: 40 })
+  await page.waitForSelector('[role="listbox"] [role="option"]', { timeout: 5_000 })
+  await page.waitForTimeout(400)
+
+  await capture(page, '31-emoji-autocomplete-dark')
+})
+
 // ── Glass Theme-Variant Scenes ─────────────────────────────────────
 // Captures the .fluux-glass frost effect across themes to verify that the
 // glass panel tints to each theme's surface (--fluux-chat-bg via color-mix)

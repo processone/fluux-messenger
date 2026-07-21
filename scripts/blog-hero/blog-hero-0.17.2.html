@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!--
+  Blog hero for the 0.17.2 release post ("night stage" layout, polish story).
+  Render with: node scripts/blog-hero/render.mjs 0.17.2
+
+  Departs from 0.17.0/0.17.1 in one way: there is no second overlapping card.
+  Those heroes put a cropped chip of UI on top of an unrelated window, which
+  here left three subjects competing and the underlying message text poking out
+  around the card as fragments. One window carries the whole story instead.
+-->
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+  body { background: #0B1020; }
+  .glow-teal { position: absolute; width: 900px; height: 900px; left: -320px; top: -420px;
+    background: radial-gradient(circle, rgba(56,224,196,0.22) 0%, rgba(56,224,196,0) 60%); }
+  .glow-violet { position: absolute; width: 1100px; height: 1100px; right: -380px; bottom: -520px;
+    background: radial-gradient(circle, rgba(167,139,250,0.25) 0%, rgba(167,139,250,0) 62%); }
+  .glow-indigo { position: absolute; width: 800px; height: 800px; left: 30%; top: -400px;
+    background: radial-gradient(circle, rgba(124,140,255,0.16) 0%, rgba(124,140,255,0) 60%); }
+
+  .left { position: absolute; left: 72px; top: 0; bottom: 0; width: 460px;
+    display: flex; flex-direction: column; justify-content: center; gap: 26px; z-index: 3; }
+  .lockup svg { width: 320px; height: auto; filter: drop-shadow(0 10px 40px rgba(0,0,0,0.45)); }
+  /* Two short lines (0.17.0/0.17.1 ran three longer ones), so the type is set
+     well up to keep the same optical weight in the 460px left column. */
+  h1 { font-family: 'Inter Tight', sans-serif; font-weight: 700; font-size: 74px; line-height: 1.08;
+    color: #F2F4FF; letter-spacing: -0.02em; }
+  h1 .grad { background: linear-gradient(100deg, #38E0C4 0%, #7C8CFF 55%, #A78BFA 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .version { display: inline-flex; align-items: center; gap: 10px; }
+  .version .pill { font-family: 'Inter Tight', sans-serif; font-weight: 600; font-size: 22px; color: #0B1020;
+    background: linear-gradient(100deg, #38E0C4, #7C8CFF); border-radius: 999px; padding: 4px 16px; }
+  .version .date { font-size: 16px; color: #8A93B8; font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; max-width: 430px; }
+  .chip { font-size: 15.5px; font-weight: 600; color: #C7CEEC; border: 1px solid rgba(124,140,255,0.35);
+    background: rgba(124,140,255,0.08); border-radius: 999px; padding: 7px 15px; }
+
+  /* One object. The window is cropped to the conversation column (source x 288..,
+     so the icon rail and the sidebar with its green Join button — the highest
+     saturation thing in the frame, and meaningless here — fall outside), and the
+     shot is the emoji-autocomplete capture itself, so the feature reads in situ.
+     Top edge starts at source y 145, below the image attachment fragment.
+     Axis-aligned, unlike 0.17.0/0.17.1: the tilt read as a gimmick and made the
+     UI text sit on a slant. It bleeds off the right frame edge instead. */
+  .stage { position: absolute; left: 520px; top: 56px; z-index: 2; }
+  .shot { position: relative; width: 760px; height: 563px; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 40px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,140,255,0.25); }
+  .shot img { width: 1101px; position: absolute; left: -248px; top: -125px; }
+</style></head>
+<body>
+<div class="frame">
+  <div class="glow-teal"></div><div class="glow-indigo"></div><div class="glow-violet"></div>
+  <div class="left">
+    <div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 731 260">
+      <defs>
+        <linearGradient id="a1" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#38E0C4"/><stop offset="0.52" stop-color="#7C8CFF"/><stop offset="1" stop-color="#A78BFA"/>
+        </linearGradient>
+        <linearGradient id="b1" x1="262" y1="315" x2="262" y2="672" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF0FF"/>
+        </linearGradient>
+        <linearGradient id="t1" x1="264" y1="0" x2="691.32" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#4EE6CC"/><stop offset="0.55" stop-color="#93A0FF"/><stop offset="1" stop-color="#BCA6FF"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(40,40) scale(0.17578125)">
+        <rect x="61" y="61" width="902" height="902" rx="225" fill="url(#a1)"/>
+        <g fill="url(#b1)"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 665 L332 808 L548 665 Z"/></g>
+      </g>
+      <g transform="translate(264,193.27) scale(0.18,-0.18)" fill="url(#t1)"><path d="M161 -8Q131 -8 114.5 8.5Q98 25 98 56V395H52Q28 395 15.0 407.5Q2 420 2 442Q2 465 15.0 477.0Q28 489 52 489H134L98 456V490Q98 593 150.0 644.5Q202 696 300 705L334 708Q354 710 366.0 701.5Q378 693 382.0 679.5Q386 666 383.0 652.0Q380 638 370.5 627.5Q361 617 346 616L332 615Q275 611 249.0 586.0Q223 561 223 510V473L207 489H308Q332 489 345.0 477.0Q358 465 358 442Q358 420 345.0 407.5Q332 395 308 395H223V56Q223 -8 161 -8Z M604 -10Q521 -10 479.0 37.5Q437 85 437 177V650Q437 681 453.0 697.0Q469 713 499 713Q529 713 545.5 697.0Q562 681 562 650V183Q562 137 581.5 115.0Q601 93 637 93Q645 93 652.0 93.5Q659 94 666 95Q680 97 685.0 87.5Q690 78 690 49Q690 24 680.0 10.0Q670 -4 647 -7Q637 -8 626.0 -9.0Q615 -10 604 -10Z M941 -10Q880 -10 840.0 12.5Q800 35 780.5 80.0Q761 125 761 192V434Q761 466 777.0 481.5Q793 497 823 497Q853 497 869.5 481.5Q886 466 886 434V190Q886 138 907.0 113.0Q928 88 974 88Q1024 88 1056.0 122.5Q1088 157 1088 214V434Q1088 466 1104.0 481.5Q1120 497 1150 497Q1180 497 1196.5 481.5Q1213 466 1213 434V56Q1213 -8 1152 -8Q1123 -8 1107.0 8.5Q1091 25 1091 56V132L1105 102Q1084 48 1041.5 19.0Q999 -10 941 -10Z M1528 -10Q1467 -10 1427.0 12.5Q1387 35 1367.5 80.0Q1348 125 1348 192V434Q1348 466 1364.0 481.5Q1380 497 1410 497Q1440 497 1456.5 481.5Q1473 466 1473 434V190Q1473 138 1494.0 113.0Q1515 88 1561 88Q1611 88 1643.0 122.5Q1675 157 1675 214V434Q1675 466 1691.0 481.5Q1707 497 1737 497Q1767 497 1783.5 481.5Q1800 466 1800 434V56Q1800 -8 1739 -8Q1710 -8 1694.0 8.5Q1678 25 1678 56V132L1692 102Q1671 48 1628.5 19.0Q1586 -10 1528 -10Z M1972 -5Q1950 -5 1935.5 7.5Q1921 20 1920.5 40.0Q1920 60 1937 82L2099 282V223L1947 410Q1929 432 1930.0 452.0Q1931 472 1945.5 484.5Q1960 497 1982 497Q2005 497 2020.5 489.0Q2036 481 2049 464L2169 310H2125L2246 464Q2260 481 2275.0 489.0Q2290 497 2312 497Q2335 497 2349.0 484.0Q2363 471 2363.5 451.0Q2364 431 2346 409L2195 224V280L2357 82Q2375 61 2374.0 41.0Q2373 21 2358.5 8.0Q2344 -5 2321 -5Q2299 -5 2284.0 3.0Q2269 11 2255 28L2125 192H2167L2038 28Q2025 12 2010.0 3.5Q1995 -5 1972 -5Z"/></g>
+    </svg></div>
+    <h1><span class="grad">Polished</span>,<br>end to end</h1>
+    <div class="version"><span class="pill">0.17.2</span><span class="date">July 2026</span></div>
+    <div class="chips">
+      <span class="chip">Emoji autocomplete</span>
+      <span class="chip">Gapless history</span>
+      <span class="chip">Faster transfers</span>
+      <span class="chip">Decrypt on download</span>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="shot"><img src="../../screenshots/31-emoji-autocomplete-dark.png"></div>
+  </div>
+</div>
+</body></html>
