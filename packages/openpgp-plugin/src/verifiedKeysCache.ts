@@ -70,6 +70,9 @@ export class VerifiedKeysCache {
   private hydrated = false
   /** Promise-chain mutex — see the class doc's "Write serialization" section. */
   private writeChain: Promise<void> = Promise.resolve()
+  private listeners = new Set<() => void>()
+  /** Cached immutable snapshot; invalidated (set to null) on every mutation. */
+  private snapshot: Record<string, string> | null = null
 
   constructor(private readonly storage: PluginStorage) {}
 
@@ -96,6 +99,49 @@ export class VerifiedKeysCache {
     return Object.fromEntries(this.map)
   }
 
+  /** Raw stored fingerprint for `jid`, with no comparison — `null` if unverified. */
+  getVerifiedFingerprint(jid: string): string | null {
+    return this.map.get(jid) ?? null
+  }
+
+  /**
+   * Subscribe to verified-state changes. Notification is SYNCHRONOUS and fires
+   * on the in-memory mutation — before write-behind persistence resolves — and
+   * again on rollback if that persistence fails. Both edges matter: the first
+   * makes the UI update immediately, the second makes it revert honestly rather
+   * than showing a verification that never reached disk.
+   *
+   * The synchronous timing is also load-bearing for the plugin's own
+   * verification-sync guard, which relies on the notification landing inside
+   * the `_syncingFromRemoteCount` window.
+   */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  /**
+   * Referentially stable snapshot for `useSyncExternalStore`: repeated calls
+   * return the SAME object until a mutation invalidates it. Returning a fresh
+   * object each call (as `getAll()` does) trips React's
+   * "getSnapshot should be cached" infinite-loop guard.
+   */
+  getSnapshot(): Record<string, string> {
+    if (this.snapshot === null) this.snapshot = Object.fromEntries(this.map)
+    return this.snapshot
+  }
+
+  private notify(): void {
+    this.snapshot = null
+    for (const l of [...this.listeners]) {
+      try {
+        l()
+      } catch {
+        // One bad subscriber must not stop the others (or abort a write).
+      }
+    }
+  }
+
   /**
    * Sets `jid`'s verified fingerprint and persists it. On a `persist()`
    * rejection, the in-memory mutation is rolled back before rethrowing —
@@ -116,12 +162,14 @@ export class VerifiedKeysCache {
     const hadEntry = this.map.has(jid)
     const previous = this.map.get(jid)
     this.map.set(jid, fingerprint)
+    this.notify()
     return this.enqueueWrite(async () => {
       try {
         await this.persist()
       } catch (err) {
         if (hadEntry) this.map.set(jid, previous as string)
         else this.map.delete(jid)
+        this.notify()
         throw err
       }
     })
@@ -136,11 +184,13 @@ export class VerifiedKeysCache {
     if (!this.map.has(jid)) return
     const previous = this.map.get(jid) as string
     this.map.delete(jid)
+    this.notify()
     return this.enqueueWrite(async () => {
       try {
         await this.persist()
       } catch (err) {
         this.map.set(jid, previous)
+        this.notify()
         throw err
       }
     })
@@ -158,11 +208,13 @@ export class VerifiedKeysCache {
     const entries = Object.entries(map)
     if (entries.length === 0) return
     this.map = new Map(entries)
+    this.notify()
     return this.enqueueWrite(async () => {
       try {
         await this.persist()
       } catch (err) {
         this.map = new Map()
+        this.notify()
         throw err
       }
     })

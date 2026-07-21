@@ -224,4 +224,142 @@ describe('VerifiedKeysCache', () => {
       expect(disk).toEqual({ 'carol@x': 'EF01' })
     })
   })
+
+  describe('subscribe / getSnapshot', () => {
+    it('notifies subscribers synchronously on setVerified, before persistence resolves', async () => {
+      let release: () => void = () => {}
+      const gate = new Promise<void>((r) => {
+        release = r
+      })
+      const slow = memStorage()
+      const put = slow.put.bind(slow)
+      slow.put = async (k, v) => {
+        await gate
+        return put(k, v)
+      }
+
+      const c = new VerifiedKeysCache(slow)
+      await c.hydrate()
+      let notified = false
+      c.subscribe(() => {
+        notified = true
+      })
+
+      const pending = c.setVerified('bob@x', 'ABCD')
+      // Persistence has NOT resolved yet, but the listener must already have fired.
+      expect(notified).toBe(true)
+      expect(c.getSnapshot()).toEqual({ 'bob@x': 'ABCD' })
+      release()
+      await pending
+    })
+
+    it('notifies again on rollback when persistence fails, so the UI reverts', async () => {
+      const s = memStorage()
+      s.put = async () => {
+        throw new Error('disk full')
+      }
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      let notifications = 0
+      c.subscribe(() => {
+        notifications += 1
+      })
+
+      await expect(c.setVerified('bob@x', 'ABCD')).rejects.toThrow('disk full')
+      expect(notifications).toBe(2)
+      expect(c.getSnapshot()).toEqual({})
+    })
+
+    it('getSnapshot returns the SAME object identity when nothing changed', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+      expect(c.getSnapshot()).toBe(c.getSnapshot())
+    })
+
+    it('getSnapshot returns a NEW identity after a mutation', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+      const before = c.getSnapshot()
+      await c.setVerified('carol@x', 'EF01')
+      const after = c.getSnapshot()
+      expect(after).not.toBe(before)
+      expect(after).toEqual({ 'bob@x': 'ABCD', 'carol@x': 'EF01' })
+    })
+
+    it('unsubscribe stops further notifications', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      let count = 0
+      const unsubscribe = c.subscribe(() => {
+        count += 1
+      })
+      await c.setVerified('bob@x', 'ABCD')
+      expect(count).toBe(1)
+      unsubscribe()
+      await c.setVerified('carol@x', 'EF01')
+      expect(count).toBe(1)
+    })
+
+    it('a listener that throws does not prevent other listeners from being notified', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      let secondCalled = false
+      c.subscribe(() => {
+        throw new Error('boom')
+      })
+      c.subscribe(() => {
+        secondCalled = true
+      })
+      await expect(c.setVerified('bob@x', 'ABCD')).resolves.toBeUndefined()
+      expect(secondCalled).toBe(true)
+    })
+
+    it('a listener that throws does not abort the write in progress', async () => {
+      const s = memStorage()
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      c.subscribe(() => {
+        throw new Error('boom')
+      })
+      await c.setVerified('bob@x', 'ABCD')
+      const reloaded = new VerifiedKeysCache(s)
+      await reloaded.hydrate()
+      expect(reloaded.isVerified('bob@x', 'ABCD')).toBe(true)
+    })
+
+    it('notifies on clearVerified and on seed', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      let count = 0
+      c.subscribe(() => {
+        count += 1
+      })
+
+      await c.setVerified('bob@x', 'ABCD')
+      expect(count).toBe(1)
+
+      await c.clearVerified('bob@x')
+      expect(count).toBe(2)
+
+      await c.seed({ 'carol@x': 'EF01' })
+      expect(count).toBe(3)
+    })
+  })
+
+  describe('getVerifiedFingerprint', () => {
+    it('returns the raw stored fingerprint for a verified jid', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+      expect(c.getVerifiedFingerprint('bob@x')).toBe('ABCD')
+    })
+
+    it('returns null when the jid has no verified entry', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      expect(c.getVerifiedFingerprint('nobody@x')).toBeNull()
+    })
+  })
 })
