@@ -110,10 +110,14 @@ If the release includes UI or layout changes, regenerate the visual assets befor
    ```
    The screenshots end up in `screenshots/` and are committed alongside the release. Review the diff to confirm nothing unexpected changed.
 
-4. **Update the auto-generated blog hero** in `scripts/screenshots.ts` (the `Blog Hero` test). The hero test encodes the release story — version text, feature strip, which views to compose, labels, and tagline — so it needs editing each release:
-   - Change the output filename to include the new version (e.g. `blog-hero-0.15.2.png`). **Do not overwrite previous hero images** — the prior `blog-hero-X.Y.Z.png` stays committed as a release archive.
-   - Update the version text, feature strip, panel captures, labels, and tagline to match the agreed highlights.
-   - Re-run `npm run screenshots` to produce the new hero PNG.
+4. **Build the blog hero** in `scripts/blog-hero/`. Each release has its own `blog-hero-X.Y.Z.html` next to the shared `shared.css`; the HTML encodes the release story — headline, version pill, feature chips, and which screenshot crops sit on the stage:
+   - Copy the previous release's HTML to `blog-hero-<new version>.html` and edit it. **Published heroes are frozen** — once a version is tagged, its `blog-hero-X.Y.Z.png` is a release archive and must never be re-rendered against a newer UI. Only ever render the version being prepared.
+   - Render it:
+     ```bash
+     node scripts/blog-hero/render.mjs <new version>
+     ```
+     This writes a 1200×675 PNG into `screenshots/`. The version argument filters by filename, so past heroes are left untouched.
+   - Open the PNG and review it — no test guards a bad crop.
 
 5. **Create the marketing blog post / release announcement image** based on the agreed highlights. This lives outside the repo — follow the marketing workflow. It complements (not replaces) the auto-generated hero from step 4.
 
