@@ -110,10 +110,13 @@ If the release includes UI or layout changes, regenerate the visual assets befor
    ```
    The screenshots end up in `screenshots/` and are committed alongside the release. Review the diff to confirm nothing unexpected changed.
 
-4. **Update the auto-generated blog hero** in `scripts/screenshots.ts` (the `Blog Hero` test). The hero test encodes the release story — version text, feature strip, which views to compose, labels, and tagline — so it needs editing each release:
-   - Change the output filename to include the new version (e.g. `blog-hero-0.15.2.png`). **Do not overwrite previous hero images** — the prior `blog-hero-X.Y.Z.png` stays committed as a release archive.
-   - Update the version text, feature strip, panel captures, labels, and tagline to match the agreed highlights.
-   - Re-run `npm run screenshots` to produce the new hero PNG.
+4. **Build the blog hero** in `scripts/blog-hero/`. Each release gets its own self-contained 1200×675 HTML layout there, rendered at 2x by Playwright. (Heroes up to 0.16.1 were composited on a canvas inside `scripts/screenshots.ts`; those tests remain as an archive but are no longer the workflow.)
+   - Copy the previous release's file — e.g. `cp scripts/blog-hero/blog-hero-0.17.1.html scripts/blog-hero/blog-hero-0.17.2.html`. The "night stage" ground is the house style: dark field with aurora glows, and lockup + headline + version pill + feature chips in a 460px left column. **Do not overwrite previous hero files**; each `blog-hero-X.Y.Z.html`/`.png` stays committed as a release archive.
+   - Rewrite the headline, version pill, date, and chips for the agreed highlights, and repoint the `<img>` tags at the screenshots that carry the story. Verify any number in the headline against the changelog (`awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md | grep -c '^- '`).
+   - **How many objects go on the stage is a per-release call, not a template.** 0.17.0 and 0.17.1 used a tilted app window plus a second cropped card overlapping it; 0.17.2 dropped the card, because a chip of one screen floating over an unrelated screen left three subjects competing and the underlying message text poking out around the card as fragments. Prefer one window carrying the whole story when a single capture can.
+   - Whatever is on the stage is a fixed-pixel crop: the element's `width`/`height` set the visible window, and the inner `img` `width`/`left`/`top` pan the source screenshot behind it. Two traps: crop flush to the UI element's own edges (a few pixels of slack lets the surrounding app leak in as a stray strip), and give the crop element `position: relative` — without a transform or explicit positioning it is not a containing block, so the `img` escapes `overflow: hidden` entirely.
+   - Watch what the source screenshot drags in. Sidebar captures carry a bright green Join button that becomes the highest-saturation thing in the frame, and Emma Wilson's thread ends with an image attachment that renders as a grey screenshot-inside-a-screenshot. Crop them out, or capture a different conversation.
+   - Render with `node scripts/blog-hero/render.mjs 0.17.2` (the argument filters by filename), then **look at the PNG** and iterate. It is the one asset with no test to catch a bad crop.
 
 5. **Create the marketing blog post / release announcement image** based on the agreed highlights. This lives outside the repo — follow the marketing workflow. It complements (not replaces) the auto-generated hero from step 4.
 
