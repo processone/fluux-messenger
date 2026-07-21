@@ -367,14 +367,35 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _pendingRepublish = false
   /**
    * Depth of `syncVerificationsFromServer`'s own remote-apply writes
-   * currently in flight (bracketed around each `setVerifiedDual`/
-   * `clearVerifiedDual` call in its apply loop). Distinguishes "this
+   * currently in flight. Bracketed around only the SYNCHRONOUS prefix of
+   * each `setVerifiedDual`/`clearVerifiedDual` call in its apply loop — not
+   * the whole `await` — because `VerifiedKeysCache.setVerified`/
+   * `clearVerified` mutate the map and fire `notify()` synchronously,
+   * before the write-behind `persist()` (queued behind `enqueueWrite`'s FIFO
+   * mutex) even starts. Bracketing the full `await` would keep this open
+   * across that mutex and `persist()` too, so it would cover not just this
+   * entry's own storage write but any earlier queued write still draining —
+   * misclassifying a genuine local write that lands in that window as a
+   * remote-apply write and dropping its republish. Distinguishes "this
    * `verifiedKeys` notification was caused by the sync applying data it
    * just fetched" (never mark pending — republishing that would echo the
    * remote snapshot straight back and reopen the cross-device loop the
    * guard exists to prevent) from "this notification was caused by some
    * other, genuinely local write that happened to land while a sync is in
    * flight" (mark pending, so it survives to be republished).
+   *
+   * One consequence of closing the bracket early: `VerifiedKeysCache`'s
+   * rollback `notify()` (fired from a `persist()` rejection, inside
+   * `enqueueWrite`) always lands OUTSIDE this bracket, since it only ever
+   * fires after the synchronous prefix that opens/closes the bracket has
+   * returned. If `_syncingFromRemoteCount` is still nonzero at that point
+   * (the rollback belongs to one of the sync's own apply-loop writes,
+   * settling while a later entry is still in flight), the rollback gets
+   * classified as a genuine local write and marks `_pendingRepublish`. That
+   * is correct, not a loop risk: the scheduled publish reads
+   * `verifiedKeys.getAll()` at fire time, so it republishes the accurate
+   * post-rollback map exactly once — it does not call `setVerified`/
+   * `clearVerified` again, so it cannot re-trigger this guard or the sync.
    *
    * A counter, not a boolean, for the same reason `_syncingFromRemoteCount`
    * is: overlapping syncs. In practice at most one apply is ever
@@ -847,6 +868,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._verificationStoreUnsub = null
     this._trustStoreUnsubs.forEach((u) => u())
     this._trustStoreUnsubs = []
+    // Tidiness, not a correctness fix: if `shutdown()` races an in-flight
+    // sync that already set this flag, the sync's `finally` still runs
+    // after teardown and would otherwise arm a fresh 500ms publish timer
+    // post-shutdown. `scheduleVerificationsPublish`'s timer body already
+    // no-ops on a null `ctx`/`ownBundle`, so the only cost was a stray
+    // timer — this just avoids creating it.
+    this._pendingRepublish = false
     this.ownBundle = null
     this.peerKeys.clear()
     this.pendingVerifications.clear()
@@ -1483,21 +1511,41 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const local = this.verifiedKeys.getAll()
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
+      // The bracket only needs to span the SYNCHRONOUS prefix of each call,
+      // not the full `await`. `verifiedKeys.setVerified`/`clearVerified`
+      // mutate the map and fire `notify()` synchronously — before the
+      // returned promise's write-behind `persist()` even starts (see
+      // `VerifiedKeysCache`'s class doc). Bracketing the whole `await`
+      // (an earlier version of this fix) kept `_remoteApplyDepth` open
+      // across `enqueueWrite`'s FIFO mutex and `persist()`, so it covered
+      // not just this entry's storage write but any earlier queued write
+      // still draining — misclassifying a genuine local write that landed
+      // in that window as a remote-apply write and silently dropping its
+      // republish (until the next unrelated local mutation heals it).
+      // Closing the bracket right after starting the call is enough
+      // because the notification we care about has already fired
+      // synchronously by then. `try`/`finally` around just the
+      // synchronous portion keeps `_remoteApplyDepth` from leaking even if
+      // that portion were ever to throw synchronously.
       for (const { jid, fingerprint } of plan.toSet) {
         this._remoteApplyDepth++
+        let pending: Promise<void>
         try {
-          await this.setVerifiedDual(jid, fingerprint)
+          pending = this.setVerifiedDual(jid, fingerprint)
         } finally {
           this._remoteApplyDepth--
         }
+        await pending
       }
       for (const jid of plan.toClear) {
         this._remoteApplyDepth++
+        let pending: Promise<void>
         try {
-          await this.clearVerifiedDual(jid)
+          pending = this.clearVerifiedDual(jid)
         } finally {
           this._remoteApplyDepth--
         }
+        await pending
       }
       saveAppliedVerificationsVersion(plan.version)
       this.scheduleTrustStateSeal()

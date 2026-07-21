@@ -17,7 +17,7 @@
 // writes that come from `syncVerificationsFromServer`'s own apply loop from
 // ones that don't — a distinction that only exists on the real path.
 import { describe, it, expect, vi } from 'vitest'
-import type { PEPItem, XMLElementData } from '@fluux/sdk'
+import type { PEPItem, PluginStorage, XMLElementData } from '@fluux/sdk'
 import { getVerifiedKeysCache, makeTestBase, makeTestCtx } from './testSupport/baseHarness'
 import { VERIFICATIONS_NODE } from './verificationSync'
 import type { DecryptOutput, KeyBundle } from './OpenPGPPluginBase'
@@ -33,6 +33,29 @@ function canonicalBundle(): KeyBundle {
 function b64Encode(input: string): string {
   if (typeof btoa === 'function') return btoa(unescape(encodeURIComponent(input)))
   return Buffer.from(input, 'utf-8').toString('base64')
+}
+
+/** Inverse of {@link b64Encode}, for decoding what a real publish call sent. */
+function b64Decode(input: string): string {
+  if (typeof atob === 'function') return decodeURIComponent(escape(atob(input)))
+  return Buffer.from(input, 'base64').toString('utf-8')
+}
+
+/**
+ * Decode a published `verifications-data` `PEPItem` back into its
+ * verification map. Mirrors `verificationsItem`'s encoding in reverse; valid
+ * only because `makeSyncableBase()`'s `encryptToRecipient` stub is the
+ * identity function, so the "ciphertext" IS the plaintext JSON.
+ */
+function decodePublishedVerifications(item: PEPItem): Record<string, string> {
+  const payload = item.payload
+  const dataChild = payload.children.find(
+    (c): c is XMLElementData => typeof c !== 'string' && c.name === 'data',
+  )
+  const b64 = dataChild?.children[0]
+  if (typeof b64 !== 'string') throw new Error('decodePublishedVerifications: no data child')
+  const parsed = JSON.parse(b64Decode(b64)) as { verifications: Record<string, string> }
+  return parsed.verifications
 }
 
 /**
@@ -100,6 +123,7 @@ function publishedVerificationCalls(
 
 describe('OpenPGPPluginBase — local write suppressed during an in-flight sync (B3 Task 2)', () => {
   it('(a) a local verify during an in-flight sync IS published once the sync completes', async () => {
+    localStorage.clear()
     vi.useFakeTimers()
     try {
       const { base } = makeSyncableBase()
@@ -134,10 +158,12 @@ describe('OpenPGPPluginBase — local write suppressed during an in-flight sync 
       gate.resolve([])
       await flushMicrotasks()
 
-      // The suppressed write must now be scheduled for publish.
+      // The suppressed write must now be scheduled for publish — exactly
+      // once, not merely "at least once" (a double-publish would still
+      // pass a `toBeGreaterThanOrEqual(1)` assertion unnoticed).
       await vi.advanceTimersByTimeAsync(600)
       const calls = publishedVerificationCalls(publishSpy)
-      expect(calls.length).toBeGreaterThanOrEqual(1)
+      expect(calls).toHaveLength(1)
     } finally {
       vi.useRealTimers()
     }
@@ -217,12 +243,92 @@ describe('OpenPGPPluginBase — local write suppressed during an in-flight sync 
       expect(publishedVerificationCalls(publishSpy)).toHaveLength(0)
 
       // Only once the OUTER (outermost) sync also completes does the
-      // suppressed write get published.
+      // suppressed write get published — exactly once.
       gateOuter.resolve([])
       await flushMicrotasks()
       await vi.advanceTimersByTimeAsync(600)
       const calls = publishedVerificationCalls(publishSpy)
-      expect(calls.length).toBeGreaterThanOrEqual(1)
+      expect(calls).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('(d) a genuine local write during the sync’s own persist-drain is still republished (closes the misclassification window)', async () => {
+    // Regression test for the review finding on B3 Task 2: `_remoteApplyDepth`
+    // used to bracket the WHOLE `await this.setVerifiedDual(...)` in the
+    // apply loop, which stayed open across `VerifiedKeysCache`'s
+    // `enqueueWrite` mutex and `persist()` — not just the synchronous
+    // mutation + `notify()`. A genuine local write landing while an earlier
+    // remote-apply entry's persist is still draining was therefore
+    // misclassified as part of the remote apply and its republish silently
+    // dropped. The fix closes the bracket at the synchronous prefix; this
+    // test drains a real (gated) persist to prove the window is closed.
+    localStorage.clear()
+    vi.useFakeTimers()
+    try {
+      const { base } = makeSyncableBase()
+      const publishSpy = vi.fn(async () => {})
+
+      // Storage whose `put` (the write side of `persist()`) blocks on a
+      // gate for its FIRST call only — that first call is the sync's own
+      // apply of the remote `dave@x` entry. Every later `put` (including
+      // the local `carol@x` write's own persist, queued behind it in
+      // `enqueueWrite`'s FIFO chain) resolves immediately.
+      const backing = new Map<string, Uint8Array>()
+      const putGate = deferred<void>()
+      let putCalls = 0
+      const storage: PluginStorage = {
+        get: async (k) => backing.get(k) ?? null,
+        put: async (k, v) => {
+          putCalls++
+          if (putCalls === 1) await putGate.promise
+          backing.set(k, v)
+        },
+        delete: async (k) => void backing.delete(k),
+        list: async (p) => [...backing.keys()].filter((k) => k.startsWith(p)),
+      }
+
+      const ctx = makeTestCtx(ACCOUNT, { storage })
+      ctx.xmpp.publishPEP = publishSpy
+      ctx.xmpp.queryPEP = async (_jid, node) =>
+        node === VERIFICATIONS_NODE ? [verificationsItem({ 'dave@x': 'DAVE_FP' }, 1)] : []
+
+      await base.init(ctx)
+      // init()'s fire-and-forget sync fetches the remote item and starts
+      // applying it: the in-memory mutation + `notify()` for `dave@x` have
+      // already happened synchronously by the time the microtask queue
+      // drains, but its `persist()` (the gated `put`) is still in flight.
+      await flushMicrotasks()
+      expect(getVerifiedKeysCache(base).isVerified('dave@x', 'DAVE_FP')).toBe(true)
+      expect(putCalls).toBe(1)
+      publishSpy.mockClear()
+
+      // A genuine local verification lands while that persist is still
+      // draining. With the bracket closed at the synchronous prefix,
+      // `_remoteApplyDepth` is already back to 0 here, so this write is
+      // correctly classified as local and marked pending — not swallowed
+      // as if it were part of the sync's own remote apply.
+      void getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+
+      // No publish should have fired yet — the sync is still in flight.
+      await vi.advanceTimersByTimeAsync(600)
+      expect(publishedVerificationCalls(publishSpy)).toHaveLength(0)
+
+      // Release dave's persist. The apply loop (and the sync) can now
+      // finish, and carol's own queued persist can run too.
+      putGate.resolve()
+      await flushMicrotasks()
+
+      // The local write must now be scheduled for publish, exactly once,
+      // carrying both entries (the publish reads the live map at fire time).
+      await vi.advanceTimersByTimeAsync(600)
+      const calls = publishedVerificationCalls(publishSpy)
+      expect(calls).toHaveLength(1)
+      expect(decodePublishedVerifications(calls[0][1])).toEqual({
+        'dave@x': 'DAVE_FP',
+        'carol@x': 'CAROL_FP',
+      })
     } finally {
       vi.useRealTimers()
     }
