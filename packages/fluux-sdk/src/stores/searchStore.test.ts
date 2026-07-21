@@ -88,6 +88,33 @@ describe('searchStore', () => {
       expect(state.isSearching).toBe(true)
     })
 
+    // Every notification re-renders the search UI. A keystroke has exactly one
+    // synchronous effect — the query changed — so it must cost exactly one write.
+    it('notifies subscribers once per keystroke', () => {
+      searchStore.getState().search('hel')  // leave prefix state settled
+
+      let notifications = 0
+      const unsub = searchStore.subscribe(() => { notifications++ })
+      searchStore.getState().search('hell')
+      unsub()
+
+      expect(notifications).toBe(1)
+    })
+
+    // Re-allocating an already-empty collection changes its identity, which defeats
+    // the useShallow comparison in useSearch and forces a render for no state change.
+    it('keeps referential identity of collections that stay empty', () => {
+      searchStore.getState().search('hel')
+      const before = searchStore.getState()
+
+      searchStore.getState().search('hell')
+      const after = searchStore.getState()
+
+      expect(after.inPrefixSuggestions).toBe(before.inPrefixSuggestions)
+      expect(after.mamResults).toBe(before.mamResults)
+      expect(after.resultContext).toBe(before.resultContext)
+    })
+
     it('should debounce the actual search call', () => {
       searchStore.getState().search('hello')
 

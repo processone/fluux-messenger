@@ -368,8 +368,12 @@ async function executeSearch(query: string): Promise<void> {
     }))
 
     // Only update if the query hasn't changed while we were searching
-    if (searchStore.getState().query === query) {
-      searchStore.setState({ results, isSearching: false, error: null })
+    const current = searchStore.getState()
+    if (current.query === query) {
+      // A no-match query maps to a fresh empty array; keeping the previous (also
+      // empty) one avoids invalidating useSearch for a result set that did not change.
+      const nextResults = results.length === 0 && current.results.length === 0 ? current.results : results
+      searchStore.setState({ results: nextResults, isSearching: false, error: null })
       // Fire-and-forget: load context messages for results
       void fetchResultContexts(results, query)
     }
@@ -556,7 +560,7 @@ async function indexMAMResults(results: SearchResult[]): Promise<void> {
   }
 }
 
-export const searchStore = createStore<SearchState>((set) => ({
+export const searchStore = createStore<SearchState>((set, get) => ({
   query: '',
   isSearching: false,
   results: [],
@@ -600,11 +604,25 @@ export const searchStore = createStore<SearchState>((set) => ({
       return
     }
 
-    // Clear in: state when not in prefix mode
-    set({ inPrefixSuggestions: [], isInPrefixActive: false })
-
-    // Reset MAM results and context on new query
-    set({ query, isSearching: true, error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, resultContext: new Map() })
+    // One write per keystroke. Every `set` notifies subscribers and re-renders the
+    // search UI, so the in: reset and the query update go out together rather than as
+    // two back-to-back writes. The collections here are only ever *cleared*, and
+    // re-allocating one that is already empty would change its identity for no change
+    // in value — that defeats the useShallow comparison in useSearch and costs a render
+    // on every keystroke. Clear only what actually holds something.
+    const prev = get()
+    const patch: Partial<SearchState> = {
+      query,
+      isSearching: true,
+      error: null,
+      mamError: null,
+      hasMoreMAMResults: false,
+    }
+    if (prev.isInPrefixActive) patch.isInPrefixActive = false
+    if (prev.inPrefixSuggestions.length > 0) patch.inPrefixSuggestions = []
+    if (prev.mamResults.length > 0) patch.mamResults = []
+    if (prev.resultContext.size > 0) patch.resultContext = new Map()
+    set(patch)
     mamSearchGeneration++  // Cancel any in-flight MAM search
     mamRsmCursor = undefined
 
