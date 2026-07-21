@@ -5,10 +5,11 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.17.2] - 2026-07-17
+## [0.17.2] - 2026-07-21
 
 ### Added
 
+- Emoji autocomplete in the composer: type ":" followed by a keyword to complete emoji inline, with arrow-key navigation and Enter or Tab to insert
 - The send button responds with a press and glow-pulse animation when a message goes out
 - Web (PWA): an unread badge on the app icon, service-worker media caching for fewer re-downloads, and repeated messages from one sender coalesced into a single "N new messages" notification
 
@@ -27,8 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encryption: a leftover unread badge from an undecryptable reaction now clears once its placeholder is dropped
 - Web (PWA): an update already downloaded but parked is now applied automatically at launch instead of trailing the deployed build indefinitely
 - Clicking a reaction notification now always jumps to the reacted message
+- Reopening a conversation no longer re-posts a notification for a message you have already seen
+- An encrypted message with no readable content stays silent until it is decrypted, instead of posting a blank notification and playing a sound
+- A delayed message (an offline replay or a catch-up copy older than what you already have) no longer drags the sidebar preview back to older text, in both 1:1 chats and group chats
 - The sidebar keeps its scroll position when conversations reorder during catch-up
 - Authentication: a wrong saved password no longer triggers an endless keychain retry loop
+- Connecting to a server whose domain contains non-ASCII characters now works
 - Encryption: the key-backup passphrase is now used exactly as displayed, so backups restore in other XMPP clients; older backups still open and are healed to the portable format on restore
 - Desktop: downloading an update no longer risks freezing the app while showing progress
 - Linux: fixed a performance issue when many new messages arrived at once
