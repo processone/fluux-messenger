@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react'
-import { adminStore } from '../stores'
+import { adminStore } from '../stores/adminStore'
 import { LastActivityQueue } from '../core/admin/lastActivityQueue'
 import { useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { consoleStore } from '../stores'
+import { consoleStore } from '../stores/consoleStore'
 import { useConsoleStore } from '../react/storeHooks'
 
 /**

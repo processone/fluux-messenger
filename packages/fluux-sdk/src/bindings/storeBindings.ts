@@ -17,18 +17,23 @@
  */
 
 import type { XMPPClient } from '../core/XMPPClient'
-import type {
-  connectionStore,
-  chatStore,
-  rosterStore,
-  roomStore,
-  eventsStore,
-  adminStore,
-  blockingStore,
-  consoleStore,
-  ignoreStore,
-} from '../stores'
-import { isMessageFromIgnoredUser, isReplyToIgnoredUser, ignoreStore as ignoreStoreInstance } from '../stores'
+// Import concrete store modules rather than the '../stores' barrel: the barrel
+// sits in an import cycle with core/, so re-exporting through it makes Rollup
+// split the declaration bundle into mutually dependent chunks.
+import type { connectionStore } from '../stores/connectionStore'
+import type { chatStore } from '../stores/chatStore'
+import type { rosterStore } from '../stores/rosterStore'
+import type { roomStore } from '../stores/roomStore'
+import type { eventsStore } from '../stores/eventsStore'
+import type { adminStore } from '../stores/adminStore'
+import type { blockingStore } from '../stores/blockingStore'
+import type { consoleStore } from '../stores/consoleStore'
+import type { ignoreStore } from '../stores/ignoreStore'
+import {
+  isMessageFromIgnoredUser,
+  isReplyToIgnoredUser,
+  ignoreStore as ignoreStoreInstance,
+} from '../stores/ignoreStore'
 import { findLastNonIgnoredMessage } from '../stores/shared/lastMessageUtils'
 import { isMarkerDebugEnabled, markerDebugLog } from '../utils/markerDebug'
 import { getBareJid, getLocalPart } from '../core/jid'

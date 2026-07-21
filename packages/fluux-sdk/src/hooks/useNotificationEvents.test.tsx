@@ -57,8 +57,10 @@ const triggerRoomStoreUpdate = () => {
   roomStoreSubscribers.forEach(sub => sub(state))
 }
 
-// Mock the SDK stores
-vi.mock('../stores', () => ({
+// Mock the SDK stores.
+// Mocks the concrete modules, not the '../stores' barrel: source modules import
+// the concrete store files so the barrel is never in their module graph.
+vi.mock('../stores/chatStore', () => ({
   chatStore: {
     subscribe: (callback: (state: unknown) => void) => {
       chatStoreSubscribers.push(callback)
@@ -67,6 +69,9 @@ vi.mock('../stores', () => ({
       }
     },
   },
+}))
+
+vi.mock('../stores/roomStore', () => ({
   roomStore: {
     subscribe: (callback: (state: unknown) => void) => {
       roomStoreSubscribers.push(callback)
@@ -75,6 +80,9 @@ vi.mock('../stores', () => ({
       }
     },
   },
+}))
+
+vi.mock('../stores/connectionStore', () => ({
   connectionStore: {
     getState: () => ({ windowVisible: mockWindowVisible }),
   },

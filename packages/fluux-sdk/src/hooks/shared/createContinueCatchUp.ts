@@ -23,7 +23,7 @@
  * the hole fully instead of silently stopping mid-gap.
  */
 
-import { connectionStore } from '../../stores'
+import { connectionStore } from '../../stores/connectionStore'
 import type { MAMQueryState } from '../../core/types'
 import {
   selectCatchUpQuery,

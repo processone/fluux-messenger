@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { rosterStore } from '../stores'
+import { rosterStore } from '../stores/rosterStore'
 import { useXMPPContext } from '../provider'
 import type { Contact } from '../core'
 

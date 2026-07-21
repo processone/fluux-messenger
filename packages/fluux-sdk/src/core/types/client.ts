@@ -16,17 +16,15 @@ import type { WebPushService } from './webpush'
 import type { AdminCommand, AdminSession } from './admin'
 import type { StorageAdapter } from './storage'
 import type { ProxyAdapter } from './proxy'
-import type {
-  ConnectionState,
-  ChatState,
-  RosterState,
-  ConsoleState,
-  EventsState,
-  RoomState,
-  AdminState,
-  BlockingState,
-  SDKStores,
-} from '../../stores'
+import type { ConnectionState } from '../../stores/connectionStore'
+import type { ChatState } from '../../stores/chatStore'
+import type { RosterState } from '../../stores/rosterStore'
+import type { ConsoleState } from '../../stores/consoleStore'
+import type { EventsState } from '../../stores/eventsStore'
+import type { RoomState } from '../../stores/roomStore'
+import type { AdminState } from '../../stores/adminStore'
+import type { BlockingState } from '../../stores/blockingStore'
+import type { SDKStores } from '../../stores/sdkStores'
 import {
   connectionBindingMethodKeys,
   chatBindingMethodKeys,

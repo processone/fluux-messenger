@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { connectionStore, chatStore } from '../stores'
+import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
 import { useEventsStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import { getLocalPart } from '../core/jid'
