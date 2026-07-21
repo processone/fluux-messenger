@@ -1571,6 +1571,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * at schedule time and reused 500 ms later — which could publish a stale
    * snapshot if a guarded (remote-sync) write landed in that window. Reading
    * at fire time always publishes the freshest state.
+   *
+   * The actual `getAll()` read (and the network publish) happens in
+   * {@link publishSettledVerifications}, which awaits
+   * `verifiedKeys.whenIdle()` first — see that method's doc comment for why
+   * (B3 Task 3: publish only ever reflects persisted state).
    */
   private scheduleVerificationsPublish(): void {
     if (this._publishVerificationTimeout !== null) {
@@ -1581,14 +1586,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (!this.ownBundle || !this.ctx) return
       const ctx = this.ctx
       const ownPublicArmored = this.ownBundle.publicArmored
-      const verifications = this.verifiedKeys.getAll()
       // Reserve the next version above the highest we've applied/published.
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
-      // Persist the reservation BEFORE publishing, not after. Monotonicity —
-      // the persisted version never decreasing — is the property that
-      // matters, not contiguity, and not uniqueness: publishing takes a
-      // network round-trip, and a remote apply that lands during that
+      // Persist the reservation BEFORE publishing, not after — and, just as
+      // importantly, BEFORE awaiting `verifiedKeys.whenIdle()` below, not
+      // after. Monotonicity — the persisted version never decreasing — is
+      // the property that matters, not contiguity, and not uniqueness:
+      // publishing takes a network round-trip (now preceded by a
+      // write-drain wait too), and a remote apply that lands during that
       // window can persist a higher version (a genuinely newer snapshot
       // from another device). Saving this reservation only after publish
       // resolves would then stomp that higher version back down to this
@@ -1609,24 +1615,70 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // every path into this method is the same `verifiedKeys` notification
       // that also calls `scheduleTrustStateSeal` (both listeners fire in
       // registration order, both debounced 500 ms), so this save always
-      // lands before `buildCanonicalSnapshot` next reads the version.
+      // lands before `buildCanonicalSnapshot` next reads the version. This
+      // save happening synchronously here (unconditionally, not gated on
+      // `whenIdle()`) keeps that ordering intact even when the write-drain
+      // wait below runs long — only the map READ and the network publish
+      // wait for persistence; the version reservation never does.
       // Shortening the seal's debounce below this one, or reordering the
       // two subscriptions, breaks that ordering and reopens the spurious
       // "compromised" banner above.
       saveAppliedVerificationsVersion(nextVersion)
-      void publishVerificationsToServer(
+      void this.publishSettledVerifications(ctx, ownPublicArmored, nextVersion)
+    }, 500)
+  }
+
+  /**
+   * Awaits `verifiedKeys.whenIdle()` before reading `getAll()` and
+   * publishing — B3 Task 3, fixing an edge introduced by Task 7.
+   *
+   * `verifiedKeys.subscribe(...)`'s notification (which schedules the
+   * debounce that leads here) fires the moment a mutation lands in memory —
+   * BEFORE its write-behind `persist()` resolves (see `VerifiedKeysCache`'s
+   * class doc; that synchronous timing is deliberately kept, it's
+   * load-bearing for `_syncingFromRemoteCount`). Without this await, a
+   * persist slower than the 500 ms publish debounce would let this method
+   * read and publish an entry this device had not yet durably saved to its
+   * own disk — briefly handing another device state this device could not
+   * itself reproduce after a restart. If the persist then failed, the
+   * rollback's own notification would eventually correct the record (it
+   * reschedules another publish), but only after that window, and only if
+   * nothing reads/relies on the interim published state first. Awaiting the
+   * drain here restores the pre-Task-7 invariant instead: a publish only
+   * ever reflects state that has actually settled (persisted, or rolled
+   * back after a failed persist) — never a bare optimistic mutation.
+   *
+   * Only the map read and the network publish wait on this; the version
+   * reservation ({@link scheduleVerificationsPublish}'s
+   * `saveAppliedVerificationsVersion` call) happens BEFORE this method is
+   * even invoked, so it stays synchronized with `scheduleTrustStateSeal`'s
+   * own independent 500 ms timer regardless of how long persistence takes
+   * — see the long comment at that call site.
+   */
+  private async publishSettledVerifications(
+    ctx: PluginContext,
+    ownPublicArmored: string,
+    version: number,
+  ): Promise<void> {
+    await this.verifiedKeys.whenIdle()
+    // `shutdown()` may have run while we were waiting for the write queue
+    // to drain — bail out the same way the rest of this path already does
+    // when `ctx` goes away mid-flight (e.g. `sealTrustStateNow`).
+    if (!this.ctx) return
+    const verifications = this.verifiedKeys.getAll()
+    try {
+      await publishVerificationsToServer(
         ctx,
         (plaintext, recipientKey) =>
           this.encryptToRecipient(ctx.account.jid, recipientKey, plaintext),
         ownPublicArmored,
         verifications,
-        nextVersion,
+        version,
       )
-        .then(() => {
-          this.scheduleTrustStateSeal()
-        })
-        .catch(() => {})
-    }, 500)
+      this.scheduleTrustStateSeal()
+    } catch {
+      // Best-effort, mirrors the previous fire-and-forget `.catch(() => {})`.
+    }
   }
 
   // ---------------------------------------------------------------------------

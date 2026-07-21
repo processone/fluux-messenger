@@ -458,4 +458,114 @@ describe('VerifiedKeysCache', () => {
       expect(c.getVerifiedFingerprint('nobody@x')).toBeNull()
     })
   })
+
+  // B3 Task 3: `OpenPGPPluginBase`'s debounced cross-device publish awaits
+  // this before reading `getAll()`, so a publish only ever reflects state
+  // that has actually settled — see `whenIdle`'s doc comment.
+  describe('whenIdle', () => {
+    it('resolves immediately when there is no write in flight', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      await expect(c.whenIdle()).resolves.toBeUndefined()
+    })
+
+    it('does not resolve until a pending persist settles', async () => {
+      let release: () => void = () => {}
+      const gate = new Promise<void>((r) => {
+        release = r
+      })
+      const slow = memStorage()
+      const put = slow.put.bind(slow)
+      slow.put = async (k, v) => {
+        await gate
+        return put(k, v)
+      }
+      const c = new VerifiedKeysCache(slow)
+      await c.hydrate()
+
+      const write = c.setVerified('bob@x', 'ABCD')
+      let idleSettled = false
+      const idle = c.whenIdle().then(() => {
+        idleSettled = true
+      })
+
+      // Give any stray microtasks a chance to run — `whenIdle()` must still
+      // not have resolved, because the persist is still gated.
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(idleSettled).toBe(false)
+
+      release()
+      await write
+      await idle
+      expect(idleSettled).toBe(true)
+    })
+
+    it('waits for a write enqueued WHILE it is already waiting (chain reassignment)', async () => {
+      // Regression coverage for the loop in `whenIdle()`: a naive single
+      // `await this.writeChain` would capture the chain BEFORE the second
+      // write is enqueued and could resolve without ever reflecting it.
+      let releaseFirst: () => void = () => {}
+      const gateFirst = new Promise<void>((r) => {
+        releaseFirst = r
+      })
+      const slow = memStorage()
+      const put = slow.put.bind(slow)
+      let putCalls = 0
+      slow.put = async (k, v) => {
+        putCalls += 1
+        if (putCalls === 1) await gateFirst
+        return put(k, v)
+      }
+      const c = new VerifiedKeysCache(slow)
+      await c.hydrate()
+
+      const writeA = c.setVerified('bob@x', 'ABCD')
+      const idle = c.whenIdle()
+
+      // Enqueue a second write while `whenIdle()` is still awaiting the
+      // first write's (gated) persist.
+      const writeB = c.setVerified('carol@x', 'EF01')
+
+      let idleSettled = false
+      void idle.then(() => {
+        idleSettled = true
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(idleSettled).toBe(false)
+
+      releaseFirst()
+      await writeA
+      await writeB
+      await idle
+
+      expect(idleSettled).toBe(true)
+      expect(c.isVerified('bob@x', 'ABCD')).toBe(true)
+      expect(c.isVerified('carol@x', 'EF01')).toBe(true)
+    })
+
+    it('resolves (never rejects) even when the pending write is rolled back after a failed persist', async () => {
+      let release: () => void = () => {}
+      const gate = new Promise<void>((r) => {
+        release = r
+      })
+      const slow = memStorage()
+      slow.put = async () => {
+        await gate
+        throw new Error('disk full')
+      }
+      const c = new VerifiedKeysCache(slow)
+      await c.hydrate()
+
+      const write = c.setVerified('bob@x', 'ABCD').catch((err: unknown) => err)
+      const idle = c.whenIdle()
+
+      release()
+      await write
+      await expect(idle).resolves.toBeUndefined()
+      // The rollback ran: the optimistic entry did not survive the failure.
+      expect(c.isVerified('bob@x', 'ABCD')).toBe(false)
+    })
+  })
 })

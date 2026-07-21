@@ -255,6 +255,46 @@ export class VerifiedKeysCache implements VerifiedKeysView {
   }
 
   /**
+   * Resolves once every write enqueued as of this call — and any write that
+   * gets enqueued while this call is still waiting — has fully settled
+   * (persisted, or rolled back after a failed persist). Read-only: it does
+   * not enqueue anything itself and never blocks `setVerified`/
+   * `clearVerified`/`seed`, which keep racing ahead against `writeChain`
+   * exactly as before.
+   *
+   * Exists so a consumer that must never observe an optimistic, not-yet-
+   * persisted mutation (`OpenPGPPluginBase`'s debounced cross-device
+   * publish — B3 Task 3) can `await cache.whenIdle()` immediately before
+   * reading `getAll()`, restoring "published implies persisted" even though
+   * `subscribe()`'s notification itself still fires on the optimistic
+   * mutation (see this class's doc comment for why that stays synchronous).
+   *
+   * A single `await this.writeChain` would not be enough: `writeChain` is
+   * REASSIGNED by `enqueueWrite` every time a new write is enqueued, so a
+   * write that lands while we're already waiting on an earlier chain would
+   * be missed — the awaited promise settles without ever reflecting the
+   * later write. Looping until the captured reference matches the live
+   * field closes that gap: each iteration re-reads `writeChain` after
+   * awaiting it, and only returns once an await produces no further
+   * reassignment, i.e. nothing new was enqueued while we were waiting.
+   *
+   * Never rejects: `enqueueWrite` already normalizes `writeChain` to a
+   * promise that always resolves, swallowing both outcomes (see its doc
+   * comment) — a persist failure surfaces to that write's OWN caller via
+   * the promise `setVerified`/`clearVerified`/`seed` returned, not here. So
+   * a rejected write cannot leave `whenIdle()` permanently pending; it just
+   * settles (resolves) like every other write once its rollback completes.
+   */
+  async whenIdle(): Promise<void> {
+    let chain = this.writeChain
+    for (;;) {
+      await chain
+      if (chain === this.writeChain) return
+      chain = this.writeChain
+    }
+  }
+
+  /**
    * Chains `step` (a persist-and-rollback attempt) behind every previously
    * enqueued write, so no two writes' `persist()` calls can ever be in
    * flight at once — see the class doc's "Write serialization" section.
