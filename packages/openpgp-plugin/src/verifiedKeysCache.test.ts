@@ -81,6 +81,45 @@ describe('VerifiedKeysCache', () => {
     expect(b.isVerified('bob@x', 'ABCD')).toBe(true)
   })
 
+  // Finding 1 (B2 Task 1 review): `OpenPGPPluginBase.init()` does
+  // `new VerifiedKeysCache(ctx.storage)` then `await verifiedKeys.hydrate()`.
+  // That `await` yields to the event loop on real (Tauri IPC) storage, so a
+  // `getSnapshot()` call racing the hydrate must not get permanently stuck
+  // on the pre-hydrate `{}` snapshot once hydration completes — it must
+  // reflect the loaded data, and subscribers must be told.
+  it('hydrate invalidates a snapshot taken before it resolves and notifies subscribers', async () => {
+    const s = memStorage()
+    const seedCache = new VerifiedKeysCache(s)
+    await seedCache.hydrate()
+    await seedCache.setVerified('bob@x', 'ABCD')
+
+    let release: () => void = () => {}
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const slow = { ...s }
+    slow.get = async (key: string) => {
+      await gate
+      return s.get(key)
+    }
+
+    const c = new VerifiedKeysCache(slow)
+    // Cache a snapshot BEFORE hydrate() resolves — this is the racy window.
+    expect(c.getSnapshot()).toEqual({})
+
+    let notified = false
+    c.subscribe(() => {
+      notified = true
+    })
+
+    const pending = c.hydrate()
+    release()
+    await pending
+
+    expect(notified).toBe(true)
+    expect(c.getSnapshot()).toEqual({ 'bob@x': 'ABCD' })
+  })
+
   it('getAll returns a snapshot that does not alias internal state', async () => {
     const c = new VerifiedKeysCache(memStorage())
     await c.hydrate()
@@ -270,11 +309,68 @@ describe('VerifiedKeysCache', () => {
       expect(c.getSnapshot()).toEqual({})
     })
 
+    // Finding 3 (B2 Task 1 review): only setVerified's rollback notification
+    // had coverage. clearVerified's and seed's rollback `notify()` calls
+    // (verified functionally by the "rollback on a failed persist" describe
+    // block above) had no assertion on the notification itself, so a future
+    // refactor could delete either call with the suite still green.
+    it('clearVerified notifies again on rollback when persistence fails, so the UI reverts', async () => {
+      const s = memStorage()
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+
+      s.put = async () => {
+        throw new Error('disk full')
+      }
+      let notifications = 0
+      c.subscribe(() => {
+        notifications += 1
+      })
+
+      await expect(c.clearVerified('bob@x')).rejects.toThrow('disk full')
+      expect(notifications).toBe(2)
+      expect(c.getSnapshot()).toEqual({ 'bob@x': 'ABCD' })
+    })
+
+    it('seed notifies again on rollback when persistence fails, so the UI reverts', async () => {
+      const s = memStorage()
+      s.put = async () => {
+        throw new Error('disk full')
+      }
+      const c = new VerifiedKeysCache(s)
+      await c.hydrate()
+      let notifications = 0
+      c.subscribe(() => {
+        notifications += 1
+      })
+
+      await expect(c.seed({ 'bob@x': 'ABCD' })).rejects.toThrow('disk full')
+      expect(notifications).toBe(2)
+      expect(c.getSnapshot()).toEqual({})
+    })
+
     it('getSnapshot returns the SAME object identity when nothing changed', async () => {
       const c = new VerifiedKeysCache(memStorage())
       await c.hydrate()
       await c.setVerified('bob@x', 'ABCD')
       expect(c.getSnapshot()).toBe(c.getSnapshot())
+    })
+
+    // Finding 2 (B2 Task 1 review): unlike `getAll()`, which copies on every
+    // call, `getSnapshot()` hands the SAME object to every caller (that's
+    // the point, for `useSyncExternalStore`). Without freezing, one consumer
+    // mutating the returned object would poison every other caller's view
+    // until the next mutation invalidates the cache.
+    it('getSnapshot returns a frozen object that mutation cannot poison', async () => {
+      const c = new VerifiedKeysCache(memStorage())
+      await c.hydrate()
+      await c.setVerified('bob@x', 'ABCD')
+      const snap = c.getSnapshot()
+      expect(() => {
+        ;(snap as Record<string, string>)['evil@x'] = 'X'
+      }).toThrow()
+      expect(c.getSnapshot()).toEqual({ 'bob@x': 'ABCD' })
     })
 
     it('getSnapshot returns a NEW identity after a mutation', async () => {

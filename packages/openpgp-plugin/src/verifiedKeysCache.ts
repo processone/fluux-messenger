@@ -81,6 +81,12 @@ export class VerifiedKeysCache {
     const stored = await loadVerifiedMap(this.storage)
     this.map = new Map(Object.entries(stored))
     this.hydrated = true
+    // Invalidate any snapshot cached during the `await` above (e.g. a
+    // `getSnapshot()` call that ran while storage I/O was in flight would
+    // have cached `{}` from the still-empty map) and notify subscribers so
+    // the UI picks up the loaded data instead of being stuck on that stale
+    // cached snapshot forever.
+    this.notify()
   }
 
   /**
@@ -125,9 +131,15 @@ export class VerifiedKeysCache {
    * return the SAME object until a mutation invalidates it. Returning a fresh
    * object each call (as `getAll()` does) trips React's
    * "getSnapshot should be cached" infinite-loop guard.
+   *
+   * Frozen so the "callers must not be able to mutate internal state"
+   * contract (see `getAll()`'s doc comment) actually holds here too: unlike
+   * `getAll()`, this object is handed out by reference to every caller, so
+   * one caller mutating it would silently poison every other caller's view
+   * until the next mutation invalidates the cache.
    */
   getSnapshot(): Record<string, string> {
-    if (this.snapshot === null) this.snapshot = Object.fromEntries(this.map)
+    if (this.snapshot === null) this.snapshot = Object.freeze(Object.fromEntries(this.map))
     return this.snapshot
   }
 
