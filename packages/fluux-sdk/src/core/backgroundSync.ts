@@ -16,7 +16,9 @@
 
 import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
-import { connectionStore, chatStore, roomStore } from '../stores'
+import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
+import { roomStore } from '../stores/roomStore'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { buildScopedStorageKey } from '../utils/storageScope'

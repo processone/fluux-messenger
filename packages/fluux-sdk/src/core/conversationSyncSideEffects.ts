@@ -14,7 +14,8 @@
 
 import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
-import { chatStore, connectionStore } from '../stores'
+import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
 import { logInfo } from './logger'
 
 /** Debounce interval for publishing (ms) */

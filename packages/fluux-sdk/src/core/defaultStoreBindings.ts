@@ -9,7 +9,7 @@
  * @module Core
  */
 
-import { defaultStores, type SDKStores } from '../stores'
+import { defaultStores, type SDKStores } from '../stores/sdkStores'
 import type { StoreBindings } from './types/client'
 import type { Message } from './types/chat'
 import {

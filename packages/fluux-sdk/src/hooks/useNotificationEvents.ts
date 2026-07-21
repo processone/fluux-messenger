@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { chatStore, roomStore, connectionStore } from '../stores'
+import { chatStore } from '../stores/chatStore'
+import { roomStore } from '../stores/roomStore'
+import { connectionStore } from '../stores/connectionStore'
 import { isPreviewableMessage, shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
 

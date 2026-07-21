@@ -8,7 +8,7 @@ import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
-import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
 import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
@@ -124,7 +124,15 @@ export function SearchView() {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => search(e.target.value)}
+            onChange={(e) => {
+              // Each keystroke re-renders this controlled input for the query, then
+              // again for the debounced search cycle (isSearching → results) — about
+              // 3× per key, which normal typing speed multiplies past the render-loop
+              // *warning* threshold with no loop present. Arm the interaction grace,
+              // as the composer does; the hard loop-break threshold is unaffected.
+              notifyUserInput()
+              search(e.target.value)
+            }}
             onKeyDown={handleInPrefixKeyDown}
             placeholder={t('search.placeholder', 'Search messages…')}
             className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-md

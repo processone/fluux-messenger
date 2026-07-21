@@ -12,7 +12,8 @@
  */
 
 import type { XMPPClient } from './XMPPClient'
-import { chatStore, connectionStore } from '../stores'
+import { chatStore } from '../stores/chatStore'
+import { connectionStore } from '../stores/connectionStore'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { getDomain } from './jid'

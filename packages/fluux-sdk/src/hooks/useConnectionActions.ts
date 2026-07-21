@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { connectionStore } from '../stores'
+import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
 import type { LinkPreview, VCardInfo, ConnectOptions } from '../core/types'
 

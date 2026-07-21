@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { rosterStore } from '../stores'
+import { rosterStore } from '../stores/rosterStore'
 import { useRosterStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Contact } from '../core'

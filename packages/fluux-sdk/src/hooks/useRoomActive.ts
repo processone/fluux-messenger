@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { roomStore } from '../stores'
+import { roomStore } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
