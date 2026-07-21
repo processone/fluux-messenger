@@ -721,8 +721,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // reachable from the early-return branches below that skip
     // `activateSubscriptions()`. A cold/placeholder cache here would read as
     // "-1" (nothing applied yet), silently reopening the replay window this
-    // counter exists to close.
-    this.syncVersion = new SyncVersionCache(ctx.storage)
+    // counter exists to close. `onRollback` (B3 review Finding 2) reseals
+    // whenever a failed persist rolls the in-memory value back — see
+    // `SyncVersionCache`'s "Rollback can still leave a seal ahead of disk"
+    // doc section for why the rollback alone isn't enough: a seal that read
+    // the never-persisted value during the write-behind window is already
+    // sealed ahead of disk by the time the rollback runs, and this is the
+    // only path that notices and corrects it.
+    this.syncVersion = new SyncVersionCache(ctx.storage, () => this.scheduleTrustStateSeal())
     bindSyncVersionCache(this.syncVersion)
     await this.syncVersion.hydrate()
     if (!ctx.account.jid) {
@@ -1669,19 +1675,25 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // our publish as `<= lastApplied` and silently drop it. Pre-existing,
       // not a regression from this fix, and not addressed here.
       // A version left unpublished by a failed/aborted publish is a harmless
-      // gap, never replayed because nothing signs it — but ONLY because
-      // every path into this method is the same `verifiedKeys` notification
-      // that also calls `scheduleTrustStateSeal` (both listeners fire in
-      // registration order, both debounced 500 ms), so this save always
-      // lands before `buildCanonicalSnapshot` next reads the version. This
-      // save happening synchronously here (unconditionally, not gated on
-      // `getSettled()`) keeps that ordering intact even when the write-drain
-      // wait below runs long — only the map READ and the network publish
-      // wait for persistence; the version reservation never does.
-      // Shortening the seal's debounce below this one, or reordering the
-      // two subscriptions, breaks that ordering and reopens the spurious
-      // "compromised" banner above.
+      // gap, never replayed because nothing signs it — but the persisted
+      // version and the SEALED `syncVersion` must never drift apart, or
+      // `buildCanonicalSnapshot`'s comparison on the next launch reports a
+      // false "trust state compromised" banner manufactured by our own code.
+      //
+      // This used to rely on every path into this method being the same
+      // `verifiedKeys` notification that also drives `scheduleTrustStateSeal`
+      // (both listeners fire in registration order, both debounced 500 ms) —
+      // but that stopped being true once `syncVerificationsFromServer`'s
+      // `finally` started arming this same timer directly (to republish a
+      // local write suppressed during an in-flight sync), without going
+      // through any store notification that would also reseal. Relying on a
+      // sibling subscription is therefore not enough: reseal explicitly,
+      // right here, immediately after the save, so the seal is rearmed
+      // whenever the version moves regardless of which path got us here or
+      // whether the publish below ultimately succeeds, fails, or never
+      // settles.
       saveAppliedVerificationsVersion(nextVersion)
+      this.scheduleTrustStateSeal()
       void this.publishSettledVerifications(ctx, ownPublicArmored, nextVersion)
     }, 500)
   }
@@ -1718,10 +1730,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    *
    * Only the map read and the network publish wait on this; the version
    * reservation ({@link scheduleVerificationsPublish}'s
-   * `saveAppliedVerificationsVersion` call) happens BEFORE this method is
-   * even invoked, so it stays synchronized with `scheduleTrustStateSeal`'s
-   * own independent 500 ms timer regardless of how long persistence takes
-   * — see the long comment at that call site.
+   * `saveAppliedVerificationsVersion` call, immediately followed by its own
+   * explicit `scheduleTrustStateSeal()` call) happens BEFORE this method is
+   * even invoked, so the seal is already rearmed against the new version
+   * regardless of how long persistence takes here, or whether this method's
+   * publish below succeeds — see the long comment at that call site.
    */
   private async publishSettledVerifications(
     ctx: PluginContext,
@@ -1758,6 +1771,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         verifications,
         version,
       )
+      // Redundant with the explicit reseal `scheduleVerificationsPublish`
+      // already does right after reserving `version` (see that call site) —
+      // this debounces onto the same timer, so it's a harmless no-op call in
+      // the common case. Kept as a belt-and-suspenders reseal on the success
+      // path specifically, in case some other trust-store mutation cleared
+      // and rescheduled that timer for a later fire time while this publish
+      // was in flight.
       this.scheduleTrustStateSeal()
     } catch {
       // Best-effort, mirrors the previous fire-and-forget `.catch(() => {})`.

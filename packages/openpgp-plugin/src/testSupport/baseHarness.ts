@@ -9,6 +9,7 @@ import { OpenPGPPluginBase, type KeyBundle, type CertValidation, type DecryptOut
 import { createMockHostStores } from '../testing/mockHostStores'
 import type { VerifiedKeysCache } from '../verifiedKeysCache'
 import type { SyncVersionCache } from '../syncVersionCache'
+import type { OpenPGPHostStores } from '../hostStores'
 import { memStorage } from './memStorage'
 
 /** Concrete subclass whose abstract crypto methods are never exercised by
@@ -205,6 +206,17 @@ export function getVerifiedKeysCache(base: OpenPGPPluginBase): VerifiedKeysCache
  */
 export function getSyncVersionCache(base: OpenPGPPluginBase): SyncVersionCache {
   return (base as unknown as { syncVersion: SyncVersionCache }).syncVersion
+}
+
+/**
+ * Reach a base instance's `protected hostStores` — same cast-based-access
+ * pattern as {@link getVerifiedKeysCache}. Needed by tests that assert on
+ * `trustStateStatus` (e.g. the trust-state seal) without constructing their
+ * own separate `createMockHostStores()`, which would be a DIFFERENT store
+ * than the one the instance under test actually reads/writes.
+ */
+export function getHostStores(base: OpenPGPPluginBase): OpenPGPHostStores {
+  return (base as unknown as { hostStores: OpenPGPHostStores }).hostStores
 }
 
 /**

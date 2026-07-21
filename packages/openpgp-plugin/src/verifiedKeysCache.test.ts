@@ -594,6 +594,13 @@ describe('VerifiedKeysCache', () => {
     // mandated deliberate-break below — which is why the sweep matters more
     // than any single offset.)
     it('never returns a snapshot containing an entry whose persist has not settled (two-entry apply-loop gap)', async () => {
+      // Tracks whether ANY offset in the sweep produced an observable
+      // (non-null) snapshot. Without this, a future change that makes every
+      // offset resolve to "still pending" (e.g. by lengthening the apply
+      // loop) would leave the loop's `if (settledResult !== null)` assertion
+      // unreached at every offset — the test would pass vacuously, asserting
+      // nothing. Asserted at the end of the sweep, below.
+      let observedNonNullResult = false
       for (let headstartTicks = 0; headstartTicks <= 8; headstartTicks++) {
         const gateErin = new Promise<void>(() => {
           // Deliberately never resolves: erin's persist must never be
@@ -649,6 +656,7 @@ describe('VerifiedKeysCache', () => {
         for (let i = 0; i < 30; i++) await Promise.resolve()
 
         if (settledResult !== null) {
+          observedNonNullResult = true
           expect(settledResult, `headstartTicks=${headstartTicks}`).not.toHaveProperty('erin@x')
         }
         // else: getSettled() is still (correctly) blocked on erin's
@@ -657,6 +665,10 @@ describe('VerifiedKeysCache', () => {
 
         void applyLoop
       }
+
+      // At least one offset in the sweep must have actually exercised the
+      // invariant above — otherwise the loop asserted nothing at all.
+      expect(observedNonNullResult).toBe(true)
     })
   })
 })

@@ -72,6 +72,22 @@ export async function persistSyncVersion(storage: PluginStorage, value: number):
  * so two `persist()` calls can never be in flight at once — a slower call's
  * rollback can never land after a faster, genuinely-newer call's persist has
  * already succeeded and moved memory (and disk) ahead.
+ *
+ * ## Rollback can still leave a seal ahead of disk
+ *
+ * `set()` updates `this.value` synchronously, before `persist()` even starts
+ * (see above) — and the trust-state seal's synchronous snapshot builder
+ * (`buildCanonicalSnapshot`) can read `this.value` via `get()` in that same
+ * window, before `persist()` resolves either way. If `persist()` then
+ * rejects, the rollback below restores the durable value in memory, but a
+ * seal captured during the window already sealed the higher, never-persisted
+ * value — so the seal now runs AHEAD of disk instead of the usual "disk
+ * behind seal, memory ahead" case the rollback itself was built to prevent.
+ * Rolling back memory alone cannot fix that: something already read the
+ * stale-in-hindsight value. `onRollback`, when supplied, gives the caller a
+ * chance to trigger a fresh seal against the now-rolled-back (durable) value,
+ * so the seal converges back onto disk instead of staying stuck ahead of it.
+ * `OpenPGPPluginBase` wires this to `scheduleTrustStateSeal()`.
  */
 export class SyncVersionCache {
   private value = -1
@@ -79,7 +95,15 @@ export class SyncVersionCache {
   /** Promise-chain mutex — see the class doc's "Write serialization" section. */
   private writeChain: Promise<void> = Promise.resolve()
 
-  constructor(private readonly storage: PluginStorage) {}
+  /**
+   * @param onRollback Optional hook invoked synchronously whenever `set()`
+   * rolls a failed persist back — see the class doc's "Rollback can still
+   * leave a seal ahead of disk" section.
+   */
+  constructor(
+    private readonly storage: PluginStorage,
+    private readonly onRollback?: () => void,
+  ) {}
 
   async hydrate(): Promise<void> {
     if (this.hydrated) return
@@ -111,7 +135,10 @@ export class SyncVersionCache {
    * call (not awaiting the returned promise) already sees the new value.
    *
    * On a `persist()` rejection, the in-memory mutation is rolled back
-   * before rethrowing — see the class doc comment.
+   * before rethrowing — and, if the caller supplied one, `onRollback` fires
+   * synchronously right after the rollback, before rethrowing. See the
+   * class doc's "Rollback can still leave a seal ahead of disk" section for
+   * why a caller needs that hook at all.
    */
   async set(version: number): Promise<void> {
     const previous = this.value
@@ -121,6 +148,7 @@ export class SyncVersionCache {
         await this.persist()
       } catch (err) {
         this.value = previous
+        this.onRollback?.()
         throw err
       }
     })

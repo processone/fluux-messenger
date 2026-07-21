@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { SyncVersionCache, loadSyncVersion } from './syncVersionCache'
+import { describe, it, expect, vi } from 'vitest'
+import { SyncVersionCache, loadSyncVersion, SYNC_VERSION_STORAGE_KEY } from './syncVersionCache'
 import { memStorage } from './testSupport/memStorage'
 
 describe('SyncVersionCache', () => {
@@ -49,13 +49,21 @@ describe('SyncVersionCache', () => {
 
   it('hydrate is idempotent (a second call does not re-read storage)', async () => {
     const s = memStorage()
+    const getSpy = vi.spyOn(s, 'get')
     const c = new SyncVersionCache(s)
     await c.hydrate()
+    expect(getSpy).toHaveBeenCalledTimes(1)
     await c.set(4)
-    // A concurrent/late second hydrate() must not clobber the in-memory
-    // value with a stale storage read (there is none here, but the guard
-    // must still short-circuit rather than re-run `loadSyncVersion`).
+
+    // Mutate the backing store directly (bypassing `set()`) to a value the
+    // in-memory cache has never seen. A guardless `hydrate()` would re-read
+    // storage and clobber `this.value` with this stale-relative-to-memory
+    // (but newer-on-disk) value; the guard must short-circuit instead, so
+    // neither the read count nor the in-memory value moves.
+    await s.put(SYNC_VERSION_STORAGE_KEY, new TextEncoder().encode('99'))
     await c.hydrate()
+
+    expect(getSpy).toHaveBeenCalledTimes(1)
     expect(c.get()).toBe(4)
   })
 

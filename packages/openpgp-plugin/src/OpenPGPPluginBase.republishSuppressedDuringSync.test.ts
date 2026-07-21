@@ -18,8 +18,9 @@
 // ones that don't — a distinction that only exists on the real path.
 import { describe, it, expect, vi } from 'vitest'
 import type { PEPItem, PluginStorage, XMLElementData } from '@fluux/sdk'
-import { getVerifiedKeysCache, makeTestBase, makeTestCtx } from './testSupport/baseHarness'
+import { getHostStores, getVerifiedKeysCache, makeTestBase, makeTestCtx } from './testSupport/baseHarness'
 import { VERIFICATIONS_NODE } from './verificationSync'
+import { verifyTrustStateSeal } from './trustStateIntegrity'
 import type { DecryptOutput, KeyBundle } from './OpenPGPPluginBase'
 
 const ACCOUNT = 'alice@example.com'
@@ -329,6 +330,95 @@ describe('OpenPGPPluginBase — local write suppressed during an in-flight sync 
         'dave@x': 'DAVE_FP',
         'carol@x': 'CAROL_FP',
       })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('(e) a FAILED publish on the republish path still leaves the trust-state seal in sync with the persisted version — B3 final-review Finding 1', async () => {
+    // The `finally` in `syncVerificationsFromServer` arms the publish timer
+    // directly (case (a) above) — NOT through the `verifiedKeys` subscription
+    // that also schedules a trust-state reseal on every OTHER path into
+    // `scheduleVerificationsPublish()`. Before the fix, that meant a version
+    // bumped/persisted on THIS path could go unsealed if the publish itself
+    // then failed (offline, IQ error, a torn-down `ctx`): the persisted
+    // version moves, nothing reseals it, and the next `verifyTrustStateSeal`
+    // call (simulating the next launch, at the end of this test) sees the
+    // seal's `syncVersion` lag behind disk and reports `compromised` —
+    // manufactured entirely by our own code, not real tampering.
+    localStorage.clear()
+    vi.useFakeTimers()
+    try {
+      const { base } = makeSyncableBase()
+      const ctx = makeTestCtx(ACCOUNT)
+      const hostStores = getHostStores(base)
+
+      // Every publish to the verifications node fails (simulating offline /
+      // a rejected IQ) — every OTHER PEP publish `init()` itself performs
+      // (e.g. own-key metadata) still succeeds so `init()` doesn't hang.
+      ctx.xmpp.publishPEP = async (node) => {
+        if (node === VERIFICATIONS_NODE) throw new Error('offline')
+      }
+
+      const gate = deferred<PEPItem[]>()
+      let queryCalls = 0
+      ctx.xmpp.queryPEP = async (_jid, node) => {
+        if (node !== VERIFICATIONS_NODE) return []
+        queryCalls++
+        return gate.promise
+      }
+
+      await base.init(ctx)
+      expect(queryCalls).toBe(1)
+
+      // A genuine local write lands while the sync is still in flight —
+      // suppressed and remembered as `_pendingRepublish`, not published
+      // through the normal `verifiedKeys` subscription path.
+      await getVerifiedKeysCache(base).setVerified('carol@x', 'CAROL_FP')
+
+      // Let the sync complete with no remote snapshot to apply — its
+      // `finally` arms the republish timer via `scheduleVerificationsPublish()`
+      // directly, the exact path Finding 1 is about.
+      gate.resolve([])
+      await flushMicrotasks()
+
+      // Fire whatever's due at the 500ms mark: an earlier trust-store-
+      // triggered seal (from carol's own write, sealing the version as it
+      // stood BEFORE this republish reserved a new one) and the republish
+      // timer body itself, which reserves+persists the bumped version and
+      // (with the fix) rearms the seal timer again, and attempts — and
+      // fails — the actual publish.
+      await vi.advanceTimersByTimeAsync(600)
+
+      // Fire the seal timer the republish path (re)armed, so a reseal
+      // against the bumped, now-persisted version actually runs.
+      await vi.advanceTimersByTimeAsync(600)
+      await flushMicrotasks()
+
+      // Belt-and-suspenders: the plugin's own bookkeeping believes it's sealed.
+      expect(hostStores.trustStateStatus.get()).toBe('sealed')
+
+      // The real assertion: independently re-verify the seal against
+      // storage, exactly as `verifyTrustStateOnInit()` would on the next
+      // launch. This is the only way to actually catch a version/seal
+      // mismatch — `trustStateStatus` alone only reflects whatever the last
+      // successful `sealTrustStateNow()` call believed, not whether that
+      // seal still matches the CURRENT persisted version.
+      const decryptFn = async (ciphertext: string) => ({
+        plaintext: ciphertext,
+        signatureVerified: true,
+        signerFingerprint: OWN_FP,
+        signaturePresent: true,
+      })
+      const verdict = await verifyTrustStateSeal(
+        decryptFn,
+        'own-pub-key',
+        OWN_FP,
+        hostStores,
+        getVerifiedKeysCache(base).getAll(),
+        ctx.storage,
+      )
+      expect(verdict).toEqual({ status: 'sealed' })
     } finally {
       vi.useRealTimers()
     }
