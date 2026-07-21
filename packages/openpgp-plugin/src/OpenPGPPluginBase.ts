@@ -1477,17 +1477,33 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
       const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
       // Persist the reservation BEFORE publishing, not after. Monotonicity —
-      // never handing out the same version twice — is the property that
-      // matters, not contiguity: publishing takes a network round-trip, and
-      // a remote apply that lands during that window can persist a higher
-      // version (a genuinely newer snapshot from another device). Saving
-      // this reservation only after publish resolves would then stomp that
-      // higher version back down to this stale one, re-opening the replay
-      // gate for the snapshot that was just applied and desyncing
-      // `TrustStateSnapshot.syncVersion` from the persisted value — which
-      // surfaces to the user as a spurious "trust state compromised" banner.
+      // the persisted version never decreasing — is the property that
+      // matters, not contiguity, and not uniqueness: publishing takes a
+      // network round-trip, and a remote apply that lands during that
+      // window can persist a higher version (a genuinely newer snapshot
+      // from another device). Saving this reservation only after publish
+      // resolves would then stomp that higher version back down to this
+      // stale one, re-opening the replay gate for the snapshot that was
+      // just applied and desyncing `TrustStateSnapshot.syncVersion` from
+      // the persisted value — which surfaces to the user as a spurious
+      // "trust state compromised" banner. (`saveAppliedVerificationsVersion`
+      // itself also clamps to never lower the stored value, closing the
+      // mirror-image race on the remote-apply side — see its doc comment.)
+      // Note this does NOT guarantee a version is only ever handed out
+      // once: a publish reservation taken here reads the pre-apply value,
+      // so it can coincide with a number an in-flight remote apply is about
+      // to persist for a different (newer) snapshot; other devices then see
+      // our publish as `<= lastApplied` and silently drop it. Pre-existing,
+      // not a regression from this fix, and not addressed here.
       // A version left unpublished by a failed/aborted publish is a harmless
-      // gap, never replayed because nothing signs it.
+      // gap, never replayed because nothing signs it — but ONLY because
+      // every path into this method is the same `verifiedKeys` notification
+      // that also calls `scheduleTrustStateSeal` (both listeners fire in
+      // registration order, both debounced 500 ms), so this save always
+      // lands before `buildCanonicalSnapshot` next reads the version.
+      // Shortening the seal's debounce below this one, or reordering the
+      // two subscriptions, breaks that ordering and reopens the spurious
+      // "compromised" banner above.
       saveAppliedVerificationsVersion(nextVersion)
       void publishVerificationsToServer(
         ctx,

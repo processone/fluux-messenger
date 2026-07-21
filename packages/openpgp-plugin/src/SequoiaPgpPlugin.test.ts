@@ -4190,5 +4190,92 @@ describe('SequoiaPgpPlugin', () => {
         vi.useRealTimers()
       }
     })
+
+    // Companion to the race above, on the OTHER path into
+    // `saveAppliedVerificationsVersion`: two overlapping remote applies
+    // (`syncVerificationsFromServer` is fire-and-forget and
+    // `_syncingFromRemoteCount` is a counter precisely because overlap is
+    // expected). Sync A fetches version 6 and reads the persisted version
+    // (5) before its apply loop's real storage I/O; sync B fetches a
+    // genuinely newer version 7 and, because A hasn't saved yet, also reads
+    // 5 — but B's diff against local state ends up requiring no writes, so
+    // it saves 7 immediately, well before A's slower, gated apply loop
+    // finishes and saves the stale 6 it planned against the pre-race read.
+    // Without the clamp in `saveAppliedVerificationsVersion`, A's late save
+    // stomps 7 back down to 6, re-opening the replay gate for the
+    // just-applied v7 snapshot and desyncing `TrustStateSnapshot.syncVersion`
+    // from the persisted value.
+    it('does not lower the persisted version when two remote applies race (a slower apply plans a lower version)', async () => {
+      let verificationsCb: ((item: PEPItem) => void) | null = null
+      let currentItem: PEPItem | null = null
+      const { ctx } = makeContext('me@example.com')
+      ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+        if (node === VERIFICATIONS_NODE) verificationsCb = cb
+        return { unsubscribe: () => {} }
+      }
+      ctx.xmpp.queryPEP = async (_jid, node) =>
+        node === VERIFICATIONS_NODE && currentItem ? [currentItem] : []
+
+      const fp = 'FP_RACE2_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
+        keychainBacked: true,
+      })
+      await plugin.init(ctx)
+      expect(verificationsCb).not.toBeNull()
+      // Flush init()'s own fire-and-forget syncVerificationsFromServer()
+      // (empty queryPEP result, since currentItem is still null).
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Seed the persisted version to 5 through the real apply path first,
+      // so the race below starts from a known baseline.
+      currentItem = buildVerificationsPepItem(fp, {}, 5)
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+      await new Promise((r) => setTimeout(r, 0))
+      expect(loadAppliedVerificationsVersion()).toBe(5)
+
+      // Gate the plugin-owned storage write so sync A's apply (adding one
+      // entry) blocks mid-persist — real keychain/file I/O in production.
+      let releasePersist!: () => void
+      const persistGate = new Promise<void>((resolve) => {
+        releasePersist = resolve
+      })
+      const innerPut = ctx.storage.put.bind(ctx.storage)
+      ctx.storage.put = async (key, value) => {
+        await persistGate
+        return innerPut(key, value)
+      }
+
+      // Sync A: version 6, adds alice. Its apply loop awaits the gated persist.
+      currentItem = buildVerificationsPepItem(fp, { 'alice@example.com': 'ALICE_FP' }, 6)
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+
+      // Sync B: version 7, same content alice ends up with either way — so
+      // B's diff against local is empty regardless of exactly how far A's
+      // synchronous map mutation has progressed by the time B computes its
+      // own diff, making the race deterministic without pinning A and B to
+      // an exact microtask offset from each other.
+      currentItem = buildVerificationsPepItem(fp, { 'alice@example.com': 'ALICE_FP' }, 7)
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+
+      // Let both syncs run to completion except for A's gated persist.
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      // B's save must have landed already.
+      expect(loadAppliedVerificationsVersion()).toBe(7)
+
+      // Now release A's gated persist; its loop finishes and it saves the
+      // stale version (6) it planned before the race began.
+      releasePersist()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      // A's late, stale save must not stomp B's newer, already-persisted 7.
+      expect(loadAppliedVerificationsVersion()).toBe(7)
+    })
   })
 })

@@ -157,9 +157,27 @@ export function loadAppliedVerificationsVersion(): number {
   }
 }
 
+/**
+ * Persists `version`, clamped so the stored value can never decrease.
+ *
+ * Both call sites (`syncVerificationsFromServer`'s post-apply save and
+ * `scheduleVerificationsPublish`'s pre-publish reservation) compute the
+ * version they intend to save from a `loadAppliedVerificationsVersion()`
+ * read taken *before* an unbounded `await` (real keychain/file I/O for the
+ * remote-apply loop; a network round-trip for the publish). Two such calls
+ * can overlap — `syncVerificationsFromServer` is fire-and-forget and
+ * `_syncingFromRemoteCount` is a counter precisely because concurrent syncs
+ * are expected — so a slower call can finish and save *after* a faster,
+ * genuinely-newer call already saved a higher version, based on a read that
+ * predates that save. Clamping here (rather than trying to serialize the
+ * two call sites) makes the accessor itself monotonic regardless of
+ * call-site interleaving: whichever save lands second can only raise or
+ * hold the stored value, never lower it.
+ */
 export function saveAppliedVerificationsVersion(version: number): void {
   try {
-    localStorage.setItem(buildScopedStorageKey(VERSION_STORAGE_KEY_BASE), String(version))
+    const next = Math.max(loadAppliedVerificationsVersion(), version)
+    localStorage.setItem(buildScopedStorageKey(VERSION_STORAGE_KEY_BASE), String(next))
   } catch {
     // Best-effort, mirroring verifiedPeerKeysStore: a failed persist still
     // leaves in-memory state consistent for the rest of the session.
