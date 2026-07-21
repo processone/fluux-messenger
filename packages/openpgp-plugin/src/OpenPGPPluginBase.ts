@@ -356,6 +356,33 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _trustStateSealTimeout: ReturnType<typeof setTimeout> | null = null
   private _syncingFromRemoteCount = 0
   private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Set by the `verifiedKeys.subscribe` guard below when it suppresses a
+   * notification caused by a genuine local write (not the sync's own
+   * remote-apply) while `_syncingFromRemoteCount > 0`. Nothing else would
+   * ever republish that write otherwise — see `syncVerificationsFromServer`'s
+   * `finally`, which reschedules a publish once the counter returns to zero
+   * and then clears this flag.
+   */
+  private _pendingRepublish = false
+  /**
+   * Depth of `syncVerificationsFromServer`'s own remote-apply writes
+   * currently in flight (bracketed around each `setVerifiedDual`/
+   * `clearVerifiedDual` call in its apply loop). Distinguishes "this
+   * `verifiedKeys` notification was caused by the sync applying data it
+   * just fetched" (never mark pending — republishing that would echo the
+   * remote snapshot straight back and reopen the cross-device loop the
+   * guard exists to prevent) from "this notification was caused by some
+   * other, genuinely local write that happened to land while a sync is in
+   * flight" (mark pending, so it survives to be republished).
+   *
+   * A counter, not a boolean, for the same reason `_syncingFromRemoteCount`
+   * is: overlapping syncs. In practice at most one apply is ever
+   * synchronously in flight at a time (each sync's apply loop awaits one
+   * entry before starting the next), but a counter is robust to that
+   * changing without silently reopening the loop.
+   */
+  private _remoteApplyDepth = 0
 
   /**
    * Cross-cutting bypass for the WebOpenPGPPlugin's silent-fork guard
@@ -702,7 +729,20 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._verificationStoreUnsub = this.verifiedKeys.subscribe(() => {
       if (this._syncingFromRemoteCount === 0) {
         this.scheduleVerificationsPublish()
+        return
       }
+      if (this._remoteApplyDepth === 0) {
+        // A genuine local write (e.g. the user verifying a peer) landed
+        // while a remote sync is in flight. The guard above still
+        // suppresses the immediate publish here — but nothing else will
+        // ever republish it, so remember it: `syncVerificationsFromServer`'s
+        // `finally` reschedules once `_syncingFromRemoteCount` returns to
+        // zero.
+        this._pendingRepublish = true
+      }
+      // else: this notification was caused by the sync's OWN remote-apply
+      // writes (see `_remoteApplyDepth`'s doc comment) — deliberately never
+      // marked pending, so the entries it just applied are not republished.
     })
 
     this._trustStoreUnsubs = [
@@ -1443,14 +1483,35 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const local = this.verifiedKeys.getAll()
       const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
       if (!plan.apply) return
-      for (const { jid, fingerprint } of plan.toSet) await this.setVerifiedDual(jid, fingerprint)
-      for (const jid of plan.toClear) await this.clearVerifiedDual(jid)
+      for (const { jid, fingerprint } of plan.toSet) {
+        this._remoteApplyDepth++
+        try {
+          await this.setVerifiedDual(jid, fingerprint)
+        } finally {
+          this._remoteApplyDepth--
+        }
+      }
+      for (const jid of plan.toClear) {
+        this._remoteApplyDepth++
+        try {
+          await this.clearVerifiedDual(jid)
+        } finally {
+          this._remoteApplyDepth--
+        }
+      }
       saveAppliedVerificationsVersion(plan.version)
       this.scheduleTrustStateSeal()
     } catch {
       // Non-blocking — local store is always the source of truth.
     } finally {
       this._syncingFromRemoteCount--
+      // Only once the OUTERMOST overlapping sync finishes: a suppressed
+      // local write that landed during an inner sync must survive that
+      // inner sync's own decrement and only fire once nothing is syncing.
+      if (this._syncingFromRemoteCount === 0 && this._pendingRepublish) {
+        this._pendingRepublish = false
+        this.scheduleVerificationsPublish()
+      }
     }
   }
 
