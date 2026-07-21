@@ -924,6 +924,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       clearTimeout(this._publishVerificationTimeout)
       this._publishVerificationTimeout = null
     }
+    // Flush, don't just cancel: a quit landing inside the 500ms seal
+    // debounce would otherwise leave the persisted sync-version ahead of
+    // the sealed one, manufacturing a false "trust state compromised"
+    // verdict on next launch — the same failure class `SyncVersionCache`'s
+    // own rollback-to-durable-value logic guards against. Capture the
+    // pending-ness before unsubscribing below: nothing can re-arm the timer
+    // between here and the seal, since the store subscriptions that would
+    // do so are torn down first.
+    const hadPendingSeal = this._trustStateSealTimeout !== null
     if (this._trustStateSealTimeout !== null) {
       clearTimeout(this._trustStateSealTimeout)
       this._trustStateSealTimeout = null
@@ -939,6 +948,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // no-ops on a null `ctx`/`ownBundle`, so the only cost was a stray
     // timer — this just avoids creating it.
     this._pendingRepublish = false
+    if (hadPendingSeal) {
+      // `sealTrustStateNow()` is local-only (self-encrypt + a couple of
+      // `PluginStorage` writes, no network round-trip) and already
+      // catches internally, so awaiting it here is bounded and cannot
+      // throw. Must run BEFORE `ctx`/`ownBundle` are nulled below — it
+      // reads both.
+      await this.sealTrustStateNow()
+    }
     this.ownBundle = null
     this.peerKeys.clear()
     this.pendingVerifications.clear()
@@ -1692,8 +1709,24 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // whenever the version moves regardless of which path got us here or
       // whether the publish below ultimately succeeds, fails, or never
       // settles.
+      //
+      // Only ARM a seal timer here if none is already pending. On the
+      // common local-verify path, this timer and the seal timer both trace
+      // back to the same `verifiedKeys` notification (this one via
+      // `scheduleVerificationsPublish`, the seal one via the sibling
+      // `verifiedKeys.subscribe` in `activateSubscriptions`) and were
+      // therefore scheduled together, so a seal timer is already pending
+      // and due to fire momentarily — it will capture the version just
+      // saved above (same synchronous tick, save-before-fire). Calling
+      // `scheduleTrustStateSeal()` unconditionally would `clearTimeout` that
+      // about-to-fire timer and push the seal out another 500ms for no
+      // benefit, doubling the unsealed window on every local verify. On the
+      // republish route (`syncVerificationsFromServer`'s `finally` calling
+      // this method directly, with no accompanying store notification), no
+      // seal timer is pending here, so the guard still lets this arm one —
+      // the reseal-on-version-move guarantee holds either way.
       saveAppliedVerificationsVersion(nextVersion)
-      this.scheduleTrustStateSeal()
+      if (this._trustStateSealTimeout === null) this.scheduleTrustStateSeal()
       void this.publishSettledVerifications(ctx, ownPublicArmored, nextVersion)
     }, 500)
   }

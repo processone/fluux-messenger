@@ -124,6 +124,57 @@ describe('SyncVersionCache', () => {
       expect(c.get()).toBe(3)
     })
 
+    it('an overlapping failed persist rolls back to the DURABLE value, not the caller-captured previous', async () => {
+      // Reproduces the exact interleaving from the B3 re-review finding:
+      //   set(6) runs (previous = 5), then set(7) runs (previous = 6)
+      //   before the queue drains. set(6)'s enqueued persist reads the LIVE
+      //   value (7, since set(7) already bumped memory synchronously) and
+      //   succeeds -> disk = 7. set(7)'s own persist then fails -> rollback
+      //   must land on 7 (what's durably on disk), never on 6 (set(7)'s
+      //   captured `previous`), or the next reseal would capture 6 while
+      //   disk holds 7 and manufacture a false "compromised" verdict.
+      const s = memStorage()
+      const c = new SyncVersionCache(s)
+      await c.hydrate()
+      await c.set(5)
+
+      const rollbackReads: number[] = []
+      const withHook = new SyncVersionCache(s, () => rollbackReads.push(withHook.get()))
+      await withHook.hydrate()
+      expect(withHook.get()).toBe(5)
+
+      let putCount = 0
+      const originalPut = s.put.bind(s)
+      s.put = async (k, v) => {
+        putCount++
+        if (putCount === 1) {
+          // set(6)'s persist: succeeds, writing whatever is live (7).
+          return originalPut(k, v)
+        }
+        // set(7)'s own persist: fails transiently.
+        throw new Error('disk full')
+      }
+
+      const p1 = withHook.set(6)
+      const p2 = withHook.set(7)
+
+      await expect(p2).rejects.toThrow('disk full')
+      await p1
+
+      // Disk must hold 7 (set(6)'s persist wrote the live value, which was
+      // already bumped to 7 by the time it ran).
+      const reloaded = new SyncVersionCache(s)
+      await reloaded.hydrate()
+      expect(reloaded.get()).toBe(7)
+
+      // Memory must match the durable disk value (7), not set(7)'s stale
+      // captured `previous` (6).
+      expect(withHook.get()).toBe(7)
+
+      // The reseal hook, when it fires, must see the same durable value.
+      expect(rollbackReads).toEqual([7])
+    })
+
     it('a subsequent successful set() after a rollback persists correctly', async () => {
       const s = memStorage()
       const c = new SyncVersionCache(s)

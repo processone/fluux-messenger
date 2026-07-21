@@ -61,7 +61,9 @@ export async function persistSyncVersion(storage: PluginStorage, value: number):
  * durable value, `payloadsMatch` sees `syncVersion` differ, and the user
  * gets a false "trust state compromised" tamper banner from what was really
  * a transient disk/keychain error. `set()` therefore rolls the in-memory
- * value back to what it was before the call, in a `catch`, before
+ * value back to the last value actually confirmed written to disk — see
+ * "Overlapping writes and the durable rollback target" below for why that
+ * is not simply "what it was before the call" — in a `catch`, before
  * rethrowing.
  *
  * ## Write serialization: no interleaved persist attempts
@@ -72,6 +74,21 @@ export async function persistSyncVersion(storage: PluginStorage, value: number):
  * so two `persist()` calls can never be in flight at once — a slower call's
  * rollback can never land after a faster, genuinely-newer call's persist has
  * already succeeded and moved memory (and disk) ahead.
+ *
+ * ## Overlapping writes and the durable rollback target
+ *
+ * Serialization alone does not make "roll back to the value captured before
+ * this call" safe, because two `set()` calls can overlap: `set(6)` runs
+ * (`previous = 5`), then `set(7)` runs (`previous = 6`) before either
+ * enqueued persist has fired. `set(6)`'s persist runs first (queue order)
+ * but reads the LIVE value, which by then is `7` — so it writes `7` to disk
+ * and succeeds. `set(7)`'s own persist then fails. Rolling back to its
+ * captured `previous` (`6`) would strand memory BELOW what disk durably
+ * holds (`7`) — exactly the "seal sealed too low" failure mode this class
+ * exists to prevent, just approached from the other direction. `durable`
+ * tracks the value each successful `persist()` call actually wrote (not a
+ * per-call snapshot), so a failed persist always rolls back to a value that
+ * cannot be behind, and cannot be ahead of, what is genuinely on disk.
  *
  * ## Rollback can still leave a seal ahead of disk
  *
@@ -91,6 +108,15 @@ export async function persistSyncVersion(storage: PluginStorage, value: number):
  */
 export class SyncVersionCache {
   private value = -1
+  /**
+   * Last version actually confirmed written to disk — updated only after a
+   * `persist()` call resolves successfully, to exactly the value that call
+   * wrote. Rollback restores `this.value` to `this.durable`, never to a
+   * caller-captured `previous`, so it can never land on a value disk never
+   * saw. See the class doc's "Rollback can still leave a seal ahead of disk"
+   * section.
+   */
+  private durable = -1
   private hydrated = false
   /** Promise-chain mutex — see the class doc's "Write serialization" section. */
   private writeChain: Promise<void> = Promise.resolve()
@@ -108,6 +134,7 @@ export class SyncVersionCache {
   async hydrate(): Promise<void> {
     if (this.hydrated) return
     this.value = await loadSyncVersion(this.storage)
+    this.durable = this.value
     this.hydrated = true
   }
 
@@ -134,28 +161,41 @@ export class SyncVersionCache {
    * write-behind `persist()` — a synchronous `get()` immediately after this
    * call (not awaiting the returned promise) already sees the new value.
    *
-   * On a `persist()` rejection, the in-memory mutation is rolled back
-   * before rethrowing — and, if the caller supplied one, `onRollback` fires
-   * synchronously right after the rollback, before rethrowing. See the
-   * class doc's "Rollback can still leave a seal ahead of disk" section for
-   * why a caller needs that hook at all.
+   * On a `persist()` rejection, the in-memory mutation is rolled back to the
+   * last *durably persisted* value — NOT to this call's captured `previous`
+   * — before rethrowing. `previous` is only a snapshot of memory at call
+   * time; because `persist()` reads `this.value` live (see "Write
+   * serialization" above), an overlapping, earlier-queued `set()` can
+   * already have persisted a value higher than this call's `previous` by
+   * the time this call's own persist fails. Rolling back to `previous` in
+   * that case would strand memory BELOW what disk already holds, which then
+   * gets sealed at the wrong (lower) version. Rolling back to the tracked
+   * durable value instead guarantees memory can never end up on either side
+   * of disk after a failed persist. If the caller supplied one, `onRollback`
+   * fires synchronously right after the rollback, before rethrowing. See
+   * the class doc's "Rollback can still leave a seal ahead of disk" section
+   * for why a caller needs that hook at all.
    */
   async set(version: number): Promise<void> {
     const previous = this.value
     this.value = Math.max(previous, version)
     return this.enqueueWrite(async () => {
       try {
-        await this.persist()
+        const written = await this.persist()
+        if (written > this.durable) this.durable = written
       } catch (err) {
-        this.value = previous
+        this.value = this.durable
         this.onRollback?.()
         throw err
       }
     })
   }
 
-  private persist(): Promise<void> {
-    return persistSyncVersion(this.storage, this.value)
+  /** Persists the live `this.value` and returns exactly what was written. */
+  private async persist(): Promise<number> {
+    const toWrite = this.value
+    await persistSyncVersion(this.storage, toWrite)
+    return toWrite
   }
 
   /**
