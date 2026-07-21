@@ -34,8 +34,9 @@
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
-import { buildScopedStorageKey, NS_FLUUX_VERIFICATIONS } from '@fluux/sdk'
+import { NS_FLUUX_VERIFICATIONS } from '@fluux/sdk'
 import { fingerprintsEqual } from './fingerprintCompare'
+import { SyncVersionCache, createInMemorySyncVersionCache } from './syncVersionCache'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
 export type EncryptFn = (
@@ -64,9 +65,6 @@ export type DecryptFn = (
 /** PEP node id for verification sync — the canonical value lives in the SDK. */
 export const VERIFICATIONS_NODE = NS_FLUUX_VERIFICATIONS
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
-
-/** localStorage base key holding the highest snapshot version applied/published. */
-const VERSION_STORAGE_KEY_BASE = 'fluux-e2ee-verifications-version'
 
 interface VerificationPayload {
   v: 2
@@ -131,34 +129,55 @@ function b64Decode(encoded: string): string {
 // ---------------------------------------------------------------------------
 // Applied-version persistence
 // ---------------------------------------------------------------------------
+//
+// B3 Task 4: moved from a localStorage blob (scoped + legacy-unscoped keys,
+// migrated in place on first read) into a plugin-owned `PluginStorage`
+// value, behind a synchronous in-memory cache — see `syncVersionCache.ts`
+// for the full design rationale. `loadAppliedVerificationsVersion` /
+// `saveAppliedVerificationsVersion` keep their names and (synchronous)
+// signatures so call sites in `OpenPGPPluginBase.ts` and
+// `trustStateIntegrity.ts` don't churn; they now delegate to a
+// module-level `SyncVersionCache` singleton that `OpenPGPPluginBase.init()`
+// replaces with a fresh, `ctx.storage`-backed instance (via
+// {@link bindSyncVersionCache}) on every init, mirroring how
+// `replaceVerifiedKeys` swaps in a fresh `VerifiedKeysCache`.
+
+let syncVersionCache: SyncVersionCache = createInMemorySyncVersionCache()
+
+/**
+ * Point the module-level accessors at `cache`. Called by
+ * `OpenPGPPluginBase.init()` with a fresh `SyncVersionCache(ctx.storage)`
+ * (already hydrated) on every init, so `loadAppliedVerificationsVersion` /
+ * `saveAppliedVerificationsVersion` — used both inside `OpenPGPPluginBase`
+ * and by `trustStateIntegrity.ts`'s `buildCanonicalSnapshot`, which has no
+ * access to a plugin instance — always read/write the SAME live cache.
+ */
+export function bindSyncVersionCache(cache: SyncVersionCache): void {
+  syncVersionCache = cache
+}
+
+/** The currently-bound cache — exposed for the legacy-migration seed and tests. */
+export function getSyncVersionCache(): SyncVersionCache {
+  return syncVersionCache
+}
 
 /**
  * Highest snapshot version this device has applied (from a remote fetch) or
  * published. `-1` means "nothing applied yet", so a legacy v1 node (which
  * decodes to version `0`) is still picked up exactly once on first sync.
+ *
+ * Synchronous — reads the in-memory cache only. Before `OpenPGPPluginBase.init()`
+ * binds the real cache, this reads the empty in-memory placeholder and
+ * correctly returns `-1`.
  */
 export function loadAppliedVerificationsVersion(): number {
-  try {
-    const scopedKey = buildScopedStorageKey(VERSION_STORAGE_KEY_BASE)
-    let raw = localStorage.getItem(scopedKey)
-    if (raw === null && scopedKey !== VERSION_STORAGE_KEY_BASE) {
-      const legacy = localStorage.getItem(VERSION_STORAGE_KEY_BASE)
-      if (legacy !== null) {
-        localStorage.setItem(scopedKey, legacy)
-        localStorage.removeItem(VERSION_STORAGE_KEY_BASE)
-        raw = legacy
-      }
-    }
-    if (raw === null) return -1
-    const n = Number.parseInt(raw, 10)
-    return Number.isFinite(n) ? n : -1
-  } catch {
-    return -1
-  }
+  return syncVersionCache.get()
 }
 
 /**
- * Persists `version`, clamped so the stored value can never decrease.
+ * Persists `version` (write-behind, fire-and-forget from this call site's
+ * point of view — mirrors the pre-B3-Task-4 accessor, which callers never
+ * awaited either), clamped so the stored value can never decrease.
  *
  * Both call sites (`syncVerificationsFromServer`'s post-apply save and
  * `scheduleVerificationsPublish`'s pre-publish reservation) compute the
@@ -169,19 +188,26 @@ export function loadAppliedVerificationsVersion(): number {
  * `_syncingFromRemoteCount` is a counter precisely because concurrent syncs
  * are expected — so a slower call can finish and save *after* a faster,
  * genuinely-newer call already saved a higher version, based on a read that
- * predates that save. Clamping here (rather than trying to serialize the
- * two call sites) makes the accessor itself monotonic regardless of
- * call-site interleaving: whichever save lands second can only raise or
- * hold the stored value, never lower it.
+ * predates that save. `SyncVersionCache.set`'s clamp makes the accessor
+ * itself monotonic regardless of call-site interleaving: whichever save
+ * lands second can only raise or hold the stored value, never lower it.
+ *
+ * The in-memory value updates synchronously (before this returns), so a
+ * `loadAppliedVerificationsVersion()` call immediately after this one
+ * already observes the clamped result — the write-behind persistence (and
+ * its rollback-on-failure) happens in the background.
+ *
+ * The rejection `SyncVersionCache.set` surfaces on a failed persist (after
+ * it has already rolled the in-memory value back) is swallowed here, not
+ * propagated — this call site is fire-and-forget and neither caller awaits
+ * or catches it, same as the pre-B3-Task-4 accessor's own internal
+ * try/catch. The rollback itself is what matters (memory never runs ahead
+ * of disk); there is no caller here to usefully report the failure to.
  */
 export function saveAppliedVerificationsVersion(version: number): void {
-  try {
-    const next = Math.max(loadAppliedVerificationsVersion(), version)
-    localStorage.setItem(buildScopedStorageKey(VERSION_STORAGE_KEY_BASE), String(next))
-  } catch {
-    // Best-effort, mirroring verifiedPeerKeysStore: a failed persist still
-    // leaves in-memory state consistent for the rest of the session.
-  }
+  void syncVersionCache.set(version).catch(() => {
+    // Best-effort — see the doc comment above.
+  })
 }
 
 // ---------------------------------------------------------------------------

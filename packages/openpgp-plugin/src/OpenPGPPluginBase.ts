@@ -79,12 +79,15 @@ import {
 } from './secretKeyProbe'
 import {
   VERIFICATIONS_NODE,
+  bindSyncVersionCache,
   fetchVerificationsFromServer,
   loadAppliedVerificationsVersion,
   planVerificationUpdate,
   publishVerificationsToServer,
   saveAppliedVerificationsVersion,
 } from './verificationSync'
+import { SyncVersionCache, createInMemorySyncVersionCache } from './syncVersionCache'
+import { migrateLegacySyncVersion } from './legacyTrustStateSeed'
 import {
   fingerprintsEqual,
   toXep0373Fingerprint,
@@ -466,6 +469,22 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected verifiedKeys: VerifiedKeysCache = createInMemoryVerifiedKeysCache()
 
   /**
+   * Plugin-owned verification-sync applied/published version counter (B3
+   * Task 4). Same placeholder-until-init treatment as {@link verifiedKeys}:
+   * an empty in-memory `SyncVersionCache` so the field is never `undefined`,
+   * correctly reporting "nothing applied yet" (`-1`) for any read that
+   * somehow runs before `init()`. `init()` unconditionally replaces this
+   * with a fresh `ctx.storage`-backed cache and rebinds the module-level
+   * accessors in `verificationSync.ts` (`loadAppliedVerificationsVersion` /
+   * `saveAppliedVerificationsVersion`) to it via `bindSyncVersionCache` —
+   * those, not this field, are what the plugin's own call sites and
+   * `trustStateIntegrity.ts`'s `buildCanonicalSnapshot` actually read
+   * through. This field exists mainly so `init()` and the legacy-migration
+   * seed have a typed local handle to hydrate and seed.
+   */
+  protected syncVersion: SyncVersionCache = createInMemorySyncVersionCache()
+
+  /**
    * Lazily-created, stable handle returned by {@link getVerifiedKeysView}.
    * Created on first call so a caller that never asks for a view pays
    * nothing; once created it lives for the plugin instance's whole lifetime
@@ -695,6 +714,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // would silently downgrade a verified peer to `tofu`.
     this.replaceVerifiedKeys(new VerifiedKeysCache(ctx.storage))
     await this.verifiedKeys.hydrate()
+    // Same treatment for the verification-sync version counter (B3 Task 4):
+    // hydrate before init resolves, and BEFORE the jid check below, since
+    // `buildCanonicalSnapshot` (trust-state seal) reads it synchronously
+    // through the module-level accessor this rebinds, and that path is also
+    // reachable from the early-return branches below that skip
+    // `activateSubscriptions()`. A cold/placeholder cache here would read as
+    // "-1" (nothing applied yet), silently reopening the replay window this
+    // counter exists to close.
+    this.syncVersion = new SyncVersionCache(ctx.storage)
+    bindSyncVersionCache(this.syncVersion)
+    await this.syncVersion.hydrate()
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
@@ -702,6 +732,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // peers store (removed as of Phase B2 Task 8) — see
     // `seedLegacyVerifiedPeers`'s doc comment.
     await this.seedLegacyVerifiedPeers(ctx.account.jid)
+    // One-time upgrade seed from the legacy localStorage-backed sync-version
+    // counter — see `legacyTrustStateSeed.ts`'s doc comment.
+    await migrateLegacySyncVersion(this.syncVersion, getBareJid(ctx.account.jid))
     // Rehydrate peer key cache so keys are available before MAM arrives.
     const cached = loadPeerKeyCache(ctx.account.jid)
     for (const [jid, bundle] of cached) {

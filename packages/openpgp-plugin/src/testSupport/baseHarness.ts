@@ -8,6 +8,7 @@ import type { BareJID, PluginContext, PluginStorage, SecurityContext, XMPPPrimit
 import { OpenPGPPluginBase, type KeyBundle, type CertValidation, type DecryptOutput } from '../OpenPGPPluginBase'
 import { createMockHostStores } from '../testing/mockHostStores'
 import type { VerifiedKeysCache } from '../verifiedKeysCache'
+import type { SyncVersionCache } from '../syncVersionCache'
 import { memStorage } from './memStorage'
 
 /** Concrete subclass whose abstract crypto methods are never exercised by
@@ -195,6 +196,15 @@ export function seedPeerKey(base: TestOpenPGPPlugin, jid: BareJID, fingerprint: 
  */
 export function getVerifiedKeysCache(base: OpenPGPPluginBase): VerifiedKeysCache {
   return (base as unknown as { verifiedKeys: VerifiedKeysCache }).verifiedKeys
+}
+
+/**
+ * Reach a base instance's `protected syncVersion` cache (B3 Task 4) after
+ * `init()` has hydrated/seeded it — same cast-based-access pattern as
+ * {@link getVerifiedKeysCache}.
+ */
+export function getSyncVersionCache(base: OpenPGPPluginBase): SyncVersionCache {
+  return (base as unknown as { syncVersion: SyncVersionCache }).syncVersion
 }
 
 /**
