@@ -240,6 +240,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
       <ImageContextMenu
         originalUrl={attachment.url}
         proxiedUrl={effectiveSrc}
+        encryption={attachment.encryption}
         filename={attachment.name}
         menu={imageMenu}
       />
