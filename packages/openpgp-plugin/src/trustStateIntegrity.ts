@@ -42,8 +42,22 @@ const enc = new TextEncoder()
 const dec = new TextDecoder()
 
 async function readSeal(storage: PluginStorage): Promise<string | null> {
-  const bytes = await storage.get(SEAL_STORAGE_KEY)
-  if (!bytes) return null
+  let bytes: Uint8Array | null
+  try {
+    bytes = await storage.get(SEAL_STORAGE_KEY)
+  } catch {
+    // A rejecting backend read is not a tamper signal — degrade to "no
+    // seal" so the caller still reaches a real verdict instead of an
+    // unhandled rejection (B3 Task 5 review Finding 3).
+    return null
+  }
+  // A zero-length stored value is truthy (only null/undefined are falsy),
+  // so without this check it would read back as '' — distinct from `null`
+  // but still "no real seal". Left unguarded, `hasStoredSeal` (used by the
+  // legacy migration's guard) would report `true` forever, permanently
+  // wedging an install with an empty stored value out of ever migrating
+  // (B3 Task 5 review Finding 2).
+  if (!bytes || bytes.length === 0) return null
   try {
     return dec.decode(bytes)
   } catch {
@@ -63,7 +77,14 @@ export async function writeSealBytes(storage: PluginStorage, armored: string): P
 }
 
 async function isInitialized(storage: PluginStorage): Promise<boolean> {
-  const bytes = await storage.get(INIT_FLAG_STORAGE_KEY)
+  let bytes: Uint8Array | null
+  try {
+    bytes = await storage.get(INIT_FLAG_STORAGE_KEY)
+  } catch {
+    // Same rationale as `readSeal`'s guard above — a rejecting backend
+    // read degrades to "not initialized" rather than propagating.
+    return false
+  }
   if (!bytes) return false
   try {
     return dec.decode(bytes) === '1'

@@ -6,6 +6,7 @@ import {
   verifyTrustStateSeal,
   hasStoredSeal,
   writeInitFlag,
+  SEAL_STORAGE_KEY,
 } from './trustStateIntegrity'
 import { createMockHostStores, type MockHostStores } from './testing/mockHostStores'
 import { memStorage } from './testSupport/memStorage'
@@ -233,5 +234,78 @@ describe('sealTrustState / verifyTrustStateSeal: PluginStorage-backed seal + ini
     await writeInitFlag(storage)
     const res = await verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, {}, storage, isKeyUnavailable)
     expect(res.status).toBe('compromised')
+  })
+})
+
+// B3 Task 5 review Finding 2: a zero-length stored value is truthy (only
+// null/undefined are falsy for `Uint8Array`), so an unguarded `readSeal`
+// would decode it as `''` — distinct from `null`, but still "no real seal".
+// `hasStoredSeal` (`(await readSeal(storage)) !== null`) would then report
+// `true` forever, permanently wedging the legacy-seal migration's guard
+// (`if (await hasStoredSeal(storage)) return` in `migrateLegacyTrustSeal`)
+// out of ever running for an install stuck with an empty stored value —
+// e.g. propagated from an empty legacy blob via `scopedSeal ?? unscopedSeal`
+// in `legacyTrustStateSeed.ts`.
+describe('readSeal / hasStoredSeal: zero-length stored value is treated as absent (B3 Task 5 review Finding 2)', () => {
+  const decryptOk = async (ciphertext: string) => ({
+    plaintext: ciphertext,
+    signatureVerified: true,
+    signerFingerprint: OWN_FP,
+    signaturePresent: true,
+  })
+
+  it('hasStoredSeal returns false for a zero-length stored seal, not wedged true', async () => {
+    await storage.put(SEAL_STORAGE_KEY, new Uint8Array(0))
+    expect(await hasStoredSeal(storage)).toBe(false)
+  })
+
+  it('verifyTrustStateSeal treats a zero-length stored seal the same as no seal at all (uninitialized on empty stores)', async () => {
+    await storage.put(SEAL_STORAGE_KEY, new Uint8Array(0))
+    const res = await verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, {}, storage, isKeyUnavailable)
+    expect(res.status).toBe('uninitialized')
+  })
+})
+
+// B3 Task 5 review Finding 3: before this fix, `readSeal` and `isInitialized`
+// called `storage.get(...)` unguarded. The old `localStorage`-backed
+// `isInitialized()` wrapped its read in a try/catch (degrading to `false` ->
+// `pending-seal`); the new `PluginStorage`-backed version only guarded
+// `dec.decode`, not the read itself, so a rejecting backend (e.g. a Tauri
+// IPC failure) propagated straight out of `verifyTrustStateSeal` as an
+// unhandled rejection through the `void this.verifyTrustStateOnInit()` call
+// sites in `OpenPGPPluginBase.ts` — a new unhandled-rejection source in the
+// exact path this task just cleaned one out of. These tests prove a
+// rejecting backend read now degrades to a real verdict instead.
+describe('verifyTrustStateSeal: a rejecting storage backend yields a verdict, not an unhandled rejection (B3 Task 5 review Finding 3)', () => {
+  const decryptOk = async (ciphertext: string) => ({
+    plaintext: ciphertext,
+    signatureVerified: true,
+    signerFingerprint: OWN_FP,
+    signaturePresent: true,
+  })
+
+  it('rejecting storage.get with empty stores resolves to uninitialized (exercises the readSeal guard)', async () => {
+    const rejecting: PluginStorage = {
+      ...storage,
+      get: async () => {
+        throw new Error('backend unavailable')
+      },
+    }
+    await expect(
+      verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, {}, rejecting, isKeyUnavailable),
+    ).resolves.toEqual({ status: 'uninitialized' })
+  })
+
+  it('rejecting storage.get with non-empty stores resolves to pending-seal (exercises the readSeal AND isInitialized guards)', async () => {
+    setPins({ 'peer@example.com': 'PEERFP' })
+    const rejecting: PluginStorage = {
+      ...storage,
+      get: async () => {
+        throw new Error('backend unavailable')
+      },
+    }
+    await expect(
+      verifyTrustStateSeal(decryptOk, OWN_PUBLIC, OWN_FP, host, {}, rejecting, isKeyUnavailable),
+    ).resolves.toEqual({ status: 'pending-seal' })
   })
 })
