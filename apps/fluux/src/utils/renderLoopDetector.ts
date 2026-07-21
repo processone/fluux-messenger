@@ -102,6 +102,31 @@ function getComponentState(componentName: string): ComponentState {
 }
 
 /**
+ * Dispatch a detector event *after* the current render finishes.
+ *
+ * detectRenderLoop is called from a component's render phase, so dispatching
+ * synchronously would run listeners mid-render. A listener that sets state — the
+ * on-screen warning banner does — then trips React's "Cannot update a component
+ * while rendering a different component" invariant, turning a diagnostic into a
+ * second error that points at the innocent component being rendered.
+ *
+ * A macrotask defers past the whole render+commit cycle. queueMicrotask would not
+ * be reliable: React can yield mid-render, which flushes microtasks before commit.
+ * The detail payload is captured by value at call time, so the snapshot still
+ * describes the render that tripped the threshold.
+ */
+function dispatchAfterRender(type: string, detail: unknown): void {
+  if (typeof window === 'undefined') return
+  setTimeout(() => {
+    try {
+      window.dispatchEvent(new CustomEvent(type, { detail }))
+    } catch {
+      // CustomEvent not available — ignore
+    }
+  }, 0)
+}
+
+/**
  * Get a simplified stack trace for debugging.
  * Only captures in development mode to minimize overhead.
  */
@@ -200,15 +225,9 @@ export function detectRenderLoop(componentName: string): void {
         `${state.emaRate.toFixed(0)}/sec for ${(heldFor / 1000).toFixed(1)}s ` +
         `(sub-threshold storm — likely a broken memo or a churning store map).`
       )
-      if (typeof window !== 'undefined') {
-        try {
-          window.dispatchEvent(new CustomEvent('fluux:render-loop-sustained', {
-            detail: { componentName, rate: Math.round(state.emaRate), heldMs: heldFor },
-          }))
-        } catch {
-          // CustomEvent not available — ignore
-        }
-      }
+      dispatchAfterRender('fluux:render-loop-sustained', {
+        componentName, rate: Math.round(state.emaRate), heldMs: heldFor,
+      })
     }
   } else {
     state.sustainedSince = 0
@@ -229,15 +248,9 @@ export function detectRenderLoop(componentName: string): void {
     }
     // Dispatch a window event so the app can surface an on-screen warning
     // (useful on mobile where the console is hard to reach).
-    if (typeof window !== 'undefined') {
-      try {
-        window.dispatchEvent(new CustomEvent('fluux:render-loop-warning', {
-          detail: { componentName, renderCount: state.renderCount, windowMs: TIME_WINDOW_MS },
-        }))
-      } catch {
-        // CustomEvent not available — ignore
-      }
-    }
+    dispatchAfterRender('fluux:render-loop-warning', {
+      componentName, renderCount: state.renderCount, windowMs: TIME_WINDOW_MS,
+    })
   }
 
   const effectiveThreshold = now < syncGraceUntil ? SYNC_GRACE_THRESHOLD : MAX_RENDERS_PER_WINDOW
