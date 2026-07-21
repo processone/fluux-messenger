@@ -40,7 +40,7 @@
     "demo:video": "npx playwright test --config playwright.video.config.ts",
     "demo:video:reel": "npx playwright test --config playwright.video.config.ts --grep reel",
     "demo:video:full": "npx playwright test --config playwright.video.config.ts --grep full",
-    "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -c:v libx264 -crf 30 -preset slow -pix_fmt yuv420p -movflags +faststart -an assets/readme/fluux-demo.mp4"
+    "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -vf scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv -c:v libx264 -crf 30 -preset slow -color_range tv -colorspace bt709 -color_primaries bt709 -color_trc bt709 -movflags +faststart -an assets/readme/fluux-demo.mp4"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

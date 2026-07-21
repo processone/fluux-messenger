@@ -425,7 +425,15 @@ export class Director {
     const list = join(this.dir, 'frames.txt')
     writeFileSync(list, lines.join('\n'))
 
-    const input = ['-y', '-f', 'concat', '-safe', '0', '-i', list, '-vf', `fps=${FPS}`]
+    // The frames are full-range RGB PNGs. Left implicit, ffmpeg converts them to
+    // full-range YUV under a guessed matrix (yuvj420p / pc / bt470bg) — not what HD
+    // players expect, and it propagates to every downstream transcode. Convert to
+    // limited-range BT.709 and tag the stream so players and `npm run demo:video:readme`
+    // agree on the color space. setparams is required: the filter output overrides the
+    // encoder's -color_primaries / -color_trc flags, which otherwise land as "unknown".
+    const color = 'scale=out_range=tv:out_color_matrix=bt709,format=yuv420p,'
+      + 'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv'
+    const input = ['-y', '-f', 'concat', '-safe', '0', '-i', list, '-vf', `fps=${FPS},${color}`]
     execFileSync('ffmpeg', [
       ...input, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18',
       '-movflags', '+faststart', '-an', `${outBase}.mp4`,
