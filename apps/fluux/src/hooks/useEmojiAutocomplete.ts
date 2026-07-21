@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 
 export interface EmojiMatch {
   id: string
@@ -46,8 +46,23 @@ const MAX_EMOJI_MATCHES = 8
  */
 const MIN_EMOJI_QUERY_LENGTH = 2
 
-function normalizeEmojiSearchText(value: string): string {
+export function normalizeEmojiSearchText(value: string): string {
   return value.normalize('NFKC').toLowerCase()
+}
+
+/** A database entry flattened to just what matching and rendering need. */
+export interface EmojiCandidate {
+  id: string
+  name: string
+  native: string
+  keywords?: string[]
+}
+
+/** Every emoji matching `query`, plus the query they were matched against. */
+export interface EmojiCandidatePool {
+  /** Normalized, so it can be compared against the next normalized query. */
+  query: string
+  candidates: EmojiCandidate[]
 }
 
 /** Pure: find the emoji shortcode token immediately before the caret. */
@@ -143,11 +158,99 @@ function shortestKeywordPrefixLength(
 }
 
 /**
- * Match and rank emoji suggestions independently of the source data's insertion order.
+ * Score one candidate against an already-normalized query, or null if it does not match.
  * Exact shortcode matches come first, followed by shortcode prefixes, keyword prefixes,
  * and name matches. Within a tier the query covering more of the matched text wins, so
  * "thumbs" prefers `thumbsup` over `thumbsdown` and "hea" prefers `heart` over
  * `heart_decoration`, rather than falling back to how the shortcodes happen to sort.
+ */
+function scoreEmojiCandidate(
+  candidate: EmojiCandidate,
+  normalizedQuery: string,
+): { rank: number; matchLength: number } | null {
+  const normalizedId = normalizeEmojiSearchText(candidate.id)
+
+  if (normalizedId === normalizedQuery) return { rank: 0, matchLength: normalizedId.length }
+  if (normalizedId.startsWith(normalizedQuery)) return { rank: 1, matchLength: normalizedId.length }
+
+  const keywordLength = shortestKeywordPrefixLength(candidate.keywords, normalizedQuery)
+  if (keywordLength !== null) return { rank: 2, matchLength: keywordLength }
+
+  const normalizedName = normalizeEmojiSearchText(candidate.name)
+  if (normalizedName.includes(normalizedQuery)) return { rank: 3, matchLength: normalizedName.length }
+
+  return null
+}
+
+/**
+ * Every emoji matching `query`, narrowed from `previous` when possible.
+ *
+ * Each predicate is monotonic over query prefixes — anything matching `heart`
+ * also matches `hea` — so extending a query can only ever shrink the match set,
+ * and the next set can be filtered from the previous one instead of rescanning
+ * all ~1900 emojis. The guard compares *normalized* queries because NFKC
+ * composition is not prefix-preserving: normalized `café` does not start with
+ * normalized `cafe`, so there the set grows and only a full scan is correct.
+ *
+ * The pool deliberately holds every match rather than the visible top eight: a
+ * candidate ranked below the cut for a short query can rank first once the query
+ * grows, so narrowing a limited set would lose it.
+ */
+export function emojiCandidatePool(
+  data: EmojiAutocompleteData,
+  query: string,
+  previous?: EmojiCandidatePool,
+): EmojiCandidatePool {
+  const normalizedQuery = normalizeEmojiSearchText(query)
+  const canNarrow =
+    previous !== undefined &&
+    previous.query.length > 0 &&
+    normalizedQuery.startsWith(previous.query)
+
+  if (canNarrow) {
+    return {
+      query: normalizedQuery,
+      candidates: previous.candidates.filter(
+        (candidate) => scoreEmojiCandidate(candidate, normalizedQuery) !== null
+      ),
+    }
+  }
+
+  const emojis = data.emojis
+  if (!normalizedQuery || !emojis) return { query: normalizedQuery, candidates: [] }
+
+  const candidates: EmojiCandidate[] = []
+  for (const [id, emoji] of Object.entries(emojis)) {
+    const native = emoji.skins?.[0]?.native
+    if (!native) continue
+
+    const candidate: EmojiCandidate = { id, name: emoji.name, native, keywords: emoji.keywords }
+    if (scoreEmojiCandidate(candidate, normalizedQuery) !== null) candidates.push(candidate)
+  }
+
+  return { query: normalizedQuery, candidates }
+}
+
+/** Order a pool's candidates best-match-first. The caller applies any display limit. */
+export function rankEmojiCandidates(candidates: EmojiCandidate[], query: string): EmojiMatch[] {
+  const normalizedQuery = normalizeEmojiSearchText(query)
+
+  return candidates
+    .map((candidate) => ({ candidate, score: scoreEmojiCandidate(candidate, normalizedQuery) }))
+    .filter((entry): entry is { candidate: EmojiCandidate; score: { rank: number; matchLength: number } } =>
+      entry.score !== null
+    )
+    .sort(
+      (a, b) =>
+        a.score.rank - b.score.rank ||
+        a.score.matchLength - b.score.matchLength ||
+        a.candidate.id.localeCompare(b.candidate.id)
+    )
+    .map(({ candidate }) => ({ id: candidate.id, name: candidate.name, native: candidate.native }))
+}
+
+/**
+ * Match and rank emoji suggestions independently of the source data's insertion order.
  * The result limit is applied only after all candidates are ranked.
  */
 export function matchEmojiAutocomplete(
@@ -155,47 +258,9 @@ export function matchEmojiAutocomplete(
   query: string,
   limit = MAX_EMOJI_MATCHES,
 ): EmojiMatch[] {
-  const normalizedQuery = normalizeEmojiSearchText(query)
-  if (!normalizedQuery || limit <= 0 || !data.emojis) return []
+  if (limit <= 0) return []
 
-  const rankedMatches: Array<EmojiMatch & { rank: number; matchLength: number }> = []
-
-  for (const [id, emoji] of Object.entries(data.emojis)) {
-    const native = emoji.skins?.[0]?.native
-    if (!native) continue
-
-    const normalizedId = normalizeEmojiSearchText(id)
-    let rank = -1
-    let matchLength = 0
-
-    if (normalizedId === normalizedQuery) {
-      rank = 0
-      matchLength = normalizedId.length
-    } else if (normalizedId.startsWith(normalizedQuery)) {
-      rank = 1
-      matchLength = normalizedId.length
-    } else {
-      const keywordLength = shortestKeywordPrefixLength(emoji.keywords, normalizedQuery)
-      const normalizedName = normalizeEmojiSearchText(emoji.name)
-
-      if (keywordLength !== null) {
-        rank = 2
-        matchLength = keywordLength
-      } else if (normalizedName.includes(normalizedQuery)) {
-        rank = 3
-        matchLength = normalizedName.length
-      }
-    }
-
-    if (rank >= 0) {
-      rankedMatches.push({ id, name: emoji.name, native, rank, matchLength })
-    }
-  }
-
-  return rankedMatches
-    .sort((a, b) => a.rank - b.rank || a.matchLength - b.matchLength || a.id.localeCompare(b.id))
-    .slice(0, limit)
-    .map(({ id, name, native }) => ({ id, name, native }))
+  return rankEmojiCandidates(emojiCandidatePool(data, query).candidates, query).slice(0, limit)
 }
 
 /** The emoji whose shortcode is exactly `query`, used to resolve a closed `:name:`. */
@@ -245,11 +310,19 @@ export function useEmojiAutocomplete(
   const triggerIndex = trigger?.triggerIndex ?? -1
   const emojiData = useEmojiAutocompleteData(isTriggerActive)
 
-  // Build matches list
+  // Extending a query only ever shrinks the match set, so each keystroke filters
+  // the previous candidates instead of rescanning the whole database. The cache is
+  // a pure optimization — `emojiCandidatePool` falls back to a full scan whenever
+  // the previous pool cannot cover the new query — so a stale or dropped entry can
+  // only cost time, never change the result.
+  const poolRef = useRef<EmojiCandidatePool | undefined>(undefined)
   const matches = useMemo((): EmojiMatch[] => {
     if (!isTriggerActive || !emojiData || !query) return []
 
-    return matchEmojiAutocomplete(emojiData, query)
+    const pool = emojiCandidatePool(emojiData, query, poolRef.current)
+    poolRef.current = pool
+
+    return rankEmojiCandidates(pool.candidates, query).slice(0, MAX_EMOJI_MATCHES)
   }, [isTriggerActive, query, emojiData])
 
   // A changed token represents a new completion interaction, even at the same position.

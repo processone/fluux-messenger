@@ -2,10 +2,15 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import {
+  emojiCandidatePool,
   loadEmojiAutocompleteData,
   matchEmojiAutocomplete,
   matchEmojiAutocompleteTrigger,
+  normalizeEmojiSearchText,
+  rankEmojiCandidates,
   useEmojiAutocomplete,
+  type EmojiAutocompleteData,
+  type EmojiCandidatePool,
 } from './useEmojiAutocomplete'
 
 // Mock the emoji database with a smaller subset of test emojis
@@ -294,6 +299,114 @@ describe('useEmojiAutocomplete', () => {
       const ids = result.current.state.matches.map(m => m.id)
       expect(ids).toContain('+1')
       expect(ids).toContain('heart')
+    })
+  })
+
+  describe('incremental narrowing', () => {
+    const DATA = {
+      emojis: {
+        heart: { name: 'Red Heart', skins: [{ native: '❤️' }], keywords: ['love'] },
+        heart_eyes: { name: 'Smiling Face with Heart-Eyes', skins: [{ native: '😍' }], keywords: ['love'] },
+        headphones: { name: 'Headphone', skins: [{ native: '🎧' }], keywords: ['music'] },
+        fire: { name: 'Fire', skins: [{ native: '🔥' }], keywords: ['hot'] },
+      },
+    }
+
+    /** Reading `emojis` means a full database scan happened. */
+    function dataThatFailsIfScanned(): EmojiAutocompleteData {
+      return {
+        get emojis(): never {
+          throw new Error('scanned the full emoji database instead of narrowing')
+        },
+      }
+    }
+
+    it('extends a previous query without rescanning the database', () => {
+      const pool = emojiCandidatePool(DATA, 'hea')
+      expect(pool.candidates.map((c) => c.id).sort()).toEqual(['headphones', 'heart', 'heart_eyes'])
+
+      const narrowed = emojiCandidatePool(dataThatFailsIfScanned(), 'heart', pool)
+
+      expect(narrowed.candidates.map((c) => c.id).sort()).toEqual(['heart', 'heart_eyes'])
+    })
+
+    it('produces exactly what a full scan produces, at every prefix length', () => {
+      let pool: EmojiCandidatePool | undefined
+      for (const query of ['he', 'hea', 'hear', 'heart']) {
+        pool = emojiCandidatePool(DATA, query, pool)
+        expect(pool.candidates.map((c) => c.id).sort()).toEqual(
+          emojiCandidatePool(DATA, query).candidates.map((c) => c.id).sort()
+        )
+      }
+    })
+
+    /**
+     * NFKC composition is not prefix-preserving: normalized 'café' does not start
+     * with normalized 'cafe', so the match set can GROW as the query lengthens.
+     * Narrowing there would lose the match, so the guard must fall back to a scan.
+     */
+    it('rescans when composition breaks the prefix relationship', () => {
+      const data = {
+        emojis: {
+          'café': { name: 'Café', skins: [{ native: '☕' }], keywords: [] },
+        },
+      }
+
+      const pool = emojiCandidatePool(data, 'cafe')
+      expect(pool.candidates).toEqual([])
+
+      const next = emojiCandidatePool(data, normalizeEmojiSearchText('CAFÉ'), pool)
+
+      expect(next.candidates.map((c) => c.id)).toEqual(['café'])
+    })
+
+    it('narrows a deletion by rescanning rather than reusing a narrower pool', () => {
+      const pool = emojiCandidatePool(DATA, 'heart')
+      expect(pool.candidates.map((c) => c.id).sort()).toEqual(['heart', 'heart_eyes'])
+
+      const widened = emojiCandidatePool(DATA, 'hea', pool)
+
+      expect(widened.candidates.map((c) => c.id).sort()).toEqual(['headphones', 'heart', 'heart_eyes'])
+    })
+
+    /**
+     * The pool holds every match, not the visible top eight: a candidate ranked
+     * below the cut for a short query can rank first once the query grows.
+     */
+    it('keeps candidates that only rank into view at a longer query', () => {
+      // Eight ids that tie 'zzz' on rank and length at 'zz' but sort ahead of it,
+      // filling the visible list. None of them survives the extra character.
+      const decoys = Object.fromEntries(
+        'abcdefgh'.split('').map((letter) => [
+          `zz${letter}`,
+          { name: `Decoy ${letter}`, skins: [{ native: `d-${letter}` }], keywords: [] },
+        ])
+      )
+      const data = { emojis: { ...decoys, zzz: { name: 'Target', skins: [{ native: '🎯' }], keywords: [] } } }
+
+      // 'zzz' is pushed out of the visible eight at the shorter query...
+      expect(matchEmojiAutocomplete(data, 'zz').map((m) => m.id)).not.toContain('zzz')
+
+      // ...but the pool keeps it, so extending the query can still surface it.
+      const narrowed = emojiCandidatePool(data, 'zzz', emojiCandidatePool(data, 'zz'))
+
+      expect(narrowed.candidates.map((c) => c.id)).toEqual(['zzz'])
+      expect(rankEmojiCandidates(narrowed.candidates, 'zzz')[0].id).toBe('zzz')
+    })
+
+    it('matches the same emojis whether typed progressively or in one go', async () => {
+      const { result, rerender } = renderHook(
+        ({ text, cursor }) => useEmojiAutocomplete(text, cursor),
+        { initialProps: { text: ':he', cursor: 3 } }
+      )
+      await waitFor(() => expect(result.current.state.isActive).toBe(true))
+
+      for (const [text, cursor] of [[':hea', 4], [':hear', 5], [':heart', 6]] as const) {
+        rerender({ text, cursor })
+      }
+      await waitFor(() => expect(result.current.state.matches.length).toBeGreaterThan(0))
+
+      expect(result.current.state.matches.map((m) => m.id)).toEqual(['heart'])
     })
   })
 
