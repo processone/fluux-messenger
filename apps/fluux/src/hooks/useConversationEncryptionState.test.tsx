@@ -32,6 +32,8 @@ vi.mock('@/hooks/useWebKeyLocked', () => ({
 import { useConnection, useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
+import { setVerifiedKeysView } from '@/e2ee/verifiedPeersView'
+import type { VerifiedKeysView } from '@fluux/openpgp-plugin'
 
 const mockedUseConnection = useConnection as unknown as ReturnType<typeof vi.fn>
 const mockedUseConnectionStatus = useConnectionStatus as unknown as ReturnType<typeof vi.fn>
@@ -72,6 +74,34 @@ function makePlugin(overrides: Partial<FakePlugin> = {}): FakePlugin {
     getPeerFingerprint: vi.fn().mockReturnValue(null),
     probePeer: vi.fn().mockResolvedValue({ supported: false }),
     ...overrides,
+  }
+}
+
+/**
+ * Minimal fake `VerifiedKeysView`, mirroring the one in
+ * `verifiedPeersView.test.ts`. The blocks below used to seed the legacy
+ * `verifiedPeerKeysStore` directly; now they seed the plugin-backed view
+ * that `useVerifiedFingerprint` reads, via the app-side holder
+ * (`setVerifiedKeysView`) — the regression net for the warm-start fast path
+ * and the trust derivation.
+ */
+function createFakeVerifiedKeysView(
+  initial: Record<string, string> = {},
+): VerifiedKeysView & { set(jid: string, fp: string): void } {
+  let map = { ...initial }
+  const listeners = new Set<() => void>()
+  return {
+    isVerified: (jid, fp) => map[jid] === fp,
+    getVerifiedFingerprint: (jid) => map[jid] ?? null,
+    getSnapshot: () => map,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    set(jid, fp) {
+      map = { ...map, [jid]: fp }
+      for (const l of listeners) l()
+    },
   }
 }
 
@@ -255,26 +285,22 @@ describe('useConversationEncryptionState', () => {
   })
 
   describe('verification trust derivation', () => {
-    // Use the real verification store rather than re-mocking. The
-    // assertions below depend on the JID + fingerprint pair pinning,
-    // which is the whole point — mocking the store would let a bug
-    // in that pinning logic slip past.
-    const mod = '@/stores/verifiedPeerKeysStore'
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    let store: VerifiedStore
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as VerifiedStore
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    // Seed the plugin-backed VerifiedKeysView (the seam `useVerifiedFingerprint`
+    // reads) rather than the legacy store. The assertions below depend on the
+    // JID + fingerprint pair pinning, which is the whole point — a naive fake
+    // would let a bug in that pinning logic slip past, so this is a faithful
+    // map + notify, matching `verifiedPeersView.test.ts`.
+    let view: ReturnType<typeof createFakeVerifiedKeysView>
+    beforeEach(() => {
+      view = createFakeVerifiedKeysView()
+      setVerifiedKeysView(view)
     })
     afterEach(() => {
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+      setVerifiedKeysView(null)
     })
 
     it("returns trust='verified' when the cached fingerprint is in the store", () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'CAFE1234')
+      view.set('bob@example.com', 'CAFE1234')
       const plugin = makePlugin({
         getPeerFingerprint: vi.fn().mockReturnValue('CAFE1234'),
       })
@@ -293,9 +319,7 @@ describe('useConversationEncryptionState', () => {
       // A native (Sequoia) device verified the peer and synced the
       // fingerprint in UPPERCASE; this web (openpgp.js) device's plugin cache
       // reports the same key lowercase. The lock must still be green.
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('adrien@example.com', 'AABBCCDDEEFF00112233445566778899AABBCCDD')
+      view.set('adrien@example.com', 'AABBCCDDEEFF00112233445566778899AABBCCDD')
       const plugin = makePlugin({
         getPeerFingerprint: vi
           .fn()
@@ -316,9 +340,7 @@ describe('useConversationEncryptionState', () => {
       // Pin to the OLD fingerprint, but the cache returns a NEW one —
       // simulates a key rotation that hasn't been re-confirmed. The
       // chip must drop back to BTBV trust until the user re-verifies.
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'OLD_FP_VALUE')
+      view.set('bob@example.com', 'OLD_FP_VALUE')
       const plugin = makePlugin({
         getPeerFingerprint: vi.fn().mockReturnValue('NEW_FP_VALUE'),
       })
@@ -347,7 +369,7 @@ describe('useConversationEncryptionState', () => {
       // verifiedFingerprint subscription should pick the change up
       // without needing a remount.
       act(() => {
-        store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'FP')
+        view.set('bob@example.com', 'FP')
       })
       expect(result.current).toMatchObject({ trust: 'verified' })
     })
@@ -545,26 +567,21 @@ describe('useConversationEncryptionState', () => {
   })
 
   describe('reconnect fast path for verified peers', () => {
-    const mod = '@/stores/verifiedPeerKeysStore'
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    let store: VerifiedStore
+    let view: ReturnType<typeof createFakeVerifiedKeysView>
 
-    beforeEach(async () => {
-      localStorage.clear()
-      store = (await import(mod)) as VerifiedStore
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    beforeEach(() => {
+      view = createFakeVerifiedKeysView()
+      setVerifiedKeysView(view)
     })
 
     afterEach(() => {
-      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+      setVerifiedKeysView(null)
     })
 
     it("returns 'encrypted' immediately from the stored fingerprint when plugin cache is cold", () => {
       // Peer has a verified fingerprint persisted from a previous session, but
       // the plugin cache is empty (simulates cold start or post-reconnect state).
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
+      view.set('bob@example.com', 'STORED_FP')
 
       const plugin = makePlugin({
         // Cache miss — plugin hasn't seen this peer yet this session.
@@ -587,9 +604,7 @@ describe('useConversationEncryptionState', () => {
     })
 
     it('fires a background probe to warm the plugin cache even when fast-path applies', async () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
+      view.set('bob@example.com', 'STORED_FP')
 
       const plugin = makePlugin({
         getPeerFingerprint: vi.fn().mockReturnValue(null),
@@ -608,9 +623,7 @@ describe('useConversationEncryptionState', () => {
     })
 
     it('keeps showing encrypted when the background probe fails (transient error)', async () => {
-      store.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', 'STORED_FP')
+      view.set('bob@example.com', 'STORED_FP')
 
       const plugin = makePlugin({
         getPeerFingerprint: vi.fn().mockReturnValue(null),

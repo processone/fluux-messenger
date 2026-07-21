@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useConnectionStatus, useXMPPContext, type TrustState } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useProtocolSwitchStore } from '../stores/protocolSwitchStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useVerifiedFingerprint } from '@/e2ee/verifiedPeersView'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
@@ -142,12 +142,11 @@ export function useConversationEncryptionState(
   // or a manager rebuild.
   const e2eeManager = client.e2ee ?? null
 
-  // Subscribe to ONLY the current peer's verified fingerprint. The
-  // selector takes a primitive (string | null) so unrelated entries
-  // changing in the verifications map don't trigger a re-render here.
-  const verifiedFingerprint = useVerifiedPeerKeysStore((s) =>
-    peerJid ? (s.verifiedFingerprintByJid[peerJid] ?? null) : null,
-  )
+  // Subscribe to ONLY the current peer's verified fingerprint, from the
+  // plugin-backed view. Returns a primitive (string | null) so unrelated
+  // entries changing in the verifications map don't trigger a re-render
+  // here.
+  const verifiedFingerprint = useVerifiedFingerprint(peerJid)
 
   // Same pattern for the per-peer key-change alert: subscribe via a
   // primitive selector so unrelated peers churning don't ripple here.
