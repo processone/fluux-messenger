@@ -1,0 +1,110 @@
+name: Windows Test Build
+
+# On-demand Windows installers for testing a branch before it is released.
+#
+# This mirrors the `build-windows` job in release.yml, minus everything that is
+# release-specific: no tag, no GitHub release, no Azure Trusted Signing, no
+# updater artifacts. The output is a plain Actions artifact you download and
+# install on a Windows machine.
+#
+# The build uses the production identity (com.processone.fluux, "Fluux
+# Messenger") rather than the .dev identity, so installing it over an existing
+# Fluux Messenger exercises the real WiX/NSIS upgrade path. It will replace an
+# installed release build.
+#
+# The installers are UNSIGNED — SmartScreen will warn on first run
+# ("More info" -> "Run anyway").
+#
+# Note: workflow_dispatch only appears in the Actions UI once this file is on
+# the default branch. Merge it to main first, then you can dispatch it against
+# any branch.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: windows-test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Windows installers
+    runs-on: windows-latest
+    # Backstop against a hung build (default GitHub timeout is 6h). A cold
+    # cache is ~25min on Windows; a warm one is far less.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Disable updater artifacts
+        shell: bash
+        run: |
+          # tauri.conf.json sets createUpdaterArtifacts: true and configures an
+          # updater pubkey, so the bundler demands TAURI_SIGNING_PRIVATE_KEY.
+          # Test builds have no signing key and no latest.json to update from,
+          # so turn the artifacts off — same thing tauri-build.sh does locally.
+          sed -i 's/"createUpdaterArtifacts": true/"createUpdaterArtifacts": false/' \
+            apps/fluux/src-tauri/tauri.conf.json
+          grep -q '"createUpdaterArtifacts": false' apps/fluux/src-tauri/tauri.conf.json
+
+      - name: Build Tauri app
+        shell: bash
+        working-directory: apps/fluux
+        run: |
+          # bundle.targets is "all", which on Windows means both NSIS (.exe) and
+          # WiX (.msi) — the same pair the release builds.
+          npm run tauri build
+
+      - name: Summarize build
+        id: summary
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./apps/fluux/src-tauri/tauri.conf.json').version")
+          # Artifact names cannot contain "/", and this repo's branches are
+          # prefixed (mr/...), so flatten the ref before using it as a name.
+          SLUG=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-')
+          echo "slug=${SLUG}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Windows test build"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Branch | \`${GITHUB_REF_NAME}\` |"
+            echo "| Commit | \`$(git rev-parse --short HEAD)\` |"
+            echo "| Version | \`${VERSION}\` |"
+            echo ""
+            echo "Unsigned — SmartScreen will warn on first run."
+            echo "The app reports its commit hash in Settings, so you can confirm what you installed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: fluux-windows-${{ steps.summary.outputs.slug }}-${{ github.sha }}
+          path: |
+            apps/fluux/src-tauri/target/release/bundle/nsis/*.exe
+            apps/fluux/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14

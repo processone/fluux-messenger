@@ -97,6 +97,64 @@ This produces a set of PNG files in the `screenshots/` directory covering major 
 
 The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `scripts/screenshots.ts`.
 
+## Windows Test Builds
+
+Windows installers cannot be cross-compiled from macOS or Linux — the MSVC toolchain, WiX, and NSIS all require Windows. To try a branch on Windows before it is released, dispatch the **Windows Test Build** workflow (`.github/workflows/windows-test-build.yml`). It runs on `windows-latest`, builds both installers, and attaches them as a run artifact (14-day retention) — no tag and no GitHub release.
+
+### Triggering the build
+
+The workflow is manual-only (`workflow_dispatch`); nothing runs it automatically. Because GitHub only exposes `workflow_dispatch` from the default branch, **the workflow file must be on `main`** before you can dispatch it — including against a feature branch. Once it is there, the branch you pick is what gets built.
+
+From the command line:
+
+```bash
+gh workflow run windows-test-build.yml --ref my-feature-branch
+```
+
+Omit `--ref` to build `main`. The command confirms the dispatch but does not report a run ID, so list the runs to pick up the new one:
+
+```bash
+gh run list --workflow=windows-test-build.yml
+```
+
+Then follow it to completion (roughly 25 minutes on a cold Rust cache, much less once warm):
+
+```bash
+gh run watch <run-id>
+```
+
+From the web UI instead: **Actions** → **Windows Test Build** in the left sidebar → **Run workflow** → choose the branch → **Run workflow**.
+
+### Getting the installers
+
+When the run finishes, download the artifact into the current directory:
+
+```bash
+gh run download <run-id>
+```
+
+Or use the **Artifacts** section at the bottom of the run's summary page. Either way you get a zip named `fluux-windows-<branch>-<sha>` — with `/` flattened to `-`, so `mr/my-feature` becomes `mr-my-feature`, since artifact names cannot contain slashes. It holds two files:
+
+| File | Installer |
+|---|---|
+| `…_x64-setup.exe` | NSIS — per-user install, no admin prompt |
+| `…_x64_en-US.msi` | WiX — the MSI, for Group Policy or scripted deploys |
+
+These are Tauri's raw bundle names, so they still carry the `Fluux Messenger_<version>_` prefix; `scripts/rename-release-assets.js` only tidies names on published releases, and it does not run here.
+
+Copy either to the Windows machine and run it. The run summary page also records the branch, commit, and version that produced the build.
+
+Two things differ from a release build:
+
+| | Test build | Release build |
+|---|---|---|
+| Code signing | None — SmartScreen warns on first run ("More info" → "Run anyway") | Azure Trusted Signing |
+| Updater artifacts | Disabled (no signing key, no `latest.json` to serve) | `.sig` files published |
+
+Everything else matches `release.yml`, including the production identifier `com.processone.fluux` and the WiX `upgradeCode`. That means a test build installs *over* an installed Fluux Messenger and exercises the real upgrade path — which is usually what you want, but it does replace the release copy on that machine.
+
+The app reports its commit hash (embedded by `src-tauri/build.rs` as `GIT_HASH`), so you can confirm which build you actually installed. The version string still reads as the current `tauri.conf.json` version — Tauri v2 rejects non-`X.Y.Z` versions, so test builds are not separately stamped.
+
 ## Windows Installer Artwork
 
 The MSI and `.exe` installers carry four branded bitmaps. They are committed under `apps/fluux/src-tauri/installer/windows/` and referenced from `bundle.windows.wix` / `bundle.windows.nsis` in `tauri.conf.json`. They are **not** release-cadence assets — regenerate them only when the artwork itself changes.
