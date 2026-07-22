@@ -55,7 +55,10 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
 
   useEffect(() => {
     const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { hasNoLocalKey?: () => Promise<boolean>; hasSecretKeyBackup?: () => Promise<boolean> }
+      | {
+          hasNoLocalKey?: () => Promise<boolean>
+          probeSecretKeyBackup?: () => Promise<'present' | 'absent' | 'unknown'>
+        }
       | null
       | undefined
     if (!plugin?.hasNoLocalKey) {
@@ -70,8 +73,14 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           if (!cancelled) setMode('unlock')
           return
         }
-        const hasBackup = plugin.hasSecretKeyBackup ? await plugin.hasSecretKeyBackup() : false
-        if (!cancelled) setMode(hasBackup ? 'restore' : 'setup')
+        // Only a server-confirmed `absent` justifies offering to create a new
+        // key. `unknown` means we could not rule out a backup, and guessing
+        // wrong toward setup risks forking the identity; guessing wrong toward
+        // restore only produces an error this dialog already handles.
+        const probe = plugin.probeSecretKeyBackup
+          ? await plugin.probeSecretKeyBackup()
+          : 'absent'
+        if (!cancelled) setMode(probe === 'absent' ? 'setup' : 'restore')
       } catch {
         if (!cancelled) setMode('unlock')
       }

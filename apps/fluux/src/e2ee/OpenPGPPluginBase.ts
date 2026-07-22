@@ -1107,14 +1107,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  /**
-   * @deprecated Collapses `unknown` to `false`. Retained only until the last
-   * consumer migrates to {@link probeSecretKeyBackup}; removed in Task 4.
-   */
-  async hasSecretKeyBackup(): Promise<boolean> {
-    return (await this.probeSecretKeyBackup()) === 'present'
-  }
-
   async restoreSecretKey(passphrase: string): Promise<RestoreResult> {
     const ctx = this.requireCtx()
     const armoredMessage = await this.fetchSecretKeyBackup()

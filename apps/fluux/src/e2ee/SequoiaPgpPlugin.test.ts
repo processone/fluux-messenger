@@ -2527,14 +2527,6 @@ describe('SequoiaPgpPlugin', () => {
       })
     })
 
-    it('hasSecretKeyBackup reflects whether a backup has been published', async () => {
-      const { ctx } = makeContext('me@example.com')
-      await plugin.init(ctx)
-      expect(await plugin.hasSecretKeyBackup()).toBe(false)
-      await plugin.backupSecretKey('pp')
-      expect(await plugin.hasSecretKeyBackup()).toBe(true)
-    })
-
     it('fetchSecretKeyBackup decodes the armored ciphertext exactly as published', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
@@ -2565,7 +2557,7 @@ describe('SequoiaPgpPlugin', () => {
 
     it('restoreSecretKey throws a clean error when no backup exists', async () => {
       // A brand-new account that hasn't published a backup yet — the UI
-      // should be able to detect this via `hasSecretKeyBackup()` first,
+      // should be able to detect this via `probeSecretKeyBackup()` first,
       // but if it racially calls `restoreSecretKey` directly we still
       // want a legible error rather than a silent noop.
       const { ctx } = makeContext('me@example.com')
