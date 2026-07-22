@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Obnoviť zo zálohy servera",
                 "restoreFromServerBody": "Použite prístupovú frázu zálohy, ktorú ste nastavili pri povolení šifrovania na inom zariadení. Príslušný súkromný kľúč sa načíta zo servera a lokálne sa odomkne.",
                 "restoreFromServerUnavailable": "Na serveri nie je publikovaná žiadna záloha súkromného kľúča. Pre obnovenie identity tohto účtu použite inú možnosť.",
+                "restoreFromServerUnknown": "Nepodarilo sa overiť, či na tomto serveri existuje záloha. Aj tak to môžete skúsiť: zadajte prístupovú frázu zálohy a ak existuje, načítame ju.",
                 "importFromFileTitle": "Importovať zo súboru",
                 "importFromFileBody": "Vyberte súbor exportu kľúča, ktorý ste uložili z iného zariadenia. Budete požiadaný o prístupovú frázu, ktorá ho chráni.",
                 "replaceTitle": "Nahradiť publikovanú identitu",

@@ -884,6 +884,7 @@
                 "restoreFromServerTitle": "Restaurer depuis la sauvegarde serveur",
                 "restoreFromServerBody": "Utilisez la phrase de passe de sauvegarde que vous avez définie en activant le chiffrement sur un autre appareil. La clé privée correspondante est récupérée depuis le serveur et déverrouillée localement.",
                 "restoreFromServerUnavailable": "Aucune sauvegarde de clé privée n'est publiée sur le serveur. Utilisez une autre option pour récupérer l'identité de ce compte.",
+                "restoreFromServerUnknown": "Impossible de vérifier si une sauvegarde existe sur ce serveur. Vous pouvez tout de même essayer : saisissez la phrase de passe de la sauvegarde et nous la récupérerons si elle existe.",
                 "importFromFileTitle": "Importer depuis un fichier",
                 "importFromFileBody": "Choisissez un fichier d'export de clé enregistré depuis un autre appareil. Sa phrase de passe vous sera demandée.",
                 "replaceTitle": "Remplacer l'identité publiée",

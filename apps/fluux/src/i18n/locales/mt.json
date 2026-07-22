@@ -858,6 +858,7 @@
                 "restoreFromServerTitle": "Restawra mill-backup tas-server",
                 "restoreFromServerBody": "Uża l-passfrażi tal-backup li ssettjajt meta ppermettejt il-kriptaġġ fuq apparat ieħor. Iċ-ċavetta privata korrispondenti tinġabar mis-server u tinfetaħ lokalment.",
                 "restoreFromServerUnavailable": "L-ebda backup taċ-ċavetta privata mhu ppubblikat fuq is-server. Uża għażla oħra biex tirkupra l-identità ta' dan il-kont.",
+                "restoreFromServerUnknown": "Ma stajniex nivverifikaw jekk hemmx backup fuq dan is-server. Xorta tista' tipprova: daħħal il-passphrase tal-backup u nġibuh jekk ikun hemm.",
                 "importFromFileTitle": "Importa minn fajl",
                 "importFromFileBody": "Agħżel fajl ta' esportazzjoni taċ-ċavetta li ssalvajt minn apparat ieħor. Tintalab il-passfrażi li tipproteġih.",
                 "replaceTitle": "Issostitwixxi l-identità ppubblikata",

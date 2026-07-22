@@ -854,6 +854,7 @@
                 "restoreFromServerTitle": "Vrati iz sigurnosne kopije poslužitelja",
                 "restoreFromServerBody": "Upotrijebite lozinku sigurnosne kopije koju ste postavili pri omogućavanju šifriranja na drugom uređaju. Odgovarajući privatni ključ dohvaća se s poslužitelja i otključava lokalno.",
                 "restoreFromServerUnavailable": "Na poslužitelju nije objavljena sigurnosna kopija privatnog ključa. Upotrijebite drugu opciju za vraćanje identiteta ovog računa.",
+                "restoreFromServerUnknown": "Nije bilo moguće provjeriti postoji li sigurnosna kopija na ovom poslužitelju. Ipak možete pokušati: unesite zaporku sigurnosne kopije i dohvatit ćemo je ako postoji.",
                 "importFromFileTitle": "Uvezi iz datoteke",
                 "importFromFileBody": "Odaberite datoteku izvoza ključa koju ste spremili s drugog uređaja. Bit će vam zatražena lozinka koja je štiti.",
                 "replaceTitle": "Zamijeni objavljeni identitet",

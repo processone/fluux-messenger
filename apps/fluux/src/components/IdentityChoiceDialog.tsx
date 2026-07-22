@@ -2,8 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
 import { ModalOverlay } from './ModalOverlay'
+import type { BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
+
+/**
+ * Copy for the restore choice, one variant per probe outcome. Typing this
+ * as a total Record over {@link BackupProbeResult} means a new probe state
+ * is a compile error here rather than a silently missing description.
+ */
+const RESTORE_DESCRIPTION_KEY: Record<BackupProbeResult, string> = {
+  present: 'settings.encryption.identityChoice.restoreFromServerBody',
+  absent: 'settings.encryption.identityChoice.restoreFromServerUnavailable',
+  unknown: 'settings.encryption.identityChoice.restoreFromServerUnknown',
+}
 
 interface IdentityChoiceDialogProps {
   /**
@@ -14,8 +26,14 @@ interface IdentityChoiceDialogProps {
    *     (keychain/key desync, corruption, missing passphrase).
    */
   reason?: 'no-local-key' | 'local-key-unrecoverable'
-  /** True when the server holds a secret-key backup the user can restore. */
-  hasServerBackup: boolean
+  /**
+   * What the server probe concluded about a restorable secret-key backup.
+   *
+   * `'unknown'` (the probe failed) keeps restore offered, because the
+   * alternative is nudging the user toward the destructive replace path
+   * over a network blip. See `identityChoiceFromProbe`.
+   */
+  serverBackup: BackupProbeResult
   /** Fingerprint(s) currently published on PEP — surfaced so the user sees what they're choosing between. */
   publishedFingerprints: string[]
   /** Called with the backup passphrase. Returns when the import succeeded. */
@@ -48,7 +66,7 @@ interface IdentityChoiceDialogProps {
  */
 export function IdentityChoiceDialog({
   reason = 'no-local-key',
-  hasServerBackup,
+  serverBackup,
   publishedFingerprints,
   onRestoreFromServer,
   onImportFromFile,
@@ -172,12 +190,8 @@ export function IdentityChoiceDialog({
               <ChoiceButton
                 icon={<Server className="size-4" />}
                 title={t('settings.encryption.identityChoice.restoreFromServerTitle')}
-                description={t(
-                  hasServerBackup
-                    ? 'settings.encryption.identityChoice.restoreFromServerBody'
-                    : 'settings.encryption.identityChoice.restoreFromServerUnavailable',
-                )}
-                disabled={!hasServerBackup}
+                description={t(RESTORE_DESCRIPTION_KEY[serverBackup])}
+                disabled={serverBackup === 'absent'}
                 onClick={handleStartRestore}
               />
               <ChoiceButton

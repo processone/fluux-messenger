@@ -855,6 +855,7 @@
                 "restoreFromServerTitle": "Atkurti iš serverio atsarginės kopijos",
                 "restoreFromServerBody": "Naudokite atsarginės kopijos slaptafrazę, kurią nustatėte įjungdami šifravimą kitame įrenginyje. Atitinkamas privatusis raktas gaunamas iš serverio ir atrakinamas vietoje.",
                 "restoreFromServerUnavailable": "Serveryje nepaskelbta privačiojo rakto atsarginė kopija. Naudokite kitą parinktį šios paskyros tapatybei atkurti.",
+                "restoreFromServerUnknown": "Nepavyko patikrinti, ar šiame serveryje yra atsarginė kopija. Vis tiek galite pabandyti: įveskite atsarginės kopijos slaptafrazę ir mes ją parsiųsime, jei tokia yra.",
                 "importFromFileTitle": "Importuoti iš failo",
                 "importFromFileBody": "Pasirinkite rakto eksporto failą, kurį išsaugojote iš kito įrenginio. Jūsų bus paprašyta slaptafrazės, kuri jį saugo.",
                 "replaceTitle": "Pakeisti paskelbtą tapatybę",

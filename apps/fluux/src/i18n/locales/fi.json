@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Palauta palvelimen varmuuskopiosta",
                 "restoreFromServerBody": "Käytä varmuuskopioinnin tunnuslausetta, jonka asetit ottaessasi salauksen käyttöön toisella laitteella. Vastaava yksityinen avain noudetaan palvelimelta ja avataan paikallisesti.",
                 "restoreFromServerUnavailable": "Palvelimella ei ole julkaistu yksityisen avaimen varmuuskopiota. Käytä toista vaihtoehtoa tämän tilin identiteetin palauttamiseen.",
+                "restoreFromServerUnknown": "Ei voitu tarkistaa, onko tällä palvelimella varmuuskopiota. Voit silti yrittää: syötä varmuuskopion salasanalause, niin haemme sen, jos se on olemassa.",
                 "importFromFileTitle": "Tuo tiedostosta",
                 "importFromFileBody": "Valitse avaimen vientitiedosto, jonka olet tallentanut toisesta laitteesta. Sinulta kysytään sitä suojaavaa tunnuslausetta.",
                 "replaceTitle": "Korvaa julkaistu identiteetti",

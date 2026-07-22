@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "从服务器备份恢复",
                 "restoreFromServerBody": "使用您在另一台设备上启用加密时设置的备份密码短语。相应的私钥将从服务器获取并在本地解锁。",
                 "restoreFromServerUnavailable": "服务器上未发布私钥备份。请使用其他选项恢复此账户的身份。",
+                "restoreFromServerUnknown": "无法确认此服务器上是否存在备份。你仍然可以尝试：输入备份密码短语，如果备份存在，我们会获取它。",
                 "importFromFileTitle": "从文件导入",
                 "importFromFileBody": "选择您从另一台设备保存的密钥导出文件。系统将要求您输入保护它的密码短语。",
                 "replaceTitle": "替换已发布的身份",

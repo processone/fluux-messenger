@@ -20,6 +20,7 @@ import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
+  identityChoiceFromProbe,
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
@@ -160,7 +161,7 @@ export function EncryptionSettings() {
   // depth).
   const [pendingIdentityChoice, setPendingIdentityChoice] = useState<{
     accountJid: string
-    hasBackup: boolean
+    serverBackup: BackupProbeResult
     publishedFingerprints: string[]
     reason?: 'no-local-key' | 'local-key-unrecoverable'
   } | null>(null)
@@ -310,7 +311,7 @@ export function EncryptionSettings() {
     void (async () => {
       let next: {
         accountJid: string
-        hasBackup: boolean
+        serverBackup: BackupProbeResult
         publishedFingerprints: string[]
         reason: 'local-key-unrecoverable'
       }
@@ -318,17 +319,17 @@ export function EncryptionSettings() {
         const state = await probeRemoteIdentityState(client, bareJid)
         next = {
           accountJid: bareJid,
-          hasBackup: state.backupMessage !== null,
-          publishedFingerprints: state.publishedFingerprints,
+          ...identityChoiceFromProbe(state),
           reason: 'local-key-unrecoverable',
         }
       } catch {
-        // Probe failed: still open so import/replace are reachable; restore
-        // stays disabled until the server probe succeeds.
+        // Probe failed: open the dialog anyway so the user isn't stranded,
+        // but record the outcome as `'unknown'`. Reporting "no backup" here
+        // would grey out restore and leave replace-identity as the obvious
+        // move, over what may be nothing worse than a dropped connection.
         next = {
           accountJid: bareJid,
-          hasBackup: false,
-          publishedFingerprints: [],
+          ...identityChoiceFromProbe(null),
           reason: 'local-key-unrecoverable',
         }
       }
@@ -411,8 +412,7 @@ export function EncryptionSettings() {
           if (state.hasServerIdentity) {
             setPendingIdentityChoice({
               accountJid: bareJid,
-              hasBackup: state.backupMessage !== null,
-              publishedFingerprints: state.publishedFingerprints,
+              ...identityChoiceFromProbe(state),
             })
             return
           }
@@ -475,8 +475,7 @@ export function EncryptionSettings() {
       if (!recoveryNeeded && !state.hasServerIdentity) return
       setPendingIdentityChoice({
         accountJid: bareJid,
-        hasBackup: state.backupMessage !== null,
-        publishedFingerprints: state.publishedFingerprints,
+        ...identityChoiceFromProbe(state),
         reason: recoveryNeeded ? 'local-key-unrecoverable' : 'no-local-key',
       })
     } catch (err) {
@@ -1382,7 +1381,7 @@ export function EncryptionSettings() {
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
           reason={pendingIdentityChoice.reason}
-          hasServerBackup={pendingIdentityChoice.hasBackup}
+          serverBackup={pendingIdentityChoice.serverBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityChoiceRestore}
           onImportFromFile={handleIdentityChoiceImportFile}

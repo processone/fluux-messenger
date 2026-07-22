@@ -24,6 +24,7 @@
  */
 
 import type { XMPPClient } from '@fluux/sdk/core'
+import type { BackupProbeResult } from './OpenPGPPluginBase'
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
@@ -187,6 +188,34 @@ export async function probeRemoteIdentityState(
     backupMessage,
     publishedFingerprints,
     hasServerIdentity: backupMessage !== null || publishedFingerprints.length > 0,
+  }
+}
+
+/**
+ * Reduce a settled {@link probeRemoteIdentityState} attempt to what
+ * `IdentityChoiceDialog` needs. Pass `null` when the probe threw.
+ *
+ * A failed probe becomes `'unknown'`, never `'absent'`. This is the same
+ * rule the module docstring states, applied one level up: `'absent'`
+ * disables "Restore from server" and greys it out as unavailable, which
+ * leaves "Replace identity" — retract the published key, generate a new
+ * one — as the user's most visible way forward. Steering someone there
+ * because an IQ timed out is the worst outcome this dialog can produce.
+ *
+ * Offering restore under `'unknown'` is free: `restoreSecretKey` fetches
+ * the backup itself rather than reusing anything the probe found, and it
+ * raises `no-backup` only when the server confirms absence. So a wrong
+ * `'unknown'` guess degrades to an honest error the dialog already
+ * renders, while a wrong `'absent'` guess pushes a destructive action.
+ */
+export function identityChoiceFromProbe(state: RemoteIdentityState | null): {
+  serverBackup: BackupProbeResult
+  publishedFingerprints: string[]
+} {
+  if (!state) return { serverBackup: 'unknown', publishedFingerprints: [] }
+  return {
+    serverBackup: state.backupMessage !== null ? 'present' : 'absent',
+    publishedFingerprints: state.publishedFingerprints,
   }
 }
 

@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Athchóirigh ó chúltaca freastalaí",
                 "restoreFromServerBody": "Úsáid an pasfhrása cúltaca a shocraigh tú agus tú ag cumasú criptithe ar ghléas eile. Faightear an eochair phríobháideach chomhfhreagrach ón bhfreastalaí agus díghlasáiltear go háitiúil í.",
                 "restoreFromServerUnavailable": "Níl aon chúltaca eochrach príobháidí foilsithe ar an bhfreastalaí. Úsáid rogha eile chun féiniúlacht an chuntais seo a aisghabháil.",
+                "restoreFromServerUnknown": "Níorbh fhéidir seiceáil an bhfuil cúltaca ar an bhfreastalaí seo. Is féidir leat triail a bhaint as mar sin féin: cuir frása faire an chúltaca isteach agus gheobhaimid é má tá sé ann.",
                 "importFromFileTitle": "Iompórtáil ó chomhad",
                 "importFromFileBody": "Roghnaigh comhad easpórtála eochrach a shábháil tú ó ghléas eile. Iarrfar an pasfhrása ort a chosnaíonn é.",
                 "replaceTitle": "Cuir an fhéiniúlacht foilsithe in ionad",

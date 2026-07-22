@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Ripristina dal backup del server",
                 "restoreFromServerBody": "Usa la passphrase di backup impostata quando hai attivato la crittografia su un altro dispositivo. La chiave privata corrispondente viene recuperata dal server e sbloccata localmente.",
                 "restoreFromServerUnavailable": "Nessun backup di chiave privata è pubblicato sul server. Usa un'altra opzione per recuperare l'identità di questo account.",
+                "restoreFromServerUnknown": "Impossibile verificare se esiste un backup su questo server. Puoi comunque provare: inserisci la passphrase del backup e lo recupereremo se esiste.",
                 "importFromFileTitle": "Importa da file",
                 "importFromFileBody": "Scegli un file di esportazione chiave che hai salvato da un altro dispositivo. Ti verrà chiesta la passphrase che lo protegge.",
                 "replaceTitle": "Sostituisci l'identità pubblicata",

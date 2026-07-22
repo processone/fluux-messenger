@@ -855,6 +855,7 @@
                 "restoreFromServerTitle": "Atjaunot no servera dublējuma",
                 "restoreFromServerBody": "Izmantojiet dublējuma paroli, ko iestatījāt, iespējojot šifrēšanu citā ierīcē. Atbilstošā privātā atslēga tiek izgūta no servera un atbloķēta lokāli.",
                 "restoreFromServerUnavailable": "Serverī nav publicēts privātās atslēgas dublējums. Izmantojiet citu iespēju, lai atjaunotu šī konta identitāti.",
+                "restoreFromServerUnknown": "Neizdevās pārbaudīt, vai šajā serverī ir rezerves kopija. Varat tomēr mēģināt: ievadiet rezerves kopijas paroles frāzi, un mēs to iegūsim, ja tāda ir.",
                 "importFromFileTitle": "Importēt no faila",
                 "importFromFileBody": "Izvēlieties atslēgas eksporta failu, ko esat saglabājis no citas ierīces. Jums tiks lūgta parole, kas to aizsargā.",
                 "replaceTitle": "Aizstāt publicēto identitāti",

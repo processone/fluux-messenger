@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Endurheimta úr afriti netþjóns",
                 "restoreFromServerBody": "Notaðu öryggisafritslykilorðið sem þú stilltir þegar þú virkjaðir dulkóðun á öðru tæki. Samsvarandi einkalykill er sóttur af netþjóni og opnaður staðbundið.",
                 "restoreFromServerUnavailable": "Engin einkalyklaöryggisafritun er birt á netþjóninum. Notaðu annan möguleika til að endurheimta auðkenni þessa reiknings.",
+                "restoreFromServerUnknown": "Ekki var hægt að athuga hvort öryggisafrit er til á þessum þjóni. Þú getur samt reynt: sláðu inn lykilsetningu öryggisafritsins og við sækjum það ef það er til.",
                 "importFromFileTitle": "Flytja inn úr skrá",
                 "importFromFileBody": "Veldu lyklaútflutningsskrá sem þú hefur vistað af öðru tæki. Þú verður beðinn um lykilorðið sem verndar hana.",
                 "replaceTitle": "Skipta um birta auðkenni",

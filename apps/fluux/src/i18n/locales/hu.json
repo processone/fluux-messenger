@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Visszaállítás a szerver biztonsági mentéséből",
                 "restoreFromServerBody": "Használja azt a biztonsági mentési jelszót, amelyet a titkosítás engedélyezésekor egy másik eszközön beállított. A megfelelő privát kulcs letöltődik a szerverről, és helyileg fel lesz oldva.",
                 "restoreFromServerUnavailable": "Nincs közzétéve privát kulcs biztonsági mentés a szerveren. Használjon másik lehetőséget ennek a fióknak az identitásának helyreállítására.",
+                "restoreFromServerUnknown": "Nem sikerült ellenőrizni, hogy létezik-e biztonsági mentés ezen a kiszolgálón. Ettől még megpróbálhatja: adja meg a mentés jelmondatát, és ha van, letöltjük.",
                 "importFromFileTitle": "Importálás fájlból",
                 "importFromFileBody": "Válasszon egy kulcsexport fájlt, amelyet egy másik eszközről mentett. Meg kell adnia a fájlt védő jelszót.",
                 "replaceTitle": "A közzétett identitás cseréje",

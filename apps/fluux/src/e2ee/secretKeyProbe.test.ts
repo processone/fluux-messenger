@@ -13,6 +13,7 @@ import {
   probeRemotePublishedFingerprints,
   probeRemoteIdentityState,
   SecretKeyBackupProbeError,
+  identityChoiceFromProbe,
 } from './secretKeyProbe'
 import type { XMPPClient } from '@fluux/sdk/core'
 import type { PEPItem } from '@fluux/sdk'
@@ -577,5 +578,42 @@ describe('probeRemoteIdentityState', () => {
     await expect(probeRemoteIdentityState(client, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
+  })
+})
+
+describe('identityChoiceFromProbe', () => {
+  it("maps a failed probe to 'unknown', not 'absent'", () => {
+    // The reason this function exists. 'absent' disables "Restore from
+    // server" in IdentityChoiceDialog, which leaves "Replace identity"
+    // — retract the published key and generate a new one — as the most
+    // visible way forward. A probe that merely timed out must never
+    // push the user there.
+    expect(identityChoiceFromProbe(null)).toEqual({
+      serverBackup: 'unknown',
+      publishedFingerprints: [],
+    })
+  })
+
+  it("maps a probe that found a backup to 'present'", () => {
+    expect(
+      identityChoiceFromProbe({
+        backupMessage: '-----BEGIN PGP MESSAGE-----\n\nabc\n-----END PGP MESSAGE-----',
+        publishedFingerprints: ['aabbccdd'],
+        hasServerIdentity: true,
+      }),
+    ).toEqual({ serverBackup: 'present', publishedFingerprints: ['aabbccdd'] })
+  })
+
+  it("maps a confirmed-empty probe to 'absent'", () => {
+    // `backupMessage: null` only ever comes back from an `item-not-found`
+    // or a node that resolved with no parseable item, so this is the one
+    // case where the server really did answer "there is no backup."
+    expect(
+      identityChoiceFromProbe({
+        backupMessage: null,
+        publishedFingerprints: ['eeff0011'],
+        hasServerIdentity: true,
+      }),
+    ).toEqual({ serverBackup: 'absent', publishedFingerprints: ['eeff0011'] })
   })
 })

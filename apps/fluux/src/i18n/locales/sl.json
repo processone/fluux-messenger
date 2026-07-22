@@ -857,6 +857,7 @@
                 "restoreFromServerTitle": "Obnovi iz strežniške varnostne kopije",
                 "restoreFromServerBody": "Uporabite geslo varnostne kopije, ki ste ga nastavili pri omogočanju šifriranja na drugi napravi. Ustrezni zasebni ključ se pridobi s strežnika in odklene lokalno.",
                 "restoreFromServerUnavailable": "Na strežniku ni objavljene varnostne kopije zasebnega ključa. Uporabite drugo možnost za obnovitev identitete tega računa.",
+                "restoreFromServerUnknown": "Ni bilo mogoče preveriti, ali na tem strežniku obstaja varnostna kopija. Vseeno lahko poskusite: vnesite geslo varnostne kopije in pridobili jo bomo, če obstaja.",
                 "importFromFileTitle": "Uvozi iz datoteke",
                 "importFromFileBody": "Izberite datoteko izvoza ključa, ki ste jo shranili z druge naprave. Vprašalo vas bo za geslo, ki jo varuje.",
                 "replaceTitle": "Zamenjaj objavljeno identiteto",

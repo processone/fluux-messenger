@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Gjenopprett fra server-sikkerhetskopi",
                 "restoreFromServerBody": "Bruk sikkerhetskopiens passordfrase du satte når du aktiverte kryptering på en annen enhet. Den tilsvarende private nøkkelen hentes fra serveren og låses opp lokalt.",
                 "restoreFromServerUnavailable": "Ingen sikkerhetskopi av privatnøkkel er publisert på serveren. Bruk et annet alternativ for å gjenopprette identiteten til denne kontoen.",
+                "restoreFromServerUnknown": "Kunne ikke sjekke om det finnes en sikkerhetskopi på denne serveren. Du kan prøve likevel: skriv inn passordfrasen til sikkerhetskopien, så henter vi den hvis den finnes.",
                 "importFromFileTitle": "Importer fra fil",
                 "importFromFileBody": "Velg en nøkkeleksportfil du har lagret fra en annen enhet. Du vil bli bedt om passordfrasen som beskytter den.",
                 "replaceTitle": "Erstatt den publiserte identiteten",

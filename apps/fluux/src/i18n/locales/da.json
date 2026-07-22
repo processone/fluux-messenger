@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Gendan fra serverbackup",
                 "restoreFromServerBody": "Brug backup-adgangskoden, du angav, da du aktiverede kryptering på en anden enhed. Den tilsvarende private nøgle hentes fra serveren og låses op lokalt.",
                 "restoreFromServerUnavailable": "Ingen backup af privat nøgle er publiceret på serveren. Brug en anden mulighed for at gendanne denne kontos identitet.",
+                "restoreFromServerUnknown": "Kunne ikke kontrollere, om der findes en sikkerhedskopi på denne server. Du kan prøve alligevel: indtast adgangssætningen til sikkerhedskopien, så henter vi den, hvis den findes.",
                 "importFromFileTitle": "Importer fra fil",
                 "importFromFileBody": "Vælg en nøgleeksportfil, du har gemt fra en anden enhed. Du vil blive bedt om den adgangskode, der beskytter den.",
                 "replaceTitle": "Erstat den publicerede identitet",

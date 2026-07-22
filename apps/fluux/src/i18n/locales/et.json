@@ -855,6 +855,7 @@
                 "restoreFromServerTitle": "Taastamine serveri varundusest",
                 "restoreFromServerBody": "Kasutage varunduse paroolifraasi, mille seadsite krüptimise lubamisel teisel seadmel. Vastav privaatvõti tuuakse serverist ja avatakse kohalikult.",
                 "restoreFromServerUnavailable": "Serveris pole avaldatud privaatvõtme varundust. Kasutage selle konto identiteedi taastamiseks teist võimalust.",
+                "restoreFromServerUnknown": "Ei õnnestunud kontrollida, kas selles serveris on varukoopia. Võite siiski proovida: sisestage varukoopia paroolifraas ja me tõmbame selle, kui see on olemas.",
                 "importFromFileTitle": "Impordi failist",
                 "importFromFileBody": "Valige võtme ekspordifail, mille olete teisest seadmest salvestanud. Teilt küsitakse paroolifraasi, mis seda kaitseb.",
                 "replaceTitle": "Asenda avaldatud identiteet",

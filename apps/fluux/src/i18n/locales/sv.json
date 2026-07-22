@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Återställ från serverbackup",
                 "restoreFromServerBody": "Använd backup-lösenfrasen som du ställde in när du aktiverade kryptering på en annan enhet. Motsvarande privata nyckel hämtas från servern och låses upp lokalt.",
                 "restoreFromServerUnavailable": "Ingen backup av privat nyckel är publicerad på servern. Använd ett annat alternativ för att återställa identiteten för detta konto.",
+                "restoreFromServerUnknown": "Det gick inte att kontrollera om det finns en säkerhetskopia på den här servern. Du kan ändå försöka: ange lösenfrasen för säkerhetskopian, så hämtar vi den om den finns.",
                 "importFromFileTitle": "Importera från fil",
                 "importFromFileBody": "Välj en nyckelexportfil som du har sparat från en annan enhet. Du kommer att bli ombedd att ange lösenfrasen som skyddar den.",
                 "replaceTitle": "Ersätt den publicerade identiteten",

@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Restaurar des de la còpia de seguretat del servidor",
                 "restoreFromServerBody": "Utilitzeu la contrasenya de còpia de seguretat que vau definir en activar el xifratge en un altre dispositiu. La clau privada corresponent es recupera del servidor i es desbloqueja localment.",
                 "restoreFromServerUnavailable": "No hi ha cap còpia de seguretat de clau privada publicada al servidor. Utilitzeu una altra opció per recuperar la identitat d'aquest compte.",
+                "restoreFromServerUnknown": "No s'ha pogut comprovar si hi ha una còpia de seguretat en aquest servidor. Tot i així podeu provar-ho: introduïu la frase de contrasenya de la còpia i la recuperarem si existeix.",
                 "importFromFileTitle": "Importar des d'un fitxer",
                 "importFromFileBody": "Trieu un fitxer d'exportació de clau que hàgiu desat des d'un altre dispositiu. Se us demanarà la contrasenya que el protegeix.",
                 "replaceTitle": "Reemplaçar la identitat publicada",

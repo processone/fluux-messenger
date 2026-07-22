@@ -5,7 +5,8 @@ import { useConnectionStatus, useXMPPContext, hasFastToken, getBareJid, getDomai
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
 import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
-import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
+import { probeRemoteIdentityState, identityChoiceFromProbe } from './e2ee/secretKeyProbe'
+import type { BackupProbeResult } from './e2ee/OpenPGPPluginBase'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
 import { useToastStore } from './stores/toastStore'
 import { useAppUpdateStore } from './stores/appUpdateStore'
@@ -196,7 +197,7 @@ function App() {
   // E2EE bootstrap flow.
   const [pendingIdentityChoice, setPendingIdentityChoice] = useState<{
     accountJid: string
-    hasBackup: boolean
+    serverBackup: BackupProbeResult
     publishedFingerprints: string[]
     // Why the dialog opened — drives the intro copy. `no-local-key` is the
     // fresh-device/new-browser case; `local-key-unrecoverable` is a present
@@ -270,8 +271,7 @@ function App() {
               if (recoveryNeeded || state.hasServerIdentity) {
                 setPendingIdentityChoice({
                   accountJid,
-                  hasBackup: state.backupMessage !== null,
-                  publishedFingerprints: state.publishedFingerprints,
+                  ...identityChoiceFromProbe(state),
                   reason: recoveryNeeded
                     ? 'local-key-unrecoverable'
                     : 'no-local-key',
@@ -282,13 +282,13 @@ function App() {
           } catch {
             // Probe failure (transient network, server down): fall through.
             // For an unrecoverable key we still open the dialog so the user
-            // isn't stranded — restore-from-server will simply be disabled
-            // until the probe succeeds; import/replace remain available.
+            // isn't stranded. The probe result stays `'unknown'` rather than
+            // collapsing to "no backup": all three recovery paths remain
+            // offered, and restore re-queries the server itself.
             if (plugin.isKeyRecoveryNeeded?.() === true) {
               setPendingIdentityChoice({
                 accountJid,
-                hasBackup: false,
-                publishedFingerprints: [],
+                ...identityChoiceFromProbe(null),
                 reason: 'local-key-unrecoverable',
               })
               return
@@ -495,7 +495,7 @@ function App() {
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
           reason={pendingIdentityChoice.reason}
-          hasServerBackup={pendingIdentityChoice.hasBackup}
+          serverBackup={pendingIdentityChoice.serverBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityRestoreFromServer}
           onImportFromFile={handleIdentityImportFromFile}

@@ -855,6 +855,7 @@
                 "restoreFromServerTitle": "Aus Server-Backup wiederherstellen",
                 "restoreFromServerBody": "Verwenden Sie die Backup-Passphrase, die Sie beim Aktivieren der Verschlüsselung auf einem anderen Gerät festgelegt haben. Der passende private Schlüssel wird vom Server abgerufen und lokal entsperrt.",
                 "restoreFromServerUnavailable": "Es ist kein Backup des privaten Schlüssels auf dem Server veröffentlicht. Verwenden Sie eine andere Option, um die Identität dieses Kontos wiederherzustellen.",
+                "restoreFromServerUnknown": "Es konnte nicht geprüft werden, ob auf diesem Server ein Backup existiert. Sie können es trotzdem versuchen: Geben Sie die Passphrase des Backups ein, dann rufen wir es ab, falls es vorhanden ist.",
                 "importFromFileTitle": "Aus Datei importieren",
                 "importFromFileBody": "Wählen Sie eine Schlüsselexport-Datei, die Sie von einem anderen Gerät gespeichert haben. Sie werden nach der Passphrase gefragt, die sie schützt.",
                 "replaceTitle": "Veröffentlichte Identität ersetzen",

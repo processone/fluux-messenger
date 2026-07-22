@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Restaurar do backup do servidor",
                 "restoreFromServerBody": "Use a senha de backup que você definiu ao ativar a criptografia em outro dispositivo. A chave privada correspondente é obtida do servidor e desbloqueada localmente.",
                 "restoreFromServerUnavailable": "Nenhum backup de chave privada está publicado no servidor. Use outra opção para recuperar a identidade desta conta.",
+                "restoreFromServerUnknown": "Não foi possível verificar se existe uma cópia de segurança neste servidor. Ainda assim pode tentar: introduza a frase de acesso da cópia e iremos obtê-la se existir.",
                 "importFromFileTitle": "Importar de arquivo",
                 "importFromFileBody": "Escolha um arquivo de exportação de chave que você salvou de outro dispositivo. Será solicitada a senha que o protege.",
                 "replaceTitle": "Substituir a identidade publicada",

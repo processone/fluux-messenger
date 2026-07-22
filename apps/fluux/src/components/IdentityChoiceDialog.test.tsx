@@ -12,7 +12,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 const baseProps = {
-  hasServerBackup: true,
+  serverBackup: 'present' as const,
   publishedFingerprints: ['aabbccdd1122334455667788'],
   onRestoreFromServer: vi.fn(),
   onImportFromFile: vi.fn(),
@@ -59,8 +59,8 @@ describe('IdentityChoiceDialog', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('disables the server-restore choice when no backup is available', () => {
-    render(<IdentityChoiceDialog {...baseProps} hasServerBackup={false} />)
+  it('disables the server-restore choice when the server confirmed there is no backup', () => {
+    render(<IdentityChoiceDialog {...baseProps} serverBackup="absent" />)
     // The container button hosting the title text is the disable target.
     // Querying by the title element and walking up to the button is the
     // most resilient locator — the title sits inside a styled <span>.
@@ -74,6 +74,59 @@ describe('IdentityChoiceDialog', () => {
       screen.getByText('settings.encryption.identityChoice.restoreFromServerUnavailable'),
     ).toBeInTheDocument()
   })
+
+  it('keeps the server-restore choice reachable when the probe was inconclusive', () => {
+    // A probe that timed out tells us nothing about whether a backup
+    // exists. Greying out restore here would steer the user toward
+    // "Replace identity", which retracts their published key.
+    render(<IdentityChoiceDialog {...baseProps} serverBackup="unknown" />)
+    const restoreButton = screen
+      .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+      .closest('button')
+    expect(restoreButton).not.toBeDisabled()
+  })
+
+  it('runs the restore handler when restore is picked under an inconclusive probe', async () => {
+    // Control for the test above: an un-greyed button proves nothing on
+    // its own, so drive the whole wire. `restoreSecretKey` re-fetches the
+    // backup itself, which makes this the retry path for a failed probe.
+    render(<IdentityChoiceDialog {...baseProps} serverBackup="unknown" />)
+    fireEvent.click(
+      screen
+        .getByText('settings.encryption.identityChoice.restoreFromServerTitle')
+        .closest('button')!,
+    )
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        'settings.encryption.identityChoice.restorePassphrasePlaceholder',
+      ),
+      { target: { value: 'passphrase-from-other-device' } },
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'settings.encryption.identityChoice.restoreAction',
+      }),
+    )
+    await waitFor(() => {
+      expect(baseProps.onRestoreFromServer).toHaveBeenCalledWith(
+        'passphrase-from-other-device',
+      )
+    })
+  })
+
+  it.each([
+    ['present', 'restoreFromServerBody'],
+    ['absent', 'restoreFromServerUnavailable'],
+    ['unknown', 'restoreFromServerUnknown'],
+  ] as const)(
+    'describes the restore choice with its own copy when the probe says %s',
+    (serverBackup, key) => {
+      render(<IdentityChoiceDialog {...baseProps} serverBackup={serverBackup} />)
+      expect(
+        screen.getByText(`settings.encryption.identityChoice.${key}`),
+      ).toBeInTheDocument()
+    },
+  )
 
   it('surfaces the first published fingerprint in the header band', () => {
     render(<IdentityChoiceDialog {...baseProps} />)

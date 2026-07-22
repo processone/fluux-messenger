@@ -857,6 +857,7 @@
                 "restoreFromServerTitle": "Przywróć z kopii zapasowej serwera",
                 "restoreFromServerBody": "Użyj hasła kopii zapasowej ustawionego przy włączaniu szyfrowania na innym urządzeniu. Odpowiadający klucz prywatny jest pobierany z serwera i odblokowywany lokalnie.",
                 "restoreFromServerUnavailable": "Na serwerze nie opublikowano kopii zapasowej klucza prywatnego. Użyj innej opcji, aby odzyskać tożsamość tego konta.",
+                "restoreFromServerUnknown": "Nie udało się sprawdzić, czy na tym serwerze istnieje kopia zapasowa. Mimo to możesz spróbować: podaj hasło kopii zapasowej, a pobierzemy ją, jeśli istnieje.",
                 "importFromFileTitle": "Importuj z pliku",
                 "importFromFileBody": "Wybierz plik eksportu klucza zapisany z innego urządzenia. Zostaniesz poproszony o hasło, które go chroni.",
                 "replaceTitle": "Zastąp opublikowaną tożsamość",

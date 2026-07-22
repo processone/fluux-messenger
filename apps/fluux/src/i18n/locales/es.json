@@ -856,6 +856,7 @@
                 "restoreFromServerTitle": "Restaurar desde la copia de seguridad del servidor",
                 "restoreFromServerBody": "Usa la frase de contraseña de copia de seguridad que estableciste al activar el cifrado en otro dispositivo. La clave privada correspondiente se recupera del servidor y se desbloquea localmente.",
                 "restoreFromServerUnavailable": "No hay copia de seguridad de clave privada publicada en el servidor. Usa otra opción para recuperar la identidad de esta cuenta.",
+                "restoreFromServerUnknown": "No se pudo comprobar si existe una copia de seguridad en este servidor. Aun así puedes intentarlo: introduce la frase de contraseña de la copia y la recuperaremos si existe.",
                 "importFromFileTitle": "Importar desde un archivo",
                 "importFromFileBody": "Elige un archivo de exportación de clave que hayas guardado desde otro dispositivo. Se te pedirá la frase de contraseña que lo protege.",
                 "replaceTitle": "Reemplazar la identidad publicada",

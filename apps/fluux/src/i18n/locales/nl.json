@@ -853,6 +853,7 @@
                 "restoreFromServerTitle": "Herstellen vanuit server-back-up",
                 "restoreFromServerBody": "Gebruik de back-up-wachtzin die je hebt ingesteld bij het inschakelen van versleuteling op een ander apparaat. De bijbehorende privésleutel wordt opgehaald van de server en lokaal ontgrendeld.",
                 "restoreFromServerUnavailable": "Er is geen privésleutel-back-up gepubliceerd op de server. Gebruik een andere optie om de identiteit van dit account te herstellen.",
+                "restoreFromServerUnknown": "Kon niet controleren of er een back-up bestaat op deze server. Je kunt het toch proberen: voer de wachtwoordzin van de back-up in, dan halen we hem op als hij er is.",
                 "importFromFileTitle": "Importeren uit bestand",
                 "importFromFileBody": "Kies een sleutel-exportbestand dat je hebt opgeslagen van een ander apparaat. Je wordt gevraagd om de wachtzin die het beschermt.",
                 "replaceTitle": "Vervang de gepubliceerde identiteit",
