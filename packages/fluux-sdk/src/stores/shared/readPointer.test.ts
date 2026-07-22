@@ -98,6 +98,20 @@ describe('serialization', () => {
     expect(deserializeReadPointer(raw)).toEqual(p)
   })
 
+  // Two on-disk encodings of `timestamp` both need to keep loading: epoch ms
+  // (serializeReadPointer's own output, used by room read-state storage) and
+  // ISO strings (what a chat pointer riding inside `conversationMeta` becomes
+  // after a plain `JSON.stringify` turns its `Date` into a string, #1081).
+  // Deserializing the wrong encoding must never silently drop every existing
+  // pointer.
+  it('accepts an ISO string timestamp', () => {
+    const iso = new Date(1000).toISOString()
+    expect(deserializeReadPointer({ messageId: 'm1', timestamp: iso })).toEqual({
+      messageId: 'm1',
+      timestamp: at(1000),
+    })
+  })
+
   // Storage is untrusted input: a corrupt entry must yield "no pointer",
   // never a pointer with an Invalid Date that silently poisons comparisons.
   it.each([
@@ -106,7 +120,8 @@ describe('serialization', () => {
     ['a string', 'nonsense'],
     ['a missing messageId', { timestamp: 1000 }],
     ['a missing timestamp', { messageId: 'm1' }],
-    ['a non-numeric timestamp', { messageId: 'm1', timestamp: 'later' }],
+    ['a non-numeric, non-string timestamp', { messageId: 'm1', timestamp: true }],
+    ['a string timestamp that is not a valid date', { messageId: 'm1', timestamp: 'later' }],
   ])('returns undefined for %s', (_label, raw) => {
     expect(deserializeReadPointer(raw)).toBeUndefined()
   })

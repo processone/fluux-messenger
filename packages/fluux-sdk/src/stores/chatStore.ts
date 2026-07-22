@@ -18,7 +18,7 @@ import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMess
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { makeReadPointer, type ReadPointer } from './shared/readPointer'
+import { deserializeReadPointer, makeReadPointer } from './shared/readPointer'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
@@ -552,16 +552,6 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     return lastReadAt instanceof Date ? lastReadAt : new Date(lastReadAt)
   }
 
-  // Helper to restore the read pointer's Date (#1081). JSON.stringify turns the
-  // timestamp into a string; a pointer holding a string would poison every
-  // comparison it touched, so anything unrecoverable becomes "no pointer" —
-  // lastSeenMessageId is still authoritative during the migration.
-  const restoreReadPointer = (pointer?: ReadPointer): ReadPointer | undefined => {
-    if (!pointer || typeof pointer.messageId !== 'string' || pointer.messageId.length === 0) return undefined
-    const timestamp = pointer.timestamp instanceof Date ? pointer.timestamp : new Date(pointer.timestamp)
-    return Number.isNaN(timestamp.getTime()) ? undefined : { messageId: pointer.messageId, timestamp }
-  }
-
   // Check if we have the new separated format
   const hasNewFormat = persisted.conversationEntities && persisted.conversationMeta
 
@@ -580,7 +570,11 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(meta.lastMessage),
           lastReadAt: restoreLastReadAt(meta.lastReadAt),
-          readPointer: restoreReadPointer(meta.readPointer),
+          // The persisted value is untrusted, not really a `ReadPointer`: a chat
+          // pointer riding inside `conversationMeta` goes through a plain
+          // `JSON.stringify`, so its `timestamp` lands on disk as an ISO string
+          // even though the in-memory type says `Date` (#1081).
+          readPointer: deserializeReadPointer(meta.readPointer),
         },
       ])
     )
@@ -605,7 +599,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(conv.lastMessage),
           lastReadAt: restoreLastReadAt(conv.lastReadAt),
-          readPointer: restoreReadPointer(conv.readPointer),
+          readPointer: deserializeReadPointer(conv.readPointer),
         },
       ])
     )

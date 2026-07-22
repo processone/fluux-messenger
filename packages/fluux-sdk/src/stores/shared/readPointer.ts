@@ -90,11 +90,24 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
  * Rebuild a pointer from untrusted storage. Anything malformed yields
  * `undefined` — "no pointer" — rather than a pointer holding an Invalid Date,
  * which would poison every comparison it touched with silent `false`.
+ *
+ * Accepts `timestamp` as either epoch ms (the on-disk form `serializeReadPointer`
+ * writes) or an ISO string (what a chat pointer riding inside `conversationMeta`
+ * becomes after a plain `JSON.stringify` turns its `Date` into a string). Both
+ * encodings exist on disk today — this is the one place that reads either back.
+ * We still only ever WRITE epoch ms; the string branch is read-only tolerance.
  */
 export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {
   if (!raw || typeof raw !== 'object') return undefined
-  const { messageId, timestamp } = raw as Partial<SerializedReadPointer>
+  const { messageId, timestamp } = raw as { messageId?: unknown; timestamp?: unknown }
   if (typeof messageId !== 'string' || messageId.length === 0) return undefined
-  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return undefined
-  return { messageId, timestamp: new Date(timestamp) }
+
+  if (typeof timestamp === 'number') {
+    return Number.isFinite(timestamp) ? { messageId, timestamp: new Date(timestamp) } : undefined
+  }
+  if (typeof timestamp === 'string') {
+    const parsed = new Date(timestamp)
+    return Number.isNaN(parsed.getTime()) ? undefined : { messageId, timestamp: parsed }
+  }
+  return undefined
 }

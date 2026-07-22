@@ -86,8 +86,12 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   }
 
   // An advance always lands on `match` (onMessageSeen only ever moves to the id
-  // it was given), so the pointer for the advanced position is match's own.
-  const readPointer = makeReadPointer(match)
+  // it was given), so `onMessageSeen` has already resolved `updated.readPointer`
+  // to `makeReadPointer(match)` for us — reuse it instead of recomputing the
+  // same pointer a second time. It can only be undefined here if `match.id`
+  // were absent from `messages`, which can't happen: `match` itself came from
+  // `messages.find(...)` above.
+  const readPointer = updated.readPointer ?? makeReadPointer(match)
 
   if (!options.isActive) {
     return { kind: 'advanced', lastSeenMessageId: updated.lastSeenMessageId, readPointer }
