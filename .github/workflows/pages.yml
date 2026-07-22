@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7
         with:
           node-version: 24
           cache: npm
@@ -39,7 +39,7 @@ jobs:
         run: cp apps/fluux/dist/index.html apps/fluux/dist/404.html
 
       - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         with:
           path: apps/fluux/dist
 
@@ -63,7 +63,7 @@ jobs:
       - name: Deploy to GitHub Pages (attempt 1)
         id: deploy1
         continue-on-error: true
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
 
       - name: Back off before attempt 2
         if: steps.deploy1.outcome == 'failure'
@@ -73,7 +73,7 @@ jobs:
         id: deploy2
         if: steps.deploy1.outcome == 'failure'
         continue-on-error: true
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
 
       - name: Back off before attempt 3
         if: steps.deploy2.outcome == 'failure'
@@ -83,7 +83,7 @@ jobs:
         id: deploy3
         if: steps.deploy2.outcome == 'failure'
         continue-on-error: true
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
 
       - name: Back off before attempt 4
         if: steps.deploy3.outcome == 'failure'
@@ -92,4 +92,4 @@ jobs:
       - name: Deploy to GitHub Pages (attempt 4)
         id: deploy4
         if: steps.deploy3.outcome == 'failure'
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
