@@ -114,6 +114,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
             <button
+              type="button"
               onClick={openVerify}
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors disabled:opacity-50"
@@ -122,6 +123,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
               {t('chat.keyChangeBanner.reVerify')}
             </button>
             <button
+              type="button"
               onClick={handleDismiss}
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-hover text-fluux-text hover:bg-fluux-active rounded transition-colors disabled:opacity-50"

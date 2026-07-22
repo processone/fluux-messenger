@@ -31,6 +31,7 @@ vi.mock('./sidebar-components', () => ({
   // exposes the archive toggle (aria-label reflects state) and calls back.
   MessagesHeaderActions: ({ showArchived, onToggleArchived }: { showArchived: boolean; onToggleArchived: () => void }) => (
     <button
+      type="button"
       aria-label={showArchived ? 'Show active conversations' : 'Show archived conversations'}
       onClick={onToggleArchived}
     />

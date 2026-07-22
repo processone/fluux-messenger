@@ -50,6 +50,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
                   aria-haspopup="menu"
                   aria-label="rooms.notificationSettings"
                   class="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
+                  type="button"
                 >
                   <span
                     data-testid="icon-bell-off"
@@ -74,6 +75,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
               <button
                 aria-label="rooms.inviteMember"
                 class="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+                type="button"
               >
                 <span
                   data-testid="icon-user-plus"
@@ -111,6 +113,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
               aria-label="rooms.showMembers"
               class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
                        hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
+              type="button"
             >
               <span
                 data-testid="icon-users"
@@ -188,6 +191,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
                 class="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"
                 data-fab="scroll-to-bottom"
                 tabindex="-1"
+                type="button"
               >
                 <span
                   data-testid="icon-chevron-down"
@@ -205,6 +209,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
         <button
           class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-fluux-brand hover:bg-fluux-brand/90
                    disabled:opacity-50 disabled:cursor-not-allowed text-fluux-text-on-accent rounded-lg font-medium transition-colors"
+          type="button"
         >
           <span
             data-testid="icon-login"

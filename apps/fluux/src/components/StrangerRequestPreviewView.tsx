@@ -81,6 +81,7 @@ export function StrangerRequestPreviewView({
         {/* Back button — mobile */}
         {onBack && (
           <button
+            type="button"
             onClick={onBack}
             className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back', 'Back')}
@@ -132,6 +133,7 @@ export function StrangerRequestPreviewView({
       {/* Bottom action banner */}
       <div className="p-3 border-t border-fluux-hover flex items-center justify-end gap-2">
         <button
+          type="button"
           onClick={onBlock}
           className="px-4 py-2 text-sm font-medium rounded-md
                      text-fluux-muted hover:bg-fluux-hover transition-colors"
@@ -139,6 +141,7 @@ export function StrangerRequestPreviewView({
           {t('common.block', 'Block')}
         </button>
         <button
+          type="button"
           onClick={onIgnore}
           className="px-4 py-2 text-sm font-medium rounded-md
                      text-fluux-muted hover:bg-fluux-hover transition-colors"
@@ -146,6 +149,7 @@ export function StrangerRequestPreviewView({
           {t('common.ignore', 'Ignore')}
         </button>
         <button
+          type="button"
           onClick={onAccept}
           className="px-4 py-2 text-sm font-medium rounded-md
                      bg-fluux-brand text-white hover:bg-fluux-brand/90 transition-colors"

@@ -115,6 +115,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
+            type="button"
             onClick={onCancel}
             disabled={isInstalling}
             className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
@@ -122,6 +123,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
             {t('common.cancel')}
           </button>
           <button
+            type="button"
             onClick={handleConfirm}
             disabled={!selected || isInstalling}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

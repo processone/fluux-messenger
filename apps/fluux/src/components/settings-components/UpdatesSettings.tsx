@@ -44,6 +44,7 @@ export function UpdatesSettings() {
             )}
             {update.downloaded ? (
               <button
+                type="button"
                 onClick={update.relaunchApp}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
@@ -53,6 +54,7 @@ export function UpdatesSettings() {
               </button>
             ) : update.available && !update.downloading ? (
               <button
+                type="button"
                 onClick={update.downloadAndInstall}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
@@ -66,6 +68,7 @@ export function UpdatesSettings() {
               </span>
             ) : !update.checking ? (
               <button
+                type="button"
                 onClick={update.checkForUpdate}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"

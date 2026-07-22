@@ -180,6 +180,7 @@ export function OccupantModerationModal({
                 if (!label) return null
                 return (
                   <button
+                    type="button"
                     key={`role-${role}`}
                     disabled={loading}
                     onClick={() => void handleRoleAction(role)}
@@ -203,6 +204,7 @@ export function OccupantModerationModal({
             <div className="flex flex-wrap gap-2">
               {affButtons.map(aff => (
                 <button
+                  type="button"
                   key={`aff-${aff}`}
                   disabled={loading}
                   onClick={() => void handleAffAction(aff)}
@@ -240,6 +242,7 @@ export function OccupantModerationModal({
                 />
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     disabled={loading}
                     onClick={() => {
                       if (confirmingAction === 'kick') void handleConfirmedKick()
@@ -251,6 +254,7 @@ export function OccupantModerationModal({
                     {confirmingAction === 'kick' ? t('rooms.kick') : t('rooms.ban')}
                   </button>
                   <button
+                    type="button"
                     onClick={() => { setConfirmingAction(null); setReason('') }}
                     className="px-3 py-1.5 text-sm rounded-md bg-fluux-hover/50 text-fluux-text
                       hover:bg-fluux-hover transition-colors"
@@ -263,6 +267,7 @@ export function OccupantModerationModal({
               <div className="flex flex-wrap gap-2">
                 {showKick && (
                   <button
+                    type="button"
                     disabled={loading}
                     onClick={() => setConfirmingAction('kick')}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md
@@ -275,6 +280,7 @@ export function OccupantModerationModal({
                 )}
                 {showBan && (
                   <button
+                    type="button"
                     disabled={loading}
                     onClick={() => setConfirmingAction('ban')}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md

@@ -136,6 +136,7 @@ export function OwnKeyConflictBanner() {
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
+              type="button"
               onClick={() => void handleOverwrite()}
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors disabled:opacity-50"
@@ -144,6 +145,7 @@ export function OwnKeyConflictBanner() {
               {t('settings.encryption.ownKeyConflict.overwriteServer')}
             </button>
             <button
+              type="button"
               onClick={() => setShowImportDialog(true)}
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded transition-colors disabled:opacity-50"

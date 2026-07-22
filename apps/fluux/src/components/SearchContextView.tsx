@@ -334,6 +334,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         {/* Back button - mobile */}
         {onBack && (
           <button
+            type="button"
             onClick={handleBack}
             className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back', 'Back')}
@@ -389,6 +390,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           <span className="text-sm">{t('search.previewBanner', 'You are viewing a search result preview')}</span>
         </div>
         <button
+          type="button"
           onClick={handleGoToMessage}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
                      bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors flex-shrink-0"

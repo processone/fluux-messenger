@@ -34,6 +34,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
     <div className="relative" ref={containerRef}>
       <Tooltip content={tooltip} position="bottom" disabled={open}>
         <button
+          type="button"
           ref={menu.triggerRef}
           onClick={() => setOpen((v) => !v)}
           aria-label={ariaLabel}

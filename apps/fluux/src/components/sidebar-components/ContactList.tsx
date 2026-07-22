@@ -435,6 +435,7 @@ const ContactItem = memo(function ContactItem({
           style={{ left: menu.position.x, top: menu.position.y }}
         >
           <button
+            type="button"
             onClick={handleStartChat}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
@@ -442,6 +443,7 @@ const ContactItem = memo(function ContactItem({
             <span>{t('contacts.startChat')}</span>
           </button>
           <button
+            type="button"
             onClick={handleRename}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
@@ -452,6 +454,7 @@ const ContactItem = memo(function ContactItem({
             <>
               <div className="my-1 border-t border-fluux-hover" />
               <button
+                type="button"
                 onClick={handleManage}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
@@ -462,6 +465,7 @@ const ContactItem = memo(function ContactItem({
           )}
           <div className="my-1 border-t border-fluux-hover" />
           <button
+            type="button"
             onClick={handleRemove}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
           >

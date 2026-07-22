@@ -46,6 +46,7 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
           <h2 className="text-lg font-semibold text-fluux-text">{t('shortcuts.title')}</h2>
           <Tooltip content={t('common.close')} position="left">
             <button
+              type="button"
               onClick={close}
               className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
               aria-label={t('common.close')}

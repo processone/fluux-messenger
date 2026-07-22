@@ -232,7 +232,7 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
           messages={makeMessages(8)}
           conversationId="conv-media-load"
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
-            <button onClick={onMediaLoad}>media loaded {msg.id}</button>
+            <button type="button" onClick={onMediaLoad}>media loaded {msg.id}</button>
           )}
         />,
       )

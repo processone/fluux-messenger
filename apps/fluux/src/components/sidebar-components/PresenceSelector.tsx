@@ -125,6 +125,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
       {/* Trigger - styled as a distinct chip */}
       <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen} className="min-w-0">
         <button
+          type="button"
           ref={menu.triggerRef}
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full overflow-hidden"
@@ -148,6 +149,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
           {/* Presence options */}
           {presenceOptions.map((option, index) => (
             <button
+              type="button"
               key={option.value}
               onClick={() => void handleSelectPresence(option.value)}
               onMouseEnter={() => setFocusedIndex(index)}

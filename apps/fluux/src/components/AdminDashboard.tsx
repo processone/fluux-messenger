@@ -107,6 +107,7 @@ function CategoryButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={`w-full px-3 py-2 flex items-center gap-2 rounded-lg transition-colors
                  ${isActive

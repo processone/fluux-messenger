@@ -164,6 +164,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
               />
               {canRemoveOption && (
                 <button
+                  type="button"
                   onClick={() => removeOption(index)}
                   className="p-1 text-fluux-muted hover:text-red-500 transition-colors"
                   aria-label={t('poll.removeOption', 'Remove option')}
@@ -176,6 +177,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
 
           {canAddOption && (
             <button
+              type="button"
               onClick={addOption}
               className="flex items-center gap-1.5 text-sm text-fluux-brand hover:text-fluux-text transition-colors mt-1"
             >
@@ -231,12 +233,14 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2 border-t border-fluux-border">
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 text-sm text-fluux-muted hover:text-fluux-text transition-colors"
           >
             {t('common.cancel', 'Cancel')}
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={!isValid || sending}
             className="px-4 py-2 text-sm font-medium text-fluux-text-on-accent bg-fluux-brand rounded-md hover:bg-fluux-brand/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"

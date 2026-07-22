@@ -1912,7 +1912,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />
@@ -1967,7 +1967,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />
@@ -2022,7 +2022,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />

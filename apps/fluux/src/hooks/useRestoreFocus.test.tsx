@@ -14,10 +14,10 @@ function Harness() {
   useRestoreFocus(containerRef, inputRef)
   return (
     <div>
-      <button data-testid="outside">outside</button>
+      <button type="button" data-testid="outside">outside</button>
       <div ref={containerRef} data-testid="modal">
         <input ref={inputRef} data-testid="field" />
-        <button data-testid="inside-btn">inside</button>
+        <button type="button" data-testid="inside-btn">inside</button>
       </div>
     </div>
   )

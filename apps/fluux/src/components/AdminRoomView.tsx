@@ -95,6 +95,7 @@ export function AdminRoomView({
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
           <button
+            type="button"
             onClick={onBack}
             className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover
                        rounded-lg transition-colors"
@@ -159,6 +160,7 @@ export function AdminRoomView({
           <div className="space-y-2">
             {/* Destroy Room */}
             <button
+              type="button"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isExecuting}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg

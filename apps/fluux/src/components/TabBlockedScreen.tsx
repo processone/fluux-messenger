@@ -38,6 +38,7 @@ export function TabBlockedScreen({ takenOver, onTakeOver }: TabBlockedScreenProp
           </p>
 
           <button
+            type="button"
             onClick={onTakeOver}
             className="w-full py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover
                        text-fluux-text-on-accent font-medium rounded transition-colors

@@ -89,6 +89,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
           <Download className="size-6" />
         </button>
         <button
+          type="button"
           onClick={onClose}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.close')}

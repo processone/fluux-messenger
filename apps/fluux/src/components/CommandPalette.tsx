@@ -659,6 +659,7 @@ function CommandPaletteContent({
 
                   return (
                     <button
+                      type="button"
                       key={item.id}
                       data-selected={isSelected}
                       onClick={item.action}

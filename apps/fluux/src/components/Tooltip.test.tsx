@@ -12,7 +12,7 @@ describe('Tooltip', () => {
     it('should not show tooltip initially', () => {
       render(
         <Tooltip content="Test tooltip">
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -23,7 +23,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={400}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -45,7 +45,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -67,7 +67,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={500}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -94,7 +94,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -118,7 +118,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={500}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -149,7 +149,7 @@ describe('Tooltip', () => {
         <div>
           <div data-testid="unrelated-scroller">Some scrollable content</div>
           <Tooltip content="Test tooltip" delay={0}>
-            <button>Hover me</button>
+            <button type="button">Hover me</button>
           </Tooltip>
         </div>
       )
@@ -177,7 +177,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0}>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -205,7 +205,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0} disabled>
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -227,7 +227,7 @@ describe('Tooltip', () => {
         vi.useFakeTimers()
         render(
           <Tooltip content="Test tooltip" position={position} delay={0}>
-            <button>Hover me</button>
+            <button type="button">Hover me</button>
           </Tooltip>
         )
 
@@ -255,7 +255,7 @@ describe('Tooltip', () => {
           }
           delay={0}
         >
-          <button>Hover me</button>
+          <button type="button">Hover me</button>
         </Tooltip>
       )
 
@@ -276,7 +276,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0}>
-          <button>Focus me</button>
+          <button type="button">Focus me</button>
         </Tooltip>
       )
 
@@ -294,7 +294,7 @@ describe('Tooltip', () => {
       vi.useFakeTimers()
       render(
         <Tooltip content="Test tooltip" delay={0}>
-          <button>Focus me</button>
+          <button type="button">Focus me</button>
         </Tooltip>
       )
 
@@ -323,7 +323,7 @@ describe('SimpleTooltip', () => {
     vi.useFakeTimers()
     render(
       <SimpleTooltip content="Simple tooltip" delay={0}>
-        <button>Hover me</button>
+        <button type="button">Hover me</button>
       </SimpleTooltip>
     )
 

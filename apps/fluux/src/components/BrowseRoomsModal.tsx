@@ -310,6 +310,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
               />
               <Tooltip content={t('rooms.discover')}>
                 <button
+                  type="button"
                   onClick={handleCustomServiceSubmit}
                   disabled={!customService.trim()}
                   aria-label={t('rooms.discover')}
@@ -321,6 +322,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
               </Tooltip>
               <Tooltip content={t('common.cancel')}>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowCustomInput(false)
                     setCustomService('')
@@ -454,6 +456,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                       </span>
                     ) : (
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation()
                           void handleJoinRoom(room.jid)

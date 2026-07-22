@@ -129,6 +129,7 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, is
           )}
           {onClosePoll && !expired && !isClosed && (
             <button
+              type="button"
               onClick={async () => {
                 setClosing(true)
                 try {
@@ -179,6 +180,7 @@ function PollOption({ option, color, totalVoters, isMyVote, hasVoted, showResult
 
   return (
     <button
+      type="button"
       onClick={onVote ? () => onVote(option.emoji) : undefined}
       disabled={!onVote}
       className={`

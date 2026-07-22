@@ -568,6 +568,7 @@ const { MockMessageComposer } = vi.hoisted(() => {
           onChange: () => {},
         }),
         React.createElement('button', {
+          type: 'button',
           'data-testid': 'send-button',
           onClick: () => onSend('test message'),
         }, 'Send')

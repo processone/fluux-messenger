@@ -212,6 +212,7 @@ export function NotificationsSettings() {
           {/* Web: request permission in-page */}
           {!isTauri() && notificationStatus === 'default' && (
             <button
+              type="button"
               onClick={handleRequestPermission}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                          bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
@@ -224,6 +225,7 @@ export function NotificationsSettings() {
           {/* macOS: trigger the native OS prompt when permission was never asked */}
           {isMac && notificationStatus === 'default' && (
             <button
+              type="button"
               onClick={handleRequestPermission}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                          bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
@@ -249,6 +251,7 @@ export function NotificationsSettings() {
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
               <>
                 <button
+                  type="button"
                   onClick={handleOpenNotificationSettings}
                   className="flex items-center gap-1.5 text-xs text-fluux-brand hover:text-fluux-text transition-colors"
                 >
@@ -288,6 +291,7 @@ export function NotificationsSettings() {
 
             {webPushStatus === 'available' && webPushEnabled && (
               <button
+                type="button"
                 onClick={() => requestWebPushRegistration(client)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
@@ -299,6 +303,7 @@ export function NotificationsSettings() {
 
             {webPushStatus === 'registered' && (
               <button
+                type="button"
                 onClick={handleDisableWebPush}
                 disabled={disabling}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-red hover:text-fluux-red/80
@@ -311,6 +316,7 @@ export function NotificationsSettings() {
 
             {(webPushStatus === 'disabled' || !webPushEnabled) && webPushStatus !== 'registered' && webPushStatus !== 'available' && (
               <button
+                type="button"
                 onClick={() => enableWebPush(client)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"

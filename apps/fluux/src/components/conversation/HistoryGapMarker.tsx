@@ -20,6 +20,7 @@ export function HistoryGapMarker({ onLoadMore, isLoading }: { onLoadMore: () => 
         <div className="flex-1 h-px bg-fluux-hover" />
       </div>
       <button
+        type="button"
         onClick={onLoadMore}
         disabled={isLoading}
         className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-full transition-colors ${

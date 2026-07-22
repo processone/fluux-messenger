@@ -36,6 +36,7 @@ export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSi
               return (
                 <li key={category.id}>
                   <button
+                    type="button"
                     onClick={() => onCategoryChange(category.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-start transition-colors
                       ${isActive

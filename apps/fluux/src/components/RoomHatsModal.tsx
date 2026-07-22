@@ -309,6 +309,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               : (assignmentsLoaded ? assignments.length : undefined)
             return (
               <button
+                type="button"
                 key={tab}
                 onClick={() => handleTabChange(tab)}
                 className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all
@@ -343,6 +344,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch('')}
               className="absolute end-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
             >
@@ -385,6 +387,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                       <Loader2 className="size-4 animate-spin text-fluux-muted" />
                     ) : (
                       <button
+                        type="button"
                         onClick={() => setConfirmDelete(hat)}
                         className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
                         title={t('rooms.destroyHat')}
@@ -425,6 +428,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                       <Loader2 className="size-4 animate-spin text-fluux-muted" />
                     ) : (
                       <button
+                        type="button"
                         onClick={() => void handleUnassign(a)}
                         className="text-xs text-fluux-muted hover:text-fluux-error transition-colors"
                       >
@@ -470,6 +474,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               />
             </div>
             <button
+              type="button"
               onClick={() => void handleCreate()}
               disabled={!newTitle.trim() || !newUri.trim() || isCreating}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent
@@ -554,6 +559,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               )}
             </select>
             <button
+              type="button"
               onClick={() => void handleAssign()}
               disabled={jidSelection.length === 0 || !assignUri || isAssigning}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent

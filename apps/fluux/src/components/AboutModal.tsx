@@ -44,6 +44,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
           </p>
           <Tooltip content={copied ? t('common.copied') : t('about.copyVersionInfo')}>
             <button
+              type="button"
               onClick={copyVersionInfo}
               className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
             >

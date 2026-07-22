@@ -2,6 +2,7 @@ import eslint from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactCompiler from 'eslint-plugin-react-compiler'
+import react from 'eslint-plugin-react'
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -10,6 +11,7 @@ export default tseslint.config(
     plugins: {
       'react-hooks': reactHooks,
       'react-compiler': reactCompiler,
+      react,
     },
     languageOptions: {
       parserOptions: {
@@ -24,6 +26,16 @@ export default tseslint.config(
 
       // React Compiler
       'react-compiler/react-compiler': 'warn',
+
+      // A <button> with no type attribute defaults to type="submit". Inside a
+      // <form> that silently triggers the form's onSubmit - which is how the
+      // backup dialog's Copy button ended up publishing the OpenPGP key.
+      // Only this rule is enabled from eslint-plugin-react; the recommended
+      // preset is deliberately not used here.
+      // eslint-plugin-react 7.37.5 still caps its eslint peer at ^9.7, so the
+      // root package.json overrides that peer to ^10 - the rule itself runs
+      // fine on eslint 10. Drop the override once upstream supports it.
+      'react/button-has-type': 'error',
 
       // Allow unused vars prefixed with underscore
       '@typescript-eslint/no-unused-vars': [
