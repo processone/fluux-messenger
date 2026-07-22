@@ -187,11 +187,29 @@ describe('post-rehydrate readPointer backfill', () => {
   // restored pointer. A pass that migrated conversations which already have a
   // pointer would move it to m3 — advancing the read position past messages the
   // user never saw, which forward-only makes permanent.
+  //
+  // CONV is the subject but cannot be the barrier: when the guard works nothing
+  // about it ever changes, so there is no transition to wait on. A bare timer is
+  // not a barrier either — the offending write needs a `getMessage` round trip,
+  // which fake-indexeddb resolves from the event loop's CHECK phase, after a
+  // `setTimeout(0)` has already fired in the TIMERS phase of the same iteration.
+  // The assertion would read the untouched pointer and pass either way.
+  //
+  // OTHER is the barrier: it genuinely migrates, `pending` keeps Map insertion
+  // order, and the pass awaits one conversation before starting the next. So by
+  // the time OTHER's pointer lands, CONV's write — correct (none) or wrong — has
+  // already flushed.
   it('leaves an existing pointer alone even when the legacy fields point further ahead', async () => {
-    persistConversations([[CONV, { lastSeenMessageId: 'm3', readPointer: { messageId: 'm1', timestamp: 1000 } }]])
+    await messageCache.saveMessages([
+      { type: 'chat', id: 'o1', conversationId: OTHER, from: OTHER, body: 'x', timestamp: at(1500), isOutgoing: false },
+    ] as never)
+    persistConversations([
+      [CONV, { lastSeenMessageId: 'm3', readPointer: { messageId: 'm1', timestamp: 1000 } }],
+      [OTHER, { lastSeenMessageId: 'o1' }],
+    ])
 
     await chatStore.persist.rehydrate()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.waitFor(() => expect(pointerOf(OTHER)).toEqual({ messageId: 'o1', timestamp: at(1500) }))
 
     expect(pointerOf(CONV)).toEqual({ messageId: 'm1', timestamp: at(1000) })
   })

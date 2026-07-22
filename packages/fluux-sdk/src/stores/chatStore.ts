@@ -564,15 +564,22 @@ export async function migrateReadPointer(
   }
 
   if (lastReadAt) {
-    // Newest message at or before the timestamp. `before` builds an EXCLUSIVE
-    // upper bound (messageCache.ts: `IDBKeyRange.upperBound([...], true)`), so we
-    // probe one millisecond past the timestamp to make the bound inclusive; and
-    // `before` alone already forces the backwards cursor, so `limit: 1` yields
-    // the NEWEST match rather than the oldest.
+    // Newest message at or before the timestamp. The bounds are EXCLUSIVE on
+    // both ends (messageCache.ts: `IDBKeyRange.bound([...], [...], true, true)`),
+    // so we probe one millisecond past the timestamp to make the upper bound
+    // inclusive; `before` forces the backwards cursor, so `limit: 1` yields the
+    // NEWEST match rather than the oldest.
+    //
+    // `after` is what keeps the range inside this conversation. With an upper
+    // bound alone the cursor has no floor, so a conversation with nothing at or
+    // before the timestamp walks backwards through every lower-sorting
+    // conversation's rows — `limit` cannot stop it, because the result array
+    // never fills. That is one `cursor.continue()` per cached message, on the
+    // startup path.
     const [newest] = await messageCache.getMessages(conversationId, {
+      after: new Date(0),
       before: new Date(lastReadAt.getTime() + 1),
       limit: 1,
-      latest: true,
     })
     return newest ? makeReadPointer(newest) : undefined
   }
@@ -646,18 +653,28 @@ function scheduleReadPointerBackfill(conversationMeta: Map<string, ConversationM
   void (async () => {
     // Yield a full task before touching the store. `deserializeState` runs from
     // INSIDE the persist middleware's `getItem`, so the restored state has not
-    // been applied yet — and the both-fields branch below needs no cache read,
-    // so without this its continuation could run first and write a pointer into
-    // a conversation that does not exist yet. That write would no-op and the
-    // migration would be lost silently, which is exactly what Task 6b cannot
-    // survive. This also keeps the store reference off the module's own
-    // evaluation stack.
+    // been applied yet. With today's synchronous storage that ordering is safe
+    // without the yield — zustand wraps `getItem` in a synchronous thenable and
+    // runs the whole `hydrate()` chain, `set(stateFromStorage)` included, before
+    // control returns, so no continuation of ours can preempt it. The yield is
+    // insurance against a future ASYNC storage, where `set` would land in a
+    // later task and the both-fields branch below (which needs no cache read)
+    // could otherwise write a pointer into a conversation that does not exist
+    // yet — a silent no-op, and exactly the loss Task 6b cannot survive. It also
+    // keeps the store reference off the module's own evaluation stack.
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     for (const [conversationId, legacy] of pending) {
-      const migrated = await migrateReadPointer(conversationId, legacy)
-      if (getStorageScopeJid() !== scopeAtSchedule) return
-      if (migrated) applyMigratedReadPointer(conversationId, migrated)
+      // Isolated per conversation: an unhandled throw here would cancel the pass
+      // for every conversation still queued, and Task 6b deletes the legacy
+      // fields — a skipped conversation loses its read position for good.
+      try {
+        const migrated = await migrateReadPointer(conversationId, legacy)
+        if (getStorageScopeJid() !== scopeAtSchedule) return
+        if (migrated) applyMigratedReadPointer(conversationId, migrated)
+      } catch (error) {
+        console.warn(`Read pointer migration failed for ${conversationId}:`, error)
+      }
     }
   })()
 }

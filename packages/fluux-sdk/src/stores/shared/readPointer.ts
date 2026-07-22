@@ -15,11 +15,23 @@
  * All functions here are pure.
  */
 
-/** Where the user has read to. Written atomically or not at all. */
+/**
+ * Where the user has read to. Written atomically or not at all.
+ *
+ * ONE deliberate exception to "the timestamp is the message's own": pointers
+ * built by the #1081 migration from a legacy `lastSeenMessageId` + `lastReadAt`
+ * PAIR carry `lastReadAt` as the timestamp, which is not necessarily the
+ * timestamp of the message `messageId` names. That is the status quo preserved
+ * exactly — `lastReadAt` is the floor today's unread derivation already counts
+ * from, and it is at or behind the named message. Do not "fix" this by resolving
+ * the message's real timestamp: that could move the floor FORWARD, and the
+ * pointer is forward-only, so a position lost that way is unrecoverable. Only
+ * `timestamp` is used for ordering; nothing derives a message from it.
+ */
 export interface ReadPointer {
   /** Client message id of the newest message the user has read. */
   messageId: string
-  /** Timestamp OF that message. */
+  /** Timestamp OF that message (see the migration caveat above). */
   timestamp: Date
 }
 
