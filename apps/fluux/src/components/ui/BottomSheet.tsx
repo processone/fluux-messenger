@@ -53,10 +53,10 @@ export function BottomSheet({
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
-    <div
-      data-modal="true"
-      className="fixed inset-0 modal-scrim flex items-end justify-center z-50"
-    >
+    <div data-modal="true" className="fixed inset-0 flex items-end justify-center z-50">
+      {/* Sibling scrim — see ModalOverlay: a panel nested inside a
+          backdrop-filter element loses its own frost. */}
+      <div aria-hidden="true" className="absolute inset-0 modal-scrim" />
       <button
         type="button"
         aria-hidden="true"
