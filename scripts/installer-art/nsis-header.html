@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--
+  NSIS header image — 150×57, top corner of every page after the welcome one.
+
+  Deliberately on pure #FFFFFF: that is MUI2's default MUI_BGCOLOR, so the
+  bitmap dissolves into the header bar instead of sitting there as a pasted
+  tile. A night-stage crop would read as a sticker.
+
+  Centered rather than edge-aligned, because MUI puts this image on the right
+  by default but on the left with MUI_HEADERIMAGE_RIGHT undefined — centering
+  keeps it composed either way, whatever Tauri's template does.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      html,
+      body {
+        width: 150px;
+        height: 57px;
+      }
+      body {
+        background: #ffffff;
+      }
+      .lockup {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 112px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <img class="lockup" src="../../assets/readme/fluux-logo.svg" />
+    </div>
+  </body>
+</html>

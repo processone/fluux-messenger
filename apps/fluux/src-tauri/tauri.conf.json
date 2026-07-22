@@ -76,11 +76,15 @@
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       },
-      "nsis": {
-        "installMode": "currentUser"
-      },
       "wix": {
-        "upgradeCode": "ac0dbc5c-7b6c-557f-a2aa-5ba7152ac415"
+        "upgradeCode": "ac0dbc5c-7b6c-557f-a2aa-5ba7152ac415",
+        "bannerPath": "installer/windows/wix-banner.bmp",
+        "dialogImagePath": "installer/windows/wix-dialog.bmp"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "headerImage": "installer/windows/nsis-header.bmp",
+        "sidebarImage": "installer/windows/nsis-sidebar.bmp"
       }
     },
     "linux": {

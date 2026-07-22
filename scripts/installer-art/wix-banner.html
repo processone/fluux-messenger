@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!--
+  MSI (WiX v3) banner — 493×58, shown at the top of every page except the first.
+
+  Hard constraint: WixUI draws the page Title and Description as *transparent
+  text controls on top of this bitmap*, in the dialog's black system font.
+  Their box is x 20..406 px (Title X=15 dlu, Description X=25 W=280 dlu, at
+  1 dlu = 1.333 px). So the left three-quarters must stay light and quiet —
+  a night-stage banner here would put black text on a near-black field.
+
+  The aurora therefore only washes in from the right, and the lockup lives in
+  the remaining ~87 px. The bottom hairline sits just above the separator WiX
+  draws under the banner, so it reads as a deliberate underline.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      html,
+      body {
+        width: 493px;
+        height: 58px;
+      }
+      body {
+        background: var(--dawn);
+      }
+      /* Stays below 4% opacity until x≈300px, so the black title text keeps
+         its contrast even when a long localized string runs into it. */
+      .wash {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          100deg,
+          rgba(56, 224, 196, 0) 45%,
+          rgba(56, 224, 196, 0.1) 64%,
+          rgba(124, 140, 255, 0.16) 84%,
+          rgba(167, 139, 250, 0.2) 100%
+        );
+      }
+      .hairline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+      }
+      .lockup {
+        position: absolute;
+        right: 18px;
+        top: 17px;
+        height: 23px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="wash"></div>
+      <img class="lockup" src="../../assets/readme/fluux-logo.svg" />
+      <div class="hairline"></div>
+    </div>
+  </body>
+</html>

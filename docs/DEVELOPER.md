@@ -97,6 +97,31 @@ This produces a set of PNG files in the `screenshots/` directory covering major 
 
 The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `scripts/screenshots.ts`.
 
+## Windows Installer Artwork
+
+The MSI and `.exe` installers carry four branded bitmaps. They are committed under `apps/fluux/src-tauri/installer/windows/` and referenced from `bundle.windows.wix` / `bundle.windows.nsis` in `tauri.conf.json`. They are **not** release-cadence assets — regenerate them only when the artwork itself changes.
+
+Sources are self-contained HTML layouts in `scripts/installer-art/`, rendered by Playwright:
+
+```bash
+node scripts/installer-art/render.mjs            # all four
+node scripts/installer-art/render.mjs nsis       # filter by name
+```
+
+This writes the `.bmp` files the installers consume, plus a PNG of the same pixels into `scripts/installer-art/preview/` so the artwork is reviewable in a pull request (GitHub renders PNG, not BMP). The render is deterministic: re-running it against unchanged sources produces byte-identical files, so any diff under `installer/windows/` means the artwork actually moved.
+
+Three constraints are easy to break and expensive to discover, since the result is only visible on Windows:
+
+| Constraint | Why |
+|---|---|
+| 24-bit uncompressed BMP, at the exact slot size | The only format WiX v3 and NSIS accept; anything off-size gets stretched. `render.mjs` encodes the BMP itself and asserts the dimensions — never render at 2x. |
+| The left of `wix-banner` and `wix-dialog` must stay light | WixUI draws each page's Title and Description as transparent **black** text controls on top of the bitmap — x 20–406 px on the banner, from x 180 px on the dialog. Art that reaches into those boxes makes the installer's own copy unreadable. |
+| `nsis-header` stays on pure `#FFFFFF` | That is MUI2's default `MUI_BGCOLOR`. Any other background turns the image into a visible tile pasted onto the header bar. |
+
+Each HTML file's header comment records the dialog-unit coordinates behind those numbers. Only `nsis-sidebar` has no text over it, which is why it is the one surface carrying the full night-stage treatment.
+
+The artwork deliberately contains no words beyond the brand lockup: the installers localize their own copy, so baked-in English would be wrong in 32 of the 33 shipped locales.
+
 ## Troubleshooting
 
 ### Clear Local Storage
