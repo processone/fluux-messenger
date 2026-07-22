@@ -3,14 +3,14 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg_attr(not(any(target_os = "linux", target_os = "windows")), allow(dead_code))]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseAction {
     HideToTray,
     Quit,
 }
 
-#[cfg_attr(not(any(target_os = "linux", target_os = "windows")), allow(dead_code))]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn close_action(keep_in_tray: bool, tray_available: bool) -> CloseAction {
     if keep_in_tray && tray_available {
         CloseAction::HideToTray
