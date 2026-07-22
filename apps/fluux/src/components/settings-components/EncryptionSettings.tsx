@@ -68,6 +68,32 @@ const BACKUP_CONFIRM_KEYS = {
 type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
 
 /**
+ * Is the server-side backup known to match this device's current key?
+ *
+ * All three inputs have to line up:
+ *   - `remoteBackupExists` — tri-state; `null` means "not probed yet",
+ *     which is not in sync (callers show a "Checking…" state instead).
+ *   - `backedUpFingerprint` — local marker recorded at the last
+ *     successful backup/restore. `null` means this device never
+ *     published, so whatever sits on PEP belongs to someone else.
+ *   - `fingerprint` — this device's current key. A missing key can
+ *     never be in sync, hence the explicit truthiness guard: without
+ *     it a null/null pair would compare equal and report in-sync.
+ *
+ * Deliberately does NOT normalize case. Both fingerprints trace back
+ * to the same unnormalized `ownBundle.fingerprint`, so comparing them
+ * raw is correct here; normalizing would be a behavior change that
+ * needs its own decision rather than riding along with this helper.
+ */
+function isBackupInSync(
+  remoteBackupExists: boolean | null,
+  backedUpFingerprint: string | null,
+  fingerprint: string | null,
+): boolean {
+  return remoteBackupExists === true && !!fingerprint && backedUpFingerprint === fingerprint
+}
+
+/**
  * Settings → Encryption panel.
  *
  * Surfaces the OpenPGP toggle and — when enabled — the account's
@@ -635,7 +661,7 @@ export function EncryptionSettings() {
       setShowBackupDialog(true)
       return
     }
-    const isOwnBackup = !!backedUpFingerprint && backedUpFingerprint === fingerprint
+    const isOwnBackup = isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
     setBackupConfirmVariant(isOwnBackup ? 'own' : 'foreign')
   }, [remoteBackupExists, backedUpFingerprint, fingerprint])
 
@@ -739,11 +765,7 @@ export function EncryptionSettings() {
 
   const handleRotateConfirm = useCallback(() => {
     setShowRotateConfirm(false)
-    const inSync =
-      remoteBackupExists === true &&
-      !!fingerprint &&
-      backedUpFingerprint === fingerprint
-    if (inSync) {
+    if (isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)) {
       // Generate a new backup passphrase and re-publish atomically.
       // The dialog drives its own loading + error UI from now on.
       setShowRotatePassphraseDialog(true)
@@ -1084,10 +1106,7 @@ export function EncryptionSettings() {
               // no other XEP-0373 client can open (#1021) and the user
               // needs a way to re-publish it.
               const checking = remoteBackupExists === null
-              const inSync =
-                remoteBackupExists === true &&
-                !!fingerprint &&
-                backedUpFingerprint === fingerprint
+              const inSync = isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
               return (
                 <>
                   <p className="text-xs leading-snug">
@@ -1275,7 +1294,7 @@ export function EncryptionSettings() {
         <ConfirmDialog
           title={t('settings.encryption.rotateConfirmTitle')}
           message={
-            remoteBackupExists === true && backedUpFingerprint === fingerprint
+            isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
               ? t('settings.encryption.rotateConfirmMessageWithBackup')
               : t('settings.encryption.rotateConfirmMessage')
           }
