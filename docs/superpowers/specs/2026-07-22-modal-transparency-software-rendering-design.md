@@ -1,5 +1,56 @@
 # Modal transparency on machines that cannot blur
 
+## Outcome (added post-merge-review, 2026-07-22)
+
+**The software-rendering probe described in §1 and §2 was implemented, then
+removed before merge.** §3's overlay restructure, the panel-fade fix that
+followed it, and the light-mode specificity fix all shipped as designed and
+are unaffected by this reversal. §1/§2 are kept below as historical record of
+the reasoning that led to (and then away from) the probe — not as shipped
+design.
+
+**Why it was removed.** The probe's flagship pattern, `swiftshader`, was
+disproven by a direct test against the repo's own bundled Chromium:
+
+```
+renderer: "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+verdict:  backdrop-filter DOES paint here
+```
+
+SwiftShader is software *GL*; Chromium still composites `backdrop-filter`
+through Skia on the CPU regardless. The probe's `classifyRenderer` would have
+flattened glass on machines where it demonstrably works. The Mesa patterns
+(`llvmpipe`, `softpipe`, `swrast`, `lavapipe`) only matter on Linux, and Linux
+already renders `.fluux-glass` solid unconditionally via the
+`:root[data-platform="linux"]` gate (§ "Non-goals" above) — the probe had no
+platform left where it could fire *and* add value. And per §6's own risk
+note, the reporter's screenshots came from a real machine with a real GPU, so
+`classifyRenderer` would have returned `'hardware'` there too: the probe was
+never going to fire on the one machine it was built for, only on machines
+where it was wrong.
+
+**Blast radius the probe would have had.** `npm run screenshots` (Playwright),
+the release-blog hero pipeline, and the promo-video capture, along with any
+future UX audit, all run headless Chromium — which uses SwiftShader by
+default in this sandbox. Left in place, the probe would have silently
+flattened glass in every one of those pipelines, shipping flat, blur-free
+panels in release marketing images while looking correct in every manual
+check on real hardware.
+
+**What DID ship:** the backdrop-root restructure (§3 — panel rendered as a
+sibling of `.modal-scrim` instead of a descendant), the restoration of the
+panel's own fade after the sibling split, and the light-mode specificity fix
+(`:where(.light)` so the light liquid tier can't outrank the
+reduced-transparency revert).
+
+**The original Windows symptom (see "Problem" below) therefore remains
+unfixed**, pending the maintainer building and testing the restructure on the
+affected machine. If the restructure alone does not resolve it there, the
+remedy is a Windows-scoped alpha adjustment or a flat tier for Windows,
+following the same pattern as §6's fallback for the probe.
+
+---
+
 **Date:** 2026-07-22
 **Status:** Approved, ready for planning
 
@@ -67,7 +118,7 @@ are fixed here, but they are separate fixes.
 
 ## Design
 
-### 1. Software-rendering probe
+### 1. Software-rendering probe (removed before merge — see Outcome)
 
 New module `apps/fluux/src/themes/softwareRendering.ts`, split so the decision
 logic is pure and testable without a GPU:
@@ -99,7 +150,7 @@ There is deliberately no attempt to detect whether `backdrop-filter` *painted*.
 Composited output cannot be read back from the page; the renderer string is a
 proxy, and §6 gates the work on confirming the proxy actually fires.
 
-### 2. Wiring — reuse the existing reduced-wins seam
+### 2. Wiring — reuse the existing reduced-wins seam (removed before merge — see Outcome)
 
 No new CSS and no new selectors. The probe feeds `resolveTransparency`
 (`apps/fluux/src/themes/transparency.ts`), whose `[data-transparency="reduced"]`

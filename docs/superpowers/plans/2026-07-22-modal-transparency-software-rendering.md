@@ -1,5 +1,14 @@
 # Modal Transparency on Machines That Cannot Blur — Implementation Plan
 
+> **Outcome (added post-merge-review, 2026-07-22):** Tasks 1-3 below (the
+> renderer classifier, the WebGL probe, and its wiring into
+> `resolveTransparency`) were implemented and then **reverted before merge** —
+> the probe was empirically disproven. See the "Outcome" section at the top
+> of the [spec](../specs/2026-07-22-modal-transparency-software-rendering-design.md#outcome-added-post-merge-review-2026-07-22)
+> for the full reasoning. Task 4 (the backdrop-root restructure) and Task 5's
+> non-probe verification shipped as planned. Task bodies below are left
+> unmodified as historical record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop modal panels from being see-through on machines whose compositor silently refuses to paint `backdrop-filter`, and repair the backdrop-root nesting that has prevented the glass panel's own frost from ever painting on any platform.
