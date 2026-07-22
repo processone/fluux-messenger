@@ -567,6 +567,52 @@ function findEncryptionTarget(
 }
 
 /**
+ * OMEMO namespaces whose `<encrypted>` element follows the
+ * `<header>` + optional `<payload>` shape. Both the legacy siacs namespace and
+ * OMEMO 2 use it; OpenPGP (`<openpgp>` wrapping base64 directly) does not.
+ */
+const OMEMO_NAMESPACES = new Set(['eu.siacs.conversations.axolotl', 'urn:xmpp:omemo:2'])
+
+/** Does `el` have a direct child element named `name`, whatever its namespace? */
+function hasChildElement(el: Element, name: string): boolean {
+  return el.children.some(
+    (child) => typeof child !== 'string' && (child as Element).name === name,
+  )
+}
+
+/**
+ * Whether this is an XEP-0384 **empty OMEMO message** — an `<encrypted>` with a
+ * `<header>` but no `<payload>`.
+ *
+ * The spec calls them "empty OMEMO messages, which are used in various places
+ * throughout the protocol purely to manage sessions and not to transfer
+ * content": the ack a device sends back to confirm a session was established,
+ * and the heartbeats that forward the ratchet. They encrypt 32 zero-bytes, not
+ * anything a human wrote, and every real client consumes them silently (Gajim:
+ * `if properties.omemo.payload is None: # Key Transport message`).
+ *
+ * They carry the `<store/>` hint, so they land in MAM and are replayed on every
+ * catch-up. Without this check a build with no OMEMO plugin classifies each one
+ * as an unsupported protocol and manufactures a "message encrypted with OMEMO"
+ * placeholder — a bubble, a preview and an unread badge for something the
+ * sender's client never displayed. Reported in the field as "phantom OMEMO
+ * messages": a burst of them arrives across many contacts at once, right after
+ * our account announces a new OMEMO device and each peer builds its session.
+ *
+ * Gated on the `<header>` being present: an element with neither header nor
+ * payload is malformed rather than empty, and keeps the visible unsupported
+ * treatment instead of disappearing.
+ *
+ * Note this only ever runs for stanzas **no plugin claimed**. Once an OMEMO
+ * plugin is registered it claims the stanza first and reports `control-message`
+ * from `decrypt`, which the main path already consumes without a body.
+ */
+function isEmptyOmemoElement(namespace: string, child: Element | null): boolean {
+  if (!child || !OMEMO_NAMESPACES.has(namespace)) return false
+  return hasChildElement(child, 'header') && !hasChildElement(child, 'payload')
+}
+
+/**
  * Classify and tag an encryption-tagged stanza that no plugin claimed, mutating
  * the stanza with the appropriate stash. See {@link UnclaimedEMEDisposition}.
  *
@@ -584,6 +630,13 @@ export function recordUnclaimedEME(
 ): UnclaimedEMEDisposition {
   const target = findEncryptionTarget(stanza)
   if (!target) return { kind: 'none' }
+
+  // Session bookkeeping, not a message — drop before either branch below can
+  // turn it into a placeholder. See {@link isEmptyOmemoElement}.
+  if (isEmptyOmemoElement(target.namespace, target.child)) {
+    logInfo(`E2EE: dropped empty OMEMO message (ns=${target.namespace})`)
+    return { kind: 'none' }
+  }
 
   const state = unclaimedPluginState(pluginState)
   if (state.hasPlugins && !state.hasPluginForNamespace(target.namespace)) {
