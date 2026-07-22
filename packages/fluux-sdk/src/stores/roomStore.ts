@@ -2905,7 +2905,8 @@ export const roomStore = createStore<RoomState>()(
         rsm.first, // Pagination cursor for fetching older messages
         newestFetchedTimestamp,
         preserveGapMarker,
-        isFetchLatest
+        isFetchLatest,
+        mamState.isDisjointFromResidentWindow(existingMessages, extras?.initialBefore, isFetchLatest)
       )
 
       // Newest PROVEN in-memory boundary (resident extent). Undefined when the
