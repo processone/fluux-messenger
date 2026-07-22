@@ -39,6 +39,9 @@ export interface MergeArchiveExtras {
   /** The walk carried corrections/retractions/reactions/fastenings, whose
    *  cache effects are fire-and-forget — certification is blocked (r4 #2). */
   walkCarriedModifications?: boolean
+  /** FORWARD only: the `after` cursor the catch-up resumed from — the bootstrap
+   *  anchor when that catch-up reports complete. */
+  initialAfter?: string
 }
 
 /** Serialize the coverage map for localStorage (`[id, CoverageRecord][]`). */
@@ -65,6 +68,12 @@ export interface ArchiveMergeCoverageInput {
   direction: 'backward' | 'forward'
   /** The query was a `before:''` fetch-latest. */
   isFetchLatest: boolean
+  /** The server reported the walk exhausted its direction. On a forward
+   *  catch-up this means the walk reached the live edge. */
+  complete?: boolean
+  /** The `after` cursor a forward catch-up resumed from (the local downloaded
+   *  edge). Undefined for `start`-filtered or cursorless catch-ups. */
+  initialAfter?: string
   /** Bounded windowed query — proves nothing about live contiguity. */
   preserveGapMarker: boolean
   /** rsm.first of the merge's LAST page (deepest entry seen, signals included). */
@@ -90,19 +99,47 @@ export interface ArchiveMergeCoverageInput {
  *   give-up with zero displayable messages) → replace with the walk extent;
  * - plain backward page → extend the bottom ONLY when the query resumed
  *   id-exactly from it (initialBefore === bottomId);
- * - forward merges and preserveGapMarker (bounded windowed) queries prove
- *   nothing about the live-contiguous bottom → no-op.
+ * - COMPLETED forward catch-up with a resume cursor → seed the bottom from that
+ *   cursor when no record exists yet (bootstrap, see below);
+ * - incomplete forward merges and preserveGapMarker (bounded windowed) queries
+ *   prove nothing about the live-contiguous bottom → no-op.
  *
  * Copy-on-write: returns the SAME map reference when nothing changes.
  */
 export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput): Map<string, CoverageRecord> {
   const {
-    coverage, id, direction, isFetchLatest, preserveGapMarker,
+    coverage, id, direction, isFetchLatest, preserveGapMarker, complete, initialAfter,
     rsmFirst, fetchLatestTopId, initialBefore, sawCoverageTop, walkCarriedModifications,
   } = input
   if (preserveGapMarker) return coverage
-  if (direction !== 'backward') return coverage
+  // Applies to BOTH directions: a walk whose corrections/retractions/reactions
+  // were written fire-and-forget is not durably confirmed, so it may not certify
+  // coverage — the forward bootstrap anchor included (Codex r4 #2).
   if (walkCarriedModifications) return coverage
+
+  if (direction !== 'backward') {
+    // Bootstrap. Without this the record can only be born in the fetch-latest
+    // branch below, and `selectCatchUpQuery` only issues a `before:''`
+    // fetch-latest when the cache is EMPTY — an entity's first-ever sync. Every
+    // entity already cached when this feature shipped would therefore never get
+    // a record (the plain-backward branch requires one to exist), leaving Phase
+    // B permanently seeded from the raw cache bottom instead of a proven edge.
+    //
+    // A forward catch-up that resumed at `initialAfter` and came back complete
+    // has downloaded everything from that cursor to the live edge — which is
+    // precisely "oldest entry proven contiguous with live". The claim is
+    // deliberately conservative: it anchors on the cursor we resumed from, never
+    // on how deep the cache happens to reach, and it never overwrites an
+    // existing record, so a bottom already proven deeper always wins. Erring
+    // shallow only costs Phase B a re-walk of covered ground; erring deep would
+    // skip real history, and this path cannot do that.
+    if (!complete || !initialAfter) return coverage
+    if (coverage.get(id)) return coverage
+    const next = new Map(coverage)
+    next.set(id, { bottomId: initialAfter })
+    return next
+  }
+
   const existing = coverage.get(id)
 
   if (isFetchLatest) {

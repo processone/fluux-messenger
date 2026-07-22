@@ -2118,6 +2118,8 @@ export const chatStore = createStore<ChatState>()(
             initialBefore: extras?.initialBefore,
             sawCoverageTop: extras?.sawCoverageTop ?? false,
             walkCarriedModifications: extras?.walkCarriedModifications ?? false,
+            complete,
+            initialAfter: extras?.initialAfter,
           })
           const prevCoverage = state.conversationCoverage.get(conversationId)
           const deferCoverageCommit =

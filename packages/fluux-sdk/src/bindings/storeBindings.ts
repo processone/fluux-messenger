@@ -288,9 +288,9 @@ export function createStoreBindings(
     stores.chat.setMAMError(conversationId, error)
   })
 
-  on('chat:mam-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications }) => {
+  on('chat:mam-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
     const stores = getStores()
-    stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications })
+    stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter })
   })
 
   // A purged id-exact anchor (item-not-found degrade): strip the matching
@@ -464,9 +464,9 @@ export function createStoreBindings(
     stores.room.setRoomMAMError(roomJid, error)
   })
 
-  on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications }) => {
+  on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
     const stores = getStores()
-    stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications })
+    stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter })
   })
 
   // Room twin of chat:mam-anchor-purged (see above).

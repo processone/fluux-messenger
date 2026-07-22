@@ -2305,6 +2305,39 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
+    it('seeds and persists the coverage record when a forward catch-up completes', async () => {
+      // End-to-end wiring for the bootstrap: before this, a record could only be
+      // born from a `before:''` fetch-latest, which only happens on an entity's
+      // first-ever sync — so every already-cached room never got one and Phase B
+      // fell back to the raw cache bottom.
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'held', timestamp: new Date('2026-07-20T00:00:00Z'), isOutgoing: false,
+        stanzaId: 'local-edge',
+      }
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'caught-up', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'caught up', timestamp: new Date('2026-07-21T00:00:00Z'), isOutgoing: false,
+        stanzaId: 'newer',
+      }
+      // Forward catch-up resumed from 'local-edge' and reached live.
+      roomStore.getState().mergeRoomMAMMessages(
+        jid, [fetched], { first: 'newer' }, true, 'forward', false, false,
+        { initialAfter: 'local-edge' }
+      )
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomCoverage(jid)).toEqual({ bottomId: 'local-edge' })
+      })
+      // ...and it reached localStorage, so it survives the next fresh session.
+      const persisted = Object.entries(localStorageMock._store)
+        .find(([k]) => k.startsWith('fluux-room-coverage'))
+      expect(persisted?.[1]).toContain('local-edge')
+    })
+
     it('does NOT mark the visible timeline complete when a Phase B deep probe reaches the archive start below the resident window', () => {
       // Reproduces the "cannot scroll back past the activation slice" regression.
       // The resident window is the latest-N activation slice (July). Phase B — a
