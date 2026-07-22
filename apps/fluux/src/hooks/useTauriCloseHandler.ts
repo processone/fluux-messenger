@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useXMPPContext } from '@fluux/sdk'
+import { markShuttingDown } from '@/utils/appShutdown'
 
 /**
  * Set up Tauri app close handlers for graceful XMPP disconnect.
@@ -42,6 +43,14 @@ export function useTauriCloseHandler(): void {
         unlistenShutdown = await listen('graceful-shutdown', async () => {
           if (isClosing) return
           isClosing = true
+
+          // Mark shutdown BEFORE disconnecting. `disconnect()` synchronously
+          // flips the store to 'disconnected', which routes App to a fresh
+          // LoginScreen mount; without this flag set first, that mount would
+          // reload the webview (killing the JS context before `exit_app` runs)
+          // and auto-connect from the keychain — a pointless new XMPP session
+          // that the exit kills moments later.
+          markShuttingDown()
 
           await disconnectBestEffort()
           await invoke('stop_xmpp_proxy').catch(() => {})

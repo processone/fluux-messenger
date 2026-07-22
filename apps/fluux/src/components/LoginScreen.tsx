@@ -14,6 +14,7 @@ import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownSe
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
+import { isShuttingDown } from '@/utils/appShutdown'
 import { LoginErrorPanel } from './LoginErrorPanel'
 import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
@@ -104,6 +105,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   // See: https://github.com/tauri-apps/wry/issues/184
   useEffect(() => {
     if (!isTauri()) return
+    // Not while quitting: this mount is the app tearing down, not a live
+    // disconnect the user has to keep interacting with. Reloading here destroys
+    // the JS context that still owes the shutdown handler its `stop_xmpp_proxy`
+    // / `exit_app` calls, downgrading a clean quit to Rust's 2s force-exit.
+    if (isShuttingDown()) return
     const flag = sessionStorage.getItem('__wry_was_online')
     if (!flag) return
 
@@ -321,6 +327,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     // race and the keychain entry survived. Mirrors the gate in
     // useSessionPersistence — the reconnect intent is the single source of truth.
     if (getReconnectIntent() === 'logged-out') return
+    // Quitting is not logging out, so the intent above is still 'active' — but
+    // a connection opened now is killed by the exit seconds later, leaving a
+    // ghost session on the server until it times out. `hasAutoConnected` cannot
+    // catch this: shutdown routes here as a *fresh mount*, so the ref is reset.
+    if (isShuttingDown()) return
 
     // Mark as auto-connected to prevent loops
     hasAutoConnected.current = true

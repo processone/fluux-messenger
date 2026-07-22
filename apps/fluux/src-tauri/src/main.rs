@@ -1457,6 +1457,13 @@ fn main() {
     // timer) is allowed to complete and terminate the app.
     let graceful_shutdown_started = Arc::new(AtomicBool::new(false));
     let graceful_shutdown_flag_for_run = graceful_shutdown_started.clone();
+    // Tray "Quit" (and the Linux no-tray X-close) start the graceful shutdown
+    // themselves, so they must claim the flag too. Otherwise the frontend's
+    // follow-up `exit_app` looks like a *first* exit request to the run handler
+    // below, which prevents it — leaving the 2s fallback timer as the only way
+    // out, i.e. every tray quit force-killed instead of exiting cleanly.
+    // Underscore-prefixed: only the linux/windows cfg blocks below consume it.
+    let _graceful_shutdown_flag_for_setup = graceful_shutdown_started.clone();
 
     let app = tauri::Builder::default()
         // Single-instance guard MUST be the first plugin registered (Tauri
@@ -1874,6 +1881,7 @@ fn main() {
                     .tooltip("Fluux Messenger")
                     .on_menu_event({
                         let keepalive_flag = keepalive_flag_for_setup.clone();
+                        let graceful_shutdown_flag = _graceful_shutdown_flag_for_setup.clone();
                         let last_window_state = last_window_state.clone();
                         let window_hidden_to_tray = window_hidden_to_tray.clone();
                         move |app, event| match event.id.as_ref() {
@@ -1955,6 +1963,9 @@ fn main() {
                             }
                             "quit" => {
                                 keepalive_flag.store(false, Ordering::Relaxed);
+                                // Claim the shutdown so the frontend's exit_app
+                                // is treated as the second request and allowed.
+                                graceful_shutdown_flag.store(true, Ordering::Relaxed);
                                 let _ = app.emit("graceful-shutdown", ());
                                 let handle = app.clone();
                                 std::thread::spawn(move || {
@@ -2023,6 +2034,7 @@ fn main() {
                 let last_window_state_for_close = last_window_state.clone();
                 let window_hidden_to_tray_for_close = window_hidden_to_tray.clone();
                 let keepalive_flag_for_close = keepalive_flag_for_setup.clone();
+                let graceful_shutdown_flag_for_close = _graceful_shutdown_flag_for_setup.clone();
                 let app_handle_for_close = app.handle().clone();
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
@@ -2041,6 +2053,7 @@ fn main() {
                             // Mirror the tray "Quit" menu item: stop keepalive,
                             // let the frontend disconnect XMPP, then force-exit.
                             keepalive_flag_for_close.store(false, Ordering::Relaxed);
+                            graceful_shutdown_flag_for_close.store(true, Ordering::Relaxed);
                             let _ = app_handle_for_close.emit("graceful-shutdown", ());
                             let handle = app_handle_for_close.clone();
                             std::thread::spawn(move || {
@@ -2085,6 +2098,7 @@ fn main() {
                     .tooltip("Fluux Messenger")
                     .on_menu_event({
                         let keepalive_flag = keepalive_flag_for_setup.clone();
+                        let graceful_shutdown_flag = _graceful_shutdown_flag_for_setup.clone();
                         let log_dir_for_tray = log_dir.clone();
                         move |app, event| match event.id.as_ref() {
                             "show" => {
@@ -2109,6 +2123,9 @@ fn main() {
                             "quit" => {
                                 // Stop the keepalive thread
                                 keepalive_flag.store(false, Ordering::Relaxed);
+                                // Claim the shutdown so the frontend's exit_app
+                                // is treated as the second request and allowed.
+                                graceful_shutdown_flag.store(true, Ordering::Relaxed);
                                 // Emit graceful shutdown event to frontend
                                 let _ = app.emit("graceful-shutdown", ());
                                 // Set a fallback timer to force exit after 2 seconds
