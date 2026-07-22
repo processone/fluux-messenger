@@ -54,7 +54,7 @@ describe('classifyRenderer', () => {
 
 const UNMASKED_RENDERER = 0x9246
 
-function stubWebGL(renderer: string | null, opts: { extension?: boolean } = {}) {
+function stubWebGL(renderer: unknown, opts: { extension?: boolean } = {}) {
   const lose = { loseContext: vi.fn() }
   const gl = {
     getExtension: vi.fn((name: string) => {
@@ -85,6 +85,11 @@ describe('readRendererString', () => {
 
   it('returns null when the debug-renderer extension is unavailable', () => {
     stubWebGL('llvmpipe', { extension: false })
+    expect(readRendererString()).toBeNull()
+  })
+
+  it('returns null when the driver reports a non-string renderer', () => {
+    stubWebGL(42)
     expect(readRendererString()).toBeNull()
   })
 
