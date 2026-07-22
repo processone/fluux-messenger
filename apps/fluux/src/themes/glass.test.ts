@@ -216,4 +216,21 @@ describe('liquid-glass tier', () => {
     expect(revertIdx).toBeGreaterThan(-1)
     expect(revertIdx).toBeGreaterThan(liquidIdx)
   })
+
+  // The light liquid tier (`:root:not([data-platform="linux"]) .fluux-glass`
+  // plus `.light`) must stay AT (0,3,0), same as its dark sibling above, so the
+  // reduced-transparency revert below (also (0,3,0), later in source) keeps
+  // outranking it. Wrapping the mode class in `:where(.light)` — which
+  // contributes zero specificity — is what keeps it there. A bare `.light`
+  // class would silently escalate the selector to (0,4,0), beating the revert
+  // in light mode only: [data-transparency="reduced"] + light mode would then
+  // render a translucent, blur-active panel instead of the solid a11y
+  // fallback — the exact bug this branch exists to prevent, and it would never
+  // show up testing dark mode alone.
+  it('light liquid tier uses :where(.light) so it never outranks the reduced-transparency revert', () => {
+    expect(css).toMatch(/:root:not\(\[data-platform="linux"\]\):where\(\.light\)\s+\.fluux-glass\s*\{/)
+    // guard against regressing back to the bare `.light` form, which escalates
+    // specificity to (0,4,0) and defeats the revert in light mode
+    expect(css).not.toMatch(/:root:not\(\[data-platform="linux"\]\)\.light\s+\.fluux-glass\s*\{/)
+  })
 })
