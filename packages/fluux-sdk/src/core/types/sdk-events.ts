@@ -150,6 +150,31 @@ export interface ChatEvents {
     updates: Partial<StoredMessage>
   }
 
+  /**
+   * XEP-0424: a retraction arrived for a message that is not in the resident
+   * window (backgrounded conversation, or older than the loaded slice). The
+   * store records it and replays it once the target loads — dropping it would
+   * lose the tombstone, and letting the stanza through would surface its
+   * XEP-0428 fallback body as a message.
+   */
+  'chat:retraction-pending': {
+    conversationId: string
+    /** The `<retract id="…">` reference — any id tier of the target. */
+    targetId: string
+    /** Bare JID the retraction came from; must match the target's author. */
+    actorJid: string
+  }
+
+  /** XEP-0424: room twin of `chat:retraction-pending`. */
+  'room:retraction-pending': {
+    roomJid: string
+    targetId: string
+    /** Full room JID (room@service/nick) the retraction came from. */
+    actorJid: string
+    /** XEP-0421 occupant-id, when the sender advertises one — the stable author identity. */
+    actorOccupantId?: string
+  }
+
   /** XEP-0490: a device synced its last-displayed (read) position for a conversation (1:1 or room) */
   'read:displayed-synced': {
     /** Conversation bare JID (1:1 contact or MUC room). */

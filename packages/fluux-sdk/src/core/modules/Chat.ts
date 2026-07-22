@@ -356,7 +356,7 @@ export class Chat extends BaseModule {
           return { handled: true }
         }
       }
-      if (this.handleIncomingRetraction(
+      this.handleIncomingRetraction(
         retraction.targetId,
         from,
         bareFrom,
@@ -364,7 +364,11 @@ export class Chat extends BaseModule {
         type,
         isSentCarbon,
         stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
-      )) return { handled: true }
+      )
+      // Claimed either way: the body is only the XEP-0428 fallback notice for
+      // clients without XEP-0424 support, never a message. An unresolved target
+      // is deferred inside handleIncomingRetraction, not dropped.
+      return { handled: true }
     }
 
     // XEP-0425: Message Moderation (legacy: moderated as direct child)
@@ -1933,11 +1937,22 @@ export class Chat extends BaseModule {
     return false
   }
 
-  private handleIncomingRetraction(originalId: string, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean, senderOccupantId?: string): boolean {
+  /**
+   * XEP-0424: apply an incoming retraction, or defer it when its target is not
+   * loaded.
+   *
+   * Only the ACTIVE conversation keeps its messages resident, so a retraction
+   * arriving for a backgrounded conversation — or for a message older than the
+   * loaded window — cannot resolve here. That is not a reason to drop it: the
+   * store records it and replays it the moment the target loads. A target that
+   * IS loaded but was written by someone else is an unauthorized retraction and
+   * is dropped outright.
+   */
+  private handleIncomingRetraction(originalId: string, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean, senderOccupantId?: string): void {
     const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const isOutgoing = isSentCarbon || bareFrom === myBareJid
     const conversationId = isOutgoing ? bareTo : bareFrom
-    if (!conversationId) return false
+    if (!conversationId) return
 
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
@@ -1945,17 +1960,23 @@ export class Chat extends BaseModule {
       const retractionData = applyRetraction(!!original && this.isSameMucAuthor(original, from, senderOccupantId))
       if (retractionData) {
         this.deps.emitSDK('room:message-updated', { roomJid: conversationId, messageId: originalId, updates: retractionData })
-        return true
+      } else if (!original) {
+        this.deps.emitSDK('room:retraction-pending', {
+          roomJid: conversationId,
+          targetId: originalId,
+          actorJid: from,
+          ...(senderOccupantId ? { actorOccupantId: senderOccupantId } : {}),
+        })
       }
     } else {
       const original = this.deps.stores?.chat.getMessage(conversationId, originalId)
       const retractionData = applyRetraction(!!original && original.from === bareFrom)
       if (retractionData) {
         this.deps.emitSDK('chat:message-updated', { conversationId, messageId: originalId, updates: retractionData })
-        return true
+      } else if (!original) {
+        this.deps.emitSDK('chat:retraction-pending', { conversationId, targetId: originalId, actorJid: bareFrom })
       }
     }
-    return false
   }
 
   /**

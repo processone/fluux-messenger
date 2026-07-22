@@ -4419,6 +4419,103 @@ describe('chatStore', () => {
       expect(chatStore.getState().targetMessageId).toBeNull()
     })
   })
+
+  // XEP-0424: a retraction can land while its target is outside the resident
+  // window (only the ACTIVE conversation keeps messages in RAM). It is recorded
+  // and replayed rather than dropped.
+  describe('pending retractions', () => {
+    const convId = 'peer@example.com'
+
+    function incoming(id: string, body = 'to retract'): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId: convId,
+        from: convId,
+        body,
+        timestamp: new Date('2026-07-22T03:52:00Z'),
+        isOutgoing: false,
+      }
+    }
+
+    beforeEach(() => {
+      chatStore.getState().addConversation(createConversation(convId))
+    })
+
+    it('tombstones the target when it arrives after the retraction', () => {
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', convId)
+      expect(chatStore.getState().pendingRetractions.get(convId)).toHaveLength(1)
+
+      chatStore.getState().addMessage(incoming('msg-1'))
+
+      expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({
+        id: 'msg-1',
+        isRetracted: true,
+      })
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+    })
+
+    it('applies to a resident target without recording anything', () => {
+      chatStore.setState({ activeConversationId: convId })
+      chatStore.getState().addMessage(incoming('msg-1'))
+
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', convId)
+
+      expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({ isRetracted: true })
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'msg-1',
+        expect.objectContaining({ isRetracted: true })
+      )
+    })
+
+    it('never tombstones a message authored by someone else', () => {
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', 'mallory@example.com')
+
+      chatStore.getState().addMessage(incoming('msg-1'))
+
+      expect(chatStore.getState().messages.get(convId)?.[0].isRetracted).toBeUndefined()
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+    })
+
+    it('replays the record when the conversation hydrates from the cache', async () => {
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', convId)
+      vi.mocked(messageCache.getMessages).mockResolvedValue([incoming('msg-1')])
+
+      await chatStore.getState().loadMessagesFromCache(convId)
+
+      expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({ isRetracted: true })
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+      // Written through, so the tombstone survives a reload without the record.
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'msg-1',
+        expect.objectContaining({ isRetracted: true })
+      )
+    })
+
+    it('replays the record when the target arrives in a MAM page', () => {
+      chatStore.setState({ activeConversationId: convId })
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', convId)
+
+      chatStore.getState().mergeMAMMessages(convId, [incoming('msg-1')], {}, true, 'backward')
+
+      expect(chatStore.getState().messages.get(convId)?.[0]).toMatchObject({
+        id: 'msg-1',
+        isRetracted: true,
+      })
+      expect(chatStore.getState().pendingRetractions.get(convId) ?? []).toHaveLength(0)
+      // The tombstone rides the archive write instead of racing it.
+      expect(messageCache.saveMessages).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'msg-1', isRetracted: true }),
+      ])
+    })
+
+    it('is cleared by reset', () => {
+      chatStore.getState().recordPendingRetraction(convId, 'msg-1', convId)
+      chatStore.getState().reset()
+      expect(chatStore.getState().pendingRetractions.size).toBe(0)
+    })
+  })
 })
 
 // Regression tests for chat/room parity drifts: each of these behaviors already

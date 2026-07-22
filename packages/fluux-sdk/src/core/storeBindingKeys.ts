@@ -65,6 +65,7 @@ export const chatBindingMethodKeys = [
   'updateMessage',
   'removeMessage',
   'recomputeUnreadForConversation',
+  'recordPendingRetraction',
   'getMessage',
   'triggerAnimation',
   // XEP-0313: MAM support
@@ -130,6 +131,7 @@ export const roomBindingMethodKeys = [
   'addMessage',
   'updateReactions',
   'updateMessage',
+  'recordPendingRetraction',
   'getMessage',
   'markAsRead',
   'getActiveRoomJid',

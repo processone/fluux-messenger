@@ -12,6 +12,7 @@ import {
   createMockXmppClient,
   createMockStores,
   createMockElement,
+  createMockRoom,
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
@@ -3448,6 +3449,67 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', retractionStanza)
 
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+    })
+
+    // The retraction body is only the XEP-0428 fallback notice for clients that
+    // don't support XEP-0424. It must never surface as a message, even when the
+    // target can't be resolved — only the ACTIVE conversation is resident, so a
+    // retraction landing on a backgrounded conversation always misses.
+    it('claims a 1:1 retraction whose target is not resident, recording it instead of showing the fallback', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getMessage).mockReturnValue(undefined)
+
+      const retractionStanza = createMockElement('message', {
+        from: 'contact@example.com/desktop',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'retraction-msg-id',
+      }, [
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'target-msg-id' } },
+        { name: 'fallback', attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:message-retract:1' } },
+        { name: 'body', text: 'This message has been retracted by the sender.' },
+      ])
+
+      mockXmppClientInstance._emit('stanza', retractionStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:retraction-pending', {
+        conversationId: 'contact@example.com',
+        targetId: 'target-msg-id',
+        actorJid: 'contact@example.com',
+      })
+    })
+
+    it('claims a MUC retraction whose target is not resident, recording the occupant-id', async () => {
+      await connectClient()
+
+      // The room IS joined (so a fall-through really would store the fallback
+      // body as a room message) — only the retraction's target is unloaded.
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(
+        createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
+      )
+      vi.mocked(mockStores.room.getMessage).mockReturnValue(undefined)
+
+      const retractionStanza = createMockElement('message', {
+        from: 'room@conference.example.com/edaveine',
+        type: 'groupchat',
+        id: 'retraction-msg-id',
+      }, [
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'server-stanza-id-999' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-1' } },
+        { name: 'body', text: 'This message has been retracted by the sender.' },
+      ])
+
+      mockXmppClientInstance._emit('stanza', retractionStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:retraction-pending', {
+        roomJid: 'room@conference.example.com',
+        targetId: 'server-stanza-id-999',
+        actorJid: 'room@conference.example.com/edaveine',
+        actorOccupantId: 'occ-1',
+      })
     })
   })
 
