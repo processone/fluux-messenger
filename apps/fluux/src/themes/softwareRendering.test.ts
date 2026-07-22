@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { classifyRenderer } from './softwareRendering'
+// @vitest-environment jsdom
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { classifyRenderer, detectSoftwareRendering, readRendererString, resetSoftwareRenderingProbe } from './softwareRendering'
 
 describe('classifyRenderer', () => {
   it('identifies Chromium/WebView2 software GL (SwiftShader)', () => {
@@ -45,5 +46,93 @@ describe('classifyRenderer', () => {
 
   it('does not match "warp" inside an unrelated word', () => {
     expect(classifyRenderer('Warpdrive Graphics Accelerator 9000')).toBe('hardware')
+  })
+})
+
+// --- probe ---------------------------------------------------------------
+// jsdom has no WebGL; these tests stub the canvas context entirely.
+
+const UNMASKED_RENDERER = 0x9246
+
+function stubWebGL(renderer: string | null, opts: { extension?: boolean } = {}) {
+  const lose = { loseContext: vi.fn() }
+  const gl = {
+    getExtension: vi.fn((name: string) => {
+      if (name === 'WEBGL_lose_context') return lose
+      if (name === 'WEBGL_debug_renderer_info') {
+        return opts.extension === false ? null : { UNMASKED_RENDERER_WEBGL: UNMASKED_RENDERER }
+      }
+      return null
+    }),
+    getParameter: vi.fn((p: number) => (p === UNMASKED_RENDERER ? renderer : null)),
+  }
+  const spy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue(gl as unknown as RenderingContext)
+  return { gl, lose, spy }
+}
+
+describe('readRendererString', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetSoftwareRenderingProbe()
+  })
+
+  it('returns the unmasked renderer string', () => {
+    stubWebGL('llvmpipe (LLVM 15.0.6, 256 bits)')
+    expect(readRendererString()).toBe('llvmpipe (LLVM 15.0.6, 256 bits)')
+  })
+
+  it('returns null when the debug-renderer extension is unavailable', () => {
+    stubWebGL('llvmpipe', { extension: false })
+    expect(readRendererString()).toBeNull()
+  })
+
+  it('returns null when no WebGL context can be created', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    expect(readRendererString()).toBeNull()
+  })
+
+  it('releases the throwaway context instead of leaking it', () => {
+    const { lose } = stubWebGL('llvmpipe')
+    readRendererString()
+    expect(lose.loseContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('survives a throwing getContext', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      throw new Error('context creation blocked')
+    })
+    expect(readRendererString()).toBeNull()
+  })
+})
+
+describe('detectSoftwareRendering', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetSoftwareRenderingProbe()
+  })
+
+  it('is true for a software rasteriser', () => {
+    stubWebGL('llvmpipe (LLVM 15.0.6, 256 bits)')
+    expect(detectSoftwareRendering()).toBe(true)
+  })
+
+  it('is false for a real GPU', () => {
+    stubWebGL('ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)')
+    expect(detectSoftwareRendering()).toBe(false)
+  })
+
+  it('is false when the renderer cannot be determined', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    expect(detectSoftwareRendering()).toBe(false)
+  })
+
+  it('probes the GPU only once per session', () => {
+    const { spy } = stubWebGL('llvmpipe')
+    detectSoftwareRendering()
+    detectSoftwareRendering()
+    detectSoftwareRendering()
+    expect(spy).toHaveBeenCalledTimes(1)
   })
 })
