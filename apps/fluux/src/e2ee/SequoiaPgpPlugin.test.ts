@@ -3003,6 +3003,17 @@ describe('SequoiaPgpPlugin', () => {
         code: 'no-backup',
       })
     })
+
+    it('reports unknown rather than throwing after shutdown', async () => {
+      // The tri-state exists so consumers never have to try/catch. A probe
+      // racing plugin teardown (disconnect, or toggling E2EE off) is exactly
+      // the operational failure it must absorb.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.shutdown()
+
+      await expect(plugin.probeSecretKeyBackup()).resolves.toBe('unknown')
+    })
   })
 
   describe('trust-state verdict instrumentation', () => {

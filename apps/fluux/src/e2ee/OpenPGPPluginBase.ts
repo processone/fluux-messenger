@@ -1100,7 +1100,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     try {
       return (await this.fetchSecretKeyBackup()) === null ? 'absent' : 'present'
     } catch (err) {
-      this.requireCtx().logger.debug(
+      this.ctx?.logger.debug(
         `${this.pluginName()}: secret-key backup probe inconclusive: ${formatError(err)}`,
       )
       return 'unknown'
