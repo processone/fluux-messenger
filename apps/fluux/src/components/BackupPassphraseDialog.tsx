@@ -190,7 +190,14 @@ export function BackupPassphraseDialog({
         </div>
 
         <div className="flex gap-2 mb-4">
+          {/*
+            type="button" is load-bearing: everything here lives inside the
+            password-manager <form>, so an untyped button defaults to submit
+            and publishes the backup on the first click. Disabling the confirm
+            button does NOT stop a second submit button from submitting.
+          */}
           <button
+            type="button"
             onClick={handleCopy}
             disabled={isPublishing || !passphrase}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
@@ -211,6 +218,7 @@ export function BackupPassphraseDialog({
             disabled={isPublishing}
           />
           <button
+            type="button"
             onClick={handleRegenerate}
             disabled={isPublishing || !passphrase}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
