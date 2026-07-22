@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!--
+  MSI (WiX v3) dialog image — 493×312, used on the Welcome and Exit dialogs.
+
+  Same trap as the banner: WixUI overlays black Title/Description text, here
+  starting at x = 135 dlu = 180 px. The classic MSI answer, which this follows,
+  is a left art band with a light field beside it. The band is 164 px — the
+  same width as the NSIS sidebar, so both installers show the mark at the same
+  scale — plus a 2 px seam, leaving 14 px of clearance before the text box.
+
+  The mark is the *hollow* icon variant because that is what `select-icon-
+  variant.mjs` ships by default: the installer should show the icon the user
+  is about to get on their desktop.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="shared.css" />
+    <style>
+      html,
+      body {
+        width: 493px;
+        height: 312px;
+      }
+      body {
+        background: var(--dawn);
+      }
+      .band {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 164px;
+        overflow: hidden;
+      }
+      .glow-teal {
+        position: absolute;
+        width: 300px;
+        height: 300px;
+        left: -130px;
+        top: -110px;
+        background: radial-gradient(
+          circle,
+          rgba(56, 224, 196, 0.3) 0%,
+          rgba(56, 224, 196, 0) 62%
+        );
+      }
+      .glow-violet {
+        position: absolute;
+        width: 340px;
+        height: 340px;
+        right: -160px;
+        bottom: -150px;
+        background: radial-gradient(
+          circle,
+          rgba(167, 139, 250, 0.32) 0%,
+          rgba(167, 139, 250, 0) 62%
+        );
+      }
+      .glow-indigo {
+        position: absolute;
+        width: 260px;
+        height: 260px;
+        left: -60px;
+        top: 120px;
+        background: radial-gradient(
+          circle,
+          rgba(124, 140, 255, 0.2) 0%,
+          rgba(124, 140, 255, 0) 60%
+        );
+      }
+      /* 92 px displayed → a 81 px tile, since the source SVG carries 6% of
+         transparent padding around the rounded square. */
+      .mark {
+        position: absolute;
+        left: 36px;
+        top: 110px;
+        width: 92px;
+        height: 92px;
+      }
+      .seam {
+        position: absolute;
+        left: 164px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+      }
+      /* Keeps the light two-thirds from reading as bare white, without
+         touching the text box's contrast. */
+      .wash {
+        position: absolute;
+        left: 166px;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(
+          circle at 100% 100%,
+          rgba(167, 139, 250, 0.16) 0%,
+          rgba(124, 140, 255, 0.06) 42%,
+          rgba(124, 140, 255, 0) 70%
+        );
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="wash"></div>
+      <div class="band night">
+        <div class="glow-teal"></div>
+        <div class="glow-indigo"></div>
+        <div class="glow-violet"></div>
+        <img
+          class="mark"
+          src="../../apps/fluux/src-tauri/icons/icon-variants/hollow/icon-source.svg"
+        />
+      </div>
+      <div class="seam hairline vertical"></div>
+    </div>
+  </body>
+</html>

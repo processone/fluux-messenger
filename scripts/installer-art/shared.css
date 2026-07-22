@@ -1,0 +1,65 @@
+/*
+ * Shared base for the Windows installer artwork.
+ *
+ * Unlike the blog heroes, these are rendered 1:1 (never at 2x): WiX and NSIS
+ * take fixed-size bitmaps and stretch anything else. Each layout therefore
+ * sets its own exact html/body size in pixels.
+ *
+ * No @font-face here on purpose — the artwork carries no words beyond the
+ * brand lockup (an SVG). The installers localize their own copy, so baking
+ * English into the bitmaps would be wrong in 32 of our 33 locales.
+ */
+:root {
+  /* The aurora quartet, same stops as the app icon and the blog heroes. */
+  --night: #0b1020;
+  --aurora-1: #38e0c4;
+  --aurora-3: #7c8cff;
+  --aurora-4: #a78bfa;
+  /* Light surfaces the installers draw black text on. */
+  --dawn: #f7f9ff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+}
+
+.frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The "night stage" ground: dark field carrying the aurora glows. */
+.night {
+  background: var(--night);
+}
+
+/* Aurora hairline, echoing the app header's. Horizontal by default. */
+.hairline {
+  background: linear-gradient(
+    90deg,
+    var(--aurora-1) 0%,
+    var(--aurora-3) 55%,
+    var(--aurora-4) 100%
+  );
+}
+
+.hairline.vertical {
+  background: linear-gradient(
+    180deg,
+    var(--aurora-1) 0%,
+    var(--aurora-3) 55%,
+    var(--aurora-4) 100%
+  );
+}
