@@ -40,6 +40,14 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) =>
       opts && typeof opts.code === 'string' ? `${key}:${opts.code}` : key,
+    // BackupPassphraseDialog.tsx:81 reads `i18n.language` inside a mount
+    // effect (to draw a locale-specific passphrase). Omitting `i18n` here
+    // makes that dialog throw `TypeError: Cannot read properties of
+    // undefined (reading 'language')` the instant it renders, which
+    // silently defuses any assertion downstream of it (e.g. a
+    // `.not.toHaveBeenCalled()` check that can never fail because the
+    // dialog never got the chance to call anything).
+    i18n: { language: 'en' },
   }),
 }))
 
@@ -248,6 +256,163 @@ describe('EncryptionSettings PEP support', () => {
         expect(document.querySelector('input[name="backup-code"]')).not.toBeNull()
         expect(document.querySelector('input[name="passphrase"]')).toBeNull()
       })
+    })
+  })
+
+  // The backup row used to be hidden once the local marker matched the
+  // current fingerprint, which made "in sync" a dead end: a backup encoded
+  // by Fluux <=0.17.1 (legacy-normalized passphrase, #1021) sits behind a
+  // green status line that no other XEP-0373 client can open, with no way
+  // to re-publish it. The row now always renders, and because publishing
+  // mints a FRESH passphrase, replacing an existing backup is confirmed.
+  describe('re-publishing an in-sync backup', () => {
+    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      localStorage.clear()
+      mockStatus = 'online'
+      mockCheckPepSupport.mockResolvedValue(true)
+      mockBackupSecretKey.mockResolvedValue(undefined)
+      mockPlugin = {
+        getOwnFingerprint: () => FP,
+        // Marker matches the live fingerprint => the UI considers local and
+        // server in sync, which is exactly the state that used to hide the row.
+        getBackedUpFingerprint: () => FP,
+        hasSecretKeyBackup: vi.fn().mockResolvedValue(true),
+        backupSecretKey: mockBackupSecretKey,
+      }
+      useEncryptionSettingsStore.setState({
+        openpgpEnabled: true,
+        pluginRegisteredAt: 1,
+        registrationError: null,
+      })
+    })
+
+    it('offers the backup button even while in sync', async () => {
+      render(<EncryptionSettings />)
+
+      // Precondition: we really are in the in-sync state, not merely unprobed.
+      await screen.findByText('settings.encryption.backupStatusInSync')
+
+      expect(
+        screen.getByRole('button', { name: 'settings.encryption.backupAction' }),
+      ).toBeInTheDocument()
+    })
+
+    it('offers the restore button even while in sync', async () => {
+      render(<EncryptionSettings />)
+
+      await screen.findByText('settings.encryption.backupStatusInSync')
+
+      expect(
+        screen.getByRole('button', { name: 'settings.encryption.restoreAction' }),
+      ).toBeInTheDocument()
+    })
+
+    it('confirms with the own-backup copy, not the foreign-backup copy', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      expect(
+        screen.getByText('settings.encryption.backupReplaceOwnTitle'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.backupConflictTitle'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('does not publish until the confirmation is accepted', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      await screen.findByText('settings.encryption.backupReplaceOwnTitle')
+      expect(mockBackupSecretKey).not.toHaveBeenCalled()
+    })
+
+    it('publishes once the confirmation is accepted and the passphrase acknowledged', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.backupReplaceOwnAction',
+        }),
+      )
+      const publish = await screen.findByRole('button', {
+        name: 'settings.encryption.backupPublish',
+      })
+      fireEvent.click(document.querySelector('input[type="checkbox"]')!)
+      await waitFor(() => expect(publish).not.toBeDisabled())
+      fireEvent.click(publish)
+
+      // The dialog generates its own fresh passphrase, so assert call
+      // count rather than the argument value.
+      await waitFor(() => expect(mockBackupSecretKey).toHaveBeenCalledTimes(1))
+    })
+
+    it('leaves a clean state when the confirmation is cancelled', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      await screen.findByText('settings.encryption.backupReplaceOwnTitle')
+      fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
+        ).not.toBeInTheDocument()
+      })
+      // No passphrase dialog opened, and nothing was published.
+      expect(
+        screen.queryByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).not.toBeInTheDocument()
+      expect(mockBackupSecretKey).not.toHaveBeenCalled()
+
+      // Clicking backup again reopens the confirm dialog — cancellation
+      // must not leave the variant stuck in some half-cleared state.
+      fireEvent.click(
+        screen.getByRole('button', { name: 'settings.encryption.backupAction' }),
+      )
+      expect(
+        screen.getByText('settings.encryption.backupReplaceOwnTitle'),
+      ).toBeInTheDocument()
+    })
+
+    it('uses the foreign-backup copy when the marker does not match', async () => {
+      // Server holds a backup this device did not publish.
+      mockPlugin!.getBackedUpFingerprint = () => null
+
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      expect(
+        screen.getByText('settings.encryption.backupConflictTitle'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
+      ).not.toBeInTheDocument()
     })
   })
 

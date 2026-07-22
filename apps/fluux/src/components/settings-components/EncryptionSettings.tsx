@@ -44,6 +44,30 @@ type PluginStatus =
 const GENERATION_TIMEOUT_MS = 60_000
 
 /**
+ * Copy for the pre-publish confirmation. Publishing always overwrites the
+ * server blob AND always mints a fresh passphrase, so both variants are
+ * destructive; they differ only in what the user is losing.
+ *   own     — this device published the current backup. The passphrase the
+ *             user saved (and may have configured in other clients) dies.
+ *   foreign — the server copy came from somewhere else. Whoever holds ITS
+ *             passphrase loses access.
+ */
+const BACKUP_CONFIRM_KEYS = {
+  own: {
+    title: 'settings.encryption.backupReplaceOwnTitle',
+    message: 'settings.encryption.backupReplaceOwnMessage',
+    action: 'settings.encryption.backupReplaceOwnAction',
+  },
+  foreign: {
+    title: 'settings.encryption.backupConflictTitle',
+    message: 'settings.encryption.backupConflictMessage',
+    action: 'settings.encryption.backupConflictAction',
+  },
+} as const
+
+type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
+
+/**
  * Settings → Encryption panel.
  *
  * Surfaces the OpenPGP toggle and — when enabled — the account's
@@ -75,20 +99,18 @@ export function EncryptionSettings() {
   const [showRotateConfirm, setShowRotateConfirm] = useState(false)
   const [showRotatePassphraseDialog, setShowRotatePassphraseDialog] = useState(false)
   const [isRotating, setIsRotating] = useState(false)
-  // Surfaced when the user clicks "Back up to server" while a backup
-  // already lives on PEP for a fingerprint we don't have a local "this
-  // device backed it up" marker for. Overwriting that backup is what
-  // the user is asking for, but we want to confirm — the existing
-  // ciphertext belongs to whoever knows ITS passphrase, and replacing
-  // it makes that copy unrecoverable.
-  const [showBackupConflictConfirm, setShowBackupConflictConfirm] = useState(false)
+  // Surfaced when the user clicks "Back up to server" while ANY backup
+  // already lives on PEP. Publishing overwrites it and mints a fresh
+  // passphrase, so the old code stops working either way; the variant
+  // decides which consequence we spell out. null = no confirmation open.
+  const [backupConfirmVariant, setBackupConfirmVariant] =
+    useState<BackupConfirmVariant | null>(null)
   // null = not yet probed, true/false = known. Kept narrow so the UI
   // can show a "Checking…" placeholder without flickering a wrong state.
   const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
   // Fingerprint recorded locally at the moment of the last successful
   // backup/restore. When this equals the current local fingerprint AND
-  // a remote backup exists, local and server are known to be in sync
-  // and the backup/restore buttons are redundant.
+  // a remote backup exists, local and server are known to be in sync.
   const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
   // Set whenever the toggle (or auto-init) detected an existing server-
   // side OpenPGP identity but this device has no local key. The user must
@@ -597,24 +619,24 @@ export function EncryptionSettings() {
   )
 
   /**
-   * Entry point for the "Back up to server" button. If the server
-   * already holds a backup whose fingerprint we don't recognize as
-   * having been published from THIS device, gate the publish behind a
-   * confirmation step — overwriting silently would clobber whatever
-   * the existing backup belongs to (most likely a sibling device the
-   * user forgot about, possibly a now-stale copy of an earlier key).
-   * The buttons-row is only rendered when not-in-sync (inSync hides
-   * Back up entirely), so there's no need to guard the in-sync case.
+   * Entry point for the "Back up to server" button. Publishing replaces
+   * whatever is on the server and always generates a NEW passphrase
+   * (BackupPassphraseDialog draws a fresh one on every open), so any
+   * existing backup gets a confirmation first — the user is about to
+   * invalidate a code they may have written down or configured in another
+   * client. Which copy we show depends on whose backup it is: `own` when
+   * our local marker says this device published the current one,
+   * `foreign` otherwise (a sibling device, or a stale copy of an earlier
+   * key). With nothing on the server there is nothing to lose, so we go
+   * straight to the passphrase dialog.
    */
   const handleBackupRequest = useCallback(() => {
-    const conflict =
-      remoteBackupExists === true &&
-      (!backedUpFingerprint || backedUpFingerprint !== fingerprint)
-    if (conflict) {
-      setShowBackupConflictConfirm(true)
-    } else {
+    if (remoteBackupExists !== true) {
       setShowBackupDialog(true)
+      return
     }
+    const isOwnBackup = !!backedUpFingerprint && backedUpFingerprint === fingerprint
+    setBackupConfirmVariant(isOwnBackup ? 'own' : 'foreign')
   }, [remoteBackupExists, backedUpFingerprint, fingerprint])
 
   const handleRestoreConfirm = useCallback(
@@ -1053,11 +1075,14 @@ export function EncryptionSettings() {
               //   checking  → pre-probe transient
               //   inSync    → server has a backup AND it matches this
               //               device's current fingerprint (by our local
-              //               marker). Buttons are redundant.
+              //               marker).
               //   outOfSync → backup is missing, or present but for a
-              //               different fingerprint — show backup, and
-              //               show restore when something is there to
-              //               restore from.
+              //               different fingerprint.
+              // The three states drive the STATUS LINE only. The buttons
+              // render regardless: the marker records a fingerprint, not
+              // the blob's encoding, so an in-sync backup can still be one
+              // no other XEP-0373 client can open (#1021) and the user
+              // needs a way to re-publish it.
               const checking = remoteBackupExists === null
               const inSync =
                 remoteBackupExists === true &&
@@ -1087,7 +1112,7 @@ export function EncryptionSettings() {
                       </span>
                     )}
                   </p>
-                  {!checking && !inSync && (
+                  {!checking && (
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={handleBackupRequest}
@@ -1218,17 +1243,17 @@ export function EncryptionSettings() {
         />
       )}
 
-      {showBackupConflictConfirm && (
+      {backupConfirmVariant && (
         <ConfirmDialog
-          title={t('settings.encryption.backupConflictTitle')}
-          message={t('settings.encryption.backupConflictMessage')}
-          confirmLabel={t('settings.encryption.backupConflictAction')}
+          title={t(BACKUP_CONFIRM_KEYS[backupConfirmVariant].title)}
+          message={t(BACKUP_CONFIRM_KEYS[backupConfirmVariant].message)}
+          confirmLabel={t(BACKUP_CONFIRM_KEYS[backupConfirmVariant].action)}
           variant="danger"
           onConfirm={() => {
-            setShowBackupConflictConfirm(false)
+            setBackupConfirmVariant(null)
             setShowBackupDialog(true)
           }}
-          onCancel={() => setShowBackupConflictConfirm(false)}
+          onCancel={() => setBackupConfirmVariant(null)}
         />
       )}
 
