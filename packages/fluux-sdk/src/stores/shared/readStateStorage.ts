@@ -37,9 +37,32 @@ interface SerializedRoomReadState {
   historyFloor?: number
 }
 
-function getRoomReadStateStorageKey(jid?: string | null): string {
+/**
+ * The on-disk key this module reads and writes, for `jid` (or the ambient
+ * storage scope when omitted).
+ *
+ * Exported so tests can address the same row this module writes instead of
+ * re-spelling `fluux-room-read-state:<jid>` by hand — a duplicated literal would
+ * survive a rename here and turn a real regression into a puzzling
+ * "expected null not to be null".
+ */
+export function getRoomReadStateStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(ROOM_READ_STATE_STORAGE_KEY_BASE, jid)
 }
+
+/**
+ * Every key `saveRoomReadState` has actually written this session.
+ *
+ * A save builds its key from the AMBIENT storage scope, so the row's name is
+ * decided at write time. A test that resets the scope first (the usual order)
+ * then asks to clear would otherwise remove the UNSCOPED key — a row nothing
+ * wrote — and leave `fluux-room-read-state:<jid>` on disk for the next
+ * `switchAccount` to load back. Remembering what we wrote is what lets
+ * `_clearAllRoomReadStateForTesting` clear the real rows; enumerating
+ * `localStorage` is not an option, as the store suites install object mocks with
+ * no key enumeration.
+ */
+const writtenRoomReadStateKeys = new Set<string>()
 
 /**
  * Load persisted room read state.
@@ -99,11 +122,32 @@ export function loadRoomReadState(jid?: string | null): Map<string, RoomReadStat
  * of conversation, rather than for one of them.
  */
 export function clearRoomReadState(jid?: string | null): void {
+  const key = getRoomReadStateStorageKey(jid)
+  writtenRoomReadStateKeys.delete(key)
   try {
-    localStorage.removeItem(getRoomReadStateStorageKey(jid))
+    localStorage.removeItem(key)
   } catch {
     // Ignore storage errors (private mode, etc.).
   }
+}
+
+/**
+ * Test-only: drop every row this module has written, under whatever account
+ * scope it was written. See `writtenRoomReadStateKeys` for why the ambient
+ * scope is not enough.
+ * @internal
+ */
+export function _clearAllRoomReadStateForTesting(): void {
+  for (const key of writtenRoomReadStateKeys) {
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      // Ignore storage errors (private mode, etc.).
+    }
+  }
+  writtenRoomReadStateKeys.clear()
+  // The ambient row too: a test may have hand-written a fixture we never saved.
+  clearRoomReadState()
 }
 
 export function saveRoomReadState(state: Map<string, RoomReadState>, jid?: string | null): void {
@@ -119,7 +163,9 @@ export function saveRoomReadState(state: Map<string, RoomReadState>, jid?: strin
         },
       ])
     }
-    localStorage.setItem(getRoomReadStateStorageKey(jid), JSON.stringify(entries))
+    const key = getRoomReadStateStorageKey(jid)
+    localStorage.setItem(key, JSON.stringify(entries))
+    writtenRoomReadStateKeys.add(key)
   } catch {
     // Ignore storage errors (quota exceeded, private mode, etc.).
   }

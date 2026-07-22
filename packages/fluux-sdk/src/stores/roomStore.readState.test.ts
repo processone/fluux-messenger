@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
-import { loadRoomReadState } from './shared/readStateStorage'
+import { loadRoomReadState, getRoomReadStateStorageKey } from './shared/readStateStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Room, RoomMessage } from '../core/types/room'
@@ -25,10 +25,14 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 const JID = 'me@example.com'
 const ROOM = 'room@conf.example.com'
 const OTHER_ROOM = 'other@conf.example.com'
+// A room this file never writes through the store — the disk-load test below
+// depends on its row existing ONLY in localStorage.
+const DISK_ONLY_ROOM = 'restored@conf.example.com'
 
-// The room read-state key is private to shared/readStateStorage; this is the
-// on-disk name it builds for the scoped account.
-const STORAGE_KEY = `fluux-room-read-state:${JID}`
+// Ask the module for the key it actually uses rather than re-spelling it: a
+// rename would otherwise leave the assertions below reading an absent row and
+// failing as a confusing "expected null not to be null".
+const STORAGE_KEY = getRoomReadStateStorageKey(JID)
 
 function rmsg(id: string, ms: number, roomJid = ROOM): RoomMessage {
   return {
@@ -62,9 +66,15 @@ function makeRoom(jid = ROOM, messages: RoomMessage[] = []): Room {
 /**
  * Re-initialise the store the way a new app run does: `switchAccount` is the
  * production re-entry point (XMPPClient.connect calls it), and it is the only
- * path that re-reads the scoped storage after module load. Asserting through it
- * is what proves the LOAD half is wired — in-memory state alone would pass even
- * if nothing were ever read back.
+ * path that re-reads the scoped storage after module load.
+ *
+ * This does NOT prove the load half on its own: `setState` cannot reach the
+ * module-level map roomStore folds into `roomMeta`, so a test that wrote through
+ * the store earlier in the same test would still find its pointer in memory even
+ * if nothing were read back from disk. What these restart tests DO cover is that
+ * a re-added room recovers its position rather than being reset by the incoming
+ * bookmark/presence Room. "loads read state from disk on switchAccount" below is
+ * the test that isolates the disk read itself.
  */
 function restartSession(): void {
   roomStore.setState({ rooms: new Map(), roomEntities: new Map(), roomMeta: new Map(), roomRuntime: new Map() })
@@ -122,6 +132,35 @@ describe('room read state persistence', () => {
     // …and the pointer itself, not just the creation-time floor: a wiring that
     // only saved at addRoom would pass the floor assertion above on its own.
     expect(persisted.get(ROOM)?.readPointer).toEqual({ messageId: 'm5', timestamp: new Date(5000) })
+  })
+
+  // The one shape that can tell DISK apart from MEMORY, and so the only test
+  // that covers the load half at all. Nothing here has written to the store, and
+  // beforeEach's `reset()` emptied the module-level map, so this row exists ONLY
+  // in localStorage: if switchAccount stopped re-reading the scoped key, there
+  // would be no row for this room and no pointer could reach roomMeta.
+  // The payload is hand-written in its on-disk form rather than produced by
+  // saveRoomReadState, so a save/load pair that agreed with each other but not
+  // with the documented encoding could not pass.
+  it('loads read state from disk on switchAccount', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        [DISK_ONLY_ROOM, { readPointer: { messageId: 'd7', timestamp: 7000 }, historyFloor: 1000 }],
+      ])
+    )
+
+    roomStore.getState().switchAccount(JID)
+    // Bookmarks re-add the room on the next run; it carries no read state.
+    roomStore.getState().addRoom(makeRoom(DISK_ONLY_ROOM))
+
+    const meta = roomStore.getState().roomMeta.get(DISK_ONLY_ROOM)
+    expect(meta?.readPointer).toEqual({ messageId: 'd7', timestamp: new Date(7000) })
+    // The restored pointer has to land on lastSeenMessageId too — every reader
+    // (divider placement, the XEP-0490 publisher) still keys off that field.
+    expect(meta?.lastSeenMessageId).toBe('d7')
+    // …and the floor must come from disk rather than being restamped to now.
+    expect(meta?.historyFloor).toEqual(new Date(1000))
   })
 
   it('rehydrates the persisted pointer into roomMeta on the next session', () => {

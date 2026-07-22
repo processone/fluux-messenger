@@ -32,7 +32,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { makeReadPointer } from './shared/readPointer'
-import { loadRoomReadState, saveRoomReadState, clearRoomReadState, type RoomReadState } from './shared/readStateStorage'
+import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
@@ -371,10 +371,14 @@ export function _resetRoomArchiveSavesForTesting(): void {
  * no longer gives a test a clean room: the next `addRoom` folds the previous
  * test's pointer back in — which is the whole point in production. A test that
  * resets the store by hand needs this too.
+ *
+ * Clears the rows for EVERY account scope written this session, not just the
+ * ambient one: callers reset the storage scope first, so the ambient key at this
+ * moment is the unscoped one, which nothing writes once an account is set.
  */
 export function _resetRoomReadStateForTesting(): void {
   persistedRoomReadState = new Map()
-  clearRoomReadState()
+  _clearAllRoomReadStateForTesting()
 }
 
 /**

@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { loadRoomReadState, saveRoomReadState, type RoomReadState } from './readStateStorage'
+import {
+  loadRoomReadState,
+  saveRoomReadState,
+  getRoomReadStateStorageKey,
+  _clearAllRoomReadStateForTesting,
+  type RoomReadState,
+} from './readStateStorage'
 import { makeReadPointer } from './readPointer'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { localStorageMock } from '../../core/sideEffects.testHelpers'
@@ -43,7 +49,25 @@ describe('room read-state persistence', () => {
       new Map([['r@c', { historyFloor: at(1) }]]),
       JID
     )
-    expect(localStorage.getItem(`fluux-room-read-state:${JID}`)).not.toBeNull()
+    const key = getRoomReadStateStorageKey(JID)
+    // Asserted separately from the lookup below: reading the key back through
+    // the same builder that wrote it proves the two agree, but not that the key
+    // carries the account at all.
+    expect(key).toContain(JID)
+    expect(localStorage.getItem(key)).not.toBeNull()
+  })
+
+  // `_resetRoomReadStateForTesting` runs right after the storage scope is reset,
+  // so the AMBIENT key at that moment is the unscoped one — which nothing writes
+  // once an account is set. Clearing only that would leave the account's row on
+  // disk for the next `switchAccount` to load straight back into the store.
+  it('clears rows written under an account scope even after the scope is reset', () => {
+    saveRoomReadState(new Map([['r@c', { historyFloor: at(1) }]]), JID)
+    _resetStorageScopeForTesting()
+
+    _clearAllRoomReadStateForTesting()
+
+    expect(loadRoomReadState(JID).size).toBe(0)
   })
 
   it("keeps one account's read state out of another's", () => {
@@ -67,14 +91,14 @@ describe('room read-state persistence', () => {
   // floor rather than to a phantom entry.
   it('drops a row whose pointer is corrupt rather than keeping a hollow entry', () => {
     localStorage.setItem(
-      `fluux-room-read-state:${JID}`,
+      getRoomReadStateStorageKey(JID),
       JSON.stringify([['r@c', { readPointer: { messageId: 'm1' }, historyFloor: 42 }]])
     )
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
   })
 
   it('returns an empty map for unparseable storage rather than throwing', () => {
-    localStorage.setItem(`fluux-room-read-state:${JID}`, '{not json')
+    localStorage.setItem(getRoomReadStateStorageKey(JID), '{not json')
     expect(loadRoomReadState(JID).size).toBe(0)
   })
 
@@ -86,7 +110,7 @@ describe('room read-state persistence', () => {
   // this row. Deleting that guard would let this row survive.
   it('drops a row with neither a valid pointer nor a valid history floor', () => {
     localStorage.setItem(
-      `fluux-room-read-state:${JID}`,
+      getRoomReadStateStorageKey(JID),
       JSON.stringify([['r@c', {}]])
     )
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
