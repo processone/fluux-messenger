@@ -376,6 +376,7 @@ const ROOM_ENTITY_FIELDS = Object.keys({
 const ROOM_META_FIELDS = Object.keys({
   unreadCount: true, mentionsCount: true, typingUsers: true, notifyAll: true,
   notifyAllPersistent: true, lastReadAt: true, lastSeenMessageId: true,
+  readPointer: true, historyFloor: true,
   pendingRemoteDisplayedStanzaId: true, lastMessage: true, lastInteractedAt: true,
 } satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
 

@@ -12,6 +12,8 @@
  * are always updated atomically through these transition functions.
  */
 
+import type { ReadPointer } from './readPointer'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -41,6 +43,10 @@ export interface EntityNotificationState {
    * Persisted across sessions.
    */
   lastSeenMessageId?: string
+  /** Canonical read position. Supersedes lastSeenMessageId + lastReadAt (#1081). */
+  readPointer?: ReadPointer
+  /** Entity-creation watermark. Not a read position. */
+  historyFloor?: Date
   /**
    * ID of the first unread message for the visual "new messages" divider.
    * Set when user opens entity with messages after lastSeenMessageId.

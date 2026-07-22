@@ -8,6 +8,7 @@
 import type { PresenceShow } from './roster'
 import type { MentionReference } from './chat'
 import type { BaseMessage } from './message-base'
+import type { ReadPointer } from '../../stores/shared/readPointer'
 
 /**
  * Room affiliation level (XEP-0045).
@@ -268,8 +269,30 @@ export interface RoomMetadata {
   notifyAllPersistent?: boolean
   /** When room was last marked as read (for new messages marker) */
   lastReadAt?: Date
-  /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
+  /**
+   * ID of the last message the user saw in the viewport (only advances forward).
+   *
+   * NOT persisted, despite what this comment claimed before #1081: roomStore has
+   * no persist middleware and the app's `saveRooms` has no caller. Durable room
+   * read state now lives in `readPointer` + `shared/readStateStorage`.
+   *
+   * @deprecated Superseded by `readPointer`; removed once all readers migrate.
+   */
   lastSeenMessageId?: string
+  /**
+   * Where the user has read to — the canonical read position.
+   *
+   * Supersedes the `lastSeenMessageId` + `lastReadAt` pair, which were two
+   * independent fields describing one fact (issue #1081). Those two remain
+   * during the migration and are removed once every reader has moved here.
+   */
+  readPointer?: ReadPointer
+  /**
+   * When this room entered our world (join). NOT a read position — it is the
+   * floor that stops history predating the join from counting as unread.
+   * Written once, at creation.
+   */
+  historyFloor?: Date
   /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
    * message is not yet in the loaded room cache. Resolved to lastSeenMessageId

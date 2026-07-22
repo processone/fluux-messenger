@@ -6,6 +6,7 @@
  */
 
 import type { BaseMessage } from './message-base'
+import type { ReadPointer } from '../../stores/shared/readPointer'
 
 /**
  * Chat state notification types (XEP-0085).
@@ -108,6 +109,20 @@ export interface ConversationMetadata {
   lastReadAt?: Date
   /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
   lastSeenMessageId?: string
+  /**
+   * Where the user has read to — the canonical read position.
+   *
+   * Supersedes the `lastSeenMessageId` + `lastReadAt` pair, which were two
+   * independent fields describing one fact (issue #1081). Those two remain
+   * during the migration and are removed once every reader has moved here.
+   */
+  readPointer?: ReadPointer
+  /**
+   * When this conversation entered our world. NOT a read position — it is the
+   * floor that stops history predating the conversation from counting as
+   * unread. Written once, at creation.
+   */
+  historyFloor?: Date
   /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
    * message is not yet in the local cache. Resolved to lastSeenMessageId once
