@@ -95,7 +95,7 @@ beforeEach(() => {
   setStorageScopeJid(JID)
   roomStore.getState().reset()
   previousWindowVisible = connectionStore.getState().windowVisible
-  // updateLastSeenMessageId is gated on the window being focused (#1080); an
+  // advanceReadPointer is gated on the window being focused (#1080); an
   // unfocused window would make the pointer-advance tests silently no-op.
   connectionStore.getState().setWindowVisible(true)
 })
@@ -124,7 +124,7 @@ describe('room read state persistence', () => {
 
   it('persists the pointer so it survives a store reset + rehydrate', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m4', 4000), rmsg('m5', 5000)]))
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     // Whatever the in-memory state, the durable copy is what matters here.
     const persisted = loadRoomReadState(JID)
@@ -156,16 +156,13 @@ describe('room read state persistence', () => {
 
     const meta = roomStore.getState().roomMeta.get(DISK_ONLY_ROOM)
     expect(meta?.readPointer).toEqual({ messageId: 'd7', timestamp: new Date(7000) })
-    // The restored pointer has to land on lastSeenMessageId too — every reader
-    // (divider placement, the XEP-0490 publisher) still keys off that field.
-    expect(meta?.lastSeenMessageId).toBe('d7')
     // …and the floor must come from disk rather than being restamped to now.
     expect(meta?.historyFloor).toEqual(new Date(1000))
   })
 
   it('rehydrates the persisted pointer into roomMeta on the next session', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m4', 4000), rmsg('m5', 5000)]))
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     restartSession()
     // Bookmarks re-add the room on the next run; it carries no read state.
@@ -173,10 +170,6 @@ describe('room read state persistence', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer).toEqual({ messageId: 'm5', timestamp: new Date(5000) })
-    // The restored pointer has to land on lastSeenMessageId too — every reader
-    // (divider placement, XEP-0490 publisher) still keys off that field, so
-    // restoring the pointer alone would persist a position nothing acts on.
-    expect(meta?.lastSeenMessageId).toBe('m5')
   })
 
   // The cross-restart half of the "written once" rule: re-adding the room in a
@@ -212,7 +205,7 @@ describe('room read state persistence', () => {
 
     restartSession()
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     expect(loadRoomReadState(JID).has(OTHER_ROOM)).toBe(true)
   })
@@ -221,7 +214,7 @@ describe('room read state persistence', () => {
   // from another device materialises a room we have never joined.
   it('stamps and restores read state for a room born from a bookmark', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, 'm5')
     const floor = roomStore.getState().roomMeta.get(ROOM)?.historyFloor
 
     restartSession()
@@ -245,7 +238,7 @@ describe('room read state persistence', () => {
   // a persisted count outlives the messages it counted and comes back wrong.
   it('does not persist unreadCount', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm5')
+    roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
     expect(localStorage.getItem(STORAGE_KEY)).not.toContain('unreadCount')

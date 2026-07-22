@@ -465,34 +465,12 @@ describe('useSessionPersistence', () => {
       expect(restored![0].messages[49].id).toBe('msg99')
     })
 
-    it('should convert lastReadAt to Date object', () => {
-      const lastReadAt = new Date('2024-01-15T16:00:00Z')
-
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-            lastReadAt,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].lastReadAt).toBeInstanceOf(Date)
-      expect(restored![0].lastReadAt?.getTime()).toBe(lastReadAt.getTime())
-    })
+    // The 'should convert lastReadAt to Date object' case was removed in #1081:
+    // it round-tripped `Room.lastReadAt`, a field that no longer exists in any
+    // form here. Room read state is durable via the SDK's readStateStorage and
+    // is deliberately NOT in this session blob, so there is nothing to migrate
+    // the assertion to. The Date round-trip itself stays covered by the two
+    // cases above (message timestamps and retractedAt).
 
     it('should restore occupants as Map and typingUsers as Set', () => {
       const rooms = new Map<string, Room>([

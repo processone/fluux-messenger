@@ -126,8 +126,10 @@ describe('StateSnapshot', () => {
       expect(phone?.show).toBe('away')
     })
 
-    it('restores rooms with occupants, selfOccupant, subject and last-read marker', async () => {
-      const lastReadAt = new Date('2026-04-21T08:30:00Z')
+    // Read state is deliberately NOT in this snapshot since #1081: rooms keep a
+    // durable readPointer in shared/readStateStorage instead, so the old
+    // `lastReadAt` field this case also asserted has no equivalent here.
+    it('restores rooms with occupants, selfOccupant and subject', async () => {
       adapterData.store.set('user@example.com', {
         rooms: [{
           jid: 'room@conf.example.com',
@@ -144,7 +146,6 @@ describe('StateSnapshot', () => {
           mentionsCount: 1,
           isBookmarked: true,
           autojoin: true,
-          lastReadAt: lastReadAt.toISOString(),
           messages: [],
         }],
       })
@@ -161,7 +162,6 @@ describe('StateSnapshot', () => {
       expect(room?.selfOccupant?.nick).toBe('me')
       expect(room?.unreadCount).toBe(3)
       expect(room?.autojoin).toBe(true)
-      expect(room?.lastReadAt).toEqual(lastReadAt)
     })
 
     it('restores server info, own nickname and avatar hash', async () => {

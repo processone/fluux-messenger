@@ -18,24 +18,24 @@ export interface MarkerMessage {
  * Find the ID of the first "new" message that should have a marker before it.
  *
  * A message is considered "new" if:
- * 1. Its timestamp is after lastReadAt
+ * 1. Its timestamp is after readAt
  * 2. It's an incoming message (not outgoing)
  * 3. It's not a delayed/historical message
  *
  * @param messages - Array of messages to search through
- * @param lastReadAt - Timestamp when the conversation/room was last read
+ * @param readAt - Timestamp when the conversation/room was last read
  * @returns The ID of the first new message, or null if none found
  */
 export function findFirstNewMessageId(
   messages: MarkerMessage[],
-  lastReadAt: Date | undefined
+  readAt: Date | undefined
 ): string | null {
-  if (!lastReadAt) {
+  if (!readAt) {
     return null
   }
 
   const firstNewMessage = messages.find(
-    (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing && !msg.isDelayed
+    (msg) => msg.timestamp > readAt && !msg.isOutgoing && !msg.isDelayed
   )
 
   return firstNewMessage?.id ?? null

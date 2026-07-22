@@ -60,7 +60,7 @@ interface PrevRoomState {
  * This hook handles all the filtering logic:
  * - Skip outgoing messages
  * - For 1:1 conversations: notify only when the message is unseen (unreadCount > 0 and
- *   message id differs from lastSeenMessageId); delivery mechanism and message age are not
+ *   message id differs from the read pointer); delivery mechanism and message age are not
  *   discriminators — an offline-delivered message is "new to me"
  * - Skip if window is visible AND conversation/room is active
  * - For rooms: skip delayed/historical messages and messages older than 5 minutes;
@@ -205,7 +205,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
               isActive,
               windowVisible,
               unreadCount: conv.unreadCount,
-              lastSeenMessageId: conv.lastSeenMessageId,
+              readPointer: conv.readPointer,
             }
           )
 

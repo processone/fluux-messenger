@@ -105,16 +105,14 @@ export interface ConversationMetadata {
   unreadCount: number
   /** Most recent message in the conversation */
   lastMessage?: Message
-  /** When conversation was last marked as read (for new messages marker) */
-  lastReadAt?: Date
-  /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
-  lastSeenMessageId?: string
   /**
-   * Where the user has read to — the canonical read position.
+   * Where the user has read to — the read position, and the only
+   * representation of it.
    *
-   * Supersedes the `lastSeenMessageId` + `lastReadAt` pair, which were two
-   * independent fields describing one fact (issue #1081). Those two remain
-   * during the migration and are removed once every reader has moved here.
+   * Replaced the `lastSeenMessageId` + `lastReadAt` pair, two independently
+   * writable fields describing one fact that drifted apart in practice and
+   * silently corrupted unread counts (issue #1081). Persisted; only ever
+   * advances forward.
    */
   readPointer?: ReadPointer
   /**
@@ -125,8 +123,8 @@ export interface ConversationMetadata {
   historyFloor?: Date
   /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
-   * message is not yet in the local cache. Resolved to lastSeenMessageId once
-   * the message arrives (see mergeMAMMessages).
+   * message is not yet in the local cache. Folded into `readPointer` once the
+   * message arrives (see mergeMAMMessages).
    */
   pendingRemoteDisplayedStanzaId?: string
 }

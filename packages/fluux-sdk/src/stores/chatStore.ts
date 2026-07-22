@@ -257,7 +257,7 @@ interface ChatState {
   // Target message to scroll to after navigation (ephemeral, not persisted)
   targetMessageId: string | null
   // Session-only new-message divider per conversation (jid -> messageId). Derived
-  // at activation from lastSeenMessageId; never persisted (absent from serializeState).
+  // at activation from the read pointer; never persisted (absent from serializeState).
   firstNewMessageMarkers: Map<string, string>
   // Sliding window: whether a conversation's resident `messages` array is at the live
   // edge (holds the newest history) so an incoming live message can be appended.
@@ -327,7 +327,7 @@ interface ChatState {
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
-   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: repositions the
+   *  for this conversation. Forward-only and idempotent: repositions the
    *  divider to the first unread message after the pointer when one exists. Never clears an
    *  existing divider when the pointer is at the newest (nothing unread) — that state is kept
    *  alive deliberately after a FAB jump-to-present so the jump-to-last-read pill can offer a
@@ -338,10 +338,10 @@ interface ChatState {
    *  the recompute sees an empty array and would SILENTLY clear the divider — callers must only
    *  invoke this for the active conversation. */
   resyncDividerToReadPointer: (conversationId: string) => void
-  updateLastSeenMessageId: (conversationId: string, messageId: string) => void
+  advanceReadPointer: (conversationId: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
-   * lastSeenMessageId forward-only by resolving the stanza-id to a local
+   * the read pointer forward-only by resolving the stanza-id to a local
    * message id; stores a pending high-water mark if not yet loaded.
    */
   applyRemoteDisplayed: (conversationId: string, stanzaId: string, messagesOverride?: Message[]) => void
@@ -498,15 +498,37 @@ export function _resetChatArchiveSavesForTesting(): void {
   chatCacheEpoch++
 }
 
+/**
+ * Read state as it may appear ON DISK, which is not the same shape as in memory.
+ *
+ * `lastSeenMessageId` / `lastReadAt` were deleted from the live types in #1081,
+ * but blobs written by every release before it still carry them and nothing
+ * else. {@link scheduleReadPointerBackfill} reads them here to build the
+ * `readPointer` those users have never had. Deleting them from this type would
+ * silently orphan every pre-#1081 read position — and the pointer is
+ * forward-only, so a position lost that way never comes back.
+ *
+ * Nothing WRITES these: `serializeState` emits the live shape, so a blob loses
+ * them the first time this build persists. That is safe only because the
+ * backfill captures their values synchronously, at rehydrate, before any write.
+ */
+interface PersistedReadState {
+  lastSeenMessageId?: string
+  lastReadAt?: Date | string
+}
+
+type PersistedConversationMetadata = ConversationMetadata & PersistedReadState
+type PersistedConversation = Conversation & PersistedReadState
+
 // Serialization types for localStorage
 // Note: messages are NOT persisted in localStorage - they're in IndexedDB
 // Only conversations metadata, archivedConversations, and drafts are persisted here
 interface PersistedState {
   // New separated storage (Phase 6)
   conversationEntities?: [string, ConversationEntity][]
-  conversationMeta?: [string, ConversationMetadata][]
+  conversationMeta?: [string, PersistedConversationMetadata][]
   // Legacy combined storage for backward compatibility
-  conversations: [string, Conversation][]
+  conversations: [string, PersistedConversation][]
   archivedConversations?: string[] // Optional for backwards compatibility
   drafts?: [string, string][] // Optional for backwards compatibility
   conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
@@ -632,20 +654,32 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  * `deserializeState` is synchronous and the migration needs the message cache,
  * so this runs fire-and-forget after the restored state lands — the same shape
  * as the localStorage-messages → IndexedDB migration below it. Conversations
- * persisted before #1081 carry only `lastSeenMessageId` / `lastReadAt`; without
- * this pass they would have no pointer at all once those fields are gone.
+ * persisted before #1081 carry only `lastSeenMessageId` / `lastReadAt`, which
+ * are no longer live fields; without this pass they would have no pointer at
+ * all. `legacyReadState` is what the blob held for each conversation, read off
+ * the persisted shape (see {@link PersistedReadState}) rather than off the
+ * restored metadata, which no longer has anywhere to keep it.
+ *
+ * The "already has one" skip deliberately consults the RESTORED pointer, not
+ * the raw persisted value: a corrupt on-disk pointer deserializes to
+ * `undefined`, and such a conversation should be backfilled from its legacy
+ * fields rather than left with nothing.
  *
  * The scope jid is captured up front: an account switch mid-pass must not write
  * the previous account's positions into the new account's conversations.
  */
-function scheduleReadPointerBackfill(conversationMeta: Map<string, ConversationMetadata>): void {
+function scheduleReadPointerBackfill(
+  conversationMeta: Map<string, ConversationMetadata>,
+  legacyReadState: Map<string, { lastSeenMessageId?: string; lastReadAt?: Date }>
+): void {
   const pending: Array<[string, { lastSeenMessageId?: string; lastReadAt?: Date }]> = []
   for (const [id, meta] of conversationMeta) {
     // Already migrated (or written this session) — leave it alone.
     if (meta.readPointer) continue
+    const legacy = legacyReadState.get(id)
     // Never read: no legacy state to carry forward, so no pointer is correct.
-    if (!meta.lastSeenMessageId && !meta.lastReadAt) continue
-    pending.push([id, { lastSeenMessageId: meta.lastSeenMessageId, lastReadAt: meta.lastReadAt }])
+    if (!legacy?.lastSeenMessageId && !legacy?.lastReadAt) continue
+    pending.push([id, { lastSeenMessageId: legacy.lastSeenMessageId, lastReadAt: legacy.lastReadAt }])
   }
   if (pending.length === 0) return
 
@@ -689,12 +723,22 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 
   // Helper to restore a persisted Date (it lands on disk as an ISO string,
-  // even though the in-memory type says Date). Used for lastReadAt and for
-  // historyFloor, which is compared against message timestamps — a string there
-  // would make every comparison lie rather than throw.
-  const restoreLastReadAt = (lastReadAt?: Date | string): Date | undefined => {
-    if (!lastReadAt) return undefined
-    return lastReadAt instanceof Date ? lastReadAt : new Date(lastReadAt)
+  // even though the in-memory type says Date). Used for the legacy `lastReadAt`
+  // and for historyFloor, which is compared against message timestamps — a
+  // string there would make every comparison lie rather than throw.
+  const restoreDate = (value?: Date | string): Date | undefined => {
+    if (!value) return undefined
+    return value instanceof Date ? value : new Date(value)
+  }
+
+  // Legacy read state as it sits on disk, keyed by conversation. Not part of any
+  // live type any more (#1081) — read here purely to feed the readPointer
+  // backfill at the bottom of this function.
+  const legacyReadState = new Map<string, { lastSeenMessageId?: string; lastReadAt?: Date }>()
+  const captureLegacyReadState = (id: string, source: PersistedReadState): void => {
+    const lastReadAt = restoreDate(source.lastReadAt)
+    if (!source.lastSeenMessageId && !lastReadAt) return
+    legacyReadState.set(id, { lastSeenMessageId: source.lastSeenMessageId, lastReadAt })
   }
 
   // Check if we have the new separated format
@@ -708,23 +752,28 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     // New format: deserialize separated maps
     conversationEntities = new Map(persisted.conversationEntities!)
     conversationMeta = new Map(
-      persisted.conversationMeta!.map(([id, meta]) => [
-        id,
-        {
-          ...meta,
-          // The persisted count paints on cold start. Zeroing it here flashed
-          // empty badges on every launch until something recomputed (#1081).
-          unreadCount: meta.unreadCount ?? 0,
-          lastMessage: restoreLastMessage(meta.lastMessage),
-          lastReadAt: restoreLastReadAt(meta.lastReadAt),
-          historyFloor: restoreLastReadAt(meta.historyFloor),
-          // The persisted value is untrusted, not really a `ReadPointer`: a chat
-          // pointer riding inside `conversationMeta` goes through a plain
-          // `JSON.stringify`, so its `timestamp` lands on disk as an ISO string
-          // even though the in-memory type says `Date` (#1081).
-          readPointer: deserializeReadPointer(meta.readPointer),
-        },
-      ])
+      persisted.conversationMeta!.map(([id, meta]) => {
+        captureLegacyReadState(id, meta)
+        // Named explicitly rather than spread, so the legacy read-state keys are
+        // dropped from the live object instead of riding along invisibly.
+        const { lastSeenMessageId: _seen, lastReadAt: _readAt, ...rest } = meta
+        return [
+          id,
+          {
+            ...rest,
+            // The persisted count paints on cold start. Zeroing it here flashed
+            // empty badges on every launch until something recomputed (#1081).
+            unreadCount: meta.unreadCount ?? 0,
+            lastMessage: restoreLastMessage(meta.lastMessage),
+            historyFloor: restoreDate(meta.historyFloor),
+            // The persisted value is untrusted, not really a `ReadPointer`: a chat
+            // pointer riding inside `conversationMeta` goes through a plain
+            // `JSON.stringify`, so its `timestamp` lands on disk as an ISO string
+            // even though the in-memory type says `Date` (#1081).
+            readPointer: deserializeReadPointer(meta.readPointer),
+          },
+        ]
+      })
     )
 
     // Rebuild combined map from separated maps
@@ -738,20 +787,23 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   } else {
     // Legacy format: deserialize combined map and extract separated maps
     conversations = new Map(
-      persisted.conversations.map(([id, conv]) => [
-        id,
-        {
-          ...conv,
-          // Default to 'chat' for conversations stored before the type field was added
-          type: conv.type ?? 'chat',
-          // See the new-format branch: the persisted count survives the restore.
-          unreadCount: conv.unreadCount ?? 0,
-          lastMessage: restoreLastMessage(conv.lastMessage),
-          lastReadAt: restoreLastReadAt(conv.lastReadAt),
-          historyFloor: restoreLastReadAt(conv.historyFloor),
-          readPointer: deserializeReadPointer(conv.readPointer),
-        },
-      ])
+      persisted.conversations.map(([id, conv]) => {
+        captureLegacyReadState(id, conv)
+        const { lastSeenMessageId: _seen, lastReadAt: _readAt, ...rest } = conv
+        return [
+          id,
+          {
+            ...rest,
+            // Default to 'chat' for conversations stored before the type field was added
+            type: conv.type ?? 'chat',
+            // See the new-format branch: the persisted count survives the restore.
+            unreadCount: conv.unreadCount ?? 0,
+            lastMessage: restoreLastMessage(conv.lastMessage),
+            historyFloor: restoreDate(conv.historyFloor),
+            readPointer: deserializeReadPointer(conv.readPointer),
+          },
+        ]
+      })
     )
 
     // Extract entity and metadata from combined conversations (migration)
@@ -767,8 +819,6 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
       conversationMeta.set(id, {
         unreadCount: conv.unreadCount,
         lastMessage: conv.lastMessage,
-        lastReadAt: conv.lastReadAt,
-        lastSeenMessageId: conv.lastSeenMessageId,
         readPointer: conv.readPointer,
         historyFloor: conv.historyFloor,
       })
@@ -778,7 +828,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Give every restored conversation a readPointer (fire-and-forget; #1081).
   // Runs after the restored maps land, since the resolution needs the async
   // message cache and this function is synchronous.
-  scheduleReadPointerBackfill(conversationMeta)
+  scheduleReadPointerBackfill(conversationMeta, legacyReadState)
 
   // Migrate old localStorage messages to IndexedDB (one-time migration)
   if (persisted.messages && persisted.messages.length > 0) {
@@ -1008,8 +1058,6 @@ export const chatStore = createStore<ChatState>()(
             const notifInput: notifState.EntityNotificationState = {
               unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
               mentionsCount: 0,
-              lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
-              lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
               readPointer: meta?.readPointer ?? conv.readPointer,
               firstNewMessageId: undefined,
             }
@@ -1023,10 +1071,8 @@ export const chatStore = createStore<ChatState>()(
 
             set((state) => {
               const newMetaEntry = {
-                ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined }),
+                ...(meta ?? { unreadCount: 0, readPointer: undefined }),
                 unreadCount: activated.unreadCount,
-                lastReadAt: activated.lastReadAt,
-                lastSeenMessageId: activated.lastSeenMessageId,
                 readPointer: activated.readPointer,
               }
               const newMeta = new Map(state.conversationMeta)
@@ -1035,8 +1081,6 @@ export const chatStore = createStore<ChatState>()(
               newConversations.set(id, {
                 ...conv,
                 unreadCount: activated.unreadCount,
-                lastReadAt: activated.lastReadAt,
-                lastSeenMessageId: activated.lastSeenMessageId,
                 readPointer: activated.readPointer,
               })
               const newMarkers = new Map(state.firstNewMessageMarkers)
@@ -1061,7 +1105,7 @@ export const chatStore = createStore<ChatState>()(
           // A newer activation started while the cache read was in flight: it owns
           // the pending flag now, so bail without clearing it.
           if (token !== activationToken) return
-          // XEP-0490: fold any pending remote read position into lastSeenMessageId
+          // XEP-0490: fold any pending remote read position into readPointer
           // BEFORE setActiveConversation derives the new-message divider. The fresh
           // session MDS seed runs before messages load, so the marker is stashed as
           // pendingRemoteDisplayedStanzaId; resolve it now (forward-only, against the
@@ -1072,7 +1116,7 @@ export const chatStore = createStore<ChatState>()(
           // would reposition the divider on every return). Gate + retry policy
           // live in shared/readMarkerSync.
           const foldOnce = (stage: string) => {
-            const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
+            const lastSeenBefore = get().conversationMeta.get(id)?.readPointer?.messageId
             const fold = foldPendingRemoteDisplayed(
               mdsGate,
               id,
@@ -1084,7 +1128,7 @@ export const chatStore = createStore<ChatState>()(
                 conversationId: id,
                 pendingStanzaId: fold.pending,
                 lastSeenBefore,
-                lastSeenAfter: get().conversationMeta.get(id)?.lastSeenMessageId,
+                lastSeenAfter: get().conversationMeta.get(id)?.readPointer?.messageId,
                 resolved: fold.resolved,
               })
             } else if (fold.pending) {
@@ -1103,7 +1147,7 @@ export const chatStore = createStore<ChatState>()(
           // position. A cache miss keeps the latest slice; the divider then
           // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
           // heals the cache for the next open.
-          const pointer = get().conversationMeta.get(id)?.lastSeenMessageId
+          const pointer = get().conversationMeta.get(id)?.readPointer?.messageId
           if (pointer) {
             const loaded = get().messages.get(id) ?? []
             if (!loaded.some((m) => m.id === pointer)) {
@@ -1135,8 +1179,6 @@ export const chatStore = createStore<ChatState>()(
           const meta: ConversationMetadata = {
             unreadCount: conv.unreadCount,
             lastMessage: conv.lastMessage,
-            lastReadAt: conv.lastReadAt,
-            lastSeenMessageId: conv.lastSeenMessageId,
             readPointer: conv.readPointer,
             // When this conversation entered our world. Written once, at
             // creation, and never again — a floor that moved on every re-add
@@ -1301,8 +1343,6 @@ export const chatStore = createStore<ChatState>()(
               {
                 unreadCount: meta.unreadCount,
                 mentionsCount: 0,
-                lastReadAt: meta.lastReadAt,
-                lastSeenMessageId: meta.lastSeenMessageId,
                 readPointer: meta.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(msg.conversationId),
               },
@@ -1336,9 +1376,7 @@ export const chatStore = createStore<ChatState>()(
             newMeta.set(msg.conversationId, {
               ...meta,
               unreadCount: notif.unreadCount,
-              lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
-              lastSeenMessageId: notif.lastSeenMessageId,
               readPointer: notif.readPointer,
             })
 
@@ -1347,9 +1385,7 @@ export const chatStore = createStore<ChatState>()(
             newConversations.set(msg.conversationId, {
               ...conv,
               unreadCount: notif.unreadCount,
-              lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
-              lastSeenMessageId: notif.lastSeenMessageId,
               readPointer: notif.readPointer,
             })
 
@@ -1394,43 +1430,38 @@ export const chatStore = createStore<ChatState>()(
           const notifInput: notifState.EntityNotificationState = {
             unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
             mentionsCount: 0,
-            lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
-            lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
             readPointer: meta?.readPointer ?? conv.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
 
           const messages = state.messages.get(conversationId) || []
           const lastMessage = messages[messages.length - 1]
-          const lastMessageTimestamp = lastMessage?.timestamp
 
           // When the loaded window is at the live edge, the newest loaded message
           // IS the true newest and clearing the badge means the user caught up to
           // it — advance the read pointer so the XEP-0490 publisher (which watches
-          // lastSeenMessageId) syncs the marker to other devices. Slid up into
-          // history we leave the pointer where the user actually read, so MDS never
-          // publishes a position past unseen messages.
+          // the pointer) syncs the marker to other devices. Slid up into history we
+          // leave the pointer where the user actually read, so MDS never publishes
+          // a position past unseen messages.
           const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
           const advanceSeenTo = atLiveEdge ? lastMessage : undefined
 
           // Delegate to pure function
-          const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp, advanceSeenTo)
+          const updated = notifState.onMarkAsRead(notifInput, advanceSeenTo)
 
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
 
           const newMetaEntry = {
-            ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined }),
+            ...(meta ?? { unreadCount: 0, readPointer: undefined }),
             unreadCount: updated.unreadCount,
-            lastReadAt: updated.lastReadAt,
-            lastSeenMessageId: updated.lastSeenMessageId,
             readPointer: updated.readPointer,
           }
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, newMetaEntry)
 
           const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, readPointer: updated.readPointer })
 
           return { conversationMeta: newMeta, conversations: newConversations }
         })
@@ -1448,10 +1479,10 @@ export const chatStore = createStore<ChatState>()(
 
           // Skip update if already fully read: pointer at the computed newest id,
           // no unread count, and no "new messages" divider to clear.
-          const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+          const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.messageId
           const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
           if (
-            currentLastSeenMessageId === newest.id &&
+            currentSeenMessageId === newest.id &&
             currentUnreadCount === 0 &&
             !state.firstNewMessageMarkers.has(conversationId)
           ) {
@@ -1459,10 +1490,8 @@ export const chatStore = createStore<ChatState>()(
           }
 
           const read = {
-            lastSeenMessageId: newest.id,
             readPointer: makeReadPointer(newest),
             unreadCount: 0,
-            lastReadAt: newest.timestamp,
           }
 
           const newMeta = new Map(state.conversationMeta)
@@ -1501,8 +1530,6 @@ export const chatStore = createStore<ChatState>()(
             {
               unreadCount: 0,
               mentionsCount: 0,
-              lastReadAt: meta.lastReadAt,
-              lastSeenMessageId: meta.lastSeenMessageId,
               readPointer: meta.readPointer,
               firstNewMessageId: undefined,
             },
@@ -1521,7 +1548,7 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      updateLastSeenMessageId: (conversationId, messageId) => {
+      advanceReadPointer: (conversationId, messageId) => {
         // Presence gate (issue #1076) — see the roomStore twin. The viewport
         // observer reports what is PAINTED, and the list auto-scrolls to arriving
         // messages whether or not the user is at the window. Rendered is not seen.
@@ -1538,8 +1565,6 @@ export const chatStore = createStore<ChatState>()(
             {
               unreadCount: meta.unreadCount,
               mentionsCount: 0,
-              lastReadAt: meta.lastReadAt,
-              lastSeenMessageId: meta.lastSeenMessageId,
               readPointer: meta.readPointer,
               firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
@@ -1548,15 +1573,16 @@ export const chatStore = createStore<ChatState>()(
             { atLiveEdge }
           )
 
-          // No change (same reference or same value)
-          if (updated.lastSeenMessageId === meta.lastSeenMessageId) return state
+          // No change: onMessageSeen hands back the pointer it was given (by
+          // reference) whenever it did not advance, and a fresh object when it did.
+          if (updated.readPointer === meta.readPointer) return state
 
           const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+          newMeta.set(conversationId, { ...meta, readPointer: updated.readPointer })
 
           if (conv) {
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+            newConversations.set(conversationId, { ...conv, readPointer: updated.readPointer })
             return { conversationMeta: newMeta, conversations: newConversations }
           }
 
@@ -1582,8 +1608,6 @@ export const chatStore = createStore<ChatState>()(
             {
               unreadCount: meta.unreadCount,
               mentionsCount: 0,
-              lastReadAt: meta.lastReadAt,
-              lastSeenMessageId: meta.lastSeenMessageId,
               readPointer: meta.readPointer,
               pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
             },
@@ -1601,7 +1625,6 @@ export const chatStore = createStore<ChatState>()(
               : resolution.kind === 'clear-pending'
                 ? { pendingRemoteDisplayedStanzaId: undefined }
                 : {
-                    lastSeenMessageId: resolution.lastSeenMessageId,
                     readPointer: resolution.readPointer,
                     pendingRemoteDisplayedStanzaId: undefined,
                   }
@@ -1625,8 +1648,6 @@ export const chatStore = createStore<ChatState>()(
               {
                 unreadCount: meta.unreadCount,
                 mentionsCount: 0,
-                lastReadAt: meta.lastReadAt,
-                lastSeenMessageId: resolution.lastSeenMessageId,
                 readPointer: resolution.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               },
@@ -1688,8 +1709,6 @@ export const chatStore = createStore<ChatState>()(
                 const pointerState: notifState.EntityNotificationState = {
                   unreadCount: meta.unreadCount,
                   mentionsCount: 0,
-                  lastReadAt: meta.lastReadAt,
-                  lastSeenMessageId: meta.lastSeenMessageId,
                   readPointer: meta.readPointer,
                   firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
                 }
@@ -1699,7 +1718,6 @@ export const chatStore = createStore<ChatState>()(
                 newMeta.set(conversationId, {
                   ...meta,
                   unreadCount: exact.unreadCount,
-                  lastSeenMessageId: exact.lastSeenMessageId,
                   readPointer: exact.readPointer,
                 })
                 const conv = state.conversations.get(conversationId)
@@ -1708,7 +1726,6 @@ export const chatStore = createStore<ChatState>()(
                 newConversations.set(conversationId, {
                   ...conv,
                   unreadCount: exact.unreadCount,
-                  lastSeenMessageId: exact.lastSeenMessageId,
                   readPointer: exact.readPointer,
                 })
                 return { conversationMeta: newMeta, conversations: newConversations }
@@ -2106,8 +2123,6 @@ export const chatStore = createStore<ChatState>()(
           const pointerState: notifState.EntityNotificationState = {
             unreadCount: meta.unreadCount,
             mentionsCount: 0,
-            lastReadAt: meta.lastReadAt,
-            lastSeenMessageId: meta.lastSeenMessageId,
             readPointer: meta.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
@@ -2119,7 +2134,6 @@ export const chatStore = createStore<ChatState>()(
           newMeta.set(conversationId, {
             ...meta,
             unreadCount: recomputed.unreadCount,
-            lastSeenMessageId: recomputed.lastSeenMessageId,
             readPointer: recomputed.readPointer,
           })
           const conv = state.conversations.get(conversationId)
@@ -2128,7 +2142,6 @@ export const chatStore = createStore<ChatState>()(
           newConversations.set(conversationId, {
             ...conv,
             unreadCount: recomputed.unreadCount,
-            lastSeenMessageId: recomputed.lastSeenMessageId,
             readPointer: recomputed.readPointer,
           })
           return { conversationMeta: newMeta, conversations: newConversations }
@@ -2421,8 +2434,6 @@ export const chatStore = createStore<ChatState>()(
               const pointerState: notifState.EntityNotificationState = {
                 unreadCount: meta.unreadCount,
                 mentionsCount: 0,
-                lastReadAt: meta.lastReadAt,
-                lastSeenMessageId: meta.lastSeenMessageId,
                 readPointer: meta.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               }
@@ -2443,7 +2454,6 @@ export const chatStore = createStore<ChatState>()(
                 ...(previewUpdate ? { lastMessage } : {}),
                 ...(hydrated ? {
                   unreadCount: hydrated.unreadCount,
-                  lastSeenMessageId: hydrated.lastSeenMessageId,
                   readPointer: hydrated.readPointer,
                 } : {}),
               })
@@ -2453,7 +2463,6 @@ export const chatStore = createStore<ChatState>()(
                 ...(previewUpdate ? { lastMessage } : {}),
                 ...(hydrated ? {
                   unreadCount: hydrated.unreadCount,
-                  lastSeenMessageId: hydrated.lastSeenMessageId,
                   readPointer: hydrated.readPointer,
                 } : {}),
               })
@@ -2498,7 +2507,7 @@ export const chatStore = createStore<ChatState>()(
         // XEP-0490: a remote displayed marker may have arrived before its message.
         // Now that messages are merged into state, try to resolve the pending marker
         // forward-only. applyRemoteDisplayed re-reads the merged messages, resolves
-        // lastSeenMessageId, and clears pendingRemoteDisplayedStanzaId on success.
+        // the read pointer, and clears pendingRemoteDisplayedStanzaId on success.
         const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
         if (pending) {
           get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)

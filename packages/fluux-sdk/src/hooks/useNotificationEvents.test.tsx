@@ -697,7 +697,7 @@ describe('useNotificationEvents', () => {
           id: 'alice@example.com',
           name: 'Alice',
           unreadCount: 1,
-          lastSeenMessageId: undefined,
+          readPointer: undefined,
           lastMessage: {
             id: 'm1',
             body: 'Offline message',
@@ -721,10 +721,17 @@ describe('useNotificationEvents', () => {
         mockConversations.set('bob@example.com', {
           id: 'bob@example.com',
           name: 'Bob',
-          unreadCount: 0,
-          lastSeenMessageId: 'm1',
+          // Non-zero on purpose: with 0 unread the count gate alone suppresses
+          // the notification and this case could not tell a working read-pointer
+          // check from a missing one.
+          unreadCount: 1,
+          readPointer: { messageId: 'm1', timestamp: new Date() },
           lastMessage: {
             id: 'm1',
+            // A body is required: without one `isPreviewableMessage` rejects the
+            // arrival before the read-position check runs, and this case passed
+            // no matter what that check did.
+            body: 'already read',
             timestamp: new Date(),
             isOutgoing: false,
             isDelayed: true,
@@ -745,7 +752,7 @@ describe('useNotificationEvents', () => {
         id: 'carol@example.com',
         name: 'Carol',
         unreadCount: 1,
-        lastSeenMessageId: undefined,
+        readPointer: undefined,
         lastMessage: {
           id: 'm9',
           body: 'Hello',
@@ -1005,7 +1012,7 @@ describe('useNotificationEvents', () => {
           id: convId,
           name: 'Dave',
           unreadCount: 1,
-          lastSeenMessageId: undefined,
+          readPointer: undefined,
           lastMessage: real,
         })
         triggerChatStoreUpdate()
@@ -1043,7 +1050,7 @@ describe('useNotificationEvents', () => {
           id: convId,
           name: 'Dave',
           unreadCount: 1,
-          lastSeenMessageId: undefined,
+          readPointer: undefined,
           lastMessage: real1,
         })
         triggerChatStoreUpdate()
@@ -1103,7 +1110,7 @@ describe('useNotificationEvents', () => {
           id: convId,
           name: 'Dave',
           unreadCount: 1,
-          lastSeenMessageId: undefined,
+          readPointer: undefined,
           lastMessage: newest,
         })
         triggerChatStoreUpdate()
@@ -1158,7 +1165,7 @@ describe('useNotificationEvents', () => {
           id: convId,
           name: 'Dave',
           unreadCount: 1,
-          lastSeenMessageId: undefined,
+          readPointer: undefined,
           lastMessage: preview,
         })
         triggerChatStoreUpdate()

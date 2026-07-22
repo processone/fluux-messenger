@@ -327,7 +327,6 @@ interface SerializableRoom {
   password?: string
   notifyAll?: boolean
   notifyAllPersistent?: boolean
-  lastReadAt?: string
   isQuickChat?: boolean
   messages: SerializableRoomMessage[]
 }
@@ -365,7 +364,6 @@ export function saveRooms(rooms: Map<string, Room>, jid?: string | null): void {
     password: room.password,
     notifyAll: room.notifyAll,
     notifyAllPersistent: room.notifyAllPersistent,
-    lastReadAt: room.lastReadAt?.toISOString(),
     isQuickChat: room.isQuickChat,
     // Persist last N messages for context on reload (like history on fresh join)
     messages: room.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
@@ -399,7 +397,6 @@ export function getSavedRooms(jid?: string | null): Room[] | null {
       // Restore messages with Date objects
       messages: (room.messages || []).map(deserializeRoomMessage),
       avatar: undefined, // Will be restored from cache via avatarHash
-      lastReadAt: room.lastReadAt ? new Date(room.lastReadAt) : undefined,
     })) as Room[]
   } catch {
     return null

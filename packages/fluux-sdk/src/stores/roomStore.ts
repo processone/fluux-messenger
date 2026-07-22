@@ -272,9 +272,9 @@ function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
  * source and written as a whole.
  *
  * Priority: what the store already holds → what the caller supplied → what
- * survived the last run. Never a field-by-field merge across sources:
- * `lastSeenMessageId`, `lastReadAt` and `readPointer` describe one fact, and
- * mixing them is exactly the drift #1081 is undoing.
+ * survived the last run. Never a field-by-field merge across sources: a read
+ * position is one `readPointer`, and mixing halves of two of them is exactly
+ * the drift #1081 undid.
  *
  * The store's own value wins because `addRoom` runs again on rejoin and on
  * bookmark reload, and those Room objects are rebuilt from presence/bookmark
@@ -285,38 +285,11 @@ function resolveRoomReadPosition(
   existingMeta: RoomMetadata | undefined,
   room: Room,
   restored: RoomReadState | undefined
-): Pick<RoomMetadata, 'lastReadAt' | 'lastSeenMessageId' | 'readPointer'> {
-  if (existingMeta?.lastSeenMessageId || existingMeta?.readPointer) {
-    return {
-      lastReadAt: existingMeta.lastReadAt,
-      lastSeenMessageId: existingMeta.lastSeenMessageId,
-      readPointer: existingMeta.readPointer,
-    }
-  }
-  if (room.lastSeenMessageId || room.readPointer) {
-    return {
-      lastReadAt: room.lastReadAt,
-      lastSeenMessageId: room.lastSeenMessageId,
-      readPointer: room.readPointer,
-    }
-  }
-  if (restored?.readPointer) {
-    // A restored pointer has to land on lastSeenMessageId/lastReadAt too: every
-    // reader (divider placement, the XEP-0490 publisher, the unread recount)
-    // still keys off those, so restoring the pointer alone would persist a
-    // position nothing acts on. The pointer's timestamp IS the timestamp of the
-    // message it names, which is precisely what lastReadAt wants.
-    return {
-      lastReadAt: restored.readPointer.timestamp,
-      lastSeenMessageId: restored.readPointer.messageId,
-      readPointer: restored.readPointer,
-    }
-  }
-  return {
-    lastReadAt: existingMeta?.lastReadAt ?? room.lastReadAt,
-    lastSeenMessageId: undefined,
-    readPointer: undefined,
-  }
+): Pick<RoomMetadata, 'readPointer'> {
+  if (existingMeta?.readPointer) return { readPointer: existingMeta.readPointer }
+  if (room.readPointer) return { readPointer: room.readPointer }
+  if (restored?.readPointer) return { readPointer: restored.readPointer }
+  return { readPointer: undefined }
 }
 
 /**
@@ -486,8 +459,7 @@ const ROOM_ENTITY_FIELDS = Object.keys({
 
 const ROOM_META_FIELDS = Object.keys({
   unreadCount: true, mentionsCount: true, typingUsers: true, notifyAll: true,
-  notifyAllPersistent: true, lastReadAt: true, lastSeenMessageId: true,
-  readPointer: true, historyFloor: true,
+  notifyAllPersistent: true, readPointer: true, historyFloor: true,
   pendingRemoteDisplayedStanzaId: true, lastMessage: true, lastInteractedAt: true,
 } satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
 
@@ -743,7 +715,7 @@ export interface RoomState {
   // Target message to scroll to after navigation (ephemeral)
   targetMessageId: string | null
   // Session-only new-message divider per room (jid -> messageId). Derived at
-  // activation from lastSeenMessageId; never persisted.
+  // activation from the read pointer; never persisted.
   firstNewMessageMarkers: Map<string, string>
 
   // Actions
@@ -819,7 +791,7 @@ export interface RoomState {
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
-   *  (lastSeenMessageId) for this room. Forward-only and idempotent: repositions the divider to the
+   *  for this room. Forward-only and idempotent: repositions the divider to the
    *  first unread message after the pointer when one exists. Never clears an existing divider when
    *  the pointer is at the newest (nothing unread) — that state is kept alive deliberately after a
    *  FAB jump-to-present so the jump-to-last-read pill can offer a return; clearing is owned by the
@@ -830,10 +802,10 @@ export interface RoomState {
    *  an empty array and would SILENTLY clear the divider — callers must only invoke this for the
    *  active room. */
   resyncDividerToReadPointer: (roomJid: string) => void
-  updateLastSeenMessageId: (roomJid: string, messageId: string) => void
+  advanceReadPointer: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
-   * lastSeenMessageId forward-only by resolving the stanza-id to a local
+   * the read pointer forward-only by resolving the stanza-id to a local
    * message id; stores a pending high-water mark if not yet loaded.
    */
   applyRemoteDisplayed: (roomJid: string, stanzaId: string, messagesOverride?: RoomMessage[]) => void
@@ -1058,8 +1030,6 @@ export const roomStore = createStore<RoomState>()(
       // fields, and an incoming Room carries none of them.
       newRooms.set(room.jid, {
         ...room,
-        lastReadAt: meta.lastReadAt,
-        lastSeenMessageId: meta.lastSeenMessageId,
         readPointer: meta.readPointer,
         historyFloor: meta.historyFloor,
       })
@@ -1599,8 +1569,6 @@ export const roomStore = createStore<RoomState>()(
       const notifInput: notifState.EntityNotificationState = {
         unreadCount: existingMeta?.unreadCount ?? existing.unreadCount,
         mentionsCount: existingMeta?.mentionsCount ?? existing.mentionsCount,
-        lastReadAt: existingMeta?.lastReadAt ?? existing.lastReadAt,
-        lastSeenMessageId: existingMeta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         readPointer: existingMeta?.readPointer ?? existing.readPointer,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
@@ -1647,17 +1615,18 @@ export const roomStore = createStore<RoomState>()(
         ? (lastMessage?.timestamp ?? existing.lastInteractedAt)
         : existing.lastInteractedAt
 
-      // NOTE: `updated.lastSeenMessageId` (and so `updated.readPointer`) are
-      // deliberately NOT written here — this path has never advanced the room's
-      // read position on an outgoing/seen message, unlike chatStore.addMessage.
-      // Writing the pointer alone would make the two fields disagree; the
-      // chat/room parity gap is left exactly as it is (#1081 is a refactor).
+      // NOTE: `updated.readPointer` is deliberately NOT written here — this path
+      // has never advanced the room's read position on an outgoing/seen message,
+      // unlike chatStore.addMessage. That chat/room parity gap is left exactly as
+      // it is (#1081 is a refactor). What it USED to write was `lastReadAt`, the
+      // half of the old pair that moved on its own: the room's derivation floor
+      // ran ahead of the position the room actually held. With one pointer that
+      // half-write is not expressible, so the gap is now simply visible.
       newRooms.set(roomJid, {
         ...existing,
         messages: newMessages,
         unreadCount: updated.unreadCount,
         mentionsCount: updated.mentionsCount,
-        lastReadAt: updated.lastReadAt,
         lastMessage,
         lastInteractedAt: newLastInteractedAt,
       })
@@ -1676,7 +1645,6 @@ export const roomStore = createStore<RoomState>()(
           ...existingMeta,
           unreadCount: updated.unreadCount,
           mentionsCount: updated.mentionsCount,
-          lastReadAt: updated.lastReadAt,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
         })
@@ -1903,8 +1871,6 @@ export const roomStore = createStore<RoomState>()(
       const notifInput: notifState.EntityNotificationState = {
         unreadCount: meta?.unreadCount ?? existing.unreadCount,
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
-        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         readPointer: meta?.readPointer ?? existing.readPointer,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
@@ -1912,7 +1878,6 @@ export const roomStore = createStore<RoomState>()(
       const runtime = state.roomRuntime.get(roomJid)
       const messages = runtime?.messages ?? existing.messages
       const lastMessage = messages[messages.length - 1]
-      const lastMessageTimestamp = lastMessage?.timestamp
 
       // At the live edge the newest loaded message is the true newest and clearing
       // the badge means the user caught up — advance the read pointer so the
@@ -1920,21 +1885,19 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = runtime?.windowAtLiveEdge !== false
       const advanceSeenTo = atLiveEdge ? lastMessage : undefined
 
-      const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp, advanceSeenTo)
+      const updated = notifState.onMarkAsRead(notifInput, advanceSeenTo)
 
       // Skip update if no change
       if (updated === notifInput) return {}
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, readPointer: updated.readPointer })
 
       const newMeta = new Map(state.roomMeta)
       const newMetaEntry = {
         ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
         unreadCount: updated.unreadCount,
         mentionsCount: updated.mentionsCount,
-        lastReadAt: updated.lastReadAt,
-        lastSeenMessageId: updated.lastSeenMessageId,
         readPointer: updated.readPointer,
       }
       newMeta.set(roomJid, newMetaEntry)
@@ -1957,11 +1920,11 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if already fully read: pointer at the computed newest id,
       // no unread/mentions, and no "new messages" divider to clear.
       const meta = state.roomMeta.get(roomJid)
-      const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+      const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.messageId
       const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
       const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
       if (
-        currentLastSeenMessageId === newest.id &&
+        currentSeenMessageId === newest.id &&
         currentUnreadCount === 0 &&
         currentMentionsCount === 0 &&
         !state.firstNewMessageMarkers.has(roomJid)
@@ -1970,11 +1933,9 @@ export const roomStore = createStore<RoomState>()(
       }
 
       const read = {
-        lastSeenMessageId: newest.id,
         readPointer: makeReadPointer(newest),
         unreadCount: 0,
         mentionsCount: 0,
-        lastReadAt: newest.timestamp,
       }
       const committed = commitRoomUpdate(state, roomJid, read)
       if (!committed) return state
@@ -2038,8 +1999,6 @@ export const roomStore = createStore<RoomState>()(
         const notifInput: notifState.EntityNotificationState = {
           unreadCount: meta?.unreadCount ?? room.unreadCount,
           mentionsCount: meta?.mentionsCount ?? room.mentionsCount,
-          lastReadAt: meta?.lastReadAt ?? room.lastReadAt,
-          lastSeenMessageId: meta?.lastSeenMessageId ?? room.lastSeenMessageId,
           readPointer: meta?.readPointer ?? room.readPointer,
           firstNewMessageId: get().firstNewMessageMarkers.get(roomJid),
         }
@@ -2058,8 +2017,6 @@ export const roomStore = createStore<RoomState>()(
             ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
             unreadCount: activated.unreadCount,
             mentionsCount: activated.mentionsCount,
-            lastReadAt: activated.lastReadAt,
-            lastSeenMessageId: activated.lastSeenMessageId,
             readPointer: activated.readPointer,
             lastInteractedAt: newLastInteractedAt,
           }
@@ -2071,8 +2028,6 @@ export const roomStore = createStore<RoomState>()(
             ...room,
             unreadCount: activated.unreadCount,
             mentionsCount: activated.mentionsCount,
-            lastReadAt: activated.lastReadAt,
-            lastSeenMessageId: activated.lastSeenMessageId,
             readPointer: activated.readPointer,
             lastInteractedAt: newLastInteractedAt,
           })
@@ -2098,7 +2053,7 @@ export const roomStore = createStore<RoomState>()(
       // A newer activation started while the cache read was in flight: it owns
       // the pending flag now, so bail without clearing it.
       if (token !== activationToken) return
-      // XEP-0490: fold any pending remote read position into lastSeenMessageId
+      // XEP-0490: fold any pending remote read position into the read pointer
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded
       // messages, and applied only once per distinct RESOLVED marker this
@@ -2106,7 +2061,7 @@ export const roomStore = createStore<RoomState>()(
       // resolved one is never re-folded (that would reposition the divider on
       // every return). Gate + retry policy live in shared/readMarkerSync.
       const foldOnce = (stage: string) => {
-        const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
+        const lastSeenBefore = get().roomMeta.get(roomJid)?.readPointer?.messageId
         const fold = foldPendingRemoteDisplayed(
           mdsGate,
           roomJid,
@@ -2118,7 +2073,7 @@ export const roomStore = createStore<RoomState>()(
             roomJid,
             pendingStanzaId: fold.pending,
             lastSeenBefore,
-            lastSeenAfter: get().roomMeta.get(roomJid)?.lastSeenMessageId,
+            lastSeenAfter: get().roomMeta.get(roomJid)?.readPointer?.messageId,
             resolved: fold.resolved,
           })
         } else if (fold.pending) {
@@ -2137,7 +2092,7 @@ export const roomStore = createStore<RoomState>()(
       // position. A cache miss keeps the latest slice; the divider then
       // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
       // heals the cache for the next open.
-      const pointer = get().roomMeta.get(roomJid)?.lastSeenMessageId
+      const pointer = get().roomMeta.get(roomJid)?.readPointer?.messageId
       if (pointer) {
         const loaded = get().roomRuntime.get(roomJid)?.messages ?? get().rooms.get(roomJid)?.messages ?? []
         if (!loaded.some((m) => m.id === pointer)) {
@@ -2175,12 +2130,10 @@ export const roomStore = createStore<RoomState>()(
       if (!meta && !existing) return state
       const runtime = state.roomRuntime.get(roomJid)
       const messages = runtime?.messages ?? existing?.messages ?? []
-      const lastSeenMessageId = meta?.lastSeenMessageId ?? existing?.lastSeenMessageId
-      const lastReadAt = meta?.lastReadAt ?? existing?.lastReadAt
       const readPointer = meta?.readPointer ?? existing?.readPointer
 
       const divider = notifState.onActivate(
-        { unreadCount: 0, mentionsCount: 0, lastReadAt, lastSeenMessageId, readPointer, firstNewMessageId: undefined },
+        { unreadCount: 0, mentionsCount: 0, readPointer, firstNewMessageId: undefined },
         messages,
         { treatDelayedAsNew: true }
       ).firstNewMessageId
@@ -2196,7 +2149,7 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  updateLastSeenMessageId: (roomJid, messageId) => {
+  advanceReadPointer: (roomJid, messageId) => {
     // Presence gate (issue #1076): the viewport observer reports what is PAINTED,
     // and the list auto-scrolls to arriving messages whether or not the user is
     // at the window. Without this check a backgrounded client marks every new
@@ -2216,8 +2169,6 @@ export const roomStore = createStore<RoomState>()(
       const notifInput: notifState.EntityNotificationState = {
         unreadCount: meta?.unreadCount ?? existing.unreadCount,
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
-        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         readPointer: meta?.readPointer ?? existing.readPointer,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
@@ -2226,11 +2177,11 @@ export const roomStore = createStore<RoomState>()(
       if (updated === notifInput) return state
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+      newRooms.set(roomJid, { ...existing, readPointer: updated.readPointer })
 
       const newMeta = new Map(state.roomMeta)
       if (meta) {
-        newMeta.set(roomJid, { ...meta, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+        newMeta.set(roomJid, { ...meta, readPointer: updated.readPointer })
         persistRoomReadState(newMeta)
       }
 
@@ -2257,8 +2208,6 @@ export const roomStore = createStore<RoomState>()(
         {
           unreadCount: meta.unreadCount,
           mentionsCount: meta.mentionsCount,
-          lastReadAt: meta.lastReadAt,
-          lastSeenMessageId: meta.lastSeenMessageId,
           readPointer: meta.readPointer,
           pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
         },
@@ -2277,7 +2226,6 @@ export const roomStore = createStore<RoomState>()(
           : resolution.kind === 'clear-pending'
             ? { pendingRemoteDisplayedStanzaId: undefined }
             : {
-                lastSeenMessageId: resolution.lastSeenMessageId,
                 readPointer: resolution.readPointer,
                 pendingRemoteDisplayedStanzaId: undefined,
               }
@@ -2300,8 +2248,6 @@ export const roomStore = createStore<RoomState>()(
           {
             unreadCount: meta.unreadCount,
             mentionsCount: meta.mentionsCount,
-            lastReadAt: meta.lastReadAt,
-            lastSeenMessageId: resolution.lastSeenMessageId,
             readPointer: resolution.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
           },
@@ -2372,8 +2318,6 @@ export const roomStore = createStore<RoomState>()(
             const pointerState: notifState.EntityNotificationState = {
               unreadCount: meta.unreadCount,
               mentionsCount: meta.mentionsCount,
-              lastReadAt: meta.lastReadAt,
-              lastSeenMessageId: meta.lastSeenMessageId,
               readPointer: meta.readPointer,
               firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
             }
@@ -2384,7 +2328,6 @@ export const roomStore = createStore<RoomState>()(
               ...meta,
               unreadCount: exact.unreadCount,
               mentionsCount: exact.mentionsCount,
-              lastSeenMessageId: exact.lastSeenMessageId,
               readPointer: exact.readPointer,
             })
             persistRoomReadState(newMeta)
@@ -2395,7 +2338,6 @@ export const roomStore = createStore<RoomState>()(
               ...room,
               unreadCount: exact.unreadCount,
               mentionsCount: exact.mentionsCount,
-              lastSeenMessageId: exact.lastSeenMessageId,
               readPointer: exact.readPointer,
             })
             return { roomMeta: newMeta, rooms: newRooms }
@@ -3312,8 +3254,6 @@ export const roomStore = createStore<RoomState>()(
             {
               unreadCount: existingMeta.unreadCount,
               mentionsCount: existingMeta.mentionsCount,
-              lastReadAt: existingMeta.lastReadAt,
-              lastSeenMessageId: existingMeta.lastSeenMessageId,
               readPointer: existingMeta.readPointer,
               firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
             },
@@ -3330,14 +3270,12 @@ export const roomStore = createStore<RoomState>()(
             ...newMeta.get(roomJid)!,
             unreadCount: recomputed.unreadCount,
             mentionsCount: recomputed.mentionsCount,
-            lastSeenMessageId: recomputed.lastSeenMessageId,
             readPointer: recomputed.readPointer,
           })
           newRooms.set(roomJid, {
             ...newRooms.get(roomJid)!,
             unreadCount: recomputed.unreadCount,
             mentionsCount: recomputed.mentionsCount,
-            lastSeenMessageId: recomputed.lastSeenMessageId,
             readPointer: recomputed.readPointer,
           })
           persistRoomReadState(newMeta)

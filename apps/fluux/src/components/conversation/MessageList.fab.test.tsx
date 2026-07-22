@@ -346,7 +346,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-3"
-          lastSeenMessageId="msg-2" // read up to msg-2 → unread = msg-3..msg-9 = 7
+          readPointerId="msg-2" // read up to msg-2 → unread = msg-3..msg-9 = 7
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -365,7 +365,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-3"
-          lastSeenMessageId="msg-6"
+          readPointerId="msg-6"
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -383,7 +383,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-3"   // divider at entry
-          lastSeenMessageId="msg-6"   // read pointer deeper than divider
+          readPointerId="msg-6"   // read pointer deeper than divider
           onResyncDivider={onResyncDivider}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
@@ -404,7 +404,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-3"
-          lastSeenMessageId="msg-3"   // pointer == divider, reader hasn't gone past it
+          readPointerId="msg-3"   // pointer == divider, reader hasn't gone past it
           onResyncDivider={onResyncDivider}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />

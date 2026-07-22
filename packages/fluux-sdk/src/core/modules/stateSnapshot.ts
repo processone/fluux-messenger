@@ -71,7 +71,6 @@ interface SerializedRoom {
   password?: string
   notifyAll?: boolean
   notifyAllPersistent?: boolean
-  lastReadAt?: string
   isQuickChat?: boolean
   muted?: boolean
   supportsMAM?: boolean
@@ -166,7 +165,6 @@ function serializeRoom(r: Room): SerializedRoom {
     password: r.password,
     notifyAll: r.notifyAll,
     notifyAllPersistent: r.notifyAllPersistent,
-    lastReadAt: r.lastReadAt?.toISOString(),
     isQuickChat: r.isQuickChat,
     muted: r.muted,
     supportsMAM: r.supportsMAM,
@@ -183,7 +181,6 @@ function deserializeRoom(r: SerializedRoom): Room {
     occupants: new Map(r.occupants),
     typingUsers: new Set<string>(),
     messages: (r.messages || []).map(deserializeRoomMessage),
-    lastReadAt: r.lastReadAt ? new Date(r.lastReadAt) : undefined,
     avatar: undefined,
   } as Room
 }

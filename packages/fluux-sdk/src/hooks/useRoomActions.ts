@@ -210,8 +210,8 @@ export function useRoomActions() {
     roomStore.getState().resyncDividerToReadPointer(roomJid)
   }, [])
 
-  const updateLastSeenMessageId = useCallback((roomJid: string, messageId: string) => {
-    roomStore.getState().updateLastSeenMessageId(roomJid, messageId)
+  const advanceReadPointer = useCallback((roomJid: string, messageId: string) => {
+    roomStore.getState().advanceReadPointer(roomJid, messageId)
   }, [])
 
   const fetchOlderHistory = useMemo(
@@ -264,7 +264,7 @@ export function useRoomActions() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchOlderHistory,
       // Focused slices (composed)
       ...polls,
@@ -298,7 +298,7 @@ export function useRoomActions() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchOlderHistory,
       polls,
       moderation,

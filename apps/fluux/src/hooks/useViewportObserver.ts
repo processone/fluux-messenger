@@ -79,13 +79,13 @@ export function useViewportObserver({
     // targets the CORRECT conversation — even though onMessageSeenRef.current
     // may already point at the new conversation's callback (updated during
     // render).  Without this, the pending flush would go to the wrong
-    // conversation, causing lastSeenMessageId to never advance and the
+    // conversation, causing readPointerId to never advance and the
     // "new messages" marker to lag behind by one or two activations.
     const callbackForFlush = onMessageSeenRef.current
 
     return () => {
       // Flush pending report using the callback captured at setup time,
-      // ensuring lastSeenMessageId is updated for the CORRECT conversation
+      // ensuring readPointerId is updated for the CORRECT conversation
       // before onDeactivate() clears the marker.
       if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
         callbackForFlush?.(pendingMessageIdRef.current)

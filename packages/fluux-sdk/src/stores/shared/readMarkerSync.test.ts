@@ -22,9 +22,14 @@ const messages: TestMsg[] = [
 const baseMeta = {
   unreadCount: 2,
   mentionsCount: 0,
-  lastReadAt: undefined,
-  lastSeenMessageId: undefined,
+  readPointer: undefined,
   pendingRemoteDisplayedStanzaId: undefined,
+}
+
+/** The read position naming `id`, carrying that message's own timestamp. */
+function seenIn(id: string) {
+  const found = messages.find((m) => m.id === id)!
+  return { messageId: found.id, timestamp: found.timestamp }
 }
 
 describe('resolveRemoteDisplayed', () => {
@@ -36,24 +41,24 @@ describe('resolveRemoteDisplayed', () => {
 
   it('advances the read position forward-only for a non-active entity (no divider)', () => {
     const result = resolveRemoteDisplayed(
-      { ...baseMeta, lastSeenMessageId: 'm1' },
+      { ...baseMeta, readPointer: seenIn('m1') },
       messages,
       undefined,
       'arch-m2',
       { isActive: false }
     )
 
+    // Whole-object assertion: the resolution carries one read position, and its
+    // timestamp is the resolved message's own (#1081).
     expect(result).toEqual({
       kind: 'advanced',
-      lastSeenMessageId: 'm2',
-      // The pointer names the SAME message as lastSeenMessageId (#1081).
       readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
     })
   })
 
   it('recomputes the divider for the ACTIVE entity from the advanced position', () => {
     const result = resolveRemoteDisplayed(
-      { ...baseMeta, lastSeenMessageId: 'm1' },
+      { ...baseMeta, readPointer: seenIn('m1') },
       messages,
       undefined,
       'arch-m2',
@@ -63,7 +68,6 @@ describe('resolveRemoteDisplayed', () => {
     // Advanced to m2 → the first unseen incoming message after it is m3.
     expect(result).toEqual({
       kind: 'advanced-with-divider',
-      lastSeenMessageId: 'm2',
       readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
       firstNewMessageId: 'm3',
     })
@@ -71,7 +75,7 @@ describe('resolveRemoteDisplayed', () => {
 
   it('clears the divider when the advanced position reaches the newest message', () => {
     const result = resolveRemoteDisplayed(
-      { ...baseMeta, lastSeenMessageId: 'm1' },
+      { ...baseMeta, readPointer: seenIn('m1') },
       messages,
       'm2',
       'arch-m3',
@@ -80,7 +84,6 @@ describe('resolveRemoteDisplayed', () => {
 
     expect(result).toEqual({
       kind: 'advanced-with-divider',
-      lastSeenMessageId: 'm3',
       readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
       firstNewMessageId: undefined,
     })
@@ -88,7 +91,7 @@ describe('resolveRemoteDisplayed', () => {
 
   it('reports unchanged when the local position is already at the marker and no pending is stale', () => {
     const result = resolveRemoteDisplayed(
-      { ...baseMeta, lastSeenMessageId: 'm3' },
+      { ...baseMeta, readPointer: seenIn('m3') },
       messages,
       undefined,
       'arch-m2',
@@ -100,7 +103,7 @@ describe('resolveRemoteDisplayed', () => {
 
   it('asks to clear a stale pending mark when resolved without an advance', () => {
     const result = resolveRemoteDisplayed(
-      { ...baseMeta, lastSeenMessageId: 'm3', pendingRemoteDisplayedStanzaId: 'arch-m2' },
+      { ...baseMeta, readPointer: seenIn('m3'), pendingRemoteDisplayedStanzaId: 'arch-m2' },
       messages,
       undefined,
       'arch-m2',

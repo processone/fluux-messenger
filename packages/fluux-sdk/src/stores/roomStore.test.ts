@@ -71,7 +71,7 @@ function createRoom(
     subject: options.subject,
     selfOccupant: options.selfOccupant,
     typingUsers: options.typingUsers || new Set(),
-    lastReadAt: options.lastReadAt,
+    readPointer: options.readPointer,
     notifyAll: options.notifyAll,
     notifyAllPersistent: options.notifyAllPersistent,
     lastInteractedAt: options.lastInteractedAt,
@@ -1311,7 +1311,7 @@ describe('roomStore', () => {
       expect(room?.unreadCount).toBe(1) // Only incremented once
     })
 
-    it('should leave lastReadAt undefined when inactive room gets first message', () => {
+    it('should leave the read pointer undefined when inactive room gets first message', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
       // Room is inactive (activeRoomJid is not set)
 
@@ -1319,13 +1319,13 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toBeUndefined() // Stays undefined; marker placed via unreadCount on activate
+      expect(room?.readPointer).toBeUndefined() // Marker placed via unreadCount on activate
     })
 
-    it('should preserve lastReadAt when inactive room gets new message', () => {
-      const existingLastReadAt = new Date('2025-01-15T08:00:00Z')
+    it('should preserve the read pointer when inactive room gets new message', () => {
+      const existing = { messageId: 'older', timestamp: new Date('2025-01-15T08:00:00Z') }
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
-        lastReadAt: existingLastReadAt,
+        readPointer: existing,
       }))
       // Room is inactive
 
@@ -1333,11 +1333,21 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toEqual(existingLastReadAt) // Preserved
+      expect(room?.readPointer).toEqual(existing) // Preserved
     })
 
-    it('should update lastReadAt to message timestamp when active room gets new message', () => {
-      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+    // Was 'should update lastReadAt to message timestamp when active room gets
+    // new message'. That behaviour is deliberately gone with #1081: this path
+    // advanced `lastReadAt` (the derivation FLOOR) while leaving the position
+    // the room actually held put, so the floor ran ahead of the read position
+    // and later derivations under-counted. roomStore.addMessage has never
+    // advanced the room's read position — unlike its chatStore twin — and that
+    // parity gap is now simply visible rather than half-papered-over.
+    it('should NOT move the read pointer when an active room gets a new message', () => {
+      const existing = { messageId: 'older', timestamp: new Date('2025-01-15T08:00:00Z') }
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        readPointer: existing,
+      }))
       roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
 
       const msgTimestamp = new Date('2025-01-15T10:30:00Z')
@@ -1348,7 +1358,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toEqual(msgTimestamp) // Updated to message time
+      expect(room?.readPointer).toEqual(existing)
     })
 
     it('should save message to IndexedDB when noLocalStore is false', () => {
@@ -1578,14 +1588,14 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.mentionsCount).toBe(0)
     })
 
-    it('should update lastReadAt to last message timestamp (resets new messages marker)', () => {
-      // markAsRead should reset counts AND update lastReadAt
-      // This clears the "new messages" marker when switching back to a room
+    it('should advance the read pointer to the last message (resets new messages marker)', () => {
+      // markAsRead resets counts AND advances the read pointer to the newest
+      // loaded message, which clears the "new messages" marker on return.
       const msgTimestamp = new Date('2025-01-15T10:30:00Z')
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 2,
         mentionsCount: 1,
-        lastReadAt: new Date('2025-01-15T08:00:00Z'),
+        readPointer: { messageId: 'older', timestamp: new Date('2025-01-15T08:00:00Z') },
       }))
       roomStore.getState().addMessage('test@conference.example.com', {
         ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello'),
@@ -1595,11 +1605,13 @@ describe('roomStore', () => {
       roomStore.getState().markAsRead('test@conference.example.com')
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toEqual(msgTimestamp) // lastReadAt updated to last message
+      expect(room?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
     })
 
-    it('should set lastReadAt to current time when no messages exist', () => {
-      const beforeMark = new Date()
+    // Replaces 'should set lastReadAt to current time when no messages exist'
+    // (#1081): with nothing loaded there is no message the user can be said to
+    // have read up to, and there is no wall-clock read time left to invent one.
+    it('should not invent a read position when no messages exist', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 1,
       }))
@@ -1607,20 +1619,19 @@ describe('roomStore', () => {
       roomStore.getState().markAsRead('test@conference.example.com')
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toBeDefined()
-      expect(room!.lastReadAt!.getTime()).toBeGreaterThanOrEqual(beforeMark.getTime())
+      expect(room?.unreadCount).toBe(0)
+      expect(room?.readPointer).toBeUndefined()
     })
 
-    it('should update lastReadAt even when unreadCount is already 0', () => {
-      // Bug fix: when switching to a room with 0 unread but stale lastReadAt,
-      // the "new messages" marker would show incorrectly
-      const oldLastReadAt = new Date('2025-01-15T08:00:00Z')
+    it('should advance the read pointer even when unreadCount is already 0', () => {
+      // Bug fix: when switching to a room with 0 unread but a stale read
+      // position, the "new messages" marker would show incorrectly
       const msgTimestamp = new Date('2025-01-15T10:30:00Z')
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 0, // Already read
         mentionsCount: 0,
-        lastReadAt: oldLastReadAt,
+        readPointer: { messageId: 'older', timestamp: new Date('2025-01-15T08:00:00Z') },
       }))
 
       // Add a newer message
@@ -1629,14 +1640,14 @@ describe('roomStore', () => {
         timestamp: msgTimestamp,
       })
 
-      // markAsRead should update lastReadAt to the new message timestamp
+      // markAsRead should advance the pointer onto the new message
       roomStore.getState().markAsRead('test@conference.example.com')
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toEqual(msgTimestamp)
+      expect(room?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
     })
 
-    it('should not trigger state update when called multiple times with same timestamp (regression test for infinite loop)', () => {
+    it('should not trigger state update when called twice at the same read position (regression test for infinite loop)', () => {
       // Regression test: Date objects were compared by reference (!==) instead of value (.getTime())
       // This caused infinite re-render loops because new Date() !== new Date() is always true
       const msgTimestamp = new Date('2025-01-15T10:30:00Z')
@@ -1654,7 +1665,7 @@ describe('roomStore', () => {
       const roomAfterFirst = roomStore.getState().rooms.get('test@conference.example.com')
       expect(roomAfterFirst?.unreadCount).toBe(0)
       expect(roomAfterFirst?.mentionsCount).toBe(0)
-      expect(roomAfterFirst?.lastReadAt).toEqual(msgTimestamp)
+      expect(roomAfterFirst?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
 
       // Capture rooms Map reference after first markAsRead
       const roomsMapAfterFirst = roomStore.getState().rooms
@@ -1687,7 +1698,7 @@ describe('roomStore', () => {
         lastMessage: messages[2],
         unreadCount: 2,
         mentionsCount: 1,
-        lastSeenMessageId: 'm1',
+        readPointer: { messageId: 'm1', timestamp: messages[0].timestamp },
       }))
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
@@ -1698,7 +1709,7 @@ describe('roomStore', () => {
       roomStore.getState().markReadToNewest(roomJid)
 
       const meta = roomStore.getState().roomMeta.get(roomJid)
-      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.readPointer?.messageId).toBe('m3')
       expect(meta?.unreadCount).toBe(0)
       expect(meta?.mentionsCount).toBe(0)
       expect(roomStore.getState().firstNewMessageMarkers.has(roomJid)).toBe(false)
@@ -1717,7 +1728,7 @@ describe('roomStore', () => {
         lastMessage: messages[2],
         unreadCount: 2,
         mentionsCount: 1,
-        lastSeenMessageId: 'm1',
+        readPointer: { messageId: 'm1', timestamp: messages[0].timestamp },
       }))
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
@@ -1759,7 +1770,7 @@ describe('roomStore', () => {
       roomStore.getState().markReadToNewest(roomJid)
 
       const meta = roomStore.getState().roomMeta.get(roomJid)
-      expect(meta?.lastSeenMessageId).toBe('m9')
+      expect(meta?.readPointer?.messageId).toBe('m9')
       expect(meta?.unreadCount).toBe(0)
       expect(meta?.mentionsCount).toBe(0)
     })
@@ -1786,12 +1797,12 @@ describe('roomStore', () => {
       roomStore.getState().markAllRoomsRead()
 
       expect(roomStore.getState().roomMeta.get(unreadJoined)?.unreadCount).toBe(0)
-      expect(roomStore.getState().roomMeta.get(unreadJoined)?.lastSeenMessageId).toBe('u1')
+      expect(roomStore.getState().roomMeta.get(unreadJoined)?.readPointer?.messageId).toBe('u1')
       // Clean room was already at 0 — no change expected (and no crash).
       expect(roomStore.getState().roomMeta.get(cleanJoined)?.unreadCount).toBe(0)
       // Unjoined room is skipped even though it has unread messages.
       expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.unreadCount).toBe(5)
-      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.lastSeenMessageId).toBeUndefined()
+      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.readPointer).toBeUndefined()
     })
   })
 
@@ -2133,15 +2144,18 @@ describe('roomStore', () => {
 
     it('activateRoom reloads the window around a pointer deeper than the latest slice', async () => {
       // Arrange: cache holds 300 messages; the latest-100 slice (returned by
-      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
+      // loadMessagesFromCache) does NOT contain the message the read pointer names
       // ('msg-150') — the reader left off deep in history. Seeding
-      // roomMeta.lastSeenMessageId directly mimics a persisted read pointer
+      // roomMeta.readPointer directly mimics a persisted read pointer
       // from a prior session (no live activation has run yet in this test).
       const roomJid = 'test@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
-        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'msg-150' })
+        meta.set(roomJid, {
+          ...meta.get(roomJid)!,
+          readPointer: { messageId: 'msg-150', timestamp: new Date(150 * 60_000) },
+        })
         return { roomMeta: meta }
       })
 
@@ -3971,7 +3985,10 @@ describe('roomStore', () => {
     it('forward merge into a non-active room recomputes unread and mention counts from the pointer', () => {
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
-        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1' })
+        meta.set(roomJid, {
+          ...meta.get(roomJid)!,
+          readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T09:30:00Z') },
+        })
         return { roomMeta: meta }
       })
 
@@ -4024,7 +4041,7 @@ describe('roomStore', () => {
     })
 
     it('forward merge into a room with NO read state snaps the pointer (fresh-join guard)', () => {
-      // No lastSeenMessageId/lastReadAt seeded — fresh room, never read.
+      // No readPointer seeded — fresh room, never read.
       const mamMessages: RoomMessage[] = [
         {
           type: 'groupchat',
@@ -4066,13 +4083,18 @@ describe('roomStore', () => {
       const meta = roomStore.getState().roomMeta.get(roomJid)
       expect(meta?.unreadCount).toBe(0)
       expect(meta?.mentionsCount).toBe(0)
-      expect(meta?.lastSeenMessageId).toBe('f3')
+      expect(meta?.readPointer?.messageId).toBe('f3')
     })
 
     it('backward merge does not touch counts', () => {
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
-        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 5, mentionsCount: 1 })
+        meta.set(roomJid, {
+          ...meta.get(roomJid)!,
+          readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T09:30:00Z') },
+          unreadCount: 5,
+          mentionsCount: 1,
+        })
         return { roomMeta: meta }
       })
 
@@ -4101,7 +4123,12 @@ describe('roomStore', () => {
       roomStore.setState({ activeRoomJid: roomJid })
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
-        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 0, mentionsCount: 0 })
+        meta.set(roomJid, {
+          ...meta.get(roomJid)!,
+          readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T09:30:00Z') },
+          unreadCount: 0,
+          mentionsCount: 0,
+        })
         return { roomMeta: meta }
       })
 
@@ -5668,12 +5695,16 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     }
   }
 
-  function activateWith(messages: RoomMessage[], lastSeenMessageId: string, unreadCount: number) {
+  function activateWith(messages: RoomMessage[], seenMessageId: string, unreadCount: number) {
     roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages, unreadCount }))
+    const seenMsg = messages.find((m) => m.id === seenMessageId)
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(ROOM)!
-      meta.set(ROOM, { ...existing, lastSeenMessageId })
+      meta.set(ROOM, {
+        ...existing,
+        readPointer: { messageId: seenMessageId, timestamp: seenMsg?.timestamp ?? new Date(0) },
+      })
       return { roomMeta: meta }
     })
     roomStore.getState().setActiveRoom(ROOM)
@@ -5696,7 +5727,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
   })
 
   it('fresh join (no read state) derives no marker from delayed history', () => {
-    // Same setup WITHOUT seeding lastSeenMessageId/lastReadAt/unreadCount — the
+    // Same setup WITHOUT seeding a readPointer or unreadCount — the
     // fresh-entity path has nothing to resume from, so no marker is derived.
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
@@ -6013,7 +6044,11 @@ describe('roomStore parity drift regressions', () => {
       const preview = messageAt('prev-1', 'alice', 'preview', '2024-01-15T10:00:00Z')
       roomStore.setState((state) => {
         const roomMeta = new Map(state.roomMeta)
-        roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: preview, lastSeenMessageId: 'seen-1' })
+        roomMeta.set(roomJid, {
+          ...roomMeta.get(roomJid)!,
+          lastMessage: preview,
+          readPointer: { messageId: 'seen-1', timestamp: new Date('2024-01-15T09:00:00Z') },
+        })
         return { roomMeta }
       })
 
@@ -6022,7 +6057,7 @@ describe('roomStore parity drift regressions', () => {
       const meta = roomStore.getState().roomMeta.get(roomJid)
       expect(meta?.unreadCount).toBe(5)
       expect(meta?.lastMessage?.id).toBe('prev-1')
-      expect(meta?.lastSeenMessageId).toBe('seen-1')
+      expect(meta?.readPointer?.messageId).toBe('seen-1')
     })
 
     it('updateRoom never recenters the window: windowAtLiveEdge survives a runtime update', () => {

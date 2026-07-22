@@ -1097,7 +1097,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
       const last = msgs[msgs.length - 1]
-      if (last) rs.updateLastSeenMessageId(jid, last.id)
+      if (last) rs.advanceReadPointer(jid, last.id)
       return last?.id ?? null
     }, STRESS_ROOM_JID)
     expect(lastId, 'stress room must have messages').not.toBeNull()
@@ -1135,7 +1135,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
       const rs = (window as any).__roomStore.getState()
       return {
         markerInStore: rs.firstNewMessageMarkers.get(jid) ?? null,
-        lastSeen: rs.roomMeta.get(jid)?.lastSeenMessageId ?? rs.rooms.get(jid)?.lastSeenMessageId ?? null,
+        lastSeen: (rs.roomMeta.get(jid)?.readPointer ?? rs.rooms.get(jid)?.readPointer)?.messageId ?? null,
         unread: rs.roomMeta.get(jid)?.unreadCount ?? rs.rooms.get(jid)?.unreadCount ?? null,
         expectedLastSeen: expectLast,
       }
@@ -1225,7 +1225,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
       const cs = (window as any).__chatStore.getState()
       const msgs = cs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
-      if (last) cs.updateLastSeenMessageId(jid, last.id)
+      if (last) cs.advanceReadPointer(jid, last.id)
       return last?.id ?? null
     }, AVA)
     expect(avaLast, 'ava must have messages').not.toBeNull()
@@ -1258,7 +1258,7 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
       const cs = (window as any).__chatStore.getState()
       return {
         markerInStore: cs.firstNewMessageMarkers.get(jid) ?? null,
-        lastSeen: cs.conversationMeta.get(jid)?.lastSeenMessageId ?? cs.conversations.get(jid)?.lastSeenMessageId ?? null,
+        lastSeen: (cs.conversationMeta.get(jid)?.readPointer ?? cs.conversations.get(jid)?.readPointer)?.messageId ?? null,
         unread: cs.conversationMeta.get(jid)?.unreadCount ?? cs.conversations.get(jid)?.unreadCount ?? null,
       }
     }, AVA)
@@ -1934,7 +1934,7 @@ test.describe('Jump-to-last-read pill', () => {
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
       const last = msgs[msgs.length - 1]
-      if (last) rs.updateLastSeenMessageId(jid, last.id)
+      if (last) rs.advanceReadPointer(jid, last.id)
     }, STRESS_ROOM_JID)
 
     // Leave the room (genuinely at the bottom, so no restore-position is saved).
@@ -2003,7 +2003,7 @@ test.describe('Jump-to-last-read pill', () => {
 
   // The "New messages" divider follows reading progress: once the reader has read past part of a
   // new-message block and scrolls back up, the divider snaps FORWARD to the read pointer (first
-  // unread after lastSeenMessageId) — and it must NEVER be cleared by that snap (the read-through /
+  // unread after the read pointer) — and it must NEVER be cleared by that snap (the read-through /
   // pill paths own clearing). Setup is store-driven (divider behind an advanced pointer) so the test
   // is deterministic and does not depend on the stress room's live-message cache-reload behavior; the
   // observer→pointer and entry-positioning paths are covered by the marker-reentry / pill invariants.
@@ -2022,7 +2022,7 @@ test.describe('Jump-to-last-read pill', () => {
       const store = (window as any).__roomStore
       const s = store.getState()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; isOutgoing?: boolean }[]
+      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; timestamp: Date; isOutgoing?: boolean }[]
       // First unread after the pointer must exist and be incoming — find the last incoming message
       // and put the pointer immediately before it, so resyncDividerToReadPointer lands on it.
       let targetIdx = -1
@@ -2033,12 +2033,14 @@ test.describe('Jump-to-last-read pill', () => {
       const dividerId = msgs[dIdx].id
       const pointerId = msgs[pIdx].id
       const expectedTargetId = msgs[targetIdx].id
+      // One read position, written whole: id plus the named message's own timestamp (#1081).
+      const readPointer = { messageId: pointerId, timestamp: msgs[pIdx].timestamp }
       const roomMeta = new Map(s.roomMeta)
       const meta = roomMeta.get(jid)
-      if (meta) roomMeta.set(jid, { ...meta, lastSeenMessageId: pointerId })
+      if (meta) roomMeta.set(jid, { ...meta, readPointer })
       const rooms = new Map(s.rooms)
       const room = rooms.get(jid)
-      if (room) rooms.set(jid, { ...room, lastSeenMessageId: pointerId })
+      if (room) rooms.set(jid, { ...room, readPointer })
       const markers = new Map(s.firstNewMessageMarkers)
       markers.set(jid, dividerId)
       store.setState({ roomMeta, rooms, firstNewMessageMarkers: markers })

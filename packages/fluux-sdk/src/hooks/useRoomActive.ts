@@ -82,9 +82,9 @@ export function useRoomActive() {
 
   // Persisted read pointer (XEP-0490 sync marker) for the active room. Drives the FAB badge count
   // and the divider resync-on-scroll-up trigger in MessageList.
-  const activeLastSeenMessageId = useRoomStore((s) => {
+  const activeReadPointerId = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
-    return s.roomMeta.get(s.activeRoomJid)?.lastSeenMessageId
+    return s.roomMeta.get(s.activeRoomJid)?.readPointer?.messageId
   })
 
   // Provisional divider: derived from the local pointer while a synced XEP-0490
@@ -179,7 +179,7 @@ export function useRoomActive() {
   const markAsRead = useRoomStore((s) => s.markAsRead)
   const clearFirstNewMessageId = useRoomStore((s) => s.clearFirstNewMessageId)
   const resyncDividerToReadPointer = useRoomStore((s) => s.resyncDividerToReadPointer)
-  const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)
+  const advanceReadPointer = useRoomStore((s) => s.advanceReadPointer)
 
   const joinRoom = useCallback(
     async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
@@ -406,7 +406,7 @@ export function useRoomActive() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchOlderHistory,
       loadMessagesAround,
       loadNewer,
@@ -449,7 +449,7 @@ export function useRoomActive() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchOlderHistory,
       loadMessagesAround,
       loadNewer,
@@ -476,7 +476,7 @@ export function useRoomActive() {
       activeMAMState,
       firstNewMessageId: activeFirstNewMessageId,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
-      lastSeenMessageId: activeLastSeenMessageId,
+      readPointerId: activeReadPointerId,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
       // Actions (spread memoized actions)
@@ -492,7 +492,7 @@ export function useRoomActive() {
       activeMAMState,
       activeFirstNewMessageId,
       activeFirstNewMessageIsProvisional,
-      activeLastSeenMessageId,
+      activeReadPointerId,
       activeWindowAtLiveEdge,
       actions,
     ]

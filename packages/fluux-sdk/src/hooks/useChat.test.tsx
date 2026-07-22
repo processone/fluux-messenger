@@ -34,7 +34,7 @@ describe('useChat hook', () => {
       'markAsRead', 'markReadToNewest',
       'archiveConversation', 'unarchiveConversation', 'isArchived',
       'sendEasterEgg', 'clearAnimation', 'setDraft', 'getDraft', 'clearDraft',
-      'clearFirstNewMessageId', 'updateLastSeenMessageId', 'fetchHistory', 'fetchOlderHistory',
+      'clearFirstNewMessageId', 'advanceReadPointer', 'fetchHistory', 'fetchOlderHistory',
     ] as const
 
     it('exposes every composed action as a function', () => {

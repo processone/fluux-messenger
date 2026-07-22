@@ -3,7 +3,7 @@
  *
  * The badge shows how many "new" messages — those from the first-new-message divider to the end of
  * the loaded list — are still BELOW the reader's deepest-read position (the persisted read pointer
- * `lastSeenMessageId`). It therefore counts DOWN as the reader reads toward the present and reaches 0
+ * `readPointerId`). It therefore counts DOWN as the reader reads toward the present and reaches 0
  * once the read pointer reaches the newest message. Because the pointer is forward-only, the count
  * holds when the reader scrolls back up rather than climbing again.
  *
@@ -13,7 +13,7 @@
  *
  * @param messages          The (deduplicated) rendered message list, in chronological order.
  * @param firstNewMessageId The divider anchor — first unread message. Undefined ⇒ no new block ⇒ 0.
- * @param readAnchorId      The deepest message considered read (the read pointer `lastSeenMessageId`);
+ * @param readAnchorId      The deepest message considered read (the read pointer `readPointerId`);
  *                          unread is everything strictly after it. `null` before any read position is
  *                          known, in which case the full new-message count is reported.
  */

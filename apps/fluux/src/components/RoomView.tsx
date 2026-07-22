@@ -97,7 +97,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, lastSeenMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -471,12 +471,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     [resyncDividerToReadPointer],
   )
 
-  // Viewport observer callback: update lastSeenMessageId as user scrolls
+  // Viewport observer callback: update readPointerId as user scrolls
   const handleMessageSeen = useCallback((messageId: string) => {
     if (roomJid) {
-      updateLastSeenMessageId(roomJid, messageId)
+      advanceReadPointer(roomJid, messageId)
     }
-  }, [roomJid, updateLastSeenMessageId])
+  }, [roomJid, advanceReadPointer])
 
   // Find on page: browser-style search within this room
   const find = useFindOnPage(activeMessages, activeRoom?.jid)
@@ -605,7 +605,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            lastSeenMessageId={lastSeenMessageId}
+            readPointerId={readPointerId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -893,7 +893,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   firstNewMessageIsProvisional,
-  lastSeenMessageId,
+  readPointerId,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -943,7 +943,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
-  lastSeenMessageId?: string
+  readPointerId?: string
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -1184,7 +1184,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      lastSeenMessageId={lastSeenMessageId}
+      readPointerId={readPointerId}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

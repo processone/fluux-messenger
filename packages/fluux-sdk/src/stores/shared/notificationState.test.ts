@@ -17,6 +17,7 @@ import {
   type NotificationMessage,
   type EntityContext,
 } from './notificationState'
+import type { ReadPointer } from './readPointer'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,6 +41,30 @@ function makeState(overrides: Partial<EntityNotificationState> = {}): EntityNoti
   }
 }
 
+/**
+ * A read position (#1081). Both halves are given together because that is the
+ * only way to express one: `messageId` alone is not a read position, and the
+ * timestamp has to be that message's own.
+ */
+function seen(id: string, timestamp: Date): ReadPointer {
+  return { messageId: id, timestamp }
+}
+
+/** The read position naming `id`, taking that message's own timestamp from `msgs`. */
+function seenIn(msgs: NotificationMessage[], id: string): ReadPointer {
+  const found = msgs.find((m) => m.id === id)
+  if (!found) throw new Error(`seenIn: no message ${id} in the slice`)
+  return { messageId: found.id, timestamp: found.timestamp }
+}
+
+/**
+ * The epoch sentinel a pointer carries when its timestamp is not usable as a
+ * read horizon — the shape a pre-#1081 conversation that only ever had a
+ * `lastSeenMessageId` migrates into. The stale-pointer fallbacks still treat
+ * `getTime() === 0` as "no usable read time" and fall through to unreadCount.
+ */
+const NO_READ_TIME = new Date(0)
+
 const ACTIVE_VISIBLE: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1 }
 const ACTIVE_HIDDEN: EntityContext = { isActive: true, windowVisible: false, unreadCount: 1 }
 const INACTIVE_VISIBLE: EntityContext = { isActive: false, windowVisible: true, unreadCount: 1 }
@@ -58,7 +83,7 @@ describe('onMessageReceived', () => {
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
       expect(result.firstNewMessageId).toBeUndefined()
-      expect(result.lastReadAt).toEqual(msg.timestamp)
+      expect(result.readPointer).toEqual({ messageId: msg.id, timestamp: msg.timestamp })
     })
 
     it('clears state regardless of window visibility', () => {
@@ -69,11 +94,11 @@ describe('onMessageReceived', () => {
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('advances lastSeenMessageId to outgoing message', () => {
-      const state = makeState({ lastSeenMessageId: 'seen-1' })
+    it('advances the read pointer to the outgoing message', () => {
+      const state = makeState({ readPointer: seen('seen-1', new Date(1000)) })
       const msg = makeMsg({ isOutgoing: true })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE)
-      expect(result.lastSeenMessageId).toBe(msg.id)
+      expect(result.readPointer).toEqual({ messageId: msg.id, timestamp: msg.timestamp })
     })
   })
 
@@ -87,20 +112,20 @@ describe('onMessageReceived', () => {
   })
 
   describe('incoming message — user sees it', () => {
-    it('keeps unread at 0 and updates lastReadAt', () => {
+    it('keeps unread at 0 and advances the read pointer to the message', () => {
       const state = makeState()
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE)
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
-      expect(result.lastReadAt).toEqual(msg.timestamp)
+      expect(result.readPointer).toEqual({ messageId: msg.id, timestamp: msg.timestamp })
     })
 
-    it('advances lastSeenMessageId to the new message', () => {
-      const state = makeState({ lastSeenMessageId: 'old-msg' })
+    it('advances the read pointer to the new message', () => {
+      const state = makeState({ readPointer: seen('old-msg', new Date(1000)) })
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE)
-      expect(result.lastSeenMessageId).toBe('new-msg')
+      expect(result.readPointer).toEqual({ messageId: 'new-msg', timestamp: msg.timestamp })
     })
 
     it('preserves existing marker', () => {
@@ -147,19 +172,19 @@ describe('onMessageReceived', () => {
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('keeps lastReadAt undefined when it was undefined', () => {
-      const state = makeState({ lastReadAt: undefined })
+    it('leaves the read pointer undefined when there was none', () => {
+      const state = makeState({ readPointer: undefined })
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN)
-      expect(result.lastReadAt).toBeUndefined()
+      expect(result.readPointer).toBeUndefined()
     })
 
-    it('preserves existing lastReadAt', () => {
-      const existing = new Date('2025-01-10T00:00:00Z')
-      const state = makeState({ lastReadAt: existing })
+    it('preserves the existing read pointer', () => {
+      const existing = seen('seen-1', new Date('2025-01-10T00:00:00Z'))
+      const state = makeState({ readPointer: existing })
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN)
-      expect(result.lastReadAt).toBe(existing)
+      expect(result.readPointer).toBe(existing)
     })
   })
 
@@ -203,15 +228,15 @@ describe('onActivate', () => {
     makeMsg({ id: 'msg-5', timestamp: new Date('2025-01-15T11:00:00Z') }),
   ]
 
-  it('sets marker at first incoming message after lastSeenMessageId', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-2', unreadCount: 2 })
+  it('sets marker at first incoming message after the read pointer', () => {
+    const state = makeState({ readPointer: seenIn(messages, 'msg-2'), unreadCount: 2 })
     const result = onActivate(state, messages)
     // msg-3 is outgoing, so marker should be at msg-4
     expect(result.firstNewMessageId).toBe('msg-4')
   })
 
   it('skips outgoing messages when finding marker position', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-2' })
+    const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages)
     expect(result.firstNewMessageId).toBe('msg-4') // skips msg-3 (outgoing)
   })
@@ -222,148 +247,158 @@ describe('onActivate', () => {
       makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
       makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z') }),
     ]
-    const state = makeState({ lastSeenMessageId: 'a' })
+    const state = makeState({ readPointer: seenIn(msgs, 'a') })
     const result = onActivate(state, msgs, { treatDelayedAsNew: true })
     // Delayed messages are valid new messages (offline delivery in 1:1 chats)
     expect(result.firstNewMessageId).toBe('b')
   })
 
-  it('sets no marker when lastSeenMessageId is the last message', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-5' })
+  it('sets no marker when the read pointer is at the last message', () => {
+    const state = makeState({ readPointer: seenIn(messages, 'msg-5') })
     const result = onActivate(state, messages)
     expect(result.firstNewMessageId).toBeUndefined()
   })
 
   it('clears unreadCount and mentionsCount', () => {
-    const state = makeState({ unreadCount: 5, mentionsCount: 2, lastSeenMessageId: 'msg-2' })
+    const state = makeState({ unreadCount: 5, mentionsCount: 2, readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages)
     expect(result.unreadCount).toBe(0)
     expect(result.mentionsCount).toBe(0)
   })
 
-  it('updates lastReadAt to last message timestamp', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-2' })
+  // Replaces 'updates lastReadAt to last message timestamp' (#1081). Activation
+  // used to stamp a second read field with the NEWEST loaded message's time
+  // while the position it actually held stayed at msg-2 — the two-fields drift
+  // this issue removes. There is now one pointer, and activation must leave its
+  // timestamp on the message it names.
+  it('does not drag the read time forward to the newest loaded message', () => {
+    const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages)
-    expect(result.lastReadAt).toEqual(new Date('2025-01-15T11:00:00Z'))
+    expect(result.readPointer).toEqual({ messageId: 'msg-2', timestamp: new Date('2025-01-15T09:30:00Z') })
+    expect(result.readPointer?.timestamp).not.toEqual(new Date('2025-01-15T11:00:00Z'))
   })
 
-  it('preserves lastSeenMessageId', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-2' })
+  it('preserves the read pointer', () => {
+    const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages)
-    expect(result.lastSeenMessageId).toBe('msg-2')
+    expect(result.readPointer?.messageId).toBe('msg-2')
   })
 
   it('handles empty messages array', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-1', unreadCount: 3 })
+    const state = makeState({ readPointer: seenIn(messages, 'msg-1'), unreadCount: 3 })
     const result = onActivate(state, [])
     expect(result.firstNewMessageId).toBeUndefined()
     expect(result.unreadCount).toBe(0)
   })
 
-  describe('when lastSeenMessageId not in loaded messages (older than memory)', () => {
-    it('uses lastReadAt fallback to find correct marker position', () => {
+  describe('when the read pointer is not in loaded messages (older than memory)', () => {
+    it('uses the pointer timestamp as fallback to find correct marker position', () => {
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
+        // between msg-3 (10:00) and msg-4 (10:30)
+        readPointer: seen('very-old-msg', new Date('2025-01-15T10:15:00Z')),
         unreadCount: 2,
-        lastReadAt: new Date('2025-01-15T10:15:00Z'), // between msg-3 (10:00) and msg-4 (10:30)
       })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-4')
     })
 
-    it('lastReadAt fallback skips outgoing messages', () => {
+    it('timestamp fallback skips outgoing messages', () => {
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
+        // between msg-2 (09:30) and msg-3 (10:00, outgoing)
+        readPointer: seen('very-old-msg', new Date('2025-01-15T09:45:00Z')),
         unreadCount: 2,
-        lastReadAt: new Date('2025-01-15T09:45:00Z'), // between msg-2 (09:30) and msg-3 (10:00, outgoing)
       })
       const result = onActivate(state, messages)
       // msg-3 is outgoing, so marker should be at msg-4
       expect(result.firstNewMessageId).toBe('msg-4')
     })
 
-    it('uses lastReadAt even when unreadCount is 0 (post-restart)', () => {
+    it('uses the pointer timestamp even when unreadCount is 0 (post-restart)', () => {
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
+        readPointer: seen('very-old-msg', new Date('2025-01-15T10:15:00Z')),
         unreadCount: 0, // restored with nothing counted as unread
-        lastReadAt: new Date('2025-01-15T10:15:00Z'),
       })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-4')
     })
 
-    it('sets no marker when all loaded messages are before lastReadAt', () => {
+    it('sets no marker when all loaded messages are before the pointer timestamp', () => {
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
-        lastReadAt: new Date('2025-01-15T12:00:00Z'), // after all messages
+        // after all messages
+        readPointer: seen('very-old-msg', new Date('2025-01-15T12:00:00Z')),
       })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('uses unreadCount to place marker N messages from end when no lastReadAt', () => {
+    it('uses unreadCount to place marker N messages from end when the pointer has no usable time', () => {
       // 5 messages: msg-1, msg-2, msg-3(outgoing), msg-4, msg-5
       // unreadCount=2: count back 2 incoming from end → msg-5, msg-4 → marker at msg-4
-      const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 2 })
+      const state = makeState({ readPointer: seen('very-old-msg', NO_READ_TIME), unreadCount: 2 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-4')
     })
 
     it('places marker at first incoming when unreadCount exceeds available messages', () => {
-      const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 50 })
+      const state = makeState({ readPointer: seen('very-old-msg', NO_READ_TIME), unreadCount: 50 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-1') // first non-outgoing
     })
 
-    it('sets no marker when no lastReadAt and no unread', () => {
-      const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 0 })
+    it('sets no marker when the pointer has no usable time and no unread', () => {
+      const state = makeState({ readPointer: seen('very-old-msg', NO_READ_TIME), unreadCount: 0 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('resume-preserving: snaps stale lastSeenMessageId to the predecessor of the derived divider', () => {
+    it('resume-preserving: snaps a stale pointer to the predecessor of the derived divider', () => {
       // unreadCount=3: counting back 3 incoming from end → msg-5, msg-4, msg-2 (skips
       // outgoing msg-3) → marker at msg-2. The pointer snaps to msg-2's predecessor
       // (msg-1), NOT to the newest message (msg-5) — that would destroy the resume
       // point the marker just derived.
-      const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 3 })
+      const state = makeState({ readPointer: seen('very-old-msg', NO_READ_TIME), unreadCount: 3 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-2')
-      expect(result.lastSeenMessageId).toBe('msg-1')
+      expect(result.readPointer).toEqual(seenIn(messages, 'msg-1'))
     })
 
-    it('lastReadAt fallback includes delayed messages (offline/MAM delivery)', () => {
+    it('timestamp fallback includes delayed messages (offline/MAM delivery)', () => {
       const msgs: NotificationMessage[] = [
         makeMsg({ id: 'old-1', timestamp: new Date('2025-01-15T09:00:00Z') }),
         makeMsg({ id: 'delayed-1', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
         makeMsg({ id: 'delayed-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
       ]
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
+        readPointer: seen('very-old-msg', new Date('2025-01-15T09:30:00Z')),
         unreadCount: 2,
-        lastReadAt: new Date('2025-01-15T09:30:00Z'),
       })
       const result = onActivate(state, msgs, { treatDelayedAsNew: true })
       expect(result.firstNewMessageId).toBe('delayed-1')
     })
   })
 
-  describe('migration path (no lastSeenMessageId, fall back to lastReadAt)', () => {
-    it('finds marker using lastReadAt when no lastSeenMessageId', () => {
-      const state = makeState({ lastReadAt: new Date('2025-01-15T09:15:00Z') })
+  describe('migration path (pointer built from a legacy lastReadAt-only conversation)', () => {
+    // Pre-#1081 a conversation could hold a read TIME and no message id at all,
+    // and onActivate had a dedicated branch for it. The migration turns that into
+    // a pointer whose id names whatever message the cache resolved (often absent
+    // from the loaded slice) and whose timestamp IS the old lastReadAt — so the
+    // divider is now derived by the stale-pointer timestamp fallback instead, to
+    // the same message.
+    it('finds the marker from the pointer timestamp when its id is not in the slice', () => {
+      const state = makeState({ readPointer: seen('resolved-elsewhere', new Date('2025-01-15T09:15:00Z')) })
       const result = onActivate(state, messages)
       // First message with timestamp > 09:15 and not outgoing = msg-2 (09:30)
       expect(result.firstNewMessageId).toBe('msg-2')
     })
 
-    it('handles no lastReadAt and no lastSeenMessageId with no unread', () => {
+    it('handles no read pointer at all with no unread', () => {
       const state = makeState()
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBeUndefined()
     })
   })
 
-  describe('brand-new conversation (no lastSeenMessageId, no lastReadAt, has unread)', () => {
+  describe('brand-new conversation (no read pointer, has unread)', () => {
     it('places marker using unreadCount', () => {
       // 5 messages: msg-1, msg-2, msg-3(outgoing), msg-4, msg-5
       // unreadCount=2: count back 2 incoming from end → msg-5, msg-4 → marker at msg-4
@@ -411,13 +446,13 @@ describe('onActivate', () => {
     // marker must skip delayed messages — otherwise joining a room scrolls the user
     // into the middle of replayed history instead of to the bottom.
 
-    it('forward scan skips delayed history after lastSeenMessageId', () => {
+    it('forward scan skips delayed history after the read pointer', () => {
       const msgs: NotificationMessage[] = [
         makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
         makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
         makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
       ]
-      const state = makeState({ lastSeenMessageId: 'a' })
+      const state = makeState({ readPointer: seenIn(msgs, 'a') })
       // Only delayed (history) messages follow → no marker → scroll to bottom
       const result = onActivate(state, msgs, { treatDelayedAsNew: false })
       expect(result.firstNewMessageId).toBeUndefined()
@@ -429,21 +464,20 @@ describe('onActivate', () => {
         makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
         makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z') }),
       ]
-      const state = makeState({ lastSeenMessageId: 'a' })
+      const state = makeState({ readPointer: seenIn(msgs, 'a') })
       const result = onActivate(state, msgs, { treatDelayedAsNew: false })
       expect(result.firstNewMessageId).toBe('c')
     })
 
-    it('lastReadAt fallback skips delayed history', () => {
+    it('timestamp fallback skips delayed history', () => {
       const msgs: NotificationMessage[] = [
         makeMsg({ id: 'old-1', timestamp: new Date('2025-01-15T09:00:00Z') }),
         makeMsg({ id: 'delayed-1', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
         makeMsg({ id: 'delayed-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
       ]
       const state = makeState({
-        lastSeenMessageId: 'very-old-msg',
+        readPointer: seen('very-old-msg', new Date('2025-01-15T09:30:00Z')),
         unreadCount: 2,
-        lastReadAt: new Date('2025-01-15T09:30:00Z'),
       })
       const result = onActivate(state, msgs, { treatDelayedAsNew: false })
       expect(result.firstNewMessageId).toBeUndefined()
@@ -467,7 +501,7 @@ describe('onActivate', () => {
         makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
         makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
       ]
-      const state = makeState({ lastSeenMessageId: 'a' })
+      const state = makeState({ readPointer: seenIn(msgs, 'a') })
       const result = onActivate(state, msgs)
       expect(result.firstNewMessageId).toBeUndefined()
     })
@@ -481,26 +515,24 @@ describe('onActivate stale pointer (resume-preserving)', () => {
     })
     const state = {
       ...createInitialNotificationState(),
-      lastSeenMessageId: 'evicted',
-      lastReadAt: new Date(Date.now() - 25 * 60_000),
+      readPointer: seen('evicted', new Date(Date.now() - 25 * 60_000)),
     }
     const messages = [mkMsg('a', 30), mkMsg('b', 20), mkMsg('c', 10)]
     const out = onActivate(state, messages, { treatDelayedAsNew: true })
     expect(out.firstNewMessageId).toBe('b')
-    expect(out.lastSeenMessageId).toBe('a') // predecessor of divider — NOT 'c'
+    expect(out.readPointer?.messageId).toBe('a') // predecessor of divider — NOT 'c'
   })
 })
 
 describe('onMessageSeen atLiveEdge advance', () => {
   it('advances an unresolvable pointer when viewing the newest message at the live edge', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'evicted' }
+    const state = { ...createInitialNotificationState(), readPointer: seen('evicted', new Date(500)) }
     const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
     const out = onMessageSeen(state, 'b', messages, { atLiveEdge: true })
-    expect(out.lastSeenMessageId).toBe('b')
     expect(out.readPointer).toEqual({ messageId: 'b', timestamp: new Date(2000) })
   })
   it('stays guarded off the live edge (window slid up — no regression)', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'newer-than-slice' }
+    const state = { ...createInitialNotificationState(), readPointer: seen('newer-than-slice', new Date(9000)) }
     const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
     expect(onMessageSeen(state, 'b', messages, { atLiveEdge: false })).toBe(state)
     expect(onMessageSeen(state, 'a', messages, { atLiveEdge: true })).toBe(state) // not the newest
@@ -528,14 +560,13 @@ describe('onDeactivate', () => {
     const state = makeState({
       unreadCount: 3,
       mentionsCount: 1,
-      lastReadAt: new Date(),
-      lastSeenMessageId: 'seen-1',
+      readPointer: seen('seen-1', new Date(1000)),
       firstNewMessageId: 'marker-1',
     })
     const result = onDeactivate(state)
     expect(result.unreadCount).toBe(3)
     expect(result.mentionsCount).toBe(1)
-    expect(result.lastSeenMessageId).toBe('seen-1')
+    expect(result.readPointer?.messageId).toBe('seen-1')
   })
 })
 
@@ -546,61 +577,63 @@ describe('onDeactivate', () => {
 describe('onMarkAsRead', () => {
   it('clears unreadCount and mentionsCount', () => {
     const state = makeState({ unreadCount: 5, mentionsCount: 2 })
-    const ts = new Date('2025-01-15T12:00:00Z')
-    const result = onMarkAsRead(state, ts)
+    const result = onMarkAsRead(state)
     expect(result.unreadCount).toBe(0)
     expect(result.mentionsCount).toBe(0)
-    expect(result.lastReadAt).toEqual(ts)
   })
 
   it('preserves firstNewMessageId', () => {
     const state = makeState({ firstNewMessageId: 'marker-1', unreadCount: 1 })
-    const result = onMarkAsRead(state, new Date())
+    const result = onMarkAsRead(state)
     expect(result.firstNewMessageId).toBe('marker-1')
   })
 
   it('returns same reference when nothing to change', () => {
-    const ts = new Date('2025-01-15T12:00:00Z')
-    const state = makeState({ unreadCount: 0, mentionsCount: 0, lastReadAt: ts })
-    const result = onMarkAsRead(state, ts)
+    const state = makeState({ unreadCount: 0, mentionsCount: 0 })
+    const result = onMarkAsRead(state)
     expect(result).toBe(state)
   })
 
-  it('uses current time when no timestamp provided', () => {
-    const before = Date.now()
-    const state = makeState({ unreadCount: 1 })
+  // Replaces 'uses current time when no timestamp provided' (#1081). Clearing a
+  // badge is not evidence of a new read position, so marking read no longer
+  // stamps a wall-clock time anywhere: with no caught-up message supplied, the
+  // read position must come out byte-identical.
+  it('does not invent a read position when no caught-up message is supplied', () => {
+    const pointer = seen('seen-1', new Date('2025-01-15T11:00:00Z'))
+    const state = makeState({ unreadCount: 1, readPointer: pointer })
     const result = onMarkAsRead(state)
-    const after = Date.now()
-    expect(result.lastReadAt!.getTime()).toBeGreaterThanOrEqual(before)
-    expect(result.lastReadAt!.getTime()).toBeLessThanOrEqual(after)
+    expect(result.unreadCount).toBe(0)
+    expect(result.readPointer).toBe(pointer)
   })
 
-  it('leaves lastSeenMessageId untouched when no advance id is given', () => {
-    const state = makeState({ unreadCount: 3, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, new Date())
-    expect(result.lastSeenMessageId).toBe('seen-1')
+  it('leaves the read pointer untouched when no caught-up message is given', () => {
+    const pointer = seen('seen-1', new Date(1000))
+    const state = makeState({ unreadCount: 3, readPointer: pointer })
+    const result = onMarkAsRead(state)
+    expect(result.readPointer).toBe(pointer)
   })
 
-  it('advances lastSeenMessageId to the supplied message (read pointer catches up)', () => {
-    const state = makeState({ unreadCount: 3, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, new Date(), makeMsg({ id: 'newest-9' }))
-    expect(result.lastSeenMessageId).toBe('newest-9')
+  it('advances the read pointer to the supplied message (pointer catches up)', () => {
+    const state = makeState({ unreadCount: 3, readPointer: seen('seen-1', new Date(1000)) })
+    const caughtUpTo = makeMsg({ id: 'newest-9', timestamp: new Date(9000) })
+    const result = onMarkAsRead(state, caughtUpTo)
+    expect(result.readPointer).toEqual({ messageId: 'newest-9', timestamp: new Date(9000) })
     expect(result.unreadCount).toBe(0)
   })
 
-  it('advances lastSeenMessageId even when the badge is already clear', () => {
+  it('advances the read pointer even when the badge is already clear', () => {
     // The IntersectionObserver may lag: unread already 0 but the pointer is behind.
     const ts = new Date('2025-01-15T12:00:00Z')
-    const state = makeState({ unreadCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, ts, makeMsg({ id: 'newest-9', timestamp: ts }))
+    const state = makeState({ unreadCount: 0, readPointer: seen('seen-1', new Date(1000)) })
+    const result = onMarkAsRead(state, makeMsg({ id: 'newest-9', timestamp: ts }))
     expect(result).not.toBe(state)
-    expect(result.lastSeenMessageId).toBe('newest-9')
+    expect(result.readPointer).toEqual({ messageId: 'newest-9', timestamp: ts })
   })
 
   it('returns same reference when the supplied message is the current pointer', () => {
     const ts = new Date('2025-01-15T12:00:00Z')
-    const state = makeState({ unreadCount: 0, mentionsCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, ts, makeMsg({ id: 'seen-1', timestamp: ts }))
+    const state = makeState({ unreadCount: 0, mentionsCount: 0, readPointer: seen('seen-1', ts) })
+    const result = onMarkAsRead(state, makeMsg({ id: 'seen-1', timestamp: ts }))
     expect(result).toBe(state)
   })
 })
@@ -625,12 +658,12 @@ describe('onClearMarker', () => {
   it('preserves other fields', () => {
     const state = makeState({
       unreadCount: 3,
-      lastSeenMessageId: 'seen-1',
+      readPointer: seen('seen-1', new Date(1000)),
       firstNewMessageId: 'marker-1',
     })
     const result = onClearMarker(state)
     expect(result.unreadCount).toBe(3)
-    expect(result.lastSeenMessageId).toBe('seen-1')
+    expect(result.readPointer?.messageId).toBe('seen-1')
   })
 })
 
@@ -641,11 +674,19 @@ describe('onClearMarker', () => {
 describe('onWindowBecameVisible', () => {
   it('clears unread and mentions for active entity', () => {
     const state = makeState({ unreadCount: 5, mentionsCount: 2 })
-    const ts = new Date('2025-01-15T12:00:00Z')
-    const result = onWindowBecameVisible(state, true, ts)
+    const result = onWindowBecameVisible(state, true)
     expect(result.unreadCount).toBe(0)
     expect(result.mentionsCount).toBe(0)
-    expect(result.lastReadAt).toEqual(ts)
+  })
+
+  // Replaces the lastReadAt half of the case above (#1081). Refocusing the
+  // window says nothing about WHICH message the user reached, so it must not
+  // move the read position — the pointer comes back by reference.
+  it('does not move the read position', () => {
+    const pointer = seen('seen-1', new Date(1000))
+    const state = makeState({ unreadCount: 5, readPointer: pointer })
+    const result = onWindowBecameVisible(state, true)
+    expect(result.readPointer).toBe(pointer)
   })
 
   it('returns same reference for non-active entity', () => {
@@ -660,15 +701,15 @@ describe('onWindowBecameVisible', () => {
     expect(result).toBe(state)
   })
 
-  it('preserves marker and lastSeenMessageId', () => {
+  it('preserves marker and read pointer', () => {
     const state = makeState({
       unreadCount: 3,
       firstNewMessageId: 'marker-1',
-      lastSeenMessageId: 'seen-1',
+      readPointer: seen('seen-1', new Date(1000)),
     })
-    const result = onWindowBecameVisible(state, true, new Date())
+    const result = onWindowBecameVisible(state, true)
     expect(result.firstNewMessageId).toBe('marker-1')
-    expect(result.lastSeenMessageId).toBe('seen-1')
+    expect(result.readPointer?.messageId).toBe('seen-1')
   })
 })
 
@@ -685,35 +726,53 @@ describe('onMessageSeen', () => {
     { id: 'msg-5', timestamp: new Date(5000) },
   ]
 
-  it('sets lastSeenMessageId when none exists', () => {
+  const pointerAt = (id: string): ReadPointer => {
+    const found = messages.find((m) => m.id === id)!
+    return { messageId: found.id, timestamp: found.timestamp }
+  }
+
+  it('sets the read pointer when none exists', () => {
     const state = makeState()
     const result = onMessageSeen(state, 'msg-3', messages)
-    expect(result.lastSeenMessageId).toBe('msg-3')
+    expect(result.readPointer).toEqual({ messageId: 'msg-3', timestamp: new Date(3000) })
   })
 
   it('advances forward', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-2' })
+    const state = makeState({ readPointer: pointerAt('msg-2') })
     const result = onMessageSeen(state, 'msg-4', messages)
-    expect(result.lastSeenMessageId).toBe('msg-4')
+    expect(result.readPointer).toEqual({ messageId: 'msg-4', timestamp: new Date(4000) })
   })
 
   it('does not go backwards', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-4' })
+    const state = makeState({ readPointer: pointerAt('msg-4') })
     const result = onMessageSeen(state, 'msg-2', messages)
     expect(result).toBe(state)
   })
 
   it('returns same reference for same message', () => {
-    const state = makeState({ lastSeenMessageId: 'msg-3' })
+    const state = makeState({ readPointer: pointerAt('msg-3') })
     const result = onMessageSeen(state, 'msg-3', messages)
     expect(result).toBe(state)
+  })
+
+  // #1081 constraint: the id and the timestamp of a read position move together
+  // or not at all. A message the caller does not hold has no honest timestamp to
+  // pair with its id, so the pointer must not move to it — under-advancing is
+  // recoverable (the next viewport report re-derives), over-advancing is not.
+  it('does not advance to a message that is absent from the slice', () => {
+    const withPointer = makeState({ readPointer: pointerAt('msg-2') })
+    expect(onMessageSeen(withPointer, 'not-in-slice', messages)).toBe(withPointer)
+
+    const withoutPointer = makeState()
+    expect(onMessageSeen(withoutPointer, 'not-in-slice', messages)).toBe(withoutPointer)
+    expect(onMessageSeen(withoutPointer, 'not-in-slice', messages).readPointer).toBeUndefined()
   })
 
   it('preserves other fields', () => {
     const state = makeState({
       unreadCount: 3,
       firstNewMessageId: 'marker-1',
-      lastSeenMessageId: 'msg-1',
+      readPointer: pointerAt('msg-1'),
     })
     const result = onMessageSeen(state, 'msg-3', messages)
     expect(result.unreadCount).toBe(3)
@@ -764,7 +823,7 @@ describe('shouldNotifyConversation', () => {
         isActive: false,
         windowVisible: false,
         unreadCount: 1,
-        lastSeenMessageId: 'm5',
+        readPointer: { messageId: 'm5', timestamp: new Date() },
       }),
     ).toBe(false)
   })
@@ -855,8 +914,7 @@ describe('createInitialNotificationState', () => {
     const state = createInitialNotificationState()
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
-    expect(state.lastReadAt).toBeUndefined()
-    expect(state.lastSeenMessageId).toBeUndefined()
+    expect(state.readPointer).toBeUndefined()
     expect(state.firstNewMessageId).toBeUndefined()
   })
 })
@@ -874,7 +932,7 @@ describe('lifecycle sequences', () => {
     ]
 
     // Start: user has seen m1, messages m2 and m3 arrived while away
-    let state = makeState({ lastSeenMessageId: 'm1', unreadCount: 2 })
+    let state = makeState({ readPointer: seenIn(messages, 'm1'), unreadCount: 2 })
 
     // User opens conversation
     state = onActivate(state, messages)
@@ -884,16 +942,16 @@ describe('lifecycle sequences', () => {
     // User scrolls and sees m2 and m3 via viewport
     state = onMessageSeen(state, 'm2', messages)
     state = onMessageSeen(state, 'm3', messages)
-    expect(state.lastSeenMessageId).toBe('m3')
+    expect(state.readPointer).toEqual(seenIn(messages, 'm3'))
 
     // User switches away
     state = onDeactivate(state)
     expect(state.firstNewMessageId).toBeUndefined()
-    expect(state.lastSeenMessageId).toBe('m3')
+    expect(state.readPointer).toEqual(seenIn(messages, 'm3'))
   })
 
   it('message arrives while window hidden → window refocuses', () => {
-    let state = makeState({ lastSeenMessageId: 'm1' })
+    let state = makeState({ readPointer: seen('m1', new Date('2025-01-15T09:00:00Z')) })
     const msg = makeMsg({ id: 'm2', timestamp: new Date('2025-01-15T10:00:00Z') })
 
     // Message arrives while active but window hidden
@@ -902,7 +960,7 @@ describe('lifecycle sequences', () => {
     expect(state.firstNewMessageId).toBe('m2')
 
     // Window becomes visible
-    state = onWindowBecameVisible(state, true, msg.timestamp)
+    state = onWindowBecameVisible(state, true)
     expect(state.unreadCount).toBe(0)
     expect(state.firstNewMessageId).toBe('m2') // marker preserved for visual
   })
@@ -912,7 +970,7 @@ describe('lifecycle sequences', () => {
       unreadCount: 5,
       mentionsCount: 2,
       firstNewMessageId: 'old-marker',
-      lastSeenMessageId: 'seen-1',
+      readPointer: seen('seen-1', new Date(1000)),
     })
 
     const outgoing = makeMsg({ id: 'out-1', isOutgoing: true })
@@ -920,7 +978,8 @@ describe('lifecycle sequences', () => {
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
     expect(state.firstNewMessageId).toBeUndefined()
-    expect(state.lastSeenMessageId).toBe('out-1') // advanced to outgoing
+    // advanced to the outgoing message, timestamp included
+    expect(state.readPointer).toEqual({ messageId: 'out-1', timestamp: outgoing.timestamp })
   })
 
   it('no spurious marker after user replies to a conversation', () => {
@@ -935,19 +994,19 @@ describe('lifecycle sequences', () => {
     ]
 
     // User has seen everything up to msg-2
-    let state = makeState({ lastSeenMessageId: 'msg-2' })
+    let state = makeState({ readPointer: seenIn(msgs, 'msg-2') })
 
-    // User sends reply-1 → lastSeenMessageId must advance
+    // User sends reply-1 → the read pointer must advance
     state = onMessageReceived(state, msgs[2], ACTIVE_VISIBLE)
-    expect(state.lastSeenMessageId).toBe('reply-1')
+    expect(state.readPointer?.messageId).toBe('reply-1')
 
     // Incoming msg-3 arrives while user is viewing
     state = onMessageReceived(state, msgs[3], ACTIVE_VISIBLE)
-    expect(state.lastSeenMessageId).toBe('msg-3')
+    expect(state.readPointer?.messageId).toBe('msg-3')
 
     // User sends reply-2
     state = onMessageReceived(state, msgs[4], ACTIVE_VISIBLE)
-    expect(state.lastSeenMessageId).toBe('reply-2')
+    expect(state.readPointer?.messageId).toBe('reply-2')
 
     // User switches away and back
     state = onDeactivate(state)
@@ -957,20 +1016,20 @@ describe('lifecycle sequences', () => {
     expect(state.firstNewMessageId).toBeUndefined()
   })
 
-  it('switching away and back re-derives the same marker (resume-preserving stale lastSeenMessageId)', () => {
+  it('switching away and back re-derives the same marker (resume-preserving stale pointer)', () => {
     const msgs: NotificationMessage[] = [
       makeMsg({ id: 'msg-100', timestamp: new Date('2025-01-15T09:00:00Z') }),
       makeMsg({ id: 'msg-101', timestamp: new Date('2025-01-15T09:30:00Z') }),
       makeMsg({ id: 'msg-102', timestamp: new Date('2025-01-15T10:00:00Z') }),
-      // These two are new (after lastReadAt)
+      // These two are new (after the read pointer's timestamp)
       makeMsg({ id: 'msg-103', timestamp: new Date('2025-01-15T10:30:00Z') }),
       makeMsg({ id: 'msg-104', timestamp: new Date('2025-01-15T11:00:00Z') }),
     ]
 
     let state = makeState({
-      lastSeenMessageId: 'msg-50', // stale: not in msgs
+      // stale: 'msg-50' is not in msgs, so the timestamp is the usable half
+      readPointer: seen('msg-50', new Date('2025-01-15T10:15:00Z')),
       unreadCount: 2,
-      lastReadAt: new Date('2025-01-15T10:15:00Z'),
     })
 
     // First activation: marker at msg-103. Resume-preserving: the pointer snaps to
@@ -979,7 +1038,7 @@ describe('lifecycle sequences', () => {
     // resume point without the viewport ever confirming it was read.
     state = onActivate(state, msgs)
     expect(state.firstNewMessageId).toBe('msg-103')
-    expect(state.lastSeenMessageId).toBe('msg-102')
+    expect(state.readPointer).toEqual(seenIn(msgs, 'msg-102'))
 
     // User switches away
     state = onDeactivate(state)
@@ -989,54 +1048,56 @@ describe('lifecycle sequences', () => {
     // onMessageSeen calls) — the same unread content re-derives the same marker.
     state = onActivate(state, msgs)
     expect(state.firstNewMessageId).toBe('msg-103')
-    // lastSeenMessageId preserved (found in array, not stale)
-    expect(state.lastSeenMessageId).toBe('msg-102')
+    // pointer preserved (found in array, no longer stale)
+    expect(state.readPointer).toEqual(seenIn(msgs, 'msg-102'))
   })
 
-  it('epoch lastReadAt does not place marker at beginning of history', () => {
-    // Scenario: first offline message arrived with no prior lastReadAt,
-    // then lastSeenMessageId became stale. The marker should NOT be placed
-    // at the very first message just because lastReadAt was epoch.
+  it('an epoch pointer timestamp does not place the marker at the beginning of history', () => {
+    // Scenario: a pre-#1081 conversation that only ever had a message id migrates
+    // to a pointer carrying the epoch sentinel, and that id is stale. The marker
+    // must NOT be placed at the very first message just because the timestamp is
+    // epoch — it falls through to the unreadCount placement.
     const msgs: NotificationMessage[] = [
       makeMsg({ id: 'msg-500', timestamp: new Date('2025-01-15T09:00:00Z') }),
       makeMsg({ id: 'msg-501', timestamp: new Date('2025-01-15T09:30:00Z') }),
       makeMsg({ id: 'msg-502', timestamp: new Date('2025-01-15T10:00:00Z') }),
     ]
 
-    // Start: offline message arrived, lastReadAt stayed undefined (no longer set to epoch)
-    let state = makeState({ lastSeenMessageId: 'msg-1', unreadCount: 3 })
+    const startPointer = seen('msg-1', NO_READ_TIME)
+    let state = makeState({ readPointer: startPointer, unreadCount: 3 })
     const offlineMsg = makeMsg({ id: 'offline-1', isDelayed: true })
     state = onMessageReceived(state, offlineMsg, INACTIVE_HIDDEN, { treatDelayedAsNew: true })
 
-    // lastReadAt should still be undefined (not epoch)
-    expect(state.lastReadAt).toBeUndefined()
+    // An unseen arrival never moves the read position
+    expect(state.readPointer).toBe(startPointer)
 
-    // On activation with stale lastSeenMessageId and no lastReadAt,
+    // On activation with a stale pointer and no usable timestamp,
     // marker should be placed using unreadCount (4 unread: 3 original + 1 offline)
     state = onActivate(state, msgs)
     // 4 unread > 3 incoming msgs available → marker at first incoming
     expect(state.firstNewMessageId).toBe('msg-500')
   })
 
-  it('onMessageSeen does not regress when lastSeenMessageId is stale', () => {
-    // Scenario: lastSeenMessageId refers to an old message not in the current array.
+  it('onMessageSeen does not regress when the read pointer is stale', () => {
+    // Scenario: the pointer names an old message not in the current array.
     // A visible message should NOT replace it since we can't confirm ordering.
     const msgs = [
       { id: 'msg-100', timestamp: new Date(1000) },
       { id: 'msg-101', timestamp: new Date(2000) },
       { id: 'msg-102', timestamp: new Date(3000) },
     ]
-    const state = makeState({ lastSeenMessageId: 'msg-999' }) // not in msgs
+    const pointer = seen('msg-999', new Date(9000))
+    const state = makeState({ readPointer: pointer }) // not in msgs
 
     const result = onMessageSeen(state, 'msg-100', msgs)
-    // Should NOT regress to msg-100 — stale ID is preserved
+    // Should NOT regress to msg-100 — the stale pointer is preserved
     expect(result).toBe(state)
-    expect(result.lastSeenMessageId).toBe('msg-999')
+    expect(result.readPointer).toBe(pointer)
   })
 
-  it('stale lastSeenMessageId + unreadCount places marker correctly from end', () => {
-    // After app restart: lastSeenMessageId is stale, lastReadAt undefined,
-    // unreadCount > 0. The marker should be placed N messages from the end.
+  it('stale read pointer + unreadCount places marker correctly from end', () => {
+    // After app restart: the pointer's id is stale and its timestamp is not
+    // usable, unreadCount > 0. The marker should be placed N messages from the end.
     const msgs: NotificationMessage[] = [
       makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
       makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isOutgoing: true }),
@@ -1046,9 +1107,8 @@ describe('lifecycle sequences', () => {
     ]
 
     const state = makeState({
-      lastSeenMessageId: 'stale-id',
+      readPointer: seen('stale-id', NO_READ_TIME),
       unreadCount: 2,
-      lastReadAt: undefined,
     })
 
     const result = onActivate(state, msgs)
@@ -1092,16 +1152,16 @@ describe('lifecycle sequences', () => {
     ]
 
     // User had seen m1, m2 and m3 are unread
-    let state = makeState({ lastSeenMessageId: 'm1', unreadCount: 2 })
+    let state = makeState({ readPointer: seenIn(initialMessages, 'm1'), unreadCount: 2 })
 
     // User opens conversation → marker at m2
     state = onActivate(state, initialMessages)
     expect(state.firstNewMessageId).toBe('m2')
-    expect(state.lastSeenMessageId).toBe('m1')
+    expect(state.readPointer?.messageId).toBe('m1')
 
     // User scrolls and sees all messages via IntersectionObserver
     state = onMessageSeen(state, 'm3', initialMessages)
-    expect(state.lastSeenMessageId).toBe('m3')
+    expect(state.readPointer).toEqual(seenIn(initialMessages, 'm3'))
 
     // New messages arrive while user is actively viewing
     const m4 = makeMsg({ id: 'm4', timestamp: new Date('2025-01-15T10:30:00Z') })
@@ -1109,8 +1169,8 @@ describe('lifecycle sequences', () => {
     state = onMessageReceived(state, m4, ACTIVE_VISIBLE)
     state = onMessageReceived(state, m5, ACTIVE_VISIBLE)
 
-    // lastSeenMessageId should have advanced to m5 (user sees each message)
-    expect(state.lastSeenMessageId).toBe('m5')
+    // the read pointer should have advanced to m5 (user sees each message)
+    expect(state.readPointer).toEqual({ messageId: 'm5', timestamp: m5.timestamp })
 
     // User switches away
     state = onDeactivate(state)
@@ -1126,7 +1186,7 @@ describe('lifecycle sequences', () => {
 
     // No new messages after m5 → no marker (not the stale marker at m2!)
     expect(state.firstNewMessageId).toBeUndefined()
-    expect(state.lastSeenMessageId).toBe('m5')
+    expect(state.readPointer?.messageId).toBe('m5')
   })
 })
 
@@ -1149,61 +1209,61 @@ describe('recomputeCountsFromPointer', () => {
     const out = recomputeCountsFromPointer(state, messages, { hasPendingRemoteMarker: true })
     // Untouched: the pending fold owns resolving this position.
     expect(out).toBe(state)
-    expect(out.lastSeenMessageId).toBeUndefined()
+    expect(out.readPointer).toBeUndefined()
   })
 
-  it('fresh entity (no pointer, no lastReadAt) is caught up: snaps pointer to newest, zero counts', () => {
+  it('fresh entity (no read pointer) is caught up: snaps pointer to newest, zero counts', () => {
     const state = createInitialNotificationState()
     const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
     const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
     expect(out.unreadCount).toBe(0)
     expect(out.mentionsCount).toBe(0)
-    expect(out.lastSeenMessageId).toBe('c')
+    expect(out.readPointer).toEqual({ messageId: 'c', timestamp: messages[2].timestamp })
   })
 
   it('counts incoming messages after the pointer, including delayed ones, with mentions', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
     const messages = [msg('a', 30), msg('b', 20, { isMention: true }), msg('c', 10)]
+    const pointer = seenIn(messages, 'a')
+    const state = { ...createInitialNotificationState(), readPointer: pointer }
     const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
     expect(out.unreadCount).toBe(2)
     expect(out.mentionsCount).toBe(1)
-    expect(out.lastSeenMessageId).toBe('a') // pointer untouched
+    expect(out.readPointer).toBe(pointer) // pointer untouched
   })
 
-  it('pointer missing from slice: falls back to lastReadAt timestamp', () => {
+  it('pointer id missing from slice: falls back to its own timestamp', () => {
     const state = {
       ...createInitialNotificationState(),
-      lastSeenMessageId: 'gone',
-      lastReadAt: new Date(Date.now() - 25 * 60_000),
+      readPointer: seen('gone', new Date(Date.now() - 25 * 60_000)),
     }
     const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
     const out = recomputeCountsFromPointer(state, messages)
-    expect(out.unreadCount).toBe(2) // b and c are newer than lastReadAt
+    expect(out.unreadCount).toBe(2) // b and c are newer than the pointer's timestamp
   })
 
-  it('pointer missing and no usable lastReadAt: counts the whole slice (lower bound)', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'gone', lastReadAt: new Date(0) }
+  it('pointer id missing and no usable timestamp: counts the whole slice (lower bound)', () => {
+    const state = { ...createInitialNotificationState(), readPointer: seen('gone', NO_READ_TIME) }
     const messages = [msg('a', 30), msg('b', 20)]
     const out = recomputeCountsFromPointer(state, messages)
     expect(out.unreadCount).toBe(2)
   })
 
   it('an outgoing message in range marks everything before it read and advances the pointer', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
     const messages = [msg('a', 40), msg('b', 30), msg('mine', 20, { isOutgoing: true }), msg('c', 10)]
+    const state = { ...createInitialNotificationState(), readPointer: seenIn(messages, 'a') }
     const out = recomputeCountsFromPointer(state, messages)
     expect(out.unreadCount).toBe(1) // only c
-    expect(out.lastSeenMessageId).toBe('mine')
+    expect(out.readPointer).toEqual(seenIn(messages, 'mine'))
   })
 
   it('returns the same reference when nothing changes', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'b', unreadCount: 0 }
     const messages = [msg('a', 30), msg('b', 20)]
+    const state = { ...createInitialNotificationState(), readPointer: seenIn(messages, 'b'), unreadCount: 0 }
     expect(recomputeCountsFromPointer(state, messages)).toBe(state)
   })
 
   it('empty slice returns the same reference', () => {
-    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'x', unreadCount: 3 }
+    const state = { ...createInitialNotificationState(), readPointer: seen('x', new Date(1000)), unreadCount: 3 }
     expect(recomputeCountsFromPointer(state, [])).toBe(state)
   })
 })
@@ -1212,56 +1272,45 @@ describe('recomputeCountsFromPointer', () => {
 // readPointer shadow write (#1081)
 // ---------------------------------------------------------------------------
 
-describe('readPointer is written with lastSeenMessageId (#1081 migration)', () => {
+describe('readPointer is the whole read position (#1081)', () => {
   const base = () => notifState.createInitialNotificationState()
   const msg = (id: string, ms: number, over = {}) => ({
     id, timestamp: new Date(ms), isOutgoing: false, ...over,
   })
 
-  it('onMessageReceived sets both for an outgoing message', () => {
+  it('onMessageReceived writes the whole pointer for an outgoing message', () => {
     const out = notifState.onMessageReceived(
       base(),
       msg('m1', 1000, { isOutgoing: true }),
       { isActive: false, windowVisible: false }
     )
-    expect(out.lastSeenMessageId).toBe('m1')
-    // Whole-object assertion: a partial write that sets only the id fails here.
+    // Whole-object assertion: a write that got the timestamp from anywhere but
+    // the message itself fails here.
     expect(out.readPointer).toEqual({ messageId: 'm1', timestamp: new Date(1000) })
   })
 
-  it('onMessageReceived sets both when the user sees the message', () => {
+  it('onMessageReceived writes the whole pointer when the user sees the message', () => {
     const out = notifState.onMessageReceived(
       base(),
       msg('m2', 2000),
       { isActive: true, windowVisible: true }
     )
-    expect(out.lastSeenMessageId).toBe('m2')
     expect(out.readPointer).toEqual({ messageId: 'm2', timestamp: new Date(2000) })
   })
 
-  it('onMessageSeen sets both, resolving the timestamp from the messages array', () => {
+  it('onMessageSeen resolves the timestamp from the messages array', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
-    const start = { ...base(), lastSeenMessageId: 'm1', readPointer: { messageId: 'm1', timestamp: new Date(1000) } }
+    const start = { ...base(), readPointer: { messageId: 'm1', timestamp: new Date(1000) } }
     const out = notifState.onMessageSeen(start, 'm3', messages)
-    expect(out.lastSeenMessageId).toBe('m3')
     expect(out.readPointer).toEqual({ messageId: 'm3', timestamp: new Date(3000) })
   })
 
   it('onMessageSeen leaves the pointer put when it does not advance', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000)]
     const pointer = { messageId: 'm2', timestamp: new Date(2000) }
-    const start = { ...base(), lastSeenMessageId: 'm2', readPointer: pointer }
+    const start = { ...base(), readPointer: pointer }
     const out = notifState.onMessageSeen(start, 'm1', messages)
     expect(out.readPointer).toBe(pointer)
-  })
-
-  it('the two fields never disagree after any transition', () => {
-    const messages = [msg('m1', 1000), msg('m2', 2000, { isOutgoing: true }), msg('m3', 3000)]
-    let s = base()
-    s = notifState.onMessageReceived(s, messages[0], { isActive: true, windowVisible: true })
-    s = notifState.onMessageReceived(s, messages[1], { isActive: false, windowVisible: false })
-    s = notifState.onMessageSeen(s, 'm3', messages)
-    expect(s.readPointer?.messageId).toBe(s.lastSeenMessageId)
   })
 })
 
@@ -1273,101 +1322,105 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
 
   it('onMessageReceived keeps the pointer put for an unseen incoming message', () => {
     const pointer = { messageId: 'm1', timestamp: new Date(1000) }
-    const start = { ...base(), lastSeenMessageId: 'm1', readPointer: pointer }
+    const start = { ...base(), readPointer: pointer }
     const out = notifState.onMessageReceived(start, msg('m2', 2000), { isActive: false, windowVisible: false })
-    expect(out.lastSeenMessageId).toBe('m1')
     expect(out.readPointer).toBe(pointer)
   })
 
   it('onActivate resolves the pointer to the position it lands on', () => {
-    // Stale pointer (not in the slice) + usable lastReadAt: the divider derives
-    // at m2, so the pointer snaps to the message just before it.
+    // Stale pointer (id not in the slice) with a usable timestamp: the divider
+    // derives at m2, so the pointer snaps to the message just before it — and
+    // takes THAT message's timestamp, not the stale one it came in with.
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
-    const start = { ...base(), lastSeenMessageId: 'gone', lastReadAt: new Date(1500), unreadCount: 2 }
+    const start = { ...base(), readPointer: { messageId: 'gone', timestamp: new Date(1500) }, unreadCount: 2 }
     const out = notifState.onActivate(start, messages, { treatDelayedAsNew: true })
     expect(out.firstNewMessageId).toBe('m2')
-    expect(out.lastSeenMessageId).toBe('m1')
     expect(out.readPointer).toEqual({ messageId: 'm1', timestamp: new Date(1000) })
   })
 
   it('onActivate resolves the pointer even when the position does not move', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
-    const start = { ...base(), lastSeenMessageId: 'm2', unreadCount: 1 }
+    const start = { ...base(), readPointer: { messageId: 'm2', timestamp: new Date(2000) }, unreadCount: 1 }
     const out = notifState.onActivate(start, messages)
-    expect(out.lastSeenMessageId).toBe('m2')
     expect(out.readPointer).toEqual({ messageId: 'm2', timestamp: new Date(2000) })
   })
 
-  it('onMarkAsRead sets both when the caller supplies the caught-up message', () => {
+  it('onMarkAsRead writes the whole pointer when the caller supplies the caught-up message', () => {
     const start = {
       ...base(),
       unreadCount: 3,
-      lastSeenMessageId: 'm1',
       readPointer: { messageId: 'm1', timestamp: new Date(1000) },
     }
-    const out = notifState.onMarkAsRead(start, new Date(3000), msg('m3', 3000))
-    expect(out.lastSeenMessageId).toBe('m3')
+    const out = notifState.onMarkAsRead(start, msg('m3', 3000))
     expect(out.readPointer).toEqual({ messageId: 'm3', timestamp: new Date(3000) })
   })
 
   it('onMarkAsRead leaves the pointer put when the window is off the live edge', () => {
     const pointer = { messageId: 'm1', timestamp: new Date(1000) }
-    const start = { ...base(), unreadCount: 3, lastSeenMessageId: 'm1', readPointer: pointer }
-    const out = notifState.onMarkAsRead(start, new Date(3000))
-    expect(out.lastSeenMessageId).toBe('m1')
+    const start = { ...base(), unreadCount: 3, readPointer: pointer }
+    const out = notifState.onMarkAsRead(start)
     expect(out.readPointer).toBe(pointer)
   })
 
-  it('recomputeCountsFromPointer sets both on the fresh-entity guard', () => {
+  it('recomputeCountsFromPointer writes the whole pointer on the fresh-entity guard', () => {
     const messages = [msg('a', 1000), msg('b', 2000)]
     const out = notifState.recomputeCountsFromPointer(base(), messages)
-    expect(out.lastSeenMessageId).toBe('b')
     expect(out.readPointer).toEqual({ messageId: 'b', timestamp: new Date(2000) })
   })
 
-  it('recomputeCountsFromPointer sets both when an outgoing message moves the pointer', () => {
+  it('recomputeCountsFromPointer writes the whole pointer when an outgoing message moves it', () => {
     const messages = [msg('a', 1000), msg('b', 2000), msg('mine', 3000, { isOutgoing: true }), msg('c', 4000)]
-    const start = { ...base(), lastSeenMessageId: 'a', readPointer: { messageId: 'a', timestamp: new Date(1000) } }
+    const start = { ...base(), readPointer: { messageId: 'a', timestamp: new Date(1000) } }
     const out = notifState.recomputeCountsFromPointer(start, messages)
     expect(out.unreadCount).toBe(1)
-    expect(out.lastSeenMessageId).toBe('mine')
     expect(out.readPointer).toEqual({ messageId: 'mine', timestamp: new Date(3000) })
   })
 
-  it('the two fields never disagree across the full transition set', () => {
+  // Replaces 'the two fields never disagree across the full transition set'
+  // (#1081): there is no second field left to disagree with. The invariant that
+  // survives the consolidation, and is still falsifiable, is that a pointer's
+  // timestamp is always the timestamp of the message its id names — a transition
+  // that carried a stale timestamp onto a new id would fail here.
+  it('every transition leaves the pointer timestamp equal to its own message', () => {
     const messages = [
       msg('m1', 1000),
       msg('m2', 2000),
       msg('m3', 3000, { isOutgoing: true }),
       msg('m4', 4000),
     ]
-    // Tagged so a failure names the transition that broke the invariant.
-    const agree = (s: EntityNotificationState, label: string) =>
-      expect(`${label}: ${s.readPointer?.messageId}`).toBe(`${label}: ${s.lastSeenMessageId}`)
+    const byId = new Map(messages.map((m) => [m.id, m.timestamp]))
+    // Tagged so a failure names the transition that broke the invariant. The
+    // whole pointer is compared, so a right-id/wrong-timestamp pair fails.
+    const coherent = (st: EntityNotificationState, label: string) => {
+      const p = st.readPointer
+      expect(`${label}: ${JSON.stringify(p)}`).toBe(
+        `${label}: ${JSON.stringify(p && { messageId: p.messageId, timestamp: byId.get(p.messageId) })}`
+      )
+    }
 
     let s: EntityNotificationState = base()
     s = notifState.onMessageReceived(s, messages[0], { isActive: false, windowVisible: false })
-    agree(s, 'onMessageReceived (unseen)')
+    coherent(s, 'onMessageReceived (unseen)')
     s = notifState.onMessageReceived(s, messages[1], { isActive: true, windowVisible: true })
-    agree(s, 'onMessageReceived (seen)')
+    coherent(s, 'onMessageReceived (seen)')
     s = notifState.onMessageReceived(s, messages[2], { isActive: false, windowVisible: false })
-    agree(s, 'onMessageReceived (outgoing)')
+    coherent(s, 'onMessageReceived (outgoing)')
     s = notifState.onMessageReceived(s, messages[3], { isActive: false, windowVisible: false })
-    agree(s, 'onMessageReceived (unseen again)')
+    coherent(s, 'onMessageReceived (unseen again)')
     s = notifState.onActivate(s, messages, { treatDelayedAsNew: true })
-    agree(s, 'onActivate')
+    coherent(s, 'onActivate')
     s = notifState.onMessageSeen(s, 'm4', messages)
-    agree(s, 'onMessageSeen')
+    coherent(s, 'onMessageSeen')
     s = notifState.onDeactivate(s)
-    agree(s, 'onDeactivate')
+    coherent(s, 'onDeactivate')
     s = notifState.recomputeCountsFromPointer(s, messages)
-    agree(s, 'recomputeCountsFromPointer')
-    s = notifState.onMarkAsRead(s, new Date(4000), messages[3])
-    agree(s, 'onMarkAsRead')
-    s = notifState.onWindowBecameVisible(s, true, new Date(4000))
-    agree(s, 'onWindowBecameVisible')
+    coherent(s, 'recomputeCountsFromPointer')
+    s = notifState.onMarkAsRead(s, messages[3])
+    coherent(s, 'onMarkAsRead')
+    s = notifState.onWindowBecameVisible(s, true)
+    coherent(s, 'onWindowBecameVisible')
     s = notifState.onClearMarker(s)
-    agree(s, 'onClearMarker')
-    expect(s.lastSeenMessageId).toBe('m4')
+    coherent(s, 'onClearMarker')
+    expect(s.readPointer?.messageId).toBe('m4')
   })
 })

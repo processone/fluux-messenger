@@ -401,7 +401,7 @@ describe('useViewportObserver', () => {
     })
 
     // Switch conversation — pending report should be flushed synchronously
-    // so that lastSeenMessageId is up-to-date before onDeactivate() clears the marker
+    // so that readPointerId is up-to-date before onDeactivate() clears the marker
     rerender({ conversationId: 'conv-2' })
 
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
@@ -416,7 +416,7 @@ describe('useViewportObserver', () => {
     // Regression test: when switching conversations, the pending viewport report
     // from the old conversation must be flushed using the old callback (which
     // targets the old conversationId), NOT the new one.  Otherwise, the old
-    // conversation's lastSeenMessageId never advances and the "new messages"
+    // conversation's readPointerId never advances and the "new messages"
     // marker lags behind by one or two activations.
     const onMessageSeenConv1 = vi.fn()
     const onMessageSeenConv2 = vi.fn()
