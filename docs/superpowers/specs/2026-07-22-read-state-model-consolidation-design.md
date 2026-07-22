@@ -44,12 +44,38 @@ The resident slice bites in a third place too: `resolveSeenStanzaId`
 `lastMessage`-only fallback, and silently returns `undefined` — dropping a publish —
 whenever neither matches.
 
+### Rooms have no durable read pointer at all
+
+Found while planning, and it changes the shape of the work. `RoomMetadata.lastSeenMessageId`
+is documented as *"persisted, only advances forward"*. It is not persisted:
+
+- `roomStore` has no zustand `persist` middleware. `ROOM_META_FIELDS` is field-routing for
+  `commitRoomUpdate`, not a persistence manifest.
+- The app's `useSessionPersistence` *reads* `getSavedRooms` on restore, but `saveRooms` —
+  the only writer of the `xmpp-rooms` sessionStorage key — has no production caller. It is
+  reachable only from its own test. The restore path reads a key nothing writes.
+
+So room read position is purely in-memory, rebuilt each session from MAM catch-up plus the
+XEP-0490 seed. This is very likely part of #1076's original symptom: a fresh instance had
+no local read state to show, which is exactly the condition under which the catch-up
+ordering bug fired.
+
+A design whose premise is "one canonical, durable read pointer" cannot leave this standing
+for the entities the issue says are worst affected. Room read-state persistence is
+therefore in scope, in PR A.
+
 ## Design decisions (approved)
 
 1. **The count becomes a projection, still persisted.** `unreadCount` stays in the store
    and stays in persisted meta, but stops being authoritative: the only writer is one
-   `recomputeUnread(entity) = f(floor, archive)`. Persisting it avoids a blank-badge flash
-   on cold start; it is a cache of the derivation, not an accumulator.
+   `recomputeUnread(entity) = f(floor, archive)`. It is a cache of the derivation, not an
+   accumulator.
+
+   Note this is an *improvement* on today rather than preservation of it: chat counts are
+   currently persisted and then zeroed on rehydrate (`unreadCount: 0, // Reset unread on
+   restore`, `chatStore.ts`), so cold start already flashes zero badges until MAM catch-up
+   repopulates them. Under this design the restored count paints immediately and the
+   derivation corrects it, so the zeroing goes away.
 
 2. **Four pointer writers, and only four.** The viewport observer, an inbound XEP-0490
    marker, `markReadToNewest` (Escape / ⌘↓ / FAB), and a message composed *on this
@@ -106,9 +132,22 @@ Every derivation uses **`floor = max(readPointer.timestamp, historyFloor)`** —
 comparison between two timestamps, which is the entire reason for denormalising the
 timestamp onto the pointer.
 
+### Room read-state persistence (new)
+
+Rooms gain a durable, account-scoped read-state store on the pattern roomStore already
+uses four times (`fluux-room-gaps`, `fluux-room-coverage`,
+`fluux-room-pending-retractions`, `fluux-room-drafts`): key
+`fluux-room-read-state`, holding `readPointer` and `historyFloor` per room JID. Not
+`unreadCount` — that is derived, and a room's archive is the thing worth trusting.
+
+The dead `saveRooms` / `getSavedRooms` sessionStorage path and the read-state fields of
+`SerializableRoom` are removed rather than wired up: sessionStorage is the wrong durability
+tier for a read position, and the scoped-localStorage pattern above is the established one.
+
 ### Persisted-shape migration
 
-One-shot, on rehydrate, in both stores and in the app's `useSessionPersistence`:
+One-shot, on rehydrate. Chat only in practice — rooms have nothing persisted to migrate
+from, so they start from an empty read-state store and populate going forward:
 
 | Persisted state | Migrates to |
 |---|---|
@@ -249,11 +288,15 @@ anything touching the loaded window.
 
 Three stacked PRs off `main`, reviewed as one slice at the end.
 
-**PR A — `ReadPointer` + `historyFloor` + migration.** Behaviour-neutral: everything
-computes exactly as today, just reading `readPointer.messageId` / `.timestamp` instead of
-two independent fields. Touches `ROOM_META_FIELDS`, its chat equivalent, and the app's
-`useSessionPersistence`. A base PR that changes no behaviour is a strong place to review a
-persisted-shape change from.
+**PR A — `ReadPointer` + `historyFloor` + persistence + migration.** Everything computes
+exactly as today, just reading `readPointer.messageId` / `.timestamp` instead of two
+independent fields, plus the new room read-state store and the chat migration.
+
+Not strictly behaviour-neutral, by the decision above: rooms start remembering their read
+position across restarts, which they never did. That is the one intended behaviour change
+in PR A, and it should be verified against a real restart rather than only in unit tests.
+Also removes the dead `saveRooms` path and corrects `RoomMetadata.lastSeenMessageId`'s doc
+comment, which currently claims a persistence that does not exist.
 
 The pointer object must come first: the archive count needs a *timestamp* floor, and
 before migration the only timestamp available is the `lastReadAt` that lies.
@@ -275,3 +318,7 @@ deleted; divider derived from the floor; gate 3 removed and gate 4 re-justified;
 - **The migration is forward-only, like the bug.** A migration that over-advances is as
   unrecoverable as the defect it fixes. Mitigation is structural: every migration branch
   resolves at-or-behind today's effective position.
+- **Rooms gain persistence they never had.** A wrong pointer that used to evaporate on
+  restart now survives one. This raises the cost of any residual pointer-advance bug, and
+  is the strongest argument for landing PR C's writer restriction rather than stopping
+  after B.
