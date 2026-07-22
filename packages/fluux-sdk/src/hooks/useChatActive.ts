@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { chatStore } from '../stores'
+import { chatStore } from '../stores/chatStore'
 import { chatSelectors } from '../stores/chatSelectors'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'

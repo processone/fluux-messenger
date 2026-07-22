@@ -16,7 +16,8 @@
 
 import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
-import { roomStore, connectionStore } from '../stores'
+import { roomStore } from '../stores/roomStore'
+import { connectionStore } from '../stores/connectionStore'
 import { logInfo } from './logger'
 import {
   isConnectionError,

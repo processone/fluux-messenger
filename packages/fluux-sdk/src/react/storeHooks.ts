@@ -8,18 +8,16 @@
  */
 
 import { useStore } from 'zustand'
-import {
-  connectionStore,
-  chatStore,
-  rosterStore,
-  consoleStore,
-  eventsStore,
-  roomStore,
-  adminStore,
-  blockingStore,
-  ignoreStore,
-  searchStore,
-} from '../stores'
+import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
+import { rosterStore } from '../stores/rosterStore'
+import { consoleStore } from '../stores/consoleStore'
+import { eventsStore } from '../stores/eventsStore'
+import { roomStore } from '../stores/roomStore'
+import { adminStore } from '../stores/adminStore'
+import { blockingStore } from '../stores/blockingStore'
+import { ignoreStore } from '../stores/ignoreStore'
+import { searchStore } from '../stores/searchStore'
 import type { ConnectionState } from '../stores/connectionStore'
 import type { ChatState } from '../stores/chatStore'
 import type { RosterState } from '../stores/rosterStore'

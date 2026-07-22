@@ -465,7 +465,8 @@
         "invitationsHeading": "Invitații",
         "nickChanged": "{{oldNick}} este acum cunoscut ca {{newNick}}",
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
-        "nickHiddenChars": "Numele conține caractere ascunse"
+        "nickHiddenChars": "Numele conține caractere ascunse",
+        "mentionSuggestions": "Sugestii de mențiuni"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",
@@ -639,7 +640,8 @@
         "loadVideo": "Încarcă videoclipul",
         "loadAudio": "Încarcă sunetul",
         "loadFilePreview": "Încarcă previzualizarea",
-        "showLinkImage": "Afișează imaginea"
+        "showLinkImage": "Afișează imaginea",
+        "emojiSuggestions": "Sugestii de emoji"
     },
     "dates": {
         "today": "Astăzi",

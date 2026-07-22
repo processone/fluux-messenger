@@ -463,7 +463,8 @@
         "invitationsHeading": "Cuirí",
         "nickChanged": "Tugtar {{newNick}} ar {{oldNick}} anois",
         "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
-        "nickHiddenChars": "Tá carachtair fholaithe san ainm"
+        "nickHiddenChars": "Tá carachtair fholaithe san ainm",
+        "mentionSuggestions": "Moltaí tagartha"
     },
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",
@@ -639,7 +640,8 @@
         "loadVideo": "Luchtaigh físeán",
         "loadAudio": "Luchtaigh fuaim",
         "loadFilePreview": "Luchtaigh réamhamharc",
-        "showLinkImage": "Taispeáin íomhá"
+        "showLinkImage": "Taispeáin íomhá",
+        "emojiSuggestions": "Moltaí emoji"
     },
     "dates": {
         "today": "Inniu",

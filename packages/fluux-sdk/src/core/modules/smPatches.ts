@@ -39,7 +39,7 @@
  * @module
  */
 
-import type { Client, Element } from '@xmpp/client'
+import type { Client, Element, SmOutboundQueueItem, StreamManagement } from '@xmpp/client'
 import { xml } from '@xmpp/client'
 
 const NS_SM = 'urn:xmpp:sm:3'
@@ -70,7 +70,7 @@ export function createSmPatchState(): SmPatchState {
  * are left untouched.
  */
 export function patchSmAckDebounce(state: SmPatchState, xmppClient: Client): void {
-  const sm = xmppClient.streamManagement as any
+  const sm = xmppClient.streamManagement
   // Guard: only patch real xmpp.js clients (not test mocks which lack outbound_q)
   if (!Array.isArray(sm?.outbound_q)) return
 
@@ -113,7 +113,7 @@ export function patchSmAckDebounce(state: SmPatchState, xmppClient: Client): voi
  * Object.defineProperty to re-patch whenever xmpp.js reassigns outbound_q
  * (e.g., `sm.outbound_q = []` in resumed()).
  */
-export function patchSmAckQueue(sm: any): void {
+export function patchSmAckQueue(sm: StreamManagement): void {
   if (!Array.isArray(sm.outbound_q) || typeof sm.emit !== 'function') return
 
   // Sentinel: has .stanza property to prevent crash in ackQueue's `item.stanza`
@@ -121,7 +121,7 @@ export function patchSmAckQueue(sm: any): void {
   let allowEmptySentinel = true
 
   // Patch shift on the current outbound_q array
-  const patchQueueShift = (q: any[]) => {
+  const patchQueueShift = (q: SmOutboundQueueItem[]) => {
     const nativeShift = Array.prototype.shift
     q.shift = function() {
       if (this.length === 0) {
@@ -144,7 +144,7 @@ export function patchSmAckQueue(sm: any): void {
   let currentQ = sm.outbound_q
   Object.defineProperty(sm, 'outbound_q', {
     get: () => currentQ,
-    set: (val: any[]) => {
+    set: (val: SmOutboundQueueItem[]) => {
       currentQ = val
       if (Array.isArray(val)) patchQueueShift(val)
     },
@@ -153,7 +153,7 @@ export function patchSmAckQueue(sm: any): void {
 
   // Suppress synthetic events for sentinel items (stanza === null)
   const originalEmit = sm.emit.bind(sm)
-  sm.emit = function(event: string, ...args: any[]) {
+  sm.emit = function(event: string, ...args: unknown[]) {
     if (args[0] === null) {
       if (event === 'fail') {
         allowEmptySentinel = false
@@ -173,7 +173,7 @@ export function flushSmAckDebounce(state: SmPatchState, xmppClient: Client): voi
     clearTimeout(state.smAckDebounceTimer)
     state.smAckDebounceTimer = null
     if (state.originalEntitySend) {
-      const sm = xmppClient.streamManagement as any
+      const sm = xmppClient.streamManagement
       if (sm?.enabled) {
         const freshAck = xml('a', { xmlns: NS_SM, h: String(sm.inbound) })
         state.originalEntitySend(freshAck).catch(() => {})

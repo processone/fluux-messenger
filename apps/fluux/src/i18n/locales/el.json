@@ -464,7 +464,8 @@
         "invitationsHeading": "Προσκλήσεις",
         "nickChanged": "{{oldNick}} είναι πλέον γνωστός ως {{newNick}}",
         "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
-        "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες"
+        "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες",
+        "mentionSuggestions": "Προτάσεις αναφορών"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",
@@ -637,7 +638,8 @@
         "loadVideo": "Φόρτωση βίντεο",
         "loadAudio": "Φόρτωση ήχου",
         "loadFilePreview": "Φόρτωση προεπισκόπησης",
-        "showLinkImage": "Εμφάνιση εικόνας"
+        "showLinkImage": "Εμφάνιση εικόνας",
+        "emojiSuggestions": "Προτάσεις emoji"
     },
     "dates": {
         "today": "Σήμερα",

@@ -1367,6 +1367,7 @@ export const MessageInput = memo(function MessageInput({
         resolveInput={resolveInput}
         classifyInput={classifyInput}
         aboveInput={helpOpen ? <CommandHelpPanel commands={visibleCommands('chat')} onClose={() => setHelpOpen(false)} /> : undefined}
+        hasExternalOverlay={helpOpen}
         onEditLastMessage={onEditLastMessage}
         encryptionState={encryptionState}
         onEncryptionClick={onEncryptionClick}
@@ -1374,4 +1375,3 @@ export const MessageInput = memo(function MessageInput({
     </>
   )
 })
-

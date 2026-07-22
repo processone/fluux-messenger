@@ -463,7 +463,8 @@
         "invitationsHeading": "Meghívók",
         "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert",
         "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
-        "nickHiddenChars": "A név rejtett karaktereket tartalmaz"
+        "nickHiddenChars": "A név rejtett karaktereket tartalmaz",
+        "mentionSuggestions": "Említésjavaslatok"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Videó betöltése",
         "loadAudio": "Hang betöltése",
         "loadFilePreview": "Előnézet betöltése",
-        "showLinkImage": "Kép megjelenítése"
+        "showLinkImage": "Kép megjelenítése",
+        "emojiSuggestions": "Emoji javaslatok"
     },
     "dates": {
         "today": "Ma",

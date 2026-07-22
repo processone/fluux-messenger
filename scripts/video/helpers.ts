@@ -66,6 +66,10 @@ export async function openDemo(page: Page): Promise<void> {
       *::-webkit-scrollbar { display: none !important; }
       * { scrollbar-width: none !important; }
       * { caret-color: transparent !important; }
+      /* The dev-only render-loop warning banner is a full-width fixed overlay
+         at the top of the viewport: it would both appear on camera and swallow
+         the clicks the Director aims at the header/sidebar. */
+      #fluux-render-loop-warning { display: none !important; }
     `,
   })
 }

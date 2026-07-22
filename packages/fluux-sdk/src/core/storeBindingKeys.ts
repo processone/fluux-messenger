@@ -22,16 +22,14 @@
  * @module Core
  */
 
-import type {
-  ConnectionState,
-  ChatState,
-  RosterState,
-  ConsoleState,
-  EventsState,
-  RoomState,
-  AdminState,
-  BlockingState,
-} from '../stores'
+import type { ConnectionState } from '../stores/connectionStore'
+import type { ChatState } from '../stores/chatStore'
+import type { RosterState } from '../stores/rosterStore'
+import type { ConsoleState } from '../stores/consoleStore'
+import type { EventsState } from '../stores/eventsStore'
+import type { RoomState } from '../stores/roomStore'
+import type { AdminState } from '../stores/adminStore'
+import type { BlockingState } from '../stores/blockingStore'
 
 export const connectionBindingMethodKeys = [
   'setStatus',

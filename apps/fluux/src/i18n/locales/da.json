@@ -463,7 +463,8 @@
         "invitationsHeading": "Invitationer",
         "nickChanged": "{{oldNick}} er nu kendt som {{newNick}}",
         "nickEdgeWhitespace": "Navnet har ekstra mellemrum i kanterne",
-        "nickHiddenChars": "Navnet indeholder skjulte tegn"
+        "nickHiddenChars": "Navnet indeholder skjulte tegn",
+        "mentionSuggestions": "Omtaleforslag"
     },
     "events": {
         "invitedBy": "Inviteret af {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Indlæs video",
         "loadAudio": "Indlæs lyd",
         "loadFilePreview": "Indlæs forhåndsvisning",
-        "showLinkImage": "Vis billede"
+        "showLinkImage": "Vis billede",
+        "emojiSuggestions": "Emoji-forslag"
     },
     "dates": {
         "today": "I dag",

@@ -463,7 +463,8 @@
         "invitationsHeading": "Inbjudningar",
         "nickChanged": "{{oldNick}} är nu känd som {{newNick}}",
         "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
-        "nickHiddenChars": "Namnet innehåller dolda tecken"
+        "nickHiddenChars": "Namnet innehåller dolda tecken",
+        "mentionSuggestions": "Omnämnandeförslag"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Läs in video",
         "loadAudio": "Läs in ljud",
         "loadFilePreview": "Läs in förhandsgranskning",
-        "showLinkImage": "Visa bild"
+        "showLinkImage": "Visa bild",
+        "emojiSuggestions": "Emoji-förslag"
     },
     "dates": {
         "today": "Idag",

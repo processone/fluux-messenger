@@ -7,7 +7,7 @@
  */
 
 import type { MAMQueryState } from '../../core/types'
-import { connectionStore } from '../../stores'
+import { connectionStore } from '../../stores/connectionStore'
 import { isItemNotFoundError } from './mamCursor'
 
 /**

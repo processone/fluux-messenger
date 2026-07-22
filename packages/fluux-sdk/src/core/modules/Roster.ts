@@ -5,6 +5,7 @@ import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import { calculateCapsHash, getCapsNode } from '../caps'
 import { getClientName } from '../clients'
+import { PRESENCE_PRIORITY } from '../config'
 import {
   NS_CAPS,
   NS_VCARD_UPDATE,
@@ -375,7 +376,7 @@ export class Roster extends BaseModule {
     const presence = xml('presence', {},
       showToSend ? xml('show', {}, showToSend) : undefined,
       statusToSend ? xml('status', {}, statusToSend) : undefined,
-      xml('priority', {}, '50'),
+      xml('priority', {}, PRESENCE_PRIORITY),
       xml('c', {
         xmlns: NS_CAPS,
         hash: 'sha-1',
@@ -407,7 +408,7 @@ export class Roster extends BaseModule {
     const children = [
       show !== 'online' ? xml('show', {}, show) : undefined,
       status ? xml('status', {}, status) : undefined,
-      xml('priority', {}, '50'),
+      xml('priority', {}, PRESENCE_PRIORITY),
       this.capsHash ? xml('c', {
         xmlns: NS_CAPS,
         hash: 'sha-1',

@@ -2,7 +2,10 @@ mod dns;
 mod framing;
 mod happy_eyeballs;
 
-use dns::{parse_server_input, resolve_xmpp_server, ConnectionMode, ParsedServer, XmppEndpoint};
+use dns::{
+    parse_server_input, resolve_xmpp_server, to_ascii_host, ConnectionMode, ParsedServer,
+    XmppEndpoint,
+};
 use framing::{
     extract_open_to, extract_stanza, extract_stream_error_condition, translate_tcp_to_ws,
     translate_ws_to_tcp,
@@ -357,7 +360,10 @@ async fn upgrade_to_tls(
     host: &str,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
     let connector = create_tls_connector()?;
-    let server_name = ServerName::try_from(host.to_string())
+    // Internationalized domains must be punycoded here: rustls accepts ASCII
+    // names only, and certificates for IDNs carry the A-label in their SAN.
+    // The XMPP domainpart stays a U-label on the wire (see `perform_starttls`).
+    let server_name = ServerName::try_from(to_ascii_host(host)?)
         .map_err(|e| format!("Invalid server name: {}", e))?;
 
     connector
@@ -1825,6 +1831,60 @@ mod tests {
         assert!(
             header.contains("to='explicit.example'"),
             "?domain= override must win over <open to=>, got: {header}"
+        );
+    }
+
+    /// Guard (#1042) at the real call site: `upgrade_to_tls` must no longer
+    /// reject an internationalized domain before the handshake even starts.
+    ///
+    /// The peer is a plain TCP listener that hangs up immediately, so the
+    /// handshake is expected to fail — what matters is *how*. Before the fix,
+    /// `ServerName::try_from("ツ.com")` failed with "Invalid server name" and no
+    /// ClientHello was ever sent; now the A-label is accepted and the failure is
+    /// an ordinary transport-level handshake error.
+    #[tokio::test]
+    async fn test_upgrade_to_tls_accepts_internationalized_domain() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind peer");
+        let addr = listener.local_addr().expect("peer addr");
+        tokio::spawn(async move {
+            // Accept, then drop the socket so the client sees EOF promptly.
+            let _ = listener.accept().await;
+        });
+
+        let stream = TcpStream::connect(addr).await.expect("connect to peer");
+        let err = upgrade_to_tls(stream, "ツ.com")
+            .await
+            .expect_err("plain-TCP peer cannot complete a TLS handshake");
+
+        assert!(
+            !err.contains("Invalid server name"),
+            "IDN must be punycoded before rustls sees it, got: {err}"
+        );
+        assert!(
+            err.contains("TLS handshake failed"),
+            "expected a transport-level handshake failure, got: {err}"
+        );
+    }
+
+    /// Guard (#1042): for an internationalized domain, the STARTTLS stream
+    /// header MUST carry the U-label (Unicode) form. RFC 7622 §3.2.1 requires
+    /// domainpart slots to hold U-labels and forbids A-labels, and ejabberd
+    /// matches virtual hosts with `jid:nameprep` (Unicode-preserving), so
+    /// punycoding the wire form here would produce `host-unknown`.
+    ///
+    /// Only DNS resolution and the TLS SNI name are converted to the A-label —
+    /// see `to_ascii_host` in `dns.rs`.
+    #[tokio::test]
+    async fn test_starttls_header_keeps_unicode_u_label_for_idn_domain() {
+        let client_open = "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='ツ.com' from='me@ツ.com' version='1.0'/>";
+        let header = capture_proxy_starttls_header(client_open, None).await;
+        assert!(
+            header.contains("to='ツ.com'"),
+            "STARTTLS header must carry the Unicode U-label per RFC 7622, got: {header}"
+        );
+        assert!(
+            !header.contains("xn--"),
+            "STARTTLS header must NOT carry the punycode A-label, got: {header}"
         );
     }
 

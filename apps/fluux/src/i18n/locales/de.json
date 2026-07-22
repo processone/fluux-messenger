@@ -465,7 +465,8 @@
         "invitationsHeading": "Einladungen",
         "nickChanged": "{{oldNick}} heißt jetzt {{newNick}}",
         "nickEdgeWhitespace": "Der Name hat zusätzliche Leerzeichen am Rand",
-        "nickHiddenChars": "Der Name enthält versteckte Zeichen"
+        "nickHiddenChars": "Der Name enthält versteckte Zeichen",
+        "mentionSuggestions": "Erwähnungsvorschläge"
     },
     "events": {
         "invitedBy": "Eingeladen von {{name}}",
@@ -638,7 +639,8 @@
         "loadVideo": "Video laden",
         "loadAudio": "Audio laden",
         "loadFilePreview": "Vorschau laden",
-        "showLinkImage": "Bild anzeigen"
+        "showLinkImage": "Bild anzeigen",
+        "emojiSuggestions": "Emoji-Vorschläge"
     },
     "dates": {
         "today": "Heute",

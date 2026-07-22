@@ -54,7 +54,9 @@ export type { ConsoleState } from './consoleStore'
 
 export { eventsStore } from './eventsStore'
 export type { EventsState } from './eventsStore'
-export type { SubscriptionRequest, StrangerMessage, MucInvitation } from '../core/types'
+// Re-exported from the concrete module, not the '../core/types' barrel: that barrel
+// pulls in core/types/client.ts, which would put this barrel back inside a cycle.
+export type { SubscriptionRequest, StrangerMessage, MucInvitation } from '../core/types/events'
 
 export { roomStore } from './roomStore'
 export type { RoomState } from './roomStore'

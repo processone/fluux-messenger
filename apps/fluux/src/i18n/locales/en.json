@@ -463,7 +463,8 @@
         "invitationsHeading": "Invitations",
         "nickChanged": "{{oldNick}} is now known as {{newNick}}",
         "nickEdgeWhitespace": "Name has extra spaces at the edges",
-        "nickHiddenChars": "Name contains hidden characters"
+        "nickHiddenChars": "Name contains hidden characters",
+        "mentionSuggestions": "Mention suggestions"
     },
     "events": {
         "invitedBy": "Invited by {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Load video",
         "loadAudio": "Load audio",
         "loadFilePreview": "Load preview",
-        "showLinkImage": "Show image"
+        "showLinkImage": "Show image",
+        "emojiSuggestions": "Emoji suggestions"
     },
     "dates": {
         "today": "Today",

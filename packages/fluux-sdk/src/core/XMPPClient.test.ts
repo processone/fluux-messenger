@@ -923,7 +923,6 @@ describe('XMPPClient', () => {
       // on the connection module, then connect triggers handleConnectionSuccess
       // which computes the duration.
       // We test this by setting the internal timestamp 30s ago.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
 
       const connectPromise = newXmppClient.connect({
@@ -966,7 +965,6 @@ describe('XMPPClient', () => {
       // Short disconnect keeps the path minimal (no bookmark fetch / catch-up).
       // (In this node env localStorage.getItem throws, so the cache-marker check is
       // swallowed and execution continues down the real SM-resume path.)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
 
       const connectPromise = newXmppClient.connect({
@@ -1004,7 +1002,6 @@ describe('XMPPClient', () => {
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Simulate a reconnect with long disconnect (5 minutes ago)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 300_000
 
       const connectPromise = newXmppClient.connect({
@@ -1045,7 +1042,6 @@ describe('XMPPClient', () => {
 
       // Short disconnect (30s): WebKit keeps the blob URLs alive, so refreshing
       // them would needlessly re-read every avatar from IndexedDB on each blip.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
 
       const connectPromise = newXmppClient.connect({
@@ -1081,7 +1077,6 @@ describe('XMPPClient', () => {
 
       // Long disconnect (5 min) covers the OS sleep-wake case where WebKit may
       // have reclaimed the blob URLs — they must be re-created.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 300_000
 
       const connectPromise = newXmppClient.connect({

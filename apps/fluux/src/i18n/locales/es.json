@@ -465,7 +465,8 @@
         "invitationsHeading": "Invitaciones",
         "nickChanged": "{{oldNick}} ahora se conoce como {{newNick}}",
         "nickEdgeWhitespace": "El nombre tiene espacios adicionales en los extremos",
-        "nickHiddenChars": "El nombre contiene caracteres ocultos"
+        "nickHiddenChars": "El nombre contiene caracteres ocultos",
+        "mentionSuggestions": "Sugerencias de menciones"
     },
     "events": {
         "invitedBy": "Invitado por {{name}}",
@@ -639,7 +640,8 @@
         "loadVideo": "Cargar vídeo",
         "loadAudio": "Cargar audio",
         "loadFilePreview": "Cargar vista previa",
-        "showLinkImage": "Mostrar imagen"
+        "showLinkImage": "Mostrar imagen",
+        "emojiSuggestions": "Sugerencias de emojis"
     },
     "dates": {
         "today": "Hoy",

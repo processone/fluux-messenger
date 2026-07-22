@@ -12,29 +12,120 @@ declare module '@xmpp/client' {
     toString(): string
   }
 
+  /**
+   * An entry in the Stream Management outbound queue.
+   *
+   * `stanza` is nullable because `patchSmAckQueue` (see core/modules/smPatches.ts)
+   * injects a `{ stanza: null }` sentinel on empty-queue shifts to survive the
+   * unguarded `item.stanza` read in xmpp.js's ackQueue (xmppjs/xmpp.js#1119).
+   */
+  export interface SmOutboundQueueItem {
+    stanza: Element | null
+  }
+
   // XEP-0198 Stream Management
   export interface StreamManagement {
     id: string | null
     inbound: number
     outbound: number
     enabled: boolean
+    /** Resume window requested from the server, in seconds (XEP-0198 §3). */
+    preferredMaximum: number
+    /** Interval (ms) between xmpp.js's built-in `<r/>` keepalives. */
+    requestAckInterval: number
+    /**
+     * Stanzas sent but not yet acked. xmpp.js reassigns this wholesale
+     * (e.g. `sm.outbound_q = []` inside resumed()), which is why
+     * `patchSmAckQueue` re-patches it through a property setter.
+     */
+    outbound_q: SmOutboundQueueItem[]
     on(event: 'resumed', handler: () => void): void
     on(event: 'ack', handler: (stanza: Element) => void): void
     on(event: 'fail', handler: (stanza: Element) => void): void
+    emit(event: string, ...args: unknown[]): boolean
+  }
+
+  /** Context passed to `iqCallee` handlers: the full IQ and its payload child. */
+  export interface IqCalleeContext {
+    stanza: Element
+    element: Element
+  }
+
+  /** Outbound IQ requests with response correlation (@xmpp/iq/caller). */
+  export interface IqCaller {
+    request(stanza: Element, timeout?: number): Promise<Element>
+  }
+
+  /** Inbound IQ routing by namespace + payload name (@xmpp/iq/callee). */
+  export interface IqCallee {
+    get(xmlns: string, name: string, handler: (context: IqCalleeContext) => unknown): void
+    set(xmlns: string, name: string, handler: (context: IqCalleeContext) => unknown): void
+  }
+
+  /** A FAST token as handed to/from xmpp.js (XEP-0484). */
+  export interface FastTokenData {
+    mechanism: string
+    token: string
+    expiry?: string
+  }
+
+  /**
+   * XEP-0484 FAST module. The default token store is in-memory only, so these
+   * three hooks are reassigned to wire up persistence.
+   */
+  export interface FastModule {
+    fetchToken: () => FastTokenData | null | Promise<FastTokenData | null>
+    saveToken: (token: FastTokenData) => void
+    deleteToken: () => void
+  }
+
+  /** Built-in auto-reconnect (@xmpp/reconnect), disabled in favour of our own. */
+  export interface ReconnectModule {
+    stop(): void
+  }
+
+  /** Payload of the 'disconnect' event. */
+  export interface DisconnectContext {
+    clean: boolean
+    reason?: unknown
+  }
+
+  /** Events emitted by the client, and the shape of each listener. */
+  export interface ClientEventMap {
+    online: () => void
+    offline: () => void
+    error: (err: Error) => void
+    stanza: (stanza: Element) => void
+    element: (element: Element) => void
+    send: (element: Element) => void
+    nonza: (nonza: Element) => void
+    disconnect: (context: DisconnectContext) => void
   }
 
   export interface Client {
-    on(event: 'online', handler: () => void): void
-    on(event: 'offline', handler: () => void): void
-    on(event: 'error', handler: (err: Error) => void): void
-    on(event: 'stanza', handler: (stanza: Element) => void): void
-    on(event: 'element', handler: (element: Element) => void): void
-    on(event: 'send', handler: (element: Element) => void): void
+    on<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
+    off<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
+    removeListener<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
+    /**
+     * Register ahead of xmpp.js's own middleware. Used to strip `<sm/>` from
+     * `<stream:features>` when SM was already negotiated inline via SASL2.
+     */
+    prependListener<K extends keyof ClientEventMap>(event: K, handler: ClientEventMap[K]): void
     start(): Promise<void>
     stop(): Promise<void>
     send(element: Element): Promise<void>
     write(data: string): Promise<void>
     streamManagement: StreamManagement
+    iqCaller: IqCaller
+    iqCallee: IqCallee
+    /** Connection lifecycle status, e.g. 'offline' | 'connecting' | 'online'. */
+    status: string
+    /** Underlying transport socket; null once the socket dies. */
+    socket: unknown
+    /** Present only when the server offers FAST (XEP-0484). */
+    fast?: FastModule
+    /** Present unless the reconnect plugin was left out of the client build. */
+    reconnect?: ReconnectModule
   }
 
   export interface ClientOptions {

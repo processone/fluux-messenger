@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, useId, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useEmojiAutocomplete } from '@/hooks'
+import { EmojiAutocompleteMenu } from './composer/EmojiAutocompleteMenu'
+import { composerAutocompleteAriaProps, type ComposerAutocompleteAriaProps } from './composer/autocompleteAria'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
 import type { InputClass } from '../commands/types'
@@ -34,6 +36,18 @@ const COMPOSING_THROTTLE_MS = 2000
 // will see the typing indicator disappear within a few seconds.
 const PAUSED_TIMEOUT_MS = 5000
 const COMPOSING_UI_TIMEOUT_MS = 1500
+
+function restoreTextareaCursor(
+  inputRef: RefObject<HTMLTextAreaElement | null>,
+  position: number,
+) {
+  setTimeout(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.focus()
+    input.setSelectionRange(position, position)
+  }, 0)
+}
 
 // Base textarea classes - exported for custom renderInput implementations to reuse.
 // `no-focus-ring` opts the textarea out of the global `.user-interacted *:focus`
@@ -70,6 +84,13 @@ export interface MessageComposerHandle {
   focus: () => void
   getText: () => string
   setText: (text: string) => void
+  /**
+   * Position the caret after the parent rewrote the text itself (a room
+   * inserting a mention). Programmatically replacing a textarea's value leaves
+   * the caret at the end, so the insertion point has to be restored explicitly
+   * — the same step the composer's own emoji completion performs inline.
+   */
+  placeCaret: (text: string, position: number) => void
 }
 
 interface UploadState {
@@ -78,6 +99,8 @@ interface UploadState {
   error: string | null
   clearError: () => void
 }
+
+export type { ComposerAutocompleteAriaProps }
 
 /** Pending attachment staged for sending (not yet sent) */
 export interface PendingAttachment {
@@ -130,9 +153,12 @@ interface MessageComposerProps {
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
     onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
+    ariaProps: ComposerAutocompleteAriaProps
   }) => ReactNode
   /** Content to render above the input (e.g., mention autocomplete dropdown) */
   aboveInput?: ReactNode
+  /** Whether a higher-priority command, mention, or help overlay currently owns the composer overlay slot. */
+  hasExternalOverlay?: boolean
   /** Text value (controlled) - if provided, component is controlled */
   value?: string
   /** Text change handler (for controlled mode) */
@@ -206,6 +232,7 @@ export function MessageComposer({
   typingNotificationsEnabled = true,
   renderInput,
   aboveInput,
+  hasExternalOverlay = false,
   value: controlledValue,
   onValueChange,
   onSelectionChange,
@@ -255,6 +282,43 @@ export function MessageComposer({
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
+  // A caret offset only means something for the text it was measured against.
+  // Storing the two together lets an externally swapped value — a conversation
+  // switch, a mention or command insertion, an edit recall — be recognised as
+  // "caret unknown" instead of being sliced at a caret from the previous draft.
+  const [caret, setCaret] = useState<{ text: string; position: number } | null>(null)
+  const cursorPosition = caret?.text === text ? caret.position : null
+  // The single place the caret is recorded. Owners of the external overlay slot
+  // drive their own completion (room mentions, slash commands) off the reported
+  // position, so anything that moves the caret — typing included, not just
+  // selection events — has to go through here or their menus never open.
+  const onSelectionChangeRef = useRef(onSelectionChange)
+  onSelectionChangeRef.current = onSelectionChange
+  const updateCaret = useCallback((nextText: string, position: number) => {
+    // Keeping the previous object when nothing moved lets React bail out, the way
+    // it did when this was a plain number: a selection event that lands on the
+    // caret it already had should not cost a render.
+    setCaret((previous) =>
+      previous && previous.text === nextText && previous.position === position
+        ? previous
+        : { text: nextText, position }
+    )
+    onSelectionChangeRef.current?.(position)
+  }, [])
+  const emojiAutocomplete = useEmojiAutocomplete(text, cursorPosition)
+  const emojiAutocompleteListboxId = `${useId()}-emoji-autocomplete`
+  // External overlays are already ordered by their owner (help, command, then
+  // mention). Inline emoji completion is the final fallback in that priority.
+  const isEmojiAutocompleteActive = !hasExternalOverlay && emojiAutocomplete.state.isActive
+  const selectedEmojiMatch = emojiAutocomplete.state.matches[emojiAutocomplete.state.selectedIndex]
+  // Emoji completion is the composer's own overlay. An owner of the external
+  // overlay slot (a room's mention list) replaces these with its own.
+  const autocompleteAriaProps = composerAutocompleteAriaProps({
+    label: effectivePlaceholder,
+    listboxId: emojiAutocompleteListboxId,
+    isOpen: isEmojiAutocompleteActive,
+    activeOptionKey: selectedEmojiMatch?.id,
+  })
   // Which glyph the send button shows (send / command / unknown). Derived from
   // the live text so it can never go stale — clearing the input after a command
   // runs, an edit cancels, etc. reverts the icon automatically, whereas a
@@ -306,13 +370,25 @@ export function MessageComposer({
     focus: () => inputRef.current?.focus(),
     getText: () => text,
     setText: (t: string) => setText(t),
-  }), [text, setText])
+    placeCaret: (t: string, position: number) => {
+      updateCaret(t, position)
+      restoreTextareaCursor(inputRef, position)
+    },
+  }), [text, setText, updateCaret])
 
   // Close menus when clicking outside
   const closeAttachMenu = () => setShowAttachMenu(false)
   useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
+
+  // Inline completion owns the composer overlay slot while active. Close the
+  // toolbar drawers so only one popover can occupy the area above the composer.
+  useEffect(() => {
+    if (!isEmojiAutocompleteActive) return
+    setShowAttachMenu(false)
+    setShowEmojiPicker(false)
+  }, [isEmojiAutocompleteActive])
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -333,13 +409,7 @@ export function MessageComposer({
       setText(editingMessage.body)
       setEditAttachmentRemoved(false) // Reset attachment removal state
       // Focus and move cursor to end
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
-          const len = editingMessage.body.length
-          inputRef.current.setSelectionRange(len, len)
-        }
-      }, 0)
+      restoreTextareaCursor(inputRef, editingMessage.body.length)
     } else if (!editingMessage) {
       // Reset when editing is cancelled
       lastEditedMessageIdRef.current = null
@@ -452,7 +522,20 @@ export function MessageComposer({
     // *warning*. Arm the interaction grace so warnings stay quiet while typing;
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
-    setText(e.target.value)
+    // A completed `:name:` resolves to the emoji straight away, so the closing
+    // colon never lands in the message. Gated like the menu: an overlay that
+    // owns the composer keeps its own completion semantics.
+    const closedShortcode = hasExternalOverlay
+      ? null
+      : emojiAutocomplete.completeClosedShortcode(e.target.value, e.target.selectionStart)
+    if (closedShortcode) {
+      setText(closedShortcode.newText)
+      updateCaret(closedShortcode.newText, closedShortcode.newCursorPosition)
+      restoreTextareaCursor(inputRef, closedShortcode.newCursorPosition)
+    } else {
+      setText(e.target.value)
+      updateCaret(e.target.value, e.target.selectionStart)
+    }
     // inputClass is derived from `text` (see declaration), so it updates here
     // automatically — no manual sync needed.
 
@@ -576,7 +659,39 @@ export function MessageComposer({
     }
   }
 
+  const selectEmoji = (index: number) => {
+    const { newText, newCursorPosition } = emojiAutocomplete.selectMatch(index)
+    setText(newText)
+    updateCaret(newText, newCursorPosition)
+    emojiAutocomplete.dismiss()
+    restoreTextareaCursor(inputRef, newCursorPosition)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isEmojiAutocompleteActive) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        emojiAutocomplete.moveSelection('up')
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        emojiAutocomplete.moveSelection('down')
+        return
+      }
+      // Shift+Enter remains the native newline gesture even while completion is open.
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+        e.preventDefault()
+        selectEmoji(emojiAutocomplete.state.selectedIndex)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        emojiAutocomplete.dismiss()
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       // Don't submit if disabled (e.g., offline) or send-gated (e.g., whisper
@@ -603,7 +718,7 @@ export function MessageComposer({
   }
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-    onSelectionChange?.(e.currentTarget.selectionStart)
+    updateCaret(e.currentTarget.value, e.currentTarget.selectionStart)
   }
 
   // Handle clipboard paste - stage files as pending attachment
@@ -681,13 +796,9 @@ export function MessageComposer({
     setShowEmojiPicker(false)
 
     // Restore focus and set cursor after emoji
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-        const newCursorPos = cursorPos + emoji.length
-        inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
-      }
-    }, 0)
+    const newCursorPos = cursorPos + emoji.length
+    updateCaret(newText, newCursorPos)
+    restoreTextareaCursor(inputRef, newCursorPos)
   }
 
   // Default input renderer (simple textarea)
@@ -704,6 +815,7 @@ export function MessageComposer({
       spellCheck={true}
       autoCorrect="on"
       autoCapitalize="sentences"
+      {...autocompleteAriaProps}
       className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES} [grid-area:input]`}
     />
   )
@@ -743,6 +855,17 @@ export function MessageComposer({
     <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
+
+      {/* Inline emoji autocomplete dropdown */}
+      {isEmojiAutocompleteActive && (
+        <EmojiAutocompleteMenu
+          id={emojiAutocompleteListboxId}
+          matches={emojiAutocomplete.state.matches}
+          selectedIndex={emojiAutocomplete.state.selectedIndex}
+          onSelect={selectEmoji}
+          onDismiss={emojiAutocomplete.dismiss}
+        />
+      )}
 
       <div className="composer-card bg-fluux-hover">
       {/* Edit indicator */}
@@ -1011,6 +1134,7 @@ export function MessageComposer({
               onSelect: handleSelect,
               onPaste: handlePaste,
               placeholder: effectivePlaceholder,
+              ariaProps: autocompleteAriaProps,
             })}
           </div>
         ) : (

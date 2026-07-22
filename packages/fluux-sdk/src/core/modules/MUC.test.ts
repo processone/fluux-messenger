@@ -2581,4 +2581,75 @@ describe('MUC Module', () => {
       )
     })
   })
+
+  describe('directed presence priority (ejabberd representative session)', () => {
+    const ROOM = 'room@conference.example.org'
+
+    const joinedRoom = () => ({
+      jid: ROOM,
+      name: 'room',
+      joined: true,
+      isJoining: false,
+      nickname: 'mynick',
+      isBookmarked: true,
+      occupants: new Map(),
+      messages: [],
+      unreadCount: 0,
+      mentionsCount: 0,
+      typingUsers: new Set<string>(),
+    })
+
+    /**
+     * ejabberd's mod_muc_room picks the "representative" session for a nick by
+     * strictly-highest <priority>, tie → most recent joiner, and broadcasts only
+     * that session's presence (including our own status-110 self-echo). Directed
+     * presence with no <priority> reads as 0, so omitting it loses arbitration to
+     * any later-joining client forever — the user's away/dnd never reaches the room.
+     */
+    const priorityOf = (presence: { getChildText: (name: string) => string | null }) =>
+      presence.getChildText('priority')
+
+    it('sends priority on presence updates to joined rooms', async () => {
+      mockStores.room.joinedRooms.mockReturnValue([joinedRoom()])
+
+      await muc.sendPresenceToRooms('away')
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(presence.attrs.to).toBe(`${ROOM}/mynick`)
+      expect(presence.getChildText('show')).toBe('away')
+      expect(priorityOf(presence)).toBe('50')
+    })
+
+    it('sends priority when joining a room', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }, []))
+      mockStores.room.getRoom.mockReturnValue(undefined)
+
+      await muc.joinRoom(ROOM, 'mynick')
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(priorityOf(presence)).toBe('50')
+    })
+
+    it('sends priority when changing nick', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom())
+
+      const p = muc.changeNick(ROOM, 'newnick')
+      muc.handle(
+        createMockElement('presence', { from: `${ROOM}/newnick` }, [
+          {
+            name: 'x',
+            attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+            children: [
+              { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+              { name: 'status', attrs: { code: '110' } },
+            ],
+          },
+        ]),
+      )
+      await p
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(priorityOf(presence)).toBe('50')
+    })
+  })
 })

@@ -463,7 +463,8 @@
         "invitationsHeading": "Invitasjoner",
         "nickChanged": "{{oldNick}} er nå kjent som {{newNick}}",
         "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
-        "nickHiddenChars": "Navnet inneholder skjulte tegn"
+        "nickHiddenChars": "Navnet inneholder skjulte tegn",
+        "mentionSuggestions": "Omtaleforslag"
     },
     "events": {
         "invitedBy": "Invitert av {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Last inn video",
         "loadAudio": "Last inn lyd",
         "loadFilePreview": "Last inn forhåndsvisning",
-        "showLinkImage": "Vis bilde"
+        "showLinkImage": "Vis bilde",
+        "emojiSuggestions": "Emoji-forslag"
     },
     "dates": {
         "today": "I dag",

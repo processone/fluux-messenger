@@ -1485,6 +1485,69 @@ describe('chatStore', () => {
     })
   })
 
+  describe('lastMessage preview — delayed arrivals must not regress the sidebar', () => {
+    const CID = 'alice@example.com'
+    const at = (iso: string, body: string, isOutgoing = false): Message => ({
+      ...createMessage(CID, body, isOutgoing),
+      timestamp: new Date(iso),
+    })
+
+    it('keeps the newer preview when an older delayed message arrives', () => {
+      // Offline/s2s replay: the peer's 10:00 message is delivered only after we
+      // already know about a 10:05 message (persisted preview or MAM catch-up).
+      // The resident array is empty for a backgrounded conversation, so the late
+      // copy can't dedupe away — it must still not drag the sidebar backwards.
+      chatStore.getState().addConversation(createConversation(CID))
+      const newer = at('2026-07-20T10:05:00Z', 'my reply from the phone', true)
+      chatStore.getState().addMessage(newer)
+
+      chatStore.getState().addMessage({
+        ...at('2026-07-20T10:00:00Z', 'queued while you were offline'),
+        isDelayed: true,
+      })
+
+      const meta = chatStore.getState().conversationMeta.get(CID)
+      expect(meta?.lastMessage?.id).toBe(newer.id)
+      expect(chatStore.getState().conversations.get(CID)?.lastMessage?.id).toBe(newer.id)
+    })
+
+    it('still advances the preview for a delayed message that is genuinely newer', () => {
+      chatStore.getState().addConversation(createConversation(CID))
+      chatStore.getState().addMessage(at('2026-07-20T10:00:00Z', 'older'))
+
+      const newer = { ...at('2026-07-20T10:05:00Z', 'newer offline message'), isDelayed: true }
+      chatStore.getState().addMessage(newer)
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.lastMessage?.id).toBe(newer.id)
+    })
+
+    it('advances the preview across a burst sharing one timestamp', () => {
+      // XEP-0203 delay stamps are commonly second-precision, so an offline
+      // replay burst arrives with identical timestamps. Arrival order decides:
+      // a strictly-newer-only gate would freeze the sidebar on the FIRST of the
+      // burst and show the oldest message of the batch.
+      chatStore.getState().addConversation(createConversation(CID))
+      chatStore.getState().addMessage({ ...at('2026-07-20T10:00:00Z', 'burst 1'), isDelayed: true })
+      const last = { ...at('2026-07-20T10:00:00Z', 'burst 2'), isDelayed: true }
+      chatStore.getState().addMessage(last)
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.lastMessage?.id).toBe(last.id)
+    })
+
+    it('keeps the older-but-real preview when the late arrival is a bodiless placeholder', () => {
+      chatStore.getState().addConversation(createConversation(CID))
+      const real = at('2026-07-20T10:00:00Z', 'real message')
+      chatStore.getState().addMessage(real)
+
+      chatStore.getState().addMessage({
+        ...at('2026-07-20T10:05:00Z', ''),
+        encryptedPayload: '<message><openpgp>…</openpgp></message>',
+      })
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.lastMessage?.id).toBe(real.id)
+    })
+  })
+
   describe('clearMessageStanzaId', () => {
     it('strips a stale stanzaId from the in-memory message and IndexedDB', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))

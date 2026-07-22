@@ -465,7 +465,8 @@
         "invitationsHeading": "Kutsed",
         "nickChanged": "{{oldNick}} on nüüd tuntud kui {{newNick}}",
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
-        "nickHiddenChars": "Nimi sisaldab peidetud märke"
+        "nickHiddenChars": "Nimi sisaldab peidetud märke",
+        "mentionSuggestions": "Mainimiste soovitused"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",
@@ -638,7 +639,8 @@
         "loadVideo": "Laadi video",
         "loadAudio": "Laadi heli",
         "loadFilePreview": "Laadi eelvaade",
-        "showLinkImage": "Kuva pilt"
+        "showLinkImage": "Kuva pilt",
+        "emojiSuggestions": "Emoji soovitused"
     },
     "dates": {
         "today": "Täna",

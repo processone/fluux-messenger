@@ -463,7 +463,8 @@
         "invitationsHeading": "Запрошення",
         "nickChanged": "{{oldNick}} тепер відомий як {{newNick}}",
         "nickEdgeWhitespace": "Ім'я містить зайві пробіли по краях",
-        "nickHiddenChars": "Ім'я містить приховані символи"
+        "nickHiddenChars": "Ім'я містить приховані символи",
+        "mentionSuggestions": "Пропозиції згадувань"
     },
     "events": {
         "invitedBy": "Запрошено {{name}}",
@@ -638,7 +639,8 @@
         "loadVideo": "Завантажити відео",
         "loadAudio": "Завантажити аудіо",
         "loadFilePreview": "Завантажити прев'ю",
-        "showLinkImage": "Показати зображення"
+        "showLinkImage": "Показати зображення",
+        "emojiSuggestions": "Пропозиції емодзі"
     },
     "dates": {
         "today": "Сьогодні",

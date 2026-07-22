@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { blockingStore } from '../stores'
+import { blockingStore } from '../stores/blockingStore'
 import { useBlockingStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 

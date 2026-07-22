@@ -465,7 +465,8 @@
         "invitationsHeading": "Vabila",
         "nickChanged": "{{oldNick}} je zdaj znan kot {{newNick}}",
         "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
-        "nickHiddenChars": "Ime vsebuje skrite znake"
+        "nickHiddenChars": "Ime vsebuje skrite znake",
+        "mentionSuggestions": "Predlogi omemb"
     },
     "events": {
         "invitedBy": "Povabil {{name}}",
@@ -640,7 +641,8 @@
         "loadVideo": "Naloži video",
         "loadAudio": "Naloži zvok",
         "loadFilePreview": "Naloži predogled",
-        "showLinkImage": "Prikaži sliko"
+        "showLinkImage": "Prikaži sliko",
+        "emojiSuggestions": "Predlogi emojijev"
     },
     "dates": {
         "today": "Danes",

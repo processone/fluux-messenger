@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { chatStore, roomStore, connectionStore } from '../stores'
-import { shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
+import { chatStore } from '../stores/chatStore'
+import { roomStore } from '../stores/roomStore'
+import { connectionStore } from '../stores/connectionStore'
+import { isPreviewableMessage, shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
 
 /**
@@ -122,9 +124,17 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   // re-hydration (activateRoom → loadMessagesFromCache, prepending older
   // history) also trips even though the newest message is unchanged. Keying the
   // notify-once decision on the message id — not the count — stops a reload from
-  // resurrecting a banner already delivered. The 1:1 path is already immune
-  // because it dedupes by lastMessage.id.
+  // resurrecting a banner already delivered. The 1:1 path gets its arrival
+  // signal from the store instead — see prevArrivedMessageIdsRef below.
   const lastNotifiedRoomMessageIdRef = useRef<Map<string, string>>(new Map())
+
+  // Last ARRIVED message id we've seen per conversation, mirroring
+  // chatStore.lastArrivedMessage. Diffing that store field — rather than the
+  // sidebar preview — is what makes one delivery produce exactly one
+  // notification: the store writes it only in addMessage past the duplicate
+  // early-returns, so it cannot move for a merge, a duplicate echo, or a
+  // preview swap. See its declaration in chatStore for the full rationale.
+  const prevArrivedMessageIdsRef = useRef<Map<string, string>>(new Map())
 
   // Watch for new messages in 1:1 conversations
   // Uses Zustand subscribe() to avoid re-rendering the parent component
@@ -133,11 +143,18 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       const conversations = Array.from(state.conversations.values())
       const activeConversationId = state.activeConversationId
       const prevConversations = prevConversationsRef.current
+      // Defensive default: the field is always present on a real store, but the
+      // SDK is consumed by apps that mock chatStore in their own test setups.
+      const arrivedMessages = state.lastArrivedMessage ?? new Map()
+      const prevArrived = prevArrivedMessageIdsRef.current
       const onConversationMessage = handlersRef.current.onConversationMessage
       const onConversationRead = handlersRef.current.onConversationRead
 
       if (!onConversationMessage && !onConversationRead) {
         prevConversationsRef.current = conversations
+        // Keep the arrival baseline current, or attaching a handler later would
+        // replay every delivery buffered since mount as if it were new.
+        for (const [id, msg] of arrivedMessages) prevArrived.set(id, msg.id)
         return
       }
 
@@ -158,19 +175,31 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
           onConversationRead(conv.id)
         }
 
-        // Check if this conversation has a new message
-        if (onConversationMessage && conv.lastMessage) {
-          const isNewMessage = !prevConv?.lastMessage ||
-            prevConv.lastMessage.id !== conv.lastMessage.id
-          if (!isNewMessage) continue
+        // Did a message ARRIVE in this conversation? Ask the store's arrival
+        // signal, which moves once per delivery — never for the preview swaps
+        // and merges that also rewrite conv.lastMessage.
+        if (onConversationMessage) {
+          const arrived = arrivedMessages.get(conv.id)
+          if (!arrived) continue
+          if (arrived.id === prevArrived.get(conv.id)) continue
+
+          // Mark it seen before deciding: a delivery we chose NOT to notify for
+          // has still been handled, and must not be reconsidered on every tick.
+          prevArrived.set(conv.id, arrived.id)
+
+          // An undecrypted bodiless stanza may later resolve to a reaction or
+          // retraction rather than a user-visible message. It is deliberately
+          // excluded from previews, and must not post a blank notification or
+          // play the message sound while its contents are still unknown.
+          if (!isPreviewableMessage(arrived)) continue
 
           const isActive = conv.id === activeConversationId
           const notify = shouldNotifyConversation(
             {
-              id: conv.lastMessage.id,
-              timestamp: conv.lastMessage.timestamp,
-              isOutgoing: conv.lastMessage.isOutgoing,
-              isDelayed: conv.lastMessage.isDelayed,
+              id: arrived.id,
+              timestamp: arrived.timestamp,
+              isOutgoing: arrived.isOutgoing,
+              isDelayed: arrived.isDelayed,
             },
             {
               isActive,
@@ -180,9 +209,10 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
             }
           )
 
-          if (notify) {
-            onConversationMessage(conv, conv.lastMessage)
-          }
+          // Notify with the message that ARRIVED, not the current preview —
+          // they can differ, and the preview would put the wrong body in the
+          // banner.
+          if (notify) onConversationMessage(conv, arrived)
         }
       }
 

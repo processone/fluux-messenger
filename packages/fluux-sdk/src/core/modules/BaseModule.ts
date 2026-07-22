@@ -1,4 +1,4 @@
-import type { Element } from '@xmpp/client'
+import type { Client, Element } from '@xmpp/client'
 import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 import type { E2EEManager } from '../e2ee'
 import type { PresenceReader } from '../presenceReader'
@@ -31,7 +31,8 @@ export interface ModuleDependencies {
    * These events are subscribed to by XMPPProvider to update Zustand stores.
    */
   emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => void
-  getXmpp: () => any | null // The underlying xmpp client
+  /** The underlying xmpp.js client, or null when no session is live. */
+  getXmpp: () => Client | null
   /**
    * Storage adapter for session persistence.
    * Used by Connection module for SM state persistence.

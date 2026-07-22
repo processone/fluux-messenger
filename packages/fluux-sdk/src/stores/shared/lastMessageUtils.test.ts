@@ -94,6 +94,26 @@ describe('shouldReplaceLastMessage', () => {
     // The heal case: a real (older) message supersedes a newer bodiless placeholder.
     expect(shouldReplaceLastMessage(placeholder, older)).toBe(true)
   })
+
+  describe('tie policy', () => {
+    const tie = { body: 'same instant', timestamp: new Date('2024-01-15T10:00:00Z') }
+
+    it("keeps the incumbent on a tie by default (bulk merge re-scans the same message)", () => {
+      expect(shouldReplaceLastMessage(newer, tie)).toBe(false)
+      expect(shouldReplaceLastMessage(newer, tie, 'keep')).toBe(false)
+    })
+
+    it("lets arrival order win the tie for the live path", () => {
+      // Second-precision <delay/> stamps make identical timestamps common in an
+      // offline replay burst; the last to arrive is the one to show.
+      expect(shouldReplaceLastMessage(newer, tie, 'replace')).toBe(true)
+    })
+
+    it('still refuses a strictly older candidate under either policy', () => {
+      expect(shouldReplaceLastMessage(newer, older, 'replace')).toBe(false)
+      expect(shouldReplaceLastMessage(newer, older, 'keep')).toBe(false)
+    })
+  })
 })
 
 describe('isResolvedSamePreview', () => {

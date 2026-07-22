@@ -463,7 +463,8 @@
         "invitationsHeading": "Boð",
         "nickChanged": "{{oldNick}} er nú þekktur sem {{newNick}}",
         "nickEdgeWhitespace": "Nafnið er með auka bil á endunum",
-        "nickHiddenChars": "Nafnið inniheldur falda stafi"
+        "nickHiddenChars": "Nafnið inniheldur falda stafi",
+        "mentionSuggestions": "Tillögur að tilvísunum"
     },
     "events": {
         "invitedBy": "Boðið af {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Hlaða myndband",
         "loadAudio": "Hlaða hljóð",
         "loadFilePreview": "Hlaða forskoðun",
-        "showLinkImage": "Sýna mynd"
+        "showLinkImage": "Sýna mynd",
+        "emojiSuggestions": "Emoji-tillögur"
     },
     "dates": {
         "today": "Í dag",

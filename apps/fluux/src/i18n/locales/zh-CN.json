@@ -463,7 +463,8 @@
         "invitationsHeading": "邀请",
         "nickChanged": "{{oldNick}} 现在称为 {{newNick}}",
         "nickEdgeWhitespace": "名称的首尾包含多余的空格",
-        "nickHiddenChars": "名称包含隐藏字符"
+        "nickHiddenChars": "名称包含隐藏字符",
+        "mentionSuggestions": "提及建议"
     },
     "events": {
         "invitedBy": "邀请者 {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "加载视频",
         "loadAudio": "加载音频",
         "loadFilePreview": "加载预览",
-        "showLinkImage": "显示图片"
+        "showLinkImage": "显示图片",
+        "emojiSuggestions": "表情符号建议"
     },
     "dates": {
         "today": "今天",

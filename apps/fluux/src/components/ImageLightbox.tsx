@@ -11,7 +11,7 @@ import type { FileEncryption } from '@fluux/sdk'
 import { useAttachmentUrl } from '@/hooks'
 import { useCachedMediaUrl } from '@/hooks/useCachedMediaUrl'
 import { useContextMenu } from '@/hooks/useContextMenu'
-import { downloadFile } from '@/utils/download'
+import { downloadFile, downloadAttachment } from '@/utils/download'
 import { ImageContextMenu } from './ImageContextMenu'
 
 interface ImageLightboxProps {
@@ -50,6 +50,20 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   }, [onClose])
 
   const displaySrc = proxiedSrc ?? cachedFullRes ?? placeholderSrc
+  // Already-resolved (decrypted or plaintext-proxied) full-res bytes, or null.
+  const resolvedUrl = proxiedSrc ?? cachedFullRes
+
+  const handleDownload = () => {
+    const options = { errorMessage: t('common.downloadFailed') }
+    if (resolvedUrl) {
+      void downloadFile(resolvedUrl, filename || 'image', options)
+    } else if (encryption) {
+      // Encrypted but not yet resolved: decrypt on demand. Never save the ciphertext URL.
+      void downloadAttachment({ url: downloadUrl, name: filename, encryption }, options)
+    } else {
+      void downloadFile(downloadUrl, filename || 'image', options)
+    }
+  }
 
   return createPortal(
     <div
@@ -68,11 +82,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
       <div className="absolute top-4 end-4 z-10 flex items-center gap-2">
         <button
           type="button"
-          onClick={() =>
-            void downloadFile(proxiedSrc ?? cachedFullRes ?? downloadUrl, filename || 'image', {
-              errorMessage: t('common.downloadFailed'),
-            })
-          }
+          onClick={handleDownload}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.download')}
         >
@@ -109,7 +119,8 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
 
       <ImageContextMenu
         originalUrl={src}
-        proxiedUrl={proxiedSrc ?? cachedFullRes ?? downloadUrl}
+        proxiedUrl={resolvedUrl}
+        encryption={encryption}
         filename={filename}
         menu={imageMenu}
       />

@@ -463,7 +463,8 @@
         "invitationsHeading": "Kutsut",
         "nickChanged": "{{oldNick}} tunnetaan nyt nimellä {{newNick}}",
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
-        "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä"
+        "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä",
+        "mentionSuggestions": "Mainintaehdotukset"
     },
     "events": {
         "invitedBy": "Kutsuja: {{name}}",
@@ -636,7 +637,8 @@
         "loadVideo": "Lataa video",
         "loadAudio": "Lataa ääni",
         "loadFilePreview": "Lataa esikatselu",
-        "showLinkImage": "Näytä kuva"
+        "showLinkImage": "Näytä kuva",
+        "emojiSuggestions": "Emoji-ehdotukset"
     },
     "dates": {
         "today": "Tänään",
