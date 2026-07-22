@@ -1137,6 +1137,15 @@ describe('recomputeCountsFromPointer', () => {
     ...opts,
   })
 
+  it('does not claim caught-up while an XEP-0490 marker is still pending', () => {
+    const state = createInitialNotificationState()
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { hasPendingRemoteMarker: true })
+    // Untouched: the pending fold owns resolving this position.
+    expect(out).toBe(state)
+    expect(out.lastSeenMessageId).toBeUndefined()
+  })
+
   it('fresh entity (no pointer, no lastReadAt) is caught up: snaps pointer to newest, zero counts', () => {
     const state = createInitialNotificationState()
     const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]

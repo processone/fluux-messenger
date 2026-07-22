@@ -41,6 +41,7 @@ import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
+import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
@@ -255,6 +256,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(true)
+
+  // Publish the viewport-at-bottom truth so the global focus handler can tell a
+  // genuine "user is looking at the newest message" from a view merely parked at
+  // the live edge (issue #1076). Registers the ref object, so the scroll hook's
+  // many writes to `.current` need no notification.
+  useEffect(() => {
+    if (!activeRoomJid) return
+    return registerViewportBottomRef('room', activeRoomJid, isAtBottomRef)
+  }, [activeRoomJid])
 
   // Composer handle ref for focusing after staging attachment
   const composerHandleRef = useRef<MessageComposerHandle>(null)
