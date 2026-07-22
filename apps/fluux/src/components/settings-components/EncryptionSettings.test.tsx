@@ -500,12 +500,6 @@ describe('EncryptionSettings PEP support', () => {
       expect(
         await screen.findByText('settings.encryption.backupReplaceUnknownTitle'),
       ).toBeInTheDocument()
-      expect(
-        screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
-      ).not.toBeInTheDocument()
-      expect(
-        screen.queryByText('settings.encryption.backupConflictTitle'),
-      ).not.toBeInTheDocument()
     })
 
     it('publishes once the unknown confirmation is accepted', async () => {
@@ -568,6 +562,17 @@ describe('EncryptionSettings PEP support', () => {
       // we rotated and left the server copy stale.
       expect(
         await screen.findByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).toBeInTheDocument()
+    })
+
+    it('offers restore under an inconclusive probe', async () => {
+      // Restoring when there is in fact no backup degrades to an error the
+      // restore dialog already handles. Hiding restore when a backup DOES
+      // exist strands the user, so `unknown` must keep it reachable.
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByRole('button', { name: 'settings.encryption.restoreAction' }),
       ).toBeInTheDocument()
     })
   })

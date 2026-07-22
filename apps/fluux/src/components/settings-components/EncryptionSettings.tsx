@@ -1114,14 +1114,17 @@ export function EncryptionSettings() {
               </p>
             )}
             {(() => {
-              // Three visible states:
+              // Four visible states:
               //   checking  → pre-probe transient
               //   inSync    → server has a backup AND it matches this
               //               device's current fingerprint (by our local
               //               marker).
               //   outOfSync → backup is missing, or present but for a
               //               different fingerprint.
-              // The three states drive the STATUS LINE only. The buttons
+              //   unknown   → the probe could not reach a definitive answer;
+              //               treated as "a backup might exist" since the
+              //               dangerous assumption is absence.
+              // These four states drive the STATUS LINE only. The buttons
               // render regardless: the marker records a fingerprint, not
               // the blob's encoding, so an in-sync backup can still be one
               // no other XEP-0373 client can open (#1021) and the user
