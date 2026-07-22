@@ -356,6 +356,13 @@ export const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   },
 }
 
+/**
+ * Three-state result of probing the server for a secret-key backup.
+ * `unknown` means the probe could not reach a definitive answer — see
+ * {@link OpenPGPPluginBase.probeSecretKeyBackup}.
+ */
+export type BackupProbeResult = 'present' | 'absent' | 'unknown'
+
 // ---------------------------------------------------------------------------
 // Abstract base class
 // ---------------------------------------------------------------------------
@@ -1043,24 +1050,69 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     writeBackedUpFingerprint(ctx.account.jid, this.ownBundle.fingerprint)
   }
 
+  /**
+   * Query our own XEP-0373 §5 secret-key node.
+   *
+   * Returns the armored backup when one exists. Returns `null` ONLY when the
+   * server has confirmed there is none: an `item-not-found` IQ error, or a
+   * node that resolved but carried no `<secretkey>` item.
+   *
+   * Every other failure THROWS — timeout, transport down, permission, or an
+   * item we found but could not decode. Collapsing those to "no backup" is
+   * what let callers overwrite a real backup and told restoring users their
+   * backup did not exist. Callers that want a non-throwing answer should use
+   * {@link probeSecretKeyBackup}.
+   */
   async fetchSecretKeyBackup(): Promise<string | null> {
     const ctx = this.requireCtx()
+    let items: Awaited<ReturnType<typeof ctx.xmpp.queryPEP>>
     try {
-      const items = await ctx.xmpp.queryPEP(ctx.account.jid, SECRET_KEY_NODE, 1)
-      for (const item of items) {
-        const armored = parseSecretKeyBackupItem(item.payload)
-        if (armored) return armored
-      }
+      items = await ctx.xmpp.queryPEP(ctx.account.jid, SECRET_KEY_NODE, 1)
     } catch (err) {
-      ctx.logger.debug(
-        `${this.pluginName()}: fetchSecretKeyBackup: ${formatError(err)} (treated as no backup)`,
-      )
+      if (isItemNotFoundError(err)) return null
+      throw this.toPluginError('fetchSecretKeyBackup', err)
+    }
+    for (const item of items) {
+      let armored: string | null
+      try {
+        armored = parseSecretKeyBackupItem(item.payload)
+      } catch (err) {
+        // We DID find a `<secretkey>` item — there is something on the
+        // server, we just cannot decode it. Reporting absence here would
+        // let a caller overwrite that something with a fresh key.
+        throw this.toPluginError('fetchSecretKeyBackup', err)
+      }
+      if (armored) return armored
     }
     return null
   }
 
+  /**
+   * Non-throwing three-state answer to "is there a backup on the server?".
+   *
+   * `unknown` is not a failure to be retried silently — it is information the
+   * UI must act on. Every consumer treats it as "a backup might exist",
+   * because in each case the dangerous action is the one that assumes
+   * absence: overwriting the node, rotating without re-publishing, hiding
+   * the delete-the-backup option, or offering to generate a fresh key.
+   */
+  async probeSecretKeyBackup(): Promise<BackupProbeResult> {
+    try {
+      return (await this.fetchSecretKeyBackup()) === null ? 'absent' : 'present'
+    } catch (err) {
+      this.requireCtx().logger.debug(
+        `${this.pluginName()}: secret-key backup probe inconclusive: ${formatError(err)}`,
+      )
+      return 'unknown'
+    }
+  }
+
+  /**
+   * @deprecated Collapses `unknown` to `false`. Retained only until the last
+   * consumer migrates to {@link probeSecretKeyBackup}; removed in Task 4.
+   */
   async hasSecretKeyBackup(): Promise<boolean> {
-    return (await this.fetchSecretKeyBackup()) !== null
+    return (await this.probeSecretKeyBackup()) === 'present'
   }
 
   async restoreSecretKey(passphrase: string): Promise<RestoreResult> {
@@ -2349,6 +2401,23 @@ function parseSecretKeyBackupItem(payload: XMLElementData): string | null {
   if (payload.name !== 'secretkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
   const encoded = firstText(payload)
   return encoded ? base64DecodeOpenPgpBlock(encoded, 'PGP MESSAGE') : null
+}
+
+/**
+ * `item-not-found` is the only IQ error condition that means "this node was
+ * never created", i.e. the user has genuinely never published a backup.
+ * ejabberd and Prosody both return it for an absent node. Every other
+ * failure (timeout, transport down, permission, internal error) leaves the
+ * question open and must NOT collapse to "no backup".
+ *
+ * The IQ caller surfaces XMPP conditions inside the Error message; the
+ * codebase convention is to substring-match the condition name. Mirrors
+ * `secretKeyProbe.ts`, which established these semantics for the
+ * plugin-less toggle-on path.
+ */
+function isItemNotFoundError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.includes('item-not-found')
 }
 
 function firstAttr(

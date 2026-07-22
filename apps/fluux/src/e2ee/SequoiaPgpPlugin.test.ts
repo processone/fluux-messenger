@@ -2900,6 +2900,111 @@ describe('SequoiaPgpPlugin', () => {
     })
   })
 
+  // A failed probe used to be indistinguishable from an empty node:
+  // fetchSecretKeyBackup swallowed every error and returned null. Callers
+  // then read "no backup exists" when the truthful answer was "could not
+  // find out", which let the settings panel overwrite a real backup and
+  // told restoring users their backup did not exist. Only `item-not-found`
+  // means absent; everything else is an open question.
+  describe('secret-key backup probe classification', () => {
+    it('reports absent when the server returns item-not-found', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => {
+        throw new Error('item-not-found')
+      }
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('absent')
+    })
+
+    it('reports absent when the node resolves with no secretkey item', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => []
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('absent')
+    })
+
+    it('reports unknown when the query times out', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => {
+        throw new Error('remote-server-timeout')
+      }
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('unknown')
+    })
+
+    it('reports unknown when the transport is down', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => {
+        throw new Error('not connected')
+      }
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('unknown')
+    })
+
+    it('reports unknown when a secretkey item is present but undecodable', async () => {
+      // Something IS on the server. Reporting absence would let a caller
+      // overwrite it, which is the whole failure this change prevents.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => [
+        {
+          id: 'current',
+          payload: {
+            name: 'secretkey',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: ['!!!not-base64!!!'],
+          },
+        },
+      ]
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('unknown')
+    })
+
+    it('reports present when a decodable backup exists', async () => {
+      // Control test: the harness's publishPEP writes into the same map
+      // queryPEP reads, so this proves the fixture can reach a positive
+      // result and the negative expectations above are not vacuous.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('probe-classification-pp')
+
+      expect(await plugin.probeSecretKeyBackup()).toBe('present')
+    })
+
+    it('surfaces a transient error from restoreSecretKey when the probe fails', async () => {
+      // Previously this raised permanent/no-backup — "no secret-key backup
+      // found on server" — at the exact moment a user decides whether to
+      // replace their identity.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => {
+        throw new Error('remote-server-timeout')
+      }
+
+      await expect(plugin.restoreSecretKey('pp')).rejects.toMatchObject({
+        kind: 'transient',
+      })
+    })
+
+    it('still raises no-backup when the server confirms there is none', async () => {
+      // Control test for the pair above: the no-backup path must survive.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.queryPEP = async () => {
+        throw new Error('item-not-found')
+      }
+
+      await expect(plugin.restoreSecretKey('pp')).rejects.toMatchObject({
+        kind: 'permanent',
+        code: 'no-backup',
+      })
+    })
+  })
+
   describe('trust-state verdict instrumentation', () => {
     // Task 4: After computing the trust-state verdict, the plugin must log it
     // via ctx.logger.info so it lands in both the webview console (fluux.log)
