@@ -103,7 +103,7 @@ describe('resolveTransparency (software-rendering probe)', () => {
         themeWantsReduced: false,
         transparencyMode: 'reduced',
         systemReducedMatches: false,
-        compositorCannotBlur: false,
+        compositorCannotBlur: true,
       }),
     ).toBe('reduced')
   })
@@ -114,7 +114,7 @@ describe('resolveTransparency (software-rendering probe)', () => {
         themeWantsReduced: true,
         transparencyMode: 'full',
         systemReducedMatches: false,
-        compositorCannotBlur: false,
+        compositorCannotBlur: true,
       }),
     ).toBe('reduced')
   })
