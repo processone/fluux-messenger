@@ -2076,23 +2076,26 @@ describe('chatStore', () => {
       expect(conversationData[1].lastMessage.body).toBe('Test')
     })
 
-    it('should reset unreadCount to 0 when deserializing', () => {
-      // This tests the behavior that unread counts are session-specific
+    // Deserialization used to zero the count, so a cold start flashed empty
+    // badges until something recomputed them (#1081). The persisted count is
+    // now what paints first.
+    it('keeps the persisted unreadCount when deserializing', async () => {
       const conv = { ...createConversation('alice@example.com'), unreadCount: 5 }
       chatStore.getState().addConversation(conv)
 
-      // Get the serialized data
-      const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
-      const serialized = lastCall[1]
+      // The serialized data carries the count...
+      const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
+      expect(JSON.parse(persisted).state.conversations[0][1].unreadCount).toBe(5)
 
-      // Check that when we would deserialize, unreadCount gets reset
-      // (The actual deserialization logic resets unreadCount to 0)
-      const parsed = JSON.parse(serialized)
+      // ...and the restore keeps it. (Clearing the store re-persists an empty
+      // payload, so the captured one has to be put back before rehydrating.)
+      chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
+      localStorageMock._store['xmpp-chat-storage'] = persisted
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
 
-      // The serialized data preserves the unreadCount
-      expect(parsed.state.conversations[0][1].unreadCount).toBe(5)
-
-      // But the deserializeState function resets it (tested via behavior)
+      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(5)
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.unreadCount).toBe(5)
     })
 
     it('should handle corrupted localStorage gracefully', () => {

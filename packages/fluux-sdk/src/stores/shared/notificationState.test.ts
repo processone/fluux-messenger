@@ -285,7 +285,7 @@ describe('onActivate', () => {
     it('uses lastReadAt even when unreadCount is 0 (post-restart)', () => {
       const state = makeState({
         lastSeenMessageId: 'very-old-msg',
-        unreadCount: 0, // reset to 0 after app restart deserialization
+        unreadCount: 0, // restored with nothing counted as unread
         lastReadAt: new Date('2025-01-15T10:15:00Z'),
       })
       const result = onActivate(state, messages)

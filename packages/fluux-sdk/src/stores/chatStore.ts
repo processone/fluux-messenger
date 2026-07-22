@@ -18,12 +18,12 @@ import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMess
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { deserializeReadPointer, makeReadPointer } from './shared/readPointer'
+import { advance, deserializeReadPointer, makeReadPointer, type ReadPointer } from './shared/readPointer'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
-import { buildScopedStorageKey } from '../utils/storageScope'
+import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -537,7 +537,132 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
   }
 }
 
-// Deserialize arrays back to Maps, reset unread counts, restore Date objects
+/**
+ * One-shot migration of legacy read state to a {@link ReadPointer}.
+ *
+ * Every branch resolves AT OR BEHIND the user's true position, never ahead.
+ * Today's `lastReadAt` means "timestamp of the newest LOADED message when I last
+ * activated" — not "the message I read up to" — so treating it as an upper bound
+ * and taking the newest message at or before it is the closest honest reading.
+ * The pointer is forward-only: under-advancing costs the user a few extra unread
+ * messages, over-advancing destroys the position for good.
+ */
+export async function migrateReadPointer(
+  conversationId: string,
+  legacy: { lastSeenMessageId?: string; lastReadAt?: Date }
+): Promise<ReadPointer | undefined> {
+  const { lastSeenMessageId, lastReadAt } = legacy
+
+  if (lastSeenMessageId && lastReadAt) {
+    return { messageId: lastSeenMessageId, timestamp: lastReadAt }
+  }
+
+  if (lastSeenMessageId) {
+    const cached = await messageCache.getMessage(lastSeenMessageId)
+    if (cached) return makeReadPointer(cached)
+    return undefined
+  }
+
+  if (lastReadAt) {
+    // Newest message at or before the timestamp. `before` builds an EXCLUSIVE
+    // upper bound (messageCache.ts: `IDBKeyRange.upperBound([...], true)`), so we
+    // probe one millisecond past the timestamp to make the bound inclusive; and
+    // `before` alone already forces the backwards cursor, so `limit: 1` yields
+    // the NEWEST match rather than the oldest.
+    const [newest] = await messageCache.getMessages(conversationId, {
+      before: new Date(lastReadAt.getTime() + 1),
+      limit: 1,
+      latest: true,
+    })
+    return newest ? makeReadPointer(newest) : undefined
+  }
+
+  return undefined
+}
+
+/**
+ * Fill `readPointer` into a conversation that was restored without one.
+ *
+ * Forward-only via {@link advance}: if the user opened the conversation and read
+ * on before the backfill resolved, their newer position wins and this is a
+ * no-op. The migrated candidate is derived from legacy fields captured at
+ * rehydrate, so it is at or behind the true position by construction — it can
+ * only ever fill a gap, never push the pointer past something unread.
+ *
+ * `conversationMeta` and `conversations` are written in ONE `setState`, so the
+ * conversation is never observable holding a pointer in one map and not the
+ * other. Until this lands it simply looks un-migrated, which is a valid state.
+ */
+function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer): void {
+  chatStore.setState((state) => {
+    const meta = state.conversationMeta.get(conversationId)
+    const conv = state.conversations.get(conversationId)
+    // Gone (deleted, logged out, account switched) — nothing to migrate into.
+    if (!meta && !conv) return {}
+
+    const current = meta?.readPointer ?? conv?.readPointer
+    const next = advance(current, migrated)
+    if (next === current) return {}
+
+    const update: Partial<ChatState> = {}
+    if (meta) {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(conversationId, { ...meta, readPointer: next })
+      update.conversationMeta = newMeta
+    }
+    if (conv) {
+      const newConversations = new Map(state.conversations)
+      newConversations.set(conversationId, { ...conv, readPointer: next })
+      update.conversations = newConversations
+    }
+    return update
+  })
+}
+
+/**
+ * Post-rehydrate backfill: give every restored conversation a `readPointer`.
+ *
+ * `deserializeState` is synchronous and the migration needs the message cache,
+ * so this runs fire-and-forget after the restored state lands — the same shape
+ * as the localStorage-messages → IndexedDB migration below it. Conversations
+ * persisted before #1081 carry only `lastSeenMessageId` / `lastReadAt`; without
+ * this pass they would have no pointer at all once those fields are gone.
+ *
+ * The scope jid is captured up front: an account switch mid-pass must not write
+ * the previous account's positions into the new account's conversations.
+ */
+function scheduleReadPointerBackfill(conversationMeta: Map<string, ConversationMetadata>): void {
+  const pending: Array<[string, { lastSeenMessageId?: string; lastReadAt?: Date }]> = []
+  for (const [id, meta] of conversationMeta) {
+    // Already migrated (or written this session) — leave it alone.
+    if (meta.readPointer) continue
+    // Never read: no legacy state to carry forward, so no pointer is correct.
+    if (!meta.lastSeenMessageId && !meta.lastReadAt) continue
+    pending.push([id, { lastSeenMessageId: meta.lastSeenMessageId, lastReadAt: meta.lastReadAt }])
+  }
+  if (pending.length === 0) return
+
+  const scopeAtSchedule = getStorageScopeJid()
+  void (async () => {
+    // Yield a full task before touching the store. `deserializeState` runs from
+    // INSIDE the persist middleware's `getItem`, so the restored state has not
+    // been applied yet — and the both-fields branch below needs no cache read,
+    // so without this its continuation could run first and write a pointer into
+    // a conversation that does not exist yet. That write would no-op and the
+    // migration would be lost silently, which is exactly what Task 6b cannot
+    // survive. This also keeps the store reference off the module's own
+    // evaluation stack.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    for (const [conversationId, legacy] of pending) {
+      const migrated = await migrateReadPointer(conversationId, legacy)
+      if (getStorageScopeJid() !== scopeAtSchedule) return
+      if (migrated) applyMigratedReadPointer(conversationId, migrated)
+    }
+  })()
+}
+
+// Deserialize arrays back to Maps, restore Date objects
 // Also handles migration of old localStorage messages to IndexedDB
 function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions'> {
   // Helper to restore Date objects in lastMessage
@@ -570,7 +695,9 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         id,
         {
           ...meta,
-          unreadCount: 0, // Reset unread on restore
+          // The persisted count paints on cold start. Zeroing it here flashed
+          // empty badges on every launch until something recomputed (#1081).
+          unreadCount: meta.unreadCount ?? 0,
           lastMessage: restoreLastMessage(meta.lastMessage),
           lastReadAt: restoreLastReadAt(meta.lastReadAt),
           historyFloor: restoreLastReadAt(meta.historyFloor),
@@ -600,7 +727,8 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           ...conv,
           // Default to 'chat' for conversations stored before the type field was added
           type: conv.type ?? 'chat',
-          unreadCount: 0, // Reset unread on restore
+          // See the new-format branch: the persisted count survives the restore.
+          unreadCount: conv.unreadCount ?? 0,
           lastMessage: restoreLastMessage(conv.lastMessage),
           lastReadAt: restoreLastReadAt(conv.lastReadAt),
           historyFloor: restoreLastReadAt(conv.historyFloor),
@@ -629,6 +757,11 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
       })
     }
   }
+
+  // Give every restored conversation a readPointer (fire-and-forget; #1081).
+  // Runs after the restored maps land, since the resolution needs the async
+  // message cache and this function is synchronous.
+  scheduleReadPointerBackfill(conversationMeta)
 
   // Migrate old localStorage messages to IndexedDB (one-time migration)
   if (persisted.messages && persisted.messages.length > 0) {
