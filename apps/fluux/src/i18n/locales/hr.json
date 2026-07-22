@@ -708,6 +708,7 @@
         "notificationDescriptionWeb": "Obavijesti vas upozoravaju na nove poruke kada je aplikacija u pozadini.",
         "requestPermission": "Omogući",
         "openSystemNotificationSettings": "Otvori postavke obavijesti sustava",
+        "openSystemNotificationSettingsFailed": "Sustavske postavke obavijesti nije moguće otvoriti. Otvorite ih u postavkama svoje radne površine.",
         "webPushStatus": "Web push obavijesti",
         "webPush_unavailable": "Poslužitelj ne podržava",
         "webPush_available": "Dostupno, dodirnite za omogućavanje",

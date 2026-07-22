@@ -708,6 +708,7 @@
         "notificationDescriptionWeb": "Οι ειδοποιήσεις σας ειδοποιούν για νέα μηνύματα όταν η εφαρμογή είναι στο παρασκήνιο.",
         "requestPermission": "Ενεργοποίηση",
         "openSystemNotificationSettings": "Άνοιγμα ρυθμίσεων ειδοποιήσεων συστήματος",
+        "openSystemNotificationSettingsFailed": "Δεν ήταν δυνατό το άνοιγμα των ρυθμίσεων ειδοποιήσεων συστήματος. Ανοίξτε τις από τις ρυθμίσεις της επιφάνειας εργασίας σας.",
         "webPushStatus": "Ειδοποιήσεις web push",
         "webPush_unavailable": "Δεν υποστηρίζεται από τον διακομιστή",
         "webPush_available": "Διαθέσιμο, πατήστε για ενεργοποίηση",

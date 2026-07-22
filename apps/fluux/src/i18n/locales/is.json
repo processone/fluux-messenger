@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Tilkynningar láta þig vita af nýjum skilaboðum þegar forritið er í bakgrunni.",
         "requestPermission": "Virkja",
         "openSystemNotificationSettings": "Opna tilkynningastillingar kerfisins",
+        "openSystemNotificationSettingsFailed": "Ekki tókst að opna tilkynningastillingar kerfisins. Opnaðu þær í stillingum skjáborðsins.",
         "webPushStatus": "Vef push-tilkynningar",
         "webPush_unavailable": "Ekki stutt af þjóni",
         "webPush_available": "Tiltækt, ýttu til að virkja",

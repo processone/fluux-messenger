@@ -899,6 +899,7 @@
         "notificationDescriptionWeb": "Notifications alert you to new messages when the app is in the background.",
         "requestPermission": "Enable",
         "openSystemNotificationSettings": "Open system notification settings",
+        "openSystemNotificationSettingsFailed": "Could not open the system notification settings. Please open them from your desktop settings.",
         "webPushStatus": "Web Push Notifications",
         "webPush_unavailable": "Not supported by server",
         "webPush_available": "Available, tap to enable",

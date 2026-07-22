@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Апавяшчэнні паведамляюць пра новыя паведамленні, калі дадатак у фоне.",
         "requestPermission": "Уключыць",
         "openSystemNotificationSettings": "Адкрыць сістэмныя налады апавяшчэнняў",
+        "openSystemNotificationSettingsFailed": "Не ўдалося адкрыць сістэмныя налады апавяшчэнняў. Адкрыйце іх у наладах працоўнага стала.",
         "webPushStatus": "Web push-апавяшчэнні",
         "webPush_unavailable": "Сервер не падтрымлівае",
         "webPush_available": "Даступна, націсніце, каб уключыць",

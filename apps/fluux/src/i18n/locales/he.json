@@ -708,6 +708,7 @@
         "notificationDescriptionWeb": "התראות מתריעות על הודעות חדשות כשהאפליקציה ברקע.",
         "requestPermission": "אפשר",
         "openSystemNotificationSettings": "פתח את הגדרות ההתראות של המערכת",
+        "openSystemNotificationSettingsFailed": "לא ניתן היה לפתוח את הגדרות ההתראות של המערכת. פתח אותן מהגדרות שולחן העבודה שלך.",
         "webPushStatus": "התראות Web Push",
         "webPush_unavailable": "לא נתמך על ידי השרת",
         "webPush_available": "זמין - לחץ להפעלה",

@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Teavitused hoiatavad sind uute sõnumite eest, kui rakendus on taustal.",
         "requestPermission": "Luba",
         "openSystemNotificationSettings": "Ava süsteemi teavituste seaded",
+        "openSystemNotificationSettingsFailed": "Süsteemi teavituste sätteid ei õnnestunud avada. Ava need oma töölaua sätetest.",
         "webPushStatus": "Veebi push-teavitused",
         "webPush_unavailable": "Server ei toeta",
         "webPush_available": "Saadaval, puuduta lubamiseks",

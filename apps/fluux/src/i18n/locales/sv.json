@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Aviseringar meddelar dig om nya meddelanden när appen är i bakgrunden.",
         "requestPermission": "Aktivera",
         "openSystemNotificationSettings": "Öppna systemets aviseringsinställningar",
+        "openSystemNotificationSettingsFailed": "Det gick inte att öppna systemets aviseringsinställningar. Öppna dem från skrivbordets inställningar.",
         "webPushStatus": "Webb-pushnotiser",
         "webPush_unavailable": "Stöds inte av servern",
         "webPush_available": "Tillgängligt, tryck för att aktivera",

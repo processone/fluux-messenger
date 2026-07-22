@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Az értesítések figyelmeztetik az új üzenetekre, amikor az alkalmazás a háttérben fut.",
         "requestPermission": "Engedélyezés",
         "openSystemNotificationSettings": "Rendszerértesítési beállítások megnyitása",
+        "openSystemNotificationSettingsFailed": "A rendszerértesítési beállítások megnyitása nem sikerült. Nyissa meg őket az asztali környezet beállításaiban.",
         "webPushStatus": "Webes push értesítések",
         "webPush_unavailable": "A szerver nem támogatja",
         "webPush_available": "Elérhető, érintse meg az aktiváláshoz",

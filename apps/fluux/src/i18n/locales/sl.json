@@ -711,6 +711,7 @@
         "notificationDescriptionWeb": "Obvestila vas opozorijo na nova sporočila, ko je aplikacija v ozadju.",
         "requestPermission": "Omogoči",
         "openSystemNotificationSettings": "Odpri sistemske nastavitve obvestil",
+        "openSystemNotificationSettingsFailed": "Sistemskih nastavitev obvestil ni bilo mogoče odpreti. Odprite jih v nastavitvah svojega namizja.",
         "webPushStatus": "Spletna push obvestila",
         "webPush_unavailable": "Strežnik ne podpira",
         "webPush_available": "Na voljo, tapnite za vklop",

@@ -710,6 +710,7 @@
         "notificationDescriptionWeb": "Notificările te alertează despre mesaje noi când aplicația este în fundal.",
         "requestPermission": "Activează",
         "openSystemNotificationSettings": "Deschide setările de notificări ale sistemului",
+        "openSystemNotificationSettingsFailed": "Setările de notificări ale sistemului nu au putut fi deschise. Deschideți-le din setările desktopului.",
         "webPushStatus": "Notificări push web",
         "webPush_unavailable": "Nu este suportat de server",
         "webPush_available": "Disponibil, atinge pentru activare",

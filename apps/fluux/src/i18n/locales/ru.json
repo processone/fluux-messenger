@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Уведомления оповещают о новых сообщениях, когда приложение свёрнуто.",
         "requestPermission": "Включить",
         "openSystemNotificationSettings": "Открыть системные настройки уведомлений",
+        "openSystemNotificationSettingsFailed": "Не удалось открыть системные настройки уведомлений. Откройте их в настройках рабочего стола.",
         "webPushStatus": "Web push-уведомления",
         "webPush_unavailable": "Не поддерживается сервером",
         "webPush_available": "Доступно, нажмите для включения",

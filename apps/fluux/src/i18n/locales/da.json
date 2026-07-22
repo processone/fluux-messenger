@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Notifikationer advarer dig om nye beskeder, når appen er i baggrunden.",
         "requestPermission": "Aktiver",
         "openSystemNotificationSettings": "Åbn systemets notifikationsindstillinger",
+        "openSystemNotificationSettingsFailed": "Systemets notifikationsindstillinger kunne ikke åbnes. Åbn dem via indstillingerne for dit skrivebord.",
         "webPushStatus": "Web-pushnotifikationer",
         "webPush_unavailable": "Ikke understøttet af serveren",
         "webPush_available": "Tilgængelig, tryk for at aktivere",

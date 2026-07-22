@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Сповіщення повідомляють про нові повідомлення, коли додаток у фоні.",
         "requestPermission": "Увімкнути",
         "openSystemNotificationSettings": "Відкрити системні налаштування сповіщень",
+        "openSystemNotificationSettingsFailed": "Не вдалося відкрити системні налаштування сповіщень. Відкрийте їх у налаштуваннях робочого столу.",
         "webPushStatus": "Web push-сповіщення",
         "webPush_unavailable": "Сервер не підтримує",
         "webPush_available": "Доступно, натисніть, щоб увімкнути",
