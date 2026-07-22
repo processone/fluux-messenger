@@ -551,6 +551,29 @@ type PersistedConversation = Conversation & PersistedReadState
  */
 const unmigratedLegacyReadState = new Map<string, Map<string, LegacyReadState>>()
 
+/**
+ * Does this conversation still owe a `readPointer` to the #1081 migration?
+ *
+ * The fresh-entity guard in `recomputeCountsFromPointer` reads "no pointer" as
+ * "brand new, caught up" and snaps the pointer to the newest message. For a
+ * conversation whose migration probe has not resolved yet that is destructive
+ * twice over: the fabricated pointer retires the legacy pair from disk (see
+ * {@link withUnmigratedReadState}), and the pointer is forward-only, so the
+ * correct — older — pointer the next attempt would produce could never win. The
+ * conversation's unread history is silently marked read, permanently.
+ *
+ * Callers pass this as `hasUnmigratedLegacyReadState`, the twin of
+ * `hasPendingRemoteMarker` (#1076): both say "this entity HAS a read position,
+ * we just cannot express it as a local message id yet".
+ *
+ * Reads the ambient storage key, the same one `serializeState` writes under, so
+ * an account switch simply misses rather than answering for the wrong account.
+ * Costs one Map.get, and a second only while a migration is outstanding.
+ */
+function hasUnmigratedLegacyReadState(conversationId: string): boolean {
+  return unmigratedLegacyReadState.get(getScopedStorageKey())?.has(conversationId) ?? false
+}
+
 // Serialization types for localStorage
 // Note: messages are NOT persisted in localStorage - they're in IndexedDB
 // Only conversations metadata, archivedConversations, and drafts are persisted here
@@ -1803,7 +1826,11 @@ export const chatStore = createStore<ChatState>()(
                   readPointer: meta.readPointer,
                   firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
                 }
-                const exact = notifState.recomputeCountsFromPointer(pointerState, cached)
+                const exact = notifState.recomputeCountsFromPointer(pointerState, cached, {
+                  // Same stand-down as the other recount sites: an un-migrated
+                  // legacy read position must not be overwritten by a snap.
+                  hasUnmigratedLegacyReadState: hasUnmigratedLegacyReadState(conversationId),
+                })
                 if (exact === pointerState) return state
                 const newMeta = new Map(state.conversationMeta)
                 newMeta.set(conversationId, {
@@ -2217,7 +2244,12 @@ export const chatStore = createStore<ChatState>()(
             readPointer: meta.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
-          const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice)
+          const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice, {
+            // A conversation still waiting on the #1081 migration has a read
+            // position we cannot express as a message id yet — snapping the
+            // pointer to newest here would destroy it (forward-only).
+            hasUnmigratedLegacyReadState: hasUnmigratedLegacyReadState(conversationId),
+          })
           // Same-reference return = nothing changed; skip the map churn.
           if (recomputed === pointerState) return state
 
@@ -2533,6 +2565,10 @@ export const chatStore = createStore<ChatState>()(
                 // fold is forward-only — so the guard must not snap the pointer
                 // past it first (issue #1076).
                 hasPendingRemoteMarker: meta.pendingRemoteDisplayedStanzaId !== undefined,
+                // Same for a pre-#1081 read position the migration has not
+                // resolved yet: this very catch-up is what fills the cache the
+                // next attempt needs, so a snap here is what would destroy it.
+                hasUnmigratedLegacyReadState: hasUnmigratedLegacyReadState(conversationId),
               })
               // Same-reference return = nothing changed; skip the map churn.
               if (recomputed !== pointerState) hydrated = recomputed

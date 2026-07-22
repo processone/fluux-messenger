@@ -226,6 +226,41 @@ describe('room read state persistence', () => {
     expect(meta?.historyFloor).toEqual(floor)
   })
 
+  // The SDK state snapshot carries a `readPointer` again since #1081, so a
+  // restored Room can arrive holding one — and it is a 500 ms-debounced mirror of
+  // the same store the durable row is written from synchronously, so it can be
+  // BEHIND that row. Taking it at face value would then have addRoom's
+  // persistRoomReadState write the older position back over the newer one.
+  // Neither source can be ahead of the user's true position, so the later wins.
+  it('keeps the durable pointer when the snapshot Room carries a staler one', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([[ROOM, { readPointer: { messageId: 'm9', timestamp: 9000 }, historyFloor: 1000 }]])
+    )
+    roomStore.getState().switchAccount(JID)
+
+    // The snapshot was written before the last few advances landed.
+    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { messageId: 'm5', timestamp: new Date(5000) } } as Room)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+    // …and the durable row must not have been overwritten with the staler one.
+    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+  })
+
+  // Control for the same rule in the other direction: the snapshot is not being
+  // ignored, it simply has to be the later of the two to win.
+  it('takes the snapshot pointer when it is ahead of the durable row', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([[ROOM, { readPointer: { messageId: 'm5', timestamp: 5000 }, historyFloor: 1000 }]])
+    )
+    roomStore.getState().switchAccount(JID)
+
+    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { messageId: 'm9', timestamp: new Date(9000) } } as Room)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+  })
+
   it('drops a removed room from the durable copy', () => {
     roomStore.getState().addRoom(makeRoom(ROOM))
     expect(loadRoomReadState(JID).has(ROOM)).toBe(true)

@@ -1212,6 +1212,18 @@ describe('recomputeCountsFromPointer', () => {
     expect(out.readPointer).toBeUndefined()
   })
 
+  // Twin of the case above, for the #1081 migration: a conversation whose legacy
+  // read state has not resolved into a pointer yet HAS a read position — snapping
+  // to newest here retires the legacy values and, forward-only, outranks the
+  // correct older pointer the next attempt would produce.
+  it('does not claim caught-up while legacy read state is still un-migrated', () => {
+    const state = createInitialNotificationState()
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { hasUnmigratedLegacyReadState: true })
+    expect(out).toBe(state)
+    expect(out.readPointer).toBeUndefined()
+  })
+
   it('fresh entity (no read pointer) is caught up: snaps pointer to newest, zero counts', () => {
     const state = createInitialNotificationState()
     const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]

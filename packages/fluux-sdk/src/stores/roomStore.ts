@@ -31,7 +31,7 @@ import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { makeReadPointer } from './shared/readPointer'
+import { advance, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -271,15 +271,23 @@ function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
  * The read position a room should start (or restart) with, resolved from ONE
  * source and written as a whole.
  *
- * Priority: what the store already holds → what the caller supplied → what
- * survived the last run. Never a field-by-field merge across sources: a read
- * position is one `readPointer`, and mixing halves of two of them is exactly
- * the drift #1081 undid.
+ * Priority: what the store already holds → then the LATER of what the caller
+ * supplied and what survived the last run. Never a field-by-field merge across
+ * sources: a read position is one `readPointer`, and mixing halves of two of
+ * them is exactly the drift #1081 undid — `advance` picks one whole pointer.
  *
  * The store's own value wins because `addRoom` runs again on rejoin and on
  * bookmark reload, and those Room objects are rebuilt from presence/bookmark
  * data that carries no read state — taking them at face value would wipe a
  * live pointer.
+ *
+ * Between the other two, neither can be ahead of the user's true position, so
+ * the later one is right. They are two mirrors of the same store and either can
+ * be the stale one: the SDK state snapshot is debounced by 500 ms, while the
+ * durable `readStateStorage` row is written synchronously on every advance — so
+ * a snapshot restored after a crash is routinely BEHIND the row it shadows, and
+ * taking it at face value would then have `persistRoomReadState` write that
+ * older position back over the row.
  */
 function resolveRoomReadPosition(
   existingMeta: RoomMetadata | undefined,
@@ -287,9 +295,10 @@ function resolveRoomReadPosition(
   restored: RoomReadState | undefined
 ): Pick<RoomMetadata, 'readPointer'> {
   if (existingMeta?.readPointer) return { readPointer: existingMeta.readPointer }
-  if (room.readPointer) return { readPointer: room.readPointer }
-  if (restored?.readPointer) return { readPointer: restored.readPointer }
-  return { readPointer: undefined }
+  // `advance` is forward-only and keeps `restored` on a tie — the direction that
+  // shows more unread, which is the recoverable one.
+  if (room.readPointer) return { readPointer: advance(restored?.readPointer, room.readPointer) }
+  return { readPointer: restored?.readPointer }
 }
 
 /**

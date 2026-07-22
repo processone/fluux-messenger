@@ -360,3 +360,109 @@ describe('unmigrated legacy read state survives the persist', () => {
     expect('lastReadAt' in diskEntry('conversationMeta', LATE)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Protecting the disk is not enough — the SESSION can fabricate a pointer too.
+//
+// A failed probe leaves the conversation pointerless in memory. Reconnect
+// catch-up then reaches mergeMAMMessages' background hydration, which hands
+// `readPointer: undefined` to recomputeCountsFromPointer — and the fresh-entity
+// guard reads that as "brand new, caught up": pointer snapped to the newest
+// message, counts zeroed. The caller writes it into both maps, the persist that
+// follows sees a truthy readPointer and stops re-emitting the legacy pair, and
+// forward-only means the correct older pointer could never win afterwards.
+//
+// This is the EXPECTED sequel to a failed probe, not a corner case: the probe
+// fails because the cache cannot resolve the position yet, and MAM catch-up is
+// precisely what fills the cache. So the guard stands down for a conversation
+// the migration still owes a pointer to — the same treatment
+// `hasPendingRemoteMarker` gets (#1076).
+// ---------------------------------------------------------------------------
+const FRESH = 'fresh@example.com'
+
+/** An archive page as catch-up delivers it, oldest → newest. */
+function archivePage(conversationId: string, prefix: string, stamps: number[]): Message[] {
+  return stamps.map((ms, i) => ({
+    type: 'chat',
+    id: `${prefix}${i + 1}`,
+    stanzaId: `s-${prefix}${i + 1}`,
+    conversationId,
+    from: conversationId,
+    body: `${prefix}${i + 1}`,
+    timestamp: at(ms),
+    isOutgoing: false,
+  })) as Message[]
+}
+
+describe('catch-up hydration does not fabricate a pointer over un-migrated read state', () => {
+  afterEach(() => {
+    getMessageGate = null
+    localStorage.clear()
+  })
+
+  // The whole path, end to end: failed probe → catch-up merge → next launch.
+  // The archive here straddles the legacy read position (1500 is before it, 2500
+  // and 3500 after), so a fabricated pointer lands on l3 and marks two unread
+  // messages read; the correct migration lands on l1.
+  it('leaves the conversation pointerless, and the next launch migrates it correctly', async () => {
+    persistConversations([[LATE, { lastReadAt: at(1800).toISOString() }]])
+
+    // Launch 1: nothing is cached for LATE, so the probe resolves nothing.
+    relaunch()
+    await settle()
+    expect(pointerOf(LATE)).toBeUndefined()
+
+    // Reconnect catch-up delivers the archive. This is the call that used to
+    // snap the pointer to l3 — and it is also what fills the cache the next
+    // migration attempt needs.
+    chatStore.getState().mergeMAMMessages(LATE, archivePage(LATE, 'l', [1500, 2500, 3500]), {}, true, 'forward')
+
+    expect(pointerOf(LATE)).toBeUndefined()
+    expect(chatStore.getState().conversations.get(LATE)?.readPointer).toBeUndefined()
+    // …and the values the retry needs are still on disk, in both maps.
+    expect(legacyOnDisk(LATE).lastReadAt).toBe(at(1800).toISOString())
+
+    // Launch 2: the cache can answer now. The pointer lands where the user
+    // actually was — BEHIND the two messages a snap would have marked read.
+    relaunch()
+    await vi.waitFor(() => expect(pointerOf(LATE)).toEqual({ messageId: 'l1', timestamp: at(1500) }))
+  })
+
+  // Control: the stand-down is per-conversation, not a blanket disable. FRESH is
+  // restored from the same blob, in the same session, with no legacy read state
+  // — it must still be caught up, or every never-read conversation would report
+  // its whole archive as unread.
+  it('still snaps a genuinely fresh conversation and reports zero unread', async () => {
+    persistConversations([
+      [LATE, { lastReadAt: at(1800).toISOString() }],
+      [FRESH, {}],
+    ])
+
+    relaunch()
+    await settle()
+    expect(pointerOf(FRESH)).toBeUndefined()
+
+    chatStore.getState().mergeMAMMessages(FRESH, archivePage(FRESH, 'f', [1500, 2500, 3500]), {}, true, 'forward')
+
+    expect(pointerOf(FRESH)).toEqual({ messageId: 'f3', timestamp: at(3500) })
+    expect(chatStore.getState().conversationMeta.get(FRESH)?.unreadCount).toBe(0)
+    // The other conversation in the same blob is untouched, which is what makes
+    // this a control rather than two independent runs.
+    expect(pointerOf(LATE)).toBeUndefined()
+  })
+
+  // The recount that follows a background hydration reads the cache directly and
+  // is a second way into the same guard.
+  it('does not fabricate a pointer through recomputeUnreadForConversation either', async () => {
+    persistConversations([[LATE, { lastReadAt: at(1800).toISOString() }]])
+    relaunch()
+    await settle()
+    expect(pointerOf(LATE)).toBeUndefined()
+
+    await messageCache.saveMessages(archivePage(LATE, 'l', [1500, 2500, 3500]) as never)
+    await chatStore.getState().recomputeUnreadForConversation(LATE)
+
+    expect(pointerOf(LATE)).toBeUndefined()
+    expect(legacyOnDisk(LATE).lastReadAt).toBe(at(1800).toISOString())
+  })
+})

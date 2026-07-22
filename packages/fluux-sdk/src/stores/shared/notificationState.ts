@@ -486,6 +486,14 @@ export interface RecomputeCountsOptions {
    * guard below must NOT claim it is caught up. See {@link recomputeCountsFromPointer}.
    */
   hasPendingRemoteMarker?: boolean
+  /**
+   * True when this entity still holds pre-#1081 legacy read state that the
+   * migration has not resolved into a `readPointer` yet. Same category as
+   * {@link hasPendingRemoteMarker}: a read position exists, we simply cannot
+   * express it as a local message id yet — so the fresh-entity guard below must
+   * NOT claim it is caught up. See {@link recomputeCountsFromPointer}.
+   */
+  hasUnmigratedLegacyReadState?: boolean
 }
 
 /**
@@ -507,6 +515,16 @@ export interface RecomputeCountsOptions {
  * silently discarding the position the user actually left off at. Leaving the
  * state untouched lets that fold resolve the marker and the counts follow.
  *
+ * Nor does it apply while pre-#1081 legacy read state is still waiting to be
+ * migrated (`hasUnmigratedLegacyReadState`). That state exists precisely because
+ * the message cache could not resolve the position YET — and MAM catch-up, which
+ * is what calls this, is exactly what fills the cache, so arriving here right
+ * after a failed probe is the expected sequel rather than a corner case.
+ * Snapping now writes a pointer at the newest message, which retires the legacy
+ * values from disk and, being forward-only, beats the correct older pointer the
+ * migration would have produced on its next attempt. Leaving the state untouched
+ * lets that attempt happen.
+ *
  * An outgoing message inside the counted range is a read boundary (the user
  * replied, here or on another device): counting restarts after the last one
  * and the pointer advances to it.
@@ -516,13 +534,19 @@ export function recomputeCountsFromPointer(
   messages: NotificationMessage[],
   options?: RecomputeCountsOptions
 ): EntityNotificationState {
-  const { countMentions = false, hasPendingRemoteMarker = false } = options ?? {}
+  const {
+    countMentions = false,
+    hasPendingRemoteMarker = false,
+    hasUnmigratedLegacyReadState = false,
+  } = options ?? {}
   if (messages.length === 0) return state
 
   if (!state.readPointer) {
     // An unresolved remote marker IS read state — defer to the fold that will
     // resolve it rather than claiming this entity is caught up.
     if (hasPendingRemoteMarker) return state
+    // So is un-migrated legacy read state — defer to the migration's next attempt.
+    if (hasUnmigratedLegacyReadState) return state
     const newest = messages[messages.length - 1]
     return {
       ...state,
