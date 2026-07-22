@@ -625,6 +625,11 @@ export function EncryptionSettings() {
       if (!plugin?.probeSecretKeyBackup) {
         // No plugin method at all is a different thing from a failed probe:
         // there is nothing to publish to, so `absent` is truthful here.
+        // UnlockEncryptionDialog falls back to `unknown` for this same
+        // missing-method condition instead — its dangerous branch offers to
+        // generate a brand-new key, while the dangerous branch here is
+        // publishing a backup over an existing one, so the two screens
+        // reasonably land on different sides of the same fallback.
         if (!cancelled) setBackupProbe('absent')
         return
       }
@@ -721,9 +726,9 @@ export function EncryptionSettings() {
       setShowRestoreDialog(false)
       setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
       // A successful restore is proof the server backup exists — bump the
-      // nonce so the next probe (or, failing that, this fact) replaces a
-      // stale `unknown`/`checking` status line rather than leaving the user
-      // told we still can't tell whether a backup exists.
+      // nonce so the effect re-probes instead of leaving a stale
+      // `unknown`/`checking` status line telling the user we still can't
+      // tell whether a backup exists.
       setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },

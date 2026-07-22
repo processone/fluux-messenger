@@ -431,6 +431,7 @@ describe('EncryptionSettings PEP support', () => {
     const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
     const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
     const mockProbe = vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>()
+    const mockRotateEncryptionKey = vi.fn<(pp?: string) => Promise<{ fingerprint: string }>>()
 
     beforeEach(() => {
       vi.clearAllMocks()
@@ -439,11 +440,13 @@ describe('EncryptionSettings PEP support', () => {
       mockCheckPepSupport.mockResolvedValue(true)
       mockBackupSecretKey.mockResolvedValue(undefined)
       mockProbe.mockResolvedValue('unknown')
+      mockRotateEncryptionKey.mockResolvedValue({ fingerprint: FP })
       mockPlugin = {
         getOwnFingerprint: () => FP,
         getBackedUpFingerprint: () => FP,
         probeSecretKeyBackup: mockProbe,
         backupSecretKey: mockBackupSecretKey,
+        rotateEncryptionKey: mockRotateEncryptionKey,
       }
       useEncryptionSettingsStore.setState({
         openpgpEnabled: true,
@@ -581,6 +584,68 @@ describe('EncryptionSettings PEP support', () => {
       expect(
         await screen.findByRole('button', { name: 'settings.encryption.backupPublish' }),
       ).toBeInTheDocument()
+    })
+
+    it('warns about the backup re-publish in the rotate confirmation under an inconclusive probe', async () => {
+      // The confirmation copy must agree with the routing in
+      // handleRotateConfirm: `unknown` re-publishes, so the dialog the user
+      // sees before confirming has to say so.
+      mockIsTauri = true
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.rotateConfirmMessageWithBackup'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.rotateConfirmMessage'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows the plain rotate confirmation when the probe confirms no backup', async () => {
+      // Control test for the case above: proves the assertion pair
+      // discriminates between two live outcomes instead of asserting a
+      // constant that would pass regardless of `backupProbe`.
+      mockIsTauri = true
+      mockProbe.mockResolvedValue('absent')
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.rotateConfirmMessage'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.rotateConfirmMessageWithBackup'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('rotates directly without the passphrase dialog when the probe confirms no backup', async () => {
+      mockIsTauri = true
+      mockProbe.mockResolvedValue('absent')
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.rotateConfirmAction',
+        }),
+      )
+
+      await waitFor(() => expect(mockRotateEncryptionKey).toHaveBeenCalledTimes(1))
+      expect(
+        screen.queryByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).not.toBeInTheDocument()
     })
 
     it('offers restore under an inconclusive probe', async () => {
