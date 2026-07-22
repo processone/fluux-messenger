@@ -508,17 +508,48 @@ export function _resetChatArchiveSavesForTesting(): void {
  * silently orphan every pre-#1081 read position — and the pointer is
  * forward-only, so a position lost that way never comes back.
  *
- * Nothing WRITES these: `serializeState` emits the live shape, so a blob loses
- * them the first time this build persists. That is safe only because the
- * backfill captures their values synchronously, at rehydrate, before any write.
+ * `serializeState` WRITES them back for any conversation that still has no
+ * `readPointer` (see {@link unmigratedLegacyReadState}). The migration resolves
+ * nothing at all in several legitimate cases — an id the message cache no longer
+ * holds, a timestamp older than every cached message, a single failed IndexedDB
+ * open — and dropping the source values on the first persist would turn a
+ * retryable miss into permanent loss: the next launch would find a conversation
+ * with neither a pointer nor anything to build one from, and
+ * `recomputeCountsFromPointer` treats that as a fresh entity and snaps to the
+ * newest message.
  */
 interface PersistedReadState {
   lastSeenMessageId?: string
   lastReadAt?: Date | string
 }
 
+/** The legacy pair as it exists in memory, dates already parsed. */
+interface LegacyReadState {
+  lastSeenMessageId?: string
+  lastReadAt?: Date
+}
+
 type PersistedConversationMetadata = ConversationMetadata & PersistedReadState
 type PersistedConversation = Conversation & PersistedReadState
+
+/**
+ * Legacy read state still waiting to become a `readPointer`, keyed by the
+ * storage key the state it came from is written back under.
+ *
+ * Captured at rehydrate by {@link deserializeState} and re-emitted by
+ * {@link serializeState} until a pointer lands, which makes the #1081 migration
+ * idempotent and retryable across launches rather than one-shot.
+ *
+ * Keyed by storage key, not merely held as "the last blob loaded", because the
+ * key is the only thing that ties these values to the account they belong to. An
+ * account switch that finds no blob for the new account never re-enters
+ * `deserializeState`, so a single unkeyed map would survive into the new
+ * account's writes — and two accounts talking to the same contact share a
+ * conversation id, so the previous account's read position would be migrated
+ * into the new account's conversation. Keying by storage key makes that
+ * impossible: a lookup under the new account's key simply misses.
+ */
+const unmigratedLegacyReadState = new Map<string, Map<string, LegacyReadState>>()
 
 // Serialization types for localStorage
 // Note: messages are NOT persisted in localStorage - they're in IndexedDB
@@ -539,14 +570,44 @@ interface PersistedState {
   activeConversationId?: string | null
 }
 
+/**
+ * Conversation entries for disk, carrying forward the legacy read state of any
+ * conversation the #1081 migration has not resolved into a `readPointer` yet.
+ *
+ * Runs on every store mutation, so the steady state must cost nothing: once the
+ * migration has finished (and for every user who never had legacy state) `legacy`
+ * is absent or empty and this is the same single `Array.from` it replaced. The
+ * per-entry work only exists while something is still un-migrated, and even then
+ * it is one `Map.get` per conversation and one object spread per conversation
+ * that still owes a pointer.
+ *
+ * A conversation that HAS a pointer emits nothing: the pointer supersedes the
+ * legacy pair, so re-emitting it would leave a stale second opinion on disk —
+ * exactly the two-independent-fields shape #1081 removed.
+ */
+function withUnmigratedReadState<T extends { readPointer?: ReadPointer }>(
+  entries: Map<string, T>,
+  legacy: Map<string, LegacyReadState> | undefined
+): [string, T & PersistedReadState][] {
+  if (!legacy || legacy.size === 0) return Array.from(entries.entries())
+  const out: [string, T & PersistedReadState][] = []
+  for (const [id, value] of entries) {
+    const carry = value.readPointer ? undefined : legacy.get(id)
+    out.push(carry ? [id, { ...value, ...carry }] : [id, value])
+  }
+  return out
+}
+
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
+  // Un-migrated legacy read state belonging to THIS blob (see the map's doc).
+  const legacy = unmigratedLegacyReadState.get(storageKey)
   return {
     // Serialize separated maps (Phase 6)
     conversationEntities: Array.from(state.conversationEntities.entries()),
-    conversationMeta: Array.from(state.conversationMeta.entries()),
+    conversationMeta: withUnmigratedReadState(state.conversationMeta, legacy),
     // Also serialize combined map for backward compatibility
-    conversations: Array.from(state.conversations.entries()),
+    conversations: withUnmigratedReadState(state.conversations, legacy),
     // Messages are NOT stored in localStorage - they're in IndexedDB
     archivedConversations: Array.from(state.archivedConversations),
     drafts: Array.from(state.drafts.entries()),
@@ -571,7 +632,7 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
  */
 export async function migrateReadPointer(
   conversationId: string,
-  legacy: { lastSeenMessageId?: string; lastReadAt?: Date }
+  legacy: LegacyReadState
 ): Promise<ReadPointer | undefined> {
   const { lastSeenMessageId, lastReadAt } = legacy
 
@@ -667,21 +728,34 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  *
  * The scope jid is captured up front: an account switch mid-pass must not write
  * the previous account's positions into the new account's conversations.
+ *
+ * The same `pending` map is registered as {@link unmigratedLegacyReadState} for
+ * `storageKey`, so `serializeState` keeps writing the legacy values back until
+ * this pass (or the user's own reading) produces a pointer. Registration happens
+ * synchronously, BEFORE the pass yields: `switchAccount` calls `set()` inside the
+ * same call that reaches here, and that `set` persists immediately.
  */
 function scheduleReadPointerBackfill(
   conversationMeta: Map<string, ConversationMetadata>,
-  legacyReadState: Map<string, { lastSeenMessageId?: string; lastReadAt?: Date }>
+  legacyReadState: Map<string, LegacyReadState>,
+  storageKey: string
 ): void {
-  const pending: Array<[string, { lastSeenMessageId?: string; lastReadAt?: Date }]> = []
+  const pending = new Map<string, LegacyReadState>()
   for (const [id, meta] of conversationMeta) {
     // Already migrated (or written this session) — leave it alone.
     if (meta.readPointer) continue
     const legacy = legacyReadState.get(id)
     // Never read: no legacy state to carry forward, so no pointer is correct.
     if (!legacy?.lastSeenMessageId && !legacy?.lastReadAt) continue
-    pending.push([id, { lastSeenMessageId: legacy.lastSeenMessageId, lastReadAt: legacy.lastReadAt }])
+    pending.set(id, { lastSeenMessageId: legacy.lastSeenMessageId, lastReadAt: legacy.lastReadAt })
   }
-  if (pending.length === 0) return
+  // Set OR delete: a reload that finds nothing left to migrate must retire the
+  // previous registration for this key, not leave it re-emitting forever.
+  if (pending.size === 0) {
+    unmigratedLegacyReadState.delete(storageKey)
+    return
+  }
+  unmigratedLegacyReadState.set(storageKey, pending)
 
   const scopeAtSchedule = getStorageScopeJid()
   void (async () => {
@@ -705,8 +779,18 @@ function scheduleReadPointerBackfill(
       try {
         const migrated = await migrateReadPointer(conversationId, legacy)
         if (getStorageScopeJid() !== scopeAtSchedule) return
-        if (migrated) applyMigratedReadPointer(conversationId, migrated)
+        if (!migrated) continue
+        applyMigratedReadPointer(conversationId, migrated)
+        // Deliberately AFTER the apply. The apply persists synchronously, and
+        // that write already omits the legacy pair — `serializeState` skips any
+        // conversation holding a pointer — so nothing is gained by dropping the
+        // entry first, while a throw in between would leave the conversation
+        // pointerless AND legacy-less, which is the state this whole mechanism
+        // exists to prevent.
+        pending.delete(conversationId)
       } catch (error) {
+        // Left in `pending`, so the values survive this launch's writes and the
+        // next launch tries again.
         console.warn(`Read pointer migration failed for ${conversationId}:`, error)
       }
     }
@@ -715,7 +799,12 @@ function scheduleReadPointerBackfill(
 
 // Deserialize arrays back to Maps, restore Date objects
 // Also handles migration of old localStorage messages to IndexedDB
-function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions'> {
+//
+// `storageKey` is the key this state will be PERSISTED under, which is not
+// always the key it was read from: the pre-scope migration below reads the
+// unscoped blob and writes the scoped one. The un-migrated legacy read state is
+// registered under the write key so `serializeState` can find it again.
+function deserializeState(persisted: PersistedState, storageKey: string): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions'> {
   // Helper to restore Date objects in lastMessage
   const restoreLastMessage = (lastMessage?: Message): Message | undefined => {
     if (!lastMessage) return undefined
@@ -734,7 +823,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Legacy read state as it sits on disk, keyed by conversation. Not part of any
   // live type any more (#1081) — read here purely to feed the readPointer
   // backfill at the bottom of this function.
-  const legacyReadState = new Map<string, { lastSeenMessageId?: string; lastReadAt?: Date }>()
+  const legacyReadState = new Map<string, LegacyReadState>()
   const captureLegacyReadState = (id: string, source: PersistedReadState): void => {
     const lastReadAt = restoreDate(source.lastReadAt)
     if (!source.lastSeenMessageId && !lastReadAt) return
@@ -828,7 +917,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Give every restored conversation a readPointer (fire-and-forget; #1081).
   // Runs after the restored maps land, since the resolution needs the async
   // message cache and this function is synchronous.
-  scheduleReadPointerBackfill(conversationMeta, legacyReadState)
+  scheduleReadPointerBackfill(conversationMeta, legacyReadState, storageKey)
 
   // Migrate old localStorage messages to IndexedDB (one-time migration)
   if (persisted.messages && persisted.messages.length > 0) {
@@ -921,7 +1010,9 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
     if (!legacyRaw) return null
 
     const parsed = JSON.parse(legacyRaw)
-    const restored = deserializeState(parsed.state)
+    // Read from the unscoped key, but the state lands under the scoped one — so
+    // that is where its un-migrated legacy read state has to be registered.
+    const restored = deserializeState(parsed.state, scopedStorageKey)
     const migrated = createEmptyChatState()
 
     migrated.conversationEntities = restored.conversationEntities
@@ -936,7 +1027,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
       messages: migrated.messages,
       archivedConversations: migrated.archivedConversations,
       drafts: migrated.drafts,
-    })
+    }, scopedStorageKey)
 
     // Persist migrated conversation lists to scoped storage and clear the legacy key.
     localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
@@ -959,7 +1050,7 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
       return migrated ?? baseState
     }
     const parsed = JSON.parse(str)
-    const restored = deserializeState(parsed.state)
+    const restored = deserializeState(parsed.state, scopedStorageKey)
     return {
       ...baseState,
       conversationEntities: restored.conversationEntities,
@@ -2787,6 +2878,9 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
         // New session → the XEP-0490 synced read marker may be folded again on first open.
         mdsGate.reset()
+        // Logout discards the blob, so there is nothing left to carry legacy
+        // read state forward into.
+        unmigratedLegacyReadState.delete(getScopedStorageKey())
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())
@@ -2807,7 +2901,7 @@ export const chatStore = createStore<ChatState>()(
             const str = localStorage.getItem(scopedStorageKey)
             if (!str) return null
             const parsed = JSON.parse(str)
-            return { state: deserializeState(parsed.state) }
+            return { state: deserializeState(parsed.state, scopedStorageKey) }
           } catch {
             // Corrupted data, clear and start fresh
             localStorage.removeItem(scopedStorageKey)
@@ -2818,7 +2912,7 @@ export const chatStore = createStore<ChatState>()(
           const scopedStorageKey = getScopedStorageKey()
           try {
             const state = value.state as ChatState
-            const serialized = serializeState(state)
+            const serialized = serializeState(state, scopedStorageKey)
             localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
           } catch {
             // Storage quota exceeded or other error, continue without persistence

@@ -224,3 +224,139 @@ describe('post-rehydrate readPointer backfill', () => {
     expect(chatStore.getState().conversations.get(CONV)?.unreadCount).toBe(4)
   })
 })
+
+// ---------------------------------------------------------------------------
+// The migration has to be RETRYABLE, not one-shot.
+//
+// `serializeState` emits the live shape, and `switchAccount` persists in the
+// same synchronous call that schedules the backfill — so without a re-emit the
+// legacy pair is erased from disk BEFORE the first migration attempt ever runs,
+// on every cold start. `migrateReadPointer` legitimately resolves nothing in
+// several cases (an id the cache never stored, a timestamp older than every
+// cached message, a single failed IndexedDB open, which returns null for every
+// conversation in flight), and a conversation left with neither a pointer nor
+// the values to rebuild one hits the fresh-entity branch of
+// `recomputeCountsFromPointer`: pointer snapped to newest, counts zeroed, unread
+// history silently marked read. The pointer is forward-only, so that is
+// permanent.
+// ---------------------------------------------------------------------------
+const LATE = 'late@example.com'
+
+/** One conversation's entry in one persisted map, as it actually sits on disk. */
+function diskEntry(map: 'conversationMeta' | 'conversations', id: string): Record<string, unknown> {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  if (!raw) throw new Error(`diskEntry: nothing persisted under ${STORAGE_KEY}`)
+  const entries = JSON.parse(raw).state[map] as Array<[string, Record<string, unknown>]>
+  const found = entries.find(([key]) => key === id)
+  if (!found) throw new Error(`diskEntry: no ${map} entry for ${id}`)
+  return found[1]
+}
+
+/**
+ * The legacy pair on disk. Both persisted maps are read: `serializeState` writes
+ * them separately, and either one going missing is the same loss.
+ */
+function legacyOnDisk(id: string): { lastSeenMessageId?: unknown; lastReadAt?: unknown } {
+  const meta = diskEntry('conversationMeta', id)
+  const conv = diskEntry('conversations', id)
+  expect([conv.lastSeenMessageId, conv.lastReadAt]).toEqual([meta.lastSeenMessageId, meta.lastReadAt])
+  return { lastSeenMessageId: meta.lastSeenMessageId, lastReadAt: meta.lastReadAt }
+}
+
+/**
+ * A cold start. `XMPPClient.connect` sets the storage scope and calls
+ * `switchAccount`, which reloads the account's whole state from disk into a
+ * fresh empty base — dropping everything in memory, as a real relaunch does —
+ * and persists it, synchronously, in the same call.
+ */
+function relaunch(): void {
+  chatStore.getState().switchAccount(JID)
+}
+
+/** Let the backfill's macrotask yield and its cache probes resolve. */
+const settle = async () => {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+describe('unmigrated legacy read state survives the persist', () => {
+  afterEach(() => {
+    getMessageGate = null
+    localStorage.clear()
+  })
+
+  // The `lastReadAt`-only shape: the most common pre-#1081 state, since the old
+  // onActivate stamped it while leaving lastSeenMessageId undefined.
+  it('keeps an unresolved lastReadAt on disk and migrates it on a later launch', async () => {
+    // Nothing is cached for LATE, so this launch's probe resolves nothing.
+    persistConversations([[LATE, { lastReadAt: at(1800).toISOString() }]])
+
+    relaunch()
+    await settle()
+
+    expect(pointerOf(LATE)).toBeUndefined()
+    expect(legacyOnDisk(LATE).lastReadAt).toBe(at(1800).toISOString())
+
+    // Next launch, with a cache that can answer.
+    await messageCache.saveMessages([
+      { type: 'chat', id: 'late1', conversationId: LATE, from: LATE, body: 'y', timestamp: at(1500), isOutgoing: false },
+    ] as never)
+
+    relaunch()
+    await vi.waitFor(() => expect(pointerOf(LATE)).toEqual({ messageId: 'late1', timestamp: at(1500) }))
+  })
+
+  // The other half of the same guarantee, for the id-only shape.
+  it('keeps an unresolved lastSeenMessageId on disk', async () => {
+    persistConversations([[CONV, { lastSeenMessageId: 'not-in-cache' }]])
+
+    relaunch()
+    await settle()
+
+    expect(pointerOf(CONV)).toBeUndefined()
+    expect(legacyOnDisk(CONV).lastSeenMessageId).toBe('not-in-cache')
+  })
+
+  // The counterpart: once a pointer exists the legacy pair is a stale second
+  // opinion, and leaving it on disk would rebuild the two-fields shape #1081
+  // removed. `in` rather than `toBeUndefined`, so an entry read from the wrong
+  // conversation cannot pass by being absent.
+  it('drops the legacy pair from disk once a pointer lands', async () => {
+    persistConversations([[CONV, { lastSeenMessageId: 'm2' }]])
+
+    relaunch()
+    await vi.waitFor(() => expect(pointerOf(CONV)).toEqual({ messageId: 'm2', timestamp: at(2000) }))
+
+    expect(diskEntry('conversationMeta', CONV).readPointer).toEqual({
+      messageId: 'm2',
+      timestamp: at(2000).toISOString(),
+    })
+    expect('lastSeenMessageId' in diskEntry('conversationMeta', CONV)).toBe(false)
+    expect('lastSeenMessageId' in diskEntry('conversations', CONV)).toBe(false)
+  })
+
+  // A conversation the user reads normally gets its pointer from the store, not
+  // from the migration — the legacy pair has to retire on that path too.
+  it('drops the legacy pair once the user reads the conversation', async () => {
+    persistConversations([[LATE, { lastReadAt: at(1800).toISOString() }]])
+
+    relaunch()
+    await settle()
+    expect(legacyOnDisk(LATE).lastReadAt).toBe(at(1800).toISOString())
+
+    const live = { messageId: 'live1', timestamp: at(9000) }
+    chatStore.setState((state) => {
+      const meta = new Map(state.conversationMeta)
+      meta.set(LATE, { ...meta.get(LATE)!, readPointer: live })
+      const conversations = new Map(state.conversations)
+      conversations.set(LATE, { ...conversations.get(LATE)!, readPointer: live })
+      return { conversationMeta: meta, conversations }
+    })
+
+    expect(diskEntry('conversationMeta', LATE).readPointer).toEqual({
+      messageId: 'live1',
+      timestamp: at(9000).toISOString(),
+    })
+    expect('lastReadAt' in diskEntry('conversationMeta', LATE)).toBe(false)
+  })
+})

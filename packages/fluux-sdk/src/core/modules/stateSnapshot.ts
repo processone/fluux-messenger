@@ -28,6 +28,11 @@ import type {
 import { rosterStore } from '../../stores/rosterStore'
 import { roomStore } from '../../stores/roomStore'
 import { connectionStore } from '../../stores/connectionStore'
+import {
+  deserializeReadPointer,
+  serializeReadPointer,
+  type SerializedReadPointer,
+} from '../../stores/shared/readPointer'
 import { logInfo } from '../logger'
 
 const PERSIST_DEBOUNCE_MS = 500
@@ -77,6 +82,14 @@ interface SerializedRoom {
   supportsReactions?: boolean
   supportsHats?: boolean
   isIrcGateway?: boolean
+  /**
+   * Where the user has read to (#1081), replacing the `lastReadAt` this shape
+   * used to carry. A snapshot without it restores rooms with no read position at
+   * all, and `recomputeCountsFromPointer` treats a pointerless entity as fresh:
+   * pointer snapped to the newest message, counts zeroed, unread history
+   * silently marked read. The pointer is forward-only, so that is permanent.
+   */
+  readPointer?: SerializedReadPointer
   messages: SerializedRoomMessage[]
 }
 
@@ -171,6 +184,7 @@ function serializeRoom(r: Room): SerializedRoom {
     supportsReactions: r.supportsReactions,
     supportsHats: r.supportsHats,
     isIrcGateway: r.isIrcGateway,
+    readPointer: r.readPointer ? serializeReadPointer(r.readPointer) : undefined,
     messages: r.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
   }
 }
@@ -181,6 +195,12 @@ function deserializeRoom(r: SerializedRoom): Room {
     occupants: new Map(r.occupants),
     typingUsers: new Set<string>(),
     messages: (r.messages || []).map(deserializeRoomMessage),
+    // Rebuilt rather than carried by the spread: the persisted `timestamp` is a
+    // number, and a pointer holding one would compare false against every
+    // message Date it met instead of throwing. `deserializeReadPointer` yields
+    // `undefined` for anything malformed, which `addRoom` then resolves from the
+    // durable read state rather than trusting the snapshot.
+    readPointer: deserializeReadPointer(r.readPointer),
     avatar: undefined,
   } as Room
 }

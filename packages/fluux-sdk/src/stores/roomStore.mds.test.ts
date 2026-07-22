@@ -73,8 +73,19 @@ function pointerIn(messages: RoomMessage[], id: string): { messageId: string; ti
  * roomEntities, roomMeta, and roomRuntime from a single Room object.
  * An optional read pointer (named by message id) is patched into roomMeta
  * afterwards, carrying that message's own timestamp.
+ *
+ * `seenMessageId` must name a message in `messages`, so a typo fails loudly
+ * instead of quietly becoming a pointer at the epoch — i.e. no read horizon at
+ * all, which changes what every unread assertion in this file means. A pointer
+ * DEEPER than the seeded slice is legitimate (the resident window does not
+ * reach it); say so by passing `pointerTimestamp` explicitly.
  */
-function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string) {
+function seedRoom(
+  jid: string,
+  messages: RoomMessage[],
+  seenMessageId?: string,
+  pointerTimestamp?: Date
+) {
   const room: Room = {
     jid,
     name: getLocalPart(jid),
@@ -89,13 +100,13 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string) 
   }
   roomStore.getState().addRoom(room)
   if (seenMessageId !== undefined) {
-    const seen = messages.find((m) => m.id === seenMessageId)
+    const timestamp = pointerTimestamp ?? pointerIn(messages, seenMessageId).timestamp
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(jid)!
       meta.set(jid, {
         ...existing,
-        readPointer: { messageId: seenMessageId, timestamp: seen?.timestamp ?? new Date(0) },
+        readPointer: { messageId: seenMessageId, timestamp },
       })
       return { roomMeta: meta }
     })
@@ -488,8 +499,11 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   it('re-attempts the fold against the slice loaded around a deep stale pointer', async () => {
     const DEEP_ROOM = 'deep-pointer@conference.example'
     const latest = [rmsg('m10', 's10', 10), rmsg('m11', 's11', 11), rmsg('m12', 's12', 12)]
-    // Resident window = latest slice; the read pointer (m2) is deeper than it.
-    seedRoom(DEEP_ROOM, latest, 'm2')
+    // Resident window = latest slice; the read pointer (m2) is deeper than it,
+    // so its timestamp is stated rather than looked up. Epoch: this case is
+    // about the fold re-attempt, and a floor there keeps every around-slice
+    // message countable.
+    seedRoom(DEEP_ROOM, latest, 'm2', new Date(0))
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
       m.set(DEEP_ROOM, { ...m.get(DEEP_ROOM)!, pendingRemoteDisplayedStanzaId: 's5' })

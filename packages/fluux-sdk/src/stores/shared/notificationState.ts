@@ -42,8 +42,13 @@ export interface EntityNotificationState {
    * Where the user has read to — the sole read position (#1081).
    *
    * Advances forward only, and only to a message present in the slice the
-   * transition was given, so its timestamp is always that message's own.
-   * `undefined` until the entity is first read.
+   * transition was given, so a pointer THESE transitions produce carries that
+   * message's own timestamp. Not a universal invariant of the type: pointers
+   * built by the #1081 migration from a legacy `lastSeenMessageId` + `lastReadAt`
+   * pair carry `lastReadAt`, which sits at or behind the named message
+   * deliberately — see `readPointer.ts`. Only `timestamp` is used for ordering,
+   * and nothing derives a message from it, so the two populations are
+   * interchangeable here. `undefined` until the entity is first read.
    *
    * REQUIRED, not optional, deliberately: several transitions build a fresh
    * object literal rather than spreading `state`, and an optional property
