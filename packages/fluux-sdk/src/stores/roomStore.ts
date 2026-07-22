@@ -2998,6 +2998,8 @@ export const roomStore = createStore<RoomState>()(
         initialBefore: extras?.initialBefore,
         sawCoverageTop: extras?.sawCoverageTop ?? false,
         walkCarriedModifications: extras?.walkCarriedModifications ?? false,
+        complete,
+        initialAfter: extras?.initialAfter,
       })
       const prevCoverage = state.roomCoverage.get(roomJid)
       const deferCoverageCommit =

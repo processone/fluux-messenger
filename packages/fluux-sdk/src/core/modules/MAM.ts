@@ -412,6 +412,14 @@ export class MAM extends BaseModule {
       // single pass (so cross-page corrections/reactions land), then emit.
       const unresolved = this.applyModifications(allMessages, modifications, (msg, from) => msg.from === from)
 
+      // Reported for BOTH directions: coverage never certifies over a walk whose
+      // modification cache-writes are fire-and-forget (Codex r4 #2), and that
+      // holds for the forward bootstrap anchor just as it does for a backward
+      // extent. `modifications` accumulates across every page of this query.
+      const walkCarriedModifications =
+        modifications.retractions.length + modifications.corrections.length +
+        modifications.fastenings.length + modifications.reactions.length > 0
+
       this.deps.emitSDK('chat:mam-messages', {
         conversationId,
         messages: allMessages,
@@ -420,14 +428,16 @@ export class MAM extends BaseModule {
         direction,
         preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
+        walkCarriedModifications,
         ...(direction === 'backward' ? {
           initialBefore: before,
           fetchLatestTopId,
           sawCoverageTop,
-          walkCarriedModifications:
-            modifications.retractions.length + modifications.corrections.length +
-            modifications.fastenings.length + modifications.reactions.length > 0,
-        } : {}),
+        } : {
+          // The cursor this walk resumed from — anchors the coverage bottom
+          // when the catch-up reports complete (mamCoverage.ts).
+          initialAfter: after,
+        }),
       })
 
       // Modifications whose target is not in this batch belong to a message
@@ -512,6 +522,11 @@ export class MAM extends BaseModule {
     // signal on the first, signal-only page targets a message only fetched by
     // a later retry page — per-page resolution would drop it.
     const backwardModifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    // Forward pages scope their modifications per page (see below), so the
+    // walk-level fact has to be accumulated separately: the coverage bootstrap
+    // is anchored by the page that reports `complete`, and it must know whether
+    // ANY earlier page of the same walk carried modifications (Codex r4 #2).
+    let forwardWalkCarriedModifications = false
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
@@ -612,6 +627,10 @@ export class MAM extends BaseModule {
           }
 
           if (isForward) {
+            forwardWalkCarriedModifications ||=
+              modifications.retractions.length + modifications.corrections.length +
+              modifications.fastenings.length + modifications.reactions.length > 0
+
             // Apply modifications to collected messages (full JID comparison for rooms)
             // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
             const unresolved = this.applyModifications(
@@ -632,6 +651,10 @@ export class MAM extends BaseModule {
               direction: 'forward',
               preserveGapMarker,
               isFetchLatest: false,
+              // The cursor the WALK resumed from (not this page's), so the
+              // completing page can anchor a coverage bottom (mamCoverage.ts).
+              initialAfter: after,
+              walkCarriedModifications: forwardWalkCarriedModifications,
             })
           }
 
