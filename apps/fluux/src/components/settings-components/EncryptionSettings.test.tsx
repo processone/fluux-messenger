@@ -36,6 +36,12 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   }
 })
 
+let mockIsTauri = false
+vi.mock('@/utils/tauri', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/tauri')>()
+  return { ...actual, isTauri: () => mockIsTauri }
+})
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) =>
@@ -61,6 +67,7 @@ describe('EncryptionSettings PEP support', () => {
     localStorage.clear()
     mockStatus = 'online'
     mockPlugin = null
+    mockIsTauri = false
     mockCheckPepSupport.mockResolvedValue(true)
     useEncryptionSettingsStore.setState({
       openpgpEnabled: false,
@@ -280,7 +287,7 @@ describe('EncryptionSettings PEP support', () => {
         // Marker matches the live fingerprint => the UI considers local and
         // server in sync, which is exactly the state that used to hide the row.
         getBackedUpFingerprint: () => FP,
-        hasSecretKeyBackup: vi.fn().mockResolvedValue(true),
+        probeSecretKeyBackup: vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>().mockResolvedValue('present'),
         backupSecretKey: mockBackupSecretKey,
       }
       useEncryptionSettingsStore.setState({
@@ -413,6 +420,243 @@ describe('EncryptionSettings PEP support', () => {
       expect(
         screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
       ).not.toBeInTheDocument()
+    })
+  })
+
+  // A failed server probe used to be coerced to "no backup exists", which
+  // skipped the replace confirmation entirely: a transient network failure
+  // could overwrite a real server backup with no warning. `unknown` now
+  // fails toward "a backup might exist" at every consumer.
+  describe('inconclusive backup probe', () => {
+    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
+    const mockProbe = vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>()
+    const mockRotateEncryptionKey = vi.fn<(pp?: string) => Promise<{ fingerprint: string }>>()
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      localStorage.clear()
+      mockStatus = 'online'
+      mockCheckPepSupport.mockResolvedValue(true)
+      mockBackupSecretKey.mockResolvedValue(undefined)
+      mockProbe.mockResolvedValue('unknown')
+      mockRotateEncryptionKey.mockResolvedValue({ fingerprint: FP })
+      mockPlugin = {
+        getOwnFingerprint: () => FP,
+        getBackedUpFingerprint: () => FP,
+        probeSecretKeyBackup: mockProbe,
+        backupSecretKey: mockBackupSecretKey,
+        rotateEncryptionKey: mockRotateEncryptionKey,
+      }
+      useEncryptionSettingsStore.setState({
+        openpgpEnabled: true,
+        pluginRegisteredAt: 1,
+        registrationError: null,
+      })
+    })
+
+    it('shows the inconclusive status line instead of claiming no backup', async () => {
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByText('settings.encryption.backupStatusUnknown'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.backupStatusNone'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('still renders the buttons — including retry — when the probe promise rejects', async () => {
+      // The probe is documented as non-throwing, but the component only
+      // reaches it through a structural `as` cast, so nothing enforces
+      // that contract at compile time. Without a catch mapping a rejection
+      // to `unknown`, `backupProbe` would stay stuck on `checking` and
+      // `{!checking && …}` would hide ALL THREE buttons — including retry
+      // — leaving the user with no way out.
+      mockProbe.mockRejectedValue(new Error('probe transport failure'))
+
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.backupStatusRetry',
+        }),
+      ).toBeInTheDocument()
+    })
+
+    it('shows the definitive status line when the probe succeeds', async () => {
+      // Control test: proves this fixture can render the other status lines,
+      // so the negative assertion above is not vacuous.
+      mockProbe.mockResolvedValue('present')
+
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByText('settings.encryption.backupStatusInSync'),
+      ).toBeInTheDocument()
+    })
+
+    it('offers a retry that re-runs the probe', async () => {
+      render(<EncryptionSettings />)
+
+      const retry = await screen.findByRole('button', {
+        name: 'settings.encryption.backupStatusRetry',
+      })
+      expect(mockProbe).toHaveBeenCalledTimes(1)
+
+      mockProbe.mockResolvedValue('present')
+      fireEvent.click(retry)
+
+      await screen.findByText('settings.encryption.backupStatusInSync')
+      expect(mockProbe).toHaveBeenCalledTimes(2)
+    })
+
+    it('confirms with the unknown variant before publishing', async () => {
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.backupAction' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.backupReplaceUnknownTitle'),
+      ).toBeInTheDocument()
+    })
+
+    it('publishes once the unknown confirmation is accepted', async () => {
+      // Control test for the pair above: proves the publish wire is live in
+      // this fixture, so "did not publish" assertions have teeth.
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.backupAction' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.backupReplaceUnknownAction',
+        }),
+      )
+      const publish = await screen.findByRole('button', {
+        name: 'settings.encryption.backupPublish',
+      })
+      fireEvent.click(document.querySelector('input[type="checkbox"]')!)
+      await waitFor(() => expect(publish).not.toBeDisabled())
+      fireEvent.click(publish)
+
+      await waitFor(() => expect(mockBackupSecretKey).toHaveBeenCalledTimes(1))
+    })
+
+    it('offers the delete-the-server-backup option under an inconclusive probe', async () => {
+      render(<EncryptionSettings />)
+
+      // The delete button lives behind the collapsed danger zone.
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.dangerZone' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.deleteKey' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.deleteKeyAlsoBackup'),
+      ).toBeInTheDocument()
+    })
+
+    it('re-publishes the backup on rotate under an inconclusive probe', async () => {
+      // Over-publishing a backup that did not exist is harmless. Leaving a
+      // real one encrypted to the retired key is not, so `unknown` takes the
+      // same path as in-sync: through the passphrase dialog.
+      mockIsTauri = true
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.rotateConfirmAction',
+        }),
+      )
+
+      // The passphrase dialog is the re-publish path; its absence would mean
+      // we rotated and left the server copy stale.
+      expect(
+        await screen.findByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).toBeInTheDocument()
+    })
+
+    it('warns about the backup re-publish in the rotate confirmation under an inconclusive probe', async () => {
+      // The confirmation copy must agree with the routing in
+      // handleRotateConfirm: `unknown` re-publishes, so the dialog the user
+      // sees before confirming has to say so.
+      mockIsTauri = true
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.rotateConfirmMessageWithBackup'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.rotateConfirmMessage'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows the plain rotate confirmation when the probe confirms no backup', async () => {
+      // Control test for the case above: proves the assertion pair
+      // discriminates between two live outcomes instead of asserting a
+      // constant that would pass regardless of `backupProbe`.
+      mockIsTauri = true
+      mockProbe.mockResolvedValue('absent')
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+
+      expect(
+        await screen.findByText('settings.encryption.rotateConfirmMessage'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.rotateConfirmMessageWithBackup'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('rotates directly without the passphrase dialog when the probe confirms no backup', async () => {
+      mockIsTauri = true
+      mockProbe.mockResolvedValue('absent')
+
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.rotateConfirmAction',
+        }),
+      )
+
+      await waitFor(() => expect(mockRotateEncryptionKey).toHaveBeenCalledTimes(1))
+      expect(
+        screen.queryByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('offers restore under an inconclusive probe', async () => {
+      // Restoring when there is in fact no backup degrades to an error the
+      // restore dialog already handles. Hiding restore when a backup DOES
+      // exist strands the user, so `unknown` must keep it reachable.
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByRole('button', { name: 'settings.encryption.restoreAction' }),
+      ).toBeInTheDocument()
     })
   })
 

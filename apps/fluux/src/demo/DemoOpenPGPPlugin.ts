@@ -9,7 +9,7 @@ import type {
   EncryptedPayload,
   DecryptResult,
 } from '@fluux/sdk'
-import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult } from '../e2ee/OpenPGPPluginBase'
 
 const OPENPGP_DESCRIPTOR: E2EEProtocolDescriptor = {
   id: 'openpgp',
@@ -167,9 +167,10 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     return this.state.forceNoLocalKey
   }
 
-  async hasSecretKeyBackup(): Promise<boolean> {
+  async probeSecretKeyBackup(): Promise<BackupProbeResult> {
     await delay(200)
-    return this.state.hasBackup
+    // Demo mode has no failing transport, so the probe is always definitive.
+    return this.state.hasBackup ? 'present' : 'absent'
   }
 
   getBackedUpFingerprint(): string | null {

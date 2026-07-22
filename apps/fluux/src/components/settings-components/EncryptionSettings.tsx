@@ -17,9 +17,10 @@ import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
-import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
+  identityChoiceFromProbe,
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
@@ -63,16 +64,32 @@ const BACKUP_CONFIRM_KEYS = {
     message: 'settings.encryption.backupConflictMessage',
     action: 'settings.encryption.backupConflictAction',
   },
+  unknown: {
+    title: 'settings.encryption.backupReplaceUnknownTitle',
+    message: 'settings.encryption.backupReplaceUnknownMessage',
+    action: 'settings.encryption.backupReplaceUnknownAction',
+  },
 } as const
 
 type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
 
 /**
+ * Server-probe state for the secret-key backup node.
+ *
+ * `unknown` is deliberately distinct from `absent`: a failed probe used to
+ * be coerced to "no backup", which skipped the replace confirmation and let
+ * a transient network failure overwrite a real backup. Consumers treat
+ * `unknown` as "a backup might exist".
+ */
+type BackupProbeState = 'checking' | BackupProbeResult
+
+/**
  * Is the server-side backup known to match this device's current key?
  *
  * All three inputs have to line up:
- *   - `remoteBackupExists` — tri-state; `null` means "not probed yet",
- *     which is not in sync (callers show a "Checking…" state instead).
+ *   - `backupProbe` — server-probe tri-state (plus `checking`); only
+ *     `present` can possibly be in sync (callers show a "Checking…"
+ *     state while pending, and `unknown`/`absent` are never in sync).
  *   - `backedUpFingerprint` — local marker recorded at the last
  *     successful backup/restore. `null` means this device never
  *     published, so whatever sits on PEP belongs to someone else.
@@ -86,11 +103,11 @@ type BackupConfirmVariant = keyof typeof BACKUP_CONFIRM_KEYS
  * needs its own decision rather than riding along with this helper.
  */
 function isBackupInSync(
-  remoteBackupExists: boolean | null,
+  backupProbe: BackupProbeState,
   backedUpFingerprint: string | null,
   fingerprint: string | null,
 ): boolean {
-  return remoteBackupExists === true && !!fingerprint && backedUpFingerprint === fingerprint
+  return backupProbe === 'present' && !!fingerprint && backedUpFingerprint === fingerprint
 }
 
 /**
@@ -131,9 +148,8 @@ export function EncryptionSettings() {
   // decides which consequence we spell out. null = no confirmation open.
   const [backupConfirmVariant, setBackupConfirmVariant] =
     useState<BackupConfirmVariant | null>(null)
-  // null = not yet probed, true/false = known. Kept narrow so the UI
-  // can show a "Checking…" placeholder without flickering a wrong state.
-  const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
+  // `checking` until the first probe settles. See BackupProbeState.
+  const [backupProbe, setBackupProbe] = useState<BackupProbeState>('checking')
   // Fingerprint recorded locally at the moment of the last successful
   // backup/restore. When this equals the current local fingerprint AND
   // a remote backup exists, local and server are known to be in sync.
@@ -145,7 +161,7 @@ export function EncryptionSettings() {
   // depth).
   const [pendingIdentityChoice, setPendingIdentityChoice] = useState<{
     accountJid: string
-    hasBackup: boolean
+    serverBackup: BackupProbeResult
     publishedFingerprints: string[]
     reason?: 'no-local-key' | 'local-key-unrecoverable'
   } | null>(null)
@@ -295,7 +311,7 @@ export function EncryptionSettings() {
     void (async () => {
       let next: {
         accountJid: string
-        hasBackup: boolean
+        serverBackup: BackupProbeResult
         publishedFingerprints: string[]
         reason: 'local-key-unrecoverable'
       }
@@ -303,17 +319,17 @@ export function EncryptionSettings() {
         const state = await probeRemoteIdentityState(client, bareJid)
         next = {
           accountJid: bareJid,
-          hasBackup: state.backupMessage !== null,
-          publishedFingerprints: state.publishedFingerprints,
+          ...identityChoiceFromProbe(state),
           reason: 'local-key-unrecoverable',
         }
       } catch {
-        // Probe failed: still open so import/replace are reachable; restore
-        // stays disabled until the server probe succeeds.
+        // Probe failed: open the dialog anyway so the user isn't stranded,
+        // but record the outcome as `'unknown'`. Reporting "no backup" here
+        // would grey out restore and leave replace-identity as the obvious
+        // move, over what may be nothing worse than a dropped connection.
         next = {
           accountJid: bareJid,
-          hasBackup: false,
-          publishedFingerprints: [],
+          ...identityChoiceFromProbe(null),
           reason: 'local-key-unrecoverable',
         }
       }
@@ -396,8 +412,7 @@ export function EncryptionSettings() {
           if (state.hasServerIdentity) {
             setPendingIdentityChoice({
               accountJid: bareJid,
-              hasBackup: state.backupMessage !== null,
-              publishedFingerprints: state.publishedFingerprints,
+              ...identityChoiceFromProbe(state),
             })
             return
           }
@@ -460,8 +475,7 @@ export function EncryptionSettings() {
       if (!recoveryNeeded && !state.hasServerIdentity) return
       setPendingIdentityChoice({
         accountJid: bareJid,
-        hasBackup: state.backupMessage !== null,
-        publishedFingerprints: state.publishedFingerprints,
+        ...identityChoiceFromProbe(state),
         reason: recoveryNeeded ? 'local-key-unrecoverable' : 'no-local-key',
       })
     } catch (err) {
@@ -588,7 +602,7 @@ export function EncryptionSettings() {
   const [backupProbeNonce, setBackupProbeNonce] = useState(0)
   useEffect(() => {
     if (pluginStatus !== 'ready') {
-      setRemoteBackupExists(null)
+      setBackupProbe('checking')
       setBackedUpFingerprint(null)
       return
     }
@@ -596,7 +610,7 @@ export function EncryptionSettings() {
     void (async () => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
         | {
-            hasSecretKeyBackup?: () => Promise<boolean>
+            probeSecretKeyBackup?: () => Promise<BackupProbeResult>
             getBackedUpFingerprint?: () => string | null
           }
         | null
@@ -607,18 +621,28 @@ export function EncryptionSettings() {
       if (!cancelled) {
         setBackedUpFingerprint(plugin?.getBackedUpFingerprint?.() ?? null)
       }
-      if (!plugin?.hasSecretKeyBackup) {
-        if (!cancelled) setRemoteBackupExists(false)
+      if (!plugin?.probeSecretKeyBackup) {
+        // No plugin method at all is a different thing from a failed probe:
+        // there is nothing to publish to, so `absent` is truthful here.
+        // UnlockEncryptionDialog falls back to `unknown` for this same
+        // missing-method condition instead — its dangerous branch offers to
+        // generate a brand-new key, while the dangerous branch here is
+        // publishing a backup over an existing one, so the two screens
+        // reasonably land on different sides of the same fallback.
+        if (!cancelled) setBackupProbe('absent')
         return
       }
-      try {
-        const exists = await plugin.hasSecretKeyBackup()
-        if (!cancelled) setRemoteBackupExists(exists)
-      } catch {
-        // Treat probe failure (server down, unsupported PEP feature)
-        // as "no backup" rather than leaving the UI in limbo.
-        if (!cancelled) setRemoteBackupExists(false)
-      }
+      // The method is documented as non-throwing, but it's reached through
+      // a structural `as` cast, so the compiler can't hold the plugin to
+      // that contract. If it ever rejects anyway, land on `unknown` —
+      // NEVER `absent`, which would resurrect the exact "failed probe
+      // treated as no backup" bug this branch exists to fix — and never
+      // leave `backupProbe` stuck on `checking`, which hides every button
+      // (retry included) behind `{!checking && …}` and strands the user.
+      const result = await plugin
+        .probeSecretKeyBackup()
+        .catch(() => 'unknown' as const)
+      if (!cancelled) setBackupProbe(result)
     })()
     return () => {
       cancelled = true
@@ -657,13 +681,21 @@ export function EncryptionSettings() {
    * straight to the passphrase dialog.
    */
   const handleBackupRequest = useCallback(() => {
-    if (remoteBackupExists !== true) {
+    if (backupProbe === 'absent') {
+      // Server confirmed there is nothing to lose.
       setShowBackupDialog(true)
       return
     }
-    const isOwnBackup = isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
+    if (backupProbe === 'unknown') {
+      // We could not rule out a backup. Say so rather than asserting whose
+      // it is — `foreign` would claim it wasn't made on this device, which
+      // we do not know.
+      setBackupConfirmVariant('unknown')
+      return
+    }
+    const isOwnBackup = isBackupInSync(backupProbe, backedUpFingerprint, fingerprint)
     setBackupConfirmVariant(isOwnBackup ? 'own' : 'foreign')
-  }, [remoteBackupExists, backedUpFingerprint, fingerprint])
+  }, [backupProbe, backedUpFingerprint, fingerprint])
 
   const handleRestoreConfirm = useCallback(
     async (passphrase: string) => {
@@ -692,6 +724,11 @@ export function EncryptionSettings() {
       setFingerprint(result.fingerprint)
       setShowRestoreDialog(false)
       setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
+      // A successful restore is proof the server backup exists — bump the
+      // nonce so the effect re-probes instead of leaving a stale
+      // `unknown`/`checking` status line telling the user we still can't
+      // tell whether a backup exists.
+      setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, addToast, t],
@@ -765,7 +802,9 @@ export function EncryptionSettings() {
 
   const handleRotateConfirm = useCallback(() => {
     setShowRotateConfirm(false)
-    if (isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)) {
+    // `unknown` re-publishes: over-publishing a backup that didn't exist is
+    // harmless, leaving a real one stale is not.
+    if (backupProbe === 'unknown' || isBackupInSync(backupProbe, backedUpFingerprint, fingerprint)) {
       // Generate a new backup passphrase and re-publish atomically.
       // The dialog drives its own loading + error UI from now on.
       setShowRotatePassphraseDialog(true)
@@ -780,7 +819,7 @@ export function EncryptionSettings() {
         })
         .finally(() => setIsRotating(false))
     }
-  }, [remoteBackupExists, backedUpFingerprint, fingerprint, doRotate, addToast, t])
+  }, [backupProbe, backedUpFingerprint, fingerprint, doRotate, addToast, t])
 
   const handleRotatePassphraseConfirm = useCallback(
     async (passphrase: string) => {
@@ -1093,20 +1132,24 @@ export function EncryptionSettings() {
               </p>
             )}
             {(() => {
-              // Three visible states:
+              // Four visible states:
               //   checking  → pre-probe transient
               //   inSync    → server has a backup AND it matches this
               //               device's current fingerprint (by our local
               //               marker).
               //   outOfSync → backup is missing, or present but for a
               //               different fingerprint.
-              // The three states drive the STATUS LINE only. The buttons
-              // render regardless: the marker records a fingerprint, not
-              // the blob's encoding, so an in-sync backup can still be one
-              // no other XEP-0373 client can open (#1021) and the user
-              // needs a way to re-publish it.
-              const checking = remoteBackupExists === null
-              const inSync = isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
+              //   unknown   → the probe could not reach a definitive answer;
+              //               treated as "a backup might exist" since the
+              //               dangerous assumption is absence.
+              // These four states drive the STATUS LINE only. The backup
+              // button renders regardless of sync state: the marker records
+              // a fingerprint, not the blob's encoding, so an in-sync backup
+              // can still be one no other XEP-0373 client can open (#1021)
+              // and the user needs a way to re-publish it. Retry and restore
+              // each have their own narrower gate below.
+              const checking = backupProbe === 'checking'
+              const inSync = isBackupInSync(backupProbe, backedUpFingerprint, fingerprint)
               return (
                 <>
                   <p className="text-xs leading-snug">
@@ -1120,19 +1163,33 @@ export function EncryptionSettings() {
                         {t('settings.encryption.backupStatusInSync')}
                       </span>
                     )}
-                    {!checking && !inSync && remoteBackupExists === false && (
+                    {!checking && !inSync && backupProbe === 'absent' && (
                       <span className="text-fluux-muted">
                         {t('settings.encryption.backupStatusNone')}
                       </span>
                     )}
-                    {!checking && !inSync && remoteBackupExists === true && (
+                    {!checking && !inSync && backupProbe === 'present' && (
                       <span className="text-fluux-yellow">
                         {t('settings.encryption.backupStatusMismatch')}
+                      </span>
+                    )}
+                    {!checking && !inSync && backupProbe === 'unknown' && (
+                      <span className="text-fluux-yellow">
+                        {t('settings.encryption.backupStatusUnknown')}
                       </span>
                     )}
                   </p>
                   {!checking && (
                     <div className="flex flex-wrap gap-2">
+                      {backupProbe === 'unknown' && (
+                        <button
+                          onClick={() => setBackupProbeNonce((n) => n + 1)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                        >
+                          <RefreshCw className="size-3.5" />
+                          {t('settings.encryption.backupStatusRetry')}
+                        </button>
+                      )}
                       <button
                         onClick={handleBackupRequest}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
@@ -1140,7 +1197,7 @@ export function EncryptionSettings() {
                         <CloudUpload className="size-3.5" />
                         {t('settings.encryption.backupAction')}
                       </button>
-                      {remoteBackupExists === true && (
+                      {(backupProbe === 'present' || backupProbe === 'unknown') && (
                         <button
                           onClick={() => setShowRestoreDialog(true)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
@@ -1254,7 +1311,7 @@ export function EncryptionSettings() {
       {showDeleteConfirm && fingerprint && (
         <DeleteOpenpgpKeyDialog
           fingerprint={fingerprint}
-          backupExists={remoteBackupExists === true}
+          backupExists={backupProbe === 'present' || backupProbe === 'unknown'}
           onConfirm={handleDeleteKey}
           onCancel={() => {
             if (!isDeleting) setShowDeleteConfirm(false)
@@ -1294,7 +1351,14 @@ export function EncryptionSettings() {
         <ConfirmDialog
           title={t('settings.encryption.rotateConfirmTitle')}
           message={
-            isBackupInSync(remoteBackupExists, backedUpFingerprint, fingerprint)
+            // Must stay in step with the routing predicate in
+            // handleRotateConfirm (the `unknown` branch there decides
+            // whether we actually re-publish). Under `unknown` this
+            // deliberately overstates — "will be re-encrypted" when we only
+            // know a backup might exist — because that is the safe
+            // direction: the alternative is a passphrase-invalidating
+            // re-publish the copy never warned about.
+            backupProbe === 'unknown' || isBackupInSync(backupProbe, backedUpFingerprint, fingerprint)
               ? t('settings.encryption.rotateConfirmMessageWithBackup')
               : t('settings.encryption.rotateConfirmMessage')
           }
@@ -1317,7 +1381,7 @@ export function EncryptionSettings() {
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
           reason={pendingIdentityChoice.reason}
-          hasServerBackup={pendingIdentityChoice.hasBackup}
+          serverBackup={pendingIdentityChoice.serverBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityChoiceRestore}
           onImportFromFile={handleIdentityChoiceImportFile}
