@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Rodar chave",
             "rotateSuccess": "Chave de criptografia rodada",
             "rotateFailed": "Não foi possível rodar a chave. Tente novamente.",
+            "rotateBackupFailed": "A chave foi rodada, mas não foi possível publicar a nova cópia de segurança. A frase-passe acima ainda não está ativa. Verifique a ligação e tente novamente.",
             "rotatePluginUnavailable": "Módulo OpenPGP indisponível",
             "trustStateCompromised": {
                 "title": "A verificação de integridade do estado de confiança falhou",

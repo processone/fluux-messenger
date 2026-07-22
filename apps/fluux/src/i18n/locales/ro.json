@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Rotește cheia",
             "rotateSuccess": "Cheie de criptare rotită",
             "rotateFailed": "Cheia nu a putut fi rotită. Încearcă din nou.",
+            "rotateBackupFailed": "Cheia a fost rotită, dar noua copie de rezervă nu a putut fi publicată. Fraza de acces de mai sus nu este încă activă. Verifică conexiunea și încearcă din nou.",
             "rotatePluginUnavailable": "Modulul OpenPGP indisponibil",
             "trustStateCompromised": {
                 "title": "Verificarea integrității stării de încredere a eșuat",

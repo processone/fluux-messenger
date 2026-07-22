@@ -829,6 +829,7 @@
             "rotateConfirmAction": "تدوير المفتاح",
             "rotateSuccess": "تم تدوير مفتاح التشفير",
             "rotateFailed": "تعذّر تدوير المفتاح. حاول مجددًا.",
+            "rotateBackupFailed": "تم تدوير مفتاحك، لكن تعذّر نشر النسخة الاحتياطية الجديدة. العبارة السرية أعلاه ليست فعّالة بعد. تحقّق من اتصالك وحاول مجددًا.",
             "rotatePluginUnavailable": "وحدة OpenPGP غير متاحة",
             "trustStateCompromised": {
                 "title": "فشل التحقق من سلامة حالة الثقة",

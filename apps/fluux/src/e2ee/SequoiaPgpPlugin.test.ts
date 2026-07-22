@@ -3247,6 +3247,96 @@ describe('SequoiaPgpPlugin', () => {
       expect(backupPub!.options?.accessModel).toBe('whitelist')
     })
 
+    /**
+     * A context whose secret-key publishes fail while every other node keeps
+     * working, simulating the realistic failure: a server we can still talk
+     * to for some things, or a connection that drops between publishes.
+     *
+     * Scoping the failure by node (rather than breaking `publishPEP`
+     * wholesale) is what gives the tests below their meaning. A globally
+     * broken transport would take the public-key publishes down too, and the
+     * assertions about which step failed could not tell the two apart.
+     */
+    function makeSecretKeyPublishFailure(accountJid: string) {
+      const built = makeContext(accountJid)
+      const originalPublish = built.ctx.xmpp.publishPEP
+      built.ctx.xmpp.publishPEP = async (node, item, options) => {
+        if (node === SECRET_KEY_NODE) {
+          throw new Error('remote-server-timeout')
+        }
+        await originalPublish(node, item, options)
+      }
+      return built
+    }
+
+    it('rejects when a supplied passphrase could not be re-published', async () => {
+      // The user has just been shown this passphrase, told to write it down,
+      // and made to tick "I've saved this". Resolving here would send them
+      // away holding a passphrase for a backup that does not exist. Nothing
+      // ever retries this step, and the passphrase stops existing when the
+      // dialog closes, so a warning in the log is not a substitute.
+      const { ctx } = makeSecretKeyPublishFailure('me@example.com')
+      await plugin.init(ctx)
+
+      const err = await plugin
+        .rotateEncryptionKey('correct-horse-battery-staple')
+        .catch((e: unknown) => e)
+
+      expect(isE2EEPluginError(err)).toBe(true)
+      // The app switches on this slug to tell "rotation failed" apart from
+      // "rotation succeeded, backup did not" — it must not drift.
+      expect((err as E2EEPluginError).code).toBe('backup-publish-failed')
+    })
+
+    it('keeps the rotation it already committed when the backup publish fails', async () => {
+      // We do not unwind. The local cert really does hold the new subkey by
+      // this point, and peers have been told about it; pretending otherwise
+      // would be a bigger lie than the error we throw.
+      const { ctx, published } = makeSecretKeyPublishFailure('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()!
+      const publishesBeforeRotation = published.length
+
+      await expect(plugin.rotateEncryptionKey('correct-horse-battery-staple')).rejects.toThrow()
+
+      // Data + metadata still went out, in the usual order. This also proves
+      // the injected failure was scoped to the secret-key node rather than
+      // knocking out every publish.
+      const postRotation = published.slice(publishesBeforeRotation)
+      expect(postRotation.map((p) => p.node)).toEqual([`${METADATA_NODE}:${fp}`, METADATA_NODE])
+      expect(plugin.getOwnFingerprint()).toBe(fp)
+    })
+
+    it('still resolves when only the public key publish fails', async () => {
+      // Control for the pair above, and the reason the asymmetry inside
+      // rotateEncryptionKey is not arbitrary: `ensureIdentity` re-publishes
+      // the public key on every connect, so that step genuinely is
+      // best-effort and must NOT turn a rotation into a failure. Only the
+      // backup, which nothing ever retries, is fatal.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()!
+      const publishesBeforeRotation = published.length
+      // Break the public-key nodes only after init, so the rotation is what
+      // meets the broken server.
+      const originalPublish = ctx.xmpp.publishPEP
+      ctx.xmpp.publishPEP = async (node, item, options) => {
+        if (node.startsWith(METADATA_NODE)) {
+          throw new Error('remote-server-timeout')
+        }
+        await originalPublish(node, item, options)
+      }
+
+      const info = await plugin.rotateEncryptionKey('correct-horse-battery-staple')
+
+      expect(info.fingerprint).toBe(fp)
+      // And the backup really was reached and published: without this the
+      // test would also pass if rotation had skipped the passphrase branch
+      // entirely, which is the very thing it claims to be a control for.
+      const postRotation = published.slice(publishesBeforeRotation)
+      expect(postRotation.map((p) => p.node)).toEqual([SECRET_KEY_NODE])
+    })
+
     it('leaves the server backup untouched when no passphrase is supplied', async () => {
       // Rotation without a passphrase at hand is still valid — the
       // local cert is already persisted, the user just has to re-enter

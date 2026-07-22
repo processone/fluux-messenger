@@ -830,6 +830,7 @@
             "rotateConfirmAction": "Irrota ċ-ċavetta",
             "rotateSuccess": "Ċ-ċavetta tal-kriptaġġ ġiet irrotata",
             "rotateFailed": "Ma rnexxiex jiġi rrotat iċ-ċavetta. Erġa' pprova.",
+            "rotateBackupFailed": "Iċ-ċavetta ġiet irrotata, iżda l-backup il-ġdid ma setax jiġi ppubblikat. Il-frażi sigrieta ta' hawn fuq għadha mhix attiva. Iċċekkja l-konnessjoni u erġa' pprova.",
             "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli",
             "trustStateCompromised": {
                 "title": "Il-verifika tal-integrità tal-istat ta' fiduċja falliet",

@@ -825,6 +825,7 @@
             "rotateConfirmAction": "Sleutel roteren",
             "rotateSuccess": "Versleutelingssleutel geroteerd",
             "rotateFailed": "Sleutel kon niet worden geroteerd. Probeer opnieuw.",
+            "rotateBackupFailed": "De sleutel is geroteerd, maar de nieuwe back-up kon niet worden gepubliceerd. De wachtwoordzin hierboven is nog niet actief. Controleer je verbinding en probeer opnieuw.",
             "rotatePluginUnavailable": "OpenPGP-module niet beschikbaar",
             "trustStateCompromised": {
                 "title": "Integriteitscontrole van vertrouwensstatus mislukt",

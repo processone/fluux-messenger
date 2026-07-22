@@ -825,6 +825,7 @@
             "rotateConfirmAction": "Skipta um lykil",
             "rotateSuccess": "Dulkóðunarlykli skipt",
             "rotateFailed": "Ekki tókst að skipta um lykil. Reyndu aftur.",
+            "rotateBackupFailed": "Skipt var um lykil en ekki tókst að birta nýja öryggisafritið. Aðgangsorðið hér að ofan er ekki virkt enn. Athugaðu tenginguna og reyndu aftur.",
             "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk",
             "trustStateCompromised": {
                 "title": "Heilleikaskoðun trauststöðu mistókst",

@@ -829,6 +829,7 @@
             "rotateConfirmAction": "Zmień klucz",
             "rotateSuccess": "Klucz szyfrowania zmieniony",
             "rotateFailed": "Nie udało się zmienić klucza. Spróbuj ponownie.",
+            "rotateBackupFailed": "Klucz został zmieniony, ale nie udało się opublikować nowej kopii zapasowej. Hasło powyżej nie jest jeszcze aktywne. Sprawdź połączenie i spróbuj ponownie.",
             "rotatePluginUnavailable": "Moduł OpenPGP niedostępny",
             "trustStateCompromised": {
                 "title": "Sprawdzanie integralności stanu zaufania nie powiodło się",

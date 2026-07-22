@@ -781,6 +781,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return { fingerprint: bundle.fingerprint }
   }
 
+  /**
+   * Rotate the encryption subkey, keeping the primary cert (and therefore
+   * the fingerprint peers verified) stable.
+   *
+   * Pass `backupPassphrase` to re-wrap the XEP-0373 §5 secret-key backup
+   * with it in the same operation, so the server copy does not stay pinned
+   * to the pre-rotation material. That step is NOT best-effort: if it fails
+   * this throws an `E2EEPluginError` with code `backup-publish-failed`,
+   * after the rotation itself has already committed. Callers must surface
+   * that to the user, whose freshly generated passphrase now protects
+   * nothing on the server.
+   */
   async rotateEncryptionKey(backupPassphrase?: string): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     if (!this.ownBundle) {
@@ -815,12 +827,32 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
 
+    // The two publishes above and the one below look alike but are not.
+    // `ensureIdentity` re-publishes the public key on every connection, so a
+    // failure there self-heals and a warning is the honest response.
+    //
+    // Nothing ever retries the backup. The caller only supplies a passphrase
+    // when re-publishing the backup IS the operation — the user has just been
+    // shown that passphrase and told to write it down — and the passphrase
+    // stops existing the moment the dialog closes. Reporting success here
+    // sends the user away guarding a backup that was never published.
     if (backupPassphrase !== undefined) {
       try {
         await this.backupSecretKey(backupPassphrase)
       } catch (err) {
-        ctx.logger.warn(
+        ctx.logger.error(
           `${this.pluginName()}: rotated backup publish failed: ${formatError(err)}`,
+        )
+        // Reuse the boundary classification so a network blip stays
+        // transient and the app's retry semantics are unchanged, but pin the
+        // code: the rotation above is committed, and the app has to be able
+        // to say so instead of reporting a rotation that never happened.
+        const classified = this.toPluginError('rotateEncryptionKey', err)
+        throw new E2EEPluginError(
+          classified.kind,
+          'backup-publish-failed',
+          `${this.pluginName()}: key rotated, but publishing the new backup failed: ${formatError(err)}`,
+          err,
         )
       }
     }

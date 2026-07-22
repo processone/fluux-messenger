@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-import { useConnection, useXMPPContext, getBareJid } from '@fluux/sdk'
+import { useConnection, useXMPPContext, getBareJid, isE2EEPluginError } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
@@ -777,6 +777,11 @@ export function EncryptionSettings() {
    * Throws on failure. The two callers handle errors differently: the
    * passphrase-dialog path lets the dialog catch and surface the error
    * inline; the no-backup path catches and toasts.
+   *
+   * A failed backup re-publish gets its own message. By the time it fails
+   * the rotation has already committed, so "couldn't rotate, try again"
+   * would be wrong on both counts, and the user is standing there with a
+   * passphrase they were just told to write down.
    */
   const doRotate = useCallback(
     async (passphrase: string | undefined) => {
@@ -787,10 +792,21 @@ export function EncryptionSettings() {
       if (!plugin?.rotateEncryptionKey) {
         throw new Error(t('settings.encryption.rotatePluginUnavailable'))
       }
-      await plugin.rotateEncryptionKey(passphrase)
-      // Re-probe so the backup status reflects the freshly-published
-      // ciphertext (or the fact that we now diverge from the server).
-      setBackupProbeNonce((n) => n + 1)
+      try {
+        await plugin.rotateEncryptionKey(passphrase)
+      } catch (err) {
+        if (isE2EEPluginError(err) && err.code === 'backup-publish-failed') {
+          console.error('[Fluux] E2EE rotate: backup re-publish failed:', err)
+          throw new Error(t('settings.encryption.rotateBackupFailed'), { cause: err })
+        }
+        throw err
+      } finally {
+        // Re-probe so the backup status reflects the freshly-published
+        // ciphertext (or the fact that we now diverge from the server).
+        // Also on the failure path: the rotation itself committed, so
+        // whatever the status line claimed before is stale either way.
+        setBackupProbeNonce((n) => n + 1)
+      }
       addToast('success', t('settings.encryption.rotateSuccess'))
     },
     [client, addToast, t],

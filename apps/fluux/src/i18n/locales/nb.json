@@ -825,6 +825,7 @@
             "rotateConfirmAction": "Rotér nøkkel",
             "rotateSuccess": "Krypteringsnøkkel rotert",
             "rotateFailed": "Kunne ikke rotere nøkkelen. Prøv igjen.",
+            "rotateBackupFailed": "Nøkkelen ble rotert, men den nye sikkerhetskopien kunne ikke publiseres. Passordsetningen ovenfor er ikke aktiv ennå. Sjekk tilkoblingen og prøv igjen.",
             "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig",
             "trustStateCompromised": {
                 "title": "Integritetssjekk av tillitstilstand mislyktes",

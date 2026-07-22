@@ -829,6 +829,7 @@
             "rotateConfirmAction": "Zamenjaj ključ",
             "rotateSuccess": "Šifrirni ključ zamenjan",
             "rotateFailed": "Ključa ni bilo mogoče zamenjati. Poskusite znova.",
+            "rotateBackupFailed": "Ključ je bil zamenjan, vendar nove varnostne kopije ni bilo mogoče objaviti. Geslo zgoraj še ni aktivno. Preverite povezavo in poskusite znova.",
             "rotatePluginUnavailable": "Modul OpenPGP ni na voljo",
             "trustStateCompromised": {
                 "title": "Preverjanje celovitosti stanja zaupanja ni uspelo",

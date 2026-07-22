@@ -825,6 +825,7 @@
             "rotateConfirmAction": "轮换密钥",
             "rotateSuccess": "加密密钥已轮换",
             "rotateFailed": "无法轮换密钥，请重试。",
+            "rotateBackupFailed": "密钥已轮换，但新备份发布失败。上方的密码短语尚未生效。请检查网络连接后重试。",
             "rotatePluginUnavailable": "OpenPGP 插件不可用",
             "trustStateCompromised": {
                 "title": "信任状态完整性检查失败",

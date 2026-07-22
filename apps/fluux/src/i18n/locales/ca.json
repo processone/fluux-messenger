@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Rotar clau",
             "rotateSuccess": "Clau de xifratge rotada",
             "rotateFailed": "No s'ha pogut rotar la clau. Torneu-ho a provar.",
+            "rotateBackupFailed": "La clau s'ha rotat, però no s'ha pogut publicar la còpia nova. La frase de pas anterior encara no és activa. Comproveu la connexió i torneu-ho a provar.",
             "rotatePluginUnavailable": "Mòdul OpenPGP no disponible",
             "trustStateCompromised": {
                 "title": "La verificació d'integritat de l'estat de confiança ha fallat",
