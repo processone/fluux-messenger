@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { roomStore, _resetRoomArchiveSavesForTesting } from './roomStore'
+import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { getLocalPart } from '../core/jid'
@@ -103,6 +103,9 @@ function createMessage(
 describe('roomStore', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    // Room read state is durable (#1081): wiping roomMeta below is not enough,
+    // or the next addRoom restores the previous test's pointer from storage.
+    _resetRoomReadStateForTesting()
     // Reset store state before each test
     roomStore.setState({
       rooms: new Map(),

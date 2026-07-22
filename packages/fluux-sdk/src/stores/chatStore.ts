@@ -546,7 +546,10 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     return { ...lastMessage, timestamp: new Date(lastMessage.timestamp) }
   }
 
-  // Helper to restore Date objects in lastReadAt
+  // Helper to restore a persisted Date (it lands on disk as an ISO string,
+  // even though the in-memory type says Date). Used for lastReadAt and for
+  // historyFloor, which is compared against message timestamps — a string there
+  // would make every comparison lie rather than throw.
   const restoreLastReadAt = (lastReadAt?: Date | string): Date | undefined => {
     if (!lastReadAt) return undefined
     return lastReadAt instanceof Date ? lastReadAt : new Date(lastReadAt)
@@ -570,6 +573,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(meta.lastMessage),
           lastReadAt: restoreLastReadAt(meta.lastReadAt),
+          historyFloor: restoreLastReadAt(meta.historyFloor),
           // The persisted value is untrusted, not really a `ReadPointer`: a chat
           // pointer riding inside `conversationMeta` goes through a plain
           // `JSON.stringify`, so its `timestamp` lands on disk as an ISO string
@@ -599,6 +603,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(conv.lastMessage),
           lastReadAt: restoreLastReadAt(conv.lastReadAt),
+          historyFloor: restoreLastReadAt(conv.historyFloor),
           readPointer: deserializeReadPointer(conv.readPointer),
         },
       ])
@@ -620,6 +625,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         lastReadAt: conv.lastReadAt,
         lastSeenMessageId: conv.lastSeenMessageId,
         readPointer: conv.readPointer,
+        historyFloor: conv.historyFloor,
       })
     }
   }
@@ -974,6 +980,7 @@ export const chatStore = createStore<ChatState>()(
             name: conv.name,
             type: conv.type,
           }
+          const existingMeta = state.conversationMeta.get(conv.id)
           // Extract metadata fields (frequently-changing)
           const meta: ConversationMetadata = {
             unreadCount: conv.unreadCount,
@@ -981,6 +988,12 @@ export const chatStore = createStore<ChatState>()(
             lastReadAt: conv.lastReadAt,
             lastSeenMessageId: conv.lastSeenMessageId,
             readPointer: conv.readPointer,
+            // When this conversation entered our world. Written once, at
+            // creation, and never again — a floor that moved on every re-add
+            // would keep burying history the user has not seen. The persisted
+            // value comes back through `deserializeState`, so a conversation
+            // re-added after a restart finds its original floor here.
+            historyFloor: existingMeta?.historyFloor ?? conv.historyFloor ?? new Date(),
           }
 
           const newEntities = new Map(state.conversationEntities)
@@ -991,7 +1004,7 @@ export const chatStore = createStore<ChatState>()(
 
           // Also update combined map for backward compatibility
           const newConversations = new Map(state.conversations)
-          newConversations.set(conv.id, conv)
+          newConversations.set(conv.id, { ...conv, historyFloor: meta.historyFloor })
 
           return {
             conversationEntities: newEntities,
@@ -1604,6 +1617,10 @@ export const chatStore = createStore<ChatState>()(
               }
               const meta: ConversationMetadata = {
                 unreadCount: 0,
+                // Creation moment — same lifecycle stamp as addConversation.
+                // This branch only runs for a conversation we do not have, so
+                // it can never restamp an existing floor.
+                historyFloor: new Date(),
               }
               const conv: Conversation = { ...entity, ...meta }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { roomStore } from './roomStore'
+import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { roomSelectors } from './roomSelectors'
 import type { Room, RoomMessage } from '../core/types/room'
 import { getLocalPart } from '../core/jid'
@@ -93,6 +93,10 @@ function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: stri
 describe('roomStore.applyRemoteDisplayed', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    // Room read state is durable (#1081), so wiping roomMeta by hand is no
+    // longer a clean slate: the next addRoom would restore the previous test's
+    // pointer from storage. Every beforeEach in this file drops it too.
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -326,6 +330,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -598,6 +603,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 describe('roomStore — new-message divider is session-only', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -658,6 +664,7 @@ describe('roomStore — new-message divider is session-only', () => {
 describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -721,6 +728,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 describe('roomStore.updateLastSeenMessageId presence gate', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -776,6 +784,7 @@ describe('roomStore.updateLastSeenMessageId presence gate', () => {
 describe('roomStore fresh-instance catch-up preserves the remote read position', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -835,6 +844,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
 describe('roomStore pending-marker guard edges', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),

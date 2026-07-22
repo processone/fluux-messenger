@@ -32,6 +32,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { makeReadPointer } from './shared/readPointer'
+import { loadRoomReadState, saveRoomReadState, clearRoomReadState, type RoomReadState } from './shared/readStateStorage'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
@@ -227,6 +228,98 @@ function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: stri
 }
 
 /**
+ * Durable room read state (see shared/readStateStorage). Rooms had none: the
+ * read position was rebuilt every session from MAM catch-up plus the XEP-0490
+ * marker, so a restart lost it (issue #1081).
+ *
+ * The map lives here rather than in `roomMeta` because rooms arrive from
+ * bookmarks LONG after the store initialises — `addRoom` is what folds a
+ * persisted row back into `roomMeta`, and until then the row has to wait
+ * somewhere. Hydrating `roomMeta` with placeholder entries instead would put
+ * rooms that may never be re-added in front of every `roomMeta` iterator (the
+ * XEP-0490 publisher walks `roomMeta.keys()`).
+ *
+ * Reloaded on `switchAccount`, dropped on `reset` (logout).
+ */
+let persistedRoomReadState = loadRoomReadState()
+
+/**
+ * Persist the read state, projecting the CURRENT `roomMeta` over the map above.
+ *
+ * Projecting the whole map (rather than writing the one room that changed)
+ * means `roomMeta` stays the single source of truth for every room the session
+ * knows about: a write site that forgets to call this loses nothing permanently,
+ * because the next call from any other room picks its pointer up too.
+ *
+ * Rooms absent from `roomMeta` keep their persisted row — at startup a pointer
+ * can advance before every bookmark has landed, and a room that is not loaded
+ * yet must not be garbage-collected by another room's save. `removeRoom` is
+ * what drops a row for good.
+ */
+function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
+  for (const [roomJid, meta] of roomMeta) {
+    if (!meta.readPointer && !meta.historyFloor) continue
+    persistedRoomReadState.set(roomJid, {
+      ...(meta.readPointer ? { readPointer: meta.readPointer } : {}),
+      ...(meta.historyFloor ? { historyFloor: meta.historyFloor } : {}),
+    })
+  }
+  saveRoomReadState(persistedRoomReadState)
+}
+
+/**
+ * The read position a room should start (or restart) with, resolved from ONE
+ * source and written as a whole.
+ *
+ * Priority: what the store already holds → what the caller supplied → what
+ * survived the last run. Never a field-by-field merge across sources:
+ * `lastSeenMessageId`, `lastReadAt` and `readPointer` describe one fact, and
+ * mixing them is exactly the drift #1081 is undoing.
+ *
+ * The store's own value wins because `addRoom` runs again on rejoin and on
+ * bookmark reload, and those Room objects are rebuilt from presence/bookmark
+ * data that carries no read state — taking them at face value would wipe a
+ * live pointer.
+ */
+function resolveRoomReadPosition(
+  existingMeta: RoomMetadata | undefined,
+  room: Room,
+  restored: RoomReadState | undefined
+): Pick<RoomMetadata, 'lastReadAt' | 'lastSeenMessageId' | 'readPointer'> {
+  if (existingMeta?.lastSeenMessageId || existingMeta?.readPointer) {
+    return {
+      lastReadAt: existingMeta.lastReadAt,
+      lastSeenMessageId: existingMeta.lastSeenMessageId,
+      readPointer: existingMeta.readPointer,
+    }
+  }
+  if (room.lastSeenMessageId || room.readPointer) {
+    return {
+      lastReadAt: room.lastReadAt,
+      lastSeenMessageId: room.lastSeenMessageId,
+      readPointer: room.readPointer,
+    }
+  }
+  if (restored?.readPointer) {
+    // A restored pointer has to land on lastSeenMessageId/lastReadAt too: every
+    // reader (divider placement, the XEP-0490 publisher, the unread recount)
+    // still keys off those, so restoring the pointer alone would persist a
+    // position nothing acts on. The pointer's timestamp IS the timestamp of the
+    // message it names, which is precisely what lastReadAt wants.
+    return {
+      lastReadAt: restored.readPointer.timestamp,
+      lastSeenMessageId: restored.readPointer.messageId,
+      readPointer: restored.readPointer,
+    }
+  }
+  return {
+    lastReadAt: existingMeta?.lastReadAt ?? room.lastReadAt,
+    lastSeenMessageId: undefined,
+    readPointer: undefined,
+  }
+}
+
+/**
  * localStorage persistence for XEP-0424 retractions still waiting for their
  * target to load. Scoped per account like the gap/coverage maps.
  */
@@ -269,6 +362,19 @@ let roomCacheEpoch = 0
 export function _resetRoomArchiveSavesForTesting(): void {
   roomArchiveSaves.clear()
   roomCacheEpoch++
+}
+
+/**
+ * Test-only: forget every persisted room read position, in memory and on disk.
+ *
+ * Room read state is durable now, so wiping `roomMeta` with a bare `setState`
+ * no longer gives a test a clean room: the next `addRoom` folds the previous
+ * test's pointer back in — which is the whole point in production. A test that
+ * resets the store by hand needs this too.
+ */
+export function _resetRoomReadStateForTesting(): void {
+  persistedRoomReadState = new Map()
+  clearRoomReadState()
 }
 
 /**
@@ -440,6 +546,12 @@ function commitRoomUpdate(
       const newMeta = new Map(state.roomMeta)
       newMeta.set(roomJid, { ...existingMeta, ...metaPatch })
       result.roomMeta = newMeta
+      // Same placement as saveGapsToStorage after a gap mutation: persist from
+      // inside the commit, so every caller routing a read-state field through
+      // updateRoom/markReadToNewest is covered without each one remembering to.
+      if ('readPointer' in metaPatch || 'historyFloor' in metaPatch) {
+        persistRoomReadState(newMeta)
+      }
     }
   }
 
@@ -908,15 +1020,22 @@ export const roomStore = createStore<RoomState>()(
         isPrivate: room.isPrivate,
         muted: room.muted,
       }
+      const existingMeta = state.roomMeta.get(room.jid)
+      const restoredReadState = persistedRoomReadState.get(room.jid)
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
         mentionsCount: room.mentionsCount,
         typingUsers: room.typingUsers,
         notifyAll: room.notifyAll,
         notifyAllPersistent: room.notifyAllPersistent,
-        lastReadAt: room.lastReadAt,
-        lastSeenMessageId: room.lastSeenMessageId,
-        readPointer: room.readPointer,
+        ...resolveRoomReadPosition(existingMeta, room, restoredReadState),
+        // Written ONCE, when the room enters our world, and never again — that
+        // is what makes it a lifecycle fact rather than a second read position.
+        // addRoom runs again on rejoin and on bookmark reload, and it runs again
+        // on every app start, so both the in-memory value and the persisted one
+        // outrank a fresh stamp: a floor that moved would silently bury whatever
+        // arrived while we were away.
+        historyFloor: existingMeta?.historyFloor ?? restoredReadState?.historyFloor ?? new Date(),
         lastMessage: room.messages?.length > 0 ? findLastNonIgnoredMessage(room.messages, room.jid, room.nickToJidCache) : undefined,
         lastInteractedAt: room.lastInteractedAt,
       }
@@ -930,7 +1049,16 @@ export const roomStore = createStore<RoomState>()(
       }
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(room.jid, room)
+      // Keep the combined mirror coherent with the read position resolved above
+      // — several call sites still read `rooms` as the fallback for these
+      // fields, and an incoming Room carries none of them.
+      newRooms.set(room.jid, {
+        ...room,
+        lastReadAt: meta.lastReadAt,
+        lastSeenMessageId: meta.lastSeenMessageId,
+        readPointer: meta.readPointer,
+        historyFloor: meta.historyFloor,
+      })
 
       const newEntities = new Map(state.roomEntities)
       newEntities.set(room.jid, entity)
@@ -940,6 +1068,10 @@ export const roomStore = createStore<RoomState>()(
 
       const newRuntime = new Map(state.roomRuntime)
       newRuntime.set(room.jid, runtime)
+
+      // Creation stamps the history floor, so the durable copy is written here
+      // too — a room joined and never opened still gets its floor recorded.
+      persistRoomReadState(newMeta)
 
       return {
         rooms: newRooms,
@@ -992,6 +1124,12 @@ export const roomStore = createStore<RoomState>()(
         newCoverage.delete(roomJid)
         saveCoverageToStorage(newCoverage)
         out.roomCoverage = newCoverage
+      }
+      // The read position describes messages that no longer exist. This is the
+      // ONLY place a persisted row is dropped — saves elsewhere never prune, so
+      // that a room whose bookmark has not loaded yet keeps its state.
+      if (persistedRoomReadState.delete(roomJid)) {
+        saveRoomReadState(persistedRoomReadState)
       }
       return out
     })
@@ -1357,6 +1495,10 @@ export const roomStore = createStore<RoomState>()(
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
     roomCacheEpoch++
+    // Read state is folded into roomMeta by addRoom, not held in the state
+    // object — reload the account's rows so the rooms this account is about to
+    // add find theirs.
+    persistedRoomReadState = loadRoomReadState(jid)
     set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid), loadCoverageFromStorage(jid), loadPendingRetractionsFromStorage(jid)))
   },
 
@@ -1377,6 +1519,11 @@ export const roomStore = createStore<RoomState>()(
     localStorage.removeItem(getRoomGapsStorageKey())
     localStorage.removeItem(getRoomCoverageStorageKey())
     localStorage.removeItem(getRoomNonAnonAckStorageKey())
+    // Logout forgets read positions for rooms exactly as chatStore.reset()
+    // forgets them for 1:1 conversations (it drops the whole chat storage key,
+    // pointers included) — one kind of conversation must not outlive the other.
+    persistedRoomReadState = new Map()
+    clearRoomReadState()
     set(createEmptyRoomState())
   },
 
@@ -1787,6 +1934,7 @@ export const roomStore = createStore<RoomState>()(
         readPointer: updated.readPointer,
       }
       newMeta.set(roomJid, newMetaEntry)
+      persistRoomReadState(newMeta)
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
@@ -1913,6 +2061,7 @@ export const roomStore = createStore<RoomState>()(
           }
           const newMeta = new Map(state.roomMeta)
           newMeta.set(roomJid, newMetaEntry)
+          persistRoomReadState(newMeta)
           const newRooms = new Map(state.rooms)
           newRooms.set(roomJid, {
             ...room,
@@ -2078,6 +2227,7 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       if (meta) {
         newMeta.set(roomJid, { ...meta, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
+        persistRoomReadState(newMeta)
       }
 
       return { rooms: newRooms, roomMeta: newMeta }
@@ -2170,6 +2320,12 @@ export const roomStore = createStore<RoomState>()(
         else newMarkers.delete(roomJid)
       }
 
+      // A position another device read to is a read position like any other —
+      // persist it. The stash/clear kinds move no pointer.
+      if (resolution.kind === 'advanced' || resolution.kind === 'advanced-with-divider') {
+        persistRoomReadState(newMeta)
+      }
+
       if (existing) {
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
@@ -2227,6 +2383,7 @@ export const roomStore = createStore<RoomState>()(
               lastSeenMessageId: exact.lastSeenMessageId,
               readPointer: exact.readPointer,
             })
+            persistRoomReadState(newMeta)
             const room = state.rooms.get(roomJid)
             if (!room) return { roomMeta: newMeta }
             const newRooms = new Map(state.rooms)
@@ -2324,7 +2481,13 @@ export const roomStore = createStore<RoomState>()(
           newMeta.set(roomJid, { ...existingMeta, notifyAllPersistent: bookmark.notifyAll })
         }
       } else {
-        // Create a new room entry from bookmark
+        // Create a new room entry from bookmark. This is the SECOND place a
+        // room entity is born — a bookmark pushed from another device
+        // materialises a room we have never joined — so it stamps the history
+        // floor and folds any persisted read state exactly like addRoom.
+        const restoredReadState = persistedRoomReadState.get(roomJid)
+        const readPosition = resolveRoomReadPosition(undefined, { jid: roomJid } as Room, restoredReadState)
+        const historyFloor = restoredReadState?.historyFloor ?? new Date()
         const newRoom: Room = {
           jid: roomJid,
           name: bookmark.name,
@@ -2340,6 +2503,8 @@ export const roomStore = createStore<RoomState>()(
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
+          ...readPosition,
+          historyFloor,
         }
         newRooms.set(roomJid, newRoom)
 
@@ -2360,7 +2525,10 @@ export const roomStore = createStore<RoomState>()(
           mentionsCount: 0,
           typingUsers: new Set(),
           notifyAllPersistent: bookmark.notifyAll,
+          ...readPosition,
+          historyFloor,
         })
+        persistRoomReadState(newMeta)
 
         // Create runtime
         newRuntime.set(roomJid, {
@@ -3168,6 +3336,7 @@ export const roomStore = createStore<RoomState>()(
             lastSeenMessageId: recomputed.lastSeenMessageId,
             readPointer: recomputed.readPointer,
           })
+          persistRoomReadState(newMeta)
         }
 
         // roomRuntime deliberately untouched.

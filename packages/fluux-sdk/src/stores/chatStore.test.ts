@@ -807,7 +807,12 @@ describe('chatStore', () => {
 
       const state = chatStore.getState()
       expect(state.conversations.size).toBe(1)
-      expect(state.conversations.get('alice@example.com')).toEqual(conv)
+      // Creation also stamps historyFloor (#1081) — see the dedicated block at
+      // the end of this file for what that value has to be.
+      expect(state.conversations.get('alice@example.com')).toEqual({
+        ...conv,
+        historyFloor: expect.any(Date),
+      })
     })
 
     it('should update existing conversation', () => {
@@ -4617,6 +4622,55 @@ describe('chatStore parity drift regressions', () => {
 
       const resident = chatStore.getState().messages.get(convId) || []
       expect(resident.map((m) => m.id)).toEqual(['cur-1', 'new-1', 'new-2'])
+    })
+  })
+  // ---------------------------------------------------------------------------
+  // historyFloor: when a conversation entered our world (#1081). NOT a read
+  // position — the floor unread derivation counts from when there is no pointer
+  // yet, so history predating the conversation cannot flood the badge.
+  // ---------------------------------------------------------------------------
+  describe('historyFloor at conversation creation', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('stamps historyFloor when a conversation is first created', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor)
+        .toBeInstanceOf(Date)
+    })
+
+    // Control: an implementation that stamps the floor on every addConversation
+    // passes "floor is set" but fails this. The clock advance is load-bearing —
+    // two calls in one tick would otherwise produce an equal Date and the
+    // control could not fail.
+    it('does NOT restamp historyFloor when an existing conversation is re-added', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-07-22T10:00:00Z'))
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const first = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+
+      vi.setSystemTime(new Date('2026-07-22T11:00:00Z'))
+      chatStore.getState().addConversation(createConversation('alice@example.com', 'Alice Renamed'))
+
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor)
+        .toEqual(first)
+    })
+
+    // conversationMeta rides a plain JSON.stringify, so a Date lands on disk as
+    // an ISO string. Restored without conversion it would still TYPE as Date
+    // while comparing as a string — the exact trap the readPointer restore
+    // already had to cover.
+    it('restores historyFloor as a real Date across a persist round-trip', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const stamped = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
+
+      const restored = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+      expect(restored).toBeInstanceOf(Date)
+      expect(restored).toEqual(stamped)
     })
   })
 })

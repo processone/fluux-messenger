@@ -91,6 +91,21 @@ export function loadRoomReadState(jid?: string | null): Map<string, RoomReadStat
   return result
 }
 
+/**
+ * Drop the account's persisted room read state (logout).
+ *
+ * Mirrors what `chatStore.reset()` does to the chat storage key, which is where
+ * the 1:1 read pointers live: logging out forgets read positions for both kinds
+ * of conversation, rather than for one of them.
+ */
+export function clearRoomReadState(jid?: string | null): void {
+  try {
+    localStorage.removeItem(getRoomReadStateStorageKey(jid))
+  } catch {
+    // Ignore storage errors (private mode, etc.).
+  }
+}
+
 export function saveRoomReadState(state: Map<string, RoomReadState>, jid?: string | null): void {
   try {
     const entries: [string, SerializedRoomReadState][] = []
