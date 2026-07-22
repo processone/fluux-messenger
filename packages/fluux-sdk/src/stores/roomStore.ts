@@ -2028,6 +2028,14 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateLastSeenMessageId: (roomJid, messageId) => {
+    // Presence gate (issue #1076): the viewport observer reports what is PAINTED,
+    // and the list auto-scrolls to arriving messages whether or not the user is
+    // at the window. Without this check a backgrounded client marks every new
+    // message read in real time — the pointer rides the live edge, the "new
+    // messages" divider never survives to the next open, and the bogus position
+    // is published to other devices over XEP-0490. Rendered is not seen.
+    if (!connectionStore.getState().windowVisible) return
+
     set((state) => {
       const existing = state.rooms.get(roomJid)
       const meta = state.roomMeta.get(roomJid)
@@ -3111,7 +3119,13 @@ export const roomStore = createStore<RoomState>()(
               firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
             },
             mergedForMarker,
-            { countMentions: true }
+            {
+              countMentions: true,
+              // A stashed XEP-0490 marker is resolved just below (after this
+              // set()), and that fold is forward-only — so the guard must not
+              // snap the pointer past it first (issue #1076).
+              hasPendingRemoteMarker: existingMeta.pendingRemoteDisplayedStanzaId !== undefined,
+            }
           )
           newMeta.set(roomJid, {
             ...newMeta.get(roomJid)!,

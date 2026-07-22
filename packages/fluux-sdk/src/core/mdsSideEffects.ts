@@ -166,6 +166,13 @@ export function setupMdsSideEffects(
       // below) or a redundant re-enqueue. The local marker is forward-only, so
       // re-asserting a value the node already has is always pointless.
       if (lastKnownNodeStanzaId.get(jid) === stanzaId) continue
+      // Re-check the catch-up gate at FLUSH time, not just at enqueue: the
+      // debounce window is long enough for a catch-up to start after the
+      // position was buffered, and it is the publish itself that must never
+      // speak from a partial archive. Dropping the entry is safe — the local
+      // pointer lives in localStorage and is re-considered on the next advance
+      // or the next fresh-session seed.
+      if (!archiveIsTrustworthy(jid)) continue
       const by = stanzaIdBy(jid)
       if (!by) continue // own JID unknown (should not happen while online) — retry next advance
       try {
@@ -177,9 +184,34 @@ export function setupMdsSideEffects(
     }
   }
 
+  /**
+   * Is this entity's archive complete enough to speak for the user?
+   *
+   * Mirrors Gajim's `if not MAM.is_catch_up_finished(contact): return` guard.
+   * A read position derived mid-catch-up is computed against a partial window,
+   * and MDS positions are forward-only — publishing a wrong one makes every
+   * other device adopt it and leaves the real position unrecoverable.
+   *
+   * An entity that has NEVER been queried is allowed through: a conversation or
+   * room created live during the session has no half-downloaded archive to
+   * misreport, and gating it would silence read sync for new conversations
+   * entirely.
+   */
+  function archiveIsTrustworthy(jid: string): boolean {
+    const mam = isRoom(jid)
+      ? roomStore.getState().getRoomMAMQueryState(jid)
+      : chatStore.getState().getMAMQueryState(jid)
+    if (!mam.hasQueried && !mam.isLoading) return true // never queried — nothing partial
+    return !mam.isLoading && mam.isCaughtUpToLive
+  }
+
   /** Consider a conversation/room for publishing if its read position advanced. */
   function consider(jid: string): void {
     if (!syncEnabled) return
+    // Catch-up gate: never publish a position derived from a partial archive.
+    // Skipping is safe — localStorage holds the local pointer and the next
+    // advance (or the next fresh-session seed) re-considers it once caught up.
+    if (!archiveIsTrustworthy(jid)) return
 
     const seenId = isRoom(jid)
       ? roomStore.getState().roomMeta.get(jid)?.lastSeenMessageId

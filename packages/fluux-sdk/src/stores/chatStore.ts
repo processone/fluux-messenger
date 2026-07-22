@@ -1340,6 +1340,11 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateLastSeenMessageId: (conversationId, messageId) => {
+        // Presence gate (issue #1076) — see the roomStore twin. The viewport
+        // observer reports what is PAINTED, and the list auto-scrolls to arriving
+        // messages whether or not the user is at the window. Rendered is not seen.
+        if (!connectionStore.getState().windowVisible) return
+
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
@@ -2221,7 +2226,12 @@ export const chatStore = createStore<ChatState>()(
                 lastSeenMessageId: meta.lastSeenMessageId,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               }
-              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker)
+              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker, {
+                // A stashed XEP-0490 marker is resolved after this set(), and that
+                // fold is forward-only — so the guard must not snap the pointer
+                // past it first (issue #1076).
+                hasPendingRemoteMarker: meta.pendingRemoteDisplayedStanzaId !== undefined,
+              })
               // Same-reference return = nothing changed; skip the map churn.
               if (recomputed !== pointerState) hydrated = recomputed
             }

@@ -32,6 +32,7 @@ import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
+import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
@@ -155,6 +156,16 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(true)
+
+  // Publish the viewport-at-bottom truth so the global focus handler can tell a
+  // genuine "user is looking at the newest message" from a view merely parked at
+  // the live edge (issue #1076). Registers the ref object, so the scroll hook's
+  // many writes to `.current` need no notification.
+  useEffect(() => {
+    const id = activeConversation?.id
+    if (!id) return
+    return registerViewportBottomRef('conversation', id, isAtBottomRef)
+  }, [activeConversation?.id])
 
   // Scroll to bottom (used after sending a message)
   const scrollToBottom = useCallback(() => {

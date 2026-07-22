@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
+import { connectionStore } from './connectionStore'
 import { chatSelectors } from './chatSelectors'
 import type { Message } from '../core/types/chat'
 
@@ -795,5 +796,121 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fresh-instance catch-up ordering (issue #1076) — twin of the roomStore case.
+//
+// A new instance has no local read state, so the marker from the client the user
+// left arrives before any message can resolve it and lands pending. The catch-up
+// merge recomputed counts first, and the fresh-entity guard snapped the pointer
+// to the newest message — past the marker, which the forward-only fold then
+// discarded.
+// ---------------------------------------------------------------------------
+
+describe('chatStore fresh-instance catch-up preserves the remote read position', () => {
+  const cid = 'juliet@capulet.example'
+
+  beforeEach(() => chatStore.getState().reset())
+
+  /** Register the conversation with NO read state at all (fresh instance). */
+  function seedFreshConversation(): void {
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0 })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+  }
+
+  const archive = () => Array.from({ length: 10 }, (_, i) => msg(`m${i + 1}`, `s${i + 1}`))
+
+  it('keeps the pointer at the marker instead of snapping to newest', () => {
+    seedFreshConversation()
+    chatStore.getState().applyRemoteDisplayed(cid, 's3') // nothing loaded → pending
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s3')
+
+    chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.lastSeenMessageId).toBe('m3')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+
+  it('counts the messages after the marker as unread', () => {
+    seedFreshConversation()
+    chatStore.getState().applyRemoteDisplayed(cid, 's3')
+
+    chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(7)
+  })
+
+  // Control: no remote marker ⇒ a fresh conversation is still caught up.
+  it('still treats a fresh conversation with no remote marker as caught up', () => {
+    seedFreshConversation()
+
+    chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.unreadCount).toBe(0)
+    expect(meta?.lastSeenMessageId).toBe('m10')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// updateLastSeenMessageId presence gate (issue #1076) — twin of the roomStore case.
+// ---------------------------------------------------------------------------
+
+describe('chatStore.updateLastSeenMessageId presence gate', () => {
+  const cid = 'juliet@capulet.example'
+
+  beforeEach(() => {
+    chatStore.getState().reset()
+    connectionStore.getState().setWindowVisible(true)
+  })
+
+  function seedWithPointer(lastSeenMessageId: string): void {
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+  }
+
+  it('advances the read pointer when the window is focused', () => {
+    seedWithPointer('m1')
+    connectionStore.getState().setWindowVisible(true)
+    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+  })
+
+  it('does not advance the read pointer while the window is unfocused', () => {
+    seedWithPointer('m1')
+    connectionStore.getState().setWindowVisible(false)
+    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+  })
+
+  it('leaves the combined conversations map untouched while unfocused', () => {
+    seedWithPointer('m1')
+    connectionStore.getState().setWindowVisible(false)
+    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
+    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m1')
+  })
+
+  it('resumes advancing once the window regains focus', () => {
+    seedWithPointer('m1')
+    connectionStore.getState().setWindowVisible(false)
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    connectionStore.getState().setWindowVisible(true)
+    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
   })
 })

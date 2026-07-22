@@ -464,6 +464,13 @@ export function onMessageSeen(
 export interface RecomputeCountsOptions {
   /** Count `isMention` messages into mentionsCount (rooms). */
   countMentions?: boolean
+  /**
+   * True when an XEP-0490 marker for this entity is stashed but not yet resolved
+   * (`pendingRemoteDisplayedStanzaId`). Such an entity has a read position — we
+   * simply cannot express it as a local message id yet — so the fresh-entity
+   * guard below must NOT claim it is caught up. See {@link recomputeCountsFromPointer}.
+   */
+  hasPendingRemoteMarker?: boolean
 }
 
 /**
@@ -477,6 +484,14 @@ export interface RecomputeCountsOptions {
  * counts stay zero. History replay of a newly joined room, or a new device
  * with no MDS position, never manufactures unread debt.
  *
+ * The guard does NOT apply while an XEP-0490 marker is still pending
+ * (`hasPendingRemoteMarker`). On a fresh instance the marker from the user's
+ * other client always arrives before the room has any messages to resolve it
+ * against, so it sits stashed while this runs. Snapping the pointer to newest
+ * then would put it PAST the marker, and the fold that follows is forward-only —
+ * silently discarding the position the user actually left off at. Leaving the
+ * state untouched lets that fold resolve the marker and the counts follow.
+ *
  * An outgoing message inside the counted range is a read boundary (the user
  * replied, here or on another device): counting restarts after the last one
  * and the pointer advances to it.
@@ -486,10 +501,13 @@ export function recomputeCountsFromPointer(
   messages: NotificationMessage[],
   options?: RecomputeCountsOptions
 ): EntityNotificationState {
-  const { countMentions = false } = options ?? {}
+  const { countMentions = false, hasPendingRemoteMarker = false } = options ?? {}
   if (messages.length === 0) return state
 
   if (!state.lastSeenMessageId && !state.lastReadAt) {
+    // An unresolved remote marker IS read state — defer to the fold that will
+    // resolve it rather than claiming this entity is caught up.
+    if (hasPendingRemoteMarker) return state
     const newest = messages[messages.length - 1]
     if (state.unreadCount === 0 && state.mentionsCount === 0 && state.lastSeenMessageId === newest.id) {
       return state

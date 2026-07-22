@@ -132,6 +132,22 @@ function addConversation(id: string): void {
   chatStore.getState().addConversation({ id, name: id, type: 'chat', unreadCount: 0 })
 }
 
+/** Force a conversation's MAM query state (catch-up gate input). */
+function setConvMamState(cid: string, patch: Partial<{ isLoading: boolean; hasQueried: boolean; isCaughtUpToLive: boolean }>): void {
+  chatStore.setState((state) => {
+    const next = new Map(state.mamQueryStates)
+    next.set(cid, {
+      isLoading: false,
+      hasQueried: false,
+      error: null,
+      isHistoryComplete: false,
+      isCaughtUpToLive: false,
+      ...patch,
+    } as never)
+    return { mamQueryStates: next }
+  })
+}
+
 describe('setupMdsSideEffects', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -567,6 +583,88 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(client.mds.retractDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Catch-up gate — Gajim's `if not MAM.is_catch_up_finished(contact): return`.
+//
+// Publishing a read position derived from a half-downloaded archive broadcasts a
+// wrong "read up to here" to every other device, and MDS positions are
+// forward-only — the real position is then unrecoverable. Wait until the archive
+// for that entity is actually caught up before speaking for the user.
+// ---------------------------------------------------------------------------
+
+describe('setupMdsSideEffects catch-up gate', () => {
+  const cid = 'juliet@capulet.example'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    connectionStore.getState().reset()
+    chatStore.getState().reset()
+    roomStore.getState().reset()
+    localStorageMock.clear()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  async function armed() {
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+    return { client, cleanup }
+  }
+
+  it('does not publish while a MAM query is still in flight', async () => {
+    const { client, cleanup } = await armed()
+    setConvMamState(cid, { isLoading: true, hasQueried: true })
+
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does not publish when the archive was queried but is not caught up to live', async () => {
+    const { client, cleanup } = await armed()
+    setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: false })
+
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('publishes once the archive is caught up to live', async () => {
+    const { client, cleanup } = await armed()
+    setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
+
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  // No-regression guarantee: an entity that never ran a MAM query (a conversation
+  // created live, mid-session) has no incomplete archive to misreport, so the gate
+  // must not silence it — that would break read sync for new conversations.
+  it('publishes for an entity that has never run a MAM query', async () => {
+    const { client, cleanup } = await armed()
+
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
     cleanup()
   })
 })

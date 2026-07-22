@@ -4,6 +4,7 @@ import { roomSelectors } from './roomSelectors'
 import type { Room, RoomMessage } from '../core/types/room'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import { connectionStore } from './connectionStore'
 
 // Mock localStorage (required because roomStore uses persist middleware)
 const localStorageMock = (() => {
@@ -704,5 +705,216 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// updateLastSeenMessageId — presence gate (issue #1076)
+//
+// The viewport observer equated "rendered on screen" with "read". Combined with
+// auto-scroll-on-new-message, a backgrounded client marked every arriving message
+// read in real time: the pointer rode the live edge, the "new messages" divider
+// never survived, and the position was published over XEP-0490. A message painted
+// while the user is in another app has not been seen.
+// ---------------------------------------------------------------------------
+
+describe('roomStore.updateLastSeenMessageId presence gate', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    connectionStore.getState().setWindowVisible(true)
+    vi.clearAllMocks()
+  })
+
+  it('advances the read pointer when the window is focused', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    connectionStore.getState().setWindowVisible(true)
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+  })
+
+  it('does not advance the read pointer while the window is unfocused', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    connectionStore.getState().setWindowVisible(false)
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+  })
+
+  it('resumes advancing once the window regains focus', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    connectionStore.getState().setWindowVisible(false)
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+    connectionStore.getState().setWindowVisible(true)
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Fresh-instance catch-up ordering (issue #1076)
+//
+// A new install / new device / cleared cache has NO local read state for a room.
+// The MDS marker from the client the user left always arrives before the room has
+// messages to resolve it against, so it lands in pendingRemoteDisplayedStanzaId.
+// The catch-up merge then recomputed counts FIRST — and its fresh-entity guard
+// ("no pointer, no lastReadAt ⇒ caught up") snapped the pointer to the newest
+// message. The pending fold that runs afterwards is forward-only, so the user's
+// real position was already behind it and got discarded.
+// ---------------------------------------------------------------------------
+
+describe('roomStore fresh-instance catch-up preserves the remote read position', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    connectionStore.getState().setWindowVisible(true)
+    vi.clearAllMocks()
+  })
+
+  /** 10 archived messages, m1..m10 / s1..s10. */
+  const archive = () => Array.from({ length: 10 }, (_, i) => rmsg(`m${i + 1}`, `s${i + 1}`, i + 1))
+
+  it('keeps the pointer at the marker instead of snapping to newest', () => {
+    seedRoom(ROOM, []) // fresh instance: no messages, no pointer, no lastReadAt
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's3') // non-resident → pending
+    expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s3')
+
+    roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m3')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+
+  it('counts the messages after the marker as unread', () => {
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
+
+    roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+  })
+
+  // Control: a genuinely fresh room with NO remote marker must still be treated as
+  // caught up, or every new join would manufacture unread debt from its history.
+  it('still treats a fresh room with no remote marker as caught up', () => {
+    seedRoom(ROOM, [])
+
+    roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.unreadCount).toBe(0)
+    expect(meta?.lastSeenMessageId).toBe('m10')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Pending-marker guard: edges around the fresh-instance fix (issue #1076).
+// ---------------------------------------------------------------------------
+
+describe('roomStore pending-marker guard edges', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    connectionStore.getState().setWindowVisible(true)
+    vi.clearAllMocks()
+  })
+
+  // The guard must not strand a room forever: when the marker's message is NOT in
+  // the delivered page it stays pending (rather than snapping the pointer past it),
+  // and a later page carrying that message still resolves it.
+  it('holds the position pending when the marker is not in the delivered page', () => {
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-deep')
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg('m8', 's8', 8), rmsg('m9', 's9', 9)],
+      {}, true, 'forward'
+    )
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-deep')
+    expect(meta?.lastSeenMessageId).toBe(undefined)
+  })
+
+  it('resolves that held position once a later page carries the marker message', () => {
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-deep')
+    roomStore.getState().mergeRoomMAMMessages(ROOM, [rmsg('m9', 's9', 9)], {}, true, 'forward')
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg('m5', 's-deep', 5), rmsg('m6', 's6', 6)],
+      {}, true, 'forward'
+    )
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+
+  // The guard is scoped to the fresh-entity branch — a room that already has a
+  // local pointer must keep counting from it, pending marker or not.
+  it('counts from the existing local pointer when one is already set', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-future')
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)],
+      {}, true, 'forward'
+    )
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+  })
+
+  it('counts mentions after the resolved marker, not from the start of the page', () => {
+    seedRoom(ROOM, [])
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's2')
+
+    const page = [
+      rmsg('m1', 's1', 1),
+      { ...rmsg('m2', 's2', 2), isMention: true } as RoomMessage,
+      { ...rmsg('m3', 's3', 3), isMention: true } as RoomMessage,
+      rmsg('m4', 's4', 4),
+    ]
+    roomStore.getState().mergeRoomMAMMessages(ROOM, page, {}, true, 'forward')
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m2')
+    expect(meta?.unreadCount).toBe(2)
+    // m2's mention is at/behind the read position — only m3's counts.
+    expect(meta?.mentionsCount).toBe(1)
   })
 })
