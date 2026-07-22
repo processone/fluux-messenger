@@ -1411,12 +1411,19 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* Modal / dialog / command-palette enter + exit (Aurora motion language).
-   The scrim layer fades (opacity); the panel scales (transform) so the two
-   compose without double-fading the panel. Exits use `forwards` to hold the
-   end frame for the ~150ms before the component unmounts. */
-@keyframes modal-panel-in  { from { transform: scale(0.97); } to { transform: scale(1); } }
-@keyframes modal-panel-out { from { transform: scale(1); }    to { transform: scale(0.98); } }
-@keyframes command-palette-in { from { transform: translateY(-8px) scale(0.98); } to { transform: translateY(0) scale(1); } }
+   The scrim and the panel are SIBLING layers (ModalOverlay/BottomSheet render
+   the scrim next to the panel, never as its ancestor — an ancestor carrying
+   backdrop-filter or opacity < 1 would form a Backdrop Root and silently
+   discard the panel's own backdrop-filter; see ModalOverlay.backdroproot.test.tsx).
+   Because they're siblings, opacity no longer cascades from the scrim onto the
+   panel, so each layer owns its own fade: the scrim keeps `scrim-in`/`scrim-out`
+   and the panel fades here alongside its scale. Do NOT drop the panel's opacity
+   keyframes to "simplify" this back to transform-only — that was the bug.
+   Exits use `forwards` to hold the end frame for the ~150ms before the
+   component unmounts. */
+@keyframes modal-panel-in  { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@keyframes modal-panel-out { from { opacity: 1; transform: scale(1); }    to { opacity: 0; transform: scale(0.98); } }
+@keyframes command-palette-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes scrim-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scrim-out { from { opacity: 1; } to { opacity: 0; } }
 
