@@ -3,6 +3,7 @@ import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
+import { detectSoftwareRendering } from '@/themes/softwareRendering'
 import { isLinux } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -348,11 +349,14 @@ export function useTheme() {
   // which is why getActiveTheme() is consulted here.
   useEffect(() => {
     const themeWantsReduced = getActiveTheme()?.transparency === 'reduced'
+    // Memoized after the first call; the GPU cannot change under a live page.
+    const compositorCannotBlur = detectSoftwareRendering()
     const resolve = () =>
       resolveTransparency({
         themeWantsReduced,
         transparencyMode,
         systemReducedMatches: window.matchMedia('(prefers-reduced-transparency: reduce)').matches,
+        compositorCannotBlur,
       })
     document.documentElement.setAttribute('data-transparency', resolve())
     if (transparencyMode !== 'system') return
