@@ -928,7 +928,17 @@
             "searchIndexDescription": "The search index allows full-text search across your message history. Rebuild it if search results seem incomplete.",
             "rebuildIndex": "Rebuild search index",
             "rebuildingIndex": "Rebuilding…",
-            "indexRebuilt": "{{count}} messages indexed"
+            "indexRebuilt": "{{count}} messages indexed",
+            "logs": "Logs",
+            "logsDescription": "Open the folder containing Fluux diagnostic logs.",
+            "openLogs": "Open Logs Folder"
+        },
+        "systemTray": {
+            "title": "System tray",
+            "keepInTray": "Keep Fluux in the system tray",
+            "descriptionWindows": "When enabled, minimizing or closing Fluux hides it in the system tray.",
+            "descriptionLinux": "When enabled, closing Fluux hides it in the system tray when supported. Minimizing keeps your desktop’s normal behavior.",
+            "unavailableLinux": "No compatible system tray is available. Closing Fluux will quit the app."
         }
     },
     "update": {

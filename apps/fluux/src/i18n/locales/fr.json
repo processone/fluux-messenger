@@ -760,7 +760,10 @@
             "searchIndexDescription": "L'index de recherche permet la recherche en texte intégral dans l'historique de vos messages. Reconstruisez-le si les résultats semblent incomplets.",
             "rebuildIndex": "Reconstruire l'index",
             "rebuildingIndex": "Reconstruction…",
-            "indexRebuilt": "{{count}} messages indexés"
+            "indexRebuilt": "{{count}} messages indexés",
+            "logs": "Journaux",
+            "logsDescription": "Ouvrir le dossier contenant les journaux de diagnostic de Fluux.",
+            "openLogs": "Ouvrir le dossier des journaux"
         },
         "encryption": {
             "experimental": "Expérimental",
@@ -931,7 +934,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Charger automatiquement dans les messages directs et les salons privés. Dans les salons publics, touchez pour charger.",
         "mediaAutoDownloadNever": "Jamais",
         "mediaAutoDownloadNeverDescription": "Ne jamais charger les médias automatiquement. Touchez pour charger dans toute conversation.",
-        "mediaAutoDownloadStrangerNote": "Les médias des personnes absentes de vos contacts nécessitent toujours une action pour se charger, quel que soit ce réglage."
+        "mediaAutoDownloadStrangerNote": "Les médias des personnes absentes de vos contacts nécessitent toujours une action pour se charger, quel que soit ce réglage.",
+        "systemTray": {
+            "title": "Zone de notification",
+            "keepInTray": "Conserver Fluux dans la zone de notification",
+            "descriptionWindows": "Lorsque cette option est activée, réduire ou fermer Fluux le masque dans la zone de notification.",
+            "descriptionLinux": "Lorsque cette option est activée, fermer Fluux le masque dans la zone de notification si elle est prise en charge. La réduction conserve le comportement normal du bureau.",
+            "unavailableLinux": "Aucune zone de notification compatible n’est disponible. Fermer Fluux quittera l’application."
+        }
     },
     "update": {
         "title": "Mise à jour disponible",

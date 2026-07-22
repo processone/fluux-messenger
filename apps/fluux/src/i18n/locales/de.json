@@ -731,7 +731,10 @@
             "searchIndexDescription": "Der Suchindex ermöglicht die Volltextsuche in Ihrem Nachrichtenverlauf. Erstellen Sie ihn neu, wenn die Suchergebnisse unvollständig erscheinen.",
             "rebuildIndex": "Index neu erstellen",
             "rebuildingIndex": "Wird erstellt…",
-            "indexRebuilt": "{{count}} Nachrichten indexiert"
+            "indexRebuilt": "{{count}} Nachrichten indexiert",
+            "logs": "Protokolle",
+            "logsDescription": "Öffnet den Ordner mit den Fluux-Diagnoseprotokollen.",
+            "openLogs": "Protokollordner öffnen"
         },
         "encryption": {
             "experimental": "Experimentell",
@@ -931,6 +934,13 @@
             "enableDescription": "Der erweiterte Modus schaltet Expertenoptionen wie benutzerdefinierte Servereinstellungen und die XMPP-Konsole frei.",
             "disableDescription": "Deaktivieren Sie den erweiterten Modus, um diesen Bereich auszublenden.",
             "disable": "Erweiterten Modus deaktivieren"
+        },
+        "systemTray": {
+            "title": "Infobereich",
+            "keepInTray": "Fluux im Infobereich behalten",
+            "descriptionWindows": "Wenn aktiviert, wird Fluux beim Minimieren oder Schließen im Infobereich ausgeblendet.",
+            "descriptionLinux": "Wenn aktiviert, wird Fluux beim Schließen im Infobereich ausgeblendet, sofern dies unterstützt wird. Das Minimieren verhält sich weiterhin wie auf Ihrem Desktop üblich.",
+            "unavailableLinux": "Kein kompatibler Infobereich ist verfügbar. Beim Schließen wird Fluux beendet."
         }
     },
     "update": {

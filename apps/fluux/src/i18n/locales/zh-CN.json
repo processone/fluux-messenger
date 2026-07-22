@@ -729,7 +729,10 @@
             "searchIndexDescription": "搜索索引支持对消息历史记录进行全文搜索。如果搜索结果不完整，请重建索引。",
             "rebuildIndex": "重建搜索索引",
             "rebuildingIndex": "正在重建…",
-            "indexRebuilt": "已索引 {{count}} 条消息"
+            "indexRebuilt": "已索引 {{count}} 条消息",
+            "logs": "日志",
+            "logsDescription": "打开包含 Fluux 诊断日志的文件夹。",
+            "openLogs": "打开日志文件夹"
         },
         "encryption": {
             "experimental": "实验性",
@@ -929,6 +932,13 @@
             "enableDescription": "高级模式解锁专家选项，例如自定义服务器设置和 XMPP 控制台。",
             "disableDescription": "关闭高级模式以隐藏此部分。",
             "disable": "关闭高级模式"
+        },
+        "systemTray": {
+            "title": "系统托盘",
+            "keepInTray": "在系统托盘中保留 Fluux",
+            "descriptionWindows": "启用后，最小化或关闭 Fluux 会将其隐藏到系统托盘。",
+            "descriptionLinux": "启用后，如果桌面支持，关闭 Fluux 会将其隐藏到系统托盘。最小化仍遵循桌面的正常行为。",
+            "unavailableLinux": "没有可用的兼容系统托盘。关闭 Fluux 将退出应用。"
         }
     },
     "update": {

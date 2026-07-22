@@ -12,6 +12,8 @@ const {
   platform,
   navigateToConversation,
   navigateToRoom,
+  requestAttention,
+  getNotificationPermissionGranted,
 } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(null),
   sendNotification: vi.fn(),
@@ -21,7 +23,10 @@ const {
   platform: vi.fn().mockResolvedValue('macos'),
   navigateToConversation: vi.fn(),
   navigateToRoom: vi.fn(),
+  requestAttention: vi.fn(),
+  getNotificationPermissionGranted: vi.fn(() => true),
 }))
+let mockPresenceStatus = 'online'
 
 // Capture the handlers the hook registers with useNotificationEvents.
 let handlers: {
@@ -34,6 +39,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen }))
 vi.mock('@tauri-apps/plugin-notification', () => ({ sendNotification, onAction }))
 vi.mock('@tauri-apps/plugin-os', () => ({ platform }))
 vi.mock('@/utils/tauriPlatform', () => ({ isMacOSDesktop }))
+vi.mock('@/utils/attention', () => ({ requestAttention }))
 vi.mock('@/utils/notificationAvatar', () => ({ getNotificationAvatarUrl: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/utils/messagePreviewText', () => ({ formatLocalizedPreview: () => 'body text' }))
 vi.mock('@/utils/notificationDebug', () => ({ notificationDebug: { desktopNotification: vi.fn() } }))
@@ -44,7 +50,7 @@ vi.mock('./useNavigateToTarget', () => ({
 vi.mock('./useNotificationPermission', () => ({
   isTauri: true,
   useNotificationPermission: () => {},
-  getNotificationPermissionGranted: () => true,
+  getNotificationPermissionGranted,
 }))
 vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: (h: typeof handlers) => { handlers = h },
@@ -54,7 +60,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
-    usePresence: () => ({ presenceStatus: 'online' }),
+    usePresence: () => ({ presenceStatus: mockPresenceStatus }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
   }
 })
@@ -67,6 +73,8 @@ describe('useDesktopNotifications posting + guard', () => {
     vi.clearAllMocks()
     handlers = {}
     platform.mockResolvedValue('macos')
+    mockPresenceStatus = 'online'
+    getNotificationPermissionGranted.mockReturnValue(true)
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
   })
   afterEach(() => {
@@ -85,6 +93,7 @@ describe('useDesktopNotifications posting + guard', () => {
       avatarPath: null,
     })
     expect(sendNotification).not.toHaveBeenCalled()
+    expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
   it('posts a room via the native command on macOS', async () => {
@@ -99,6 +108,7 @@ describe('useDesktopNotifications posting + guard', () => {
       avatarPath: null,
     })
     expect(sendNotification).not.toHaveBeenCalled()
+    expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
   // Windows/Linux go through the plugin command directly rather than the
@@ -133,6 +143,31 @@ describe('useDesktopNotifications posting + guard', () => {
       },
     })
     expect(sendNotification).not.toHaveBeenCalled()
+  })
+
+  it('requests attention even when OS notification permission is denied', async () => {
+    getNotificationPermissionGranted.mockReturnValue(false)
+    renderHook(() => useDesktopNotifications())
+
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice' },
+      { from: 'alice@example.com' },
+    )
+
+    expect(requestAttention).toHaveBeenCalledTimes(1)
+    expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+  })
+
+  it('does not request attention while Do Not Disturb is active', async () => {
+    mockPresenceStatus = 'dnd'
+    renderHook(() => useDesktopNotifications())
+
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice' },
+      { from: 'alice@example.com' },
+    )
+
+    expect(requestAttention).not.toHaveBeenCalled()
   })
 
   it('does NOT call onAction on macOS desktop (mobile-only guard)', async () => {
