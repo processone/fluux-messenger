@@ -50,9 +50,10 @@ Expected: SDK and app suites both pass. If `build:sdk` fails, run `npm install` 
 | `apps/fluux/src/components/settings-components/EncryptionSettings.tsx` | Settings consumers | State union, probe effect, status line, retry, 4 call sites |
 | `apps/fluux/src/components/settings-components/EncryptionSettings.test.tsx` | Behaviour lock | Add a `describe` block |
 | `apps/fluux/src/components/UnlockEncryptionDialog.tsx` | Unlock mode selection | `unknown` → `restore` |
+| `apps/fluux/src/components/UnlockEncryptionDialog.test.tsx` | Behaviour lock | **Create** — the component has no test file today |
 | `apps/fluux/src/demo/DemoOpenPGPPlugin.ts` | Demo stub | `hasSecretKeyBackup` → `probeSecretKeyBackup` |
 
-No new files.
+One new file: the unlock dialog's test file.
 
 ---
 
