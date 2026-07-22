@@ -1,5 +1,8 @@
 /**
  * @vitest-environment jsdom
+ *
+ * Note: room read state (previously `saveRooms`/`getSavedRooms`) is no longer
+ * persisted here — it is durable via the SDK's readStateStorage instead.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
@@ -14,10 +17,9 @@ import {
   getSavedServerInfo,
   saveOwnResources,
   getSavedOwnResources,
-  toJoinedRoomInfos,
   type ViewStateData,
 } from './useSessionPersistence'
-import type { Contact, Room, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
+import type { Contact, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
 
 const TEST_JID = 'user@example.com'
 const OTHER_JID = 'other@example.com'
@@ -357,11 +359,6 @@ describe('useSessionPersistence', () => {
     })
   })
 
-  describe('Room serialization', () => {
-    // Entire describe block deleted: saveRooms and getSavedRooms functions are removed.
-    // Room read state is now durable via the SDK's readStateStorage.
-  })
-
   describe('Server info serialization', () => {
     it('should save and retrieve server info', () => {
       const serverInfo: ServerInfo = {
@@ -476,60 +473,5 @@ describe('useSessionPersistence', () => {
       mockStorage['xmpp-session'] = 'corrupted'
       expect(getSession()).toBeNull()
     })
-  })
-
-  describe('toJoinedRoomInfos', () => {
-    const makeRoom = (overrides: Partial<Room> & { jid: string; nickname: string }): Room => ({
-      name: overrides.jid.split('@')[0],
-      joined: false,
-      occupants: new Map(),
-      typingUsers: new Set(),
-      messages: [],
-      unreadCount: 0,
-      mentionsCount: 0,
-      isBookmarked: false,
-      ...overrides,
-    })
-
-    it('should include only joined rooms', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: true }),
-        makeRoom({ jid: 'b@conf.example.com', nickname: 'me', joined: false, isBookmarked: true }),
-        makeRoom({ jid: 'c@conf.example.com', nickname: 'me', joined: true }),
-      ]
-
-      const result = toJoinedRoomInfos(rooms)
-
-      expect(result).toHaveLength(2)
-      expect(result.map(r => r.jid)).toEqual(['a@conf.example.com', 'c@conf.example.com'])
-    })
-
-    it('should preserve password and autojoin', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'secret@conf.example.com', nickname: 'me', joined: true, password: 'p4ss', autojoin: true }),
-      ]
-
-      const result = toJoinedRoomInfos(rooms)
-
-      expect(result[0]).toEqual({
-        jid: 'secret@conf.example.com',
-        nickname: 'me',
-        password: 'p4ss',
-        autojoin: true,
-      })
-    })
-
-    it('should return empty array when no rooms are joined', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: false }),
-      ]
-
-      expect(toJoinedRoomInfos(rooms)).toEqual([])
-    })
-
-    it('should return empty array for empty input', () => {
-      expect(toJoinedRoomInfos([])).toEqual([])
-    })
-
   })
 })

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
-import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
-import type { Contact, Room, ServerInfo, HttpUploadService, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
+import { useRosterStore, useConnectionStore } from '@fluux/sdk/react'
+import type { Contact, ServerInfo, HttpUploadService, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
 import { isTauri } from '@/utils/tauri'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
@@ -336,17 +336,6 @@ export function getSession(jid?: string | null): SessionData | null {
 }
 
 /**
- * Convert saved Room objects to the JoinedRoomInfo format expected by
- * ConnectOptions.previouslyJoinedRooms. Only includes rooms that were
- * actually joined (not just bookmarked).
- */
-export function toJoinedRoomInfos(rooms: Room[]): JoinedRoomInfo[] {
-  return rooms
-    .filter((r) => r.joined)
-    .map((r) => ({ jid: r.jid, nickname: r.nickname, password: r.password, autojoin: r.autojoin }))
-}
-
-/**
  * Hook to auto-reconnect on page reload if session exists.
  * Uses sessionStorage which persists across reload but clears when tab closes.
  * Supports XEP-0198 Stream Management for faster session resumption.
@@ -367,7 +356,6 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   const setHttpUploadService = useConnectionStore((s) => s.setHttpUploadService)
   const setOwnNickname = useConnectionStore((s) => s.setOwnNickname)
   const updateOwnResource = useConnectionStore((s) => s.updateOwnResource)
-  const addRoom = useRoomStore((s) => s.addRoom)
   const autoReconnectCheckedRef = useRef(false)
   const isResumptionRef = useRef(false)
   const keychainRetryAttempted = useRef(false)
@@ -584,7 +572,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
       void attemptFastConnect()
     }
-  }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
+  }, [status, connect, setContacts, i18n.language, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
 
   // Note: Presence sync is now handled automatically by XState's native persistence
   // in XMPPProvider. The machine state is restored from sessionStorage on init.
