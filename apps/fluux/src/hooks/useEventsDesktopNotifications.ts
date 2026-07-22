@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useEvents, usePresence, getLocalPart } from '@fluux/sdk'
-import { sendNotification } from '@tauri-apps/plugin-notification'
 import {
   useNotificationPermission,
   getNotificationPermissionGranted,
   isTauri,
 } from './useNotificationPermission'
+import { postPluginNotification } from '@/utils/postPluginNotification'
 
 /**
  * Hook to show desktop notifications for new events (subscription requests).
@@ -39,7 +39,7 @@ export function useEventsDesktopNotifications(): void {
         const body = `${senderName} wants to add you as a contact`
 
         if (isTauri) {
-          sendNotification({ title, body })
+          void postPluginNotification({ title, body })
         } else {
           if (typeof Notification === 'undefined') continue
 

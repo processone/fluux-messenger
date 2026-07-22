@@ -101,12 +101,38 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(sendNotification).not.toHaveBeenCalled()
   })
 
-  it('posts via the plugin (sendNotification) on non-macOS Tauri', async () => {
+  // Windows/Linux go through the plugin command directly rather than the
+  // plugin's sendNotification() wrapper, which discards the invoke promise and
+  // hid every failure. See utils/postPluginNotification.
+  it('posts via the plugin notify command on non-macOS Tauri', async () => {
     isMacOSDesktop.mockResolvedValue(false)
     renderHook(() => useDesktopNotifications())
     await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { from: 'alice@example.com' })
-    expect(sendNotification).toHaveBeenCalled()
+    expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
+      options: {
+        title: 'Alice',
+        body: 'body text',
+        attachments: undefined,
+        extra: { navType: 'conversation', navTarget: 'alice@example.com' },
+      },
+    })
+    expect(sendNotification).not.toHaveBeenCalled()
     expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
+  })
+
+  it('posts a room via the plugin notify command on non-macOS Tauri', async () => {
+    isMacOSDesktop.mockResolvedValue(false)
+    renderHook(() => useDesktopNotifications())
+    await handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team' }, { nick: 'bob' })
+    expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
+      options: {
+        title: 'bob @ Team',
+        body: 'body text',
+        attachments: undefined,
+        extra: { navType: 'room', navTarget: 'team@conf.example.com' },
+      },
+    })
+    expect(sendNotification).not.toHaveBeenCalled()
   })
 
   it('does NOT call onAction on macOS desktop (mobile-only guard)', async () => {

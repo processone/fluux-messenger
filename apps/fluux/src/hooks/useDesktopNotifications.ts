@@ -4,7 +4,7 @@ import { rosterStore, usePresence, useConnectionStatus, getLocalPart } from '@fl
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { sendNotification, onAction } from '@tauri-apps/plugin-notification'
+import { onAction } from '@tauri-apps/plugin-notification'
 import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
@@ -22,6 +22,7 @@ import { showWebNotification } from '@/utils/webNotification'
 import { webTag } from '@/utils/notificationNavigation'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { dismissNotification } from '@/utils/dismissNotification'
+import { postPluginNotification } from '@/utils/postPluginNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 
 /** Duration of the post-reconnect window during which offline-delivery
@@ -169,7 +170,7 @@ export function useDesktopNotifications(): void {
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
-        sendNotification({
+        await postPluginNotification({
           title,
           body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
@@ -228,7 +229,7 @@ export function useDesktopNotifications(): void {
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
-        sendNotification({
+        await postPluginNotification({
           title,
           body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
