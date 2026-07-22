@@ -6,7 +6,7 @@
 
 ## Log Files
 
-Fluux writes daily-rotating log files (`fluux.log`) automatically. These are useful for diagnosing connection issues, crashes, or unexpected behavior.
+Fluux writes daily-rotating log files automatically, named `fluux.YYYY-MM-DD.log` (one per day). These are useful for diagnosing connection issues, crashes, or unexpected behavior.
 
 ### Default Log Locations
 

@@ -1396,8 +1396,18 @@ fn main() {
             EnvFilter::new("fluux=info,webview=info,info")
         };
 
-        // File layer: daily-rotating log file, non-blocking writes
-        let file_appender = tracing_appender::rolling::daily(&log_dir, "fluux.log");
+        // File layer: daily-rotating log file, non-blocking writes.
+        // The date goes in the middle (fluux.2026-07-22.log) rather than at the
+        // end: with a trailing date the OS sees ".2026-07-22" as the extension,
+        // so Windows shows the file as unknown and refuses to open it on
+        // double-click. `rolling::daily()` produces that trailing form, hence
+        // the explicit builder.
+        let file_appender = tracing_appender::rolling::Builder::new()
+            .rotation(tracing_appender::rolling::Rotation::DAILY)
+            .filename_prefix("fluux")
+            .filename_suffix("log")
+            .build(&log_dir)
+            .expect("Initializing rolling file appender failed");
         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
         let file_layer = tracing_subscriber::fmt::layer()
             .with_writer(non_blocking)
