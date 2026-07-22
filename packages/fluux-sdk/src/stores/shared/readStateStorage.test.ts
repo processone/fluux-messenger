@@ -77,4 +77,18 @@ describe('room read-state persistence', () => {
     localStorage.setItem(`fluux-room-read-state:${JID}`, '{not json')
     expect(loadRoomReadState(JID).size).toBe(0)
   })
+
+  // Control: a row carrying neither a valid readPointer nor a valid
+  // historyFloor must never be written into the result map as a hollow `{}`
+  // entry. Unlike the corrupt-pointer test above, `raw.readPointer` is
+  // `undefined` here, so the corrupt-pointer `continue` branch is never
+  // reached — only the final "drop if both fields are empty" guard can drop
+  // this row. Deleting that guard would let this row survive.
+  it('drops a row with neither a valid pointer nor a valid history floor', () => {
+    localStorage.setItem(
+      `fluux-room-read-state:${JID}`,
+      JSON.stringify([['r@c', {}]])
+    )
+    expect(loadRoomReadState(JID).has('r@c')).toBe(false)
+  })
 })

@@ -64,6 +64,13 @@ export function loadRoomReadState(jid?: string | null): Map<string, RoomReadStat
 
       // A pointer that was written but cannot be read back means the row is
       // corrupt — drop it rather than silently downgrading to "never read".
+      // This discards the row's historyFloor too, even if that field is
+      // independently well-formed: a corrupt pointer means we wrote this row
+      // badly, and we don't know which half to trust. Dropping the whole row
+      // falls back to the caller's history-floor default, which under-counts
+      // (more unread, recoverable by reading). Keeping the floor and trusting
+      // it while distrusting its sibling field risks the unrecoverable
+      // direction — an over-advanced read pointer — so we bias away from it.
       let readPointer: ReadPointer | undefined
       if (raw.readPointer !== undefined) {
         readPointer = deserializeReadPointer(raw.readPointer)
