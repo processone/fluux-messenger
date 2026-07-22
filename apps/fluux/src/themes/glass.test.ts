@@ -217,20 +217,189 @@ describe('liquid-glass tier', () => {
     expect(revertIdx).toBeGreaterThan(liquidIdx)
   })
 
-  // The light liquid tier (`:root:not([data-platform="linux"]) .fluux-glass`
-  // plus `.light`) must stay AT (0,3,0), same as its dark sibling above, so the
-  // reduced-transparency revert below (also (0,3,0), later in source) keeps
-  // outranking it. Wrapping the mode class in `:where(.light)` — which
-  // contributes zero specificity — is what keeps it there. A bare `.light`
-  // class would silently escalate the selector to (0,4,0), beating the revert
-  // in light mode only: [data-transparency="reduced"] + light mode would then
-  // render a translucent, blur-active panel instead of the solid a11y
-  // fallback — the exact bug this branch exists to prevent, and it would never
-  // show up testing dark mode alone.
-  it('light liquid tier uses :where(.light) so it never outranks the reduced-transparency revert', () => {
-    expect(css).toMatch(/:root:not\(\[data-platform="linux"\]\):where\(\.light\)\s+\.fluux-glass\s*\{/)
-    // guard against regressing back to the bare `.light` form, which escalates
-    // specificity to (0,4,0) and defeats the revert in light mode
-    expect(css).not.toMatch(/:root:not\(\[data-platform="linux"\]\)\.light\s+\.fluux-glass\s*\{/)
+  // The light liquid tier's specificity is covered generically below, in
+  // 'fluux-glass tier specificity invariant' — a literal :where(.light) string
+  // match only catches the one regression it was written for (see that
+  // describe block for why a generic, recomputed-specificity check replaced
+  // the narrower literal assertions that used to live here).
+})
+
+// --- CSS selector specificity (a, b, c), computed generically ---
+// a = #id count. b = classes + attribute selectors + pseudo-classes (":root"
+// counts here). c = type selectors + pseudo-elements. `:where(...)` always
+// contributes 0. `:not(X)` (and `:is(X)`/`:has(X)`, which the spec treats the
+// same way) contribute the specificity of their argument X, not a flat
+// pseudo-class point — X may itself be a comma-separated list, in which case
+// the highest-specificity branch is what counts.
+type Specificity = [number, number, number]
+
+function addSpecificity(x: Specificity, y: Specificity): Specificity {
+  return [x[0] + y[0], x[1] + y[1], x[2] + y[2]]
+}
+
+function compareSpecificity(x: Specificity, y: Specificity): number {
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]
+}
+
+function maxSpecificity(specs: Specificity[]): Specificity {
+  return specs.reduce((best, s) => (compareSpecificity(s, best) > 0 ? s : best), [0, 0, 0] as Specificity)
+}
+
+function findMatchingBracket(s: string, openIdx: number, open: string, close: string): number {
+  let depth = 0
+  for (let j = openIdx; j < s.length; j++) {
+    if (s[j] === open) depth++
+    else if (s[j] === close) {
+      depth--
+      if (depth === 0) return j
+    }
+  }
+  throw new Error(`unmatched "${open}" in selector: ${s}`)
+}
+
+function splitTopLevelCommas(s: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let j = 0; j < s.length; j++) {
+    const c = s[j]
+    if (c === '(' || c === '[') depth++
+    else if (c === ')' || c === ']') depth--
+    else if (c === ',' && depth === 0) {
+      parts.push(s.slice(start, j).trim())
+      start = j + 1
+    }
+  }
+  parts.push(s.slice(start).trim())
+  return parts
+}
+
+/** Compute the (a, b, c) specificity of a single CSS selector (no top-level commas). */
+function specificity(selector: string): Specificity {
+  let s: Specificity = [0, 0, 0]
+  let i = 0
+  while (i < selector.length) {
+    const ch = selector[i]
+    if (ch === '#') {
+      const m = /^#[-\w\\]+/.exec(selector.slice(i))
+      i += m ? m[0].length : 1
+      s[0] += 1
+    } else if (ch === '.') {
+      const m = /^\.[-\w\\]+/.exec(selector.slice(i))
+      i += m ? m[0].length : 1
+      s[1] += 1
+    } else if (ch === '[') {
+      i = findMatchingBracket(selector, i, '[', ']') + 1
+      s[1] += 1
+    } else if (ch === ':') {
+      if (selector[i + 1] === ':') {
+        const m = /^::[-\w]+/.exec(selector.slice(i))
+        i += m ? m[0].length : 2
+        s[2] += 1
+      } else {
+        const m = /^:([-\w]+)/.exec(selector.slice(i))
+        const name = (m?.[1] ?? '').toLowerCase()
+        i += m ? m[0].length : 1
+        if (selector[i] === '(') {
+          const end = findMatchingBracket(selector, i, '(', ')')
+          const inner = selector.slice(i + 1, end)
+          i = end + 1
+          if (name === 'where') {
+            // contributes 0 regardless of contents
+          } else if (name === 'not' || name === 'is' || name === 'has') {
+            s = addSpecificity(s, maxSpecificity(splitTopLevelCommas(inner).map(specificity)))
+          } else {
+            // other functional pseudo-classes (:nth-child(...), etc.)
+            s[1] += 1
+          }
+        } else {
+          s[1] += 1
+        }
+      }
+    } else if (/[a-zA-Z]/.test(ch)) {
+      const m = /^[-\w]+/.exec(selector.slice(i))
+      i += m ? m[0].length : 1
+      s[2] += 1
+    } else {
+      // combinators, whitespace, `*` (universal, contributes 0), etc.
+      i += 1
+    }
+  }
+  return s
+}
+
+/**
+ * Extract every selector in index.css whose subject (rightmost compound) is
+ * `.fluux-glass`, wherever it appears (including inside @supports / @layer).
+ * Returns each with its character offset in `css` so callers can also assert
+ * source order without a second, potentially ambiguous, indexOf lookup.
+ */
+function extractGlassSelectors(source: string): { selector: string; index: number }[] {
+  const stripped = source.replace(/\/\*[\s\S]*?\*\//g, ' ')
+  const found: { selector: string; index: number }[] = []
+  const re = /([^{}]+)\{/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped))) {
+    for (const part of m[1].split(',')) {
+      const sel = part.trim()
+      if (/\.fluux-glass$/.test(sel)) found.push({ selector: sel, index: m.index })
+    }
+  }
+  return found
+}
+
+describe('fluux-glass tier specificity invariant', () => {
+  // The reduced-transparency revert (":root[data-transparency=\"reduced\"]
+  // .fluux-glass", itself (0,3,0)) only outranks every .fluux-glass tier rule
+  // above it via SOURCE ORDER, not higher specificity — CSS breaks a
+  // same-specificity tie by whichever rule comes last. That means ANY
+  // .fluux-glass tier rule that creeps above (0,3,0) permanently defeats the
+  // a11y opt-out, no matter where it sits in the file; a rule AT (0,3,0) is
+  // still safe only because the revert is deliberately kept last.
+  //
+  // This has already broken twice on this branch: once when the light-mode
+  // tier rule used a bare `.light` class (pushing it to (0,4,0)), and the
+  // failure mode generalizes to any future tier rule — e.g. a hypothetical
+  // `:root:not([data-platform="linux"])[data-density="compact"] .fluux-glass`
+  // at (0,4,0) would reintroduce the exact bug. A literal string match only
+  // catches the one regression it was written for; this guard recomputes real
+  // CSS specificity for every `.fluux-glass` selector actually present in the
+  // file, so it also catches selectors nobody has written yet.
+  const CAP: Specificity = [0, 3, 0]
+  const REVERT_SELECTOR = ':root[data-transparency="reduced"] .fluux-glass'
+  const glassSelectors = extractGlassSelectors(css)
+
+  it('extraction finds the known .fluux-glass rules (guards the guard)', () => {
+    // If the extractor regressed to matching nothing, every assertion below
+    // would vacuously pass. 6 is the current count: 2 base (.fluux-glass) +
+    // Linux revert + dark liquid + light liquid + reduced-transparency revert.
+    expect(glassSelectors.length).toBeGreaterThanOrEqual(6)
+  })
+
+  for (const { selector } of glassSelectors) {
+    it(`selector "${selector}" stays at or below (0,3,0)`, () => {
+      const spec = specificity(selector)
+      expect(
+        compareSpecificity(spec, CAP) <= 0,
+        `selector "${selector}" resolves to specificity (${spec.join(',')}), which ` +
+          `exceeds the (0,3,0) cap that the reduced-transparency revert relies on ` +
+          `to win by source order alone. Wrap the escalating part (e.g. a mode or ` +
+          `density class) in :where(...), or drop it, then re-run this test.`,
+      ).toBe(true)
+    })
+  }
+
+  it('the reduced-transparency revert sits after every tier rule in source order', () => {
+    const revert = glassSelectors.find((g) => g.selector === REVERT_SELECTOR)
+    expect(revert, `"${REVERT_SELECTOR}" rule not found in index.css`).toBeDefined()
+    for (const { selector, index } of glassSelectors) {
+      if (selector === REVERT_SELECTOR) continue
+      expect(
+        revert!.index,
+        `"${selector}" (source index ${index}) must come before the ` +
+          `reduced-transparency revert (source index ${revert!.index}), or it wins ` +
+          `the same-specificity cascade tie and defeats the a11y opt-out.`,
+      ).toBeGreaterThan(index)
+    }
   })
 })
