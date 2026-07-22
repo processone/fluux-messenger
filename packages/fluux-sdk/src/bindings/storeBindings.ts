@@ -210,6 +210,16 @@ export function createStoreBindings(
     stores.chat.updateMessage(conversationId, messageId, updates)
   })
 
+  on('chat:retraction-pending', ({ conversationId, targetId, actorJid }) => {
+    const stores = getStores()
+    stores.chat.recordPendingRetraction(conversationId, targetId, actorJid)
+  })
+
+  on('room:retraction-pending', ({ roomJid, targetId, actorJid, actorOccupantId }) => {
+    const stores = getStores()
+    stores.room.recordPendingRetraction(roomJid, targetId, actorJid, actorOccupantId)
+  })
+
   on('message:security-updated', ({ conversationId, messageId, securityContext, body }) => {
     const stores = getStores()
     stores.chat.updateMessage(conversationId, messageId, {

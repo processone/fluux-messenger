@@ -29,6 +29,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
+import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -219,6 +220,34 @@ function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecor
 function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
   try {
     localStorage.setItem(getRoomCoverageStorageKey(jid), serializeCoverage(coverage))
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
+ * localStorage persistence for XEP-0424 retractions still waiting for their
+ * target to load. Scoped per account like the gap/coverage maps.
+ */
+const ROOM_PENDING_RETRACTIONS_STORAGE_KEY_BASE = 'fluux-room-pending-retractions'
+
+function getRoomPendingRetractionsStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_PENDING_RETRACTIONS_STORAGE_KEY_BASE, jid)
+}
+
+function loadPendingRetractionsFromStorage(jid?: string | null): Map<string, PendingRetraction[]> {
+  try {
+    const stored = localStorage.getItem(getRoomPendingRetractionsStorageKey(jid))
+    if (stored) return new Map(JSON.parse(stored) as [string, PendingRetraction[]][])
+  } catch {
+    // Ignore parse/storage errors
+  }
+  return new Map()
+}
+
+function savePendingRetractionsToStorage(pending: Map<string, PendingRetraction[]>, jid?: string | null): void {
+  try {
+    localStorage.setItem(getRoomPendingRetractionsStorageKey(jid), JSON.stringify([...pending.entries()]))
   } catch {
     // Ignore storage errors (quota exceeded, etc.)
   }
@@ -432,18 +461,66 @@ function commitRoomUpdate(
  * dedupe, merge/sort/trim, and refresh the sidebar preview. The only difference between the two
  * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
  */
+/**
+ * XEP-0424 authorship gate, room flavour. XEP-0421 occupant-id is the stable,
+ * unforgeable author identity and wins whenever BOTH sides carry one — a nick
+ * can be reassigned once its owner leaves. Mirrors Chat.isSameMucAuthor.
+ */
+const roomRetractionAuthor = (message: StoredRoomMessage, record: PendingRetraction): boolean =>
+  message.occupantId && record.actorOccupantId
+    ? message.occupantId === record.actorOccupantId
+    : message.from === record.actorJid
+
+/**
+ * Room twin of chatStore's resolvePendingRetractions: replay a room's pending
+ * retractions against a slice, writing every tombstone through to the durable
+ * cache. `persist: false` is for a message not yet saved — its own write carries
+ * the tombstone, and a concurrent update would race it.
+ */
+function resolveRoomPendingRetractions(
+  state: RoomState,
+  roomJid: string,
+  slice: StoredRoomMessage[],
+  options: { persist?: boolean } = {}
+): { messages: StoredRoomMessage[]; pendingRetractions?: RoomState['pendingRetractions'] } {
+  const pending = state.pendingRetractions.get(roomJid)
+  if (!pending || pending.length === 0) return { messages: slice }
+
+  const { messages, applied, remaining } = applyPendingRetractions(slice, pending, roomRetractionAuthor)
+  if (remaining.length === pending.length) return { messages }
+
+  if (options.persist !== false) {
+    for (const { messageId, retractedAt } of applied) {
+      void messageCache.updateRoomMessage(messageId, { isRetracted: true, retractedAt })
+      const retracted = findMessageById(messages, messageId)
+      if (retracted) void searchIndex.removeMessage(retracted)
+    }
+  }
+
+  const nextPending = new Map(state.pendingRetractions)
+  if (remaining.length === 0) nextPending.delete(roomJid)
+  else nextPending.set(roomJid, remaining)
+  savePendingRetractionsToStorage(nextPending)
+  return { messages, pendingRetractions: nextPending }
+}
+
 function mergeCachedRoomMessages(
   state: RoomState,
   roomJid: string,
   cachedMessages: RoomMessage[]
-): Pick<RoomState, 'rooms' | 'roomRuntime' | 'roomMeta'> | null {
+): Partial<Pick<RoomState, 'rooms' | 'roomRuntime' | 'roomMeta' | 'pendingRetractions'>> | null {
   const newRooms = new Map(state.rooms)
   const existing = newRooms.get(roomJid)
   if (!existing) return null
 
   // Shared timeline machine: dedupe (in-memory messages take precedence),
   // sort, and keep-newest trim.
-  const { merged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
+  const { merged: rawMerged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
+
+  // XEP-0424: a retraction recorded while this room was unloaded applies here,
+  // the moment its target becomes resident.
+  const resolvedRetractions = resolveRoomPendingRetractions(state, roomJid, rawMerged)
+  const merged = resolvedRetractions.messages
 
   // Sidebar preview via the shared policy: only replace when the merged set's
   // newest non-ignored message genuinely supersedes (or heals) the current
@@ -468,7 +545,12 @@ function mergeCachedRoomMessages(
     newMeta.set(roomJid, { ...existingMeta, lastMessage })
   }
 
-  return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta }
+  return {
+    rooms: newRooms,
+    roomRuntime: newRuntime,
+    roomMeta: newMeta,
+    ...(resolvedRetractions.pendingRetractions ? { pendingRetractions: resolvedRetractions.pendingRetractions } : {}),
+  }
 }
 
 /**
@@ -534,6 +616,12 @@ export interface RoomState {
   // Rooms the user has acknowledged as non-anonymous (issue #37) — warn once, not
   // on every reconnect. Persisted to localStorage separately and scoped per account.
   acknowledgedNonAnonymousRooms: Set<string>
+  // XEP-0424 retractions whose target was not resident when they arrived (only the
+  // ACTIVE room keeps messages in RAM, and a target older than the loaded slice is
+  // absent even there). Persisted (scoped, like roomGaps) so the tombstone still
+  // lands after a reload; each record clears the moment its target loads. Twin of
+  // chatStore.pendingRetractions — see shared/pendingRetractions.ts.
+  pendingRetractions: Map<string, PendingRetraction[]>
   // Target message to scroll to after navigation (ephemeral)
   targetMessageId: string | null
   // Session-only new-message divider per room (jid -> messageId). Derived at
@@ -574,6 +662,17 @@ export interface RoomState {
   updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
   clearMessageStanzaId: (roomJid: string, stanzaId: string) => void
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
+  /**
+   * XEP-0424: apply an incoming retraction, deferring it when its target is not
+   * resident. Applies immediately (and writes through to the durable cache) when
+   * the target is in the window; otherwise records it and replays it the moment
+   * the target arrives live or loads from the cache. Only the message's own
+   * author can retract it — a mismatched actor is dropped, never tombstoned.
+   *
+   * @param actorJid - Full room JID (room@service/nick) the retraction came from.
+   * @param actorOccupantId - XEP-0421 occupant-id when advertised; preferred over the nick.
+   */
+  recordPendingRetraction: (roomJid: string, targetId: string, actorJid: string, actorOccupantId?: string) => void
   /**
    * Epoch ms of the room's persisted last-known message (the entity preview),
    * or undefined. Used as a last-resort forward catch-up cursor so a persisted
@@ -754,7 +853,8 @@ function createEmptyRoomState(
   roomGaps: Map<string, GapInterval> = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+  pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -769,6 +869,7 @@ function createEmptyRoomState(
     mamQueryStates: new Map(),
     roomGaps,
     roomCoverage,
+    pendingRetractions,
     acknowledgedNonAnonymousRooms,
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
@@ -777,7 +878,7 @@ function createEmptyRoomState(
 
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage(), loadCoverageFromStorage()), // Restore drafts, poll state, history gaps, coverage, and non-anon acks from localStorage
+  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage(), loadCoverageFromStorage(), loadPendingRetractionsFromStorage()), // Restore drafts, poll state, history gaps, coverage, and non-anon acks from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -1253,7 +1354,7 @@ export const roomStore = createStore<RoomState>()(
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
     roomCacheEpoch++
-    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid), loadCoverageFromStorage(jid)))
+    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid), loadCoverageFromStorage(jid), loadPendingRetractionsFromStorage(jid)))
   },
 
   reset: () => {
@@ -1284,9 +1385,16 @@ export const roomStore = createStore<RoomState>()(
     const room = get().rooms.get(roomJid)
 
     // Quick Chat rooms are transient: keep their messages in memory only
-    const messageToAdd: StoredRoomMessage = room?.isQuickChat
+    const incoming: StoredRoomMessage = room?.isQuickChat
       ? { ...message, noLocalStore: true }
       : message
+
+    // XEP-0424: a retraction can outrun its target (live retraction against a
+    // non-resident message, out-of-order delivery). Tombstone BEFORE the save
+    // below so it persists the tombstone — patching afterwards would race it.
+    const arrival = resolveRoomPendingRetractions(get(), roomJid, [incoming], { persist: false })
+    const messageToAdd = arrival.messages[0]
+    if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
     // Save to IndexedDB only if the message is locally persistable
     if (!isNoLocalStore(messageToAdd)) {
@@ -1578,6 +1686,35 @@ export const roomStore = createStore<RoomState>()(
       }
 
       return result
+    })
+  },
+
+  recordPendingRetraction: (roomJid, targetId, actorJid, actorOccupantId) => {
+    const record: PendingRetraction = {
+      targetId,
+      actorJid,
+      ...(actorOccupantId ? { actorOccupantId } : {}),
+      retractedAt: Date.now(),
+    }
+    const resident = get().rooms.get(roomJid)?.messages
+    const target = resident ? findMessageById(resident, targetId) : undefined
+    if (target) {
+      // Resolved on the spot — updateMessage carries the write-through to
+      // IndexedDB and the search-index removal.
+      if (!target.isRetracted && roomRetractionAuthor(target, record)) {
+        get().updateMessage(roomJid, target.id, { isRetracted: true, retractedAt: new Date() })
+      }
+      return
+    }
+
+    set((state) => {
+      const existing = state.pendingRetractions.get(roomJid) ?? []
+      const next = addPendingRetraction(existing, record)
+      if (next === existing) return state
+      const nextPending = new Map(state.pendingRetractions)
+      nextPending.set(roomJid, next)
+      savePendingRetractionsToStorage(nextPending)
+      return { pendingRetractions: nextPending }
     })
   },
 
@@ -2702,7 +2839,19 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
+  mergeRoomMAMMessages: (roomJid, archivePage, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
+    // XEP-0424: a retraction recorded earlier can target a message arriving in
+    // THIS page (the live pass missed it because nothing was resident). Patch
+    // the page BEFORE it merges, so the tombstone rides the same saveRoomMessages
+    // write instead of racing it. Same array back when nothing matches.
+    // Guarded on the room existing: the merge below no-ops for an unknown room,
+    // and consuming the record against a page that is never stored would lose it.
+    const replay = get().rooms.has(roomJid)
+      ? resolveRoomPendingRetractions(get(), roomJid, archivePage, { persist: false })
+      : { messages: archivePage, pendingRetractions: undefined }
+    const mamMessages = replay.messages
+    if (replay.pendingRetractions) set({ pendingRetractions: replay.pendingRetractions })
+
     // Newest persisted timestamp (entity preview) — the seam-formation fallback
     // when the resident array is empty this run (fresh session, history on disk).
     const fallbackHeldTs = get().getRoomLastTimestamp(roomJid)

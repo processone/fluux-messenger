@@ -5756,6 +5756,111 @@ describe('acknowledged non-anonymous rooms', () => {
   })
 })
 
+// XEP-0424 twin of the chatStore "pending retractions" suite: a retraction
+// landing on a room whose messages are not resident is replayed, not dropped.
+describe('roomStore pending retractions', () => {
+  const roomJid = 'retract@conference.example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      pendingRetractions: new Map(),
+    })
+    vi.clearAllMocks()
+    roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+  })
+
+  function occupantMessage(id: string): RoomMessage {
+    return { ...createMessage(id, roomJid, 'edaveine', 'to retract'), occupantId: 'occ-1' }
+  }
+
+  it('tombstones the target when it arrives after the retraction', () => {
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
+
+    roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({
+      id: 'm1',
+      isRetracted: true,
+    })
+    expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
+  })
+
+  it('matches the author by occupant-id, not by nick', () => {
+    // Same nick, different occupant: a nick can be reassigned after its owner leaves.
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-other')
+
+    roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0].isRetracted).toBeUndefined()
+  })
+
+  it('falls back to the full room JID when neither side has an occupant-id', () => {
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`)
+
+    roomStore.getState().addMessage(roomJid, createMessage('m1', roomJid, 'edaveine', 'to retract'))
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+  })
+
+  it('applies to a resident target without recording anything', () => {
+    roomStore.setState({ activeRoomJid: roomJid })
+    roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
+
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+    expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
+  })
+
+  it('replays the record when the room hydrates from the cache', async () => {
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
+    vi.mocked(messageCache.getRoomMessages).mockResolvedValue([occupantMessage('m1')])
+
+    await roomStore.getState().loadMessagesFromCache(roomJid)
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+    expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
+    expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      'm1',
+      expect.objectContaining({ isRetracted: true })
+    )
+  })
+
+  it('replays the record when the target arrives in a MAM page', () => {
+    roomStore.setState({ activeRoomJid: roomJid })
+    roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
+
+    roomStore.getState().mergeRoomMAMMessages(roomJid, [occupantMessage('m1')], {}, true, 'backward')
+
+    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({
+      id: 'm1',
+      isRetracted: true,
+    })
+    expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
+    // The tombstone rides the archive write instead of racing it.
+    expect(messageCache.saveRoomMessages).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'm1', isRetracted: true }),
+    ])
+  })
+
+  it('survives a reload through scoped localStorage', () => {
+    setStorageScopeJid('alice@example.com')
+    try {
+      roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
+      expect(localStorageMock._store['fluux-room-pending-retractions:alice@example.com']).toBeDefined()
+    } finally {
+      _resetStorageScopeForTesting()
+    }
+  })
+})
+
 // Regression tests for chat/room parity drifts: each of these behaviors already
 // exists in chatStore and had silently diverged in roomStore (or vice versa).
 describe('roomStore parity drift regressions', () => {

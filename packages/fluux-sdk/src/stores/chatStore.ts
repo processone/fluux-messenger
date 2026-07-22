@@ -16,6 +16,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
+import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
@@ -84,15 +85,20 @@ function mergeCachedChatMessages(
   state: ChatState,
   conversationId: string,
   cachedMessages: Message[]
-): Pick<ChatState, 'messages' | 'conversationMeta' | 'conversations'> | { messages: ChatState['messages'] } | null {
+): Partial<Pick<ChatState, 'messages' | 'conversationMeta' | 'conversations' | 'pendingRetractions'>> | null {
   const existingMessages = state.messages.get(conversationId) || []
 
-  const { merged: trimmed, newMessages } = timeline.latestSlice(
+  const { merged, newMessages } = timeline.latestSlice(
     existingMessages,
     cachedMessages,
     chatTimelineConfig()
   )
   if (newMessages.length === 0) return null
+
+  // XEP-0424: a retraction recorded while this conversation was unloaded applies
+  // here, the moment its target becomes resident.
+  const resolved = resolvePendingRetractions(state, conversationId, merged)
+  const trimmed = resolved.messages
 
   const newMessagesMap = new Map(state.messages)
   newMessagesMap.set(conversationId, trimmed)
@@ -103,15 +109,56 @@ function mergeCachedChatMessages(
   const meta = state.conversationMeta.get(conversationId)
   const conv = state.conversations.get(conversationId)
   const { lastMessage, changed } = derivePreviewAfterMerge(meta?.lastMessage, trimmed, findLastPreviewableMessage)
+  const retractionPatch = resolved.pendingRetractions ? { pendingRetractions: resolved.pendingRetractions } : {}
   if (meta && conv && changed) {
     const newMeta = new Map(state.conversationMeta)
     newMeta.set(conversationId, { ...meta, lastMessage })
     const newConversations = new Map(state.conversations)
     newConversations.set(conversationId, { ...conv, lastMessage })
-    return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations }
+    return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations, ...retractionPatch }
   }
 
-  return { messages: newMessagesMap }
+  return { messages: newMessagesMap, ...retractionPatch }
+}
+
+/** XEP-0424 authorship gate: only a message's own author may retract it. */
+const chatRetractionAuthor = (message: Message, record: PendingRetraction): boolean =>
+  message.from === record.actorJid
+
+/**
+ * Replay a conversation's pending retractions against a slice of its messages.
+ *
+ * Returns the patched slice plus the new `pendingRetractions` map when anything
+ * resolved (`undefined` when nothing did, so callers can skip the state write).
+ * Tombstones are written through to the durable cache — the record is dropped
+ * once resolved, so the tombstone has to outlive it. `persist: false` is for a
+ * message not yet in the cache: its own save writes the tombstone, and a
+ * concurrent update would race that save.
+ */
+function resolvePendingRetractions(
+  state: ChatState,
+  conversationId: string,
+  slice: Message[],
+  options: { persist?: boolean } = {}
+): { messages: Message[]; pendingRetractions?: ChatState['pendingRetractions'] } {
+  const pending = state.pendingRetractions.get(conversationId)
+  if (!pending || pending.length === 0) return { messages: slice }
+
+  const { messages, applied, remaining } = applyPendingRetractions(slice, pending, chatRetractionAuthor)
+  if (remaining.length === pending.length) return { messages }
+
+  if (options.persist !== false) {
+    for (const { messageId, retractedAt } of applied) {
+      void messageCache.updateMessage(messageId, { isRetracted: true, retractedAt })
+      const retracted = findMessageById(messages, messageId)
+      if (retracted) void searchIndex.removeMessage(retracted)
+    }
+  }
+
+  const nextPending = new Map(state.pendingRetractions)
+  if (remaining.length === 0) nextPending.delete(conversationId)
+  else nextPending.set(conversationId, remaining)
+  return { messages, pendingRetractions: nextPending }
 }
 
 function getLegacyStorageKey(): string {
@@ -200,6 +247,12 @@ interface ChatState {
   // conversationGaps; survives fresh sessions and gap closure). Parity with
   // roomStore.roomCoverage. See shared/mamCoverage.ts.
   conversationCoverage: Map<string, CoverageRecord>
+  // XEP-0424 retractions whose target was not resident when they arrived (only the
+  // ACTIVE conversation keeps messages in RAM, and a target older than the loaded
+  // slice is absent even there). Persisted so the tombstone still lands after a
+  // reload; each record clears the moment its target loads. See
+  // shared/pendingRetractions.ts.
+  pendingRetractions: Map<string, PendingRetraction[]>
   // Target message to scroll to after navigation (ephemeral, not persisted)
   targetMessageId: string | null
   // Session-only new-message divider per conversation (jid -> messageId). Derived
@@ -318,6 +371,16 @@ interface ChatState {
    * left behind. No-op for the active conversation (activation owns its counts).
    */
   recomputeUnreadForConversation: (conversationId: string) => Promise<void>
+  /**
+   * XEP-0424: apply an incoming retraction, deferring it when its target is not
+   * resident. Applies immediately (and writes through to the durable cache) when
+   * the target is in the window; otherwise records it and replays it the moment
+   * the target arrives live or loads from the cache. Only the message's own
+   * author can retract it — a mismatched actor is dropped, never tombstoned.
+   *
+   * @param actorJid - Bare JID the retraction came from.
+   */
+  recordPendingRetraction: (conversationId: string, targetId: string, actorJid: string) => void
   getMessage: (conversationId: string, messageId: string) => Message | undefined
   /**
    * Epoch ms of the conversation's persisted last-known message (the entity
@@ -447,13 +510,14 @@ interface PersistedState {
   drafts?: [string, string][] // Optional for backwards compatibility
   conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
   conversationCoverage?: [string, CoverageRecord][] // Optional for backwards compatibility
+  pendingRetractions?: [string, PendingRetraction[]][] // Optional for backwards compatibility
   // Legacy fields, kept for backwards compatibility when reading old storage
   messages?: [string, Message[]][] // May exist in old storage, will be migrated
   activeConversationId?: string | null
 }
 
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord> }): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }): PersistedState {
   return {
     // Serialize separated maps (Phase 6)
     conversationEntities: Array.from(state.conversationEntities.entries()),
@@ -467,12 +531,14 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
     conversationGaps: Array.from((state.conversationGaps ?? new Map<string, GapInterval>()).entries()),
     // Persisted contiguous-with-live coverage (positive twin of the gaps)
     conversationCoverage: Array.from((state.conversationCoverage ?? new Map<string, CoverageRecord>()).entries()),
+    // XEP-0424 retractions still waiting for their target to load
+    pendingRetractions: Array.from((state.pendingRetractions ?? new Map<string, PendingRetraction[]>()).entries()),
   }
 }
 
 // Deserialize arrays back to Maps, reset unread counts, restore Date objects
 // Also handles migration of old localStorage messages to IndexedDB
-function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage'> {
+function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions'> {
   // Helper to restore Date objects in lastMessage
   const restoreLastMessage = (lastMessage?: Message): Message | undefined => {
     if (!lastMessage) return undefined
@@ -581,6 +647,9 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Restore coverage records (backwards compatible - default to empty map)
   const conversationCoverage = new Map<string, CoverageRecord>(persisted.conversationCoverage || [])
 
+  // Restore pending retractions (backwards compatible - default to empty map)
+  const pendingRetractions = new Map<string, PendingRetraction[]>(persisted.pendingRetractions || [])
+
   return {
     conversationEntities,
     conversationMeta,
@@ -593,10 +662,11 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     drafts,
     conversationGaps,
     conversationCoverage,
+    pendingRetractions,
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -611,6 +681,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     mamQueryStates: new Map(),
     conversationGaps: new Map(),
     conversationCoverage: new Map(),
+    pendingRetractions: new Map(),
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
     windowAtLiveEdge: new Map(),
@@ -624,7 +695,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -663,7 +734,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -686,6 +757,7 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
       drafts: restored.drafts,
       conversationGaps: restored.conversationGaps,
       conversationCoverage: restored.conversationCoverage,
+      pendingRetractions: restored.pendingRetractions,
     }
   } catch {
     try {
@@ -989,7 +1061,15 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      addMessage: (msg) => {
+      addMessage: (incoming) => {
+        // XEP-0424: a retraction can outrun its target (live retraction against a
+        // non-resident message, out-of-order delivery). Tombstone BEFORE the
+        // append so the cache write below persists the tombstone — patching
+        // afterwards would race saveMessage.
+        const arrival = resolvePendingRetractions(get(), incoming.conversationId, [incoming], { persist: false })
+        const msg = arrival.messages[0]
+        if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
+
         set((state) => {
           const convMessages = state.messages.get(msg.conversationId) || []
 
@@ -1709,6 +1789,28 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      recordPendingRetraction: (conversationId, targetId, actorJid) => {
+        const resident = get().messages.get(conversationId)
+        const target = resident ? findMessageById(resident, targetId) : undefined
+        if (target) {
+          // Resolved on the spot — updateMessage carries the write-through to
+          // IndexedDB and the search-index removal.
+          if (!target.isRetracted && target.from === actorJid) {
+            get().updateMessage(conversationId, target.id, { isRetracted: true, retractedAt: new Date() })
+          }
+          return
+        }
+
+        set((state) => {
+          const existing = state.pendingRetractions.get(conversationId) ?? []
+          const next = addPendingRetraction(existing, { targetId, actorJid, retractedAt: Date.now() })
+          if (next === existing) return state
+          const nextPending = new Map(state.pendingRetractions)
+          nextPending.set(conversationId, next)
+          return { pendingRetractions: nextPending }
+        })
+      },
+
       getMessage: (conversationId, messageId) => {
         const convMessages = get().messages.get(conversationId)
         if (!convMessages) return undefined
@@ -1870,7 +1972,15 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
+      mergeMAMMessages: (conversationId, archivePage, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
+        // XEP-0424: a retraction recorded earlier can target a message arriving in
+        // THIS page (the live pass missed it because nothing was resident). Patch
+        // the page BEFORE it merges, so the tombstone rides the same saveMessages
+        // write instead of racing it. Same array back when nothing matches.
+        const replay = resolvePendingRetractions(get(), conversationId, archivePage, { persist: false })
+        const mamMessages = replay.messages
+        if (replay.pendingRetractions) set({ pendingRetractions: replay.pendingRetractions })
+
         // Newest persisted timestamp (entity preview) — the seam-formation fallback
         // when the resident array is empty this run (fresh session, history on disk).
         const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
@@ -2521,6 +2631,9 @@ export const chatStore = createStore<ChatState>()(
         conversationGaps: state.conversationGaps,
         // Persist coverage records (contiguous-with-live bottom; Codex r3 #3)
         conversationCoverage: state.conversationCoverage,
+        // Persist XEP-0424 retractions still waiting for their target to load,
+        // so the tombstone lands even if the app restarts first
+        pendingRetractions: state.pendingRetractions,
       }),
     }
     )
