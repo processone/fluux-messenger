@@ -1,18 +1,21 @@
 # Message-View Virtualization — Design
 
 - **Date:** 2026-06-23
-- **Status:** Approved (design); pending implementation plan
+- **Status:** Implemented; enabled by default since Fluux 0.17.0 (2026-07-06)
+- **Implementation:** `apps/fluux/src/components/conversation/MessageList.tsx`, `tanstackMessageVirtualizer.ts`, and `apps/fluux/src/utils/featureFlags.ts`
 - **Related:** `.claude/plans/pour-la-virtualisation-de-partitioned-cocke.md` (Phase 1 + Phase 2 sketch), Phase 1 commits (rooms/chat memory windowing `56a65f4b`/`3bfd0064`, anchor restore 1e), occupant-panel virtualization `6cba7eec`, `docs/superpowers/specs/2026-06-05-perf-stress-ui-harness-design.md`, the `#540` content-visibility revert
+
+> **Historical design document.** The context below describes the pre-implementation state and the constraints that shaped the solution. The message list is now virtualized by default with `@tanstack/react-virtual`; the non-virtualized path remains only for static rendering and explicit opt-out.
 
 ## Context
 
-The message list is **not virtualized**: the whole message array of the active conversation/room mounts in the DOM (up to `MAX_MESSAGES_PER_*` = 1000). On Linux/WebKitGTK this causes a **multi-second main-thread freeze** when switching into a large busy room (`[MainThreadStall] ~3191ms` measured on a 1000-message, 97-occupant room), plus FPS drops on sustained scroll and window resize. macOS/WKWebView does not reproduce the freeze (cheap layout), so **DOM node count is the platform-independent proxy** for the layout cost (~1000 rows ≈ 47k nodes).
+At the time this design was written, the message list was **not virtualized**: the whole message array of the active conversation/room mounted in the DOM (up to `MAX_MESSAGES_PER_*` = 1000). On Linux/WebKitGTK this caused a **multi-second main-thread freeze** when switching into a large busy room (`[MainThreadStall] ~3191ms` measured on a 1000-message, 97-occupant room), plus FPS drops on sustained scroll and window resize. macOS/WKWebView did not reproduce the freeze (cheap layout), so **DOM node count was used as the platform-independent proxy** for the layout cost (~1000 rows ≈ 47k nodes).
 
 A prior attempt to integrate a generic library (react-virtuoso) failed — *"doesn't work reliably with our scroll behavior"*. A `content-visibility:auto` stopgap (#497) was reverted (#540) because it regressed macOS (rows vanishing on text selection, frozen toolbar, scroll jumps). The lesson from #540: **a fix that helps Linux but regresses macOS is not a fix** — every change must be verified on both engines.
 
 **Phase 1 (done)** windowed *memory*: only the active conversation/room keeps its message array resident; non-active are evicted and re-hydrated from IndexedDB, the MAM merge is gated, and the catch-up cursor is decoupled. This bounded RAM and reduced the switch-mount to a ~120-message re-hydration window. The **occupant panel was also virtualized** (`6cba7eec`) with `@tanstack/react-virtual`, validating the library in the app's real layout on both engines (501 occupants → ~32 mounted rows).
 
-**Phase 2 (this spec)** windows the *view*: render only the visible slice of messages, keeping the DOM bounded both at switch time and during sustained scroll. This is the harder half — it collides with the bespoke scroll machinery in `useMessageListScroll.ts`, which is exactly why a generic component (which wants to *own* the scroll container) could not be dropped in.
+**Phase 2 (this spec, now implemented)** windows the *view*: render only the visible slice of messages, keeping the DOM bounded both at switch time and during sustained scroll. This was the harder half — it collided with the bespoke scroll machinery in `useMessageListScroll.ts`, which is exactly why a generic component (which wants to *own* the scroll container) could not simply be dropped in.
 
 ### Why this is hard
 
@@ -145,7 +148,7 @@ Spike-first — the spike precedes any integration.
   - stick-to-bottom coexistence (our `scrollTop` writes vs the library's scroll observation — no fight);
   - variable heights (image/reaction/collapse loading after mount → measurement corrects, no drift).
   - **Gate:** green → continue with `@tanstack`. Red → swap to a custom impl behind the same interface; integration unaffected.
-- **2.1 — Integration, rooms first, behind a flag.** Refactor `useMessageListScroll` to consume the interface (the ~6 rebind points). Wire the windowed render in the room message list. Feature flag `enableMessageVirtualization` (default OFF) so we ship dark, A/B, and roll back instantly; both render paths coexist during the bake.
+- **2.1 — Integration, rooms first, behind a flag.** Refactor `useMessageListScroll` to consume the interface (the ~6 rebind points). Wire the windowed render in the room message list. The rollout started with `enableMessageVirtualization` default OFF so it could ship dark, support A/B comparison, and roll back instantly; the flag is now default ON.
 - **2.2 — Store-backed copy + read-marker re-observe + bottom-anchor capture rebind.**
 - **2.3 — Chat mirror (1:1)**, same as Phase 1.
 - **2.4 — Flip the flag on** after both-platform verification; remove the flag and the old non-virtualized path after a bake period.

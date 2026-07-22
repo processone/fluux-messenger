@@ -1,6 +1,8 @@
 # Message-View Virtualization Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: implemented and enabled by default since Fluux 0.17.0 (2026-07-06).** This file is retained as a historical implementation plan; unchecked boxes below do not represent outstanding product work. The current implementation lives in `apps/fluux/src/components/conversation/MessageList.tsx`, `tanstackMessageVirtualizer.ts`, and `apps/fluux/src/utils/featureFlags.ts`.
+
+> **Historical execution note:** This plan originally required `superpowers:subagent-driven-development` or `superpowers:executing-plans` and used checkbox (`- [ ]`) syntax for task tracking. It should not be executed again.
 
 **Goal:** Render only the visible window of the message list so a large room mounts ≤ ~60 rows instead of up to 1000, eliminating the WebKitGTK switch freeze and sustained-scroll jank, with zero scroll-behavior regression.
 
@@ -10,7 +12,7 @@
 
 ## Global Constraints
 
-- **Feature flag:** `enableMessageVirtualization`, **default OFF**. Both render paths coexist until the bake completes.
+- **Feature flag (historical rollout):** `enableMessageVirtualization` started **default OFF** while both render paths coexisted. It is now **default ON**; static rendering and explicit opt-out still use the non-virtualized path.
 - **Two-platform gate:** every phase verified on macOS (WKWebView) **and** Linux (WebKitGTK) before merge. macOS catches correctness/alignment regressions; Linux confirms the perf win.
 - **Node-count target:** switching into a 1000-message room mounts **≤ ~60 `.message-row`** (count rows via `.message-row` — `data-message-id` appears ~2×/msg).
 - **Zero regression** on the six scroll behaviors: stick-to-bottom, MAM prepend anchor, jump (reply/target/marker/find), bottom-anchor capture (1e), read marker, multi-message copy.
