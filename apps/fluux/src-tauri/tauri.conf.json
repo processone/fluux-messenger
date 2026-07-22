@@ -74,7 +74,7 @@
     },
     "windows": {
       "webviewInstallMode": {
-        "type": "downloadBootstrapper"
+        "type": "embedBootstrapper"
       },
       "wix": {
         "upgradeCode": "ac0dbc5c-7b6c-557f-a2aa-5ba7152ac415",
