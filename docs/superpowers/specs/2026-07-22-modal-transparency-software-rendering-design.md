@@ -22,7 +22,7 @@ through Skia on the CPU regardless. The probe's `classifyRenderer` would have
 flattened glass on machines where it demonstrably works. The Mesa patterns
 (`llvmpipe`, `softpipe`, `swrast`, `lavapipe`) only matter on Linux, and Linux
 already renders `.fluux-glass` solid unconditionally via the
-`:root[data-platform="linux"]` gate (§ "Non-goals" above) — the probe had no
+`:root[data-platform="linux"]` gate (§ "Non-goals") — the probe had no
 platform left where it could fire *and* add value. And per §6's own risk
 note, the reporter's screenshots came from a real machine with a real GPU, so
 `classifyRenderer` would have returned `'hardware'` there too: the probe was
@@ -233,11 +233,11 @@ never caught a hollow test in this codebase.
 
 | File | Change |
 | --- | --- |
-| `themes/softwareRendering.ts` | new — probe + pure classifier |
-| `themes/softwareRendering.test.ts` | new — classifier table tests |
-| `themes/transparency.ts` | new reduced-wins input |
-| `themes/transparency.test.ts` | precedence table |
-| `hooks/useTheme.ts` | pass probe result into `resolveTransparency` |
+| `themes/softwareRendering.ts` | new — probe + pure classifier *(removed before merge)* |
+| `themes/softwareRendering.test.ts` | new — classifier table tests *(removed before merge)* |
+| `themes/transparency.ts` | new reduced-wins input *(removed before merge)* |
+| `themes/transparency.test.ts` | precedence table *(removed before merge)* |
+| `hooks/useTheme.ts` | pass probe result into `resolveTransparency` *(removed before merge)* |
 | `components/ModalOverlay.tsx` | scrim/layout split |
 | `components/ui/BottomSheet.tsx` | scrim/layout split |
 | `components/ModalOverlay.backdroproot.test.tsx` | new — DOM nesting guard |

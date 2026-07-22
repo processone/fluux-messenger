@@ -340,7 +340,13 @@ function extractGlassSelectors(source: string): { selector: string; index: numbe
   const re = /([^{}]+)\{/g
   let m: RegExpExecArray | null
   while ((m = re.exec(stripped))) {
-    for (const part of m[1].split(',')) {
+    // Must split on TOP-LEVEL commas only (splitTopLevelCommas, same helper the
+    // specificity calculator uses for :not()/:is() argument lists) — a naive
+    // part.split(',') corrupts any selector list containing a comma nested
+    // inside :not(.a, .b) or an attribute value like [data-x="a,b"]: it would
+    // slice mid-selector and silently drop the well-formed half that doesn't
+    // happen to end in .fluux-glass. See the fixture-based test below.
+    for (const part of splitTopLevelCommas(m[1])) {
       const sel = part.trim()
       if (/\.fluux-glass$/.test(sel)) found.push({ selector: sel, index: m.index })
     }
@@ -401,5 +407,39 @@ describe('fluux-glass tier specificity invariant', () => {
           `the same-specificity cascade tie and defeats the a11y opt-out.`,
       ).toBeGreaterThan(index)
     }
+  })
+})
+
+describe('extractGlassSelectors is comma-aware (fixture, not index.css)', () => {
+  // None of the six selectors currently in index.css contain a top-level
+  // comma, so a naive `part.split(',')` extraction would pass every test
+  // above today while still being wrong for the very selectors the generic
+  // guard exists to catch tomorrow: a multi-argument :not()/:is() tier rule,
+  // or a tier rule gated on an attribute value that itself contains a comma.
+  // Exercised here against a synthetic fixture, independent of index.css, so
+  // the extractor's comma-handling is proven correct on its own terms.
+  const fixture = `
+    :not(.light, .dark) .fluux-glass { color: red }
+    [data-x="a,b"] .fluux-glass { color: blue }
+  `
+  const found = extractGlassSelectors(fixture)
+
+  it('extracts both selectors intact, not corrupted at the nested comma', () => {
+    const selectors = found.map((f) => f.selector)
+    expect(selectors, `extracted: ${JSON.stringify(selectors)}`).toEqual([
+      ':not(.light, .dark) .fluux-glass',
+      '[data-x="a,b"] .fluux-glass',
+    ])
+  })
+
+  it('scores both correctly once extracted intact', () => {
+    const notSel = found.find((f) => f.selector.startsWith(':not'))
+    const attrSel = found.find((f) => f.selector.startsWith('[data-x'))
+    expect(notSel, 'the :not(.light, .dark) .fluux-glass fixture selector was not found').toBeDefined()
+    expect(attrSel, 'the [data-x="a,b"] .fluux-glass fixture selector was not found').toBeDefined()
+    // :not(.light, .dark) → max(.light, .dark) = (0,1,0), plus .fluux-glass → (0,2,0)
+    expect(specificity(notSel!.selector)).toEqual([0, 2, 0])
+    // [data-x="a,b"] → (0,1,0), plus .fluux-glass → (0,2,0)
+    expect(specificity(attrSel!.selector)).toEqual([0, 2, 0])
   })
 })
