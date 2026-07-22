@@ -802,6 +802,15 @@ function scheduleReadPointerBackfill(
       try {
         const migrated = await migrateReadPointer(conversationId, legacy)
         if (getStorageScopeJid() !== scopeAtSchedule) return
+        // A conversation whose legacy position can NEVER resolve (lastReadAt
+        // predates every cached message, or a lastSeenMessageId the cache never
+        // holds) stays in `pending` permanently: serializeState keeps re-emitting
+        // its legacy pair every launch, and hasUnmigratedLegacyReadState keeps its
+        // fresh-entity snap stood down. That is deliberate and self-limiting — the
+        // set only ever holds pre-#1081 conversations (legacy fields are never
+        // written fresh), and a stuck-on stand-down only ever suppresses a snap,
+        // which counts MORE unread (recoverable). Do NOT "fix" this into a snap:
+        // snapping to newest is the forward-only over-advance #1081 exists to kill.
         if (!migrated) continue
         applyMigratedReadPointer(conversationId, migrated)
         // Deliberately AFTER the apply. The apply persists synchronously, and

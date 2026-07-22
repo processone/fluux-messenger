@@ -288,6 +288,13 @@ function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
  * a snapshot restored after a crash is routinely BEHIND the row it shadows, and
  * taking it at face value would then have `persistRoomReadState` write that
  * older position back over the row.
+ *
+ * INVARIANT this "take the later" rule depends on: both `room` (from the state
+ * snapshot) and `restored` (the durable row) are lagging MIRRORS of one store
+ * pointer, so neither can be ahead of the user's true position — "later" only
+ * ever recovers the freshest mirror. If a later PR makes either an INDEPENDENT
+ * writer, this precedence is no longer safe and must be revisited: "later" would
+ * then be able to pick a genuinely-ahead position, the unrecoverable direction.
  */
 function resolveRoomReadPosition(
   existingMeta: RoomMetadata | undefined,
