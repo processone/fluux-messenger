@@ -396,14 +396,18 @@ describe('room read-state persistence', () => {
     expect(restored.get('r@c')?.readPointer).toBeUndefined()
   })
 
-  // Control: an implementation that returns { readPointer: undefined } for a
-  // corrupt row passes a naive `toBeUndefined()` check on the pointer while
-  // still claiming the room HAS read state. Assert the row is dropped entirely,
-  // so the room falls back to its history floor rather than to a phantom entry.
-  it('drops a row whose pointer is corrupt rather than keeping a hollow entry', () => {
+  // Control: an implementation that downgrades a corrupt pointer to `undefined`
+  // instead of dropping the row keeps a partially-trusted entry from a row we
+  // know was written badly.
+  //
+  // The seeded floor MUST be valid. With an invalid floor too, the function's
+  // final `if (!readPointer && !historyFloor) continue` drops the row on its
+  // own and the test passes either way — a hollow control. A valid floor makes
+  // the corrupt-pointer branch the only thing that can cause the drop.
+  it('drops a whole row whose pointer is corrupt, even when its floor is valid', () => {
     localStorage.setItem(
       `fluux-room-read-state:${JID}`,
-      JSON.stringify([['r@c', { readPointer: { messageId: 'm1' }, historyFloor: null }]])
+      JSON.stringify([['r@c', { readPointer: { messageId: 'm1' }, historyFloor: 42 }]])
     )
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
   })
