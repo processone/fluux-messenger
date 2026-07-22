@@ -68,7 +68,8 @@ const ALIGN_CLASS = {
 /**
  * The single source of truth for the app's frosted-glass modal chrome:
  *
- * - the `.modal-scrim` backdrop (frost + scrim behind the panel),
+ * - the `.modal-scrim` backdrop (frost + scrim), rendered as a SIBLING layer so
+ *   the panel escapes its backdrop root,
  * - the click-to-dismiss layer,
  * - the `.fluux-glass` panel (translucent surface + blur + overlay shadow +
  *   hairline border),
@@ -126,9 +127,18 @@ export function ModalOverlay({
   return (
     <div
       data-modal="true"
-      className={`fixed inset-0 modal-scrim flex ${ALIGN_CLASS[align]} justify-center z-50 ${scrimClass}`}
+      className={`fixed inset-0 flex ${ALIGN_CLASS[align]} justify-center z-50`}
     >
-      <div aria-hidden="true" className="modal-scrim-aurora" />
+      {/* The scrim is a SIBLING of the panel, never its ancestor. An element
+          with backdrop-filter forms a Backdrop Root, and a panel nested inside
+          one has its own backdrop-filter silently discarded — the frost simply
+          never paints. Keeping layout on the wrapper and frost on this layer is
+          what lets the panel's blur sample the real app. The scrim also owns the
+          fade now, so its transient opacity < 1 cannot form a backdrop root over
+          the panel either. Guarded by ModalOverlay.backdroproot.test.tsx. */}
+      <div aria-hidden="true" className={`absolute inset-0 modal-scrim ${scrimClass}`}>
+        <div className="modal-scrim-aurora" />
+      </div>
       <button
         type="button"
         aria-hidden="true"

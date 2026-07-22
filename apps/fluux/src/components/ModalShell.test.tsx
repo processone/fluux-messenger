@@ -23,8 +23,10 @@ describe('ModalShell glass surface', () => {
     const { container } = render(
       <ModalShell title="X" onClose={() => {}}><div /></ModalShell>
     )
-    const scrim = container.querySelector('[data-modal="true"]')
-    expect(scrim?.classList.contains('modal-scrim')).toBe(true)
+    // The scrim is its own sibling layer (not the `[data-modal="true"]` layout
+    // wrapper) so its backdrop-filter doesn't form a Backdrop Root over the panel.
+    const scrim = container.querySelector('.modal-scrim')
+    expect(scrim).not.toBeNull()
     expect(scrim?.classList.contains('bg-black/50')).toBe(false)
   })
 
