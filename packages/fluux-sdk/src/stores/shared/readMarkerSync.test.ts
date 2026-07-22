@@ -43,7 +43,12 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result).toEqual({ kind: 'advanced', lastSeenMessageId: 'm2' })
+    expect(result).toEqual({
+      kind: 'advanced',
+      lastSeenMessageId: 'm2',
+      // The pointer names the SAME message as lastSeenMessageId (#1081).
+      readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
+    })
   })
 
   it('recomputes the divider for the ACTIVE entity from the advanced position', () => {
@@ -59,6 +64,7 @@ describe('resolveRemoteDisplayed', () => {
     expect(result).toEqual({
       kind: 'advanced-with-divider',
       lastSeenMessageId: 'm2',
+      readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
       firstNewMessageId: 'm3',
     })
   })
@@ -75,6 +81,7 @@ describe('resolveRemoteDisplayed', () => {
     expect(result).toEqual({
       kind: 'advanced-with-divider',
       lastSeenMessageId: 'm3',
+      readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
       firstNewMessageId: undefined,
     })
   })

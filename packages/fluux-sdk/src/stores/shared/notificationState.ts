@@ -10,9 +10,15 @@
  *
  * Key invariant: unreadCount, firstNewMessageId, lastReadAt, and lastSeenMessageId
  * are always updated atomically through these transition functions.
+ *
+ * Migration invariant (#1081): every transition that returns a new
+ * `lastSeenMessageId` returns the matching `readPointer` in the same object —
+ * `readPointer.messageId === lastSeenMessageId` after any transition. The pair
+ * is what makes deleting `lastSeenMessageId`/`lastReadAt` safe once every reader
+ * has moved to the pointer. `lastSeenMessageId` stays authoritative until then.
  */
 
-import type { ReadPointer } from './readPointer'
+import { makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,6 +124,7 @@ export function onMessageReceived(
       mentionsCount: 0,
       lastReadAt: msg.timestamp,
       lastSeenMessageId: msg.id,
+      readPointer: makeReadPointer(msg),
       firstNewMessageId: undefined,
     }
   }
@@ -139,6 +146,7 @@ export function onMessageReceived(
       mentionsCount: 0,
       lastReadAt: msg.timestamp,
       lastSeenMessageId: msg.id,
+      readPointer: makeReadPointer(msg),
       firstNewMessageId: state.firstNewMessageId,
     }
   }
@@ -163,6 +171,9 @@ export function onMessageReceived(
     mentionsCount: newMentionsCount,
     lastReadAt: newLastReadAt,
     lastSeenMessageId: state.lastSeenMessageId,
+    // Read position untouched — carried through explicitly because this branch
+    // builds a fresh object rather than spreading `state`.
+    readPointer: state.readPointer,
     firstNewMessageId: newFirstNewMessageId,
   }
 }
@@ -309,11 +320,20 @@ export function onActivate(
   const lastMessage = messages[messages.length - 1]
   const lastReadAt = lastMessage?.timestamp ?? state.lastReadAt ?? new Date()
 
+  // Resolve the position above to a pointer (#1081). When the id resolves
+  // nowhere in this slice the position did not move — it is the caller's stale
+  // pointer — so the existing pointer, equally stale, is kept alongside it.
+  const pointerMessage = updatedLastSeenMessageId
+    ? messages.find((m) => m.id === updatedLastSeenMessageId)
+    : undefined
+  const updatedPointer = pointerMessage ? makeReadPointer(pointerMessage) : state.readPointer
+
   return {
     unreadCount: 0,
     mentionsCount: 0,
     lastReadAt,
     lastSeenMessageId: updatedLastSeenMessageId,
+    readPointer: updatedPointer,
     firstNewMessageId,
   }
 }
@@ -341,26 +361,30 @@ export function onDeactivate(
  * Preserves firstNewMessageId — the marker has a separate lifecycle
  * (set on activate, cleared on deactivate or explicit clear).
  *
- * When `advanceSeenTo` is supplied, the read pointer (lastSeenMessageId) is
- * advanced to it. Callers pass the newest message id ONLY when the user has
- * genuinely caught up to it (the loaded window is at the live edge) — this is
- * what lets the XEP-0490 publisher, which watches lastSeenMessageId, sync the
- * read marker to other devices. Omitting it (the scrolled-into-history case)
- * clears the local badge without publishing a read position past what the user
- * actually saw. The advance is forward-only in practice because the caller only
- * ever supplies the tail of a live-edge window (>= the current pointer).
+ * When `advanceSeenTo` is supplied, the read pointer is advanced to it. Callers
+ * pass the newest MESSAGE ONLY when the user has genuinely caught up to it (the
+ * loaded window is at the live edge) — this is what lets the XEP-0490
+ * publisher, which watches the read position, sync the read marker to other
+ * devices. Omitting it (the scrolled-into-history case) clears the local badge
+ * without publishing a read position past what the user actually saw. The
+ * advance is forward-only in practice because the caller only ever supplies the
+ * tail of a live-edge window (>= the current pointer).
+ *
+ * `advanceSeenTo` is the message rather than its id (#1081): the id and the
+ * timestamp of one read position are written together or not at all, and taking
+ * them as one argument makes a half-write unrepresentable.
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
   lastMessageTimestamp?: Date,
-  advanceSeenTo?: string
+  advanceSeenTo?: PointerSource
 ): EntityNotificationState {
   const lastReadAt = lastMessageTimestamp ?? new Date()
   // Skip update if nothing to change (prevents unnecessary state updates)
   const existingTime = state.lastReadAt instanceof Date
     ? state.lastReadAt.getTime()
     : state.lastReadAt ? new Date(state.lastReadAt as unknown as string).getTime() : 0
-  const seenUnchanged = advanceSeenTo === undefined || advanceSeenTo === state.lastSeenMessageId
+  const seenUnchanged = advanceSeenTo === undefined || advanceSeenTo.id === state.lastSeenMessageId
   if (state.unreadCount === 0 && state.mentionsCount === 0 && existingTime === lastReadAt.getTime() && seenUnchanged) {
     return state
   }
@@ -369,7 +393,10 @@ export function onMarkAsRead(
     unreadCount: 0,
     mentionsCount: 0,
     lastReadAt,
-    lastSeenMessageId: advanceSeenTo ?? state.lastSeenMessageId,
+    lastSeenMessageId: advanceSeenTo?.id ?? state.lastSeenMessageId,
+    // Mirrors the assignment above exactly — no extra forward-only guard here,
+    // or the two fields could disagree (the caller owns the "caught up" call).
+    readPointer: advanceSeenTo ? makeReadPointer(advanceSeenTo) : state.readPointer,
   }
 }
 
@@ -419,20 +446,31 @@ export function onWindowBecameVisible(
  *
  * @param state - Current notification state
  * @param messageId - ID of the message that became visible
- * @param messages - Full messages array for ordering comparison
+ * @param messages - Full messages array for ordering comparison. Carries
+ *   timestamps so the advanced position can be expressed as a `readPointer`
+ *   (#1081); every caller already holds full messages.
  * @returns Updated state (or same reference if no change)
  */
 export function onMessageSeen(
   state: EntityNotificationState,
   messageId: string,
-  messages: Array<{ id: string }>,
+  messages: Array<PointerSource>,
   options?: { atLiveEdge?: boolean }
 ): EntityNotificationState {
+  // The pointer for a position this function advances to. Only ever undefined
+  // when `messageId` is absent from `messages` — the caller reported a message
+  // it does not hold, and there is no honest timestamp to pair with the id.
+  const pointerFor = (id: string): ReadPointer | undefined => {
+    const found = messages.find((m) => m.id === id)
+    return found ? makeReadPointer(found) : undefined
+  }
+
   // If no current lastSeenMessageId, any message is an advancement
   if (!state.lastSeenMessageId) {
     return {
       ...state,
       lastSeenMessageId: messageId,
+      readPointer: pointerFor(messageId) ?? state.readPointer,
     }
   }
 
@@ -450,7 +488,7 @@ export function onMessageSeen(
     // maximum — advancing cannot regress. Off the live edge the slice's last
     // message may be older than the pointer, so stay guarded.
     if (options?.atLiveEdge && newIdx !== -1 && newIdx === messages.length - 1) {
-      return { ...state, lastSeenMessageId: messageId }
+      return { ...state, lastSeenMessageId: messageId, readPointer: pointerFor(messageId) ?? state.readPointer }
     }
     return state
   }
@@ -460,6 +498,7 @@ export function onMessageSeen(
     return {
       ...state,
       lastSeenMessageId: messageId,
+      readPointer: pointerFor(messageId) ?? state.readPointer,
     }
   }
 
@@ -518,7 +557,13 @@ export function recomputeCountsFromPointer(
     if (state.unreadCount === 0 && state.mentionsCount === 0 && state.lastSeenMessageId === newest.id) {
       return state
     }
-    return { ...state, unreadCount: 0, mentionsCount: 0, lastSeenMessageId: newest.id }
+    return {
+      ...state,
+      unreadCount: 0,
+      mentionsCount: 0,
+      lastSeenMessageId: newest.id,
+      readPointer: makeReadPointer(newest),
+    }
   }
 
   let startIdx: number
@@ -542,9 +587,11 @@ export function recomputeCountsFromPointer(
   }
 
   let newPointer = state.lastSeenMessageId
+  let newReadPointer = state.readPointer
   for (let i = messages.length - 1; i >= startIdx; i--) {
     if (messages[i].isOutgoing) {
       newPointer = messages[i].id
+      newReadPointer = makeReadPointer(messages[i])
       startIdx = i + 1
       break
     }
@@ -563,7 +610,13 @@ export function recomputeCountsFromPointer(
   if (unread === state.unreadCount && mentionsOut === state.mentionsCount && newPointer === state.lastSeenMessageId) {
     return state
   }
-  return { ...state, unreadCount: unread, mentionsCount: mentionsOut, lastSeenMessageId: newPointer }
+  return {
+    ...state,
+    unreadCount: unread,
+    mentionsCount: mentionsOut,
+    lastSeenMessageId: newPointer,
+    readPointer: newReadPointer,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -651,6 +704,7 @@ export function createInitialNotificationState(): EntityNotificationState {
     mentionsCount: 0,
     lastReadAt: undefined,
     lastSeenMessageId: undefined,
+    readPointer: undefined,
     firstNewMessageId: undefined,
   }
 }

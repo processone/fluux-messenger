@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import * as notifState from './notificationState'
 import {
   onMessageReceived,
   onActivate,
@@ -493,13 +494,14 @@ describe('onActivate stale pointer (resume-preserving)', () => {
 describe('onMessageSeen atLiveEdge advance', () => {
   it('advances an unresolvable pointer when viewing the newest message at the live edge', () => {
     const state = { ...createInitialNotificationState(), lastSeenMessageId: 'evicted' }
-    const messages = [{ id: 'a' }, { id: 'b' }]
+    const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
     const out = onMessageSeen(state, 'b', messages, { atLiveEdge: true })
     expect(out.lastSeenMessageId).toBe('b')
+    expect(out.readPointer).toEqual({ messageId: 'b', timestamp: new Date(2000) })
   })
   it('stays guarded off the live edge (window slid up — no regression)', () => {
     const state = { ...createInitialNotificationState(), lastSeenMessageId: 'newer-than-slice' }
-    const messages = [{ id: 'a' }, { id: 'b' }]
+    const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
     expect(onMessageSeen(state, 'b', messages, { atLiveEdge: false })).toBe(state)
     expect(onMessageSeen(state, 'a', messages, { atLiveEdge: true })).toBe(state) // not the newest
   })
@@ -579,9 +581,9 @@ describe('onMarkAsRead', () => {
     expect(result.lastSeenMessageId).toBe('seen-1')
   })
 
-  it('advances lastSeenMessageId to the supplied id (read pointer catches up)', () => {
+  it('advances lastSeenMessageId to the supplied message (read pointer catches up)', () => {
     const state = makeState({ unreadCount: 3, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, new Date(), 'newest-9')
+    const result = onMarkAsRead(state, new Date(), makeMsg({ id: 'newest-9' }))
     expect(result.lastSeenMessageId).toBe('newest-9')
     expect(result.unreadCount).toBe(0)
   })
@@ -590,15 +592,15 @@ describe('onMarkAsRead', () => {
     // The IntersectionObserver may lag: unread already 0 but the pointer is behind.
     const ts = new Date('2025-01-15T12:00:00Z')
     const state = makeState({ unreadCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, ts, 'newest-9')
+    const result = onMarkAsRead(state, ts, makeMsg({ id: 'newest-9', timestamp: ts }))
     expect(result).not.toBe(state)
     expect(result.lastSeenMessageId).toBe('newest-9')
   })
 
-  it('returns same reference when the supplied id equals the current pointer', () => {
+  it('returns same reference when the supplied message is the current pointer', () => {
     const ts = new Date('2025-01-15T12:00:00Z')
     const state = makeState({ unreadCount: 0, mentionsCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
-    const result = onMarkAsRead(state, ts, 'seen-1')
+    const result = onMarkAsRead(state, ts, makeMsg({ id: 'seen-1', timestamp: ts }))
     expect(result).toBe(state)
   })
 })
@@ -676,11 +678,11 @@ describe('onWindowBecameVisible', () => {
 
 describe('onMessageSeen', () => {
   const messages = [
-    { id: 'msg-1' },
-    { id: 'msg-2' },
-    { id: 'msg-3' },
-    { id: 'msg-4' },
-    { id: 'msg-5' },
+    { id: 'msg-1', timestamp: new Date(1000) },
+    { id: 'msg-2', timestamp: new Date(2000) },
+    { id: 'msg-3', timestamp: new Date(3000) },
+    { id: 'msg-4', timestamp: new Date(4000) },
+    { id: 'msg-5', timestamp: new Date(5000) },
   ]
 
   it('sets lastSeenMessageId when none exists', () => {
@@ -1019,7 +1021,11 @@ describe('lifecycle sequences', () => {
   it('onMessageSeen does not regress when lastSeenMessageId is stale', () => {
     // Scenario: lastSeenMessageId refers to an old message not in the current array.
     // A visible message should NOT replace it since we can't confirm ordering.
-    const msgs = [{ id: 'msg-100' }, { id: 'msg-101' }, { id: 'msg-102' }]
+    const msgs = [
+      { id: 'msg-100', timestamp: new Date(1000) },
+      { id: 'msg-101', timestamp: new Date(2000) },
+      { id: 'msg-102', timestamp: new Date(3000) },
+    ]
     const state = makeState({ lastSeenMessageId: 'msg-999' }) // not in msgs
 
     const result = onMessageSeen(state, 'msg-100', msgs)
@@ -1199,5 +1205,169 @@ describe('recomputeCountsFromPointer', () => {
   it('empty slice returns the same reference', () => {
     const state = { ...createInitialNotificationState(), lastSeenMessageId: 'x', unreadCount: 3 }
     expect(recomputeCountsFromPointer(state, [])).toBe(state)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// readPointer shadow write (#1081)
+// ---------------------------------------------------------------------------
+
+describe('readPointer is written with lastSeenMessageId (#1081 migration)', () => {
+  const base = () => notifState.createInitialNotificationState()
+  const msg = (id: string, ms: number, over = {}) => ({
+    id, timestamp: new Date(ms), isOutgoing: false, ...over,
+  })
+
+  it('onMessageReceived sets both for an outgoing message', () => {
+    const out = notifState.onMessageReceived(
+      base(),
+      msg('m1', 1000, { isOutgoing: true }),
+      { isActive: false, windowVisible: false }
+    )
+    expect(out.lastSeenMessageId).toBe('m1')
+    // Whole-object assertion: a partial write that sets only the id fails here.
+    expect(out.readPointer).toEqual({ messageId: 'm1', timestamp: new Date(1000) })
+  })
+
+  it('onMessageReceived sets both when the user sees the message', () => {
+    const out = notifState.onMessageReceived(
+      base(),
+      msg('m2', 2000),
+      { isActive: true, windowVisible: true }
+    )
+    expect(out.lastSeenMessageId).toBe('m2')
+    expect(out.readPointer).toEqual({ messageId: 'm2', timestamp: new Date(2000) })
+  })
+
+  it('onMessageSeen sets both, resolving the timestamp from the messages array', () => {
+    const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
+    const start = { ...base(), lastSeenMessageId: 'm1', readPointer: { messageId: 'm1', timestamp: new Date(1000) } }
+    const out = notifState.onMessageSeen(start, 'm3', messages)
+    expect(out.lastSeenMessageId).toBe('m3')
+    expect(out.readPointer).toEqual({ messageId: 'm3', timestamp: new Date(3000) })
+  })
+
+  it('onMessageSeen leaves the pointer put when it does not advance', () => {
+    const messages = [msg('m1', 1000), msg('m2', 2000)]
+    const pointer = { messageId: 'm2', timestamp: new Date(2000) }
+    const start = { ...base(), lastSeenMessageId: 'm2', readPointer: pointer }
+    const out = notifState.onMessageSeen(start, 'm1', messages)
+    expect(out.readPointer).toBe(pointer)
+  })
+
+  it('the two fields never disagree after any transition', () => {
+    const messages = [msg('m1', 1000), msg('m2', 2000, { isOutgoing: true }), msg('m3', 3000)]
+    let s = base()
+    s = notifState.onMessageReceived(s, messages[0], { isActive: true, windowVisible: true })
+    s = notifState.onMessageReceived(s, messages[1], { isActive: false, windowVisible: false })
+    s = notifState.onMessageSeen(s, 'm3', messages)
+    expect(s.readPointer?.messageId).toBe(s.lastSeenMessageId)
+  })
+})
+
+describe('readPointer on the remaining pointer-writing transitions (#1081)', () => {
+  const base = () => notifState.createInitialNotificationState()
+  const msg = (id: string, ms: number, over: Partial<NotificationMessage> = {}): NotificationMessage => ({
+    id, timestamp: new Date(ms), isOutgoing: false, ...over,
+  })
+
+  it('onMessageReceived keeps the pointer put for an unseen incoming message', () => {
+    const pointer = { messageId: 'm1', timestamp: new Date(1000) }
+    const start = { ...base(), lastSeenMessageId: 'm1', readPointer: pointer }
+    const out = notifState.onMessageReceived(start, msg('m2', 2000), { isActive: false, windowVisible: false })
+    expect(out.lastSeenMessageId).toBe('m1')
+    expect(out.readPointer).toBe(pointer)
+  })
+
+  it('onActivate resolves the pointer to the position it lands on', () => {
+    // Stale pointer (not in the slice) + usable lastReadAt: the divider derives
+    // at m2, so the pointer snaps to the message just before it.
+    const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
+    const start = { ...base(), lastSeenMessageId: 'gone', lastReadAt: new Date(1500), unreadCount: 2 }
+    const out = notifState.onActivate(start, messages, { treatDelayedAsNew: true })
+    expect(out.firstNewMessageId).toBe('m2')
+    expect(out.lastSeenMessageId).toBe('m1')
+    expect(out.readPointer).toEqual({ messageId: 'm1', timestamp: new Date(1000) })
+  })
+
+  it('onActivate resolves the pointer even when the position does not move', () => {
+    const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
+    const start = { ...base(), lastSeenMessageId: 'm2', unreadCount: 1 }
+    const out = notifState.onActivate(start, messages)
+    expect(out.lastSeenMessageId).toBe('m2')
+    expect(out.readPointer).toEqual({ messageId: 'm2', timestamp: new Date(2000) })
+  })
+
+  it('onMarkAsRead sets both when the caller supplies the caught-up message', () => {
+    const start = {
+      ...base(),
+      unreadCount: 3,
+      lastSeenMessageId: 'm1',
+      readPointer: { messageId: 'm1', timestamp: new Date(1000) },
+    }
+    const out = notifState.onMarkAsRead(start, new Date(3000), msg('m3', 3000))
+    expect(out.lastSeenMessageId).toBe('m3')
+    expect(out.readPointer).toEqual({ messageId: 'm3', timestamp: new Date(3000) })
+  })
+
+  it('onMarkAsRead leaves the pointer put when the window is off the live edge', () => {
+    const pointer = { messageId: 'm1', timestamp: new Date(1000) }
+    const start = { ...base(), unreadCount: 3, lastSeenMessageId: 'm1', readPointer: pointer }
+    const out = notifState.onMarkAsRead(start, new Date(3000))
+    expect(out.lastSeenMessageId).toBe('m1')
+    expect(out.readPointer).toBe(pointer)
+  })
+
+  it('recomputeCountsFromPointer sets both on the fresh-entity guard', () => {
+    const messages = [msg('a', 1000), msg('b', 2000)]
+    const out = notifState.recomputeCountsFromPointer(base(), messages)
+    expect(out.lastSeenMessageId).toBe('b')
+    expect(out.readPointer).toEqual({ messageId: 'b', timestamp: new Date(2000) })
+  })
+
+  it('recomputeCountsFromPointer sets both when an outgoing message moves the pointer', () => {
+    const messages = [msg('a', 1000), msg('b', 2000), msg('mine', 3000, { isOutgoing: true }), msg('c', 4000)]
+    const start = { ...base(), lastSeenMessageId: 'a', readPointer: { messageId: 'a', timestamp: new Date(1000) } }
+    const out = notifState.recomputeCountsFromPointer(start, messages)
+    expect(out.unreadCount).toBe(1)
+    expect(out.lastSeenMessageId).toBe('mine')
+    expect(out.readPointer).toEqual({ messageId: 'mine', timestamp: new Date(3000) })
+  })
+
+  it('the two fields never disagree across the full transition set', () => {
+    const messages = [
+      msg('m1', 1000),
+      msg('m2', 2000),
+      msg('m3', 3000, { isOutgoing: true }),
+      msg('m4', 4000),
+    ]
+    // Tagged so a failure names the transition that broke the invariant.
+    const agree = (s: EntityNotificationState, label: string) =>
+      expect(`${label}: ${s.readPointer?.messageId}`).toBe(`${label}: ${s.lastSeenMessageId}`)
+
+    let s: EntityNotificationState = base()
+    s = notifState.onMessageReceived(s, messages[0], { isActive: false, windowVisible: false })
+    agree(s, 'onMessageReceived (unseen)')
+    s = notifState.onMessageReceived(s, messages[1], { isActive: true, windowVisible: true })
+    agree(s, 'onMessageReceived (seen)')
+    s = notifState.onMessageReceived(s, messages[2], { isActive: false, windowVisible: false })
+    agree(s, 'onMessageReceived (outgoing)')
+    s = notifState.onMessageReceived(s, messages[3], { isActive: false, windowVisible: false })
+    agree(s, 'onMessageReceived (unseen again)')
+    s = notifState.onActivate(s, messages, { treatDelayedAsNew: true })
+    agree(s, 'onActivate')
+    s = notifState.onMessageSeen(s, 'm4', messages)
+    agree(s, 'onMessageSeen')
+    s = notifState.onDeactivate(s)
+    agree(s, 'onDeactivate')
+    s = notifState.recomputeCountsFromPointer(s, messages)
+    agree(s, 'recomputeCountsFromPointer')
+    s = notifState.onMarkAsRead(s, new Date(4000), messages[3])
+    agree(s, 'onMarkAsRead')
+    s = notifState.onWindowBecameVisible(s, true, new Date(4000))
+    agree(s, 'onWindowBecameVisible')
+    s = notifState.onClearMarker(s)
+    agree(s, 'onClearMarker')
+    expect(s.lastSeenMessageId).toBe('m4')
   })
 })

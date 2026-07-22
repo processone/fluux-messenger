@@ -18,6 +18,7 @@ import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMess
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
+import { makeReadPointer, type ReadPointer } from './shared/readPointer'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
@@ -551,6 +552,16 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     return lastReadAt instanceof Date ? lastReadAt : new Date(lastReadAt)
   }
 
+  // Helper to restore the read pointer's Date (#1081). JSON.stringify turns the
+  // timestamp into a string; a pointer holding a string would poison every
+  // comparison it touched, so anything unrecoverable becomes "no pointer" —
+  // lastSeenMessageId is still authoritative during the migration.
+  const restoreReadPointer = (pointer?: ReadPointer): ReadPointer | undefined => {
+    if (!pointer || typeof pointer.messageId !== 'string' || pointer.messageId.length === 0) return undefined
+    const timestamp = pointer.timestamp instanceof Date ? pointer.timestamp : new Date(pointer.timestamp)
+    return Number.isNaN(timestamp.getTime()) ? undefined : { messageId: pointer.messageId, timestamp }
+  }
+
   // Check if we have the new separated format
   const hasNewFormat = persisted.conversationEntities && persisted.conversationMeta
 
@@ -569,6 +580,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(meta.lastMessage),
           lastReadAt: restoreLastReadAt(meta.lastReadAt),
+          readPointer: restoreReadPointer(meta.readPointer),
         },
       ])
     )
@@ -593,6 +605,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(conv.lastMessage),
           lastReadAt: restoreLastReadAt(conv.lastReadAt),
+          readPointer: restoreReadPointer(conv.readPointer),
         },
       ])
     )
@@ -612,6 +625,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         lastMessage: conv.lastMessage,
         lastReadAt: conv.lastReadAt,
         lastSeenMessageId: conv.lastSeenMessageId,
+        readPointer: conv.readPointer,
       })
     }
   }
@@ -846,6 +860,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
               lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
+              readPointer: meta?.readPointer ?? conv.readPointer,
               firstNewMessageId: undefined,
             }
 
@@ -862,6 +877,7 @@ export const chatStore = createStore<ChatState>()(
                 unreadCount: activated.unreadCount,
                 lastReadAt: activated.lastReadAt,
                 lastSeenMessageId: activated.lastSeenMessageId,
+                readPointer: activated.readPointer,
               }
               const newMeta = new Map(state.conversationMeta)
               newMeta.set(id, newMetaEntry)
@@ -871,6 +887,7 @@ export const chatStore = createStore<ChatState>()(
                 unreadCount: activated.unreadCount,
                 lastReadAt: activated.lastReadAt,
                 lastSeenMessageId: activated.lastSeenMessageId,
+                readPointer: activated.readPointer,
               })
               const newMarkers = new Map(state.firstNewMessageMarkers)
               if (activated.firstNewMessageId) newMarkers.set(id, activated.firstNewMessageId)
@@ -969,6 +986,7 @@ export const chatStore = createStore<ChatState>()(
             lastMessage: conv.lastMessage,
             lastReadAt: conv.lastReadAt,
             lastSeenMessageId: conv.lastSeenMessageId,
+            readPointer: conv.readPointer,
           }
 
           const newEntities = new Map(state.conversationEntities)
@@ -1128,6 +1146,7 @@ export const chatStore = createStore<ChatState>()(
                 mentionsCount: 0,
                 lastReadAt: meta.lastReadAt,
                 lastSeenMessageId: meta.lastSeenMessageId,
+                readPointer: meta.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(msg.conversationId),
               },
               msg,
@@ -1163,6 +1182,7 @@ export const chatStore = createStore<ChatState>()(
               lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
+              readPointer: notif.readPointer,
             })
 
             // Update combined map for backward compatibility
@@ -1173,6 +1193,7 @@ export const chatStore = createStore<ChatState>()(
               lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
+              readPointer: notif.readPointer,
             })
 
             // Session-only divider: onMessageReceived only sets it for the active,
@@ -1218,6 +1239,7 @@ export const chatStore = createStore<ChatState>()(
             mentionsCount: 0,
             lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
             lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
+            readPointer: meta?.readPointer ?? conv.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
 
@@ -1232,7 +1254,7 @@ export const chatStore = createStore<ChatState>()(
           // history we leave the pointer where the user actually read, so MDS never
           // publishes a position past unseen messages.
           const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
-          const advanceSeenTo = atLiveEdge ? lastMessage?.id : undefined
+          const advanceSeenTo = atLiveEdge ? lastMessage : undefined
 
           // Delegate to pure function
           const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp, advanceSeenTo)
@@ -1245,12 +1267,13 @@ export const chatStore = createStore<ChatState>()(
             unreadCount: updated.unreadCount,
             lastReadAt: updated.lastReadAt,
             lastSeenMessageId: updated.lastSeenMessageId,
+            readPointer: updated.readPointer,
           }
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, newMetaEntry)
 
           const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId })
+          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
 
           return { conversationMeta: newMeta, conversations: newConversations }
         })
@@ -1280,6 +1303,7 @@ export const chatStore = createStore<ChatState>()(
 
           const read = {
             lastSeenMessageId: newest.id,
+            readPointer: makeReadPointer(newest),
             unreadCount: 0,
             lastReadAt: newest.timestamp,
           }
@@ -1322,6 +1346,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
+              readPointer: meta.readPointer,
               firstNewMessageId: undefined,
             },
             messages,
@@ -1358,6 +1383,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
+              readPointer: meta.readPointer,
               firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
             messageId,
@@ -1369,11 +1395,11 @@ export const chatStore = createStore<ChatState>()(
           if (updated.lastSeenMessageId === meta.lastSeenMessageId) return state
 
           const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, lastSeenMessageId: updated.lastSeenMessageId })
+          newMeta.set(conversationId, { ...meta, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
 
           if (conv) {
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId })
+            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId, readPointer: updated.readPointer })
             return { conversationMeta: newMeta, conversations: newConversations }
           }
 
@@ -1401,6 +1427,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
+              readPointer: meta.readPointer,
               pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
             },
             messages,
@@ -1416,7 +1443,11 @@ export const chatStore = createStore<ChatState>()(
               ? { pendingRemoteDisplayedStanzaId: stanzaId }
               : resolution.kind === 'clear-pending'
                 ? { pendingRemoteDisplayedStanzaId: undefined }
-                : { lastSeenMessageId: resolution.lastSeenMessageId, pendingRemoteDisplayedStanzaId: undefined }
+                : {
+                    lastSeenMessageId: resolution.lastSeenMessageId,
+                    readPointer: resolution.readPointer,
+                    pendingRemoteDisplayedStanzaId: undefined,
+                  }
 
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, { ...meta, ...metaPatch })
@@ -1439,6 +1470,7 @@ export const chatStore = createStore<ChatState>()(
                 mentionsCount: 0,
                 lastReadAt: meta.lastReadAt,
                 lastSeenMessageId: resolution.lastSeenMessageId,
+                readPointer: resolution.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               },
               messages
@@ -1501,6 +1533,7 @@ export const chatStore = createStore<ChatState>()(
                   mentionsCount: 0,
                   lastReadAt: meta.lastReadAt,
                   lastSeenMessageId: meta.lastSeenMessageId,
+                  readPointer: meta.readPointer,
                   firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
                 }
                 const exact = notifState.recomputeCountsFromPointer(pointerState, cached)
@@ -1510,6 +1543,7 @@ export const chatStore = createStore<ChatState>()(
                   ...meta,
                   unreadCount: exact.unreadCount,
                   lastSeenMessageId: exact.lastSeenMessageId,
+                  readPointer: exact.readPointer,
                 })
                 const conv = state.conversations.get(conversationId)
                 if (!conv) return { conversationMeta: newMeta }
@@ -1518,6 +1552,7 @@ export const chatStore = createStore<ChatState>()(
                   ...conv,
                   unreadCount: exact.unreadCount,
                   lastSeenMessageId: exact.lastSeenMessageId,
+                  readPointer: exact.readPointer,
                 })
                 return { conversationMeta: newMeta, conversations: newConversations }
               })
@@ -1912,6 +1947,7 @@ export const chatStore = createStore<ChatState>()(
             mentionsCount: 0,
             lastReadAt: meta.lastReadAt,
             lastSeenMessageId: meta.lastSeenMessageId,
+            readPointer: meta.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
           const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice)
@@ -1923,6 +1959,7 @@ export const chatStore = createStore<ChatState>()(
             ...meta,
             unreadCount: recomputed.unreadCount,
             lastSeenMessageId: recomputed.lastSeenMessageId,
+            readPointer: recomputed.readPointer,
           })
           const conv = state.conversations.get(conversationId)
           if (!conv) return { conversationMeta: newMeta }
@@ -1931,6 +1968,7 @@ export const chatStore = createStore<ChatState>()(
             ...conv,
             unreadCount: recomputed.unreadCount,
             lastSeenMessageId: recomputed.lastSeenMessageId,
+            readPointer: recomputed.readPointer,
           })
           return { conversationMeta: newMeta, conversations: newConversations }
         })
@@ -2224,6 +2262,7 @@ export const chatStore = createStore<ChatState>()(
                 mentionsCount: 0,
                 lastReadAt: meta.lastReadAt,
                 lastSeenMessageId: meta.lastSeenMessageId,
+                readPointer: meta.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               }
               const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker, {
@@ -2244,6 +2283,7 @@ export const chatStore = createStore<ChatState>()(
                 ...(hydrated ? {
                   unreadCount: hydrated.unreadCount,
                   lastSeenMessageId: hydrated.lastSeenMessageId,
+                  readPointer: hydrated.readPointer,
                 } : {}),
               })
               const newConversations = new Map(state.conversations)
@@ -2253,6 +2293,7 @@ export const chatStore = createStore<ChatState>()(
                 ...(hydrated ? {
                   unreadCount: hydrated.unreadCount,
                   lastSeenMessageId: hydrated.lastSeenMessageId,
+                  readPointer: hydrated.readPointer,
                 } : {}),
               })
               return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
