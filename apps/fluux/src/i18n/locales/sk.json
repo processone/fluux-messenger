@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Rotovať kľúč",
             "rotateSuccess": "Šifrovací kľúč rotovaný",
             "rotateFailed": "Nepodarilo sa rotovať kľúč. Skúste znova.",
+            "rotateBackupFailed": "Kľúč bol rotovaný, ale novú zálohu sa nepodarilo zverejniť. Heslo vyššie zatiaľ nie je aktívne. Skontrolujte pripojenie a skúste znova.",
             "rotatePluginUnavailable": "Modul OpenPGP nie je k dispozícii",
             "trustStateCompromised": {
                 "title": "Kontrola integrity stavu dôvery zlyhala",

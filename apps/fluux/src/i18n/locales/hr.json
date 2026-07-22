@@ -826,6 +826,7 @@
             "rotateConfirmAction": "Rotiraj ključ",
             "rotateSuccess": "Ključ za šifriranje rotiran",
             "rotateFailed": "Ključ se nije mogao rotirati. Pokušajte ponovno.",
+            "rotateBackupFailed": "Ključ je rotiran, ali nova sigurnosna kopija nije mogla biti objavljena. Lozinka iznad još nije aktivna. Provjerite vezu i pokušajte ponovno.",
             "rotatePluginUnavailable": "OpenPGP modul nije dostupan",
             "trustStateCompromised": {
                 "title": "Provjera integriteta stanja povjerenja nije uspjela",

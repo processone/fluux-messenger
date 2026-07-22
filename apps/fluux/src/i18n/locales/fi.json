@@ -825,6 +825,7 @@
             "rotateConfirmAction": "Vaihda avain",
             "rotateSuccess": "Salausavain vaihdettu",
             "rotateFailed": "Avaimen vaihto epäonnistui. Yritä uudelleen.",
+            "rotateBackupFailed": "Avain vaihdettiin, mutta uutta varmuuskopiota ei voitu julkaista. Yllä oleva tunnuslause ei ole vielä käytössä. Tarkista yhteytesi ja yritä uudelleen.",
             "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla",
             "trustStateCompromised": {
                 "title": "Luottamustilan eheyden tarkistus epäonnistui",

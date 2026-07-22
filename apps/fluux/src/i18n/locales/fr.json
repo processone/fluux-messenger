@@ -856,6 +856,7 @@
             "rotateConfirmAction": "Faire la rotation",
             "rotateSuccess": "Clé de chiffrement renouvelée",
             "rotateFailed": "Impossible de faire la rotation. Réessayez.",
+            "rotateBackupFailed": "La clé a été renouvelée, mais la nouvelle sauvegarde n'a pas pu être publiée. La phrase secrète ci-dessus n'est pas encore active. Vérifiez votre connexion et réessayez.",
             "rotatePluginUnavailable": "Le module OpenPGP n'est pas disponible",
             "trustStateCompromised": {
                 "title": "La vérification d'intégrité de l'état de confiance a échoué",

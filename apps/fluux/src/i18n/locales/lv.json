@@ -827,6 +827,7 @@
             "rotateConfirmAction": "Rotēt atslēgu",
             "rotateSuccess": "Šifrēšanas atslēga rotēta",
             "rotateFailed": "Neizdevās rotēt atslēgu. Mēģiniet vēlreiz.",
+            "rotateBackupFailed": "Atslēga tika rotēta, bet jauno rezerves kopiju neizdevās publicēt. Iepriekš redzamā paroles frāze vēl nedarbojas. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
             "rotatePluginUnavailable": "OpenPGP modulis nav pieejams",
             "trustStateCompromised": {
                 "title": "Uzticības stāvokļa integritātes pārbaude neizdevās",

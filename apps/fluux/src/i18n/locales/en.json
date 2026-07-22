@@ -747,6 +747,7 @@
             "rotateConfirmAction": "Rotate key",
             "rotateSuccess": "Encryption key rotated",
             "rotateFailed": "Couldn't rotate the key. Try again.",
+            "rotateBackupFailed": "Your key was rotated, but the new backup could not be published. The passphrase above is not active yet. Check your connection and try again.",
             "rotatePluginUnavailable": "OpenPGP plugin not available",
             "trustStateCompromised": {
                 "title": "Trust state integrity check failed",

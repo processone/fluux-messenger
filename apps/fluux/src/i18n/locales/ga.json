@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Rothlaigh an eochair",
             "rotateSuccess": "Rinneadh an eochair criptithe a rothlú",
             "rotateFailed": "Níorbh fhéidir an eochair a rothlú. Bain triail eile as.",
+            "rotateBackupFailed": "Rothlaíodh an eochair, ach níorbh fhéidir an cúltaca nua a fhoilsiú. Níl an pasfhrása thuas gníomhach fós. Seiceáil do cheangal agus bain triail eile as.",
             "rotatePluginUnavailable": "Níl modúl OpenPGP ar fáil",
             "trustStateCompromised": {
                 "title": "Theip ar sheiceáil sláine staid an mhuinínis",

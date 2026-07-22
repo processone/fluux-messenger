@@ -13,8 +13,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { E2EEPluginError } from '@fluux/sdk'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { useToastStore } from '@/stores/toastStore'
 
 const mockCheckPepSupport = vi.fn<() => Promise<boolean>>()
 
@@ -657,6 +659,109 @@ describe('EncryptionSettings PEP support', () => {
       expect(
         await screen.findByRole('button', { name: 'settings.encryption.restoreAction' }),
       ).toBeInTheDocument()
+    })
+  })
+
+  /**
+   * Rotating while a backup is in sync re-wraps that backup with a brand new
+   * passphrase. The user has just been shown that passphrase, told to write
+   * it down, and made to tick "I've saved this". If publishing it fails,
+   * saying "Encryption key rotated" and closing the dialog sends them away
+   * guarding a backup that does not exist.
+   */
+  describe('rotation whose backup re-publish fails', () => {
+    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const mockRotate = vi.fn<(pp?: string) => Promise<{ fingerprint: string }>>()
+    const mockProbe = vi.fn<() => Promise<'present' | 'absent' | 'unknown'>>()
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      localStorage.clear()
+      mockStatus = 'online'
+      mockCheckPepSupport.mockResolvedValue(true)
+      mockProbe.mockResolvedValue('present')
+      // Rotation committed; only the backup publish failed. This is the
+      // shape OpenPGPPluginBase throws, pinned code and all.
+      mockRotate.mockRejectedValue(
+        new E2EEPluginError(
+          'transient',
+          'backup-publish-failed',
+          'SequoiaPgpPlugin: key rotated, but publishing the new backup failed: remote-server-timeout',
+        ),
+      )
+      mockPlugin = {
+        getOwnFingerprint: () => FP,
+        // Marker matches the live key => in sync => rotation routes through
+        // the passphrase dialog rather than the fire-and-toast path.
+        getBackedUpFingerprint: () => FP,
+        probeSecretKeyBackup: mockProbe,
+        rotateEncryptionKey: mockRotate,
+      }
+      useToastStore.setState({ toasts: [] })
+      useEncryptionSettingsStore.setState({
+        openpgpEnabled: true,
+        pluginRegisteredAt: 1,
+        registrationError: null,
+      })
+      // The rotate row is desktop-only (openpgp.js v6 rotation is deferred).
+      mockIsTauri = true
+    })
+
+    /** Rotate button -> confirm -> acknowledge the passphrase -> publish. */
+    async function rotateThroughPassphraseDialog(): Promise<void> {
+      render(<EncryptionSettings />)
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'settings.encryption.rotateAction' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.rotateConfirmAction',
+        }),
+      )
+      const publish = await screen.findByRole('button', {
+        name: 'settings.encryption.backupPublish',
+      })
+      fireEvent.click(document.querySelector('input[type="checkbox"]')!)
+      await waitFor(() => expect(publish).not.toBeDisabled())
+      fireEvent.click(publish)
+
+      // Precondition: we really did reach the plugin. Without this the
+      // assertions below could pass on a flow that never got that far.
+      await waitFor(() => expect(mockRotate).toHaveBeenCalledTimes(1))
+    }
+
+    it('tells the user the passphrase they just saved is not live', async () => {
+      await rotateThroughPassphraseDialog()
+
+      // Not the raw plugin message: the user needs to know both that the
+      // rotation happened and that this passphrase is not active yet.
+      expect(
+        await screen.findByText('settings.encryption.rotateBackupFailed'),
+      ).toBeInTheDocument()
+    })
+
+    it('does not claim success', async () => {
+      await rotateThroughPassphraseDialog()
+
+      await waitFor(() =>
+        expect(screen.getByText('settings.encryption.rotateBackupFailed')).toBeInTheDocument(),
+      )
+      expect(useToastStore.getState().toasts).toEqual([])
+      // Dialog stays open, holding the same passphrase, so a retry does not
+      // need the user to copy anything again.
+      expect(
+        screen.getByRole('button', { name: 'settings.encryption.backupPublish' }),
+      ).toBeInTheDocument()
+    })
+
+    it('re-probes the backup status even though the rotation failed', async () => {
+      // The rotation committed, so whatever the status line said before is
+      // now stale — it has to stop claiming the server copy matches.
+      await rotateThroughPassphraseDialog()
+
+      // Mount probes once; the failed rotation has to trigger a second pass.
+      await waitFor(() => expect(mockProbe.mock.calls.length).toBeGreaterThan(1))
     })
   })
 

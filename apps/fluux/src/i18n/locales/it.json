@@ -828,6 +828,7 @@
             "rotateConfirmAction": "Ruota la chiave",
             "rotateSuccess": "Chiave di cifratura ruotata",
             "rotateFailed": "Impossibile ruotare la chiave. Riprova.",
+            "rotateBackupFailed": "La chiave è stata ruotata, ma non è stato possibile pubblicare il nuovo backup. La passphrase qui sopra non è ancora attiva. Controlla la connessione e riprova.",
             "rotatePluginUnavailable": "Modulo OpenPGP non disponibile",
             "trustStateCompromised": {
                 "title": "Verifica dell'integrità dello stato di fiducia non riuscita",

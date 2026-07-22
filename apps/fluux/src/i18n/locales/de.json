@@ -827,6 +827,7 @@
             "rotateConfirmAction": "Schlüssel rotieren",
             "rotateSuccess": "Verschlüsselungsschlüssel rotiert",
             "rotateFailed": "Schlüssel konnte nicht rotiert werden. Versuchen Sie es erneut.",
+            "rotateBackupFailed": "Der Schlüssel wurde rotiert, aber das neue Backup konnte nicht veröffentlicht werden. Die Passphrase oben ist noch nicht aktiv. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
             "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar",
             "trustStateCompromised": {
                 "title": "Integritätsprüfung des Vertrauensstatus fehlgeschlagen",

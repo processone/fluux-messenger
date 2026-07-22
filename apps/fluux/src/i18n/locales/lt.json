@@ -827,6 +827,7 @@
             "rotateConfirmAction": "Pakeisti raktą",
             "rotateSuccess": "Šifravimo raktas pakeistas",
             "rotateFailed": "Nepavyko pakeisti rakto. Bandykite dar kartą.",
+            "rotateBackupFailed": "Raktas buvo pakeistas, bet naujos atsarginės kopijos nepavyko paskelbti. Aukščiau esanti slaptažodinė frazė dar neveikia. Patikrinkite ryšį ir bandykite dar kartą.",
             "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas",
             "trustStateCompromised": {
                 "title": "Pasitikėjimo būsenos vientisumo patikra nepavyko",

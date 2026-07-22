@@ -827,6 +827,7 @@
             "rotateConfirmAction": "Roteeri võti",
             "rotateSuccess": "Krüpteerimisvõti roteeritud",
             "rotateFailed": "Võtit ei õnnestunud roteerida. Proovige uuesti.",
+            "rotateBackupFailed": "Võti roteeriti, kuid uut varukoopiat ei õnnestunud avaldada. Ülal olev paroolifraas ei ole veel aktiivne. Kontrollige ühendust ja proovige uuesti.",
             "rotatePluginUnavailable": "OpenPGP moodul pole saadaval",
             "trustStateCompromised": {
                 "title": "Usalduse oleku terviklikkuse kontroll ebaõnnestus",

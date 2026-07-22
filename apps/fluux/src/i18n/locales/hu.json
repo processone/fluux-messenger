@@ -825,6 +825,7 @@
             "rotateConfirmAction": "Kulcs cseréje",
             "rotateSuccess": "A titkosítási kulcs lecserélve",
             "rotateFailed": "A kulcsot nem sikerült lecserélni. Próbálja újra.",
+            "rotateBackupFailed": "A kulcs cseréje megtörtént, de az új biztonsági mentést nem sikerült közzétenni. A fenti jelmondat még nem aktív. Ellenőrizze a kapcsolatot, és próbálja újra.",
             "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el",
             "trustStateCompromised": {
                 "title": "A bizalmi állapot integritás-ellenőrzése sikertelen",

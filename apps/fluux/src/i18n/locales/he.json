@@ -826,6 +826,7 @@
             "rotateConfirmAction": "החלף מפתח",
             "rotateSuccess": "מפתח ההצפנה הוחלף",
             "rotateFailed": "לא ניתן להחליף את המפתח. נסה שוב.",
+            "rotateBackupFailed": "המפתח הוחלף, אך לא ניתן לפרסם את הגיבוי החדש. משפט הסיסמה שלמעלה עדיין אינו פעיל. בדוק את החיבור ונסה שוב.",
             "rotatePluginUnavailable": "מודול OpenPGP אינו זמין",
             "trustStateCompromised": {
                 "title": "בדיקת שלמות מצב האמון נכשלה",
