@@ -5,7 +5,7 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { getBareJid } from '@fluux/sdk'
 import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
-import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
+import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import { isTauri } from '@/utils/tauri'
 import { ModalOverlay } from './ModalOverlay'
 import {
@@ -57,7 +57,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
     const plugin = client.e2ee?.getPlugin('openpgp') as
       | {
           hasNoLocalKey?: () => Promise<boolean>
-          probeSecretKeyBackup?: () => Promise<'present' | 'absent' | 'unknown'>
+          probeSecretKeyBackup?: () => Promise<BackupProbeResult>
         }
       | null
       | undefined
@@ -77,9 +77,13 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         // key. `unknown` means we could not rule out a backup, and guessing
         // wrong toward setup risks forking the identity; guessing wrong toward
         // restore only produces an error this dialog already handles.
+        // A plugin exposing `hasNoLocalKey` but not `probeSecretKeyBackup`
+        // hasn't told us anything about the server — that is not a
+        // confirmed absence, so fall back to `unknown` (routes to
+        // `restore`), not `absent` (routes to `setup`).
         const probe = plugin.probeSecretKeyBackup
           ? await plugin.probeSecretKeyBackup()
-          : 'absent'
+          : 'unknown'
         if (!cancelled) setMode(probe === 'absent' ? 'setup' : 'restore')
       } catch {
         if (!cancelled) setMode('unlock')

@@ -2558,7 +2558,7 @@ describe('SequoiaPgpPlugin', () => {
     it('restoreSecretKey throws a clean error when no backup exists', async () => {
       // A brand-new account that hasn't published a backup yet — the UI
       // should be able to detect this via `probeSecretKeyBackup()` first,
-      // but if it racially calls `restoreSecretKey` directly we still
+      // but if it racily calls `restoreSecretKey` directly we still
       // want a legible error rather than a silent noop.
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)

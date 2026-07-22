@@ -463,6 +463,24 @@ describe('EncryptionSettings PEP support', () => {
       ).not.toBeInTheDocument()
     })
 
+    it('still renders the buttons — including retry — when the probe promise rejects', async () => {
+      // The probe is documented as non-throwing, but the component only
+      // reaches it through a structural `as` cast, so nothing enforces
+      // that contract at compile time. Without a catch mapping a rejection
+      // to `unknown`, `backupProbe` would stay stuck on `checking` and
+      // `{!checking && …}` would hide ALL THREE buttons — including retry
+      // — leaving the user with no way out.
+      mockProbe.mockRejectedValue(new Error('probe transport failure'))
+
+      render(<EncryptionSettings />)
+
+      expect(
+        await screen.findByRole('button', {
+          name: 'settings.encryption.backupStatusRetry',
+        }),
+      ).toBeInTheDocument()
+    })
+
     it('shows the definitive status line when the probe succeeds', async () => {
       // Control test: proves this fixture can render the other status lines,
       // so the negative assertion above is not vacuous.
