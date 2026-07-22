@@ -98,14 +98,16 @@ describe('resolveTransparency (software-rendering probe)', () => {
   })
 
   it('still flattens on an explicit reduced regardless of the probe', () => {
-    expect(
-      resolveTransparency({
-        themeWantsReduced: false,
-        transparencyMode: 'reduced',
-        systemReducedMatches: false,
-        compositorCannotBlur: true,
-      }),
-    ).toBe('reduced')
+    for (const compositorCannotBlur of [false, true]) {
+      expect(
+        resolveTransparency({
+          themeWantsReduced: false,
+          transparencyMode: 'reduced',
+          systemReducedMatches: false,
+          compositorCannotBlur,
+        }),
+      ).toBe('reduced')
+    }
   })
 
   it('a theme forcing reduced still wins over everything', () => {
