@@ -483,6 +483,48 @@ describe('MAM E2EE wiring', () => {
     expect(msg.body).toBe('')
   })
 
+  it('drops an archived empty OMEMO message (XEP-0384 key transport) entirely', async () => {
+    // Counterpart to the two #135 tests above: those keep a *real* OMEMO
+    // message that merely lacks a fallback body. This one carries no <payload>
+    // at all — an XEP-0384 empty message, sent purely to establish a session or
+    // forward the ratchet. It has the <store/> hint so it lands in MAM and is
+    // replayed on every catch-up.
+    //
+    // Field report ("phantom OMEMO messages"): a burst of these arrived from
+    // several contacts at once after the account announced a new OMEMO device,
+    // and each became a "Message encrypted: OMEMO not supported" bubble with an
+    // unread badge. Conversations, which sent them, showed nothing.
+    const forwardedMessage = xml(
+      'message',
+      { from: PEER + '/Conversations.cMny', to: ME, type: 'chat' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '600125587' },
+          xml('key', { rid: '445710346' }, 'Mwoh'),
+          xml('iv', {}, '4pEg'),
+        ),
+      ),
+      xml('store', { xmlns: 'urn:xmpp:hints' }),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-omemo-keytransport',
+      forwardedMessage,
+    })
+
+    const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    expect(result.messages).toHaveLength(0)
+  })
+
   it('surfaces a bodiless OMEMO MUC archive entry instead of dropping it (issue #135, rooms)', async () => {
     // parseRoomArchiveMessage has the same "no body, no attachment → drop" gate
     // as the 1:1 path. An OMEMO room message whose sender omitted the optional
