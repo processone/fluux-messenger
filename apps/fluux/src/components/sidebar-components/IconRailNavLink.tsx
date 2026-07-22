@@ -48,6 +48,7 @@ export function IconRailNavLink({
   return (
     <Tooltip content={label} position="right" delay={500}>
       <button
+        type="button"
         onClick={() => onNavigate(view)}
         aria-label={badgeLabel ?? label}
         data-nav={view}

@@ -69,6 +69,7 @@ export const MessageReactions = memo(function MessageReactions({
           delay={300}
         >
           <button
+            type="button"
             onClick={onReaction ? (e: React.MouseEvent) => {
               // Burst only when adding a reaction, not removing
               if (!myReactions.includes(emoji)) {

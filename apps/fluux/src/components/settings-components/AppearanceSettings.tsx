@@ -55,6 +55,7 @@ function ThemeCard({
 
   return (
     <button
+      type="button"
       onClick={onSelect}
       className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-start
         ${isActive
@@ -107,6 +108,7 @@ function AccentDot({
   const color = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`
   return (
     <button
+      type="button"
       onClick={onSelect}
       title={preset.name}
       className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
@@ -170,12 +172,14 @@ function SnippetEditorModal({
         {/* Actions */}
         <div className="flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="px-3 py-1.5 text-sm text-fluux-muted hover:text-fluux-text rounded-lg hover:bg-fluux-hover transition-colors"
           >
             {t('common.cancel')}
           </button>
           <button
+            type="button"
             onClick={handleSave}
             disabled={!css.trim()}
             className="px-3 py-1.5 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -319,6 +323,7 @@ export function AppearanceSettings() {
               ))}
             </div>
             <button
+              type="button"
               onClick={() => themeInputRef.current?.click()}
               className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
             >
@@ -340,6 +345,7 @@ export function AppearanceSettings() {
             <div className="flex flex-wrap gap-2 items-center">
               {/* Theme Default reset button */}
               <button
+                type="button"
                 onClick={() => clearAccentPreset()}
                 title={t('settings.accentThemeDefault')}
                 className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
@@ -374,6 +380,7 @@ export function AppearanceSettings() {
               <SettingsRow key={snippet.id} label={snippet.filename}>
                 <div className="flex items-center gap-1.5">
                   <button
+                    type="button"
                     onClick={() => setEditingSnippet(snippet)}
                     className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
                     title={t('settings.editSnippet')}
@@ -381,6 +388,7 @@ export function AppearanceSettings() {
                     <Pencil className="size-3.5" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => removeSnippet(snippet.id)}
                     className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
                     title={t('settings.removeTheme')}
@@ -398,6 +406,7 @@ export function AppearanceSettings() {
           </SettingsGroup>
         )}
         <button
+          type="button"
           onClick={() => setShowNewSnippet(true)}
           className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
         >

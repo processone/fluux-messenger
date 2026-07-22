@@ -372,6 +372,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
           <h2 className="text-lg font-semibold text-fluux-text">{t('avatar.uploadTitle')}</h2>
           <Tooltip content={t('common.close')}>
             <button
+              type="button"
               onClick={close}
               className="p-1 text-fluux-muted hover:text-fluux-text rounded"
             >
@@ -405,6 +406,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               {/* Webcam controls */}
               <div className="flex items-center gap-4">
                 <button
+                  type="button"
                   onClick={capturePhoto}
                   disabled={!webcamReady}
                   className="flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -413,6 +415,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   {t('avatar.takePhoto')}
                 </button>
                 <button
+                  type="button"
                   onClick={exitWebcamMode}
                   className="flex items-center gap-2 px-4 py-2 text-fluux-muted hover:text-fluux-text rounded transition-colors"
                 >
@@ -502,6 +505,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               {/* Zoom controls */}
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleZoomOut}
                   disabled={zoom <= MIN_ZOOM}
                   className="p-2 text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
@@ -515,6 +519,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={handleZoomIn}
                   disabled={zoom >= MAX_ZOOM}
                   className="p-2 text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
@@ -527,6 +532,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               <div className="flex items-center gap-4">
                 <Tooltip content={t('avatar.resetZoom')}>
                   <button
+                    type="button"
                     onClick={handleReset}
                     disabled={zoom === 1 && offset.x === 0 && offset.y === 0}
                     className="flex items-center gap-1 text-sm text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
@@ -536,6 +542,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   </button>
                 </Tooltip>
                 <button
+                  type="button"
                   onClick={() => {
                     if (imageUrl) URL.revokeObjectURL(imageUrl)
                     setImageUrl(null)
@@ -569,12 +576,14 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
         {/* Footer */}
         <div className="flex justify-end gap-3 p-4 border-t border-fluux-bg">
           <button
+            type="button"
             onClick={close}
             className="px-4 py-2 text-fluux-text hover:bg-fluux-hover rounded transition-colors"
           >
             {t('common.cancel')}
           </button>
           <button
+            type="button"
             onClick={handleSave}
             disabled={!imageUrl || saving}
             className="px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

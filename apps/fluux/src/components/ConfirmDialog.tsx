@@ -32,6 +32,7 @@ export function ConfirmDialog({
           <p className="text-sm text-fluux-muted mb-4">{message}</p>
           <div className="flex gap-2 justify-end">
             <button
+              type="button"
               onClick={close}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active
                          rounded-lg transition-colors"
@@ -39,6 +40,7 @@ export function ConfirmDialog({
               {t('common.cancel')}
             </button>
             <button
+              type="button"
               onClick={onConfirm}
               className={`px-4 py-2 text-sm text-white ${confirmColors}
                          rounded-lg transition-colors`}

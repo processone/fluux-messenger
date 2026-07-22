@@ -42,7 +42,7 @@ describe('glass panel escapes the scrim backdrop root', () => {
   it('ModalOverlay renders the panel as a sibling of the scrim', () => {
     const { container } = render(
       <ModalOverlay onClose={vi.fn()}>
-        <button>ok</button>
+        <button type="button">ok</button>
       </ModalOverlay>,
     )
     expectPanelOutsideScrim(container)
@@ -51,7 +51,7 @@ describe('glass panel escapes the scrim backdrop root', () => {
   it('BottomSheet renders the panel as a sibling of the scrim', () => {
     render(
       <BottomSheet open onClose={vi.fn()} ariaLabel="actions">
-        <button>ok</button>
+        <button type="button">ok</button>
       </BottomSheet>,
     )
     // BottomSheet portals to document.body, so query from there.

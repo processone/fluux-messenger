@@ -15,7 +15,7 @@ describe('BottomSheet', () => {
   it('renders children in a labelled dialog when open', () => {
     render(
       <BottomSheet open onClose={() => {}} ariaLabel="Actions">
-        <button>Do thing</button>
+        <button type="button">Do thing</button>
       </BottomSheet>,
     )
     const dialog = screen.getByRole('dialog')

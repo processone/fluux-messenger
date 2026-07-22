@@ -9,8 +9,8 @@ describe('ModalOverlay focus trap', () => {
   it('wraps Tab within the panel', () => {
     const { getByText } = render(
       <ModalOverlay onClose={vi.fn()}>
-        <button>alpha</button>
-        <button>omega</button>
+        <button type="button">alpha</button>
+        <button type="button">omega</button>
       </ModalOverlay>,
     )
     const omega = getByText('omega')

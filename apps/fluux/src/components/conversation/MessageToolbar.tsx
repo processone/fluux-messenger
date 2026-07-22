@@ -167,6 +167,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {/* Quick reaction emojis (hidden when reactions are disabled) */}
       {handleReaction && TOOLBAR_REACTIONS.map(emoji => (
         <button
+          type="button"
           key={emoji}
           onClick={(e: React.MouseEvent) => {
             if (!myReactions.includes(emoji)) {
@@ -194,6 +195,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {handleReaction && (
       <div className="relative">
         <button
+          type="button"
           ref={reactionButtonRef}
           onClick={() => {
             if (!showReactionPicker && reactionButtonRef.current) {
@@ -229,6 +231,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {canReply && (
         <Tooltip content={t('chat.reply')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
+            type="button"
             onClick={onReply}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.reply')}
@@ -242,6 +245,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {canEdit && (
         <Tooltip content={t('chat.editMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
+            type="button"
             onClick={onEdit}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.editMessage')}
@@ -254,6 +258,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {/* Forward button (placeholder) */}
       <Tooltip content={t('chat.forwardMessage')} position="top" disabled={showReactionPicker || showMoreMenu}>
         <button
+          type="button"
           className={`p-1.5 transition-colors opacity-50 cursor-not-allowed ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
           aria-label={t('chat.forwardMessage')}
           disabled
@@ -266,6 +271,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       <div className="inline-flex relative" ref={moreMenuRef}>
         <Tooltip content={t('chat.moreOptions')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
+            type="button"
             ref={moreButtonRef}
             onClick={() => {
               if (!showMoreMenu && moreButtonRef.current) {
@@ -287,6 +293,7 @@ export const MessageToolbar = memo(function MessageToolbar({
         {showMoreMenu && canDelete && (
           <div className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
+              type="button"
               onClick={handleDelete}
               className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
             >

@@ -31,6 +31,7 @@ export function ContactSecurityDetail({
     >
       <div className="h-14 px-4 flex items-center gap-2 border-b border-fluux-bg flex-shrink-0">
         <button
+          type="button"
           onClick={onClose}
           className="p-1 -ms-1 rounded hover:bg-fluux-hover tap-target"
           aria-label={t('common.back')}

@@ -88,6 +88,7 @@ export function StorageSettings() {
 
         {/* Clear cache button */}
         <button
+          type="button"
           onClick={handleClear}
           disabled={isClearing || cacheSize === 0}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
@@ -129,6 +130,7 @@ export function StorageSettings() {
           )}
 
           <button
+            type="button"
             onClick={handleRebuildIndex}
             disabled={isRebuilding}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
@@ -157,6 +159,7 @@ export function StorageSettings() {
           description={t('settings.storage.logsDescription')}
         >
           <button
+            type="button"
             onClick={() => void handleOpenLogs()}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-fluux-hover hover:bg-fluux-border text-fluux-text"
           >

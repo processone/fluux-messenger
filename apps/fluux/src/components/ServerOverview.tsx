@@ -43,6 +43,7 @@ export function ServerOverview() {
             : null}
         </div>
         <button
+          type="button"
           onClick={() => { void fetchServerStats() }}
           disabled={isLoadingStats}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-fluux-bg hover:bg-fluux-hover text-fluux-text disabled:opacity-50 transition-colors tap-target"
@@ -57,6 +58,7 @@ export function ServerOverview() {
         <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted py-12">
           <p className="mb-3">{t('admin.overview.empty')}</p>
           <button
+            type="button"
             onClick={() => { void fetchServerStats() }}
             className="px-4 py-2 text-sm rounded-lg bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand/90 transition-colors"
           >

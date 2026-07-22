@@ -514,6 +514,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Join (only for non-joined rooms) */}
           {!room.joined && (
             <button
+              type="button"
               onClick={() => { menu.close(); onJoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -525,6 +526,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Edit bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onEditBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -536,6 +538,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Toggle autojoin (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onToggleAutojoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -561,6 +564,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Leave room (only for joined rooms) */}
           {room.joined && (
             <button
+              type="button"
               onClick={() => { menu.close(); onLeave(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
@@ -572,6 +576,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Remove bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onRemoveBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >

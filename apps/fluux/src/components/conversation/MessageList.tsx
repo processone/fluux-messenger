@@ -658,6 +658,7 @@ export function MessageList<T extends BaseMessage>({
         ) : onScrollToTop ? (
           <div data-row-kind="header" className="flex justify-center py-3">
             <button
+              type="button"
               onClick={handleLoadEarlier}
               disabled={isLoadingOlder}
               className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-full transition-colors ${
@@ -814,6 +815,7 @@ export function MessageList<T extends BaseMessage>({
           {!isHistoryComplete && onScrollToTop && (
             <div className="flex justify-center py-3">
               <button
+                type="button"
                 onClick={handleLoadEarlier}
                 disabled={isLoadingOlder}
                 className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-full transition-colors ${
@@ -923,6 +925,7 @@ export function MessageList<T extends BaseMessage>({
       >
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">
           <button
+            type="button"
             onClick={handleJumpToBottom}
             data-fab="scroll-to-bottom"
             className="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"

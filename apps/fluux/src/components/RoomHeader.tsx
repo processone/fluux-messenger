@@ -107,6 +107,7 @@ export function RoomHeader({
       {/* Back button - mobile only */}
       {onBack && (
         <button
+          type="button"
           onClick={onBack}
           className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
           aria-label={t('rooms.backToRooms')}
@@ -155,6 +156,7 @@ export function RoomHeader({
         <div className={inlineClass('wide')}>
           <Tooltip content={t('rooms.inviteMember')} position="bottom">
             <button
+              type="button"
               onClick={openInvite}
               className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               aria-label={t('rooms.inviteMember')}
@@ -181,6 +183,7 @@ export function RoomHeader({
           <div className={inlineClass('search')}>
             <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
               <button
+                type="button"
                 onClick={onSearchInConversation}
                 className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
                 aria-label={t('chat.searchInConversation', 'Search in conversation')}
@@ -213,6 +216,7 @@ export function RoomHeader({
         {/* Occupant toggle button */}
         <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">
           <button
+            type="button"
             onClick={onToggleOccupants}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
                        ${showOccupants
@@ -232,7 +236,7 @@ export function RoomHeader({
       {avatarError && (
         <div className="absolute top-full inset-x-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-error text-sm flex items-center justify-between z-40">
           <span>{avatarError}</span>
-          <button onClick={() => setAvatarError(null)} className="p-1 hover:bg-fluux-red/20 rounded">
+          <button type="button" onClick={() => setAvatarError(null)} className="p-1 hover:bg-fluux-red/20 rounded">
             <X className="size-4" />
           </button>
         </div>

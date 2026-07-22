@@ -79,7 +79,7 @@ function SwappableDraftComposer() {
   const [value, setValue] = useState('')
   return (
     <>
-      <button onClick={() => setValue('see you at :heart_eyes later')}>swap-draft</button>
+      <button type="button" onClick={() => setValue('see you at :heart_eyes later')}>swap-draft</button>
       <MessageComposer
         placeholder="Type a message"
         onSend={vi.fn().mockResolvedValue(true)}

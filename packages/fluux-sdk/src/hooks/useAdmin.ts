@@ -82,9 +82,9 @@ import { USER_COMMANDS } from './adminCommands'
  *       {currentSession.form.fields.map(field => (
  *         <FormField key={field.var} field={field} />
  *       ))}
- *       {canGoBack && <button onClick={previousStep}>Back</button>}
+ *       {canGoBack && <button type="button" onClick={previousStep}>Back</button>}
  *       <button type="submit">Submit</button>
- *       <button onClick={cancelCommand}>Cancel</button>
+ *       <button type="button" onClick={cancelCommand}>Cancel</button>
  *     </form>
  *   )
  * }

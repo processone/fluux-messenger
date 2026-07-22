@@ -28,6 +28,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
           {!state.downloading && (
             <Tooltip content={t('common.close')}>
               <button
+                type="button"
                 onClick={close}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
               >
@@ -98,6 +99,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
           <div className="flex gap-3">
             {state.downloaded ? (
               <button
+                type="button"
                 onClick={onRelaunch}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
               >
@@ -106,6 +108,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
               </button>
             ) : state.downloading ? (
               <button
+                type="button"
                 disabled
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-muted/20 text-fluux-muted rounded-lg cursor-not-allowed"
               >
@@ -115,12 +118,14 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={close}
                   className="flex-1 px-4 py-2 text-fluux-muted hover:text-fluux-text border border-fluux-border rounded-lg hover:bg-fluux-hover transition-colors"
                 >
                   {t('update.later')}
                 </button>
                 <button
+                  type="button"
                   onClick={onDownload}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
                 >

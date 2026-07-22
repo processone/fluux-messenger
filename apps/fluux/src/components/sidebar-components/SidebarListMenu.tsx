@@ -234,7 +234,7 @@ export function MenuButton({ onClick, icon, label, variant = 'default', classNam
     : 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
 
   return (
-    <button onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
+    <button type="button" onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
       {icon}
       <span>{label}</span>
     </button>

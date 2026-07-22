@@ -37,18 +37,21 @@ vi.mock('./ContactSelector', () => ({
         <div data-testid="selected-count">{selectedContacts.length} selected</div>
         {/* Buttons to simulate selection for testing */}
         <button
+          type="button"
           data-testid="select-alice"
           onClick={() => onSelectionChange([...selectedContacts, 'alice@example.com'])}
         >
           Select Alice
         </button>
         <button
+          type="button"
           data-testid="select-bob"
           onClick={() => onSelectionChange([...selectedContacts, 'bob@example.com'])}
         >
           Select Bob
         </button>
         <button
+          type="button"
           data-testid="clear-selection"
           onClick={() => onSelectionChange([])}
         >

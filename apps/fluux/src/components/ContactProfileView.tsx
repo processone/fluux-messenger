@@ -206,6 +206,7 @@ export function ContactProfileView({
         >
           {onBack && (
             <button
+              type="button"
               onClick={onBack}
               className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
               aria-label={t('common.back')}

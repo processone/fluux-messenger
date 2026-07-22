@@ -58,6 +58,9 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod-validation-error": "4.0.2",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "eslint-plugin-react": {
+      "eslint": "^10.0.0"
+    }
   }
 }

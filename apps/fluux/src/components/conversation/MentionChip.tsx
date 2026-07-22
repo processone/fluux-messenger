@@ -17,10 +17,10 @@ export function MentionChip({ label, actionLabel, onAction, onDismiss, icon }: M
     <div className="mx-auto max-w-md flex items-center justify-center gap-2 text-xs text-fluux-muted bg-fluux-hover/60 rounded-full px-3 py-1">
       {icon}
       <span className="truncate">{label}</span>
-      <button onClick={onAction} className="font-medium text-fluux-brand hover:underline flex-shrink-0">
+      <button type="button" onClick={onAction} className="font-medium text-fluux-brand hover:underline flex-shrink-0">
         {actionLabel}
       </button>
-      <button onClick={onDismiss} aria-label={t('common.dismiss')} className="text-fluux-muted hover:text-fluux-text flex-shrink-0">
+      <button type="button" onClick={onDismiss} aria-label={t('common.dismiss')} className="text-fluux-muted hover:text-fluux-text flex-shrink-0">
         <X className="size-3" />
       </button>
     </div>

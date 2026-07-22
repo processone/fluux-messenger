@@ -33,7 +33,7 @@ describe('ModalShell glass surface', () => {
   it('restores focus to its input when the window regains focus', () => {
     const { container } = render(
       <>
-        <button data-testid="outside">outside</button>
+        <button type="button" data-testid="outside">outside</button>
         <ModalShell title="X" onClose={() => {}}>
           <input data-testid="field" autoFocus />
         </ModalShell>

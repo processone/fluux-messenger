@@ -365,6 +365,7 @@ function CopyButton({ text, className = '' }: { text: string; className?: string
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className={`p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors ${className}`}
       title={copied ? 'Copied!' : 'Copy code'}
@@ -444,6 +445,7 @@ function CodeBlock({ code, language, keyProp }: { code: string; language?: strin
           )}
           <div className="flex items-center gap-0.5">
             <button
+              type="button"
               onClick={() => setExpanded(true)}
               className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
               title="Expand code"
