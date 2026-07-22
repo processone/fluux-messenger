@@ -404,11 +404,21 @@ describe('room read-state persistence', () => {
   // final `if (!readPointer && !historyFloor) continue` drops the row on its
   // own and the test passes either way — a hollow control. A valid floor makes
   // the corrupt-pointer branch the only thing that can cause the drop.
-  it('drops a whole row whose pointer is corrupt, even when its floor is valid', () => {
+  it('drops a row whose pointer is corrupt rather than keeping a hollow entry', () => {
     localStorage.setItem(
       `fluux-room-read-state:${JID}`,
       JSON.stringify([['r@c', { readPointer: { messageId: 'm1' }, historyFloor: 42 }]])
     )
+    expect(loadRoomReadState(JID).has('r@c')).toBe(false)
+  })
+
+  // Second control, covering the OTHER way a row can be unusable. The test
+  // above is dropped by the corrupt-pointer branch before the final guard is
+  // ever reached, so it leaves `if (!readPointer && !historyFloor) continue`
+  // completely unexercised — deleting that line would fail nothing. This row
+  // reaches the guard with both fields genuinely absent.
+  it('drops a row with neither a valid pointer nor a valid history floor', () => {
+    localStorage.setItem(`fluux-room-read-state:${JID}`, JSON.stringify([['r@c', {}]]))
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
   })
 
