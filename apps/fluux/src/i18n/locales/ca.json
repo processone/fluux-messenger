@@ -732,7 +732,10 @@
             "searchIndexDescription": "L'índex de cerca permet la cerca de text complet a l'historial de missatges. Reconstruïu-lo si els resultats semblen incomplets.",
             "rebuildIndex": "Reconstruir l'índex",
             "rebuildingIndex": "Reconstruint…",
-            "indexRebuilt": "{{count}} missatges indexats"
+            "indexRebuilt": "{{count}} missatges indexats",
+            "logs": "Registres",
+            "logsDescription": "Obre la carpeta que conté els registres de diagnòstic de Fluux.",
+            "openLogs": "Obre la carpeta de registres"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -925,6 +928,13 @@
             "enableDescription": "El mode avançat desbloqueja opcions expertes com la configuració de servidor personalitzada i la consola XMPP.",
             "disableDescription": "Desactiva el mode avançat per amagar aquesta secció.",
             "disable": "Desactiva el mode avançat"
+        },
+        "systemTray": {
+            "title": "Safata del sistema",
+            "keepInTray": "Mantén Fluux a la safata del sistema",
+            "descriptionWindows": "Quan està activat, minimitzar o tancar Fluux l’amaga a la safata del sistema.",
+            "descriptionLinux": "Quan està activat, tancar Fluux l’amaga a la safata del sistema si és compatible. Minimitzar manté el comportament normal de l’escriptori.",
+            "unavailableLinux": "No hi ha cap safata del sistema compatible disponible. Tancar Fluux sortirà de l’aplicació."
         }
     },
     "update": {

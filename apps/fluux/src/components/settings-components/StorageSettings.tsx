@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Trash2, Loader2, Check, Search } from 'lucide-react'
+import { Trash2, Loader2, Check, Search, FolderOpen } from 'lucide-react'
 import { formatBytes } from '@/hooks'
 import { getMediaCacheSize, clearMediaCache } from '@/utils/mediaCache'
 import { rebuildSearchIndex } from '@fluux/sdk'
 import type { RebuildProgress } from '@fluux/sdk'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { isTauri } from '@/utils/tauri'
 
 export function StorageSettings() {
   const { t } = useTranslation()
@@ -50,6 +51,15 @@ export function StorageSettings() {
     } finally {
       setIsRebuilding(false)
       setProgress(null)
+    }
+  }
+
+  const handleOpenLogs = async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('open_logs_folder')
+    } catch (error) {
+      console.error('[StorageSettings] Failed to open logs folder:', error)
     }
   }
 
@@ -140,6 +150,21 @@ export function StorageSettings() {
           </button>
         </div>
       </SettingsSection>
+
+      {isTauri() && (
+        <SettingsSection
+          title={t('settings.storage.logs')}
+          description={t('settings.storage.logsDescription')}
+        >
+          <button
+            onClick={() => void handleOpenLogs()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-fluux-hover hover:bg-fluux-border text-fluux-text"
+          >
+            <FolderOpen className="size-4" />
+            {t('settings.storage.openLogs')}
+          </button>
+        </SettingsSection>
+      )}
     </section>
   )
 }

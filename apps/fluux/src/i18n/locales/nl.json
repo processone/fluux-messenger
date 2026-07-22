@@ -729,7 +729,10 @@
             "searchIndexDescription": "De zoekindex maakt zoeken in volledige tekst mogelijk in uw berichtengeschiedenis. Herbouw deze als de zoekresultaten onvolledig lijken.",
             "rebuildIndex": "Index opnieuw opbouwen",
             "rebuildingIndex": "Opnieuw opbouwen…",
-            "indexRebuilt": "{{count}} berichten geïndexeerd"
+            "indexRebuilt": "{{count}} berichten geïndexeerd",
+            "logs": "Logboeken",
+            "logsDescription": "Open de map met diagnostische logboeken van Fluux.",
+            "openLogs": "Logboekmap openen"
         },
         "encryption": {
             "experimental": "Experimenteel",
@@ -922,6 +925,13 @@
             "enableDescription": "De geavanceerde modus ontgrendelt expertopties zoals aangepaste serverinstellingen en de XMPP-console.",
             "disableDescription": "Schakel de geavanceerde modus uit om dit gedeelte te verbergen.",
             "disable": "Geavanceerde modus uitschakelen"
+        },
+        "systemTray": {
+            "title": "Systeemvak",
+            "keepInTray": "Fluux in het systeemvak houden",
+            "descriptionWindows": "Indien ingeschakeld wordt Fluux bij minimaliseren of sluiten verborgen in het systeemvak.",
+            "descriptionLinux": "Indien ingeschakeld wordt Fluux bij sluiten verborgen in het systeemvak wanneer dit wordt ondersteund. Minimaliseren blijft het normale bureaubladgedrag volgen.",
+            "unavailableLinux": "Er is geen compatibel systeemvak beschikbaar. Fluux wordt afgesloten wanneer u het venster sluit."
         }
     },
     "update": {

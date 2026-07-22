@@ -729,7 +729,10 @@
             "searchIndexDescription": "Leitarvísirinn gerir kleift að leita í öllum skilaboðasögunni. Endurbyggðu hann ef leitarniðurstöður virðast ófullkomnar.",
             "rebuildIndex": "Endurbyggja vísir",
             "rebuildingIndex": "Endurbygging…",
-            "indexRebuilt": "{{count}} skilaboð skráð"
+            "indexRebuilt": "{{count}} skilaboð skráð",
+            "logs": "Annálar",
+            "logsDescription": "Opna möppuna með greiningarannálum Fluux.",
+            "openLogs": "Opna annálamöppu"
         },
         "encryption": {
             "experimental": "Tilrauna",
@@ -922,6 +925,13 @@
             "enableDescription": "Ítarlegur hamur opnar sérfræðivalkosti eins og sérsniðnar þjónustillegar og XMPP-stjórnborðið.",
             "disableDescription": "Slökktu á ítarlegum ham til að fela þennan hluta.",
             "disable": "Slökkva á ítarlegum ham"
+        },
+        "systemTray": {
+            "title": "Kerfisbakki",
+            "keepInTray": "Halda Fluux á kerfisbakkanum",
+            "descriptionWindows": "Þegar þetta er virkt felst Fluux á kerfisbakkanum við lágmörkun eða lokun.",
+            "descriptionLinux": "Þegar þetta er virkt felst Fluux á kerfisbakkanum við lokun ef stuðningur er fyrir hendi. Lágmörkun fylgir venjulegri hegðun skjáborðsins.",
+            "unavailableLinux": "Samhæfur kerfisbakki er ekki tiltækur. Fluux hættir þegar glugganum er lokað."
         }
     },
     "update": {

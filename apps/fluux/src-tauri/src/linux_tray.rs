@@ -14,8 +14,8 @@
 /// registered — i.e. an icon will actually be displayed and can restore the
 /// window. Any other combination means hiding to tray would strand the app.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub fn should_hide_to_tray(tray_built: bool, host_registered: bool) -> bool {
-    tray_built && host_registered
+pub fn should_hide_to_tray(keep_in_tray: bool, tray_built: bool, host_registered: bool) -> bool {
+    keep_in_tray && tray_built && host_registered
 }
 
 /// Probes whether a StatusNotifier host is registered on the session bus.
@@ -69,9 +69,10 @@ mod tests {
 
     #[test]
     fn hide_to_tray_requires_built_and_host() {
-        assert!(should_hide_to_tray(true, true));
-        assert!(!should_hide_to_tray(true, false));
-        assert!(!should_hide_to_tray(false, true));
-        assert!(!should_hide_to_tray(false, false));
+        assert!(should_hide_to_tray(true, true, true));
+        assert!(!should_hide_to_tray(false, true, true));
+        assert!(!should_hide_to_tray(true, true, false));
+        assert!(!should_hide_to_tray(true, false, true));
+        assert!(!should_hide_to_tray(true, false, false));
     }
 }

@@ -732,7 +732,10 @@
             "searchIndexDescription": "O índice de pesquisa permite a pesquisa de texto completo no histórico de mensagens. Reconstrua-o se os resultados parecerem incompletos.",
             "rebuildIndex": "Reconstruir índice",
             "rebuildingIndex": "Reconstruindo…",
-            "indexRebuilt": "{{count}} mensagens indexadas"
+            "indexRebuilt": "{{count}} mensagens indexadas",
+            "logs": "Registos",
+            "logsDescription": "Abre a pasta que contém os registos de diagnóstico do Fluux.",
+            "openLogs": "Abrir pasta de registos"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -925,6 +928,13 @@
             "enableDescription": "O modo avançado desbloqueia opções avançadas como as definições de servidor personalizadas e a consola XMPP.",
             "disableDescription": "Desative o modo avançado para ocultar esta secção.",
             "disable": "Desativar o modo avançado"
+        },
+        "systemTray": {
+            "title": "Área de notificação",
+            "keepInTray": "Manter o Fluux na área de notificação",
+            "descriptionWindows": "Quando ativado, minimizar ou fechar o Fluux oculta-o na área de notificação.",
+            "descriptionLinux": "Quando ativado, fechar o Fluux oculta-o na área de notificação quando suportado. Minimizar mantém o comportamento normal do ambiente de trabalho.",
+            "unavailableLinux": "Não está disponível uma área de notificação compatível. Fechar o Fluux termina a aplicação."
         }
     },
     "update": {

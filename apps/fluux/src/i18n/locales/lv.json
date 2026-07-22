@@ -731,7 +731,10 @@
             "searchIndexDescription": "Meklēšanas indekss ļauj veikt pilna teksta meklēšanu ziņojumu vēsturē. Pārbūvējiet to, ja meklēšanas rezultāti šķiet nepilnīgi.",
             "rebuildIndex": "Pārbūvēt indeksu",
             "rebuildingIndex": "Pārbūvēšana…",
-            "indexRebuilt": "{{count}} ziņojumi indeksēti"
+            "indexRebuilt": "{{count}} ziņojumi indeksēti",
+            "logs": "Žurnāli",
+            "logsDescription": "Atvērt mapi ar Fluux diagnostikas žurnāliem.",
+            "openLogs": "Atvērt žurnālu mapi"
         },
         "encryption": {
             "experimental": "Eksperimentāls",
@@ -924,6 +927,13 @@
             "enableDescription": "Papildu režims atslēdz ekspertu opcijas, piemēram, pielāgotus servera iestatījumus un XMPP konsoli.",
             "disableDescription": "Atspējojiet papildu režīmu, lai paslēptu šo sadaļu.",
             "disable": "Atspējot papildu režīmu"
+        },
+        "systemTray": {
+            "title": "Sistēmas tekne",
+            "keepInTray": "Paturēt Fluux sistēmas teknē",
+            "descriptionWindows": "Ja iespējots, minimizējot vai aizverot Fluux, tas tiek paslēpts sistēmas teknē.",
+            "descriptionLinux": "Ja iespējots, aizverot Fluux, tas tiek paslēpts sistēmas teknē, ja tā tiek atbalstīta. Minimizēšana saglabā parasto darbvirsmas darbību.",
+            "unavailableLinux": "Saderīga sistēmas tekne nav pieejama. Aizverot Fluux, lietotne tiks izslēgta."
         }
     },
     "update": {

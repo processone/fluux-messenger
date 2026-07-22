@@ -10,6 +10,10 @@ import {
 } from '@/hooks/useNotificationPermission'
 import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { Toggle } from '@/components/ui/Toggle'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { isLinux, isWindows } from '@/utils/tauri'
+import { getTrayStatus, type TrayStatus } from '@/utils/windowBehavior'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
 
@@ -107,6 +111,12 @@ export function NotificationsSettings() {
   const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
   const [openSettingsFailed, setOpenSettingsFailed] = useState(false)
+  const keepInSystemTray = useSettingsStore((state) => state.keepInSystemTray)
+  const setKeepInSystemTray = useSettingsStore((state) => state.setKeepInSystemTray)
+  const [trayStatus, setTrayStatus] = useState<TrayStatus | null>(null)
+  const linuxDesktop = desktopBuild && isLinux()
+  const windowsDesktop = desktopBuild && isWindows()
+  const showTraySetting = linuxDesktop || windowsDesktop
 
   useEffect(() => {
     void isMacOSDesktop().then(setIsMac)
@@ -117,6 +127,18 @@ export function NotificationsSettings() {
       .then(setNotificationStatus)
       .catch(() => setNotificationStatus('unavailable'))
   }, [])
+
+  useEffect(() => {
+    if (!showTraySetting) return
+    const refreshTrayStatus = () => {
+      void getTrayStatus()
+        .then((status) => setTrayStatus(status))
+        .catch(() => setTrayStatus({ enabled: keepInSystemTray, available: false }))
+    }
+    refreshTrayStatus()
+    window.addEventListener('focus', refreshTrayStatus)
+    return () => window.removeEventListener('focus', refreshTrayStatus)
+  }, [showTraySetting, keepInSystemTray])
 
   // Re-check when the window regains focus so the status (and the runtime gate)
   // updates after the user flips the permission in System Settings and returns.
@@ -159,7 +181,7 @@ export function NotificationsSettings() {
   }
 
   return (
-    <section className="w-full max-w-md">
+    <section className="w-full max-w-md space-y-8">
       <SettingsSection title={t('settings.notifications')}>
       <div className="space-y-3">
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
@@ -301,6 +323,37 @@ export function NotificationsSettings() {
         )}
       </div>
       </SettingsSection>
+
+      {showTraySetting && (
+        <SettingsSection
+          title={t('settings.systemTray.title')}
+          description={t(
+            linuxDesktop
+              ? 'settings.systemTray.descriptionLinux'
+              : 'settings.systemTray.descriptionWindows',
+          )}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border">
+              <label htmlFor="keep-in-system-tray" className="text-sm text-fluux-text">
+                {t('settings.systemTray.keepInTray')}
+              </label>
+              <Toggle
+                id="keep-in-system-tray"
+                checked={keepInSystemTray}
+                disabled={!trayStatus?.available}
+                onChange={setKeepInSystemTray}
+                aria-label={t('settings.systemTray.keepInTray')}
+              />
+            </div>
+            {linuxDesktop && trayStatus && !trayStatus.available && (
+              <p role="status" className="text-xs text-fluux-muted">
+                {t('settings.systemTray.unavailableLinux')}
+              </p>
+            )}
+          </div>
+        </SettingsSection>
+      )}
     </section>
   )
 }

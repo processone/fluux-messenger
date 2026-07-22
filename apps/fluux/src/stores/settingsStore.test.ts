@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system', densityMode: 'comfortable', transparencyMode: 'system' })
+    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system', densityMode: 'comfortable', transparencyMode: 'system', keepInSystemTray: true })
   })
 
   describe('initial state', () => {
@@ -162,6 +162,22 @@ describe('settingsStore', () => {
         setDensityMode(v)
         expect(useSettingsStore.getState().densityMode).toBe(v)
       }
+    })
+  })
+
+  describe('keepInSystemTray', () => {
+    it('defaults to enabled to preserve the current desktop behavior', () => {
+      expect(useSettingsStore.getState().keepInSystemTray).toBe(true)
+    })
+
+    it('persists and applies both values', () => {
+      useSettingsStore.getState().setKeepInSystemTray(false)
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-keep-in-tray', 'false')
+      expect(useSettingsStore.getState().keepInSystemTray).toBe(false)
+
+      useSettingsStore.getState().setKeepInSystemTray(true)
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-keep-in-tray', 'true')
+      expect(useSettingsStore.getState().keepInSystemTray).toBe(true)
     })
   })
 })

@@ -733,7 +733,10 @@
             "searchIndexDescription": "Index vyhledávání umožňuje fulltextové vyhledávání v historii zpráv. Obnovte jej, pokud se výsledky zdají neúplné.",
             "rebuildIndex": "Obnovit index",
             "rebuildingIndex": "Obnovování…",
-            "indexRebuilt": "{{count}} zpráv indexováno"
+            "indexRebuilt": "{{count}} zpráv indexováno",
+            "logs": "Protokoly",
+            "logsDescription": "Otevřít složku s diagnostickými protokoly Fluux.",
+            "openLogs": "Otevřít složku protokolů"
         },
         "encryption": {
             "experimental": "Experimentální",
@@ -926,6 +929,13 @@
             "enableDescription": "Pokročilý režim odemkne odborné možnosti, jako jsou vlastní nastavení serveru a konzola XMPP.",
             "disableDescription": "Vypněte pokročilý režim, chcete-li tuto sekci skrýt.",
             "disable": "Vypnout pokročilý režim"
+        },
+        "systemTray": {
+            "title": "Oznamovací oblast",
+            "keepInTray": "Ponechat Fluux v oznamovací oblasti",
+            "descriptionWindows": "Je-li zapnuto, minimalizace nebo zavření skryje Fluux do oznamovací oblasti.",
+            "descriptionLinux": "Je-li zapnuto, zavření skryje Fluux do oznamovací oblasti, pokud je podporována. Minimalizace se řídí běžným chováním prostředí.",
+            "unavailableLinux": "Kompatibilní oznamovací oblast není dostupná. Zavřením se Fluux ukončí."
         }
     },
     "update": {
