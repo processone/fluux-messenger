@@ -430,7 +430,9 @@
         "nickChanged": "{{oldNick}} είναι πλέον γνωστός ως {{newNick}}",
         "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
         "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες",
-        "mentionSuggestions": "Προτάσεις αναφορών"
+        "mentionSuggestions": "Προτάσεις αναφορών",
+        "unreadMessages": "{{count}} μη αναγνωσμένο μήνυμα",
+        "unreadMessages_other": "{{count}} μη αναγνωσμένα μηνύματα"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",

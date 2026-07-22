@@ -431,7 +431,9 @@
         "nickChanged": "{{oldNick}} on nüüd tuntud kui {{newNick}}",
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
         "nickHiddenChars": "Nimi sisaldab peidetud märke",
-        "mentionSuggestions": "Mainimiste soovitused"
+        "mentionSuggestions": "Mainimiste soovitused",
+        "unreadMessages": "{{count}} lugemata sõnum",
+        "unreadMessages_other": "{{count}} lugemata sõnumit"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",

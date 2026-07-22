@@ -429,7 +429,10 @@
         "nickChanged": "{{oldNick}} sada je poznat kao {{newNick}}",
         "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
         "nickHiddenChars": "Ime sadrži skrivene znakove",
-        "mentionSuggestions": "Prijedlozi spominjanja"
+        "mentionSuggestions": "Prijedlozi spominjanja",
+        "unreadMessages": "{{count}} nepročitana poruka",
+        "unreadMessages_few": "{{count}} nepročitane poruke",
+        "unreadMessages_other": "{{count}} nepročitanih poruka"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",

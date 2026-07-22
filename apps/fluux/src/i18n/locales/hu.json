@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert",
         "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
         "nickHiddenChars": "A név rejtett karaktereket tartalmaz",
-        "mentionSuggestions": "Említésjavaslatok"
+        "mentionSuggestions": "Említésjavaslatok",
+        "unreadMessages": "{{count}} olvasatlan üzenet",
+        "unreadMessages_other": "{{count}} olvasatlan üzenet"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",

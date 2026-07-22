@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} вече е познат като {{newNick}}",
         "nickEdgeWhitespace": "Името съдържа излишни интервали в краищата",
         "nickHiddenChars": "Името съдържа скрити знаци",
-        "mentionSuggestions": "Предложения за споменавания"
+        "mentionSuggestions": "Предложения за споменавания",
+        "unreadMessages": "{{count}} непрочетено съобщение",
+        "unreadMessages_other": "{{count}} непрочетени съобщения"
     },
     "events": {
         "invitedBy": "Поканен от {{name}}",

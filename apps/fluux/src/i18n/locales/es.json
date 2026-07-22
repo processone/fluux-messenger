@@ -431,7 +431,10 @@
         "nickChanged": "{{oldNick}} ahora se conoce como {{newNick}}",
         "nickEdgeWhitespace": "El nombre tiene espacios adicionales en los extremos",
         "nickHiddenChars": "El nombre contiene caracteres ocultos",
-        "mentionSuggestions": "Sugerencias de menciones"
+        "mentionSuggestions": "Sugerencias de menciones",
+        "unreadMessages": "{{count}} mensaje sin leer",
+        "unreadMessages_many": "{{count}} de mensajes sin leer",
+        "unreadMessages_other": "{{count}} mensajes sin leer"
     },
     "events": {
         "invitedBy": "Invitado por {{name}}",

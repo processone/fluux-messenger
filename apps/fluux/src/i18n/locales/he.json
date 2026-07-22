@@ -429,7 +429,10 @@
         "nickChanged": "{{oldNick}} ידוע כעת בשם {{newNick}}",
         "nickEdgeWhitespace": "השם מכיל רווחים נוספים בקצוות",
         "nickHiddenChars": "השם מכיל תווים נסתרים",
-        "mentionSuggestions": "הצעות אזכור"
+        "mentionSuggestions": "הצעות אזכור",
+        "unreadMessages": "הודעה אחת שלא נקראה",
+        "unreadMessages_two": "2 הודעות שלא נקראו",
+        "unreadMessages_other": "{{count}} הודעות שלא נקראו"
     },
     "events": {
         "invitedBy": "הוזמן על ידי {{name}}",

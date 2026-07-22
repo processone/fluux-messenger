@@ -429,7 +429,12 @@
         "nickChanged": "Tugtar {{newNick}} ar {{oldNick}} anois",
         "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
         "nickHiddenChars": "Tá carachtair fholaithe san ainm",
-        "mentionSuggestions": "Moltaí tagartha"
+        "mentionSuggestions": "Moltaí tagartha",
+        "unreadMessages": "{{count}} teachtaireacht gan léamh",
+        "unreadMessages_two": "{{count}} theachtaireacht gan léamh",
+        "unreadMessages_few": "{{count}} theachtaireacht gan léamh",
+        "unreadMessages_many": "{{count}} dteachtaireacht gan léamh",
+        "unreadMessages_other": "{{count}} teachtaireacht gan léamh"
     },
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",

@@ -429,7 +429,11 @@
         "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}",
         "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
         "nickHiddenChars": "Varde yra paslėptų simbolių",
-        "mentionSuggestions": "Paminėjimų pasiūlymai"
+        "mentionSuggestions": "Paminėjimų pasiūlymai",
+        "unreadMessages": "{{count}} neperskaitytas pranešimas",
+        "unreadMessages_few": "{{count}} neperskaityti pranešimai",
+        "unreadMessages_many": "{{count}} neperskaityto pranešimo",
+        "unreadMessages_other": "{{count}} neperskaitytų pranešimų"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",

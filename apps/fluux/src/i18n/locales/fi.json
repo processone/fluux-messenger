@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} tunnetaan nyt nimellä {{newNick}}",
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
         "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä",
-        "mentionSuggestions": "Mainintaehdotukset"
+        "mentionSuggestions": "Mainintaehdotukset",
+        "unreadMessages": "{{count}} lukematon viesti",
+        "unreadMessages_other": "{{count}} lukematonta viestiä"
     },
     "events": {
         "invitedBy": "Kutsuja: {{name}}",

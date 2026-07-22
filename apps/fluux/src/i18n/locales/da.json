@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} er nu kendt som {{newNick}}",
         "nickEdgeWhitespace": "Navnet har ekstra mellemrum i kanterne",
         "nickHiddenChars": "Navnet indeholder skjulte tegn",
-        "mentionSuggestions": "Omtaleforslag"
+        "mentionSuggestions": "Omtaleforslag",
+        "unreadMessages": "{{count}} ulæst besked",
+        "unreadMessages_other": "{{count}} ulæste beskeder"
     },
     "events": {
         "invitedBy": "Inviteret af {{name}}",

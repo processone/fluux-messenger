@@ -429,7 +429,11 @@
         "nickChanged": "{{oldNick}} теперь известен как {{newNick}}",
         "nickEdgeWhitespace": "Имя содержит лишние пробелы по краям",
         "nickHiddenChars": "Имя содержит скрытые символы",
-        "mentionSuggestions": "Предложения упоминаний"
+        "mentionSuggestions": "Предложения упоминаний",
+        "unreadMessages": "{{count}} непрочитанное сообщение",
+        "unreadMessages_few": "{{count}} непрочитанных сообщения",
+        "unreadMessages_many": "{{count}} непрочитанных сообщений",
+        "unreadMessages_other": "{{count}} непрочитанного сообщения"
     },
     "events": {
         "invitedBy": "Пригласил(а) {{name}}",

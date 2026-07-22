@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} är nu känd som {{newNick}}",
         "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
         "nickHiddenChars": "Namnet innehåller dolda tecken",
-        "mentionSuggestions": "Omnämnandeförslag"
+        "mentionSuggestions": "Omnämnandeförslag",
+        "unreadMessages": "{{count}} oläst meddelande",
+        "unreadMessages_other": "{{count}} olästa meddelanden"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",
