@@ -251,6 +251,106 @@ describe('EncryptionSettings PEP support', () => {
     })
   })
 
+  // The backup row used to be hidden once the local marker matched the
+  // current fingerprint, which made "in sync" a dead end: a backup encoded
+  // by Fluux <=0.17.1 (legacy-normalized passphrase, #1021) sits behind a
+  // green status line that no other XEP-0373 client can open, with no way
+  // to re-publish it. The row now always renders, and because publishing
+  // mints a FRESH passphrase, replacing an existing backup is confirmed.
+  describe('re-publishing an in-sync backup', () => {
+    const FP = 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333'
+    const mockBackupSecretKey = vi.fn<(pp: string) => Promise<void>>()
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      localStorage.clear()
+      mockStatus = 'online'
+      mockCheckPepSupport.mockResolvedValue(true)
+      mockBackupSecretKey.mockResolvedValue(undefined)
+      mockPlugin = {
+        getOwnFingerprint: () => FP,
+        // Marker matches the live fingerprint => the UI considers local and
+        // server in sync, which is exactly the state that used to hide the row.
+        getBackedUpFingerprint: () => FP,
+        hasSecretKeyBackup: vi.fn().mockResolvedValue(true),
+        backupSecretKey: mockBackupSecretKey,
+      }
+      useEncryptionSettingsStore.setState({
+        openpgpEnabled: true,
+        pluginRegisteredAt: 1,
+        registrationError: null,
+      })
+    })
+
+    it('offers the backup button even while in sync', async () => {
+      render(<EncryptionSettings />)
+
+      // Precondition: we really are in the in-sync state, not merely unprobed.
+      await screen.findByText('settings.encryption.backupStatusInSync')
+
+      expect(
+        screen.getByRole('button', { name: 'settings.encryption.backupAction' }),
+      ).toBeInTheDocument()
+    })
+
+    it('offers the restore button even while in sync', async () => {
+      render(<EncryptionSettings />)
+
+      await screen.findByText('settings.encryption.backupStatusInSync')
+
+      expect(
+        screen.getByRole('button', { name: 'settings.encryption.restoreAction' }),
+      ).toBeInTheDocument()
+    })
+
+    it('confirms with the own-backup copy, not the foreign-backup copy', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      expect(
+        screen.getByText('settings.encryption.backupReplaceOwnTitle'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.backupConflictTitle'),
+      ).not.toBeInTheDocument()
+    })
+
+    it('does not publish until the confirmation is accepted', async () => {
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      await screen.findByText('settings.encryption.backupReplaceOwnTitle')
+      expect(mockBackupSecretKey).not.toHaveBeenCalled()
+    })
+
+    it('uses the foreign-backup copy when the marker does not match', async () => {
+      // Server holds a backup this device did not publish.
+      mockPlugin!.getBackedUpFingerprint = () => null
+
+      render(<EncryptionSettings />)
+
+      const backupButton = await screen.findByRole('button', {
+        name: 'settings.encryption.backupAction',
+      })
+      fireEvent.click(backupButton)
+
+      expect(
+        screen.getByText('settings.encryption.backupConflictTitle'),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('settings.encryption.backupReplaceOwnTitle'),
+      ).not.toBeInTheDocument()
+    })
+  })
+
   // Aurora security-iconography pass: every status color routes through the
   // theme-aware Aurora tokens (fluux-red/green/yellow + text-fluux-error for
   // red text) so it adapts across all 13 themes x light/dark. This guards
