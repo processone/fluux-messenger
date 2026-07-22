@@ -203,6 +203,27 @@ useless on the one machine it was built for.
 If it does not fire, the fallback is to gate Windows onto the flat tier the way
 Linux is gated, and this spec needs revisiting.
 
+**Risk revised upward during implementation.** The screenshots were captured
+from a **real machine through JetKVM** (HDMI capture plus compression), not a
+virtual machine as originally assumed. Two consequences:
+
+- The **diagnosis is unaffected**. Compression can soften an image or add
+  artifacts; it cannot sharpen one. The sidebar under `.modal-scrim` arrived
+  legible, so it was at least that legible on the physical panel, and the scrim's
+  blur is genuinely not painting.
+- The **probe's premise is weaker**. A real machine driving real HDMI almost
+  certainly has a real GPU, which reports a real renderer string —
+  `classifyRenderer` returns `'hardware'`, the probe returns `false`, and glass
+  stays on. WebGL and compositing are separate subsystems in Chromium: WebGL can
+  be hardware-accelerated while compositing, which is what `backdrop-filter`
+  actually depends on, is not. In that configuration the probe reads the wrong
+  subsystem and cannot detect the fault.
+
+The probe remains correct where it fires — a genuinely software-rendered box,
+including the WebKitGTK class — so it is not wasted work. But this gate is now
+the likely outcome rather than a remote risk, and §3's restructure is the part of
+this change expected to stand on its own.
+
 Additional verification:
 
 - Deliberate-break check on each new test (§4).
