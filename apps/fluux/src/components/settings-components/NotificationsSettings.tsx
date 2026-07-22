@@ -37,15 +37,21 @@ async function checkNotificationPermission(): Promise<NotificationStatus> {
   }
 }
 
-async function openNotificationSettings(): Promise<void> {
+/** Returns false when the OS pane could not be opened, so the UI can say so. */
+async function openNotificationSettings(): Promise<boolean> {
   try {
     // Go through a native command rather than the shell/opener plugins: their
     // default scopes reject custom URL schemes (x-apple.systempreferences:,
     // ms-settings:), and Linux needs a control-center invocation, not a URL.
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('open_notification_settings')
+    return true
   } catch (error) {
+    // Linux has no single control center: the command tries each desktop's
+    // settings binary and fails when none is installed. Swallowing that left
+    // the button silently dead (#1072), so the caller surfaces it.
     console.error('[Settings] Failed to open notification settings:', error)
+    return false
   }
 }
 
@@ -100,6 +106,7 @@ export function NotificationsSettings() {
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
   const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
+  const [openSettingsFailed, setOpenSettingsFailed] = useState(false)
 
   useEffect(() => {
     void isMacOSDesktop().then(setIsMac)
@@ -136,6 +143,10 @@ export function NotificationsSettings() {
   const handleRequestPermission = async () => {
     await requestNotificationPermission()
     setNotificationStatus(await checkNotificationPermission())
+  }
+
+  const handleOpenNotificationSettings = async () => {
+    setOpenSettingsFailed(!(await openNotificationSettings()))
   }
 
   const handleDisableWebPush = async () => {
@@ -214,13 +225,22 @@ export function NotificationsSettings() {
               is the correct first action. */}
           {isTauri() &&
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
-              <button
-                onClick={openNotificationSettings}
-                className="flex items-center gap-1.5 text-xs text-fluux-brand hover:text-fluux-text transition-colors"
-              >
-                <ExternalLink className="size-3.5" />
-                {t('settings.openSystemNotificationSettings')}
-              </button>
+              <>
+                <button
+                  onClick={handleOpenNotificationSettings}
+                  className="flex items-center gap-1.5 text-xs text-fluux-brand hover:text-fluux-text transition-colors"
+                >
+                  <ExternalLink className="size-3.5" />
+                  {t('settings.openSystemNotificationSettings')}
+                </button>
+                {/* Linux desktops without a known settings binary: say so
+                    rather than leaving the click with no visible effect. */}
+                {openSettingsFailed && (
+                  <p role="status" className="text-xs text-fluux-red">
+                    {t('settings.openSystemNotificationSettingsFailed')}
+                  </p>
+                )}
+              </>
             )}
         </div>
 

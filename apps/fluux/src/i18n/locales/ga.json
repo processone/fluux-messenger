@@ -710,6 +710,7 @@
         "notificationDescriptionWeb": "Cuireann fógraí ar an eolas thú faoi theachtaireachtaí nua nuair atá an aip sa chúlra.",
         "requestPermission": "Cumasaigh",
         "openSystemNotificationSettings": "Oscail socruithe fógraí an chórais",
+        "openSystemNotificationSettingsFailed": "Níorbh fhéidir socruithe fógraí an chórais a oscailt. Oscail iad ó shocruithe do dheasca.",
         "webPushStatus": "Fógraí brú gréasáin",
         "webPush_unavailable": "Ní thacaíonn an freastalaí leis",
         "webPush_available": "Ar fáil, tapáil le cumasú",

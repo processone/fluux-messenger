@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Meldingen waarschuwen je voor nieuwe berichten wanneer de app op de achtergrond staat.",
         "requestPermission": "Inschakelen",
         "openSystemNotificationSettings": "Systeeminstellingen voor meldingen openen",
+        "openSystemNotificationSettingsFailed": "De systeeminstellingen voor meldingen konden niet worden geopend. Open ze via de instellingen van je bureaublad.",
         "webPushStatus": "Web-pushmeldingen",
         "webPush_unavailable": "Niet ondersteund door server",
         "webPush_available": "Beschikbaar, tik om in te schakelen",

@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Ilmoitukset hälyttävät uusista viesteistä, kun sovellus on taustalla.",
         "requestPermission": "Ota käyttöön",
         "openSystemNotificationSettings": "Avaa järjestelmän ilmoitusasetukset",
+        "openSystemNotificationSettingsFailed": "Järjestelmän ilmoitusasetuksia ei voitu avata. Avaa ne työpöytäsi asetuksista.",
         "webPushStatus": "Web-push-ilmoitukset",
         "webPush_unavailable": "Palvelin ei tue tätä",
         "webPush_available": "Käytettävissä, ota käyttöön napauttamalla",

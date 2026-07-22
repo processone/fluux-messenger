@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Известията ви уведомяват за нови съобщения, когато приложението е във фонов режим.",
         "requestPermission": "Активирай",
         "openSystemNotificationSettings": "Отвори системните настройки за известия",
+        "openSystemNotificationSettingsFailed": "Системните настройки за известия не можаха да бъдат отворени. Отворете ги от настройките на работния плот.",
         "webPushStatus": "Уеб push известия",
         "webPush_unavailable": "Не се поддържа от сървъра",
         "webPush_available": "Налично, натиснете за активиране",

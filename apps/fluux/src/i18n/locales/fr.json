@@ -738,6 +738,7 @@
         "notificationDescriptionWeb": "Les notifications vous alertent des nouveaux messages lorsque l'application est en arrière-plan.",
         "requestPermission": "Activer",
         "openSystemNotificationSettings": "Ouvrir les réglages de notification du système",
+        "openSystemNotificationSettingsFailed": "Impossible d'ouvrir les réglages de notification du système. Ouvrez-les depuis les réglages de votre bureau.",
         "webPushStatus": "Notifications Web Push",
         "webPush_unavailable": "Non supporté par le serveur",
         "webPush_available": "Disponible, appuyez pour activer",

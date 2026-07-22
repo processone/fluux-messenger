@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Benachrichtigungen informieren Sie über neue Nachrichten, wenn die App im Hintergrund ist.",
         "requestPermission": "Aktivieren",
         "openSystemNotificationSettings": "Systemeinstellungen für Benachrichtigungen öffnen",
+        "openSystemNotificationSettingsFailed": "Die Systemeinstellungen für Benachrichtigungen konnten nicht geöffnet werden. Bitte öffnen Sie sie über die Einstellungen Ihrer Arbeitsumgebung.",
         "webPushStatus": "Web-Push-Benachrichtigungen",
         "webPush_unavailable": "Vom Server nicht unterstützt",
         "webPush_available": "Verfügbar, tippen zum Aktivieren",

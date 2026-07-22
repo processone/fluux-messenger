@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Paziņojumi brīdina par jauniem ziņojumiem, kad lietotne ir fonā.",
         "requestPermission": "Iespējot",
         "openSystemNotificationSettings": "Atvērt sistēmas paziņojumu iestatījumus",
+        "openSystemNotificationSettingsFailed": "Neizdevās atvērt sistēmas paziņojumu iestatījumus. Atveriet tos savas darbvirsmas iestatījumos.",
         "webPushStatus": "Tīmekļa push paziņojumi",
         "webPush_unavailable": "Serveris neatbalsta",
         "webPush_available": "Pieejams, pieskarieties, lai iespējotu",

@@ -710,6 +710,7 @@
         "notificationDescriptionWeb": "Oznámenia vás upozornia na nové správy, keď je aplikácia na pozadí.",
         "requestPermission": "Povoliť",
         "openSystemNotificationSettings": "Otvoriť systémové nastavenia oznámení",
+        "openSystemNotificationSettingsFailed": "Systémové nastavenia oznámení sa nepodarilo otvoriť. Otvorte ich v nastaveniach svojho prostredia.",
         "webPushStatus": "Webové push notifikácie",
         "webPush_unavailable": "Server nepodporuje",
         "webPush_available": "K dispozícii, ťuknite pre aktiváciu",

@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "Varsler gir deg beskjed om nye meldinger når appen er i bakgrunnen.",
         "requestPermission": "Aktiver",
         "openSystemNotificationSettings": "Åpne systemets varslingsinnstillinger",
+        "openSystemNotificationSettingsFailed": "Kunne ikke åpne systemets varslingsinnstillinger. Åpne dem fra innstillingene for skrivebordet ditt.",
         "webPushStatus": "Web-pushvarsler",
         "webPush_unavailable": "Ikke støttet av serveren",
         "webPush_available": "Tilgjengelig, trykk for å aktivere",

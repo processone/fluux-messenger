@@ -104,6 +104,39 @@ describe('NotificationsSettings — system notification settings link', () => {
     )
   })
 
+  it('reports the failure in the UI when no OS settings pane could be opened', async () => {
+    // Regression (#1072): on non-GNOME Linux the native command fails with
+    // ENOENT and the error died in console.error, so the button did nothing at
+    // all from the user's side. The failure must now be visible.
+    render(<NotificationsSettings />)
+    const link = await screen.findByRole('button', { name: LINK })
+    // Reject the click, not the initial permission probe that already ran.
+    mockInvoke.mockRejectedValueOnce(new Error('no notification settings command available'))
+
+    fireEvent.click(link)
+
+    expect(
+      await screen.findByText('settings.openSystemNotificationSettingsFailed'),
+    ).toBeInTheDocument()
+  })
+
+  it('clears a previous failure message when a later attempt succeeds', async () => {
+    render(<NotificationsSettings />)
+    const link = await screen.findByRole('button', { name: LINK })
+    mockInvoke.mockRejectedValueOnce(new Error('no notification settings command available'))
+
+    fireEvent.click(link)
+    await screen.findByText('settings.openSystemNotificationSettingsFailed')
+
+    fireEvent.click(link)
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText('settings.openSystemNotificationSettingsFailed'),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
   it('hides the link while permission was never requested (macOS default), offering Enable instead', async () => {
     mockPermState = 'default'
 

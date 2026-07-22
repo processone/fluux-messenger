@@ -709,6 +709,7 @@
         "notificationDescriptionWeb": "Pranešimai įspėja apie naujas žinutes, kai programa veikia fone.",
         "requestPermission": "Įjungti",
         "openSystemNotificationSettings": "Atidaryti sistemos pranešimų nustatymus",
+        "openSystemNotificationSettingsFailed": "Nepavyko atidaryti sistemos pranešimų nustatymų. Atidarykite juos savo darbalaukio nustatymuose.",
         "webPushStatus": "Žiniatinklio push pranešimai",
         "webPush_unavailable": "Serveris nepalaiko",
         "webPush_available": "Galima, bakstelėkite, kad įjungtumėte",

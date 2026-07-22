@@ -711,6 +711,7 @@
         "notificationDescriptionWeb": "تنبهك الإشعارات بالرسائل الجديدة عندما يكون التطبيق في الخلفية.",
         "requestPermission": "تفعيل",
         "openSystemNotificationSettings": "فتح إعدادات إشعارات النظام",
+        "openSystemNotificationSettingsFailed": "تعذّر فتح إعدادات إشعارات النظام. افتحها من إعدادات سطح المكتب لديك.",
         "webPushStatus": "إشعارات الويب الفورية",
         "webPush_unavailable": "غير مدعوم من الخادم",
         "webPush_available": "متاح, انقر للتفعيل",

@@ -707,6 +707,7 @@
         "notificationDescriptionWeb": "当应用在后台时，通知会提醒您有新消息。",
         "requestPermission": "启用",
         "openSystemNotificationSettings": "打开系统通知设置",
+        "openSystemNotificationSettingsFailed": "无法打开系统通知设置。请从桌面环境的设置中打开。",
         "webPushStatus": "网页推送通知",
         "webPush_unavailable": "服务器不支持",
         "webPush_available": "可用，点击即可启用",

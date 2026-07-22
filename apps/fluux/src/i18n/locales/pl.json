@@ -711,6 +711,7 @@
         "notificationDescriptionWeb": "Powiadomienia alertują o nowych wiadomościach, gdy aplikacja jest w tle.",
         "requestPermission": "Włącz",
         "openSystemNotificationSettings": "Otwórz systemowe ustawienia powiadomień",
+        "openSystemNotificationSettingsFailed": "Nie można otworzyć systemowych ustawień powiadomień. Otwórz je w ustawieniach swojego pulpitu.",
         "webPushStatus": "Powiadomienia web push",
         "webPush_unavailable": "Nieobsługiwane przez serwer",
         "webPush_available": "Dostępne, dotknij, aby włączyć",

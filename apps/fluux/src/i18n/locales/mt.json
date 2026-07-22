@@ -712,6 +712,7 @@
         "notificationDescriptionWeb": "In-notifiki jallertak għal messaġġi ġodda meta l-app tkun fil-background.",
         "requestPermission": "Ixgħel",
         "openSystemNotificationSettings": "Iftaħ is-settings tan-notifiki tas-sistema",
+        "openSystemNotificationSettingsFailed": "Ma setgħux jinfetħu s-settings tan-notifiki tas-sistema. Iftaħhom mis-settings tad-desktop tiegħek.",
         "webPushStatus": "Notifiki Web Push",
         "webPush_unavailable": "Mhux appoġġjat mis-server",
         "webPush_available": "Disponibbli, miss biex tixgħel",

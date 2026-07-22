@@ -1217,35 +1217,12 @@ fn log_to_terminal(level: String, message: String) {
 
 /// Open the operating system's notification settings.
 ///
-/// Uses a native process launch rather than the shell/opener plugins: their
-/// default scopes reject custom URL schemes (`x-apple.systempreferences:`,
-/// `ms-settings:`), and Linux has no notification-settings URL at all — it
-/// needs a control-center invocation. Best-effort; a failed launch is returned
-/// to the caller, which logs it.
+/// Platform dispatch and the Linux desktop detection live in
+/// `notifications::settings_pane`. A failed launch is returned to the caller,
+/// which surfaces it in the UI.
 #[tauri::command]
 fn open_notification_settings() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let result = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.Notifications-Settings.extension")
-        .spawn();
-
-    #[cfg(target_os = "windows")]
-    let result = std::process::Command::new("cmd")
-        .args(["/C", "start", "", "ms-settings:notifications"])
-        .spawn();
-
-    #[cfg(target_os = "linux")]
-    let result = std::process::Command::new("gnome-control-center")
-        .arg("notifications")
-        .spawn();
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    let result: std::io::Result<std::process::Child> = Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "unsupported platform",
-    ));
-
-    result.map(|_| ()).map_err(|e| e.to_string())
+    notifications::settings_pane::open()
 }
 
 /// Print startup diagnostics to stderr for debugging.

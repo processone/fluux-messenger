@@ -10,6 +10,7 @@
 pub mod backend;
 #[cfg(target_os = "macos")]
 mod macos;
+pub mod settings_pane;
 
 #[cfg(target_os = "macos")]
 use backend::{AuthState, NativeNotification, NavTarget};
