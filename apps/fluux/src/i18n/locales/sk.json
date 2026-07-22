@@ -430,7 +430,11 @@
         "nickChanged": "{{oldNick}} je teraz známy ako {{newNick}}",
         "nickEdgeWhitespace": "Meno obsahuje medzery na okrajoch",
         "nickHiddenChars": "Meno obsahuje skryté znaky",
-        "mentionSuggestions": "Návrhy zmienok"
+        "mentionSuggestions": "Návrhy zmienok",
+        "unreadMessages": "{{count}} neprečítaná správa",
+        "unreadMessages_few": "{{count}} neprečítané správy",
+        "unreadMessages_many": "{{count}} neprečítanej správy",
+        "unreadMessages_other": "{{count}} neprečítaných správ"
     },
     "events": {
         "invitedBy": "Pozval {{name}}",

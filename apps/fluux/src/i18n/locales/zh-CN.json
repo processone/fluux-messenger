@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} 现在称为 {{newNick}}",
         "nickEdgeWhitespace": "名称的首尾包含多余的空格",
         "nickHiddenChars": "名称包含隐藏字符",
-        "mentionSuggestions": "提及建议"
+        "mentionSuggestions": "提及建议",
+        "unreadMessages": "{{count}} 条未读消息",
+        "unreadMessages_other": "{{count}} 条未读消息"
     },
     "events": {
         "invitedBy": "邀请者 {{name}}",

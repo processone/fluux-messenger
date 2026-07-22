@@ -431,7 +431,9 @@
         "nickChanged": "{{oldNick}} heißt jetzt {{newNick}}",
         "nickEdgeWhitespace": "Der Name hat zusätzliche Leerzeichen am Rand",
         "nickHiddenChars": "Der Name enthält versteckte Zeichen",
-        "mentionSuggestions": "Erwähnungsvorschläge"
+        "mentionSuggestions": "Erwähnungsvorschläge",
+        "unreadMessages": "{{count}} ungelesene Nachricht",
+        "unreadMessages_other": "{{count}} ungelesene Nachrichten"
     },
     "events": {
         "invitedBy": "Eingeladen von {{name}}",

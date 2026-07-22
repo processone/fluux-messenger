@@ -430,7 +430,10 @@
         "nickChanged": "{{oldNick}} tagad zināms kā {{newNick}}",
         "nickEdgeWhitespace": "Vārdam ir papildu atstarpes malās",
         "nickHiddenChars": "Vārds satur slēptas rakstzīmes",
-        "mentionSuggestions": "Pieminējumu ieteikumi"
+        "mentionSuggestions": "Pieminējumu ieteikumi",
+        "unreadMessages_zero": "{{count}} neizlasītu ziņojumu",
+        "unreadMessages": "{{count}} neizlasīts ziņojums",
+        "unreadMessages_other": "{{count}} neizlasīti ziņojumi"
     },
     "events": {
         "invitedBy": "Uzaicināja {{name}}",

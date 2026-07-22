@@ -429,7 +429,13 @@
         "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}",
         "nickEdgeWhitespace": "يحتوي الاسم على مسافات إضافية في الأطراف",
         "nickHiddenChars": "يحتوي الاسم على أحرف مخفية",
-        "mentionSuggestions": "اقتراحات الإشارات"
+        "mentionSuggestions": "اقتراحات الإشارات",
+        "unreadMessages_zero": "لا رسائل غير مقروءة",
+        "unreadMessages": "رسالة واحدة غير مقروءة",
+        "unreadMessages_two": "رسالتان غير مقروءتين",
+        "unreadMessages_few": "{{count}} رسائل غير مقروءة",
+        "unreadMessages_many": "{{count}} رسالة غير مقروءة",
+        "unreadMessages_other": "{{count}} رسالة غير مقروءة"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",

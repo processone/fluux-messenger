@@ -431,7 +431,10 @@
         "nickChanged": "{{oldNick}} este acum cunoscut ca {{newNick}}",
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
         "nickHiddenChars": "Numele conține caractere ascunse",
-        "mentionSuggestions": "Sugestii de mențiuni"
+        "mentionSuggestions": "Sugestii de mențiuni",
+        "unreadMessages": "{{count}} mesaj necitit",
+        "unreadMessages_few": "{{count}} mesaje necitite",
+        "unreadMessages_other": "{{count}} de mesaje necitite"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",

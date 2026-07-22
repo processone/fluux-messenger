@@ -431,7 +431,11 @@
         "nickChanged": "{{oldNick}} je zdaj znan kot {{newNick}}",
         "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
         "nickHiddenChars": "Ime vsebuje skrite znake",
-        "mentionSuggestions": "Predlogi omemb"
+        "mentionSuggestions": "Predlogi omemb",
+        "unreadMessages": "{{count}} neprebrano sporočilo",
+        "unreadMessages_two": "{{count}} neprebrani sporočili",
+        "unreadMessages_few": "{{count}} neprebrana sporočila",
+        "unreadMessages_other": "{{count}} neprebranih sporočil"
     },
     "events": {
         "invitedBy": "Povabil {{name}}",
