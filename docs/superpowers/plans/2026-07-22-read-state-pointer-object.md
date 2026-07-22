@@ -258,7 +258,8 @@ export function isAhead(candidate: ReadPointer, current: ReadPointer | undefined
  * not ahead, so Zustand selectors can skip the re-render.
  */
 export function advance(current: ReadPointer | undefined, candidate: ReadPointer): ReadPointer {
-  return isAhead(candidate, current) ? candidate : (current as ReadPointer)
+  if (!current) return candidate
+  return isAhead(candidate, current) ? candidate : current
 }
 
 /**
@@ -925,19 +926,17 @@ git commit -m "feat(read-state): persist room read state and stamp historyFloor 
 
 ---
 
-### Task 6: Migrate chat persisted state, retire the legacy fields, delete dead code
+### Task 6a: Migrate chat persisted state to `readPointer`
 
 **Files:**
 - Modify: `packages/fluux-sdk/src/stores/chatStore.ts:539-617` (`deserializeState`)
-- Modify: `packages/fluux-sdk/src/core/types/chat.ts`, `packages/fluux-sdk/src/core/types/room.ts` — remove `lastSeenMessageId`, `lastReadAt`
-- Modify: `packages/fluux-sdk/src/stores/shared/notificationState.ts`, `readMarkerSync.ts`, both stores, `core/mdsSideEffects.ts`
-- Modify: `apps/fluux/src/hooks/useSessionPersistence.ts` — delete `saveRooms`, `getSavedRooms`, room read fields of `SerializableRoom`, and their call site at line 534
-- Modify: `apps/fluux/src/hooks/useSessionPersistence.test.ts` — delete the corresponding tests
 - Test: `packages/fluux-sdk/src/stores/chatStore.readPointerMigration.test.ts` (create)
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–5.
-- Produces: `readPointer` as the sole read position. `lastSeenMessageId` and `lastReadAt` no longer exist on any type.
+- Consumes: `ReadPointer`, `makeReadPointer` (Task 1); the type fields (Task 3).
+- Produces: `migrateReadPointer(conversationId: string, legacy: { lastSeenMessageId?: string; lastReadAt?: Date }): Promise<ReadPointer | undefined>`, exported from `chatStore.ts`. Task 6b relies on every conversation having a populated `readPointer` after rehydrate.
+
+Steps 1–6 below belong to this task. The legacy fields stay in place — 6b removes them.
 
 **The migration must never resolve AHEAD of the true position.** Today's `lastReadAt` means "newest *loaded* message when I last activated", so resolving it against the cache lands at-or-behind where the user actually was. Under-advancing shows extra unread, which the user clears by reading. Over-advancing is unrecoverable, because the pointer is forward-only.
 
@@ -1083,19 +1082,7 @@ In `chatStore.ts`'s `deserializeState` (line 541): drop `unreadCount: 0, // Rese
 
 `deserializeState` is synchronous and `migrateReadPointer` is async, so run the migration as a post-rehydrate pass: restore meta synchronously with whatever legacy fields exist, then kick off a fire-and-forget migration that fills `readPointer` per conversation — the same shape as the existing localStorage-messages→IndexedDB migration at line 620.
 
-- [ ] **Step 7: Delete the legacy fields**
-
-Remove `lastSeenMessageId` and `lastReadAt` from `ConversationMetadata`, `RoomMetadata`, and `EntityNotificationState`. Also remove `ReadMarkerMeta.lastReadAt` / `.lastSeenMessageId` in `readMarkerSync.ts:14-20`, replacing them with `readPointer?: ReadPointer`. Fix every resulting compile error by reading `readPointer` instead. In `core/mdsSideEffects.ts`, `resolveSeenStanzaId` and `consider` read `meta.readPointer?.messageId`.
-
-Remove `lastReadAt: true, lastSeenMessageId: true` from `ROOM_META_FIELDS` (roomStore.ts:378).
-
-- [ ] **Step 8: Delete the dead room session-persistence path**
-
-In `apps/fluux/src/hooks/useSessionPersistence.ts`: delete `saveRooms` (line 351), `getSavedRooms` (line 390), the `SerializableRoom` fields `unreadCount`, `mentionsCount`, `lastReadAt`, and the restore block at lines 534-539 that calls `getSavedRooms`. Rooms now rehydrate read state from `readStateStorage` inside the SDK, and their entities from bookmarks.
-
-Delete the matching cases in `apps/fluux/src/hooks/useSessionPersistence.test.ts` (lines ~397, ~428).
-
-- [ ] **Step 9: Full verification**
+- [ ] **Step 7: Verify and commit**
 
 ```bash
 npm run build:sdk && npm run typecheck && npm test
@@ -1104,36 +1091,142 @@ npm run build:sdk && npm run typecheck && npm test
 Expected: PASS, no stderr.
 
 ```bash
+git add packages/fluux-sdk/src
+git commit -m "feat(read-state): migrate persisted chat read state to ReadPointer
+
+Every branch resolves at or behind the user's true position -- the
+pointer is forward-only, so under-advancing costs a few extra unread and
+over-advancing is unrecoverable.
+
+Also stops zeroing unreadCount on rehydrate, so cold start paints the
+persisted count instead of flashing empty badges."
+```
+
+---
+
+### Task 6b: Delete the legacy fields
+
+**Files:**
+- Modify: `packages/fluux-sdk/src/core/types/chat.ts`, `packages/fluux-sdk/src/core/types/room.ts`
+- Modify: `packages/fluux-sdk/src/stores/shared/notificationState.ts`, `packages/fluux-sdk/src/stores/shared/readMarkerSync.ts:14-20`
+- Modify: `packages/fluux-sdk/src/stores/chatStore.ts`, `packages/fluux-sdk/src/stores/roomStore.ts`
+- Modify: `packages/fluux-sdk/src/core/mdsSideEffects.ts`
+
+**Interfaces:**
+- Consumes: `readPointer` populated everywhere by Tasks 4, 5 and 6a.
+- Produces: `readPointer` as the sole read position — `lastSeenMessageId` and `lastReadAt` exist on no type.
+
+This is a compiler-driven sweep. The typechecker enumerates the work: delete the fields, then fix every error by reading `readPointer` instead.
+
+- [ ] **Step 1: Remove the fields from every type**
+
+Delete `lastSeenMessageId` and `lastReadAt` from `ConversationMetadata` (`core/types/chat.ts`), `RoomMetadata` (`core/types/room.ts`), and `EntityNotificationState` (`shared/notificationState.ts`).
+
+In `readMarkerSync.ts:14-20`, replace `ReadMarkerMeta`'s `lastReadAt` and `lastSeenMessageId` with `readPointer?: ReadPointer`.
+
+Remove `lastReadAt: true, lastSeenMessageId: true` from `ROOM_META_FIELDS` (`roomStore.ts:378`). That object is `satisfies Record<keyof RoomMetadata, true>`, so leaving them is a compile error.
+
+- [ ] **Step 2: Let the compiler enumerate the remaining work**
+
+```bash
+npm run build:sdk && npm run typecheck
+```
+
+Fix each error by reading `readPointer` instead. In `core/mdsSideEffects.ts`, `resolveSeenStanzaId` (line 113) and `consider` (line 209) read `meta.readPointer?.messageId`.
+
+Repeat until clean. Then confirm nothing references the old names:
+
+```bash
+grep -rn "lastSeenMessageId\|lastReadAt" packages/fluux-sdk/src apps/fluux/src --include=*.ts --include=*.tsx
+```
+
+Expected: only historical prose in comments — no live code.
+
+- [ ] **Step 3: Run the full suite**
+
+```bash
+npm test
+```
+
+Expected: PASS with no stderr. Tests referencing the old field names must be updated to `readPointer`, not deleted — a deleted test is lost coverage, and this is exactly the sweep where that would go unnoticed.
+
+- [ ] **Step 4: Run the scroll gate**
+
+```bash
 npm run test:scroll
 ```
 
-Run from the repo root. Expected: PASS — required gate for anything touching the loaded window.
+From the repo root. Required for anything touching the loaded window.
 
-- [ ] **Step 10: Manual verification — the one intended behaviour change**
+- [ ] **Step 5: Commit**
 
-PR A is otherwise behaviour-neutral, but rooms now remember their read position across a restart, which they never did. Unit tests cannot prove this end to end.
+```bash
+git add packages/fluux-sdk/src
+git commit -m "refactor(read-state): delete lastSeenMessageId and lastReadAt
+
+readPointer is now the sole read position. The two fields described one
+fact independently and drifted apart in practice -- that divergence is
+the bug class #1081 exists to remove."
+```
+
+---
+
+### Task 6c: Delete the dead room session-persistence path
+
+**Files:**
+- Modify: `apps/fluux/src/hooks/useSessionPersistence.ts`
+- Modify: `apps/fluux/src/hooks/useSessionPersistence.test.ts`
+
+**Interfaces:**
+- Consumes: room read state now durable via `readStateStorage` (Tasks 2, 5).
+- Produces: nothing — pure deletion.
+
+`saveRooms` (line 351) is the only writer of the `xmpp-rooms` sessionStorage key and has no production caller. `getSavedRooms` (line 390) reads that key from the restore path at line 534. The restore has therefore always read a key nothing wrote.
+
+- [ ] **Step 1: Confirm the finding before deleting**
+
+```bash
+grep -rn "saveRooms\|getSavedRooms" apps/fluux/src packages/fluux-sdk/src
+```
+
+Expected: definitions, the line-534 call site, and test references — no other production caller. **If a production caller exists, stop and report it** — the premise of this task is wrong and the deletion would lose real behaviour.
+
+- [ ] **Step 2: Delete**
+
+In `apps/fluux/src/hooks/useSessionPersistence.ts`: remove `saveRooms`, `getSavedRooms`, the restore block at lines 534-539 that calls it, and the now-unused `SerializableRoom` read-state fields (`unreadCount`, `mentionsCount`, `lastReadAt`) plus `ROOMS_KEY` if nothing else uses it.
+
+Rooms rehydrate read state from `readStateStorage` inside the SDK, and their entities from bookmarks.
+
+In `apps/fluux/src/hooks/useSessionPersistence.test.ts`: delete the `saveRooms`/`getSavedRooms` cases (around lines 397 and 428) and their imports (lines 13-14). These test deleted functions, so removing them is correct — unlike Task 6b, where tests must be migrated rather than dropped.
+
+- [ ] **Step 3: Verify**
+
+```bash
+npm run typecheck && npm test
+```
+
+Expected: PASS, no stderr.
+
+- [ ] **Step 4: Manual verification — the one intended behaviour change in PR A**
+
+PR A is otherwise behaviour-neutral, but rooms now remember their read position across a restart, which they never did. No unit test proves this end to end.
 
 1. `npm run tauri:dev`, sign in, open a room, read to the bottom.
 2. Quit the app fully and relaunch.
-3. Confirm the room's read position survived: no unread badge for messages read before the quit, and the "new messages" divider is not at the top of the history.
+3. Confirm the read position survived: no unread badge for messages read before the quit, and the "new messages" divider is not at the top of the history.
 4. Confirm `localStorage` holds `fluux-room-read-state:<your-jid>` with a plausible entry.
 
-- [ ] **Step 11: Commit**
+Report what you observed. If the position did NOT survive, that is a real defect in Tasks 2/5 — report it rather than working around it here.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/fluux-sdk/src apps/fluux/src
-git commit -m "refactor(read-state): retire lastSeenMessageId and lastReadAt for ReadPointer
+git add apps/fluux/src
+git commit -m "chore(read-state): delete the dead room sessionStorage path
 
-Migrates persisted chat state one-shot, resolving every branch at or
-behind the user's true position -- the pointer is forward-only, so
-under-advancing costs a few extra unread and over-advancing is
-unrecoverable.
-
-Stops zeroing unreadCount on rehydrate, so cold start paints the
-persisted count instead of flashing empty badges.
-
-Deletes the dead saveRooms/getSavedRooms sessionStorage path: it read a
-key nothing wrote."
+saveRooms was the only writer of the xmpp-rooms key and had no
+production caller, so the restore path read a key nothing wrote. Room
+read state is now durable via the SDK's readStateStorage."
 ```
 
 ---
@@ -1141,7 +1234,7 @@ key nothing wrote."
 ## Definition of done for PR A
 
 - `lastSeenMessageId` and `lastReadAt` appear nowhere in the SDK or app (`grep -rn "lastSeenMessageId\|lastReadAt" packages apps --include=*.ts --include=*.tsx` returns only historical comments).
-- Room read state survives a full app restart (verified manually, Task 6 Step 10).
+- Room read state survives a full app restart (verified manually, Task 6c Step 4).
 - `npm test`, `npm run typecheck`, lint and `npm run test:scroll` all pass.
 - Every control listed per task has been verified to bite.
 - No counting behaviour has changed — that is PR B.
