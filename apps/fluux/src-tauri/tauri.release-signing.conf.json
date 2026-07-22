@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "windows": {
+      "signCommand": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File sign-windows.ps1 \"%1\""
+    }
+  }
+}
