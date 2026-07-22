@@ -2305,6 +2305,71 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
+    it('does NOT mark the visible timeline complete when a Phase B deep probe reaches the archive start below the resident window', () => {
+      // Reproduces the "cannot scroll back past the activation slice" regression.
+      // The resident window is the latest-N activation slice (July). Phase B — a
+      // BACKGROUND read-pointer stitch — seeds from the true cache bottom
+      // (January, thousands of messages BELOW the resident window) and walks down
+      // until the server reports complete=true at the archive start.
+      //
+      // That completion is real, but it describes the ARCHIVE bottom, not the
+      // user's visible timeline. Folding it into isHistoryComplete makes the UI
+      // draw "Beginning of conversation" at the top of the July slice and disable
+      // load-more, stranding all the older history that is already cached.
+      const residentTop: RoomMessage = {
+        type: 'groupchat', id: 'july-top', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'resident window top', timestamp: new Date('2026-07-13T14:21:40Z'),
+        isOutgoing: false, stanzaId: 'july-top-archive-id',
+      }
+      roomStore.getState().addRoom(createRoom(jid, {
+        joined: true, messages: [residentTop], lastMessage: residentTop,
+      }))
+
+      // A Phase B page from January: it resumed from the cache-bottom cursor,
+      // NOT from the resident window's oldest message, and hit the archive start.
+      const januaryPage: RoomMessage = {
+        type: 'groupchat', id: 'jan-first', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'first message ever', timestamp: new Date('2026-01-26T15:12:00Z'),
+        isOutgoing: false, stanzaId: 'jan-first-archive-id',
+      }
+      roomStore.getState().mergeRoomMAMMessages(
+        jid, [januaryPage], { first: 'jan-first-archive-id' }, true, 'backward', false, false,
+        { initialBefore: 'cache-bottom-archive-id' }
+      )
+
+      // The user's timeline still starts at the July slice — older history exists
+      // both on the server and in the local cache, so load-more must stay enabled.
+      expect(roomStore.getState().getRoomMAMQueryState(jid).isHistoryComplete).toBe(false)
+    })
+
+    it('DOES mark the timeline complete when scroll-back resumes from the resident bottom and reaches the archive start', () => {
+      // Control for the Phase B case above: this is the genuine "user scrolled to
+      // the very beginning" path — fetchOlderHistory paginates from the resident
+      // window's own oldest archive id, so complete=true really does mean the
+      // visible timeline reached the start. The fix must not suppress this.
+      const residentBottom: RoomMessage = {
+        type: 'groupchat', id: 'oldest-resident', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'oldest resident', timestamp: new Date('2026-02-01T00:00:00Z'),
+        isOutgoing: false, stanzaId: 'oldest-resident-archive-id',
+      }
+      roomStore.getState().addRoom(createRoom(jid, {
+        joined: true, messages: [residentBottom], lastMessage: residentBottom,
+      }))
+
+      const firstEver: RoomMessage = {
+        type: 'groupchat', id: 'jan-first', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'first message ever', timestamp: new Date('2026-01-26T15:12:00Z'),
+        isOutgoing: false, stanzaId: 'jan-first-archive-id',
+      }
+      // Cursor IS the resident window's oldest archive id → contiguous page.
+      roomStore.getState().mergeRoomMAMMessages(
+        jid, [firstEver], { first: 'jan-first-archive-id' }, true, 'backward', false, false,
+        { initialBefore: 'oldest-resident-archive-id' }
+      )
+
+      expect(roomStore.getState().getRoomMAMQueryState(jid).isHistoryComplete).toBe(true)
+    })
+
     it('does NOT plant a seam for a plain backward pagination page (isFetchLatest omitted)', () => {
       const held: RoomMessage = {
         type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',

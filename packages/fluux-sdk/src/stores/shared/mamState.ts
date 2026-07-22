@@ -109,6 +109,35 @@ export function computeNewestFetchedTimestamp(
 }
 
 /**
+ * True when a backward page resumed from a cursor that is NOT in the resident
+ * window — i.e. the page is disjoint from, and below, what the user can
+ * currently scroll through.
+ *
+ * The read-pointer stitch (catch-up Phase B) seeds its walk from the persisted
+ * coverage bottom / gap edge / true cache bottom, which on an active entity sits
+ * far below the resident window (the activation slice is only the latest N).
+ * When that walk reaches the archive start the server reports `complete: true`,
+ * but that describes the ARCHIVE bottom — not the user's visible timeline. Only
+ * a page that resumed from the resident window's own bottom (ordinary
+ * scroll-back) proves the visible timeline reached the beginning.
+ *
+ * Conservative by construction: returns true only on positive proof of
+ * disjointness. A fetch-latest (`before:''`) swallows the live edge and is never
+ * disjoint; an absent cursor or an empty resident array carries no proof, so
+ * both preserve the previous behavior.
+ */
+export function isDisjointFromResidentWindow(
+  existing: Array<{ stanzaId?: string }>,
+  initialBefore: string | undefined,
+  isFetchLatest: boolean
+): boolean {
+  if (isFetchLatest) return false
+  if (!initialBefore) return false
+  if (existing.length === 0) return false
+  return !existing.some((m) => m.stanzaId === initialBefore)
+}
+
+/**
  * Create a new MAM states map with query completed state.
  *
  * @param states - Current MAM states map
@@ -120,6 +149,9 @@ export function computeNewestFetchedTimestamp(
  * @param preserveGapMarker - Leave forwardGapTimestamp untouched (bounded windowed queries)
  * @param isFetchLatest - A `before:''` fetch-latest merge: the window is the live edge by
  *   definition (SM/carbons own everything newer), regardless of `complete`.
+ * @param disjointFromResidentWindow - The backward page resumed from a cursor below the
+ *   resident window (see {@link isDisjointFromResidentWindow}); its `complete` describes
+ *   the archive bottom, not the user's visible timeline.
  */
 export function setMAMQueryCompleted(
   states: Map<string, MAMQueryState>,
@@ -129,13 +161,20 @@ export function setMAMQueryCompleted(
   oldestFetchedId?: string,
   newestFetchedTimestamp?: number,
   preserveGapMarker = false,
-  isFetchLatest = false
+  isFetchLatest = false,
+  disjointFromResidentWindow = false
 ): Map<string, MAMQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
 
-  // Update the appropriate completion marker based on direction
-  const isHistoryComplete = direction === 'backward'
+  // Update the appropriate completion marker based on direction.
+  // A backward page that resumed BELOW the resident window (Phase B's
+  // read-pointer stitch) proves only that the ARCHIVE has nothing older than
+  // its own cursor — the user's timeline still starts at the resident top, and
+  // marking it complete would strand every older message (including history
+  // already sitting in the local cache) behind a "beginning of conversation"
+  // marker with load-more disabled.
+  const isHistoryComplete = direction === 'backward' && !disjointFromResidentWindow
     ? complete
     : current.isHistoryComplete
 
