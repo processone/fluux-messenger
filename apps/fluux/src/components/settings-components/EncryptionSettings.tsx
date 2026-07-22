@@ -110,8 +110,7 @@ export function EncryptionSettings() {
   const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
   // Fingerprint recorded locally at the moment of the last successful
   // backup/restore. When this equals the current local fingerprint AND
-  // a remote backup exists, local and server are known to be in sync
-  // and the backup/restore buttons are redundant.
+  // a remote backup exists, local and server are known to be in sync.
   const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
   // Set whenever the toggle (or auto-init) detected an existing server-
   // side OpenPGP identity but this device has no local key. The user must
