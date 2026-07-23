@@ -9,8 +9,8 @@
  * `querySelector('[data-message-id]')` never finds it and the jump silently no-ops. jsdom
  * has no layout, so the pixel positioning is verified on a real engine; here we pin the
  * integration CONTRACTS that have no other automated guard:
- *  - unread-marker and scroll-to-bottom call `ensureMessageMounted(id)` to bring an
- *    off-window row in; targetMessageId jumps use getIndexForMessageId + scrollToIndex directly;
+ *  - unread-marker entry and the FAB marker-first leg route through the positioning controller,
+ *    whose executor uses getIndexForMessageId + scrollToIndex directly for an off-window row;
  *  - the MAM prepend restore reads the anchor offset from the VIRTUALIZER
  *    (`getOffsetForMessageId`), not `querySelector(anchor).offsetTop` — the anchor is
  *    windowed out on prepend, so the DOM read returns null and the old code fell back to
@@ -18,7 +18,7 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, fireEvent, act } from '@testing-library/react'
+import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
@@ -33,6 +33,7 @@ const scrollToOffsetCalls: number[] = []
 // scrollToIndex(last,'end') (re-windows the virtualizer); a raw scrollTop write does not.
 // Lets a test prove the composer-resize correction routes through the virtualizer.
 const scrollToIndexCalls: Array<string | undefined> = []
+const scrollToIndexBehaviors: Array<ScrollBehavior | undefined> = []
 const scrollToIndexStartOffsets: number[] = []
 // Keys the fake virtualizer treats as OUTSIDE the mounted window: getVirtualItems() omits them (so
 // the restore's fraction-refine finds no measured size and must mount the row first via
@@ -82,8 +83,12 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
     },
-    scrollToIndex: (_index: number, opts?: { align?: string }) => {
+    scrollToIndex: (
+      _index: number,
+      opts?: { align?: string; behavior?: ScrollBehavior },
+    ) => {
       scrollToIndexCalls.push(opts?.align)
+      scrollToIndexBehaviors.push(opts?.behavior)
       // Mounting a windowed-out row: scrollToIndex windows it into the measured set.
       const mountedKey = args.items[_index]?.key
       if (mountedKey) windowedOutKeys.delete(mountedKey)
@@ -137,7 +142,7 @@ function renderList(props: Partial<MessageListProps<BaseMessage>> = {}) {
   )
 }
 
-describe('MessageList — virtualized scroll integration (ensureMessageMounted)', () => {
+describe('MessageList — virtualized scroll integration', () => {
   beforeEach(() => {
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     // jsdom doesn't implement Element.scrollTo; the scroll-to-bottom path calls it.
@@ -147,15 +152,18 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     getOffsetForMessageId.mockClear()
     getOffsetForMessageId.mockImplementation(() => 0)
     scrollToIndexCalls.length = 0
+    scrollToIndexBehaviors.length = 0
     scrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
     windowedOutKeys.clear()
   })
   afterEach(() => localStorage.clear())
 
-  it('brings the unread-marker row into the window on conversation entry', () => {
+  it('positions the unread-marker row through the controller on conversation entry', async () => {
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
     renderList({ firstNewMessageId: 'msg-40' })
-    expect(ensureMessageMounted).toHaveBeenCalledWith('msg-40')
+    await waitFor(() => expect(scrollToIndexCalls).toContain('start'))
+    expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 
   it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', () => {
@@ -173,12 +181,14 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
   })
 
-  it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', () => {
+  it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', async () => {
     // FAB previously used ensureMessageMounted + querySelector + offsetTop (which fails when the
-    // marker is windowed out). New path: getIndexForMessageId + scrollToIndex('start', smooth),
-    // no DOM dependency. align:'start' clamps to the bottom when the marker is the last message,
-    // keeping a just-arrived new message fully visible (do not shift up by vh/3 — see the marker
-    // loop). ensureMessageMounted is no longer called for the FAB.
+    // marker is windowed out). New path: getIndexForMessageId + controller-owned
+    // scrollToIndex('start'), with no DOM dependency. The measured convergence loop deliberately
+    // uses immediate writes: repeatedly restarting native smooth scrolling would make immediate
+    // scrollTop samples lie about convergence. align:'start' clamps to the bottom when the marker
+    // is the last message, keeping a just-arrived new message fully visible. ensureMessageMounted
+    // is no longer called for the FAB.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
     const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
@@ -186,9 +196,11 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
 
     scrollToIndexCalls.length = 0
+    scrollToIndexBehaviors.length = 0
     ensureMessageMounted.mockClear()
     fireEvent.click(getByLabelText('chat.scrollToBottom'))
-    expect(scrollToIndexCalls).toContain('start')
+    await waitFor(() => expect(scrollToIndexCalls).toContain('start'))
+    expect(scrollToIndexBehaviors).not.toContain('smooth')
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 

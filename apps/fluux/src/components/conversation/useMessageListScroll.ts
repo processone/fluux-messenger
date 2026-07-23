@@ -3,10 +3,10 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Saved-position policy/retry ownership lives in PositioningController; browser writes stay
- *    imperative in its hook executor while the remaining mechanisms migrate incrementally
+ * 2. Saved-position and unread-marker policy/retry ownership lives in PositioningController;
+ *    browser writes stay imperative in hook executors while the remaining mechanisms migrate
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
- * 4. The controller owns generations and saved-position arbitration, not React state or geometry
+ * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
  * BEHAVIORS:
  * - Initial load: scroll to bottom
@@ -32,8 +32,10 @@ import { notifyUserInput } from '@/utils/renderLoopDetector'
 import {
   PositioningController,
   type PositionRequestDraft,
+  type PositionExecutionLease,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
+  type UnreadMarkerExecutor,
 } from './positioningController'
 import {
   deriveAtLiveEdge,
@@ -48,6 +50,7 @@ import {
   type DesiredPosition,
   type ReachabilityFacts,
   type SavedPositionRequest,
+  type UnreadMarkerRequest,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 
@@ -111,18 +114,6 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
-// Frames to keep re-resolving the unread-marker offset after a conversation switch. On entry the
-// conversation's messages were evicted on leave and rehydrate from cache asynchronously, then the
-// rows measure over several frames, so the marker offset is unresolved at first and sharpens as it
-// settles. ~2s comfortably covers a cache page load + measurement; the loop stops early once the
-// target is stable, and bails immediately on a user scroll or a conversation switch.
-const MARKER_REASSERT_FRAMES = 120
-// Consecutive frames the marker target must hold steady before the re-assert loop stops early.
-const MARKER_STABLE_FRAMES = 8
-// Sub-row tolerance for the marker re-assert: only re-scroll when the resolved target moves more
-// than this (rows measuring jitter the offset by a few px every frame; a 1px threshold would
-// re-scroll — and re-render — every frame and never stabilize).
-const MARKER_DRIFT_PX = 16
 // Target jumps (reply/search/activity) need the same measurement-aware behavior as unread-marker
 // entry, but for a shorter window: the target row is explicitly requested and should settle fast.
 const TARGET_REASSERT_FRAMES = 30
@@ -478,9 +469,10 @@ export function useMessageListScroll({
   // React StrictMode replays layout-effect cleanup/setup without unmounting the DOM. Defer controller
   // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
   const unmountDeactivationTokenRef = useRef<object | null>(null)
-  // Generation-aware semantic controller. Saved-position restoration is its first authoritative
-  // slice; the other positioning mechanisms still report shadow decisions. Pixel writes remain in
-  // the hook executor, while the module-private generation allocator survives StrictMode remounts.
+  // Generation-aware semantic controller. Saved-position restoration and unread-marker
+  // reconciliation are authoritative; the remaining positioning mechanisms still report shadow
+  // decisions. Pixel writes stay in hook executors, while the module-private generation allocator
+  // survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -1245,155 +1237,6 @@ export function useMessageListScroll({
     return true
   }, [isAtBottomRef, rememberCurrentScrollSnapshot])
 
-  // Scroll to (and keep re-asserting toward) the first-new-message marker, re-assert-loop style —
-  // shared by the conversation-switch entry effect AND the jump-to-last-read pill's click handler,
-  // so there is exactly one marker-positioning routine (see the loop body comment at its original
-  // call site for the full rationale: unmounted rows resolve via getOffsetForMessageId/scrollToIndex,
-  // re-applied each frame as rows measure over several frames after cache rehydrate).
-  const runMarkerReassertLoop = useCallback((markerId: string, markerConvId: string) => {
-    const startedAt = Date.now()
-    // Single-flight (shared with pin-bottom / prepend): the marker positioning loop owns
-    // scrollTop while it runs, so it supersedes any in-flight re-assert and registers itself.
-    supersedeReassertLoopRef.current()
-    const markerLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('marker', performance.now())
-    const finishMarker = () => {
-      markerLoop.end()
-      reassertLoopRef.current = null
-    }
-    // Register the ref BEFORE scheduling the frame, then patch its `raf` id in place — rather than
-    // reassigning reassertLoopRef.current AFTER requestAnimationFrame returns. A mocked/synchronous
-    // rAF (test harnesses) invokes the callback inline, so an outer `ref.current = { raf:
-    // requestAnimationFrame(cb), ... }` evaluates the RHS (running the callback, possibly to
-    // completion — including a `finishMarker()` that nulls the ref) and THEN clobbers that null back
-    // to a stale non-null entry. Pre-registering means a same-tick finish's null assignment is never
-    // overwritten; the `raf` id patch only mutates the (by-then-detached) local object when that
-    // happens.
-    const registerMarkerLoop = (cb: () => void) => {
-      const entry: { raf: number; handle: typeof markerLoop } = { raf: 0, handle: markerLoop }
-      reassertLoopRef.current = entry
-      entry.raf = requestAnimationFrame(cb)
-    }
-    let framesLeft = MARKER_REASSERT_FRAMES
-    let stableFrames = 0
-    let landedTarget = -1
-    let resolved = false
-    let followLiveRecorded = false
-    const recordMarkerLiveEdge = (
-      reason:
-        | 'unread-marker-unavailable'
-        | 'unread-marker-resolved-at-live-edge',
-    ) => {
-      if (followLiveRecorded) return
-      followLiveRecorded = true
-      positioningControllerRef.current?.observeRequest({
-        event:
-          reason === 'unread-marker-unavailable'
-            ? 'marker-fallback'
-            : 'marker-resolved-at-live-edge',
-        conversationId: markerConvId,
-        draft: {
-          source: { kind: 'fallback', reason },
-          desired: { kind: 'live-edge', follow: true },
-        },
-        reachability: shadowReachabilityRef.current({
-          kind: 'live-edge',
-          follow: true,
-        }),
-        actual: {
-          desired: { kind: 'live-edge', follow: true },
-          phase: 'positioning',
-        },
-      })
-    }
-    const stepToMarker = () => {
-      if (framesLeft-- <= 0) {
-        // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
-        // view at the top; fall back to the bottom. End first so the handoff to reassertBottom
-        // (which begins a pin-bottom loop) is not miscounted as an overlap.
-        finishMarker()
-        if (!resolved) {
-          recordMarkerLiveEdge('unread-marker-unavailable')
-          reassertBottom('marker-fallback')
-        }
-        return
-      }
-      const s = scrollerRef.current
-      if (!s) { finishMarker(); return }
-      // Conversation switched away while this loop was still running → stop (a stale loop must
-      // never scroll the new conversation). prevConversationRef is set synchronously below.
-      if (prevConversationRef.current !== markerConvId) { finishMarker(); return }
-      // User took over (FAB/wheel) or scrolled away from where we landed → stop fighting them.
-      if (userScrollIntentAtRef.current > startedAt) { finishMarker(); return }
-      if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) { finishMarker(); return }
-
-      const viewportHeight = s.clientHeight
-      const v = latestRef.current.virtualizer
-      const markerIndex = v ? v.getIndexForMessageId(markerId) : null
-      let offset: number | null = null
-      if (v) {
-        offset = v.getOffsetForMessageId(markerId)
-      } else {
-        const el = s.querySelector(`[data-message-id="${CSS.escape(markerId)}"]`) as HTMLElement | null
-        if (el) offset = el.offsetTop
-      }
-
-      let wrote = false
-      if (offset != null && (!v || markerIndex != null)) {
-        resolved = true
-        // Marker sits in the top third of the content (vh/3-from-top would be above the content
-        // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
-        // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
-        // regression that consumed the older-message backlog on entry. This is the all/mostly-
-        // unread case; fall back to the bottom (the prior behavior) rather than paginating.
-        if (offset <= viewportHeight / 3) {
-          isAtBottomRef.current = true
-          finishMarker()
-          recordMarkerLiveEdge('unread-marker-unavailable')
-          reassertBottom('marker-fallback')
-          return
-        }
-        // Position the marker row via the virtualizer's measurement-aware scrollToIndex.
-        // A raw scrollToOffset to the ESTIMATED offset lands SHORT and never windows the marker
-        // row in, so its height never measures and the offset estimate never sharpens — the loop
-        // then sees a "stable" (wrong) target and stops with the marker stranded below the fold
-        // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
-        // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
-        // puts the divider near the top to read forward, and clamps to the bottom when the marker
-        // is the last message (so a single new message lands at the bottom, fully visible — do NOT
-        // shift up by viewportHeight/3 here: getOffsetForMessageId clamps to the scrollable range
-        // for a near-bottom marker, so the shift would scroll past the new message and hide it).
-        if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
-        else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
-
-        const st = s.scrollTop
-        // Converged when the landing position stops moving (rows have finished measuring).
-        if (landedTarget >= 0 && Math.abs(st - landedTarget) <= MARKER_DRIFT_PX) {
-          if (++stableFrames >= MARKER_STABLE_FRAMES) {
-            finishMarker()
-            return
-          }
-        } else {
-          wrote = true
-          stableFrames = 0
-          const distFromBottom = s.scrollHeight - st - viewportHeight
-          isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-          if (isAtBottomRef.current && !followLiveRecorded) {
-            recordMarkerLiveEdge('unread-marker-resolved-at-live-edge')
-          }
-          debugLog('CONVERSATION SWITCH: scrolling to new message marker', {
-            firstNewMessageId: markerId, markerIndex, offset, scrollTop: st,
-            distFromBottom, isAtBottom: isAtBottomRef.current,
-          })
-        }
-        landedTarget = st
-      }
-      const warning = markerLoop.frame(performance.now(), wrote)
-      if (warning) console.warn(warning)
-      registerMarkerLoop(stepToMarker)
-    }
-    registerMarkerLoop(stepToMarker)
-  }, [isAtBottomRef, reassertBottom])
-
   const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
     reachability: (desired, loadAround) => {
       const scroller = scrollerRef.current
@@ -1506,6 +1349,131 @@ export function useMessageListScroll({
     windowAtLiveEdge,
   ])
 
+  const createUnreadMarkerExecutor = useCallback((): UnreadMarkerExecutor => ({
+    reachability: (desired) => deriveReachabilityForDesired({
+      desired,
+      hasRows: messageCount > 0 && firstMessageId !== undefined,
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      virtualizer: virtualizerRef.current,
+      scroller: scrollerRef.current,
+      loadAround: 'unavailable',
+      canRecenter: false,
+    }),
+    beginLoop: (lease: PositionExecutionLease) => {
+      if (!lease.isCurrent()) return null
+      supersedeReassertLoopRef.current()
+      const monitor = (reassertMonitorRef.current ??=
+        createReassertLoopMonitor()).begin('marker', performance.now())
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        monitor.end()
+        const activeLoop = reassertLoopRef.current
+        if (activeLoop?.handle === monitor) {
+          cancelAnimationFrame(activeLoop.raf)
+          reassertLoopRef.current = null
+        }
+      }
+      return {
+        schedule: (callback) => {
+          if (finished || !lease.isCurrent()) return
+          // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop
+          // that completed from inside the callback.
+          const entry = { raf: 0, handle: monitor }
+          reassertLoopRef.current = entry
+          entry.raf = requestAnimationFrame(callback)
+        },
+        recordFrame: (wrote) => {
+          const warning = monitor.frame(performance.now(), wrote)
+          if (warning) console.warn(warning)
+        },
+        finish,
+      }
+    },
+    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
+    positionFrame: (
+      request: UnreadMarkerRequest,
+      lease: PositionExecutionLease,
+    ) => {
+      if (!lease.isCurrent()) return { kind: 'unavailable' }
+      const scroller = scrollerRef.current
+      if (!scroller) return { kind: 'unavailable' }
+
+      // Entry waits until the passive latest-value handoff has installed the new conversation's
+      // virtualizer. Reading the synchronous render ref here can act on a transient pre-paint
+      // window and advance viewport-derived read state before the new list is settled.
+      const latest = latestRef.current
+      if (latest.conversationId !== request.conversationId) {
+        return { kind: 'waiting' }
+      }
+      const virtualizer = latest.virtualizer
+      const markerId = request.desired.messageId
+      const markerIndex = virtualizer
+        ? virtualizer.getIndexForMessageId(markerId)
+        : null
+      let offset: number | null = null
+      if (virtualizer) {
+        if (markerIndex === null) return { kind: 'waiting' }
+        offset = virtualizer.getOffsetForMessageId(markerId)
+      } else {
+        const element = scroller.querySelector(
+          `[data-message-id="${CSS.escape(markerId)}"]`,
+        ) as HTMLElement | null
+        if (element) offset = element.offsetTop
+      }
+      if (offset === null) return { kind: 'waiting' }
+
+      // Avoid a target at scrollTop=0: handleScroll treats that as an explicit request for older
+      // history. For all/mostly-unread windows, preserve the established live-edge fallback.
+      if (offset <= scroller.clientHeight / 3) {
+        return { kind: 'unavailable' }
+      }
+      if (!lease.isCurrent()) return { kind: 'unavailable' }
+
+      if (virtualizer && markerIndex !== null) {
+        virtualizer.scrollToIndex(markerIndex, { align: 'start' })
+      } else {
+        const top =
+          request.desired.align === 'top-third'
+            ? Math.max(0, offset - scroller.clientHeight / 3)
+            : offset
+        scroller.scrollTop = top
+      }
+
+      const scrollTop = scroller.scrollTop
+      const distanceFromBottom =
+        scroller.scrollHeight - scrollTop - scroller.clientHeight
+      const atLiveEdge = distanceFromBottom < AT_BOTTOM_THRESHOLD
+      isAtBottomRef.current = atLiveEdge
+      debugLog('UNREAD MARKER: controller positioned frame', {
+        conversationId: request.conversationId,
+        generation: request.generation,
+        markerId,
+        markerIndex,
+        offset,
+        scrollTop,
+        distanceFromBottom,
+        atLiveEdge,
+      })
+      return { kind: 'positioned', scrollTop, atLiveEdge }
+    },
+    applyLiveEdge: (reason, lease) => {
+      if (!lease.isCurrent()) return false
+      isAtBottomRef.current = true
+      if (reason === 'unread-marker-unavailable') {
+        reassertBottom('marker-fallback')
+      }
+      return true
+    },
+  }), [
+    firstMessageId,
+    isAtBottomRef,
+    messageCount,
+    reassertBottom,
+    windowAtLiveEdge,
+  ])
+
   // ==========================================================================
   // SCROLL ACTIONS
   // ==========================================================================
@@ -1558,56 +1526,33 @@ export function useMessageListScroll({
       (virt
         ? markerOffsetPx === null || markerOffsetPx > viewportBottom
         : markerOffsetPx !== null && markerOffsetPx > viewportBottom)
-    const markerDesired =
-      firstNewMessageId && markerNeedsVisit
-        ? {
-            kind: 'message' as const,
-            messageId: firstNewMessageId,
-            align: virt ? 'start' as const : 'top-third' as const,
-          }
-        : null
-    runScrollShadowSafely({
-      event: 'fab',
-      conversationId,
-      fallback: undefined,
-      observe: () => {
-        const navigationFacts = deriveLiveEdgeNavigationFacts({
-          firstUnreadMessageId: markerResolvable ? firstNewMessageId : undefined,
-          markerOffsetPx,
-          geometry: readScrollGeometry(scroller),
-          virtualized: !!virt,
-        })
-        positioningControllerRef.current?.observeLiveEdgeNavigation({
-          event: 'fab',
-          conversationId,
-          navigationFacts,
-          reachability: (desired) => shadowReachabilityRef.current(desired),
-          actual: {
-            desired: markerDesired ?? { kind: 'live-edge', follow: true },
-            phase: 'positioning',
-          },
-        })
-      },
+    const navigationFacts = deriveLiveEdgeNavigationFacts({
+      firstUnreadMessageId: markerResolvable ? firstNewMessageId : undefined,
+      markerOffsetPx,
+      geometry: readScrollGeometry(scroller),
+      virtualized: !!virt,
     })
-
-    if (markerDesired && firstNewMessageId) {
-      if (virt) {
-        const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
-        if (markerIdx !== null) {
-          virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
-          return
-        }
-      } else {
-        const messageElement = scroller.querySelector(
-          `[data-message-id="${CSS.escape(firstNewMessageId)}"]`,
-        )
-        if (messageElement) {
-          const elementTop = (messageElement as HTMLElement).offsetTop
-          scroller.scrollTo({ top: Math.max(0, elementTop - scroller.clientHeight / 3), behavior: 'smooth' })
-          return
-        }
+    if (markerNeedsVisit) {
+      const request = positioningControllerRef.current?.beginUnreadMarkerNavigation({
+        conversationId,
+        navigationFacts,
+        executor: createUnreadMarkerExecutor(),
+      })
+      if (request) {
+        return
       }
     }
+
+    positioningControllerRef.current?.observeLiveEdgeNavigation({
+      event: 'fab-live-edge',
+      conversationId,
+      navigationFacts,
+      reachability: (desired) => shadowReachabilityRef.current(desired),
+      actual: {
+        desired: { kind: 'live-edge', follow: true },
+        phase: 'positioning',
+      },
+    })
 
     const virtFab = latestRef.current.virtualizer
     if (virtFab && virtFab.itemCount > 0) {
@@ -1619,6 +1564,7 @@ export function useMessageListScroll({
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
   }, [
     conversationId,
+    createUnreadMarkerExecutor,
     firstNewMessageId,
     reassertBottom,
     rememberBottomIntent,
@@ -2383,12 +2329,13 @@ export function useMessageListScroll({
           savedAnchor,
           savedOffsetPx: savedPos,
           firstUnreadMessageId: firstNewMessageId,
+          unreadMarkerAlign: virtualizerRef.current ? 'start' : 'top-third',
         }),
       })
       // Observation validators must never strand production positioning. If a transient saved
       // anchor is malformed (for example a zero-height row produced NaN), retain a finite legacy
       // offset when possible and otherwise let the controller choose its live-edge fallback.
-      const savedExecutionFacts = entryFacts ?? runScrollShadowSafely({
+      const entryExecutionFacts = entryFacts ?? runScrollShadowSafely({
         event: 'entry-fallback-facts',
         conversationId,
         fallback: null,
@@ -2397,15 +2344,16 @@ export function useMessageListScroll({
           savedAnchor: null,
           savedOffsetPx: savedPos !== null && Number.isFinite(savedPos) ? savedPos : null,
           firstUnreadMessageId: firstNewMessageId,
+          unreadMarkerAlign: virtualizerRef.current ? 'start' : 'top-third',
         }),
       })
 
       if (action === 'restore-position') {
         isAtBottomRef.current = false
-        const request = savedExecutionFacts
+        const request = entryExecutionFacts
           ? positioningControllerRef.current?.beginSavedPositionEntry({
               conversationId,
-              entryFacts: savedExecutionFacts,
+              entryFacts: entryExecutionFacts,
               executor: createSavedPositionExecutor(),
             })
           : null
@@ -2424,49 +2372,19 @@ export function useMessageListScroll({
         debugLog('CONVERSATION SWITCH: has unread, will scroll to marker', { firstNewMessageId })
         isAtBottomRef.current = false
 
-        const markerId = firstNewMessageId
-        const markerConvId = conversationId
-        // When virtualized, bring the (possibly unmounted) marker row into the window so the
-        // non-virtualized fallback path can find it too; the virtualized path below does not need
-        // it (getOffsetForMessageId resolves unmounted rows).
-        void latestRef.current.virtualizer?.ensureMessageMounted(markerId)
-        const markerDesired = {
-          kind: 'message' as const,
-          messageId: firstNewMessageId,
-          align: 'start' as const,
-        }
-        const markerReachability =
-          shadowReachabilityRef.current(markerDesired)
-        if (entryFacts) {
-          positioningControllerRef.current?.observeEntry({
-            event: 'entry-unread',
+        const request = entryExecutionFacts
+          ? positioningControllerRef.current?.beginUnreadMarkerEntry({
             conversationId,
-            entryFacts,
-            reachability: () => markerReachability,
-            actual: {
-              desired: markerDesired,
-              phase:
-                markerReachability.kind === 'available' &&
-                markerReachability.placement === 'use-unavailable-policy'
-                  ? 'fallback'
-                  : markerReachability.kind === 'available'
-                    ? 'positioning'
-                    : 'waiting',
-            },
+            entryFacts: entryExecutionFacts,
+            executor: createUnreadMarkerExecutor(),
           })
+          : null
+        if (!request) {
+          // Keep instrumentation/controller failures from stranding entry above an unresolved
+          // divider. Normal marker unavailability is promoted by the controller itself.
+          isAtBottomRef.current = true
+          reassertBottom('marker-fallback')
         }
-        // Re-assert the marker position across frames. On entry the conversation's messages were
-        // evicted on leave and rehydrate from cache ASYNCHRONOUSLY, and rows then measure over
-        // several frames, so the marker offset is unresolved at first and sharpens as it settles.
-        // The old code read the position from `querySelector(marker).offsetTop` — null for a row
-        // windowed OUT and 0 with no layout — and used a raw `scrollTop = scrollHeight` fallback
-        // that the virtualizer reverts to offset 0, parking the view at the TOP with the marker
-        // stranded below the fold. Resolving via getOffsetForMessageId (works for unmounted rows)
-        // and re-applying each frame lands at the marker once the region mounts. Mirrors
-        // pinVirtualizedBottom's re-assert loop; bails on user scroll or a conversation switch.
-        // Shared with the jump-to-last-read pill's click handler — see runMarkerReassertLoop's own
-        // comment.
-        runMarkerReassertLoop(markerId, markerConvId)
       } else if (targetMessageId) {
         // Has a target message to scroll to — skip scroll-to-bottom.
         // The targetMessageId effect will handle scrolling.
@@ -2541,7 +2459,7 @@ export function useMessageListScroll({
     prevLastMessageIdRef.current = lastMessageId
     previousReadPositionRef.current = readPointerId
 
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, readPointerId, isAtBottomRef, staticMode, createSavedPositionExecutor, pinVirtualizedBottom, reassertBottom, runMarkerReassertLoop])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, readPointerId, isAtBottomRef, staticMode, createSavedPositionExecutor, createUnreadMarkerExecutor, pinVirtualizedBottom, reassertBottom])
 
   // Zero-unread twin of the divider-clear settle below. The old local position may be restored
   // before MAM resolves the other device's pointer to the newest downloaded row; with no divider,
@@ -3682,40 +3600,22 @@ export function useMessageListScroll({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [scrollToBottom, scrollToTop])
 
-  // Public jump-to-last-read entry point: re-run the SAME re-assert loop the conversation-switch
-  // entry effect uses, targeting the CURRENT marker/conversation. No-op without a live marker.
+  // Public jump-to-last-read entry point: issue the same controller-owned unread request used by
+  // conversation entry. No-op without a live marker.
   const scrollToMarker = useCallback(() => {
     if (!firstNewMessageId) return
     userScrollIntentAtRef.current = Date.now()
     userHasScrolledSinceEntryRef.current = true
-    const desired = {
-      kind: 'message' as const,
-      messageId: firstNewMessageId,
-      align: virtualizerRef.current ? 'start' as const : 'top-third' as const,
-    }
-    const reachability = shadowReachabilityRef.current(desired)
-    positioningControllerRef.current?.observeRequest({
-      event: 'jump-to-last-read',
+    positioningControllerRef.current?.beginUnreadMarkerNavigation({
       conversationId,
-      draft: {
-        source: { kind: 'user-navigation', reason: 'unread-marker' },
-        desired,
-        onUnavailable: { kind: 'live-edge' },
+      navigationFacts: {
+        firstUnreadMessageId: firstNewMessageId,
+        unreadMarkerNeedsVisit: true,
+        unreadMarkerAlign: virtualizerRef.current ? 'start' : 'top-third',
       },
-      reachability,
-      actual: {
-        desired,
-        phase:
-          reachability.kind === 'available' &&
-          reachability.placement === 'use-unavailable-policy'
-            ? 'fallback'
-            : reachability.kind === 'available'
-              ? 'positioning'
-              : 'waiting',
-      },
+      executor: createUnreadMarkerExecutor(),
     })
-    runMarkerReassertLoop(firstNewMessageId, conversationId)
-  }, [firstNewMessageId, conversationId, runMarkerReassertLoop])
+  }, [firstNewMessageId, conversationId, createUnreadMarkerExecutor])
 
   // ==========================================================================
   // RETURN
