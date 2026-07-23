@@ -1282,3 +1282,13 @@ export function _resetDBForTesting(): void {
   dbPromise = null
   dbNameForPromise = null
 }
+
+/**
+ * Expose {@link contentProjection} so tests can assert its contract directly
+ * (which fields it omits/includes) rather than only exercising it indirectly
+ * through {@link mergeRoomRows}. For testing only.
+ * @internal
+ */
+export function _contentProjectionForTesting(m: StoredRoomMessage): unknown {
+  return contentProjection(m)
+}

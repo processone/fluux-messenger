@@ -8,7 +8,7 @@ import { roomIdentityKeys, roomCanonicalKey } from './roomMessageIdentity'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
-import { mergeRoomRows } from './messageCache'
+import { mergeRoomRows, _contentProjectionForTesting } from './messageCache'
 import type { StoredRoomMessage } from './messageCache'
 
 /**
@@ -1079,5 +1079,46 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     const c = rrow({ body: 'edited', isEdited: true, id: 'c1', timestamp: 4500, reactions: { a: ['d'] } })
     const rs = [mergeRoomRows(mergeRoomRows(a,b),c), mergeRoomRows(a,mergeRoomRows(b,c)), mergeRoomRows(mergeRoomRows(b,a),c), mergeRoomRows(mergeRoomRows(c,b),a)]
     for (const r of rs) expect(r).toEqual(rs[0])
+  })
+
+  // Direct contract check on the tiebreak's serialized input. The associativity test above
+  // can't discriminate the projection from a whole-row serialization — its fixture's
+  // isEdited:true row dominates by rank at every grouping, so the tiebreak is never reached.
+  // This asserts the CONTRACT contentProjection relies on directly: every field mergeRoomRows
+  // computes separately must be absent (those fields change value during a merge, which is
+  // exactly what would break associativity if they leaked into the tiebreak serialization),
+  // and representative immutable content fields must remain present.
+  it('contentProjection omits every separately-merged field and keeps immutable content', () => {
+    const row = rrow({
+      stanzaId: 'S1',
+      originId: 'O1',
+      timestamp: 1234,
+      reactions: { thumbsup: ['alice'] },
+      isRetracted: true,
+      retractedAt: 5678,
+      isModerated: true,
+      moderatedBy: 'mod-nick',
+      moderationReason: 'spam',
+      pollClosed: { by: 'alice' } as never,
+      pollClosedAt: 9999,
+      deliveryError: { text: 'failed' } as never,
+      body: 'hello world',
+      id: 'client-1',
+      attachment: { url: 'a://file' } as never,
+    })
+    const proj = _contentProjectionForTesting(row) as Record<string, unknown>
+    const projectedKeys = Object.keys(proj)
+
+    for (const field of [
+      'stanzaId', 'originId', 'timestamp', 'reactions', 'identityKeys', 'ids',
+      'isRetracted', 'retractedAt', 'isModerated', 'moderatedBy', 'moderationReason',
+      'pollClosed', 'pollClosedAt', 'deliveryError', 'cacheKey',
+    ]) {
+      expect(projectedKeys).not.toContain(field)
+    }
+
+    for (const field of ['body', 'id', 'attachment']) {
+      expect(projectedKeys).toContain(field)
+    }
   })
 })
