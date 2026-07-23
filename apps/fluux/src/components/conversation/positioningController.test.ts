@@ -13,6 +13,7 @@ import {
 import {
   getScrollShadowSnapshot,
   resetScrollShadowDiagnostics,
+  runScrollShadowSafely,
 } from './scrollPositionShadow'
 import {
   messageFraction,
@@ -54,6 +55,41 @@ beforeEach(() => {
 })
 
 describe('positioning controller shadow mode', () => {
+  it('swallows and counts invalid shadow facts without blocking the live path', () => {
+    const valid = runScrollShadowSafely({
+      event: 'valid-entry-facts',
+      conversationId,
+      fallback: null,
+      observe: () => liveEntryFacts(),
+    })
+    expect(valid).not.toBeNull()
+    expect(getScrollShadowSnapshot().instrumentationErrorCount).toBe(0)
+
+    const invalid = runScrollShadowSafely({
+      event: 'invalid-entry-facts',
+      conversationId,
+      fallback: null,
+      observe: () => deriveEntryPositionFacts({
+        syncedLiveEdge: false,
+        savedAnchor: {
+          messageId: 'zero-height-row',
+          fraction: Number.NaN,
+        },
+        savedOffsetPx: null,
+      }),
+    })
+
+    // Calling the strict fact adapter directly would throw and abort the entry effect.
+    expect(invalid).toBeNull()
+    expect(getScrollShadowSnapshot()).toMatchObject({
+      instrumentationErrorCount: 1,
+      instrumentationErrors: [{
+        event: 'invalid-entry-facts',
+        conversationId,
+      }],
+    })
+  })
+
   it('mints strictly increasing generations across controllers and conversation switches', () => {
     const firstController = new PositioningController()
     const first = observeLiveEntry(firstController)
@@ -175,7 +211,7 @@ describe('positioning controller shadow mode', () => {
       actual: { desired: liveEdge, phase: 'positioning' },
     })
 
-    // A saved-first implementation would select message-20 instead.
+    // A saved-first implementation would select the trace's msg-5 anchor instead.
     expect(request?.source).toEqual({ kind: 'entry', reason: 'synced-live-edge' })
     expect(request?.desired).toEqual(liveEdge)
     expect(getScrollShadowSnapshot().divergenceCount).toBe(0)
@@ -282,6 +318,21 @@ describe('positioning controller shadow mode', () => {
     expect(dropped).toBeNull()
     expect(accepted).not.toBeNull()
     expect(getScrollShadowSnapshot().divergenceCount).toBe(0)
+  })
+
+  it('rejects stale deactivation generations', () => {
+    const controller = new PositioningController()
+    const first = observeLiveEntry(controller, 'first-room@example.test')
+    const current = observeLiveEntry(controller, conversationId)
+
+    controller.deactivate('first-room@example.test', first!.generation)
+    expect(controller.snapshot().currentConversationId).toBe(conversationId)
+
+    controller.deactivate(conversationId, first!.generation)
+    expect(controller.snapshot().currentConversationId).toBe(conversationId)
+
+    controller.deactivate(conversationId, current!.generation)
+    expect(controller.snapshot().currentConversationId).toBeNull()
   })
 })
 
