@@ -47,8 +47,11 @@ export function useTauriFocusRestore(): void {
             // re-raise the top-level window, so it cannot loop the Windows
             // Focused(true) event that triggered us.
             await getCurrentWebview().setFocus()
-          } catch {
-            // Fallback: at least try JS-level focus.
+          } catch (error) {
+            // A missing Tauri capability makes this native focus call reject.
+            // Keep the fallback, but surface the failure so packaged-build
+            // regressions are diagnosable instead of silently looking fixed.
+            console.warn('[FocusRestore] Failed to focus native webview:', error)
             window.focus()
           }
         }
