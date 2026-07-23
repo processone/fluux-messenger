@@ -43,7 +43,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
           className={className ?? `flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target ${active ? on : idle}`}
         >
           <Icon className="size-4" />
-          <ChevronDown className={`size-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`size-3 transition-transform [transition-duration:var(--fluux-duration-fast)] [transition-timing-function:var(--fluux-ease-standard)] ${open ? 'rotate-180' : ''}`} />
         </button>
       </Tooltip>
 
@@ -52,7 +52,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
           ref={menu.menuRef}
           role="menu"
           style={{ left: menu.position.x, top: menu.position.y }}
-          className="fixed w-64 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg z-30 py-1"
+          className="header-submenu-in fixed w-64 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg z-30 py-1"
         >
           {group.items.map((item) => {
             const ItemIcon = item.icon

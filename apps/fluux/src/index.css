@@ -571,6 +571,25 @@
     box-shadow: var(--fluux-shadow-overlay);
   }
 
+  /* Let a submenu trigger's chevron finish turning before the panel unfolds.
+     clip-path preserves the panel's measured size, so anchored positioning does
+     not jump while the reveal runs. */
+  @keyframes header-submenu-in {
+    from {
+      opacity: 0;
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      opacity: 1;
+      clip-path: inset(0);
+    }
+  }
+
+  .header-submenu-in {
+    animation: header-submenu-in var(--fluux-duration-fast) var(--fluux-ease-emphasized)
+      var(--fluux-duration-fast) backwards;
+  }
+
   /* Frosted-glass panel surface (modals + command palette). Solid theme-derived
      fallback by default; frosted where the browser supports backdrop-filter +
      color-mix (~88% opaque, readability first); [data-transparency="reduced"]
@@ -820,6 +839,10 @@ html {
   scroll-behavior: auto !important;
 }
 
+[data-motion="reduced"] .header-submenu-in {
+  animation-delay: 0ms !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-motion="full"]),
   :root:not([data-motion="full"]) *,
@@ -829,6 +852,10 @@ html {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+
+  :root:not([data-motion="full"]) .header-submenu-in {
+    animation-delay: 0ms !important;
   }
 }
 
