@@ -89,4 +89,29 @@ describe('peerCertCache', () => {
     // Active + verified-inactive kept; only the newest unverified inactive (U3) survives the cap of 1.
     expect(out.map((c) => c.fingerprint)).toEqual(['ACT', 'V', 'U3'])
   })
+
+  it('drops ALL unverified inactive certs when cap is 0 (fails closed, not slice(-0))', () => {
+    const inactive = (fp: string, at: string) => cert(fp, { active: false, inactiveAt: at })
+    const certs = [
+      cert('ACT'),
+      inactive('V', '2026-01-01T00:00:00.000Z'), // verified — always kept
+      inactive('U1', '2026-02-01T00:00:00.000Z'),
+      inactive('U2', '2026-03-01T00:00:00.000Z'),
+    ]
+    const out = capUnverifiedInactive(certs, (fp) => fp === 'V', 0)
+    // Active + verified-inactive kept; every unverified inactive cert is dropped.
+    expect(out.map((c) => c.fingerprint)).toEqual(['ACT', 'V'])
+  })
+
+  it('discards an array-shaped entry missing `active` while still migrating a legacy entry missing `active`', () => {
+    const json = JSON.stringify([
+      // Array-shaped (new format): missing `active` is tampered data — discard the whole cert.
+      ['tampered@x', [{ fingerprint: 'A', publicArmored: 'ARMOR:A', keychainBacked: false }]],
+      // Legacy single-KeyBundle shape (pre-Stage-1): missing `active` is expected — migrate to active:true.
+      ['legacy@x', { fingerprint: 'B', publicArmored: 'ARMOR:B', keychainBacked: false }],
+    ])
+    const out = deserializePeerCache(json)
+    expect(out.has('tampered@x')).toBe(false)
+    expect(out.get('legacy@x')).toEqual([cert('B')])
+  })
 })
