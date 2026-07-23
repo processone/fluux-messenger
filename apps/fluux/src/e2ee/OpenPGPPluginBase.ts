@@ -94,9 +94,9 @@ import {
   fingerprintsEqual,
   normalizeFingerprint,
   toXep0373Fingerprint,
-  pubkeyMetadataFingerprintAttrs,
 } from './fingerprintCompare'
 import { accountUserId } from './openpgpUserId'
+import { mergePublicKeysList, OX_NAMESPACE as OX_WIRE_NAMESPACE } from './oxPublicKeysList'
 import { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 import {
   clearKeyChangeAlert,
@@ -133,7 +133,8 @@ import { isSecretKeyUnavailableError } from './keyUnavailable'
 // XEP-0373 constants
 // ---------------------------------------------------------------------------
 
-const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
+// Single source: `oxPublicKeysList` owns the OX wire format constants.
+const OX_NAMESPACE = OX_WIRE_NAMESPACE
 const PUBSUB_PUBLISH_OPTIONS_FEATURE = 'http://jabber.org/protocol/pubsub#publish-options'
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
@@ -946,7 +947,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     try {
       await this.publishOwnPublicKeyData(bundle)
-      await this.publishOwnPublicKeyMetadata(bundle)
+      // The retired identity's fingerprints must leave the list — we just
+      // retracted their data nodes and forgot their secret material.
+      await this.publishOwnPublicKeyMetadata(bundle, publishedFingerprints)
     } catch (err) {
       ctx.logger.warn(
         `${this.pluginName()}: retire publish failed: ${formatError(err)}`,
@@ -1353,7 +1356,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     try {
       await this.publishOwnPublicKeyData(bundle)
-      await this.publishOwnPublicKeyMetadata(bundle)
+      // The key we just replaced is no longer ours to decrypt with, so it must
+      // not stay advertised — but any SIBLING device's entry has to survive.
+      await this.publishOwnPublicKeyMetadata(
+        bundle,
+        previousFingerprint ? [previousFingerprint] : [],
+      )
       if (previousFingerprint) {
         await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
       }
@@ -1633,24 +1641,42 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     )
   }
 
-  private async publishOwnPublicKeyMetadata(bundle: KeyBundle): Promise<void> {
-    const payload: XMLElementData = {
-      name: 'public-keys-list',
-      attrs: { xmlns: OX_NAMESPACE },
-      children: [
-        {
-          name: 'pubkey-metadata',
-          attrs: {
-            // XEP-0373 §4.1: fingerprint string is upper-case hex. Emit only
-            // the version-appropriate attribute (v4 = 40 hex, v6 = 64 hex) so
-            // we never advertise a malformed v6 fingerprint for a v4 key.
-            ...pubkeyMetadataFingerprintAttrs(bundle.fingerprint),
-            date: new Date().toISOString(),
-          },
-          children: [],
-        },
-      ],
+  /**
+   * Advertise our key on `urn:xmpp:openpgp:0:public-keys`, MERGING into
+   * whatever is already there.
+   *
+   * XEP-0373 §4.2 makes this one item the account's whole key list, shared by
+   * every client. PubSub only offers a whole-item write, so we read first and
+   * carry foreign entries over — replacing the item would delete our sibling
+   * devices' keys, and peers that track the list (Gajim) would then stop
+   * encrypting to them (issue #1059).
+   *
+   * @param drop fingerprints to retire instead of carrying over — the identity
+   *             this publish replaces (restore / import / retire).
+   */
+  private async publishOwnPublicKeyMetadata(
+    bundle: KeyBundle,
+    drop: readonly string[] = [],
+  ): Promise<void> {
+    const ctx = this.requireCtx()
+    let existing: PEPItem[] = []
+    try {
+      existing = await ctx.xmpp.queryPEP(ctx.account.jid, PUBLIC_KEYS_METADATA_NODE, 1)
+    } catch (err) {
+      // Read failed (node absent on first publish, or a transient error).
+      // Publishing our own entry alone is still strictly better than not
+      // advertising at all — a sibling's next publish re-adds its entry.
+      ctx.logger.debug(
+        `${this.pluginName()}: could not read the published key list before merge: ${formatError(err)}`,
+      )
     }
+    const payload = mergePublicKeysList({
+      existing,
+      // XEP-0373 §4.1: fingerprint string is upper-case hex, emitted under the
+      // version-appropriate attribute (v4 = 40 hex, v6 = 64 hex).
+      own: { fingerprint: bundle.fingerprint, date: new Date().toISOString() },
+      drop,
+    })
     await this.publishWithPreconditionHeal(
       PUBLIC_KEYS_METADATA_NODE,
       { id: CURRENT_ITEM_ID, payload },
