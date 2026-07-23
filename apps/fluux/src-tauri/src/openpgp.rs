@@ -663,6 +663,13 @@ pub struct CertValidation {
     pub encryption_subkey_count: u32,
     /// Raw User ID strings from the certificate (e.g. `"xmpp:user@domain"`).
     pub user_ids: Vec<String>,
+    /// Upper-case hex fingerprints of every subkey, independent of usage flags,
+    /// policy, or expiry. Fingerprints identify the key material itself, so
+    /// stripping an expiration or re-signing a binding signature leaves them
+    /// unchanged while a rotation adds a new one. The own-key consistency
+    /// check compares these instead of raw bytes to tell "same key, different
+    /// bytes" apart from "a different key was published".
+    pub subkey_fingerprints: Vec<String>,
 }
 
 /// Validate a PGP public key and return its structural metrics.
@@ -701,10 +708,19 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
         .map(|ua| String::from_utf8_lossy(ua.userid().value()).into_owned())
         .collect();
 
+    // Every subkey fingerprint, unfiltered by policy or expiry: a re-signed or
+    // expiry-stripped export keeps the same set, a rotation grows it.
+    let subkey_fingerprints: Vec<String> = cert
+        .keys()
+        .subkeys()
+        .map(|ka| ka.key().fingerprint().to_hex())
+        .collect();
+
     Ok(CertValidation {
         fingerprint: cert.fingerprint().to_hex(),
         encryption_subkey_count,
         user_ids,
+        subkey_fingerprints,
     })
 }
 
@@ -2231,6 +2247,29 @@ mod tests {
             all_encryption_subkey_fingerprints(&published).len(),
             1,
             "published cert must expose only the current [E] (retired stripped)"
+        );
+    }
+
+    #[test]
+    fn validate_cert_reports_every_subkey_fingerprint() {
+        // The own-key consistency check (OpenPGPPluginBase) compares subkey
+        // fingerprints instead of raw bytes so a re-signed / expiry-stripped
+        // re-publish doesn't masquerade as a conflict. That only works if
+        // validate_cert actually surfaces them.
+        let state = new_state();
+        let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let cert = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
+        let expected: Vec<String> = cert
+            .keys()
+            .subkeys()
+            .map(|ka| ka.key().fingerprint().to_hex())
+            .collect();
+        assert!(!expected.is_empty(), "a generated cert must have a subkey");
+
+        let validation = validate_cert(&bundle.public_armored).unwrap();
+        assert_eq!(
+            validation.subkey_fingerprints, expected,
+            "validate_cert must report every subkey fingerprint"
         );
     }
 

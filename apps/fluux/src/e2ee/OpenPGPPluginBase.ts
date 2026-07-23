@@ -92,6 +92,7 @@ import {
 } from './verificationSync'
 import {
   fingerprintsEqual,
+  normalizeFingerprint,
   toXep0373Fingerprint,
   pubkeyMetadataFingerprintAttrs,
 } from './fingerprintCompare'
@@ -235,6 +236,15 @@ export interface CertValidation {
   fingerprint: string
   encryptionSubkeyCount: number
   userIds: string[]
+  /**
+   * Upper-case hex fingerprints of every subkey in the certificate,
+   * independent of usage flags or expiry. These identify the key material
+   * itself: stripping an expiration or re-signing a self-signature leaves
+   * them unchanged, while a genuine key rotation adds a new one. Used to
+   * tell "same key, different bytes" apart from "a different key was
+   * published" without a brittle raw-byte comparison.
+   */
+  subkeyFingerprints: string[]
 }
 
 interface PendingVerification {
@@ -1550,7 +1560,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     const publishedArmored = parsePublicKeyDataItem(dataItems[0].payload)
-    if (publishedArmored !== null && !openPgpBlocksEqual(publishedArmored, bundle.publicArmored)) {
+    if (
+      publishedArmored !== null &&
+      !openPgpBlocksEqual(publishedArmored, bundle.publicArmored) &&
+      !(await this.certsShareSameKeyMaterial(publishedArmored, bundle.publicArmored))
+    ) {
       recordOwnKeyConflict({
         kind: 'subkey-mismatch',
         localFingerprint: bundle.fingerprint,
@@ -1561,6 +1575,43 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     clearOwnKeyConflict()
+  }
+
+  /**
+   * Decide whether the server-published cert and the local cert carry the
+   * same key material, regardless of raw-byte differences.
+   *
+   * A byte comparison of two exports of the *same* certificate reports a
+   * difference for entirely benign reasons: PR #1087's expiry heal re-signs
+   * the primary (and subkey bindings) to drop the validity period, and
+   * re-exporting through another OpenPGP client reorders or minimizes packets.
+   * None of that changes a single component fingerprint — only a genuine
+   * rotation introduces a new subkey. Comparing the set of component
+   * fingerprints (primary + subkeys) is therefore the honest test for "did
+   * someone publish a different key?", and it stops a harmless re-publish from
+   * locking encryption behind a phantom `subkey-mismatch`.
+   *
+   * Falls back to `true` (treat as the same key) when either cert cannot be
+   * validated: an unparseable published cert is a distinct failure that the
+   * reconcile banner cannot resolve, and encryption must not be blocked on it.
+   */
+  private async certsShareSameKeyMaterial(
+    publishedArmored: string,
+    localArmored: string,
+  ): Promise<boolean> {
+    let published: CertValidation
+    let local: CertValidation
+    try {
+      published = await this.validateCert(publishedArmored)
+      local = await this.validateCert(localArmored)
+    } catch (err) {
+      this.requireCtx().logger.warn(
+        `${this.pluginName()}: could not compare published key material against ` +
+          `local; treating as unchanged: ${formatError(err)}`,
+      )
+      return true
+    }
+    return sameComponentFingerprints(published, local)
   }
 
   private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
@@ -2482,6 +2533,20 @@ function openPgpBlocksEqual(a: string, b: string): boolean {
   const bRaw = dearmorOpenPgpBlock(b)
   if (aRaw && bRaw) return bytesEqual(aRaw, bRaw)
   return a.trim() === b.trim()
+}
+
+/**
+ * Two certs share the same key material when their component fingerprints —
+ * the primary plus every subkey — match. Fingerprints are immutable identifiers
+ * of key packets, so re-signing (expiry stripped, packets reordered) leaves
+ * them untouched while a rotation adds a new subkey fingerprint. Order- and
+ * case-insensitive so the two OpenPGP backends' differing hex casing can't
+ * fabricate a difference.
+ */
+function sameComponentFingerprints(a: CertValidation, b: CertValidation): boolean {
+  const componentKey = (v: CertValidation): string =>
+    [v.fingerprint, ...v.subkeyFingerprints].map(normalizeFingerprint).sort().join('|')
+  return componentKey(a) === componentKey(b)
 }
 
 function dearmorOpenPgpBlock(armored: string): Uint8Array | null {
