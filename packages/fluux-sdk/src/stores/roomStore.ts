@@ -15,6 +15,7 @@ import type {
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
+import { roomIdentityKeys } from '../utils/roomMessageIdentity'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -442,11 +443,7 @@ const EMPTY_SET: Set<string> = new Set()
  * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getRoomMessageKeys(m: RoomMessage): string[] {
-  const keys: string[] = []
-  if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
-  if (m.originId) keys.push(`originId:${m.originId}`)
-  keys.push(`from:${m.from}:id:${m.id}`)
-  return keys
+  return roomIdentityKeys(m)
 }
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
