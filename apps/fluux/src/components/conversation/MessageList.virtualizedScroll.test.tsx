@@ -34,6 +34,11 @@ const scrollToOffsetCalls: number[] = []
 // Lets a test prove the composer-resize correction routes through the virtualizer.
 const scrollToIndexCalls: Array<string | undefined> = []
 const scrollToIndexStartOffsets: number[] = []
+// Keys the fake virtualizer treats as OUTSIDE the mounted window: getVirtualItems() omits them (so
+// the restore's fraction-refine finds no measured size and must mount the row first via
+// scrollToIndex), and a scrollToIndex(...) "windows them in" by removing them here. Empty by
+// default, so tests that don't opt in keep the render-all window unchanged.
+const windowedOutKeys = new Set<string>()
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -55,7 +60,10 @@ vi.mock('@/hooks', () => ({
 // MessageList -> useMessageListScroll -> virtualizer wiring is observable in jsdom.
 vi.mock('./tanstackMessageVirtualizer', () => ({
   useTanstackMessageVirtualizer: (args: { items: { key: string }[]; scrollRef: React.RefObject<HTMLElement | null> }) => ({
-    getVirtualItems: () => args.items.map((it, index) => ({ index, start: index * 40, size: 40, key: it.key })),
+    getVirtualItems: () =>
+      args.items
+        .map((it, index) => ({ index, start: index * 40, size: 40, key: it.key }))
+        .filter((vi) => !windowedOutKeys.has(vi.key)),
     getTotalSize: () => args.items.length * 40,
     itemCount: args.items.length,
     getOffsetForMessageId,
@@ -76,6 +84,9 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     },
     scrollToIndex: (_index: number, opts?: { align?: string }) => {
       scrollToIndexCalls.push(opts?.align)
+      // Mounting a windowed-out row: scrollToIndex windows it into the measured set.
+      const mountedKey = args.items[_index]?.key
+      if (mountedKey) windowedOutKeys.delete(mountedKey)
       const el = args.scrollRef.current
       if (!el) return
       if (opts?.align === 'end') {
@@ -138,6 +149,7 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     scrollToIndexCalls.length = 0
     scrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
+    windowedOutKeys.clear()
   })
   afterEach(() => localStorage.clear())
 
@@ -500,6 +512,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scrollToOffsetCalls.length = 0
     scrollToIndexCalls.length = 0
     scrollToIndexStartOffsets.length = 0
+    windowedOutKeys.clear()
     realRaf = globalThis.requestAnimationFrame
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       rafQueue.push(cb)
@@ -712,11 +725,16 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r2" {...props} />)
 
-    // Inject a real anchor, then return.
+    // Inject a real anchor, then return. The anchor row is windowed OUT (as it typically is on a
+    // real switch-back), so the restore mounts it via scrollToIndex('end'), then refines to the
+    // saved fraction on the next frame.
     seedSavedAnchor('conv-r1', 'msg-20')
+    windowedOutKeys.add('msg-20')
     getOffsetForMessageId.mockClear()
+    rafQueue.length = 0
     scrollToIndexCalls.length = 0
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r1" {...props} />)
+    flush(1) // run the refine frame after the mount windows the anchor in
 
     // Restore consulted the saved anchor (windowed the row in by index + refined by fraction)
     // rather than scrolling to the bottom and clearing the saved position.
@@ -752,6 +770,48 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     getOffsetForMessageId.mockClear()
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />)
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
+  })
+
+  it('does not re-issue scrollToIndex(end) every frame once the restore anchor is resolved', () => {
+    // [ScrollReassertLoop] restore-anchor non-convergence. applyAnchor used to issue BOTH
+    // scrollToIndex(idx,'end') AND the fractional scrollToOffset on EVERY frame. For a tall anchor
+    // at a mid fraction the two targets differ by (1-fraction)*height — a per-frame kick that (on a
+    // real engine) knocks the row across the virtualization window boundary so the loop never
+    // settles (the console probe showed scrollTop alternating between two states 253px apart, "41
+    // scroll writes without settling"). Once the anchor is resolvable in the window, the loop must
+    // issue ONLY the fractional scrollToOffset — a single write per frame. jsdom has no layout so we
+    // can't reproduce the pixel oscillation; we pin the MECHANISM instead: the redundant per-frame
+    // scrollToIndex('end') is gone.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-converge-1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-converge-2" {...props} />)
+
+    // Return with a saved anchor that IS in the mounted window (render-all mock) at a mid fraction.
+    seedSavedAnchor('conv-converge-1', 'msg-20', 0.5)
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-20' ? 800 : null))
+    // Drop the switch-away conversation's leftover pin-bottom frames: this harness mocks
+    // requestAnimationFrame but not cancelAnimationFrame, so supersede can't cancel them, and they
+    // would otherwise re-pin to the bottom (scrollToIndex('end')) during the flush below.
+    rafQueue.length = 0
+    scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-converge-1" {...props} />)
+
+    // Run the restore-anchor rAF loop across many frames.
+    flush(20)
+
+    // Refined to the fraction through the virtualizer (a re-window), ...
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
+    // ... and did NOT re-pin the anchor's bottom to the viewport bottom on every frame.
+    expect(scrollToIndexCalls.filter((align) => align === 'end').length).toBeLessThanOrEqual(1)
   })
 
   it('does not restore an old scrolled-up position after the FAB returns the room to bottom', () => {
@@ -811,9 +871,12 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // then return.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw2" {...props} />)
     seedSavedAnchor('conv-rw1', 'msg-20')
+    windowedOutKeys.add('msg-20') // the anchor row is windowed out on the fresh switch
     getOffsetForMessageId.mockClear()
+    rafQueue.length = 0
     scrollToIndexCalls.length = 0
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw1" {...props} />)
+    flush(1) // run the refine frame after the mount windows the anchor in
 
     expect(scrollToIndexCalls).toContain('end')                    // windowed the anchor row in
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')   // refined to the saved fraction
@@ -838,7 +901,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     seedSavedAnchor('conv-vi1', 'msg-20')
 
     // Simulate windowed-out anchor: make querySelector return null for message rows so the DOM
-    // anchor lookup (restoreToAnchor) fails and the virtualizer-index path must take over.
+    // anchor lookup (restoreToAnchor) fails, AND drop it from the virtualizer's window so the
+    // fraction-refine must mount it via scrollToIndex first.
+    windowedOutKeys.add('msg-20')
     const origQS = scroller.querySelector.bind(scroller) as (sel: string) => Element | null
     scroller.querySelector = ((sel: string) => {
       if (sel.includes('message-row')) return null
@@ -846,9 +911,11 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     }) as typeof scroller.querySelector
 
     getOffsetForMessageId.mockClear()
+    rafQueue.length = 0
     scrollToIndexCalls.length = 0
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />)
     scroller.querySelector = origQS as typeof scroller.querySelector
+    flush(1) // run the refine frame after the mount windows the anchor in
 
     // Resolved the anchor by index (re-windowing the row in) + refined by fraction, rather than a
     // scroll-to-bottom.
@@ -874,14 +941,17 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scroller.scrollTop = 200
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
-    // Switch away (conversation is now hidden / unmounted), inject a real anchor.
+    // Switch away (conversation is now hidden / unmounted), inject a real anchor (windowed out).
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
     seedSavedAnchor('conv-hidden', 'msg-20')
+    windowedOutKeys.add('msg-20')
     getOffsetForMessageId.mockClear()
+    rafQueue.length = 0
     scrollToIndexCalls.length = 0
 
     // Return AFTER a message arrived while hidden (51 messages now, appended at the bottom).
     rerender(<MessageList messages={makeMessages(51)} conversationId="conv-hidden" {...props} />)
+    flush(1) // run the refine frame after the mount windows the anchor in
 
     // Restore resolved the saved anchor rather than yanking to the new message at the bottom.
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
@@ -1079,6 +1149,7 @@ describe('MessageList — target-message highlight survives the target clear (vi
     scrollToIndexCalls.length = 0
     scrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
+    windowedOutKeys.clear()
     rafCbs = new Map()
     nextRafId = 0
     realRaf = globalThis.requestAnimationFrame

@@ -1076,13 +1076,23 @@ export function useMessageListScroll({
       if (!v || !s) return null
       const idx = v.getIndexForMessageId(anchor.messageId)
       if (idx === null) return null
-      v.scrollToIndex(idx, { align: 'end' })
-      if (anchor.fraction < 1) {
-        const start = v.getOffsetForMessageId(anchor.messageId)
-        const size = v.getVirtualItems().find((vi) => vi.index === idx)?.size
-        if (start !== null && size) {
-          v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
-        }
+      // Issue the fractional target as the ONLY scroll write per frame. The old code ALSO called
+      // scrollToIndex(idx,'end') every frame; the two targets differ by (1-fraction)*rowHeight, and
+      // for a tall anchor at a mid fraction that per-frame kick knocks the row across the
+      // virtualization window boundary — its height flips between estimate and measured, the offsets
+      // shift, and the loop never converges ([ScrollReassertLoop] 'restore-anchor', observed as a
+      // ~253px scrollTop ping-pong). scrollToOffset re-windows just like scrollToIndex, so the
+      // fractional write alone both positions the anchor AND keeps it mounted, so it settles.
+      const item =
+        anchor.fraction < 1 ? v.getVirtualItems().find((vi) => vi.index === idx) : undefined
+      const size = item?.size
+      const start = size ? v.getOffsetForMessageId(anchor.messageId) : null
+      if (size && start !== null) {
+        v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
+      } else {
+        // Anchor not yet in the measured window (or fraction===1): mount it / pin its bottom to the
+        // viewport bottom. Once it measures in, later frames take the fractional branch above.
+        v.scrollToIndex(idx, { align: 'end' })
       }
       return s.scrollTop
     }
