@@ -72,6 +72,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
       <div className="relative flex-shrink-0" ref={menuRef}>
         <Tooltip content={t('common.options')} position="top" disabled={isOpen}>
           <button
+            type="button"
             ref={menu.triggerRef}
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
@@ -88,6 +89,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
             {/* Console toggle - hidden on mobile and behind advanced mode */}
             {!isMobile && advancedMode && (
               <button
+                type="button"
                 onClick={() => {
                   toggleConsole()
                   setIsOpen(false)
@@ -101,6 +103,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
             {/* What's New */}
             <button
+              type="button"
               onClick={() => {
                 setShowChangelog(true)
                 setIsOpen(false)
@@ -114,6 +117,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
             {/* Keyboard Shortcuts - hidden on mobile */}
             {!isMobile && (
               <button
+                type="button"
                 onClick={() => {
                   modalOpen('shortcutHelp')
                   setIsOpen(false)
@@ -139,6 +143,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
             {/* About */}
             <button
+              type="button"
               onClick={() => {
                 setShowAbout(true)
                 setIsOpen(false)
@@ -154,6 +159,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
             {/* Log out */}
             <button
+              type="button"
               onClick={() => {
                 setShowLogoutConfirm(true)
                 setIsOpen(false)
@@ -198,12 +204,14 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               </label>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={close}
                   className="flex-1 px-4 py-2 text-fluux-text bg-fluux-hover rounded hover:bg-fluux-hover/80 transition-colors"
                 >
                   {t('common.cancel')}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowLogoutConfirm(false)
                     void onLogout(cleanLocalData)

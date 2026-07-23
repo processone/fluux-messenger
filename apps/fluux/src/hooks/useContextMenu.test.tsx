@@ -23,7 +23,7 @@ function TestComponent({ longPressDuration = 500 }: { longPressDuration?: number
           data-testid="menu"
           style={{ left: menu.position.x, top: menu.position.y }}
         >
-          <button data-testid="menu-item" onClick={menu.close}>
+          <button type="button" data-testid="menu-item" onClick={menu.close}>
             Close
           </button>
         </div>

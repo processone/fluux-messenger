@@ -97,6 +97,63 @@ describe('syncCoverageAfterArchiveMerge', () => {
     ).toBe(coverage)
   })
 
+  describe('forward-catch-up bootstrap', () => {
+    // Without this, a record can only be BORN by a `before:''` fetch-latest,
+    // which selectCatchUpQuery only issues when the cache is EMPTY — an
+    // entity's first-ever sync. Every entity cached before the record shipped
+    // therefore never gets one, and Phase B permanently falls back to the
+    // cache-bottom probe. A forward catch-up that reports complete proves
+    // [resume cursor → live] is contiguous, which is exactly a coverage bottom.
+    const fwd = (over: Partial<ArchiveMergeCoverageInput> = {}) =>
+      base({ direction: 'forward', isFetchLatest: false, ...over })
+
+    it('a completed forward catch-up seeds the record from its resume cursor', () => {
+      const out = syncCoverageAfterArchiveMerge(fwd({ complete: true, initialAfter: 'local-edge' }))
+      expect(out.get('a@b')).toEqual({ bottomId: 'local-edge' })
+    })
+
+    it('an INCOMPLETE forward catch-up seeds nothing (it never reached live)', () => {
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(fwd({ coverage, complete: false, initialAfter: 'local-edge' }))
+      ).toBe(coverage)
+    })
+
+    it('a completed forward catch-up never shallows an existing, deeper record', () => {
+      const coverage = new Map([['a@b', { bottomId: 'much-deeper', topId: 'top' }]])
+      expect(
+        syncCoverageAfterArchiveMerge(fwd({ coverage, complete: true, initialAfter: 'local-edge' }))
+      ).toBe(coverage)
+    })
+
+    it('a completed forward catch-up with no resume cursor seeds nothing', () => {
+      // `start`-filtered or cursorless catch-up: no archive id to anchor on.
+      const coverage = new Map<string, CoverageRecord>()
+      expect(syncCoverageAfterArchiveMerge(fwd({ coverage, complete: true }))).toBe(coverage)
+    })
+
+    it('a completed forward catch-up that carried modifications never seeds', () => {
+      // Same invariant the backward branch enforces (Codex r4 #2): the walk's
+      // modification cache-writes are fire-and-forget, so nothing it touched is
+      // durably confirmed enough to certify coverage.
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(
+          fwd({ coverage, complete: true, initialAfter: 'local-edge', walkCarriedModifications: true })
+        )
+      ).toBe(coverage)
+    })
+
+    it('a bounded windowed forward query never seeds (proves nothing about live)', () => {
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(
+          fwd({ coverage, complete: true, initialAfter: 'local-edge', preserveGapMarker: true })
+        )
+      ).toBe(coverage)
+    })
+  })
+
   it('empty fetch-latest with no rsm.first (empty archive) is a no-op', () => {
     const coverage = new Map<string, CoverageRecord>()
     expect(syncCoverageAfterArchiveMerge(base({ coverage }))).toBe(coverage)

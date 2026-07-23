@@ -163,6 +163,25 @@ describe('i18n', () => {
       expect(testI18n.t('presence.yearsAgo', { count: 1 })).toBe('1y ago')
       expect(testI18n.t('presence.yearsAgo', { count: 3 })).toBe('3y ago')
     })
+
+    it('should use English singular and plural for unread messages', async () => {
+      await testI18n.changeLanguage('en')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 unread message')
+      expect(testI18n.t('rooms.unreadMessages', { count: 37 })).toBe('37 unread messages')
+    })
+
+    it('should use French singular and plural for unread messages', async () => {
+      await testI18n.changeLanguage('fr')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 message non lu')
+      expect(testI18n.t('rooms.unreadMessages', { count: 4 })).toBe('4 messages non lus')
+    })
+
+    it('should use correct Polish plural forms for unread messages', async () => {
+      await testI18n.changeLanguage('pl')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 nieprzeczytana wiadomość')
+      expect(testI18n.t('rooms.unreadMessages', { count: 3 })).toBe('3 nieprzeczytane wiadomości')
+      expect(testI18n.t('rooms.unreadMessages', { count: 12 })).toBe('12 nieprzeczytanych wiadomości')
+    })
   })
 
   describe('language switching', () => {

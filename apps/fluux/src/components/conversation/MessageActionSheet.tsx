@@ -117,6 +117,7 @@ export function MessageActionSheet({
               <div className="flex items-center gap-1 px-2 pb-1">
                 {TOOLBAR_REACTIONS.map((emoji) => (
                   <button
+                    type="button"
                     key={emoji}
                     onClick={() => react(emoji)}
                     className={`flex h-12 flex-1 items-center justify-center rounded-lg text-2xl transition-colors hover:bg-fluux-hover ${
@@ -128,6 +129,7 @@ export function MessageActionSheet({
                   </button>
                 ))}
                 <button
+                  type="button"
                   onClick={() => setShowEmojiPicker(true)}
                   className="flex h-12 flex-1 items-center justify-center rounded-lg transition-colors hover:bg-fluux-hover"
                   aria-label={t('chat.moreReactions')}

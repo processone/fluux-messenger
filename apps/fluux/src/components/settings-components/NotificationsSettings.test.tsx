@@ -17,6 +17,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 let mockIsTauri = true
 let mockIsMac = true
 let mockPermState = 'granted'
+let mockIsWindows = false
+let mockIsLinux = false
+const mockGetTrayStatus = vi.fn().mockResolvedValue({ enabled: true, available: true })
 const mockInvoke = vi.fn(async (cmd: string) =>
   cmd === 'notification_permission_state' ? mockPermState : undefined,
 )
@@ -48,6 +51,15 @@ vi.mock('@/utils/tauriPlatform', async (importOriginal) => {
   return { ...actual, isMacOSDesktop: () => Promise.resolve(mockIsMac) }
 })
 
+vi.mock('@/utils/tauri', () => ({
+  isWindows: () => mockIsWindows,
+  isLinux: () => mockIsLinux,
+}))
+
+vi.mock('@/utils/windowBehavior', () => ({
+  getTrayStatus: () => mockGetTrayStatus(),
+}))
+
 vi.mock('@/hooks/useNotificationPermission', () => ({
   refreshNotificationPermission: vi.fn().mockResolvedValue(true),
   requestNotificationPermission: vi.fn().mockResolvedValue(true),
@@ -61,6 +73,7 @@ vi.mock('@/hooks/useWebPush', () => ({
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mockInvoke }))
 
 import { NotificationsSettings } from './NotificationsSettings'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 const LINK = 'settings.openSystemNotificationSettings'
 
@@ -69,6 +82,10 @@ describe('NotificationsSettings — system notification settings link', () => {
     mockIsTauri = true
     mockIsMac = true
     mockPermState = 'granted'
+    mockIsWindows = false
+    mockIsLinux = false
+    mockGetTrayStatus.mockReset().mockResolvedValue({ enabled: true, available: true })
+    useSettingsStore.setState({ keepInSystemTray: true })
     mockInvoke.mockClear()
   })
 
@@ -167,5 +184,33 @@ describe('NotificationsSettings — system notification settings link', () => {
     expect(await screen.findByText('settings.notificationStatus')).toBeInTheDocument()
     expect(screen.getByText('settings.notificationDescription')).toBeInTheDocument()
     expect(screen.queryByText('settings.notificationStatusWeb')).not.toBeInTheDocument()
+  })
+
+  it('shows and updates the tray preference on Windows', async () => {
+    mockIsWindows = true
+    mockIsMac = false
+    render(<NotificationsSettings />)
+
+    const toggle = await screen.findByRole('switch', {
+      name: 'settings.systemTray.keepInTray',
+    })
+    expect(toggle).toBeEnabled()
+    fireEvent.click(toggle)
+    expect(useSettingsStore.getState().keepInSystemTray).toBe(false)
+    expect(screen.getByText('settings.systemTray.descriptionWindows')).toBeInTheDocument()
+  })
+
+  it('keeps Linux close-to-tray unavailable without a StatusNotifier host', async () => {
+    mockIsLinux = true
+    mockIsMac = false
+    mockGetTrayStatus.mockResolvedValue({ enabled: true, available: false })
+    render(<NotificationsSettings />)
+
+    const toggle = await screen.findByRole('switch', {
+      name: 'settings.systemTray.keepInTray',
+    })
+    expect(toggle).toBeDisabled()
+    expect(screen.getByText('settings.systemTray.descriptionLinux')).toBeInTheDocument()
+    expect(screen.getByText('settings.systemTray.unavailableLinux')).toBeInTheDocument()
   })
 })

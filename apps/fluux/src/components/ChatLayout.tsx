@@ -1161,6 +1161,7 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
       {hint && <p className="max-w-sm mt-2 text-sm opacity-80">{hint}</p>}
       {primaryAction && (
         <button
+          type="button"
           onClick={primaryAction.onClick}
           className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent text-sm font-medium rounded-lg transition-colors"
         >

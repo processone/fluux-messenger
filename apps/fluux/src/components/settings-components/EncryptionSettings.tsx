@@ -1027,6 +1027,7 @@ export function EncryptionSettings() {
               {t('settings.encryption.lockedBannerBody')}
             </p>
             <button
+              type="button"
               onClick={() => openWebUnlockDialog()}
               className="flex-shrink-0 px-3 py-1.5 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors"
             >
@@ -1077,6 +1078,7 @@ export function EncryptionSettings() {
                     {formatFingerprintMultiline(fingerprint)}
                   </code>
                   <button
+                    type="button"
                     onClick={handleCopyFingerprint}
                     className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors tap-target"
                     title={t('settings.encryption.copyFingerprint')}
@@ -1118,6 +1120,7 @@ export function EncryptionSettings() {
               <p className="mt-1">{t('settings.encryption.limitationBackend')}</p>
             </div>
             <button
+              type="button"
               onClick={handleDismissLimitations}
               aria-label={t('common.close')}
               className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors tap-target"
@@ -1135,6 +1138,7 @@ export function EncryptionSettings() {
                 {t('settings.encryption.backupLabel')}
               </label>
               <button
+                type="button"
                 onClick={() => setBackupDescVisible((v) => !v)}
                 aria-label={t('settings.encryption.backupLabel')}
                 className="text-fluux-muted hover:text-fluux-text transition-colors"
@@ -1199,6 +1203,7 @@ export function EncryptionSettings() {
                     <div className="flex flex-wrap gap-2">
                       {backupProbe === 'unknown' && (
                         <button
+                          type="button"
                           onClick={() => setBackupProbeNonce((n) => n + 1)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                         >
@@ -1207,6 +1212,7 @@ export function EncryptionSettings() {
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={handleBackupRequest}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                       >
@@ -1215,6 +1221,7 @@ export function EncryptionSettings() {
                       </button>
                       {(backupProbe === 'present' || backupProbe === 'unknown') && (
                         <button
+                          type="button"
                           onClick={() => setShowRestoreDialog(true)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                         >
@@ -1226,6 +1233,7 @@ export function EncryptionSettings() {
                   )}
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-fluux-hover/60">
                     <button
+                      type="button"
                       onClick={() => setShowExportFileDialog(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                     >
@@ -1233,6 +1241,7 @@ export function EncryptionSettings() {
                       {t('settings.encryption.exportFileAction')}
                     </button>
                     <button
+                      type="button"
                       onClick={() => { void handleImportFileRequest() }}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                     >
@@ -1255,6 +1264,7 @@ export function EncryptionSettings() {
                 {t('settings.encryption.rotateLabel')}
               </label>
               <button
+                type="button"
                 onClick={() => setRotateDescVisible((v) => !v)}
                 aria-label={t('settings.encryption.rotateLabel')}
                 className="text-fluux-muted hover:text-fluux-text transition-colors"
@@ -1268,6 +1278,7 @@ export function EncryptionSettings() {
               </p>
             )}
             <button
+              type="button"
               onClick={handleRotateRequest}
               disabled={isRotating}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
@@ -1291,6 +1302,7 @@ export function EncryptionSettings() {
         {pluginStatus === 'ready' && (
           <div className="pt-2 border-t border-fluux-hover">
             <button
+              type="button"
               onClick={() => setDangerZoneExpanded((v) => !v)}
               aria-expanded={dangerZoneExpanded}
               className="flex items-center gap-1.5 w-full text-left"
@@ -1310,6 +1322,7 @@ export function EncryptionSettings() {
                   {t('settings.encryption.deleteKeyDescription')}
                 </p>
                 <button
+                  type="button"
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={isDeleting}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error rounded transition-colors disabled:opacity-50 disabled:cursor-wait"

@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, Check, type LucideIcon } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 
 export interface OverflowMenuItem {
   /** Stable key for the list. */
@@ -68,17 +69,12 @@ export function OverflowMenu({
 
   useClickOutside(menuRef, () => setIsOpen(false), isOpen)
 
-  useEffect(() => {
-    if (!isOpen) return
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false)
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen])
-
   const toggle = () => setIsOpen((open) => !open)
   const close = () => setIsOpen(false)
+
+  // Consume Escape only while open so it can't also fire the window-level
+  // conversation shortcut (scroll-to-bottom / mark-read). See useCloseOnEscape.
+  useCloseOnEscape(close, isOpen)
 
   if (items.length === 0) return null
 

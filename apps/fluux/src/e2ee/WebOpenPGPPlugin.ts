@@ -150,10 +150,9 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     if (storedBytes) {
       const armoredKey = new TextDecoder().decode(storedBytes)
       const encryptedKey = await readPrivateKey({ armoredKey })
+      let decrypted: PrivateKey
       try {
-        const privateKey = await decryptKey({ privateKey: encryptedKey, passphrase })
-        this.ownPrivateKey = privateKey
-        return this.bundleFromKey(privateKey)
+        decrypted = await decryptKey({ privateKey: encryptedKey, passphrase })
       } catch (err) {
         // Do NOT swallow the real reason: the message is almost always a
         // genuine wrong passphrase, but it can also be a corrupt/foreign
@@ -171,6 +170,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
           err,
         )
       }
+      // Outside the catch on purpose: a heal failure must never be reported
+      // as a wrong passphrase.
+      const privateKey = await this.clearKeyExpiration(decrypted, accountJid, passphrase)
+      this.ownPrivateKey = privateKey
+      return this.bundleFromKey(privateKey)
     }
 
     // Defence in depth: refuse to silent-generate when the server
@@ -288,7 +292,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       // No usable encryption-capable subkey (expired, revoked, or absent).
     }
     const userIds = key.getUserIDs()
-    return { fingerprint, encryptionSubkeyCount, userIds }
+    // Every subkey fingerprint, independent of usage/expiry — these identify
+    // the key material so the own-key consistency check can tell "same key,
+    // re-signed" from "a different key was published" (OpenPGPPluginBase).
+    const subkeyFingerprints = key.getSubkeys().map((sk) => sk.getFingerprint())
+    return { fingerprint, encryptionSubkeyCount, userIds, subkeyFingerprints }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {
@@ -689,12 +697,72 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       type: 'ecc',
       curve: (USE_V6_KEYS ? 'curve25519' : 'curve25519Legacy') as 'curve25519Legacy',
       userIDs: [{ name: accountUserId(accountJid) }],
+      // Stated rather than inherited from the library default: Gajim refuses
+      // to restore an expiring secret key from the XEP-0373 §5 node, so a
+      // silent upstream change here would break cross-client recovery.
+      keyExpirationTime: 0,
       format: 'object',
     })
     const encrypted = await encryptKey({ privateKey, passphrase })
     await storage.put(PRIVATE_KEY_STORAGE_KEY, new TextEncoder().encode(encrypted.armor()))
     this.ownPrivateKey = privateKey
     return this.bundleFromKey(privateKey)
+  }
+
+  /**
+   * Clear the key expiration that blocks a cross-client restore, returning
+   * the key unchanged when it already has none.
+   *
+   * Gajim's XEP-0373 §5 restore refuses outright any secret key whose
+   * primary carries an expiration ("Imported key has expiration date"). The
+   * expiry lives in the key's self-signatures rather than in the backup
+   * blob, so re-publishing the backup cannot fix it — the key itself has to
+   * be re-signed. `reformatKey` rebuilds the self-signatures over the same
+   * key packets, so the fingerprint (and every published identity and pinned
+   * peer trust that hangs off it) survives.
+   *
+   * Mirrors `strip_key_expiration` in `src-tauri/src/openpgp.rs`; openpgp.js
+   * defaults to no expiry, so this is reached only by keys imported from
+   * another implementation.
+   *
+   * A failure is logged and tolerated: an unhealed key still works locally,
+   * and failing the unlock would lock the user out of their own messages
+   * over an interop nicety.
+   */
+  private async clearKeyExpiration(
+    privateKey: PrivateKey,
+    accountJid: string,
+    passphrase: string,
+  ): Promise<PrivateKey> {
+    if ((await privateKey.getExpirationTime()) === Infinity) return privateKey
+
+    const { reformatKey, encryptKey } = await import('openpgp')
+    try {
+      const { privateKey: reformatted } = await reformatKey({
+        privateKey,
+        // The canonical XEP-0373 §8.5 trust anchor, matching what
+        // generateAndStoreKey emits and what ensureAccountUserId enforces.
+        userIDs: [{ name: accountUserId(accountJid) }],
+        keyExpirationTime: 0,
+        format: 'object',
+      })
+      const encrypted = await encryptKey({ privateKey: reformatted, passphrase })
+      await this.requireCtx().storage.put(
+        PRIVATE_KEY_STORAGE_KEY,
+        new TextEncoder().encode(encrypted.armor()),
+      )
+      this.requireCtx().logger.info(
+        'WebOpenPGPPlugin: cleared key expiration so the backup can be restored elsewhere',
+      )
+      return reformatted
+    } catch (err) {
+      this.requireCtx().logger.warn(
+        `WebOpenPGPPlugin: could not clear key expiration: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+      return privateKey
+    }
   }
 
   private bundleFromKey(privateKey: PrivateKey): KeyBundle {

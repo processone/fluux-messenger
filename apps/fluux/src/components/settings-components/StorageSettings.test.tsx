@@ -5,10 +5,13 @@ import { StorageSettings } from './StorageSettings'
 // Mock mediaCache
 const mockGetMediaCacheSize = vi.fn()
 const mockClearMediaCache = vi.fn()
+const mockInvoke = vi.fn().mockResolvedValue(undefined)
 vi.mock('@/utils/mediaCache', () => ({
   getMediaCacheSize: () => mockGetMediaCacheSize(),
   clearMediaCache: () => mockClearMediaCache(),
 }))
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: mockInvoke }))
 
 // Mock formatBytes
 vi.mock('@/hooks', () => ({
@@ -43,6 +46,8 @@ describe('StorageSettings', () => {
     vi.clearAllMocks()
     mockGetMediaCacheSize.mockResolvedValue(0)
     mockClearMediaCache.mockResolvedValue(undefined)
+    mockInvoke.mockClear()
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
 
   it('should show calculating state while loading cache size', () => {
@@ -127,5 +132,13 @@ describe('StorageSettings', () => {
     expect(screen.getByText('Media Cache')).toBeInTheDocument()
     expect(screen.getByText('Downloaded images and media are cached locally.')).toBeInTheDocument()
     expect(screen.getByText('Cache size')).toBeInTheDocument()
+  })
+
+  it('opens the logs folder from desktop settings', async () => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    render(<StorageSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.storage.openLogs' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('open_logs_folder'))
   })
 })

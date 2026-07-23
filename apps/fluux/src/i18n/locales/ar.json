@@ -429,7 +429,13 @@
         "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}",
         "nickEdgeWhitespace": "يحتوي الاسم على مسافات إضافية في الأطراف",
         "nickHiddenChars": "يحتوي الاسم على أحرف مخفية",
-        "mentionSuggestions": "اقتراحات الإشارات"
+        "mentionSuggestions": "اقتراحات الإشارات",
+        "unreadMessages_zero": "لا رسائل غير مقروءة",
+        "unreadMessages": "رسالة واحدة غير مقروءة",
+        "unreadMessages_two": "رسالتان غير مقروءتين",
+        "unreadMessages_few": "{{count}} رسائل غير مقروءة",
+        "unreadMessages_many": "{{count}} رسالة غير مقروءة",
+        "unreadMessages_other": "{{count}} رسالة غير مقروءة"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",
@@ -733,7 +739,10 @@
             "searchIndexDescription": "يتيح فهرس البحث البحث النصي الكامل عبر سجل رسائلك. أعد بناءه إذا بدت نتائج البحث غير مكتملة.",
             "rebuildIndex": "إعادة بناء فهرس البحث",
             "rebuildingIndex": "جارٍ إعادة البناء…",
-            "indexRebuilt": "تمت فهرسة {{count}} رسالة"
+            "indexRebuilt": "تمت فهرسة {{count}} رسالة",
+            "logs": "السجلات",
+            "logsDescription": "افتح المجلد الذي يحتوي على سجلات تشخيص Fluux.",
+            "openLogs": "فتح مجلد السجلات"
         },
         "encryption": {
             "experimental": "تجريبي",
@@ -933,6 +942,13 @@
             "enableDescription": "يتيح الوضع المتقدم الوصول إلى خيارات متخصصة مثل إعدادات الخادم المخصصة ووحدة التحكم XMPP.",
             "disableDescription": "أوقف الوضع المتقدم لإخفاء هذا القسم.",
             "disable": "إيقاف الوضع المتقدم"
+        },
+        "systemTray": {
+            "title": "علبة النظام",
+            "keepInTray": "إبقاء Fluux في علبة النظام",
+            "descriptionWindows": "عند التفعيل، يؤدي تصغير Fluux أو إغلاقه إلى إخفائه في علبة النظام.",
+            "descriptionLinux": "عند التفعيل، يؤدي إغلاق Fluux إلى إخفائه في علبة النظام إذا كانت مدعومة. يظل التصغير وفق السلوك المعتاد لسطح المكتب.",
+            "unavailableLinux": "لا تتوفر علبة نظام متوافقة. سيؤدي إغلاق Fluux إلى إنهاء التطبيق."
         }
     },
     "update": {

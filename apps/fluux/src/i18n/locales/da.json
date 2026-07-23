@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} er nu kendt som {{newNick}}",
         "nickEdgeWhitespace": "Navnet har ekstra mellemrum i kanterne",
         "nickHiddenChars": "Navnet indeholder skjulte tegn",
-        "mentionSuggestions": "Omtaleforslag"
+        "mentionSuggestions": "Omtaleforslag",
+        "unreadMessages": "{{count}} ulæst besked",
+        "unreadMessages_other": "{{count}} ulæste beskeder"
     },
     "events": {
         "invitedBy": "Inviteret af {{name}}",
@@ -729,7 +731,10 @@
             "searchIndexDescription": "Søgeindekset muliggør fuldtekstsøgning i din beskedhistorik. Genopbyg det, hvis søgeresultaterne virker ufuldstændige.",
             "rebuildIndex": "Genopbyg indeks",
             "rebuildingIndex": "Genopbygger…",
-            "indexRebuilt": "{{count}} beskeder indekseret"
+            "indexRebuilt": "{{count}} beskeder indekseret",
+            "logs": "Logfiler",
+            "logsDescription": "Åbn mappen med Fluux-diagnoselogfiler.",
+            "openLogs": "Åbn logfilmappe"
         },
         "encryption": {
             "experimental": "Eksperimentel",
@@ -929,6 +934,13 @@
             "enableDescription": "Avanceret tilstand låser ekspertindstillinger op, f.eks. brugerdefinerede serverindstillinger og XMPP-konsollen.",
             "disableDescription": "Deaktivér avanceret tilstand for at skjule dette afsnit.",
             "disable": "Deaktivér avanceret tilstand"
+        },
+        "systemTray": {
+            "title": "Statusområde",
+            "keepInTray": "Behold Fluux i statusområdet",
+            "descriptionWindows": "Når dette er aktiveret, skjules Fluux i statusområdet ved minimering eller lukning.",
+            "descriptionLinux": "Når dette er aktiveret, skjules Fluux i statusområdet ved lukning, hvis det understøttes. Minimering følger skrivebordets normale adfærd.",
+            "unavailableLinux": "Der er ikke noget kompatibelt statusområde. Fluux afsluttes, når vinduet lukkes."
         }
     },
     "update": {

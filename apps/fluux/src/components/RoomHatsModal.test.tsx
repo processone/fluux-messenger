@@ -102,7 +102,7 @@ vi.mock('./ModalShell', () => ({
   }) => (
     <div data-testid="modal-shell">
       <div data-testid="modal-title">{title}</div>
-      <button data-testid="modal-close" onClick={onClose}>Close</button>
+      <button type="button" data-testid="modal-close" onClick={onClose}>Close</button>
       {children}
     </div>
   ),
@@ -118,8 +118,8 @@ vi.mock('./ConfirmDialog', () => ({
     <div data-testid="confirm-dialog">
       <div data-testid="confirm-title">{title}</div>
       <div data-testid="confirm-message">{message}</div>
-      <button data-testid="confirm-yes" onClick={onConfirm}>Confirm</button>
-      <button data-testid="confirm-cancel" onClick={onCancel}>Cancel</button>
+      <button type="button" data-testid="confirm-yes" onClick={onConfirm}>Confirm</button>
+      <button type="button" data-testid="confirm-cancel" onClick={onCancel}>Cancel</button>
     </div>
   ),
 }))

@@ -192,6 +192,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
               {isRenderLoop && (
                 <>
                   <button
+                    type="button"
                     onClick={this.handleCopy}
                     className="rounded border border-fluux-border px-4 py-2 text-fluux-text hover:bg-fluux-surface"
                   >
@@ -202,6 +203,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
                         : 'Copy diagnostic info'}
                   </button>
                   <button
+                    type="button"
                     onClick={this.handleRetry}
                     className="rounded bg-fluux-brand px-4 py-2 text-fluux-text-on-accent hover:bg-fluux-brand/80"
                   >
@@ -210,6 +212,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
                 </>
               )}
               <button
+                type="button"
                 onClick={this.handleReload}
                 className={`rounded px-4 py-2 ${isRenderLoop ? 'border border-fluux-border text-fluux-text hover:bg-fluux-surface' : 'bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand/80'}`}
               >
@@ -328,6 +331,7 @@ export function RenderLoopWarningBanner() {
           ⚠️ Render loop warning: {warning.componentName} ({warning.renderCount} renders/{warning.windowMs}ms)
         </div>
         <button
+          type="button"
           onClick={() => setDismissed(true)}
           className="shrink-0 rounded px-2 py-0.5 text-amber-200 hover:bg-amber-500/20"
           aria-label="Dismiss"
@@ -350,6 +354,7 @@ export function RenderLoopWarningBanner() {
         </pre>
       </details>
       <button
+        type="button"
         onClick={handleCopy}
         className="rounded border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-amber-200 hover:bg-amber-500/20"
       >

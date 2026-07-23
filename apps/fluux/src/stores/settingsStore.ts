@@ -30,6 +30,8 @@ interface SettingsState {
   setDensityMode: (mode: DensityMode) => void
   soundEnabled: boolean
   setSoundEnabled: (enabled: boolean) => void
+  keepInSystemTray: boolean
+  setKeepInSystemTray: (enabled: boolean) => void
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -40,6 +42,7 @@ const MOTION_KEY = 'fluux-motion'
 const TRANSPARENCY_KEY = 'fluux-transparency'
 const DENSITY_KEY = 'fluux-density'
 const SOUND_KEY = 'fluux-sound'
+const KEEP_IN_TRAY_KEY = 'fluux-keep-in-tray'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -159,6 +162,21 @@ function getInitialSoundEnabled(): boolean {
   return true
 }
 
+/**
+ * Keep the current close-to-tray behavior for existing desktop users until
+ * they explicitly opt out.
+ */
+function getInitialKeepInSystemTray(): boolean {
+  try {
+    const stored = localStorage.getItem(KEEP_IN_TRAY_KEY)
+    if (stored === 'false') return false
+    if (stored === 'true') return true
+  } catch {
+    // localStorage not available
+  }
+  return true
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   themeMode: getInitialMode(),
 
@@ -237,5 +255,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSoundEnabled: (enabled) => {
     try { localStorage.setItem(SOUND_KEY, String(enabled)) } catch { /* localStorage not available */ }
     set({ soundEnabled: enabled })
+  },
+
+  keepInSystemTray: getInitialKeepInSystemTray(),
+
+  setKeepInSystemTray: (enabled) => {
+    try { localStorage.setItem(KEEP_IN_TRAY_KEY, String(enabled)) } catch { /* localStorage not available */ }
+    set({ keepInSystemTray: enabled })
   },
 }))

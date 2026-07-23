@@ -45,6 +45,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
       <div className="flex items-center gap-2">
         <BarChart3 className="size-4 text-fluux-muted flex-shrink-0" />
         <button
+          type="button"
           onClick={() => scrollToMessage(pollClosed.pollMessageId)}
           className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-start truncate"
           title={t('poll.scrollToOriginal', 'Scroll to original poll')}

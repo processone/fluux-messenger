@@ -45,6 +45,7 @@ export function ToastContainer() {
             <Icon className={`size-5 shrink-0 ${colors.icon}`} />
             <span className="text-sm text-fluux-text flex-1">{toast.message}</span>
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); removeToast(toast.id) }}
               className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text shrink-0"
               aria-label={t('common.dismiss')}

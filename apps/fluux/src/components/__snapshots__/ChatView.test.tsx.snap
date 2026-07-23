@@ -75,6 +75,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
             >
               <button
                 class="flex items-center gap-1 px-3 py-1.5 text-xs rounded-full transition-colors text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover"
+                type="button"
               >
                 <span
                   data-testid="icon-chevron-up"
@@ -143,18 +144,21 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           👍
                         </button>
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           ❤️
                         </button>
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           😂
                         </button>
@@ -167,6 +171,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           <button
                             aria-label="chat.moreReactions"
                             class="p-1.5 transition-colors hover:bg-fluux-hover"
+                            type="button"
                           >
                             <span
                               data-testid="icon-emoji"
@@ -181,6 +186,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           <button
                             aria-label="chat.reply"
                             class="p-1.5 transition-colors hover:bg-fluux-hover"
+                            type="button"
                           >
                             <span
                               data-testid="icon-reply"
@@ -196,6 +202,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                             aria-label="chat.forwardMessage"
                             class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
                             disabled=""
+                            type="button"
                           >
                             <span
                               data-testid="icon-forward"
@@ -214,6 +221,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                               aria-label="chat.moreOptions"
                               class="p-1.5 transition-colors hover:bg-fluux-hover opacity-50 cursor-not-allowed"
                               disabled=""
+                              type="button"
                             >
                               <span
                                 data-testid="icon-more"
@@ -309,18 +317,21 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           👍
                         </button>
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           ❤️
                         </button>
                         <button
                           aria-label="chat.reactWith"
                           class="px-2 py-1.5 leading-none transition-colors text-base hover:bg-fluux-hover "
+                          type="button"
                         >
                           😂
                         </button>
@@ -333,6 +344,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           <button
                             aria-label="chat.moreReactions"
                             class="p-1.5 transition-colors hover:bg-fluux-hover"
+                            type="button"
                           >
                             <span
                               data-testid="icon-emoji"
@@ -347,6 +359,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           <button
                             aria-label="chat.editMessage"
                             class="p-1.5 transition-colors hover:bg-fluux-hover"
+                            type="button"
                           >
                             <span
                               data-testid="icon-edit"
@@ -362,6 +375,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                             aria-label="chat.forwardMessage"
                             class="p-1.5 transition-colors opacity-50 cursor-not-allowed hover:bg-fluux-hover"
                             disabled=""
+                            type="button"
                           >
                             <span
                               data-testid="icon-forward"
@@ -379,6 +393,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                             <button
                               aria-label="chat.moreOptions"
                               class="p-1.5 transition-colors hover:bg-fluux-hover "
+                              type="button"
                             >
                               <span
                                 data-testid="icon-more"
@@ -454,6 +469,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
               class="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"
               data-fab="scroll-to-bottom"
               tabindex="-1"
+              type="button"
             >
               <span
                 data-testid="icon-chevron-down"
@@ -474,6 +490,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
       />
       <button
         data-testid="send-button"
+        type="button"
       >
         Send
       </button>
@@ -612,6 +629,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
               class="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"
               data-fab="scroll-to-bottom"
               tabindex="-1"
+              type="button"
             >
               <span
                 data-testid="icon-chevron-down"
@@ -632,6 +650,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
       />
       <button
         data-testid="send-button"
+        type="button"
       >
         Send
       </button>

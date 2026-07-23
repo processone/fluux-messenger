@@ -431,7 +431,9 @@
         "nickChanged": "{{oldNick}} on nüüd tuntud kui {{newNick}}",
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
         "nickHiddenChars": "Nimi sisaldab peidetud märke",
-        "mentionSuggestions": "Mainimiste soovitused"
+        "mentionSuggestions": "Mainimiste soovitused",
+        "unreadMessages": "{{count}} lugemata sõnum",
+        "unreadMessages_other": "{{count}} lugemata sõnumit"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",
@@ -731,7 +733,10 @@
             "searchIndexDescription": "Otsinguindeks võimaldab täistekstiotsingut teie sõnumite ajaloost. Ehitage see uuesti, kui otsingutulemused tunduvad puudulikud.",
             "rebuildIndex": "Ehita indeks uuesti",
             "rebuildingIndex": "Ehitamine…",
-            "indexRebuilt": "{{count}} sõnumit indekseeritud"
+            "indexRebuilt": "{{count}} sõnumit indekseeritud",
+            "logs": "Logid",
+            "logsDescription": "Ava Fluuxi diagnostikalogide kaust.",
+            "openLogs": "Ava logikaust"
         },
         "encryption": {
             "experimental": "Eksperimentaalne",
@@ -931,6 +936,13 @@
             "enableDescription": "Täpsem režiim avab ekspertvalikud, nagu kohandatud serveri seaded ja XMPP-konsool.",
             "disableDescription": "Peida see jaotis, lülitades täpsema režiimi välja.",
             "disable": "Lülita täpsem režiim välja"
+        },
+        "systemTray": {
+            "title": "Süsteemisalv",
+            "keepInTray": "Hoia Fluux süsteemisalves",
+            "descriptionWindows": "Kui see on lubatud, peidetakse Fluux minimeerimisel või sulgemisel süsteemisalve.",
+            "descriptionLinux": "Kui see on lubatud, peidetakse Fluux sulgemisel süsteemisalve, kui see on toetatud. Minimeerimine järgib töölaua tavapärast käitumist.",
+            "unavailableLinux": "Ühilduvat süsteemisalve pole saadaval. Fluuxi sulgemine lõpetab rakenduse."
         }
     },
     "update": {

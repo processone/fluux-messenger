@@ -430,7 +430,11 @@
         "nickChanged": "{{oldNick}} je teraz známy ako {{newNick}}",
         "nickEdgeWhitespace": "Meno obsahuje medzery na okrajoch",
         "nickHiddenChars": "Meno obsahuje skryté znaky",
-        "mentionSuggestions": "Návrhy zmienok"
+        "mentionSuggestions": "Návrhy zmienok",
+        "unreadMessages": "{{count}} neprečítaná správa",
+        "unreadMessages_few": "{{count}} neprečítané správy",
+        "unreadMessages_many": "{{count}} neprečítanej správy",
+        "unreadMessages_other": "{{count}} neprečítaných správ"
     },
     "events": {
         "invitedBy": "Pozval {{name}}",
@@ -732,7 +736,10 @@
             "searchIndexDescription": "Index vyhľadávania umožňuje fulltextové vyhľadávanie v histórii správ. Obnovte ho, ak sa výsledky zdajú neúplné.",
             "rebuildIndex": "Obnoviť index",
             "rebuildingIndex": "Obnovovanie…",
-            "indexRebuilt": "{{count}} správ indexovaných"
+            "indexRebuilt": "{{count}} správ indexovaných",
+            "logs": "Záznamy",
+            "logsDescription": "Otvoriť priečinok s diagnostickými záznamami Fluux.",
+            "openLogs": "Otvoriť priečinok záznamov"
         },
         "encryption": {
             "experimental": "Experimentálne",
@@ -932,6 +939,13 @@
             "enableDescription": "Pokročilý režim odomkne odborné možnosti, ako sú vlastné nastavenia servera a konzola XMPP.",
             "disableDescription": "Vypnite pokročilý režim, ak chcete túto sekciu skryť.",
             "disable": "Vypnúť pokročilý režim"
+        },
+        "systemTray": {
+            "title": "Oznamovacia oblasť",
+            "keepInTray": "Ponechať Fluux v oznamovacej oblasti",
+            "descriptionWindows": "Ak je zapnuté, minimalizovanie alebo zatvorenie skryje Fluux do oznamovacej oblasti.",
+            "descriptionLinux": "Ak je zapnuté, zatvorenie skryje Fluux do oznamovacej oblasti, ak je podporovaná. Minimalizovanie zachová bežné správanie pracovnej plochy.",
+            "unavailableLinux": "Kompatibilná oznamovacia oblasť nie je dostupná. Zatvorením sa Fluux ukončí."
         }
     },
     "update": {

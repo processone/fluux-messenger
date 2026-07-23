@@ -193,7 +193,7 @@ use tauri::{
 };
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri_plugin_deep_link::DeepLinkExt;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
 
 mod download;
@@ -208,6 +208,20 @@ mod mcp;
 // Linux tray-functionality detection (pure combiner compiled everywhere; the
 // DBus probe inside is Linux-only).
 mod linux_tray;
+mod window_behavior;
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+const MAIN_TRAY_ID: &str = "fluux-main-tray";
+
+struct LogDirectory(std::path::PathBuf);
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrayStatus {
+    enabled: bool,
+    available: bool,
+}
 
 #[cfg(target_os = "macos")]
 mod idle {
@@ -1225,6 +1239,87 @@ fn open_notification_settings() -> Result<(), String> {
     notifications::settings_pane::open()
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[tauri::command]
+fn open_logs_folder(
+    app: tauri::AppHandle,
+    log_directory: tauri::State<'_, LogDirectory>,
+) -> Result<(), String> {
+    app.opener()
+        .reveal_item_in_dir(&log_directory.0)
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn tray_available(app: &tauri::AppHandle) -> bool {
+    let built = app.tray_by_id(MAIN_TRAY_ID).is_some();
+    #[cfg(target_os = "linux")]
+    {
+        built && linux_tray::status_notifier_host_registered()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        built
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[tauri::command]
+fn get_tray_status(
+    app: tauri::AppHandle,
+    behavior: tauri::State<'_, window_behavior::WindowBehavior>,
+) -> TrayStatus {
+    TrayStatus {
+        enabled: behavior.keep_in_tray(),
+        available: tray_available(&app),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[tauri::command]
+fn set_keep_in_tray(
+    app: tauri::AppHandle,
+    behavior: tauri::State<'_, window_behavior::WindowBehavior>,
+    enabled: bool,
+) -> Result<TrayStatus, String> {
+    let Some(tray) = app.tray_by_id(MAIN_TRAY_ID) else {
+        behavior.set_keep_in_tray(false);
+        return Ok(TrayStatus {
+            enabled: false,
+            available: false,
+        });
+    };
+
+    if let Err(error) = tray.set_visible(enabled) {
+        // Prefer native close/quit behavior over believing an icon is visible
+        // and stranding the window.
+        behavior.set_keep_in_tray(false);
+        return Err(error.to_string());
+    }
+
+    behavior.set_keep_in_tray(enabled);
+    Ok(TrayStatus {
+        enabled,
+        available: tray_available(&app),
+    })
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn begin_graceful_shutdown(
+    app: &tauri::AppHandle,
+    keepalive_running: &Arc<AtomicBool>,
+    graceful_shutdown_started: &Arc<AtomicBool>,
+) {
+    keepalive_running.store(false, Ordering::Relaxed);
+    graceful_shutdown_started.store(true, Ordering::Relaxed);
+    let _ = app.emit("graceful-shutdown", ());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        handle.exit(0);
+    });
+}
+
 /// Print startup diagnostics to stderr for debugging.
 fn print_startup_diagnostics() {
     eprintln!(
@@ -1479,6 +1574,8 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(window_behavior::WindowBehavior::default())
+        .manage(LogDirectory(log_dir.clone()))
         // On macOS, decorum's on_window_ready hook repositions the traffic
         // lights at a fixed inset (dot centre ~20px from top) and keeps them
         // there across resize. The AppBar height is matched to that. We do NOT
@@ -1502,6 +1599,12 @@ fn main() {
             mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,
+            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+            open_logs_folder,
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            get_tray_status,
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            set_keep_in_tray,
             openpgp::openpgp_ensure_key,
             openpgp::openpgp_prewarm,
             openpgp::openpgp_encrypt,
@@ -1862,7 +1965,7 @@ fn main() {
                 // Linux visibility reporting can be inconsistent across WMs.
                 let window_hidden_to_tray = Arc::new(AtomicBool::new(false));
 
-                let tray = TrayIconBuilder::new()
+                let tray = TrayIconBuilder::with_id(MAIN_TRAY_ID)
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .tooltip("Fluux Messenger")
@@ -1949,16 +2052,11 @@ fn main() {
                                 }
                             }
                             "quit" => {
-                                keepalive_flag.store(false, Ordering::Relaxed);
-                                // Claim the shutdown so the frontend's exit_app
-                                // is treated as the second request and allowed.
-                                graceful_shutdown_flag.store(true, Ordering::Relaxed);
-                                let _ = app.emit("graceful-shutdown", ());
-                                let handle = app.clone();
-                                std::thread::spawn(move || {
-                                    std::thread::sleep(std::time::Duration::from_secs(2));
-                                    handle.exit(0);
-                                });
+                                begin_graceful_shutdown(
+                                    app,
+                                    &keepalive_flag,
+                                    &graceful_shutdown_flag,
+                                );
                             }
                             _ => {}
                         }
@@ -2030,23 +2128,26 @@ fn main() {
                         // Only hide to tray when an icon will actually be shown
                         // (and can restore the window). Otherwise quit, so the
                         // window can never be stranded with no way back.
+                        let keep_in_tray = app_handle_for_close
+                            .state::<window_behavior::WindowBehavior>()
+                            .keep_in_tray();
                         let host_registered = linux_tray::status_notifier_host_registered();
-                        if !linux_tray::should_hide_to_tray(tray_built, host_registered) {
+                        if !linux_tray::should_hide_to_tray(
+                            keep_in_tray,
+                            tray_built,
+                            host_registered,
+                        ) {
                             tracing::info!(
+                                keep_in_tray,
                                 tray_built,
                                 host_registered,
-                                "Linux: no functional system tray — X-close quitting"
+                                "Linux: tray disabled or unavailable — X-close quitting"
                             );
-                            // Mirror the tray "Quit" menu item: stop keepalive,
-                            // let the frontend disconnect XMPP, then force-exit.
-                            keepalive_flag_for_close.store(false, Ordering::Relaxed);
-                            graceful_shutdown_flag_for_close.store(true, Ordering::Relaxed);
-                            let _ = app_handle_for_close.emit("graceful-shutdown", ());
-                            let handle = app_handle_for_close.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                handle.exit(0);
-                            });
+                            begin_graceful_shutdown(
+                                &app_handle_for_close,
+                                &keepalive_flag_for_close,
+                                &graceful_shutdown_flag_for_close,
+                            );
                             return;
                         }
 
@@ -2077,9 +2178,10 @@ fn main() {
                 let show_logs_item = MenuItem::with_id(app, "show_logs", "Open Logs Folder", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show_item, &show_logs_item, &quit_item])?;
+                let window_hidden_to_tray = Arc::new(AtomicBool::new(false));
 
                 // Build the system tray icon
-                let _tray = TrayIconBuilder::new()
+                let _tray = TrayIconBuilder::with_id(MAIN_TRAY_ID)
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .tooltip("Fluux Messenger")
@@ -2087,6 +2189,7 @@ fn main() {
                         let keepalive_flag = keepalive_flag_for_setup.clone();
                         let graceful_shutdown_flag = _graceful_shutdown_flag_for_setup.clone();
                         let log_dir_for_tray = log_dir.clone();
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
                         move |app, event| match event.id.as_ref() {
                             "show" => {
                                 if let Some(window) = app.get_webview_window("main") {
@@ -2101,6 +2204,7 @@ fn main() {
                                     if is_minimized {
                                         let _ = window.unminimize();
                                     }
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
                                     let _ = window.set_focus();
                                 }
                             }
@@ -2108,44 +2212,42 @@ fn main() {
                                 let _ = app.opener().reveal_item_in_dir(&log_dir_for_tray);
                             }
                             "quit" => {
-                                // Stop the keepalive thread
-                                keepalive_flag.store(false, Ordering::Relaxed);
-                                // Claim the shutdown so the frontend's exit_app
-                                // is treated as the second request and allowed.
-                                graceful_shutdown_flag.store(true, Ordering::Relaxed);
-                                // Emit graceful shutdown event to frontend
-                                let _ = app.emit("graceful-shutdown", ());
-                                // Set a fallback timer to force exit after 2 seconds
-                                let handle = app.clone();
-                                std::thread::spawn(move || {
-                                    std::thread::sleep(std::time::Duration::from_secs(2));
-                                    handle.exit(0);
-                                });
+                                begin_graceful_shutdown(
+                                    app,
+                                    &keepalive_flag,
+                                    &graceful_shutdown_flag,
+                                );
                             }
                             _ => {}
                         }
                     })
-                    .on_tray_icon_event(|tray, event| {
-                        // Show window on left-click (single or double)
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let already_visible = window.is_visible().unwrap_or(false);
-                                let is_minimized = window.is_minimized().unwrap_or(false);
-                                if already_visible && !is_minimized {
-                                    let _ = window.set_focus();
-                                    return;
-                                }
+                    .on_tray_icon_event({
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
+                        move |tray, event| {
+                            // Show window on left-click (single or double)
+                            if let TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                button_state: MouseButtonState::Up,
+                                ..
+                            } = event
+                            {
+                                if let Some(window) =
+                                    tray.app_handle().get_webview_window("main")
+                                {
+                                    let already_visible = window.is_visible().unwrap_or(false);
+                                    let is_minimized = window.is_minimized().unwrap_or(false);
+                                    if already_visible && !is_minimized {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
 
-                                let _ = window.show();
-                                if is_minimized {
-                                    let _ = window.unminimize();
+                                    let _ = window.show();
+                                    if is_minimized {
+                                        let _ = window.unminimize();
+                                    }
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
+                                    let _ = window.set_focus();
                                 }
-                                let _ = window.set_focus();
                             }
                         }
                     })
@@ -2155,12 +2257,34 @@ fn main() {
                 let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
                 let app_handle = app.handle().clone();
+                let window_hidden_to_tray_for_events = window_hidden_to_tray.clone();
                 main_window.on_window_event(move |event| match event {
                     WindowEvent::CloseRequested { api, .. } => {
-                        api.prevent_close();
-                        // Save window state before hiding
-                        let _ = app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
-                        let _ = window.hide();
+                        let behavior = app_handle.state::<window_behavior::WindowBehavior>();
+                        let tray_available = app_handle.tray_by_id(MAIN_TRAY_ID).is_some();
+                        if window_behavior::close_action(
+                            behavior.keep_in_tray(),
+                            tray_available,
+                        ) == window_behavior::CloseAction::HideToTray
+                        {
+                            api.prevent_close();
+                            let _ = app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+                            window_hidden_to_tray_for_events.store(true, Ordering::Relaxed);
+                            let _ = window.hide();
+                        }
+                    }
+                    WindowEvent::Resized(_) => {
+                        let behavior = app_handle.state::<window_behavior::WindowBehavior>();
+                        let tray_available = app_handle.tray_by_id(MAIN_TRAY_ID).is_some();
+                        if window_behavior::should_hide_on_minimize(
+                            behavior.keep_in_tray(),
+                            tray_available,
+                            window.is_minimized().unwrap_or(false),
+                            window_hidden_to_tray_for_events.load(Ordering::Relaxed),
+                        ) {
+                            window_hidden_to_tray_for_events.store(true, Ordering::Relaxed);
+                            let _ = window.hide();
+                        }
                     }
                     // Alt-tabbing or clicking the taskbar focuses the top-level
                     // window, but WebView2 does not move keyboard focus into the
@@ -2168,6 +2292,8 @@ fn main() {
                     // stay dead until the user clicks. Ask the JS side to grab
                     // webview input focus (controller.MoveFocus). (#654)
                     WindowEvent::Focused(true) => {
+                        window_hidden_to_tray_for_events.store(false, Ordering::Relaxed);
+                        let _ = window.request_user_attention(None);
                         let _ = window.emit("window-focus-restore", ());
                     }
                     _ => {}

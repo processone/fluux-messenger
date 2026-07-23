@@ -227,6 +227,7 @@ export function DemoTooltip({ step, onSkip, onComplete }: DemoTooltipProps) {
         {/* Skip button */}
         {!completed && (
           <button
+            type="button"
             onClick={onSkip}
             style={{
               marginTop: 8,

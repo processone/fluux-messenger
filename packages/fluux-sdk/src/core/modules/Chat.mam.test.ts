@@ -2622,7 +2622,8 @@ describe('XMPPClient MAM', () => {
         rsm: expect.any(Object),
         complete: true, // complete from server
         direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
-        isFetchLatest: false // forward queries are never fetch-latest candidates
+        isFetchLatest: false, // forward queries are never fetch-latest candidates
+        walkCarriedModifications: false // clean walk — may anchor a coverage bootstrap
       })
     })
 
@@ -3510,7 +3511,8 @@ describe('XMPPClient MAM', () => {
         rsm: expect.any(Object),
         complete: true, // complete from server
         direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
-        isFetchLatest: false // forward query, never a fetch-latest
+        isFetchLatest: false, // forward query, never a fetch-latest
+        walkCarriedModifications: false // clean walk — may anchor a coverage bootstrap
       })
     })
 

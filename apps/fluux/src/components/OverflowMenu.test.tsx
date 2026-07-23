@@ -49,6 +49,42 @@ describe('OverflowMenu', () => {
     expect(screen.queryByText('Archive')).not.toBeInTheDocument()
   })
 
+  it('consumes Escape so it never reaches the window-level shortcut handler', () => {
+    // Regression (image-scroll-position-reset follow-up): when this menu is used
+    // over a conversation (e.g. contact profile actions), closing it with Escape
+    // must not also fire the window shortcut that scrolls the conversation to the
+    // bottom and marks it read.
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<OverflowMenu ariaLabel="More actions" items={makeItems()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByText('Archive')).toBeInTheDocument()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+
+      expect(screen.queryByText('Archive')).not.toBeInTheDocument()
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
+  it('leaves Escape alone while closed (window handler still runs)', () => {
+    // The listener is gated on the open state: a closed menu must not swallow
+    // Escape meant for the conversation underneath.
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<OverflowMenu ariaLabel="More actions" items={makeItems()} />)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(windowKeydown).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
   it('closes the menu when clicking outside', () => {
     render(
       <div>

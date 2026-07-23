@@ -67,6 +67,58 @@ describe('ImageLightbox allowFetch gating', () => {
   })
 })
 
+describe('ImageLightbox Escape handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAttachmentUrlSpy.mockReturnValue({ url: null, isLoading: false, error: null })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  it('closes on Escape', () => {
+    const onClose = vi.fn()
+    render(<ImageLightbox src="https://x/full.jpg" downloadUrl="https://x/full.jpg" onClose={onClose} />)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('consumes Escape so it never reaches the window-level shortcut handler', () => {
+    // useKeyboardShortcuts listens on `window`; its Escape branch runs
+    // onConversationEscape → scrollToBottom(), snapping a reader who had scrolled
+    // up into history back to the newest message. The lightbox's own Escape (which
+    // closes it) must stop there — the same keypress must NOT also trigger that
+    // window-level handler. Regression guard for "opening an image resets my
+    // scroll position back to most recent".
+    const onClose = vi.fn()
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<ImageLightbox src="https://x/full.jpg" downloadUrl="https://x/full.jpg" onClose={onClose} />)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
+  it('does not intercept non-Escape keys (they still reach the window handler)', () => {
+    // Control: the consume behavior must be Escape-specific. A different key must
+    // pass through untouched, or the block above could be trivially satisfied by
+    // swallowing everything.
+    const onClose = vi.fn()
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<ImageLightbox src="https://x/full.jpg" downloadUrl="https://x/full.jpg" onClose={onClose} />)
+      fireEvent.keyDown(document.body, { key: 'a' })
+      expect(onClose).not.toHaveBeenCalled()
+      expect(windowKeydown).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+})
+
 describe('ImageLightbox download button', () => {
   beforeEach(() => {
     vi.clearAllMocks()

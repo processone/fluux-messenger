@@ -71,6 +71,7 @@ export function FindOnPageBar({
           </span>
         )}
         <button
+          type="button"
           onClick={onPrev}
           disabled={totalMatches === 0}
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
@@ -79,6 +80,7 @@ export function FindOnPageBar({
           <ChevronUp className="size-4" />
         </button>
         <button
+          type="button"
           onClick={onNext}
           disabled={totalMatches === 0}
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
@@ -87,6 +89,7 @@ export function FindOnPageBar({
           <ChevronDown className="size-4" />
         </button>
         <button
+          type="button"
           onClick={onClose}
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
           title={t('common.close', 'Close (Esc)')}

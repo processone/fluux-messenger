@@ -2370,7 +2370,8 @@ export const chatStore = createStore<ChatState>()(
             rsm.first, // Pagination cursor for fetching older messages
             newestFetchedTimestamp,
             preserveGapMarker,
-            isFetchLatest
+            isFetchLatest,
+            mamState.isDisjointFromResidentWindow(rawExisting, extras?.initialBefore, isFetchLatest)
           )
 
           // Newest PROVEN in-memory boundary (resident extent). Undefined when the
@@ -2461,6 +2462,8 @@ export const chatStore = createStore<ChatState>()(
             initialBefore: extras?.initialBefore,
             sawCoverageTop: extras?.sawCoverageTop ?? false,
             walkCarriedModifications: extras?.walkCarriedModifications ?? false,
+            complete,
+            initialAfter: extras?.initialAfter,
           })
           const prevCoverage = state.conversationCoverage.get(conversationId)
           const deferCoverageCommit =

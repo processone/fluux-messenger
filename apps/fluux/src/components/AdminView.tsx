@@ -439,6 +439,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             headerAction={
               <Tooltip content={t('admin.userList.addUser')} position="left">
                 <button
+                  type="button"
                   onClick={handleAddUser}
                   className="p-1.5 text-fluux-muted hover:text-fluux-brand hover:bg-fluux-hover
                              rounded-lg transition-colors tap-target"
@@ -555,6 +556,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         {/* Back button - mobile only */}
         {onBack && (
           <button
+            type="button"
             onClick={handleHeaderBack}
             className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
@@ -565,6 +567,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         <AdminBreadcrumb crumbs={buildCrumbs()} />
         {onBack && (
           <button
+            type="button"
             onClick={() => setSectionsSheetOpen(true)}
             className="p-1 -me-1 ms-auto rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('admin.openSections')}

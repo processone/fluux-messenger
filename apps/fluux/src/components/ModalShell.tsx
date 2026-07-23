@@ -42,6 +42,7 @@ export function ModalShell({
             <h2 className="text-lg font-semibold text-fluux-text">{title}</h2>
             <Tooltip content={t('common.close')}>
               <button
+                type="button"
                 onClick={close}
                 aria-label={t('common.close')}
                 // Escape closes the modal, so the X is a pointer-only affordance:

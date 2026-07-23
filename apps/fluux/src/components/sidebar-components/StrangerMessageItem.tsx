@@ -62,6 +62,7 @@ export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnor
           Ignore/Block are icon buttons with tooltips. */}
       <div className="flex items-stretch gap-1.5 mt-2">
         <button
+          type="button"
           onClick={onAccept}
           className="flex-1 min-w-0 px-2 py-1.5 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
         >
@@ -70,6 +71,7 @@ export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnor
         </button>
         <Tooltip content={t('common.ignore')} position="top">
           <button
+            type="button"
             onClick={onIgnore}
             className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-muted/20 text-fluux-text rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center"
             aria-label={t('common.ignore')}
@@ -79,6 +81,7 @@ export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnor
         </Tooltip>
         <Tooltip content={t('common.block')} position="top">
           <button
+            type="button"
             onClick={onBlock}
             className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-red text-white rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center"
             aria-label={t('common.block')}

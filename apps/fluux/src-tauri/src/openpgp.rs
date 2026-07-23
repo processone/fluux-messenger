@@ -587,6 +587,24 @@ impl OpenpgpState {
     /// run it on a dedicated worker thread without capturing `&self`.
     fn run_blocking(storage: &KeyStorage, jid: &str, user_id: &str) -> Result<KeyBundle, String> {
         if let Some(persisted) = storage.load(jid).map_err(anyhow_to_string)? {
+            // Heal keys generated before we stopped setting a validity
+            // period: Gajim refuses to restore an expiring secret key, and
+            // the expiry lives in the signatures rather than in the backup
+            // blob, so it has to be cleared here — once, on the way in.
+            // A failure is logged and tolerated: an unhealed key still
+            // works locally, and losing the unlock would lock the user out
+            // of their own messages over an interop nicety.
+            match strip_key_expiration(persisted.cert.clone()) {
+                Ok(Some(healed)) => {
+                    let backing = storage.save(jid, &healed).map_err(anyhow_to_string)?;
+                    tracing::info!("openpgp: cleared key expiration for {}", jid);
+                    return bundle_from_cert(&healed, backing).map_err(anyhow_to_string);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!("openpgp: could not clear key expiration for {}: {:#}", jid, e)
+                }
+            }
             return bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string);
         }
         let cert = generate_cert(user_id).map_err(anyhow_to_string)?;
@@ -645,6 +663,13 @@ pub struct CertValidation {
     pub encryption_subkey_count: u32,
     /// Raw User ID strings from the certificate (e.g. `"xmpp:user@domain"`).
     pub user_ids: Vec<String>,
+    /// Upper-case hex fingerprints of every subkey, independent of usage flags,
+    /// policy, or expiry. Fingerprints identify the key material itself, so
+    /// stripping an expiration or re-signing a binding signature leaves them
+    /// unchanged while a rotation adds a new one. The own-key consistency
+    /// check compares these instead of raw bytes to tell "same key, different
+    /// bytes" apart from "a different key was published".
+    pub subkey_fingerprints: Vec<String>,
 }
 
 /// Validate a PGP public key and return its structural metrics.
@@ -683,10 +708,19 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
         .map(|ua| String::from_utf8_lossy(ua.userid().value()).into_owned())
         .collect();
 
+    // Every subkey fingerprint, unfiltered by policy or expiry: a re-signed or
+    // expiry-stripped export keeps the same set, a rotation grows it.
+    let subkey_fingerprints: Vec<String> = cert
+        .keys()
+        .subkeys()
+        .map(|ka| ka.key().fingerprint().to_hex())
+        .collect();
+
     Ok(CertValidation {
         fingerprint: cert.fingerprint().to_hex(),
         encryption_subkey_count,
         user_ids,
+        subkey_fingerprints,
     })
 }
 
@@ -903,9 +937,99 @@ fn generate_cert(user_id: &str) -> Result<Cert> {
     let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
         .set_profile(profile)
         .context("select OpenPGP key profile")?
+        // `general_purpose()` silently applies a three-year validity period.
+        // Gajim's XEP-0373 §5 restore refuses outright any secret key whose
+        // primary carries an expiration ("Imported key has expiration date"),
+        // which made every key we generated permanently unimportable there.
+        // Retiring a key is an explicit act here — revocation, or the
+        // encryption-subkey rotation below — not a silent clock.
+        // See [`strip_key_expiration`] for the matching heal of older keys.
+        .set_validity_period(None)
         .generate()
         .context("generate OpenPGP cert")?;
     Ok(cert)
+}
+
+/// Clear the key expiration that blocks a cross-client restore, returning
+/// `Ok(None)` when the cert already has none and nothing was rewritten.
+///
+/// Keys generated before the [`generate_cert`] fix carry Sequoia's default
+/// three-year validity on the primary *and* on both subkeys. The expiry
+/// lives in the self-signatures, not in the backup wrapper, so re-publishing
+/// the XEP-0373 §5 backup cannot fix it — the key itself has to be re-signed.
+///
+/// Only the primary and the **currently-alive** subkeys are touched. The
+/// superseded `[E]` subkeys that [`rotate_encryption_subkey`] deliberately
+/// expired must stay dead; clearing their expiry too would silently undo
+/// every past rotation and put retired encryption subkeys back in service.
+///
+/// The primary key packet is never rewritten, so the fingerprint — and with
+/// it every published identity and pinned peer trust — survives the heal.
+fn strip_key_expiration(cert: Cert) -> Result<Option<Cert>> {
+    let policy = StandardPolicy::new();
+    let now = SystemTime::now();
+
+    let primary_expires = cert
+        .primary_key()
+        .with_policy(&policy, now)
+        .context("inspect primary key expiration")?
+        .key_expiration_time()
+        .is_some();
+    let expiring_subkeys: Vec<_> = cert
+        .keys()
+        .with_policy(&policy, now)
+        .subkeys()
+        .filter(|ka| ka.alive().is_ok() && ka.key_expiration_time().is_some())
+        .collect();
+
+    if !primary_expires && expiring_subkeys.is_empty() {
+        return Ok(None);
+    }
+
+    let primary_secret = cert
+        .primary_key()
+        .key()
+        .clone()
+        .parts_into_secret()
+        .context("primary key has no secret material — cannot clear its expiration")?;
+    let mut primary_signer = primary_secret
+        .into_keypair()
+        .context("unlock primary key to re-sign without an expiration")?;
+
+    let mut packets: Vec<Packet> = Vec::new();
+
+    if primary_expires {
+        // Updates the direct key signature and every valid User ID binding —
+        // the certificate's expiration is read from the primary User ID, so
+        // both have to be refreshed.
+        let sigs = cert
+            .set_expiration_time(&policy, now, &mut primary_signer, None)
+            .context("re-sign primary key without an expiration")?;
+        packets.extend(sigs.into_iter().map(Packet::from));
+    }
+
+    for subkey_ka in expiring_subkeys {
+        // Cloning the live binding keeps the key flags and — for the signing
+        // subkey — the embedded primary-key binding signature, which stays
+        // valid because it is computed over the key pair rather than over the
+        // binding signature we are replacing.
+        let builder = SignatureBuilder::from(subkey_ka.binding_signature().clone())
+            .set_signature_creation_time(now)
+            .context("set heal-binding creation time")?
+            .set_key_validity_period(None)
+            .context("clear subkey validity period")?;
+        let binding = subkey_ka
+            .key()
+            .clone()
+            .bind(&mut primary_signer, &cert, builder)
+            .context("sign subkey binding without an expiration")?;
+        packets.push(binding.into());
+    }
+
+    let (healed, _) = cert
+        .insert_packets(packets)
+        .context("merge expiration-free signatures into cert")?;
+    Ok(Some(healed))
 }
 
 /// Ensure `cert` carries the XEP-0373 §8.5 `xmpp:<jid>` User ID, self-signing
@@ -2127,6 +2251,29 @@ mod tests {
     }
 
     #[test]
+    fn validate_cert_reports_every_subkey_fingerprint() {
+        // The own-key consistency check (OpenPGPPluginBase) compares subkey
+        // fingerprints instead of raw bytes so a re-signed / expiry-stripped
+        // re-publish doesn't masquerade as a conflict. That only works if
+        // validate_cert actually surfaces them.
+        let state = new_state();
+        let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let cert = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
+        let expected: Vec<String> = cert
+            .keys()
+            .subkeys()
+            .map(|ka| ka.key().fingerprint().to_hex())
+            .collect();
+        assert!(!expected.is_empty(), "a generated cert must have a subkey");
+
+        let validation = validate_cert(&bundle.public_armored).unwrap();
+        assert_eq!(
+            validation.subkey_fingerprints, expected,
+            "validate_cert must report every subkey fingerprint"
+        );
+    }
+
+    #[test]
     fn ciphertext_encrypted_to_old_subkey_still_decrypts_after_rotation() {
         // Historical MAM messages carry PKESK packets targeted at the
         // encryption subkey that was current at send time. If rotation
@@ -2615,6 +2762,219 @@ mod tests {
             after.userids().count(),
             before,
             "must not append a duplicate xmpp: UID"
+        );
+    }
+
+    // ---------- no key expiration (XEP-0373 §5 cross-client restore) ----------
+    //
+    // Gajim's `OpenPGP.import_key` refuses any restored secret key whose
+    // primary carries an expiration (`SecretKeyExpirationImportError`,
+    // "Imported key has expiration date"). Sequoia's `general_purpose()`
+    // builder silently applies a three-year validity period, so every
+    // desktop key we ever generated was permanently unimportable there.
+    // These tests pin the two halves of the fix: fresh keys are born
+    // without an expiry, and legacy keys are healed on load.
+
+    /// A cert shaped like the ones Fluux ≤0.17.x generated: `general_purpose`
+    /// with its default three-year validity on the primary *and* subkeys.
+    fn legacy_expiring_cert(user_id: &str) -> Cert {
+        let (cert, _rev) = CertBuilder::general_purpose(Some(user_id))
+            .set_profile(openpgp::Profile::RFC4880)
+            .unwrap()
+            .generate()
+            .unwrap();
+        cert
+    }
+
+    fn primary_expiration(cert: &Cert) -> Option<SystemTime> {
+        let policy = StandardPolicy::new();
+        cert.primary_key()
+            .with_policy(&policy, None)
+            .unwrap()
+            .key_expiration_time()
+    }
+
+    #[test]
+    fn generated_cert_has_no_primary_expiration() {
+        let cert = generate_cert("xmpp:alice@example.com").unwrap();
+        assert_eq!(
+            primary_expiration(&cert),
+            None,
+            "a freshly generated key must not expire — Gajim refuses to import one that does"
+        );
+    }
+
+    #[test]
+    fn generated_cert_has_no_subkey_expiration() {
+        let policy = StandardPolicy::new();
+        let cert = generate_cert("xmpp:alice@example.com").unwrap();
+        for subkey in cert.keys().with_policy(&policy, None).subkeys() {
+            assert_eq!(
+                subkey.key_expiration_time(),
+                None,
+                "subkey {} must not expire",
+                subkey.key().fingerprint().to_hex()
+            );
+        }
+    }
+
+    #[test]
+    fn heal_strips_primary_expiration() {
+        let cert = legacy_expiring_cert("xmpp:legacy@example.com");
+        assert!(
+            primary_expiration(&cert).is_some(),
+            "fixture must actually carry the legacy expiry, else this test proves nothing"
+        );
+
+        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+
+        assert_eq!(
+            primary_expiration(&healed),
+            None,
+            "heal must clear the primary expiration Gajim rejects"
+        );
+    }
+
+    #[test]
+    fn heal_preserves_fingerprint() {
+        // The heal only re-signs; the primary key packet is untouched, so
+        // published fingerprints and pinned peer trust survive it.
+        let cert = legacy_expiring_cert("xmpp:legacy@example.com");
+        let before = cert.fingerprint().to_hex();
+        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+        assert_eq!(healed.fingerprint().to_hex(), before);
+    }
+
+    #[test]
+    fn heal_clears_expiration_on_live_subkeys() {
+        // Clearing only the primary would leave encryption breaking three
+        // years in — the subkey bindings carry their own validity period.
+        let policy = StandardPolicy::new();
+        let cert = legacy_expiring_cert("xmpp:legacy@example.com");
+        let healed = strip_key_expiration(cert).unwrap().expect("heal must apply");
+
+        let mut checked = 0;
+        for subkey in healed.keys().with_policy(&policy, None).subkeys() {
+            assert_eq!(
+                subkey.key_expiration_time(),
+                None,
+                "live subkey {} must not expire after heal",
+                subkey.key().fingerprint().to_hex()
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 2, "expected the [S] and [E] subkeys to be present");
+    }
+
+    #[test]
+    fn heal_leaves_rotated_out_subkeys_expired() {
+        // `rotate_encryption_subkey` retires superseded [E] subkeys by
+        // expiring them on purpose. A blanket "clear every expiration"
+        // heal would resurrect them and undo the rotation.
+        let policy = StandardPolicy::new();
+        let cert = legacy_expiring_cert("xmpp:rotate@example.com");
+        let rotated = rotate_encryption_subkey(cert).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let retired: Vec<String> = rotated
+            .keys()
+            .with_policy(&policy, None)
+            .subkeys()
+            .filter(|ka| ka.alive().is_err())
+            .map(|ka| ka.key().fingerprint().to_hex())
+            .collect();
+        assert!(
+            !retired.is_empty(),
+            "fixture must contain a retired subkey, else this test proves nothing"
+        );
+
+        let healed = strip_key_expiration(rotated).unwrap().expect("heal must apply");
+
+        for fp in &retired {
+            let still_dead = healed
+                .keys()
+                .with_policy(&policy, None)
+                .subkeys()
+                .find(|ka| ka.key().fingerprint().to_hex() == *fp)
+                .map(|ka| ka.alive().is_err())
+                .unwrap_or(true);
+            assert!(
+                still_dead,
+                "retired subkey {fp} must stay expired — heal must not undo a rotation"
+            );
+        }
+    }
+
+    #[test]
+    fn heal_is_noop_for_a_cert_that_never_expires() {
+        // Signals "nothing to do" so the load path can skip a re-save on
+        // every single unlock.
+        let cert = generate_cert("xmpp:fresh@example.com").unwrap();
+        let outcome = strip_key_expiration(cert).unwrap();
+        assert!(
+            outcome.is_none(),
+            "a key with no expiration must report no heal needed"
+        );
+    }
+
+    #[test]
+    fn healed_cert_still_signcrypts() {
+        // Re-signing must not damage the key: prove the healed cert can
+        // still complete a real encrypt → decrypt round trip.
+        let state = new_state();
+        let bob = state.ensure_key_sync("bob@example.com", "Bob").unwrap();
+
+        let alice_cert = legacy_expiring_cert("xmpp:alice@example.com");
+        let healed = strip_key_expiration(alice_cert)
+            .unwrap()
+            .expect("heal must apply");
+        let alice_secret = armored_string(&healed, KeyExport::Secret).unwrap();
+        let alice_public = armored_string(&published_cert(&healed), KeyExport::Public).unwrap();
+
+        let ciphertext =
+            encrypt_and_sign(&bob.public_armored, &alice_secret, "healed and working").unwrap();
+        let out = state
+            .decrypt("bob@example.com", &ciphertext, Some(&alice_public))
+            .unwrap();
+        assert_eq!(out.plaintext, "healed and working");
+        assert!(out.signature_verified, "healed key must still sign");
+    }
+
+    #[test]
+    fn loading_a_legacy_key_heals_and_persists_it() {
+        // The whole point: users already hold expiring keys. Unlocking one
+        // must heal it *and* write it back, so the next backup published to
+        // the XEP-0373 §5 node is importable by Gajim.
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let legacy = legacy_expiring_cert("xmpp:legacy@example.com");
+        let legacy_fp = legacy.fingerprint().to_hex();
+        storage.save("legacy@example.com", &legacy).unwrap();
+
+        let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let bundle = state
+            .ensure_key_sync("legacy@example.com", "xmpp:legacy@example.com")
+            .unwrap();
+
+        assert_eq!(bundle.fingerprint, legacy_fp, "heal must not change identity");
+
+        let reloaded = Cert::from_bytes(bundle.secret_armored.as_bytes()).unwrap();
+        assert_eq!(
+            primary_expiration(&reloaded),
+            None,
+            "the unlocked bundle must already be healed"
+        );
+
+        // And it must be durable — a fresh state reading the same storage
+        // sees the healed key, not the legacy one.
+        let persisted = KeyStorage::for_testing(dir)
+            .load("legacy@example.com")
+            .unwrap()
+            .expect("key must still be on disk");
+        assert_eq!(
+            primary_expiration(&persisted.cert),
+            None,
+            "the heal must have been written back to disk"
         );
     }
 }

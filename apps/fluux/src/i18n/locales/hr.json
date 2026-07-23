@@ -429,7 +429,10 @@
         "nickChanged": "{{oldNick}} sada je poznat kao {{newNick}}",
         "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
         "nickHiddenChars": "Ime sadrži skrivene znakove",
-        "mentionSuggestions": "Prijedlozi spominjanja"
+        "mentionSuggestions": "Prijedlozi spominjanja",
+        "unreadMessages": "{{count}} nepročitana poruka",
+        "unreadMessages_few": "{{count}} nepročitane poruke",
+        "unreadMessages_other": "{{count}} nepročitanih poruka"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",
@@ -730,7 +733,10 @@
             "searchIndexDescription": "Indeks pretraživanja omogućuje pretraživanje punog teksta u povijesti poruka. Obnovite ga ako rezultati pretraživanja djeluju nepotpuno.",
             "rebuildIndex": "Obnovi indeks",
             "rebuildingIndex": "Obnavljanje…",
-            "indexRebuilt": "{{count}} poruka indeksirano"
+            "indexRebuilt": "{{count}} poruka indeksirano",
+            "logs": "Zapisi",
+            "logsDescription": "Otvori mapu s dijagnostičkim zapisima Fluuxa.",
+            "openLogs": "Otvori mapu zapisa"
         },
         "encryption": {
             "experimental": "Eksperimentalno",
@@ -930,6 +936,13 @@
             "enableDescription": "Napredni način otključava stručne mogućnosti kao što su prilagođene postavke poslužitelja i konzola XMPP.",
             "disableDescription": "Isključite napredni način kako biste sakrili ovaj odjeljak.",
             "disable": "Isključi napredni način"
+        },
+        "systemTray": {
+            "title": "Područje obavijesti",
+            "keepInTray": "Zadrži Fluux u području obavijesti",
+            "descriptionWindows": "Kada je uključeno, minimiziranje ili zatvaranje skriva Fluux u područje obavijesti.",
+            "descriptionLinux": "Kada je uključeno, zatvaranje skriva Fluux u područje obavijesti ako je podržano. Minimiziranje zadržava uobičajeno ponašanje radne površine.",
+            "unavailableLinux": "Kompatibilno područje obavijesti nije dostupno. Zatvaranje će ugasiti Fluux."
         }
     },
     "update": {

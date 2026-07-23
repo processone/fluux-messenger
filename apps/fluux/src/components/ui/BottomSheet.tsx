@@ -12,9 +12,10 @@
  * Used for touch action menus (e.g. per-message actions) where a centered modal
  * or a hover toolbar doesn't fit thumb ergonomics.
  */
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 
 interface BottomSheetProps {
   /** Whether the sheet is open. Renders nothing when false. */
@@ -40,15 +41,9 @@ export function BottomSheet({
 }: BottomSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   useFocusTrap(panelRef, { active: open })
-
-  useEffect(() => {
-    if (!open) return
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  // Consume Escape while open so it can't also fire the window-level conversation
+  // shortcut (scroll-to-bottom / mark-read) behind the sheet. See useCloseOnEscape.
+  useCloseOnEscape(onClose, open)
 
   if (!open || typeof document === 'undefined') return null
 

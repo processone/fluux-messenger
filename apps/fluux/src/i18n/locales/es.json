@@ -431,7 +431,10 @@
         "nickChanged": "{{oldNick}} ahora se conoce como {{newNick}}",
         "nickEdgeWhitespace": "El nombre tiene espacios adicionales en los extremos",
         "nickHiddenChars": "El nombre contiene caracteres ocultos",
-        "mentionSuggestions": "Sugerencias de menciones"
+        "mentionSuggestions": "Sugerencias de menciones",
+        "unreadMessages": "{{count}} mensaje sin leer",
+        "unreadMessages_many": "{{count}} de mensajes sin leer",
+        "unreadMessages_other": "{{count}} mensajes sin leer"
     },
     "events": {
         "invitedBy": "Invitado por {{name}}",
@@ -732,7 +735,10 @@
             "searchIndexDescription": "El índice de búsqueda permite la búsqueda de texto completo en el historial de mensajes. Reconstrúyalo si los resultados parecen incompletos.",
             "rebuildIndex": "Reconstruir índice",
             "rebuildingIndex": "Reconstruyendo…",
-            "indexRebuilt": "{{count}} mensajes indexados"
+            "indexRebuilt": "{{count}} mensajes indexados",
+            "logs": "Registros",
+            "logsDescription": "Abre la carpeta que contiene los registros de diagnóstico de Fluux.",
+            "openLogs": "Abrir carpeta de registros"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -932,6 +938,13 @@
             "enableDescription": "El modo avanzado desbloquea opciones avanzadas como la configuración de servidor personalizada y la consola XMPP.",
             "disableDescription": "Desactiva el modo avanzado para ocultar esta sección.",
             "disable": "Desactivar el modo avanzado"
+        },
+        "systemTray": {
+            "title": "Bandeja del sistema",
+            "keepInTray": "Mantener Fluux en la bandeja del sistema",
+            "descriptionWindows": "Al activarlo, minimizar o cerrar Fluux lo oculta en la bandeja del sistema.",
+            "descriptionLinux": "Al activarlo, cerrar Fluux lo oculta en la bandeja del sistema cuando sea compatible. Minimizar mantiene el comportamiento normal del escritorio.",
+            "unavailableLinux": "No hay una bandeja del sistema compatible. Cerrar Fluux saldrá de la aplicación."
         }
     },
     "update": {

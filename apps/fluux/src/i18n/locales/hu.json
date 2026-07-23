@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert",
         "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
         "nickHiddenChars": "A név rejtett karaktereket tartalmaz",
-        "mentionSuggestions": "Említésjavaslatok"
+        "mentionSuggestions": "Említésjavaslatok",
+        "unreadMessages": "{{count}} olvasatlan üzenet",
+        "unreadMessages_other": "{{count}} olvasatlan üzenet"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",
@@ -729,7 +731,10 @@
             "searchIndexDescription": "A keresési index lehetővé teszi a teljes szöveges keresést az üzenetelőzmények között. Építse újra, ha a keresési eredmények hiányosnak tűnnek.",
             "rebuildIndex": "Index újraépítése",
             "rebuildingIndex": "Újraépítés…",
-            "indexRebuilt": "{{count}} üzenet indexelve"
+            "indexRebuilt": "{{count}} üzenet indexelve",
+            "logs": "Naplók",
+            "logsDescription": "A Fluux diagnosztikai naplóit tartalmazó mappa megnyitása.",
+            "openLogs": "Naplómappa megnyitása"
         },
         "encryption": {
             "experimental": "Kísérleti",
@@ -929,6 +934,13 @@
             "enableDescription": "A speciális mód feloldja a szakértői beállításokat, például az egyéni szerverkonfigurációt és az XMPP-konzolt.",
             "disableDescription": "Kapcsolja ki a speciális módot a szakasz elrejtéséhez.",
             "disable": "Speciális mód kikapcsolása"
+        },
+        "systemTray": {
+            "title": "Rendszertálca",
+            "keepInTray": "A Fluux maradjon a rendszertálcán",
+            "descriptionWindows": "Ha engedélyezve van, a Fluux kis méretre állításkor vagy bezáráskor a rendszertálcára kerül.",
+            "descriptionLinux": "Ha engedélyezve van, a Fluux bezáráskor a rendszertálcára kerül, ha ez támogatott. A kis méretre állítás az asztal szokásos működését követi.",
+            "unavailableLinux": "Nem érhető el kompatibilis rendszertálca. A Fluux bezárása kilép az alkalmazásból."
         }
     },
     "update": {

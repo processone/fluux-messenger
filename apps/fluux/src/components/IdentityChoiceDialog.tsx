@@ -94,6 +94,11 @@ export function IdentityChoiceDialog({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // This dialog owns Escape while open (ModalOverlay's own handler is off via
+      // closeOnEscape={false}). Consume it so it can't also fire the window-level
+      // conversation shortcut (scroll-to-bottom / mark-read) behind the modal —
+      // the same leak useCloseOnEscape fixes for the shared overlays.
+      e.stopPropagation()
       // Escape backs out of the sub-phase to the chooser, NOT out of the
       // dialog entirely — Cancel is the only path that closes, to make
       // sure the user is making an explicit choice.
@@ -262,6 +267,7 @@ export function IdentityChoiceDialog({
         {phase === 'choose' && (
           <div className="px-5 pb-5 pt-3 flex justify-end">
             <button
+              type="button"
               onClick={onCancel}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
             >
@@ -273,6 +279,7 @@ export function IdentityChoiceDialog({
         {phase === 'restoring' && (
           <div className="px-5 pb-5 pt-3 flex flex-wrap gap-2 justify-end">
             <button
+              type="button"
               onClick={() => {
                 setPhase('choose')
                 setPassphrase('')
@@ -283,6 +290,7 @@ export function IdentityChoiceDialog({
               {t('common.back')}
             </button>
             <button
+              type="button"
               onClick={handleConfirmRestore}
               disabled={!passphrase.trim()}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -295,6 +303,7 @@ export function IdentityChoiceDialog({
         {phase === 'confirm-replace' && (
           <div className="px-5 pb-5 pt-3 flex flex-wrap gap-2 justify-end">
             <button
+              type="button"
               onClick={() => {
                 setPhase('choose')
                 setError(null)
@@ -304,6 +313,7 @@ export function IdentityChoiceDialog({
               {t('common.back')}
             </button>
             <button
+              type="button"
               onClick={handleConfirmReplace}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
             >
@@ -327,6 +337,7 @@ interface ChoiceButtonProps {
 function ChoiceButton({ icon, title, description, onClick, disabled, danger }: ChoiceButtonProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className={`flex items-start gap-3 text-left px-3 py-3 rounded-lg border transition-colors ${

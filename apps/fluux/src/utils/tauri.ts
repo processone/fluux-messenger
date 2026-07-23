@@ -20,6 +20,14 @@ export function isLinux(): boolean {
   return platform.includes('linux') || userAgent.includes('linux')
 }
 
+/** Check if running on Windows. */
+export function isWindows(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const platform = navigator.platform?.toLowerCase() || ''
+  const userAgent = navigator.userAgent?.toLowerCase() || ''
+  return platform.includes('win') || userAgent.includes('windows')
+}
+
 /**
  * Check if in-app updates should be enabled.
  * Enabled only in Tauri on macOS and Windows (not Linux, not web).

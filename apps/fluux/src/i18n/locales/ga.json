@@ -429,7 +429,12 @@
         "nickChanged": "Tugtar {{newNick}} ar {{oldNick}} anois",
         "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
         "nickHiddenChars": "Tá carachtair fholaithe san ainm",
-        "mentionSuggestions": "Moltaí tagartha"
+        "mentionSuggestions": "Moltaí tagartha",
+        "unreadMessages": "{{count}} teachtaireacht gan léamh",
+        "unreadMessages_two": "{{count}} theachtaireacht gan léamh",
+        "unreadMessages_few": "{{count}} theachtaireacht gan léamh",
+        "unreadMessages_many": "{{count}} dteachtaireacht gan léamh",
+        "unreadMessages_other": "{{count}} teachtaireacht gan léamh"
     },
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",
@@ -732,7 +737,10 @@
             "searchIndexDescription": "Cumasaíonn an t-innéacs cuardaigh cuardach téacs iomlán ar fud stair do theachtaireachtaí. Atóg é má tá na torthaí cuardaigh neamhiomlán.",
             "rebuildIndex": "Atóg an t-innéacs",
             "rebuildingIndex": "Ag atógáil…",
-            "indexRebuilt": "{{count}} teachtaireacht innéacsaithe"
+            "indexRebuilt": "{{count}} teachtaireacht innéacsaithe",
+            "logs": "Logaí",
+            "logsDescription": "Oscail an fillteán ina bhfuil logaí diagnóise Fluux.",
+            "openLogs": "Oscail fillteán na logaí"
         },
         "encryption": {
             "experimental": "Turgnamhach",
@@ -932,6 +940,13 @@
             "enableDescription": "Osclaíonn an mód ardleibhéil roghanna saineolaithe cosúil le socruithe freastalaí saincheaptha agus consól XMPP.",
             "disableDescription": "Díchumasaigh an mód ardleibhéil chun an chuid seo a fholú.",
             "disable": "Díchumasaigh an mód ardleibhéil"
+        },
+        "systemTray": {
+            "title": "Tráidire córais",
+            "keepInTray": "Coinnigh Fluux i dtráidire an chórais",
+            "descriptionWindows": "Nuair atá sé cumasaithe, folaítear Fluux i dtráidire an chórais nuair a íoslaghdaítear nó a dhúntar é.",
+            "descriptionLinux": "Nuair atá sé cumasaithe, folaítear Fluux i dtráidire an chórais nuair a dhúntar é má thacaítear leis. Leanann íoslaghdú gnáthiompar na deisce.",
+            "unavailableLinux": "Níl tráidire córais comhoiriúnach ar fáil. Scoirfear Fluux nuair a dhúnfar é."
         }
     },
     "update": {

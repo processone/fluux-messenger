@@ -106,6 +106,7 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
       {/* Footer */}
       <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
         <button
+          type="button"
           onClick={onClose}
           className="px-4 py-2 text-sm text-fluux-muted hover:text-fluux-text
                      hover:bg-fluux-hover rounded transition-colors"
@@ -113,6 +114,7 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           onClick={handleInvite}
           disabled={selectedContacts.length === 0}
           className="px-4 py-2 text-sm bg-fluux-brand text-fluux-text-on-accent rounded

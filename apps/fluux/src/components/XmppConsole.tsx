@@ -537,6 +537,7 @@ export function XmppConsole() {
             {(['all', 'incoming', 'outgoing'] as DirectionFilter[]).map((dir) => (
               <Tooltip key={dir} content={dir === 'all' ? t('console.showAll') : dir === 'incoming' ? t('console.showReceived') : t('console.showSent')} position="bottom">
                 <button
+                  type="button"
                   onClick={() => setDirectionFilter(dir)}
                   className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     directionFilter === dir
@@ -554,6 +555,7 @@ export function XmppConsole() {
             {(['message', 'presence', 'iq', 'sm', 'other', 'event'] as FilterType[]).map((type) => (
               <Tooltip key={type} content={enabledTypes.has(type) ? t('console.hideType', { type: type === 'event' ? 'events' : type + ' packets' }) : t('console.showType', { type: type === 'event' ? 'events' : type + ' packets' })} position="bottom">
                 <button
+                  type="button"
                   onClick={() => toggleType(type)}
                   className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     enabledTypes.has(type)
@@ -578,6 +580,7 @@ export function XmppConsole() {
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute end-1.5 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
               >
@@ -587,6 +590,7 @@ export function XmppConsole() {
           </div>
           <Tooltip content={t('console.serverInfo')} position="bottom">
             <button
+              type="button"
               onClick={() => setShowServerInfo(true)}
               disabled={!serverInfo}
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
@@ -597,6 +601,7 @@ export function XmppConsole() {
           </Tooltip>
           <Tooltip content={t('console.export')} position="bottom">
             <button
+              type="button"
               onClick={handleExport}
               disabled={entries.length === 0}
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
@@ -607,6 +612,7 @@ export function XmppConsole() {
           </Tooltip>
           <Tooltip content={t('console.clear')} position="bottom">
             <button
+              type="button"
               onClick={clearEntries}
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded"
               aria-label={t('console.clear')}
@@ -616,6 +622,7 @@ export function XmppConsole() {
           </Tooltip>
           <Tooltip content={t('console.close')} position="left">
             <button
+              type="button"
               onClick={toggle}
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded"
               aria-label={t('console.close')}
@@ -692,6 +699,7 @@ export function XmppConsole() {
         {/* Floating "Go to Live" button */}
         {!autoScroll && filteredEntries.length > 0 && (
           <button
+            type="button"
             onClick={() => {
               setAutoScroll(true)
               setSelectedEntryId(null)
@@ -725,6 +733,7 @@ export function XmppConsole() {
           />
           <Tooltip content={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })} position="top">
             <button
+              type="button"
               onClick={handleSend}
               disabled={!isConnected || !inputXml.trim()}
               className="px-4 bg-fluux-brand text-fluux-text-on-accent rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -750,6 +759,7 @@ export function XmppConsole() {
                 <h2 className="text-lg font-semibold text-fluux-text">{t('console.serverInformation')}</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setShowServerInfo(false)}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded"
               >
@@ -800,6 +810,7 @@ export function XmppConsole() {
             {/* Modal Footer */}
             <div className="px-4 py-3 border-t border-fluux-bg flex justify-end">
               <button
+                type="button"
                 onClick={() => setShowServerInfo(false)}
                 className="px-4 py-2 bg-fluux-bg text-fluux-text rounded hover:bg-fluux-bg/70 transition-colors"
               >

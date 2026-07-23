@@ -242,6 +242,9 @@ export interface ChatEvents {
      *  cache effects are fire-and-forget, so coverage must not certify over
      *  them (Codex r4 #2). */
     walkCarriedModifications?: boolean
+    /** FORWARD only: the `after` cursor the catch-up resumed from. With
+     *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */
+    initialAfter?: string
   }
 
   /**
@@ -480,6 +483,9 @@ export interface RoomEvents {
      *  cache effects are fire-and-forget, so coverage must not certify over
      *  them (Codex r4 #2). */
     walkCarriedModifications?: boolean
+    /** FORWARD only: the `after` cursor the catch-up resumed from. With
+     *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */
+    initialAfter?: string
   }
 
   /**

@@ -1732,6 +1732,55 @@ describe('MessageList scroll behavior', () => {
       }
     })
 
+    it('does not open the save gate on a measurement settle that outlives the programmatic window', () => {
+      // Save-gate settle drift: after a restore the list keeps re-measuring; on WebKit a measurement
+      // settle can fire 'scroll' events LATER than PROGRAMMATIC_SETTLE_MS (250ms) after the last
+      // programmatic write. The save gate's fallback heuristic — "not programmatic + height unchanged
+      // = a scrollbar drag" — then mistakes a mid-settle frame (whose height happens to equal the
+      // previous frame's) for a user drag, opens the gate, and persists a drifted anchor that creeps
+      // between room visits. A measurement settle CHANGES height across frames, so it must keep
+      // refreshing the programmatic window and never open the gate.
+      vi.useFakeTimers()
+      vi.setSystemTime(100_000)
+      const saveSpy = vi.spyOn(scrollStateManager, 'saveScrollPosition')
+      try {
+        const messages = createTestMessages(20)
+        const props = { clearFirstNewMessageId: vi.fn(), renderMessage: (m: BaseMessage) => <div key={m.id}>{m.body}</div> }
+        const { rerender } = render(<MessageList messages={messages} conversationId="conv-A" {...props} />)
+        const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+
+        let top = 250
+        let height = 2000
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollHeight', { get: () => height, configurable: true })
+        Object.defineProperty(container, 'scrollTop', { get: () => top, set: (v: number) => { top = v }, configurable: true })
+
+        // Genuine user scroll-up → saves conv-A's scrolled-up anchor (opens the gate via the wheel).
+        act(() => { container.dispatchEvent(new WheelEvent('wheel', { bubbles: true })); container.dispatchEvent(new Event('scroll')) })
+
+        // Switch away and back → restore sets lastProgrammaticScrollAt (starts the 250ms window) and
+        // resets "user scrolled since entry".
+        rerender(<MessageList messages={messages} conversationId="conv-B" {...props} />)
+        rerender(<MessageList messages={messages} conversationId="conv-A" {...props} />)
+
+        saveSpy.mockClear()
+
+        // >250ms after the restore, a measurement settle fires scroll events with NO wheel/touch: a
+        // frame at the current height, a frame where the height changes (rows re-measuring), then a
+        // frame back at a stable height with a drifted scrollTop.
+        vi.advanceTimersByTime(300)
+        act(() => { top = 300; container.dispatchEvent(new Event('scroll')) }) // establishes prev height
+        act(() => { height = 2100; top = 290; container.dispatchEvent(new Event('scroll')) }) // height changed
+        act(() => { top = 280; container.dispatchEvent(new Event('scroll')) }) // height stable, drifted
+
+        // The settle must NOT be mistaken for a user scroll and persisted.
+        expect(saveSpy).not.toHaveBeenCalled()
+      } finally {
+        saveSpy.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
     it('should scroll to bottom when returning to conversation that was at bottom', () => {
       const messages = createTestMessages(10)
       const scrollSpy = vi.fn()
@@ -1912,7 +1961,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />
@@ -1967,7 +2016,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />
@@ -2022,7 +2071,7 @@ describe('MessageList scroll behavior', () => {
           renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
             <div key={msg.id}>
               {msg.body}
-              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+              <button type="button" data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
             </div>
           )}
         />

@@ -429,7 +429,11 @@
         "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}",
         "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
         "nickHiddenChars": "Varde yra paslėptų simbolių",
-        "mentionSuggestions": "Paminėjimų pasiūlymai"
+        "mentionSuggestions": "Paminėjimų pasiūlymai",
+        "unreadMessages": "{{count}} neperskaitytas pranešimas",
+        "unreadMessages_few": "{{count}} neperskaityti pranešimai",
+        "unreadMessages_many": "{{count}} neperskaityto pranešimo",
+        "unreadMessages_other": "{{count}} neperskaitytų pranešimų"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",
@@ -731,7 +735,10 @@
             "searchIndexDescription": "Paieškos indeksas leidžia atlikti viso teksto paiešką žinučių istorijoje. Atkurkite jį, jei paieškos rezultatai atrodo nepilni.",
             "rebuildIndex": "Atkurti indeksą",
             "rebuildingIndex": "Atkuriama…",
-            "indexRebuilt": "{{count}} žinučių indeksuota"
+            "indexRebuilt": "{{count}} žinučių indeksuota",
+            "logs": "Žurnalai",
+            "logsDescription": "Atverti aplanką su Fluux diagnostikos žurnalais.",
+            "openLogs": "Atverti žurnalų aplanką"
         },
         "encryption": {
             "experimental": "Eksperimentinis",
@@ -931,6 +938,13 @@
             "enableDescription": "Išplėstinis režimas suteikia prieigą prie ekspertinių parinkčių, tokių kaip pasirinktiniai serverio nustatymai ir XMPP konsolė.",
             "disableDescription": "Išjunkite išplėstinį režimą, kad paslėptumėte šį skyrių.",
             "disable": "Išjungti išplėstinį režimą"
+        },
+        "systemTray": {
+            "title": "Sistemos dėklas",
+            "keepInTray": "Laikyti Fluux sistemos dėkle",
+            "descriptionWindows": "Kai įjungta, sumažinus arba uždarius Fluux jis paslepiamas sistemos dėkle.",
+            "descriptionLinux": "Kai įjungta, uždarius Fluux jis paslepiamas sistemos dėkle, jei tai palaikoma. Sumažinimas išlaiko įprastą darbalaukio veikimą.",
+            "unavailableLinux": "Suderinamas sistemos dėklas nepasiekiamas. Uždarius Fluux programa bus baigta."
         }
     },
     "update": {

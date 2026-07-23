@@ -431,7 +431,11 @@
         "nickChanged": "{{oldNick}} je zdaj znan kot {{newNick}}",
         "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
         "nickHiddenChars": "Ime vsebuje skrite znake",
-        "mentionSuggestions": "Predlogi omemb"
+        "mentionSuggestions": "Predlogi omemb",
+        "unreadMessages": "{{count}} neprebrano sporočilo",
+        "unreadMessages_two": "{{count}} neprebrani sporočili",
+        "unreadMessages_few": "{{count}} neprebrana sporočila",
+        "unreadMessages_other": "{{count}} neprebranih sporočil"
     },
     "events": {
         "invitedBy": "Povabil {{name}}",
@@ -733,7 +737,10 @@
             "searchIndexDescription": "Iskalni indeks omogoča iskanje po celotnem besedilu v zgodovini sporočil. Obnovite ga, če se rezultati iskanja zdijo nepopolni.",
             "rebuildIndex": "Obnovi indeks",
             "rebuildingIndex": "Obnavljanje…",
-            "indexRebuilt": "{{count}} sporočil indeksiranih"
+            "indexRebuilt": "{{count}} sporočil indeksiranih",
+            "logs": "Dnevniki",
+            "logsDescription": "Odpri mapo z diagnostičnimi dnevniki Fluux.",
+            "openLogs": "Odpri mapo dnevnikov"
         },
         "encryption": {
             "experimental": "Eksperimentalno",
@@ -933,6 +940,13 @@
             "enableDescription": "Napredni način odklene strokovne možnosti, kot so nastavitve po meri za strežnik in konzola XMPP.",
             "disableDescription": "Izklopite napredni način, da skrijete ta razdelek.",
             "disable": "Izklopi napredni način"
+        },
+        "systemTray": {
+            "title": "Sistemska vrstica",
+            "keepInTray": "Ohrani Fluux v sistemski vrstici",
+            "descriptionWindows": "Ko je omogočeno, se Fluux ob minimiziranju ali zapiranju skrije v sistemsko vrstico.",
+            "descriptionLinux": "Ko je omogočeno, se Fluux ob zapiranju skrije v sistemsko vrstico, če je podprta. Minimiziranje ohrani običajno vedenje namizja.",
+            "unavailableLinux": "Združljiva sistemska vrstica ni na voljo. Ob zapiranju se bo Fluux končal."
         }
     },
     "update": {

@@ -24,6 +24,7 @@ export function ListEmpty({ icon: Icon, title, description, action, className = 
       {description && <p className="text-xs opacity-75 mt-1 max-w-xs">{description}</p>}
       {action && (
         <button
+          type="button"
           onClick={action.onClick}
           className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
         >

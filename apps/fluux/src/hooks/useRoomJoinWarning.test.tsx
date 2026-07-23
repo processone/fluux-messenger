@@ -23,7 +23,7 @@ function Harness({ onResult }: { onResult: (v: boolean) => void }) {
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
   return (
     <div>
-      <button onClick={async () => onResult(await confirmJoin('room@conference.example.com'))}>go</button>
+      <button type="button" onClick={async () => onResult(await confirmJoin('room@conference.example.com'))}>go</button>
       {warningDialog}
     </div>
   )

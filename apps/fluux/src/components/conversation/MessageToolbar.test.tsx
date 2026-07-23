@@ -33,14 +33,14 @@ vi.mock('@/hooks', () => ({
 vi.mock('../EmojiPicker', () => ({
   default: ({ onSelect, onClose }: { onSelect: (emoji: string) => void; onClose: () => void }) => (
     <div data-testid="emoji-picker">
-      <button onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
-      <button onClick={onClose} data-testid="emoji-picker-close">Close</button>
+      <button type="button" onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
+      <button type="button" onClick={onClose} data-testid="emoji-picker-close">Close</button>
     </div>
   ),
   EmojiPicker: ({ onSelect, onClose }: { onSelect: (emoji: string) => void; onClose: () => void }) => (
     <div data-testid="emoji-picker">
-      <button onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
-      <button onClick={onClose} data-testid="emoji-picker-close">Close</button>
+      <button type="button" onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
+      <button type="button" onClick={onClose} data-testid="emoji-picker-close">Close</button>
     </div>
   ),
 }))

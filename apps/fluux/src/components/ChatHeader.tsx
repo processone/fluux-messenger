@@ -97,6 +97,7 @@ export function ChatHeader({
       {/* Back button - mobile only */}
       {onBack && (
         <button
+          type="button"
           onClick={onBack}
           className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
           aria-label={t('conversations.backToConversations')}
@@ -158,6 +159,7 @@ export function ChatHeader({
         {onSearchInConversation && (
           <div className={inlineClass('search')}>
             <button
+              type="button"
               onClick={onSearchInConversation}
               className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               aria-label={t('chat.searchInConversation', 'Search in conversation')}

@@ -69,6 +69,7 @@ export const PollBanner = memo(function PollBanner({ messages, myNick, votedPoll
       <BarChart3 className="size-4 text-fluux-brand flex-shrink-0" />
 
       <button
+        type="button"
         onClick={() => scrollToMessage(latestPoll.id)}
         className="flex-1 min-w-0 text-start text-fluux-text hover:text-fluux-brand transition-colors truncate"
       >
@@ -81,6 +82,7 @@ export const PollBanner = memo(function PollBanner({ messages, myNick, votedPoll
       <ChevronDown className="size-4 text-fluux-muted flex-shrink-0" />
 
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation()
           onDismiss(latestPoll.id)

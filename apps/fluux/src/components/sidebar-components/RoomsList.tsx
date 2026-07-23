@@ -13,6 +13,7 @@ import { useChatStore, useRoomStore, useIgnoreStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { visibleRoomTypingNicks } from '@/utils/roomTyping'
+import { roomTooltipParts } from '@/utils/roomTooltip'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { TypingIndicator } from '../conversation/TypingIndicator'
@@ -366,22 +367,19 @@ export const RoomItem = memo(function RoomItem({
     onActivate(roomJid)
   }
 
-  // Determine tooltip based on state
-  const getTooltipContent = () => {
-    if (room.isJoining) return t('rooms.joining')
-    if (room.joined) {
-      // Show user count and nickname in tooltip for joined rooms
-      const userCount = room.occupants.size
-      const userText = `${userCount} ${userCount === 1 ? t('rooms.user') : t('rooms.users')}`
-      if (room.nickname) {
-        return `${userText} • ${room.nickname}`
-      }
-      return userText
-    }
-    return t('rooms.doubleClickToJoin')
-  }
-
-  const tooltipContent = getTooltipContent()
+  // Tooltip: the unread count as a headline (the row itself only shows a dot,
+  // so this is the one place the number is legible), over the occupant/nickname
+  // detail line. With nothing unread this stays a bare string — byte-identical
+  // to the pre-headline tooltip.
+  const { headline, detail } = roomTooltipParts(room, t)
+  const tooltipContent = headline ? (
+    <div>
+      <div className="font-medium">{headline}</div>
+      <div className="text-xs text-fluux-muted">{detail}</div>
+    </div>
+  ) : (
+    detail
+  )
 
   return (
     <>
@@ -450,15 +448,15 @@ export const RoomItem = memo(function RoomItem({
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
             {/* Activity dot for unread (non-mention) activity. Red for a
                 notify-all room — the attention tier, matching the icon-rail
-                indicator and mention badge — grey for plain unread. */}
+                indicator and mention badge — grey for plain unread. The count
+                itself lives in the row tooltip; the dot carries no tooltip of
+                its own (nested inside the row's, it popped a second bubble). */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
-              <Tooltip content={`${room.unreadCount} unread`} position="top">
-                <div
-                  className={`size-2.5 rounded-full flex-shrink-0 ${
-                    roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
-                  }`}
-                />
-              </Tooltip>
+              <div
+                className={`size-2.5 rounded-full flex-shrink-0 ${
+                  roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
+                }`}
+              />
             )}
             {/* Mentions count badge — red, the loud "wants your attention" tier. */}
             {room.mentionsCount > 0 && (
@@ -514,6 +512,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Join (only for non-joined rooms) */}
           {!room.joined && (
             <button
+              type="button"
               onClick={() => { menu.close(); onJoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -525,6 +524,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Edit bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onEditBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -536,6 +536,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Toggle autojoin (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onToggleAutojoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
@@ -561,6 +562,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Leave room (only for joined rooms) */}
           {room.joined && (
             <button
+              type="button"
               onClick={() => { menu.close(); onLeave(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
@@ -572,6 +574,7 @@ export const RoomItem = memo(function RoomItem({
           {/* Remove bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
+              type="button"
               onClick={() => { menu.close(); onRemoveBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >

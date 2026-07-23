@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} tunnetaan nyt nimellä {{newNick}}",
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
         "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä",
-        "mentionSuggestions": "Mainintaehdotukset"
+        "mentionSuggestions": "Mainintaehdotukset",
+        "unreadMessages": "{{count}} lukematon viesti",
+        "unreadMessages_other": "{{count}} lukematonta viestiä"
     },
     "events": {
         "invitedBy": "Kutsuja: {{name}}",
@@ -729,7 +731,10 @@
             "searchIndexDescription": "Hakuindeksi mahdollistaa kokotekstihaun viestihistoriastasi. Rakenna se uudelleen, jos hakutulokset vaikuttavat puutteellisilta.",
             "rebuildIndex": "Rakenna indeksi uudelleen",
             "rebuildingIndex": "Rakennetaan…",
-            "indexRebuilt": "{{count}} viestiä indeksoitu"
+            "indexRebuilt": "{{count}} viestiä indeksoitu",
+            "logs": "Lokit",
+            "logsDescription": "Avaa Fluuxin diagnostiikkalokit sisältävä kansio.",
+            "openLogs": "Avaa lokikansio"
         },
         "encryption": {
             "experimental": "Kokeellinen",
@@ -929,6 +934,13 @@
             "enableDescription": "Edistynyt tila avaa asiantuntija-asetukset, kuten mukautetut palvelinasetukset ja XMPP-konsolin.",
             "disableDescription": "Poista edistynyt tila käytöstä piilottaaksesi tämän osion.",
             "disable": "Poista edistynyt tila käytöstä"
+        },
+        "systemTray": {
+            "title": "Ilmaisinalue",
+            "keepInTray": "Pidä Fluux ilmaisinalueella",
+            "descriptionWindows": "Kun käytössä, Fluux piilotetaan ilmaisinalueelle pienennettäessä tai suljettaessa.",
+            "descriptionLinux": "Kun käytössä, Fluux piilotetaan suljettaessa ilmaisinalueelle, jos sitä tuetaan. Pienentäminen noudattaa työpöydän normaalia toimintaa.",
+            "unavailableLinux": "Yhteensopivaa ilmaisinalueen tukea ei ole saatavilla. Fluux lopetetaan suljettaessa."
         }
     },
     "update": {

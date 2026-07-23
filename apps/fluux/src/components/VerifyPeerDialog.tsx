@@ -224,6 +224,7 @@ export function VerifyPeerDialog({
             </div>
 
             <button
+              type="button"
               onClick={() => onConfirm(peerFingerprint)}
               className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-sm text-fluux-text border border-fluux-border hover:bg-fluux-hover rounded-lg transition-colors"
             >
@@ -239,6 +240,7 @@ export function VerifyPeerDialog({
           <div className={`flex gap-2 ${alreadyVerified && onRevoke ? 'justify-between' : 'justify-end'}`}>
             {alreadyVerified && onRevoke && (
               <button
+                type="button"
                 onClick={onRevoke}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm text-fluux-error border border-fluux-red/50 hover:bg-fluux-red/10 rounded-lg transition-colors"
               >
@@ -248,12 +250,14 @@ export function VerifyPeerDialog({
             )}
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={onCancel}
                 className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
               >
                 {t('common.cancel')}
               </button>
               <button
+                type="button"
                 onClick={() => onConfirm(peerFingerprint)}
                 disabled={!inputMatches}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

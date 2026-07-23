@@ -76,6 +76,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover">
           <h2 className="text-lg font-semibold text-fluux-text">admin.addUser.title</h2>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
             title="common.close"

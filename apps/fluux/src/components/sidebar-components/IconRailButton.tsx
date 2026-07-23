@@ -28,6 +28,7 @@ export function IconRailButton({
   return (
     <Tooltip content={label} position="right" delay={500}>
       <button
+        type="button"
         onClick={onClick}
         disabled={disabled}
         aria-label={label}

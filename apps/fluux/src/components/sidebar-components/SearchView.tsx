@@ -141,6 +141,7 @@ export function SearchView() {
           />
           {query && (
             <button
+              type="button"
               onClick={clearSearch}
               className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted tap-target"
               aria-label={t('common.clear')}
@@ -154,6 +155,7 @@ export function SearchView() {
             <div className="absolute inset-x-0 top-full mt-1 fluux-popover rounded-md z-50 max-h-48 overflow-y-auto">
               {inPrefixSuggestions.map((s, i) => (
                 <button
+                  type="button"
                   key={s.id}
                   onClick={() => selectInPrefixSuggestion(s)}
                   className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
@@ -180,6 +182,7 @@ export function SearchView() {
             {t('search.scopeLabel', 'Searching in')} {getConversationName(searchScope)}
           </span>
           <button
+            type="button"
             onClick={() => setSearchScope(null)}
             className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
             aria-label={t('search.clearScope', 'Search all conversations')}
@@ -195,6 +198,7 @@ export function SearchView() {
         <div className="flex items-center gap-1 px-3 pb-1">
           {filterOptions.map(({ key, label, icon: Icon }) => (
             <button
+              type="button"
               key={key}
               onClick={() => setSearchFilter(key)}
               className={`text-xs rounded-full px-2.5 py-0.5 transition-colors flex items-center gap-1 ${
@@ -253,6 +257,7 @@ export function SearchView() {
         {!isSearching && !isInPrefixActive && query && !isSearchingMAM && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
+              type="button"
               onClick={searchMAM}
               className="w-full flex items-center justify-center gap-2 py-2 text-sm text-fluux-muted
                          hover:text-fluux-text hover:bg-fluux-hover rounded-md transition-colors"
@@ -306,6 +311,7 @@ export function SearchView() {
         {hasMoreMAMResults && !isSearchingMAM && (
           <div className="px-2 py-2">
             <button
+              type="button"
               onClick={loadMoreMAMResults}
               className="w-full flex items-center justify-center gap-2 py-1.5 text-xs text-fluux-muted
                          hover:text-fluux-text hover:bg-fluux-hover rounded-md transition-colors"
@@ -414,6 +420,7 @@ const SearchResultItem = memo(function SearchResultItem({ result, context, isAct
               {formatConversationTime(timestamp, t, currentLang, timeFormat)}
             </span>
             <button
+              type="button"
               onClick={(e) => onGoToMessage(e, result)}
               className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
               title="Go to message"

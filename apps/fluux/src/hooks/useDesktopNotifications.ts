@@ -24,6 +24,7 @@ import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { postPluginNotification } from '@/utils/postPluginNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
+import { requestAttention } from '@/utils/attention'
 
 /** Duration of the post-reconnect window during which offline-delivery
  *  notifications are coalesced to one per conversation. */
@@ -135,6 +136,7 @@ export function useDesktopNotifications(): void {
   // Show conversation notification
   const showConversationNotification = async (conv: Conversation, message: Message) => {
     if (presenceStatusRef.current === 'dnd') return
+    requestAttention()
     if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({
         title: conv.name || getLocalPart(message.from),
@@ -197,6 +199,7 @@ export function useDesktopNotifications(): void {
   // Show room notification
   const showRoomNotification = async (room: Room, message: RoomMessage) => {
     if (presenceStatusRef.current === 'dnd') return
+    requestAttention()
     if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({
         title: `${message.nick} @ ${room.name}`,

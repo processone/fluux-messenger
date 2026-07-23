@@ -90,6 +90,7 @@ export function AdminUserView({
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
           <button
+            type="button"
             onClick={onBack}
             className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover
                        rounded-lg transition-colors"

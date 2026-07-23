@@ -429,7 +429,9 @@
         "nickChanged": "{{oldNick}} är nu känd som {{newNick}}",
         "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
         "nickHiddenChars": "Namnet innehåller dolda tecken",
-        "mentionSuggestions": "Omnämnandeförslag"
+        "mentionSuggestions": "Omnämnandeförslag",
+        "unreadMessages": "{{count}} oläst meddelande",
+        "unreadMessages_other": "{{count}} olästa meddelanden"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",
@@ -729,7 +731,10 @@
             "searchIndexDescription": "Sökindexet möjliggör fulltextsökning i din meddelandehistorik. Bygg om det om sökresultaten verkar ofullständiga.",
             "rebuildIndex": "Bygg om index",
             "rebuildingIndex": "Bygger om…",
-            "indexRebuilt": "{{count}} meddelanden indexerade"
+            "indexRebuilt": "{{count}} meddelanden indexerade",
+            "logs": "Loggar",
+            "logsDescription": "Öppna mappen med Fluux diagnostikloggar.",
+            "openLogs": "Öppna loggmappen"
         },
         "encryption": {
             "experimental": "Experimentellt",
@@ -929,6 +934,13 @@
             "enableDescription": "Avancerat läge låser upp expertinställningar, till exempel anpassade serverinställningar och XMPP-konsolen.",
             "disableDescription": "Stäng av avancerat läge för att dölja det här avsnittet.",
             "disable": "Stäng av avancerat läge"
+        },
+        "systemTray": {
+            "title": "Systemfält",
+            "keepInTray": "Behåll Fluux i systemfältet",
+            "descriptionWindows": "När detta är aktiverat döljs Fluux i systemfältet vid minimering eller stängning.",
+            "descriptionLinux": "När detta är aktiverat döljs Fluux i systemfältet vid stängning om det stöds. Minimering följer skrivbordets normala beteende.",
+            "unavailableLinux": "Inget kompatibelt systemfält är tillgängligt. Fluux avslutas när fönstret stängs."
         }
     },
     "update": {

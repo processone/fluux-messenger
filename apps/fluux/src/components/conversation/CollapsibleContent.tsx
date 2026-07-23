@@ -112,6 +112,7 @@ export function CollapsibleContent({
 
       {/* Show more / Show less button - select-none prevents copying button text */}
       <button
+        type="button"
         onClick={() => toggle(messageId)}
         className="flex items-center gap-1 mt-1 text-sm text-fluux-muted hover:text-fluux-text transition-colors select-none"
       >

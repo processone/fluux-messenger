@@ -431,7 +431,10 @@
         "nickChanged": "{{oldNick}} este acum cunoscut ca {{newNick}}",
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
         "nickHiddenChars": "Numele conține caractere ascunse",
-        "mentionSuggestions": "Sugestii de mențiuni"
+        "mentionSuggestions": "Sugestii de mențiuni",
+        "unreadMessages": "{{count}} mesaj necitit",
+        "unreadMessages_few": "{{count}} mesaje necitite",
+        "unreadMessages_other": "{{count}} de mesaje necitite"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",
@@ -732,7 +735,10 @@
             "searchIndexDescription": "Indexul de căutare permite căutarea în text complet în istoricul mesajelor. Reconstruiți-l dacă rezultatele par incomplete.",
             "rebuildIndex": "Reconstruiește indexul",
             "rebuildingIndex": "Reconstruire…",
-            "indexRebuilt": "{{count}} mesaje indexate"
+            "indexRebuilt": "{{count}} mesaje indexate",
+            "logs": "Jurnale",
+            "logsDescription": "Deschide dosarul cu jurnalele de diagnostic Fluux.",
+            "openLogs": "Deschide dosarul jurnalelor"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -932,6 +938,13 @@
             "enableDescription": "Modul avansat deblochează opțiuni avansate, cum ar fi setările de server personalizate și consola XMPP.",
             "disableDescription": "Dezactivați modul avansat pentru a ascunde această secțiune.",
             "disable": "Dezactivați modul avansat"
+        },
+        "systemTray": {
+            "title": "Zona de notificare",
+            "keepInTray": "Păstrează Fluux în zona de notificare",
+            "descriptionWindows": "Când este activată, minimizarea sau închiderea ascunde Fluux în zona de notificare.",
+            "descriptionLinux": "Când este activată, închiderea ascunde Fluux în zona de notificare dacă este acceptată. Minimizarea păstrează comportamentul normal al desktopului.",
+            "unavailableLinux": "Nu este disponibilă o zonă de notificare compatibilă. Închiderea va opri Fluux."
         }
     },
     "update": {

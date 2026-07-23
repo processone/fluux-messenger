@@ -678,6 +678,7 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Reply context - show what message this is replying to (hidden for retracted messages) */}
         {!message.isRetracted && replyContext && (
           <button
+            type="button"
             onClick={() => scrollToMessage(replyContext.messageId)}
             className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             // When the row is selected the selection tint melts into the card fill
@@ -776,6 +777,7 @@ export const MessageBubble = memo(function MessageBubble({
               <span className="text-xs font-medium">{t('chat.deliveryFailed')}</span>
               <span className="text-xs text-fluux-muted">—</span>
               <button
+                type="button"
                 onClick={() => setShowErrorDetails(!showErrorDetails)}
                 className="text-xs text-fluux-muted hover:text-fluux-text cursor-pointer underline"
               >
@@ -785,6 +787,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <>
                   <span className="text-xs text-fluux-muted">·</span>
                   <button
+                    type="button"
                     onClick={onRetry}
                     className="text-xs text-fluux-link hover:text-fluux-link-hover cursor-pointer underline flex items-center gap-1"
                   >

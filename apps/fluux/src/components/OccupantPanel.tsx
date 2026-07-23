@@ -678,6 +678,7 @@ export function OccupantPanel({
         {fullScreen ? (
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
             >
@@ -690,6 +691,7 @@ export function OccupantPanel({
             <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
             <Tooltip content={t('rooms.closePanel')} position="left">
               <button
+                type="button"
                 onClick={onClose}
                 aria-label={t('rooms.closePanel')}
                 className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"

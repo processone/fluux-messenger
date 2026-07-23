@@ -431,7 +431,12 @@
         "nickChanged": "{{oldNick}} issa magħruf bħala {{newNick}}",
         "nickEdgeWhitespace": "L-isem għandu spazji żejda fit-truf",
         "nickHiddenChars": "L-isem fih karattri moħbija",
-        "mentionSuggestions": "Suġġerimenti ta' msemmija"
+        "mentionSuggestions": "Suġġerimenti ta' msemmija",
+        "unreadMessages": "{{count}} messaġġ mhux moqri",
+        "unreadMessages_two": "{{count}} messaġġi mhux moqrija",
+        "unreadMessages_few": "{{count}} messaġġi mhux moqrija",
+        "unreadMessages_many": "{{count}} messaġġ mhux moqri",
+        "unreadMessages_other": "{{count}} messaġġ mhux moqri"
     },
     "events": {
         "invitedBy": "Mistieden minn {{name}}",
@@ -734,7 +739,10 @@
             "searchIndexDescription": "L-indiċi tat-tiftix jippermetti tiftix ta' test sħiħ fl-istorja tal-messaġġi tiegħek. Erġa' ibnih jekk ir-riżultati jidhru mhux kompluti.",
             "rebuildIndex": "Erġa' ibni l-indiċi",
             "rebuildingIndex": "Qed jinbena…",
-            "indexRebuilt": "{{count}} messaġġ indiċjati"
+            "indexRebuilt": "{{count}} messaġġ indiċjati",
+            "logs": "Reġistri",
+            "logsDescription": "Iftaħ il-folder bir-reġistri dijanjostiċi ta’ Fluux.",
+            "openLogs": "Iftaħ il-folder tar-reġistri"
         },
         "encryption": {
             "experimental": "Sperimentali",
@@ -934,6 +942,13 @@
             "enableDescription": "Il-modalità avvanzata tiftaħ opcjonijiet tal-esperti bħall-impostazzjonijiet tal-server personalizzati u l-konsol XMPP.",
             "disableDescription": "Itfi l-modalità avvanzata biex taħbi din it-taqsima.",
             "disable": "Itfi l-modalità avvanzata"
+        },
+        "systemTray": {
+            "title": "Trej tas-sistema",
+            "keepInTray": "Żomm Fluux fit-trej tas-sistema",
+            "descriptionWindows": "Meta attivat, it-tnaqqis jew l-għeluq jaħbi lil Fluux fit-trej tas-sistema.",
+            "descriptionLinux": "Meta attivat, l-għeluq jaħbi lil Fluux fit-trej tas-sistema jekk ikun appoġġjat. It-tnaqqis iżomm l-imġiba normali tad-desktop.",
+            "unavailableLinux": "M’hemmx trej tas-sistema kompatibbli disponibbli. L-għeluq ta’ Fluux jagħlaq l-applikazzjoni."
         }
     },
     "update": {

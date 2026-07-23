@@ -809,6 +809,117 @@ describe('recordUnclaimedEME', () => {
 })
 
 // ---------------------------------------------------------------------------
+// XEP-0384 "empty" OMEMO messages (KeyTransportElement)
+// ---------------------------------------------------------------------------
+
+describe('recordUnclaimedEME — payload-less OMEMO (empty message)', () => {
+  /**
+   * An OMEMO element carrying a <header> but no <payload>. Per XEP-0384 these
+   * are "empty OMEMO messages, which are used in various places throughout the
+   * protocol purely to manage sessions and not to transfer content" — session
+   * completion acks and ratchet heartbeats. They carry nothing a user ever
+   * typed and MUST NOT surface as a message.
+   *
+   * Shape copied verbatim (minus base64 bulk) from a stanza a Conversations
+   * client sent after our device announced itself — see the phantom-message
+   * report where Conversations itself rendered nothing for these.
+   */
+  function emptyOmemoStanza(namespace = 'eu.siacs.conversations.axolotl'): Element {
+    return xml(
+      'message',
+      { from: 'ralphm@example.com/Conversations.cMny', type: 'chat' },
+      xml(
+        'encrypted',
+        { xmlns: namespace },
+        xml('header', { sid: '600125587' }, xml('key', { rid: '445710346' }, 'Mwoh'), xml('iv', {}, '4pEg')),
+      ),
+      xml('store', { xmlns: 'urn:xmpp:hints' }),
+    ) as Element
+  }
+
+  /** The same envelope, but a real message: <header> AND <payload>. */
+  function payloadOmemoStanza(): Element {
+    return xml(
+      'message',
+      { from: 'ralphm@example.com/Conversations.cMny', type: 'chat' },
+      xml(
+        'encrypted',
+        { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '600125587' }, xml('key', { rid: '445710346' }, 'Mwoh'), xml('iv', {}, '4pEg')),
+        xml('payload', {}, 'zqPUb2xwZQ'),
+      ),
+    ) as Element
+  }
+
+  it('drops an empty OMEMO message instead of tagging it unsupported', () => {
+    const stanza = emptyOmemoStanza()
+
+    expect(recordUnclaimedEME(stanza, true).kind).toBe('none')
+    expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
+  })
+
+  it('drops an empty OMEMO message rather than stashing it for retry', () => {
+    // No plugin registered yet. There is still nothing to show once it
+    // decrypts, so stashing would only manufacture a placeholder in the
+    // meantime.
+    const stanza = emptyOmemoStanza()
+
+    expect(recordUnclaimedEME(stanza, false).kind).toBe('none')
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+
+  it('drops an empty OMEMO 2 message', () => {
+    const stanza = emptyOmemoStanza('urn:xmpp:omemo:2')
+
+    expect(recordUnclaimedEME(stanza, true).kind).toBe('none')
+    expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
+  })
+
+  // --- controls: the drop must not widen beyond empty OMEMO -----------------
+
+  it('still reports unsupported for an OMEMO message that carries a payload', () => {
+    const stanza = payloadOmemoStanza()
+
+    const disposition = recordUnclaimedEME(stanza, true)
+    expect(disposition.kind).toBe('unsupported')
+    expect(readStashedUnsupportedEncryption(stanza)).toEqual({
+      namespace: 'eu.siacs.conversations.axolotl',
+      name: 'OMEMO',
+    })
+  })
+
+  it('still reports unsupported for OpenPGP, which has no <payload> child by design', () => {
+    // <openpgp> wraps base64 directly. A blanket "no <payload> means empty"
+    // rule would silently swallow every OX message — the drop is keyed on the
+    // OMEMO <header>/<payload> shape, not on the absence of a payload alone.
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/r', id: 'pgp2', type: 'chat' },
+      xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, 'cipher'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' }),
+    ) as Element
+
+    const disposition = recordUnclaimedEME(stanza, true)
+    expect(disposition.kind).toBe('unsupported')
+    if (disposition.kind === 'unsupported') {
+      expect(disposition.info.name).toBe('OpenPGP')
+    }
+  })
+
+  it('still reports unsupported for an OMEMO element with neither header nor payload', () => {
+    // Malformed, not an empty message: nothing identifies it as key transport,
+    // so it keeps the visible "unsupported" treatment rather than vanishing.
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/r', type: 'chat' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+    ) as Element
+
+    expect(recordUnclaimedEME(stanza, true).kind).toBe('unsupported')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // decryptStanzaInPlace: unsupported protocol with a registered plugin
 // ---------------------------------------------------------------------------
 

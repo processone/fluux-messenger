@@ -232,6 +232,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
             const count = getTabCount(tab)
             return (
               <button
+                type="button"
                 key={tab}
                 onClick={() => handleTabChange(tab)}
                 className={`flex-1 min-w-[calc(50%-2px)] flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md transition-all
@@ -267,6 +268,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch('')}
               className="absolute end-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
             >
@@ -354,6 +356,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
               ))}
             </select>
             <button
+              type="button"
               onClick={handleAddMember}
               disabled={jidSelection.length === 0 || isAdding}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent
@@ -425,6 +428,7 @@ function AffiliationDropdown({
   return (
     <div ref={dropdownRef} className="relative">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-1 px-2 py-1 text-xs text-fluux-muted hover:text-fluux-text
                    bg-fluux-hover/50 hover:bg-fluux-hover rounded transition-colors"
@@ -436,6 +440,7 @@ function AffiliationDropdown({
         <div className="absolute end-0 top-full mt-1 fluux-popover rounded-lg py-1 z-50 min-w-36">
           {availableAffiliations.map(aff => (
             <button
+              type="button"
               key={aff}
               onClick={() => {
                 onSelect(aff)

@@ -52,7 +52,7 @@ function Harness() {
   const [, setTick] = useState(0)
   return (
     <>
-      <button onClick={() => setTick((t) => t + 1)}>tick</button>
+      <button type="button" onClick={() => setTick((t) => t + 1)}>tick</button>
       <RoomMessageInput {...STABLE} />
     </>
   )

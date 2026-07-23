@@ -11,9 +11,9 @@ function Trap({ active = true }: { active?: boolean }) {
   useFocusTrap(ref, { active })
   return (
     <div ref={ref}>
-      <button>first</button>
-      <button>middle</button>
-      <button>last</button>
+      <button type="button">first</button>
+      <button type="button">middle</button>
+      <button type="button">last</button>
     </div>
   )
 }
@@ -77,9 +77,9 @@ describe('useFocusTrap', () => {
       useFocusTrap(containerRef, { initialFocusRef: initialRef })
       return (
         <div ref={containerRef}>
-          <button>first</button>
-          <button ref={initialRef}>second</button>
-          <button>third</button>
+          <button type="button">first</button>
+          <button type="button" ref={initialRef}>second</button>
+          <button type="button">third</button>
         </div>
       )
     }

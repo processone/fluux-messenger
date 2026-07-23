@@ -115,6 +115,7 @@ export function BlockedUsersSettings() {
                          focus:border-fluux-brand focus:outline-none transition-colors"
             />
             <button
+              type="button"
               onClick={handleAddBlock}
               disabled={isBlocking || !newJid.trim()}
               className="flex items-center gap-1.5 px-3 py-2 text-sm text-white
@@ -129,6 +130,7 @@ export function BlockedUsersSettings() {
               {t('settings.blocked.block')}
             </button>
             <button
+              type="button"
               onClick={handleCancelAdd}
               disabled={isBlocking}
               className="p-2 text-fluux-muted hover:text-fluux-text rounded-lg
@@ -143,6 +145,7 @@ export function BlockedUsersSettings() {
         </div>
       ) : (
         <button
+          type="button"
           onClick={() => setShowAddForm(true)}
           className="flex items-center gap-2 w-full mb-4 p-3 rounded-lg border border-dashed
                      border-fluux-hover text-fluux-muted hover:text-fluux-text
@@ -203,6 +206,7 @@ export function BlockedUsersSettings() {
                 {t('settings.blocked.confirmUnblockAll', { count: blockedJids.length })}
               </span>
               <button
+                type="button"
                 onClick={() => setShowUnblockAllConfirm(false)}
                 disabled={isUnblockingAll}
                 className="px-3 py-1.5 text-sm text-fluux-muted hover:text-fluux-text
@@ -211,6 +215,7 @@ export function BlockedUsersSettings() {
                 {t('common.cancel')}
               </button>
               <button
+                type="button"
                 onClick={handleUnblockAll}
                 disabled={isUnblockingAll}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white
@@ -223,6 +228,7 @@ export function BlockedUsersSettings() {
             </div>
           ) : (
             <button
+              type="button"
               onClick={() => setShowUnblockAllConfirm(true)}
               className="text-sm text-fluux-error hover:text-fluux-error/80 transition-colors"
             >
@@ -258,6 +264,7 @@ function BlockedUserItem({ jid, isUnblocking, onUnblock }: BlockedUserItemProps)
         <p className="text-xs text-fluux-muted truncate">{jid}</p>
       </div>
       <button
+        type="button"
         onClick={onUnblock}
         disabled={isUnblocking}
         className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text

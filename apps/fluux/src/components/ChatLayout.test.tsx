@@ -93,7 +93,7 @@ function HistoryProbe() {
   return (
     <>
       <span data-testid="probe-path">{location.pathname}</span>
-      <button data-testid="probe-back" onClick={() => navigate(-1)}>back</button>
+      <button type="button" data-testid="probe-back" onClick={() => navigate(-1)}>back</button>
     </>
   )
 }
@@ -479,8 +479,8 @@ vi.mock('./Sidebar', () => ({
             the URL moves to a detail route without any click handler updating the store */}
         <NavLink to="/messages/bob@example.com" data-testid="deep-conversation-link">Deep Conversation</NavLink>
         <NavLink to="/rooms/lobby@conference.example.com" data-testid="deep-room-link">Deep Room</NavLink>
-        <button data-testid="select-contact" onClick={() => onSelectContact(mockContact)}>Select Contact</button>
-        <button data-testid="start-chat" onClick={() => onStartChat(mockContact)}>Start Chat</button>
+        <button type="button" data-testid="select-contact" onClick={() => onSelectContact(mockContact)}>Select Contact</button>
+        <button type="button" data-testid="start-chat" onClick={() => onStartChat(mockContact)}>Start Chat</button>
       </div>
     )
   },
@@ -490,8 +490,9 @@ vi.mock('./ChatView', () => ({
   ChatView: ({ onBack, onShowProfile }: { onBack: () => void; onShowProfile?: (jid: string) => void }) => (
     <div data-testid="chat-view">
       <span>Conversation: {getMockState().activeConversationId}</span>
-      <button data-testid="chat-back" onClick={onBack}>Back</button>
+      <button type="button" data-testid="chat-back" onClick={onBack}>Back</button>
       <button
+        type="button"
         data-testid="chat-show-profile"
         onClick={() => {
           const id = getMockState().activeConversationId
@@ -508,7 +509,7 @@ vi.mock('./RoomView', () => ({
   RoomView: ({ onBack }: { onBack: () => void }) => (
     <div data-testid="room-view">
       <span>Room: {getMockState().activeRoomJid}</span>
-      <button data-testid="room-back" onClick={onBack}>Back</button>
+      <button type="button" data-testid="room-back" onClick={onBack}>Back</button>
     </div>
   ),
 }))
@@ -517,7 +518,7 @@ vi.mock('./ContactProfileView', () => ({
   ContactProfileView: ({ contact, onClose }: { contact: Contact; onClose: () => void }) => (
     <div data-testid="contact-profile-view">
       <span>Contact: {contact.name}</span>
-      <button data-testid="contact-back" onClick={onClose}>Back</button>
+      <button type="button" data-testid="contact-back" onClick={onClose}>Back</button>
     </div>
   ),
 }))
@@ -530,7 +531,7 @@ vi.mock('./AdminView', () => ({
   AdminView: ({ onBack }: { onBack?: () => void }) => (
     <div data-testid="admin-view">
       Admin
-      <button data-testid="admin-back" onClick={() => onBack?.()}>back</button>
+      <button type="button" data-testid="admin-back" onClick={() => onBack?.()}>back</button>
     </div>
   ),
 }))
@@ -558,7 +559,7 @@ vi.mock('./ToastContainer', () => ({
 vi.mock('./CreateRoomModal', () => ({
   CreateRoomModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="create-room-modal">
-      <button data-testid="create-room-close" onClick={onClose}>Close</button>
+      <button type="button" data-testid="create-room-close" onClick={onClose}>Close</button>
     </div>
   ),
 }))

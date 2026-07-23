@@ -431,7 +431,11 @@
         "nickChanged": "{{oldNick}} jest teraz znany jako {{newNick}}",
         "nickEdgeWhitespace": "Nazwa ma dodatkowe spacje na brzegach",
         "nickHiddenChars": "Nazwa zawiera ukryte znaki",
-        "mentionSuggestions": "Podpowiedzi wzmianek"
+        "mentionSuggestions": "Podpowiedzi wzmianek",
+        "unreadMessages": "{{count}} nieprzeczytana wiadomość",
+        "unreadMessages_few": "{{count}} nieprzeczytane wiadomości",
+        "unreadMessages_many": "{{count}} nieprzeczytanych wiadomości",
+        "unreadMessages_other": "{{count}} nieprzeczytanej wiadomości"
     },
     "events": {
         "invitedBy": "Zaproszony przez {{name}}",
@@ -733,7 +737,10 @@
             "searchIndexDescription": "Indeks wyszukiwania umożliwia wyszukiwanie pełnotekstowe w historii wiadomości. Odbuduj go, jeśli wyniki wyszukiwania wydają się niekompletne.",
             "rebuildIndex": "Odbuduj indeks",
             "rebuildingIndex": "Odbudowywanie…",
-            "indexRebuilt": "{{count}} wiadomości zindeksowanych"
+            "indexRebuilt": "{{count}} wiadomości zindeksowanych",
+            "logs": "Dzienniki",
+            "logsDescription": "Otwórz folder zawierający dzienniki diagnostyczne Fluux.",
+            "openLogs": "Otwórz folder dzienników"
         },
         "encryption": {
             "experimental": "Eksperymentalne",
@@ -933,6 +940,13 @@
             "enableDescription": "Tryb zaawansowany odblokowuje opcje eksperckie, takie jak niestandardowe ustawienia serwera i konsola XMPP.",
             "disableDescription": "Wyłącz tryb zaawansowany, aby ukryć tę sekcję.",
             "disable": "Wyłącz tryb zaawansowany"
+        },
+        "systemTray": {
+            "title": "Obszar powiadomień",
+            "keepInTray": "Pozostaw Fluux w obszarze powiadomień",
+            "descriptionWindows": "Po włączeniu minimalizacja lub zamknięcie ukrywa Fluux w obszarze powiadomień.",
+            "descriptionLinux": "Po włączeniu zamknięcie ukrywa Fluux w obszarze powiadomień, jeśli jest obsługiwany. Minimalizacja zachowuje standardowe działanie pulpitu.",
+            "unavailableLinux": "Brak zgodnego obszaru powiadomień. Zamknięcie Fluux zakończy aplikację."
         }
     },
     "update": {

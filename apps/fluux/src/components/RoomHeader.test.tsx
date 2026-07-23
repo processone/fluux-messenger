@@ -62,35 +62,35 @@ vi.mock('./Avatar', () => ({
 // Mock AvatarCropModal
 vi.mock('./AvatarCropModal', () => ({
   AvatarCropModal: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => (
-    isOpen ? <div data-testid="avatar-crop-modal"><button onClick={onClose}>Close</button></div> : null
+    isOpen ? <div data-testid="avatar-crop-modal"><button type="button" onClick={onClose}>Close</button></div> : null
   ),
 }))
 
 // Mock InviteToRoomModal
 vi.mock('./InviteToRoomModal', () => ({
   InviteToRoomModal: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => (
-    isOpen ? <div data-testid="invite-modal"><button onClick={onClose}>Close</button></div> : null
+    isOpen ? <div data-testid="invite-modal"><button type="button" onClick={onClose}>Close</button></div> : null
   ),
 }))
 
 // Mock RoomConfigModal
 vi.mock('./RoomConfigModal', () => ({
   RoomConfigModal: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="room-config-modal"><button onClick={onClose}>Close</button></div>
+    <div data-testid="room-config-modal"><button type="button" onClick={onClose}>Close</button></div>
   ),
 }))
 
 // Mock RoomMembersModal
 vi.mock('./RoomMembersModal', () => ({
   RoomMembersModal: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="members-modal"><button onClick={onClose}>Close</button></div>
+    <div data-testid="members-modal"><button type="button" onClick={onClose}>Close</button></div>
   ),
 }))
 
 // Mock RoomHatsModal
 vi.mock('./RoomHatsModal', () => ({
   RoomHatsModal: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="hats-modal"><button onClick={onClose}>Close</button></div>
+    <div data-testid="hats-modal"><button type="button" onClick={onClose}>Close</button></div>
   ),
 }))
 
