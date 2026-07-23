@@ -188,19 +188,25 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     return this.generateAndStoreKey(accountJid, passphrase, ctx.storage)
   }
 
-  protected async encryptToRecipient(
-    _senderAccountJid: string,
-    recipientPublicArmored: string,
+  protected async encryptToRecipients(
+    _accountJid: string,
+    recipientPublics: string[],
     plaintext: string,
   ): Promise<string> {
     await this.requireUnlocked()
     const { createMessage, readKey, encrypt } = await import('openpgp')
-    const recipientKey = await readKey({ armoredKey: recipientPublicArmored })
+    // Read EVERY recipient key up front. A malformed one throws here (parity
+    // with Rust's hard error) rather than silently encrypting to a subset —
+    // OX may advertise several public keys per JID (#1059) and the message
+    // must reach all of them.
+    const recipientKeys = await Promise.all(
+      recipientPublics.map((armored) => readKey({ armoredKey: armored })),
+    )
     const senderPublicKey = this.ownPrivateKey!.toPublic()
     const message = await createMessage({ text: plaintext })
     const encrypted = await encrypt({
       message,
-      encryptionKeys: [recipientKey, senderPublicKey],
+      encryptionKeys: [...recipientKeys, senderPublicKey],
       signingKeys: this.ownPrivateKey!,
     })
     return encrypted as string
@@ -209,15 +215,15 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   protected async decryptWithOwnKey(
     _accountJid: string,
     ciphertext: string,
-    senderPublicArmored: string | null,
+    senderPublics: string[],
   ): Promise<DecryptOutput> {
     await this.requireUnlocked()
     const { readMessage, decrypt, readKey } = await import('openpgp')
 
     const message = await readMessage({ armoredMessage: ciphertext })
-    const verificationKeys = senderPublicArmored
-      ? [await readKey({ armoredKey: senderPublicArmored })]
-      : []
+    const verificationKeys = await Promise.all(
+      senderPublics.map((armored) => readKey({ armoredKey: armored })),
+    )
 
     const { data: plaintext, signatures } = await decrypt({
       message,
@@ -229,22 +235,37 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       ...(verificationKeys.length > 0 && { verificationKeys }),
     })
 
-    let signatureVerified = false
+    let signatureStatus: DecryptOutput['signatureStatus'] = 'none'
     let signerFingerprint: string | null = null
     let signatureNotYetValid = false
-    const signaturePresent = signatures.length > 0
 
-    if (signaturePresent && senderPublicArmored) {
+    if (signatures.length > 0) {
+      const sig = signatures[0]
       try {
-        await signatures[0].verified
-        signatureVerified = true
-        // Return the primary cert fingerprint (40 hex chars for v4) to
-        // match Sequoia's behavior. keyID.toHex() only gives the 8-byte
-        // key ID (16 chars), which would never match the cached peer FP.
-        signerFingerprint = verificationKeys[0].getFingerprint()
+        await sig.verified
+        signatureStatus = 'verified'
+        // signerFingerprint MUST be the full PRIMARY certificate fingerprint,
+        // never the signature's 8-byte key ID — trust lookups compare through
+        // fingerprintsEqual against the pinned/announced primary FP, and a key
+        // ID would never match. Locate the verificationKey whose (sub)key
+        // issued this signature and take its primary fingerprint, upper-cased
+        // to match the XEP-0373 wire form (toXep0373Fingerprint) and Sequoia.
+        const signerKey = verificationKeys.find(
+          (key) => key.getKeys(sig.keyID).length > 0,
+        )
+        signerFingerprint = signerKey ? signerKey.getFingerprint().toUpperCase() : null
       } catch (err) {
-        signatureVerified = false
         const reason = err instanceof Error ? err.message : String(err)
+        // openpgp.js throws "Could not find signing key with key ID …" when
+        // none of the supplied verificationKeys is the signature's issuer.
+        // That is a missing-key condition, not a bad signature: the caller can
+        // refetch the sender's announced keyset and retry. The missing-key
+        // path refetches the whole keyset, so no key-ID hint is returned.
+        if (/could not find signing key/i.test(reason)) {
+          signatureStatus = 'missing-key'
+        } else {
+          signatureStatus = 'bad'
+        }
         // A failure caused purely by the signature being dated ahead of our
         // clock (beyond the skew tolerance) is transient — clocks may
         // converge. Flag it so the decrypt path retries instead of issuing a
@@ -256,24 +277,24 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         // never throw out of the catch even if `.signature` rejected too.
         let sigCreated = '?'
         try {
-          const sig = await signatures[0].signature
-          sigCreated = sig?.packets?.[0]?.created?.toISOString() ?? '?'
+          const sigPacket = await sig.signature
+          sigCreated = sigPacket?.packets?.[0]?.created?.toISOString() ?? '?'
         } catch {
           /* signature packet unavailable — leave as '?' */
         }
         this.requireCtx().logger.warn(
-          `WebOpenPGPPlugin: signature verify failed (signer ${
-            verificationKeys[0]?.getFingerprint?.() ?? '?'
-          }, sigCreated ${sigCreated}, now ${new Date().toISOString()}): ${reason}`,
+          `WebOpenPGPPlugin: signature verify failed (status ${signatureStatus}, ` +
+            `sigCreated ${sigCreated}, now ${new Date().toISOString()}): ${reason}`,
         )
       }
     }
 
     return {
       plaintext: plaintext as string,
-      signatureVerified,
+      signatureVerified: signatureStatus === 'verified',
       signerFingerprint,
-      signaturePresent,
+      signaturePresent: signatureStatus !== 'none',
+      signatureStatus,
       ...(signatureNotYetValid && { signatureNotYetValid }),
     }
   }
