@@ -9,6 +9,10 @@ import {
   type UseMessageListScrollResult,
 } from './useMessageListScroll'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import {
+  getScrollShadowSnapshot,
+  resetScrollShadowDiagnostics,
+} from './scrollPositionShadow'
 
 class MockResizeObserver {
   constructor(private readonly callback: ResizeObserverCallback) {}
@@ -48,11 +52,16 @@ function seedSavedScrollPosition(conversationId: string, scrollTop = 200, readPo
 // Seed a saved CONTENT anchor whose scrollHeight differs from the harness scroller (1000) so the
 // exact-scrollTop fast-path is skipped and the anchor path runs — mirrors returning to a deeply
 // scrolled-back conversation whose tall window was evicted and rehydrated to a short latest slice.
-function seedSavedAnchor(conversationId: string, anchorMessageId: string, scrollTop = 200) {
+function seedSavedAnchor(
+  conversationId: string,
+  anchorMessageId: string,
+  scrollTop = 200,
+  fraction = 1,
+) {
   scrollStateManager.enterConversation(conversationId, 10)
   scrollStateManager.leaveConversation(conversationId, scrollTop, 5000, 500, {
     messageId: anchorMessageId,
-    fraction: 1,
+    fraction,
   })
 }
 
@@ -160,6 +169,7 @@ describe('useMessageListScroll saved-position restore', () => {
 
   beforeEach(() => {
     scrollStateManager.reset()
+    resetScrollShadowDiagnostics()
     vi.stubGlobal('ResizeObserver', MockResizeObserver)
     realRaf = window.requestAnimationFrame
     window.requestAnimationFrame = (callback: FrameRequestCallback) => {
@@ -405,6 +415,30 @@ describe('useMessageListScroll saved-position restore', () => {
     )
 
     expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+  })
+
+  it('continues the live restore when malformed shadow facts are rejected', () => {
+    seedSavedAnchor('around-invalid-shadow', 'old-anchor', 200, Number.NaN)
+    const onLoadAround = vi.fn().mockResolvedValue([])
+
+    render(
+      <HookHarness
+        conversationId="around-invalid-shadow"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        onLoadAround={onLoadAround}
+        onReady={() => {}}
+      />,
+    )
+
+    // The production restore still requests its missing anchor; only the shadow observation skips.
+    expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+    expect(getScrollShadowSnapshot()).toMatchObject({
+      instrumentationErrorCount: 1,
+      instrumentationErrors: [{
+        event: 'entry-facts',
+        conversationId: 'around-invalid-shadow',
+      }],
+    })
   })
 
   it('does not request a slice when the saved anchor is already in the loaded set', () => {

@@ -91,15 +91,21 @@ test.afterEach(async ({ page }) => {
         __fluuxScrollShadow?: () => {
           divergenceCount: number
           divergences: unknown[]
+          instrumentationErrorCount: number
+          instrumentationErrors: unknown[]
         }
       }
     ).__fluuxScrollShadow?.()
   })
   expect(shadow, 'scroll shadow diagnostics must be installed').toBeDefined()
   expect(
-    shadow?.divergences,
-    `scroll shadow recorded ${shadow?.divergenceCount ?? 0} divergence(s)`,
-  ).toEqual([])
+    shadow?.divergenceCount,
+    `scroll shadow divergences: ${JSON.stringify(shadow?.divergences ?? [])}`,
+  ).toBe(0)
+  expect(
+    shadow?.instrumentationErrorCount,
+    `scroll shadow instrumentation errors: ${JSON.stringify(shadow?.instrumentationErrors ?? [])}`,
+  ).toBe(0)
 })
 
 /** Navigate to the stress room and wait for virtual rows to appear.
