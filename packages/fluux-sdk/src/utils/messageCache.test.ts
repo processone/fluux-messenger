@@ -523,7 +523,7 @@ describe('messageCache', () => {
 
         await messageCache.saveRoomMessage(message)
 
-        const byStanzaId = await messageCache.getRoomMessageByStanzaId('room-stanza-123')
+        const byStanzaId = await messageCache.getRoomMessageByStanzaId(roomJid, 'room-stanza-123')
         expect(byStanzaId).not.toBeNull()
         expect(byStanzaId?.id).toBe('room-stanza')
       })
@@ -1154,11 +1154,9 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
     expect(mine[0].timestamp.getTime()).toBe(2000)
     expect(await messageCache.getRoomMessage('client-1')).not.toBeNull()
     expect(await messageCache.getRoomMessage('server-9')).not.toBeNull()
-    // NOTE: getRoomMessageByStanzaId stays single-arg (stanzaId) in this task — the
-    // brief's 2-arg room-scoped form is Task 4 read-path wiring (its 3 callers are
-    // 1-arg today). A single-room fixture with a unique stanzaId validates the same
-    // "merged row resolvable by its stanzaId" behaviour.
-    expect(await messageCache.getRoomMessageByStanzaId('S')).not.toBeNull()
+    // Task 4 room-scoped getRoomMessageByStanzaId(roomJid, stanzaId): the merged row
+    // stays resolvable by its stanzaId within its own room.
+    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
   })
 
   it('does not merge identical stanzaIds across different rooms', async () => {
@@ -1188,5 +1186,68 @@ describe('v4 migration — identity-resolving canonicalization (streaming)', () 
     expect(raw.objectStoreNames.contains('room-messages-canonical')).toBe(false)
     expect(await raw.get('room-messages', 'z')).toBeTruthy()
     raw.close()
+  })
+})
+
+describe('live paths — identity-resolving upsert + alias lookups + mutations', () => {
+  const ROOM = 'r@c', FROM = 'r@c/alice'
+  const mk = (over: Partial<RoomMessage> = {}): RoomMessage => ({ type: 'groupchat', id: 'client-1', roomJid: ROOM, from: FROM, body: 'hello', timestamp: new Date(5000), isOutgoing: true, originId: 'O', ...over }) as RoomMessage
+  beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
+
+  it('merges a reflection (rewritten id + stanzaId) into the optimistic echo', async () => {
+    await messageCache.saveRoomMessage(mk())
+    await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S', timestamp: new Date(4000) }))
+    const mine = (await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')
+    expect(mine).toHaveLength(1); expect(mine[0].timestamp.getTime()).toBe(4000)
+  })
+  it('the discarded optimistic id still resolves after the merge', async () => {
+    await messageCache.saveRoomMessage(mk()); await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S' }))
+    expect(await messageCache.getRoomMessage('client-1')).not.toBeNull()
+    expect(await messageCache.getRoomMessage('server-9')).not.toBeNull()
+    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
+  })
+  it('updateRoomMessage that ADDS a stanzaId re-keys and merges with any matching row', async () => {
+    // A separate MAM copy already carries stanzaId S and NO originId — so it shares
+    // no identity tier with the optimistic echo (originId O, id client-1) and the two
+    // stay SEPARATE at save time. If the MAM copy also carried originId O they would
+    // merge on save, making updateRoomMessage a no-op and the re-key branch untested.
+    await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S', originId: undefined }))
+    // ...and the optimistic row is only now confirmed via an identity-adding update.
+    await messageCache.saveRoomMessage(mk()) // optimistic: originId O, no stanzaId
+    await messageCache.updateRoomMessage('client-1', { stanzaId: 'S', originId: 'O' })
+    expect((await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')).toHaveLength(1)
+  })
+  it('updateRoomMessage that ADDS an originId (canonical key UNCHANGED) still merges a row already at that originId', async () => {
+    // Row 1 has stanzaId S, no originId → canonical key stanzaId:S.
+    await messageCache.saveRoomMessage(mk({ id: 'a1', stanzaId: 'S', originId: undefined }))
+    // Row 2 is a separate copy already carrying originId O (no stanzaId).
+    await messageCache.saveRoomMessage(mk({ id: 'a2', originId: 'O', stanzaId: undefined }))
+    // Confirm row 1 also carries originId O — its canonical key stays stanzaId:S,
+    // so a key-only identityChanged check would MISS this and leave two rows.
+    await messageCache.updateRoomMessage('a1', { originId: 'O' })
+    expect((await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.stanzaId === 'S' || m.originId === 'O')).toHaveLength(1)
+    expect(await messageCache.getRoomMessage('a1')).not.toBeNull()          // every alias
+    expect(await messageCache.getRoomMessage('a2')).not.toBeNull()          // preserved
+    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'S')).not.toBeNull()
+  })
+  it('removes a deliberately cleared stale stanzaId alias (clearMessageStanzaId)', async () => {
+    await messageCache.saveRoomMessage(mk({ stanzaId: 'stale-S' })) // has stanzaId + originId O + id client-1
+    await messageCache.updateRoomMessage('client-1', { stanzaId: undefined }) // revoke the stanzaId
+    // The scoped stanza alias must be GONE — else a later message with 'stale-S' merges wrongly.
+    expect(await messageCache.getRoomMessageByStanzaId(ROOM, 'stale-S')).toBeNull()
+    // ...but the message itself, and its other aliases, remain.
+    expect(await messageCache.getRoomMessage('client-1')).not.toBeNull()
+    expect(await messageCache.getRoomMessages(ROOM, {})).toHaveLength(1)
+  })
+  it('updateRoomMessageReactions resolves a pre-merge id and is authoritative (does not un-remove)', async () => {
+    await messageCache.saveRoomMessage(mk()); await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S' }))
+    await messageCache.updateRoomMessageReactions('client-1', 'r@c/bob', ['👍'])
+    expect((await messageCache.getRoomMessage('server-9'))!.reactions?.['👍']).toContain('r@c/bob')
+    await messageCache.updateRoomMessageReactions('client-1', 'r@c/bob', []) // removal
+    expect((await messageCache.getRoomMessage('server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
+  })
+  it('getRoomMessagesAround returns each logical message once', async () => {
+    await messageCache.saveRoomMessage(mk({ stanzaId: 'S' }))
+    expect((await messageCache.getRoomMessagesAround(ROOM, 'client-1', { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
   })
 })

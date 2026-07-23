@@ -11,7 +11,7 @@ import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
 import { isRenderableStoredMessage } from './messageRenderability'
-import { roomCanonicalKey, roomIdentityKeys } from './roomMessageIdentity'
+import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
@@ -91,9 +91,6 @@ interface MessageCacheSchema extends DBSchema {
       room_timestamp: [string, number]
       // Stable room order key (roomJid, timestamp, from, id) for Task 4's read path.
       room_ts_from_id: [string, number, string, string]
-      // Kept single-`id` index so the by-id update/delete/reaction paths resolve
-      // unchanged until Task 4 migrates them to identity-resolution.
-      id: string
     }
   }
 }
@@ -172,7 +169,6 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         s.createIndex('timestamp', 'timestamp', { unique: false })
         s.createIndex('room_timestamp', ['roomJid', 'timestamp'], { unique: false })
         s.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'], { unique: false })
-        s.createIndex('id', 'id', { unique: false })
 
         // `as never`: the legacy store is not in the v4 schema, so idb's typed
         // objectStoreNames.contains() would reject its name — but it can still be
@@ -960,7 +956,11 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(ROOM_MESSAGES_STORE)
 
-    await Promise.all(messages.map((msg) => store.put(serializeRoomMessage(msg))))
+    // Sequential, NOT Promise.all: each upsert resolves existing rows by identity
+    // and merges, so a same-batch optimistic+reflection pair must collapse into one
+    // row — the second upsert has to observe the first's write. Concurrent puts would
+    // each see an empty store and leave two rows.
+    for (const msg of messages) await upsertRoomRowByIdentity(store as never, msg)
     await tx.done
     return true
   } catch (error) {
@@ -992,14 +992,22 @@ export async function getRoomMessage(id: string): Promise<RoomMessage | null> {
 }
 
 /**
- * Get a room message by its stanzaId.
+ * Get a room message by its stanzaId, scoped to a room.
+ *
+ * stanzaIds are assigned per-archive and repeat across rooms, so the global
+ * `stanzaId` index could return a different room's message. Resolving through the
+ * room-scoped `identityKeys` alias ({@link roomStanzaKey}) confines the lookup to
+ * this room, and also finds a MERGED row (which carries the stanza tier in its
+ * `identityKeys[]` even when the survivor's own `stanzaId` scalar came from a
+ * different copy).
  */
 export async function getRoomMessageByStanzaId(
+  roomJid: string,
   stanzaId: string
 ): Promise<RoomMessage | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', stanzaId)
+    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, stanzaId))
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -1085,7 +1093,7 @@ export async function getRoomMessagesAround(
   const { before = 50, after } = options
 
   let anchor = await getRoomMessage(anchorMessageId)
-  if (!anchor) anchor = await getRoomMessageByStanzaId(anchorMessageId)
+  if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorMessageId)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -1129,8 +1137,17 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
 }
 
 /**
- * Update specific fields of a room message.
- * Note: Looks up by client-generated ID using the id index.
+ * Update specific fields of a room message, resolving the row through the `ids`
+ * alias index so a caller holding a pre-merge id still finds it.
+ *
+ * When an update carries an identity FIELD it splits two ways:
+ *   - Expansion (a new stanzaId/originId, or a changed id) — the existing row's
+ *     accumulated aliases are unioned into the updated row, then it is re-keyed
+ *     and any OTHER row already at the new identity tier is merged in.
+ *   - Revocation ({ stanzaId: undefined }, as clearMessageStanzaId sends) — the
+ *     cleared tier's scoped alias is REMOVED from identityKeys, so a later message
+ *     carrying that stanzaId no longer resolves to this row and is not wrongly
+ *     merged in.
  */
 export async function updateRoomMessage(
   id: string,
@@ -1138,30 +1155,45 @@ export async function updateRoomMessage(
 ): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Look up by id index since primary key is now cacheKey
-    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
-    if (!existing) return
+    const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
+    const store = tx.objectStore(ROOM_MESSAGES_STORE)
+    const existing = await store.index('ids').get(id)
+    if (!existing) { await tx.done; return }
+    const updated = { ...deserializeRoomMessage(existing), ...updates } as RoomMessage
+    // Compare identity FIELDS, not just the canonical key: adding an originId to a
+    // row that already has a stanzaId (or changing the id) leaves the canonical key
+    // unchanged yet still expands the identity — a row now matching the new tier must
+    // be merged in. Key-only comparison would take the non-identity branch and miss it.
+    const identityChanged =
+      updated.id !== existing.id ||
+      updated.from !== existing.from ||
+      updated.roomJid !== existing.roomJid ||
+      updated.stanzaId !== existing.stanzaId ||
+      updated.originId !== existing.originId
+    if (!identityChanged) {
+      const row = serializeRoomMessage(updated)
+      row.identityKeys = existing.identityKeys // unchanged
+      row.ids = existing.ids
+      await store.put(row)
+    } else {
+      // An identity field changed. Union the existing row's accumulated aliases in
+      // (do NOT delete-then-upsert — a deleted row cannot be rediscovered, and
+      // re-serialization resets ids/identityKeys). But a REVOCATION ({ stanzaId:
+      // undefined }) must REMOVE the cleared scoped alias, not union it back:
+      const revoked: string[] = []
+      if ('stanzaId' in updates && updated.stanzaId == null && existing.stanzaId) revoked.push(roomStanzaKey(existing.roomJid, existing.stanzaId))
+      if ('originId' in updates && updated.originId == null && existing.originId) revoked.push(roomOriginKey(existing.roomJid, existing.originId))
 
-    const updated = {
-      ...existing,
-      ...updates,
-      // Preserve the cacheKey - it must match the original
-      cacheKey: existing.cacheKey,
-      timestamp:
-        updates.timestamp instanceof Date
-          ? updates.timestamp.getTime()
-          : existing.timestamp,
-      retractedAt:
-        updates.retractedAt instanceof Date
-          ? updates.retractedAt.getTime()
-          : updates.retractedAt ?? existing.retractedAt,
-      pollClosedAt:
-        updates.pollClosedAt instanceof Date
-          ? updates.pollClosedAt.getTime()
-          : updates.pollClosedAt ?? existing.pollClosedAt,
+      const row = serializeRoomMessage(updated) // ids=[updated.id]; identityKeys reflect current fields (a revoked tier is already absent)
+      row.ids = unionSorted(existing.ids, row.ids)
+      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys).filter((k) => !revoked.includes(k))
+      // excludeKey = old cacheKey: overwrites when the canonical key is unchanged,
+      // re-keys + deletes the stale row when it changed; either way the pre-update
+      // copy is not merged back in. The finder uses row.identityKeys (revoked tier
+      // absent), so a row legitimately still carrying that stanzaId is NOT pulled in.
+      await upsertStoredRoomRow(store as never, row, existing.cacheKey)
     }
-
-    await db.put(ROOM_MESSAGES_STORE, updated)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update room message:', error)
@@ -1184,8 +1216,10 @@ export async function updateRoomMessageReactions(
   try {
     const db = await getDB(getStorageScopeJid())
 
-    // Try by id index first, then by stanzaId index
-    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', messageId)
+    // Resolve via the `ids` multiEntry index (a merged row is findable by EVERY
+    // absorbed client id), then fall back to the stanzaId scalar index: a MUC
+    // reaction references the server stanza-id, which is not a client id in `ids`.
+    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', messageId)
     if (!existing) {
       existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', messageId)
     }
@@ -1208,6 +1242,9 @@ export async function updateRoomMessageReactions(
       newReactions[emoji].push(reactorNick)
     }
 
+    // Authoritative: apply the change to the found row and put under its OWN
+    // cacheKey — never route through mergeRoomRows, whose reaction-union would
+    // resurrect a reactor this call just removed.
     const updated = {
       ...existing,
       reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
@@ -1225,13 +1262,14 @@ export async function updateRoomMessageReactions(
 
 /**
  * Delete a room message by ID.
- * Note: Looks up by client-generated ID using the id index, then deletes by cacheKey.
+ * Resolves the row through the `ids` alias index (so a pre-merge id still finds a
+ * merged row), then deletes by its cacheKey (the primary key).
  */
 export async function deleteRoomMessage(id: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Look up by id index to find the cacheKey
-    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
+    // Resolve via the `ids` multiEntry index to find the cacheKey.
+    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', id)
     if (!existing) return
     // Delete using the cacheKey (the actual primary key)
     await db.delete(ROOM_MESSAGES_STORE, existing.cacheKey)

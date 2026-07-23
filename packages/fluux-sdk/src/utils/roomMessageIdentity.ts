@@ -39,3 +39,18 @@ export function roomIdentityKeys(m: RoomIdentityFields): string[] {
 export function roomCanonicalKey(m: RoomIdentityFields): string {
   return roomIdentityKeys(m)[0]
 }
+
+/**
+ * The room-scoped stanzaId identity key — the single tier a stanzaId contributes.
+ * Used by getRoomMessageByStanzaId (room-scoped lookup) and by updateRoomMessage
+ * revocation (removing the cleared alias). Matches the key roomIdentityKeys emits
+ * for the same stanzaId, so the two always agree.
+ */
+export function roomStanzaKey(roomJid: string, stanzaId: string): string {
+  return scoped(roomJid, `stanzaId${S}${stanzaId}`)
+}
+
+/** The room-scoped originId identity key (for revocation). Mirrors {@link roomStanzaKey}. */
+export function roomOriginKey(roomJid: string, originId: string): string {
+  return scoped(roomJid, `originId${S}${originId}`)
+}
