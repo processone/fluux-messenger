@@ -1041,6 +1041,15 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     )
     expect(m1).toEqual(m2)
   })
+  it('resolves a both-carry-a-different-deliveryError tie order-independently', () => {
+    const [m1, m2] = both(
+      rrow({ deliveryError: { text: 'x' } as never }),
+      rrow({ deliveryError: { text: 'y' } as never })
+    )
+    // Both present → deterministic stableStringify-min pick, same in both orders.
+    expect(m1).toEqual(m2)
+    expect(m1.deliveryError).toEqual({ text: 'x' })
+  })
   it('prefers the stanza-bearing timestamp, both orders', () => {
     for (const m of both(rrow({ timestamp: 5000 }), rrow({ timestamp: 4000, stanzaId: 'S' }))) expect(m.timestamp).toBe(4000)
   })
@@ -1120,6 +1129,42 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
 
     for (const field of ['body', 'id', 'attachment']) {
       expect(projectedKeys).toContain(field)
+    }
+  })
+
+  // A control that BITES the load-bearing invariant: contentOwner's tiebreak must
+  // serialize the content PROJECTION, not the whole row. The associativity test
+  // above can't catch a regression to whole-row serialization (its isEdited:true row
+  // dominates by rank, so the tiebreak never runs) and the contentProjection test
+  // only checks the projection's SHAPE, not that contentOwner CONSUMES it — so
+  // mutating contentOwner to `stableStringify(a) <= stableStringify(b)` (whole row)
+  // passes both while reintroducing the associativity bug. Here three rows tie on
+  // rank (all decrypted, non-empty body, isEdited:false) and differ ONLY in
+  // `reactions` (a MERGED field — unioned during a merge) and `systemEvent` (a
+  // CONTENT field, which contentOwner must own). The projection EXCLUDES reactions,
+  // so its tiebreak sees only systemEvent and keeps row a's in EVERY grouping. A
+  // whole-row tiebreak lets the unioned reactions (and the merged rows' extra keys)
+  // decide first; because c's reactions are exactly a's ∪ b's keys, that choice
+  // becomes grouping-dependent — e.g. (a∘b)∘c keeps a's systemEvent while a∘(b∘c)
+  // keeps c's. Verified: the whole-row mutation makes this test FAIL.
+  it('resolves the content winner from the projection, not the whole row (associativity control)', () => {
+    const evt = (n: string) => ({ kind: 'nick-changed', oldNick: 'o', newNick: n }) as never
+    const a = rrow({ body: 'same', reactions: { '1': ['n'] }, systemEvent: evt('a') })
+    const b = rrow({ body: 'same', reactions: { '2': ['n'] }, systemEvent: evt('b') })
+    const c = rrow({ body: 'same', reactions: { '1': ['n'], '2': ['n'] }, systemEvent: evt('c') })
+    const groupings = [
+      mergeRoomRows(mergeRoomRows(a, b), c),
+      mergeRoomRows(a, mergeRoomRows(b, c)),
+      mergeRoomRows(mergeRoomRows(b, a), c),
+      mergeRoomRows(mergeRoomRows(c, b), a),
+      mergeRoomRows(mergeRoomRows(a, c), b),
+      mergeRoomRows(c, mergeRoomRows(a, b)),
+    ]
+    for (const g of groupings) {
+      // Projection tiebreak keeps row a's systemEvent in every grouping (a's is the
+      // lexicographically-smallest projection). A whole-row tiebreak diverges here.
+      expect(g.systemEvent).toEqual(a.systemEvent)
+      expect(g).toEqual(groupings[0])
     }
   })
 })

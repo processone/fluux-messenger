@@ -81,7 +81,6 @@ interface MessageCacheSchema extends DBSchema {
     value: StoredRoomMessage
     indexes: {
       roomJid: string
-      originId: string
       // multiEntry over identityKeys[] — the finder resolves every identity tier here.
       identityKeys: string
       // multiEntry over ids[] — a merged row is findable by EVERY absorbed client id.
@@ -161,11 +160,12 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
       if (!db.objectStoreNames.contains(ROOM_MESSAGES_STORE)) {
         const s = db.createObjectStore(ROOM_MESSAGES_STORE, { keyPath: 'cacheKey' })
         s.createIndex('roomJid', 'roomJid', { unique: false })
-        // No unscoped `stanzaId` index: stanzaIds are assigned per-archive and repeat
-        // across rooms, so a scalar index on it would let a lookup cross rooms. Every
-        // stanzaId query goes through the room-scoped `identityKeys` alias instead
-        // (see roomStanzaKey / getRoomMessageByStanzaId / updateRoomMessageReactions).
-        s.createIndex('originId', 'originId', { unique: false })
+        // No unscoped `stanzaId` or `originId` scalar index: stanzaIds/originIds are
+        // assigned per-archive and repeat across rooms, so a scalar index on either
+        // would let a lookup cross rooms — and nothing queries them anyway. Every
+        // stanzaId/originId query goes through the room-scoped `identityKeys` alias
+        // instead (see roomStanzaKey / roomOriginKey / getRoomMessageByStanzaId /
+        // updateRoomMessageReactions).
         s.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
         s.createIndex('ids', 'ids', { unique: false, multiEntry: true })
         s.createIndex('timestamp', 'timestamp', { unique: false })
@@ -182,11 +182,14 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
           // alive meanwhile via the migration's chained requests, and openDB resolves
           // only after it commits. Do not deleteObjectStore here (illegal from the
           // async continuation) — the migration clear()s the legacy store instead.
-          migrateRoomStoreToCanonical(transaction).catch(() => {
-            // Aborting rejects openDB (getDB's caller handles that) AND rejects
-            // transaction.done with AbortError; nothing awaits `done`, so attach a
-            // no-op catch first to keep the abort from surfacing as an unhandled
-            // rejection, then abort.
+          migrateRoomStoreToCanonical(transaction).catch((err) => {
+            // Log before aborting: this streaming rewrite of the whole room archive
+            // is the riskiest path in the upgrade, and the abort otherwise swallows
+            // the cause silently. Then: aborting rejects openDB (getDB's caller
+            // handles that) AND rejects transaction.done with AbortError; nothing
+            // awaits `done`, so attach a no-op catch first to keep the abort from
+            // surfacing as an unhandled rejection, then abort.
+            console.error('v4 room-store migration aborted:', err)
             transaction.done.catch(() => {})
             transaction.abort()
           })
@@ -380,18 +383,17 @@ function stableStringify(v: unknown): string {
   // declared `string` return holds (undefined-valued fields do occur in the projection).
   if (v === undefined) return '␀undefined'
   if (v === null || typeof v !== 'object') return JSON.stringify(v)
+  // Date/Map/Set are objects but carry no own enumerable keys, so the object branch
+  // below would collapse each to `{}` — making two values that differ only in such a
+  // field stringify equal and breaking COMMUTATIVITY (not just the tiebreak). Not live
+  // today (no content-projection field is a Date), but normalize Date defensively.
+  // Map/Set remain hazards: content-projection fields must stay JSON-plain.
+  if (v instanceof Date) return v.toISOString()
   if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
   const o = v as Record<string, unknown>
   return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`
 }
 
-/**
- * Choose the CONTENT-owner row by a strict TOTAL order, so the choice is the same
- * regardless of argument order AND a tie happens only when the rows are identical.
- * Higher decryption rank, then edited, then non-empty body, then — the fix — a
- * full stable serialization, so two rows differing in attachment / poll / reply /
- * encryption metadata still resolve deterministically instead of picking `a`.
- */
 /**
  * The IMMUTABLE content projection — everything EXCEPT the fields merged
  * separately (aliases, timestamp, reactions, retraction, moderation, poll
@@ -412,6 +414,18 @@ function contentProjection(m: StoredRoomMessage): unknown {
   return content
 }
 
+/**
+ * Choose the CONTENT-owner row by a strict TOTAL order, so the choice is the same
+ * regardless of argument order AND a tie happens only when the rows are identical.
+ * Higher decryption rank, then edited, then non-empty body, then — the fix — a
+ * stable serialization of the CONTENT PROJECTION (not the whole row), so two rows
+ * differing in attachment / poll / reply / encryption metadata still resolve
+ * deterministically instead of picking `a`. Serializing the projection rather than
+ * the whole row is the LOAD-BEARING invariant for associativity: the fields
+ * {@link contentProjection} excludes (aliases, reactions, timestamp, retraction,
+ * moderation, poll closure, delivery error) CHANGE during a merge, so a whole-row
+ * serialization would make the winner grouping-dependent (see contentProjection).
+ */
 function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
   const ra: number[] = [decryptionRank(a), a.isEdited ? 1 : 0, a.body ? 1 : 0]
   const rb: number[] = [decryptionRank(b), b.isEdited ? 1 : 0, b.body ? 1 : 0]
