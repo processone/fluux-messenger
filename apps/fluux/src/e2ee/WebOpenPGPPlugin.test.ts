@@ -791,6 +791,10 @@ describe('WebOpenPGPPlugin', () => {
       // ECC keys generate with one encryption subkey by default.
       expect(info.encryptionSubkeyCount).toBeGreaterThanOrEqual(1)
       expect(info.userIds).toContain('xmpp:alice@example.com')
+      // Subkey fingerprints feed the own-key consistency check's "same key,
+      // different bytes" test, so the real backend must surface them.
+      expect(info.subkeyFingerprints.length).toBeGreaterThanOrEqual(1)
+      expect(info.subkeyFingerprints).not.toContain(info.fingerprint)
     })
   })
 

@@ -292,7 +292,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       // No usable encryption-capable subkey (expired, revoked, or absent).
     }
     const userIds = key.getUserIDs()
-    return { fingerprint, encryptionSubkeyCount, userIds }
+    // Every subkey fingerprint, independent of usage/expiry — these identify
+    // the key material so the own-key consistency check can tell "same key,
+    // re-signed" from "a different key was published" (OpenPGPPluginBase).
+    const subkeyFingerprints = key.getSubkeys().map((sk) => sk.getFingerprint())
+    return { fingerprint, encryptionSubkeyCount, userIds, subkeyFingerprints }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {

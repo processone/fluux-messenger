@@ -256,10 +256,24 @@ function makeFakeRust() {
         return fp as T
       }
       case 'openpgp_validate_cert': {
-        const fp = extractFingerprint(args!.publicArmored as string)
+        const armored = args!.publicArmored as string
+        const fp = extractFingerprint(armored)
         if (!fp) throw new Error('not a recognizable OpenPGP public key')
-        const uid = extractUID(args!.publicArmored as string)
-        return { fingerprint: fp, encryptionSubkeyCount: 1, userIds: uid ? [uid] : [] } as T
+        const uid = extractUID(armored)
+        // Model a real cert's immutable subkey fingerprints. A rotation keeps
+        // every prior encryption subkey and adds a fresh one, so a rotated cert
+        // has a strictly larger set. Re-signing (e.g. stripping the primary's
+        // expiry) leaves the rotation counter — and therefore this set —
+        // untouched, mirroring how OpenPGP subkey fingerprints survive a
+        // self-signature rewrite.
+        const rotation = extractRotation(armored)
+        const subkeyFingerprints = Array.from({ length: rotation + 1 }, (_, i) => `${fp}-E${i}`)
+        return {
+          fingerprint: fp,
+          encryptionSubkeyCount: 1,
+          userIds: uid ? [uid] : [],
+          subkeyFingerprints,
+        } as T
       }
       case 'openpgp_has_persisted_key': {
         const jid = args!.accountJid as string
@@ -1057,6 +1071,64 @@ describe('SequoiaPgpPlugin', () => {
       expect(conflict!.localFingerprint).toBe(bundle.fingerprint)
       expect(conflict!.publishedDate).toBe('2024-06-01T00:00:00Z')
       expect(published).toHaveLength(0)
+    })
+
+    it('does NOT flag a conflict when the published cert differs in bytes but has the same subkey fingerprints (e.g. expiry stripped by the #1087 heal)', async () => {
+      const { ctx, peerPublish, published } = makeContext('me@example.com')
+      const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'xmpp:me@example.com',
+      })
+      // Same key material re-signed with the primary-key expiration stripped:
+      // identical primary fingerprint AND identical subkey fingerprints, but
+      // the self-signature packets — and therefore the raw bytes — differ.
+      // This is exactly what PR #1087's `strip_key_expiration` /
+      // `clearKeyExpiration` heal produces locally while the server still
+      // holds the pre-heal copy. A raw-byte comparison sees a difference;
+      // a subkey-fingerprint comparison correctly sees the same key.
+      const serverArmoredExpiryStripped = makeOpenPgpArmor(
+        'PGP PUBLIC KEY BLOCK',
+        readOpenPgpArmorPayloadForTest(bundle.publicArmored) + 'Expiry: stripped\n',
+      )
+      expect(serverArmoredExpiryStripped).not.toBe(bundle.publicArmored)
+
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': bundle.fingerprint,
+                'v6-fingerprint': bundle.fingerprint,
+                date: '2024-06-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      peerPublish('me@example.com', dataNodeFor(bundle.fingerprint), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [encodeOpenPgpArmorForXep0373(serverArmoredExpiryStripped)],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      expect(getOwnKeyConflict()).toBeNull()
+      // With no real conflict, ensureIdentity must go on to (re)publish the
+      // local key so the byte divergence self-heals instead of deadlocking.
+      expect(published.length).toBeGreaterThan(0)
     })
 
     it('blocks encrypt() while an own-key conflict is live', async () => {
