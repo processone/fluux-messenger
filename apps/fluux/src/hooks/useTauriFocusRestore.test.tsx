@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import tauriCapabilities from '../../src-tauri/capabilities/default.json'
 
 // Capture what the hook subscribes to and the handler it registers.
 const listened: Array<{ name: string; cb: () => void | Promise<void> }> = []
@@ -56,12 +55,7 @@ describe('useTauriFocusRestore', () => {
   })
 
   it('allows the native webview focus command in the Tauri capability', () => {
-    const capabilityPath = resolve(process.cwd(), 'src-tauri/capabilities/default.json')
-    const capability = JSON.parse(readFileSync(capabilityPath, 'utf8')) as {
-      permissions: string[]
-    }
-
-    expect(capability.permissions).toContain('core:webview:allow-set-webview-focus')
+    expect(tauriCapabilities.permissions).toContain('core:webview:allow-set-webview-focus')
   })
 
   it('logs native focus failures before falling back to window focus', async () => {
