@@ -29,7 +29,18 @@ centralizing it later must not erase or weaken its current safeguards.
 The first migration step runs the model beside `useMessageListScroll` without moving a scroll write.
 Fact adapters read current virtualizer, persisted-state, and DOM geometry; the controller is held in
 a ref and owns no React state. Every observed live decision is compared with the model decision.
-The demo scroll-invariant suite fails if its retained divergence list is non-empty.
+The shadow runs in production so real traces can exercise it. A shared instrumentation boundary
+therefore catches and counts adapter, validator, and controller errors; an observation failure must
+never escape into the live scroll effect or event handler. The demo scroll-invariant suite fails if
+either `divergenceCount` or `instrumentationErrorCount` is non-zero. The retained lists are capped
+diagnostic samples, not the pass criterion.
+
+Zero divergences means the model agrees with the hand-authored semantic `actual` label at each
+observation site: desired position plus the coarse waiting/positioning/applied/paused/fallback/idle
+phase. It does **not** compare rendered pixels and must not be read as proof that the browser landed
+or painted at the requested position, nor does it prove that every ownership site was observed.
+Pixel geometry, measurement convergence, and WebKit repaint remain covered by the scroll-invariant
+scenarios and the unchanged imperative implementation.
 
 Generation allocation is module-private and shared by controller instances. Each mounted
 message-list owns its controller model, but a remount (including StrictMode effect replay) cannot

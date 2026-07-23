@@ -19,6 +19,7 @@ import {
   compareShadowDecision,
   phaseCategory,
   recordShadowGeneration,
+  runScrollShadowSafely,
   type ShadowActualDecision,
 } from './scrollPositionShadow'
 
@@ -80,14 +81,21 @@ export class PositioningController {
     reachability: (desired: PositionRequest['desired']) => ReachabilityFacts
     actual: ShadowActualDecision
   }): PositionRequest | null {
-    const selection = selectEntryPosition(input.entryFacts)
-    const draft = selection as PositionRequestDraft
-    return this.observeRequest({
+    return runScrollShadowSafely({
       event: input.event,
       conversationId: input.conversationId,
-      actual: input.actual,
-      draft: selection as PositionRequestDraft,
-      reachability: input.reachability(draft.desired),
+      fallback: null,
+      observe: () => {
+        const selection = selectEntryPosition(input.entryFacts)
+        const draft = selection as PositionRequestDraft
+        return this.observeRequest({
+          event: input.event,
+          conversationId: input.conversationId,
+          actual: input.actual,
+          draft,
+          reachability: input.reachability(draft.desired),
+        })
+      },
     })
   }
 
@@ -98,50 +106,57 @@ export class PositioningController {
     reachability: ReachabilityFacts
     actual: ShadowActualDecision
   }): PositionRequest | null {
-    const generation = mintPositionGeneration()
-    const request = withIdentity(input.conversationId, generation, input.draft)
-    if (!reachabilityMatchesRequest(request, input.reachability)) {
-      compareShadowDecision({
-        event: `${input.event}:fact-mismatch`,
-        conversationId: input.conversationId,
-        generation,
-        expected: { desired: null, phase: 'idle' },
-        actual: input.actual,
-      })
-      return null
-    }
-
-    const previous = this.model
-    const accepted = acceptPositionRequest(previous, request)
-    if (accepted === previous) {
-      compareShadowDecision({
-        event: input.event,
-        conversationId: input.conversationId,
-        generation,
-        expected: { desired: null, phase: 'idle' },
-        actual: input.actual,
-      })
-      return null
-    }
-
-    const phase = resolveReachability(request, input.reachability)
-    this.model = advancePhaseIfCurrent(
-      accepted,
-      input.conversationId,
-      generation,
-      phase,
-    )
-    compareShadowDecision({
+    return runScrollShadowSafely({
       event: input.event,
       conversationId: input.conversationId,
-      generation,
-      expected: {
-        desired: request.desired,
-        phase: phaseCategory(phase),
+      fallback: null,
+      observe: () => {
+        const generation = mintPositionGeneration()
+        const request = withIdentity(input.conversationId, generation, input.draft)
+        if (!reachabilityMatchesRequest(request, input.reachability)) {
+          compareShadowDecision({
+            event: `${input.event}:fact-mismatch`,
+            conversationId: input.conversationId,
+            generation,
+            expected: { desired: null, phase: 'idle' },
+            actual: input.actual,
+          })
+          return null
+        }
+
+        const previous = this.model
+        const accepted = acceptPositionRequest(previous, request)
+        if (accepted === previous) {
+          compareShadowDecision({
+            event: input.event,
+            conversationId: input.conversationId,
+            generation,
+            expected: { desired: null, phase: 'idle' },
+            actual: input.actual,
+          })
+          return null
+        }
+
+        const phase = resolveReachability(request, input.reachability)
+        this.model = advancePhaseIfCurrent(
+          accepted,
+          input.conversationId,
+          generation,
+          phase,
+        )
+        compareShadowDecision({
+          event: input.event,
+          conversationId: input.conversationId,
+          generation,
+          expected: {
+            desired: request.desired,
+            phase: phaseCategory(phase),
+          },
+          actual: input.actual,
+        })
+        return request
       },
-      actual: input.actual,
     })
-    return request
   }
 
   observeLiveEdgeNavigation(input: {
@@ -151,15 +166,22 @@ export class PositioningController {
     reachability: (desired: PositionRequest['desired']) => ReachabilityFacts
     actual: ShadowActualDecision
   }): PositionRequest | null {
-    const draft = selectLiveEdgeNavigation(
-      input.navigationFacts,
-    ) as PositionRequestDraft
-    return this.observeRequest({
+    return runScrollShadowSafely({
       event: input.event,
       conversationId: input.conversationId,
-      draft,
-      reachability: input.reachability(draft.desired),
-      actual: input.actual,
+      fallback: null,
+      observe: () => {
+        const draft = selectLiveEdgeNavigation(
+          input.navigationFacts,
+        ) as PositionRequestDraft
+        return this.observeRequest({
+          event: input.event,
+          conversationId: input.conversationId,
+          draft,
+          reachability: input.reachability(draft.desired),
+          actual: input.actual,
+        })
+      },
     })
   }
 
@@ -168,28 +190,35 @@ export class PositioningController {
     conversationId: string
     actualFollowsLive: boolean
   }): boolean {
-    const expectedFollowsLive = shouldReconcileAfterAppend(
-      this.model,
-      input.conversationId,
-    )
-    compareShadowDecision({
+    return runScrollShadowSafely({
       event: input.event,
       conversationId: input.conversationId,
-      generation: this.model.active?.request.generation ?? null,
-      expected: {
-        desired: expectedFollowsLive
-          ? this.model.active?.request.desired ?? null
-          : null,
-        phase: expectedFollowsLive ? 'positioning' : 'idle',
-      },
-      actual: {
-        desired: input.actualFollowsLive
-          ? { kind: 'live-edge', follow: true }
-          : null,
-        phase: input.actualFollowsLive ? 'positioning' : 'idle',
+      fallback: false,
+      observe: () => {
+        const expectedFollowsLive = shouldReconcileAfterAppend(
+          this.model,
+          input.conversationId,
+        )
+        compareShadowDecision({
+          event: input.event,
+          conversationId: input.conversationId,
+          generation: this.model.active?.request.generation ?? null,
+          expected: {
+            desired: expectedFollowsLive
+              ? this.model.active?.request.desired ?? null
+              : null,
+            phase: expectedFollowsLive ? 'positioning' : 'idle',
+          },
+          actual: {
+            desired: input.actualFollowsLive
+              ? { kind: 'live-edge', follow: true }
+              : null,
+            phase: input.actualFollowsLive ? 'positioning' : 'idle',
+          },
+        })
+        return expectedFollowsLive
       },
     })
-    return expectedFollowsLive
   }
 
   /**
@@ -204,78 +233,113 @@ export class PositioningController {
     geometryAtLiveEdge: boolean
     actualFollowsLive: boolean
   }): boolean {
-    const expectedFollowsLive =
-      shouldReconcileAfterAppend(this.model, input.conversationId) ||
-      input.geometryAtLiveEdge
-    compareShadowDecision({
+    return runScrollShadowSafely({
       event: input.event,
       conversationId: input.conversationId,
-      generation: this.model.active?.request.generation ?? null,
-      expected: {
-        desired: expectedFollowsLive
-          ? { kind: 'live-edge', follow: true }
-          : null,
-        phase: expectedFollowsLive ? 'positioning' : 'idle',
-      },
-      actual: {
-        desired: input.actualFollowsLive
-          ? { kind: 'live-edge', follow: true }
-          : null,
-        phase: input.actualFollowsLive ? 'positioning' : 'idle',
+      fallback: false,
+      observe: () => {
+        const expectedFollowsLive =
+          shouldReconcileAfterAppend(this.model, input.conversationId) ||
+          input.geometryAtLiveEdge
+        compareShadowDecision({
+          event: input.event,
+          conversationId: input.conversationId,
+          generation: this.model.active?.request.generation ?? null,
+          expected: {
+            desired: expectedFollowsLive
+              ? { kind: 'live-edge', follow: true }
+              : null,
+            phase: expectedFollowsLive ? 'positioning' : 'idle',
+          },
+          actual: {
+            desired: input.actualFollowsLive
+              ? { kind: 'live-edge', follow: true }
+              : null,
+            phase: input.actualFollowsLive ? 'positioning' : 'idle',
+          },
+        })
+        return expectedFollowsLive
       },
     })
-    return expectedFollowsLive
   }
 
   markPositionApplied(conversationId: string, generation: number): void {
-    this.model = advancePhaseIfCurrent(
-      this.model,
+    runScrollShadowSafely({
+      event: 'position-applied',
       conversationId,
-      generation,
-      { kind: 'position-applied' },
-    )
+      fallback: undefined,
+      observe: () => {
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          conversationId,
+          generation,
+          { kind: 'position-applied' },
+        )
+      },
+    })
   }
 
   observeUserInput(conversationId: string): void {
-    const generation = this.model.active?.request.generation
-    if (generation === undefined) return
-    this.model = cancelReconciliationForUserInput(
-      this.model,
+    runScrollShadowSafely({
+      event: 'user-input',
       conversationId,
-      generation,
-    )
+      fallback: undefined,
+      observe: () => {
+        const generation = this.model.active?.request.generation
+        if (generation === undefined) return
+        this.model = cancelReconciliationForUserInput(
+          this.model,
+          conversationId,
+          generation,
+        )
+      },
+    })
   }
 
   observeSettledUserGeometry(input: {
     conversationId: string
     atLiveEdge: boolean
   }): void {
-    const rearmRequest: Extract<
-      PositionRequest,
-      { source: { kind: 'user-navigation'; reason: 'live-edge' } }
-    > | undefined =
-      input.atLiveEdge && this.model.active === null
-        ? {
-            generation: mintPositionGeneration(),
-            conversationId: input.conversationId,
-            source: { kind: 'user-navigation', reason: 'live-edge' },
-            desired: { kind: 'live-edge', follow: true },
-          }
-        : undefined
-    this.model = settleUserPosition(
-      this.model,
-      input.conversationId,
-      input.atLiveEdge,
-      rearmRequest,
-    )
+    runScrollShadowSafely({
+      event: 'settled-user-geometry',
+      conversationId: input.conversationId,
+      fallback: undefined,
+      observe: () => {
+        const rearmRequest: Extract<
+          PositionRequest,
+          { source: { kind: 'user-navigation'; reason: 'live-edge' } }
+        > | undefined =
+          input.atLiveEdge && this.model.active === null
+            ? {
+                generation: mintPositionGeneration(),
+                conversationId: input.conversationId,
+                source: { kind: 'user-navigation', reason: 'live-edge' },
+                desired: { kind: 'live-edge', follow: true },
+              }
+            : undefined
+        this.model = settleUserPosition(
+          this.model,
+          input.conversationId,
+          input.atLiveEdge,
+          rearmRequest,
+        )
+      },
+    })
   }
 
-  deactivate(conversationId: string): void {
-    this.model = deactivateConversation(
-      this.model,
+  deactivate(conversationId: string, generation: number): void {
+    runScrollShadowSafely({
+      event: 'deactivate',
       conversationId,
-      this.model.watermark,
-    )
+      fallback: undefined,
+      observe: () => {
+        this.model = deactivateConversation(
+          this.model,
+          conversationId,
+          generation,
+        )
+      },
+    })
   }
 }
 
