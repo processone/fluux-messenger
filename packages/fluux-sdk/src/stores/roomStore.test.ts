@@ -1523,7 +1523,7 @@ describe('roomStore', () => {
 
       expect(roomStore.getState().rooms.get(ROOM)?.messages[0].stanzaId).toBeUndefined()
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('m1', { stanzaId: undefined })
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(ROOM, 'm1', { stanzaId: undefined }, `${ROOM}/me`)
     })
 
     it('is a no-op when no message carries the given stanzaId', () => {
@@ -5403,7 +5403,7 @@ describe('roomStore', () => {
       const updated = roomStore.getState().rooms.get(roomJid)?.messages[0]
       expect(updated?.isRetracted).toBe(true)
       // Verify IndexedDB update uses actual message id, not the stanza-id
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('client-id-1', { isRetracted: true })
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(roomJid, 'client-id-1', { isRetracted: true }, `${roomJid}/alice`)
     })
 
     it('should update message found by originId when a correction references the origin-id', () => {
@@ -5424,7 +5424,7 @@ describe('roomStore', () => {
       expect(updated?.isEdited).toBe(true)
       expect(updated?.body).toBe('Hello (fixed)')
       // IndexedDB update still keyed by the actual stored message id.
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('muc-rewritten-id', { isEdited: true, body: 'Hello (fixed)' })
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(roomJid, 'muc-rewritten-id', { isEdited: true, body: 'Hello (fixed)' }, `${roomJid}/alice`)
     })
 
     it('should not touch an origin-id carrier when another message owns the id (no over-match)', () => {
@@ -5960,8 +5960,10 @@ describe('roomStore pending retractions', () => {
     expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+      roomJid,
       'm1',
-      expect.objectContaining({ isRetracted: true })
+      expect.objectContaining({ isRetracted: true }),
+      expect.any(String)
     )
   })
 
@@ -6052,8 +6054,10 @@ describe('roomStore parity drift regressions', () => {
       expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('archive-123')
       // The backfill must also persist so the cursor survives a reload.
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        roomJid,
         'orig-1',
-        expect.objectContaining({ stanzaId: 'archive-123' })
+        expect.objectContaining({ stanzaId: 'archive-123' }),
+        `${roomJid}/testuser`
       )
     })
   })
@@ -6189,8 +6193,10 @@ describe('roomStore parity drift regressions', () => {
       expect(messages[0].stanzaId).toBe('arch-merge')
       expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('arch-merge')
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        roomJid,
         'own-1',
-        expect.objectContaining({ stanzaId: 'arch-merge' })
+        expect.objectContaining({ stanzaId: 'arch-merge' }),
+        `${roomJid}/testuser`
       )
     })
   })

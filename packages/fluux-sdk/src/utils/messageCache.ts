@@ -11,38 +11,21 @@ import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
 import { isRenderableStoredMessage } from './messageRenderability'
+import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
 // only the messages still awaiting a key — without scanning the whole archive.
-const DB_VERSION = 3
+// v4: canonicalize the room archive — one cached row per logical message. A fresh
+// canonically-keyed store (identityKeys[]/ids[] multiEntry + room_ts_from_id order
+// index) replaces the old room store; the v4 upgrade streams every legacy row
+// through the identity-resolving upsert into it and aborts atomically on failure.
+const DB_VERSION = 4
 const MESSAGES_STORE = 'messages'
-const ROOM_MESSAGES_STORE = 'room-messages'
-
-/**
- * Generate a unique cache key for a room message.
- * Uses stanzaId if available (globally unique from server),
- * otherwise falls back to roomJid:from:id (unique per sender).
- *
- * This fixes the duplicate message issue where different senders
- * could have the same message ID (XMPP IDs are only unique per sender).
- */
-function getRoomMessageCacheKey(message: {
-  stanzaId?: string
-  roomJid: string
-  from: string
-  id: string
-}): string {
-  // Prefer stanzaId - it's globally unique (XEP-0359)
-  if (message.stanzaId) {
-    return message.stanzaId
-  }
-  // Fallback: composite key using roomJid:from:id
-  // Known cosmetic edge: an id-less cached copy and its stanzaId-carrying
-  // re-fetch land under different keys (double row in the raw cache); the
-  // rehydrate merge dedupes them by from:id, so the UI shows one row.
-  return `${message.roomJid}:${message.from}:${message.id}`
-}
+// The canonical room store (v4+). Keyed by the highest-tier identity key.
+const ROOM_MESSAGES_STORE = 'room-messages-canonical'
+// The pre-v4 room store. Read + cleared by the v4 migration only; never written live.
+const LEGACY_ROOM_MESSAGES_STORE = 'room-messages'
 
 /**
  * Stored message format with timestamps as numbers for efficient indexing.
@@ -59,10 +42,14 @@ interface StoredMessage extends Omit<Message, 'timestamp' | 'retractedAt' | 'rep
 /**
  * Stored room message format with timestamps as numbers for efficient indexing.
  */
-interface StoredRoomMessage
+export interface StoredRoomMessage
   extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
-  /** Cache key used as the primary key in IndexedDB */
+  /** Cache key used as the primary key in IndexedDB — the canonical (highest-tier) identity key. */
   cacheKey: string
+  /** Every room-scoped identity tier this row is known under (see {@link roomIdentityKeys}). */
+  identityKeys: string[]
+  /** Every client-generated `id` this row has absorbed (a merged row may carry more than one). */
+  ids: string[]
   /** Timestamp as milliseconds since epoch for indexing */
   timestamp: number
   /** Retracted timestamp as milliseconds if message was retracted */
@@ -90,14 +77,18 @@ interface MessageCacheSchema extends DBSchema {
     }
   }
   [ROOM_MESSAGES_STORE]: {
-    key: string // cacheKey (stanzaId or roomJid:from:id)
+    key: string // cacheKey — the canonical (highest-tier) identity key
     value: StoredRoomMessage
     indexes: {
       roomJid: string
-      stanzaId: string
+      // multiEntry over identityKeys[] — the finder resolves every identity tier here.
+      identityKeys: string
+      // multiEntry over ids[] — a merged row is findable by EVERY absorbed client id.
+      ids: string
       timestamp: number
       room_timestamp: [string, number]
-      id: string // Index on client ID for lookup
+      // Stable room order key (roomJid, timestamp, from, id) for Task 4's read path.
+      room_ts_from_id: [string, number, string, string]
     }
   }
 }
@@ -163,23 +154,46 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         }
       }
 
-      // Room messages store
-      // Version 2: Changed keyPath from 'id' to 'cacheKey' to fix duplicate messages
-      // issue where different senders could have the same message ID.
-      if (oldVersion < 2 && db.objectStoreNames.contains(ROOM_MESSAGES_STORE)) {
-        // Delete old store - data will be re-fetched from MAM
-        db.deleteObjectStore(ROOM_MESSAGES_STORE)
-      }
-
+      // Room messages store (v4 canonical). A fresh canonically-keyed store replaces
+      // the pre-v4 room store; when the legacy store is present, the migration streams
+      // every legacy row through the identity-resolving upsert into it.
       if (!db.objectStoreNames.contains(ROOM_MESSAGES_STORE)) {
-        const roomStore = db.createObjectStore(ROOM_MESSAGES_STORE, { keyPath: 'cacheKey' })
-        roomStore.createIndex('roomJid', 'roomJid', { unique: false })
-        roomStore.createIndex('stanzaId', 'stanzaId', { unique: false })
-        roomStore.createIndex('timestamp', 'timestamp', { unique: false })
-        roomStore.createIndex('room_timestamp', ['roomJid', 'timestamp'], {
-          unique: false,
-        })
-        roomStore.createIndex('id', 'id', { unique: false })
+        const s = db.createObjectStore(ROOM_MESSAGES_STORE, { keyPath: 'cacheKey' })
+        s.createIndex('roomJid', 'roomJid', { unique: false })
+        // No unscoped `stanzaId` or `originId` scalar index: stanzaIds/originIds are
+        // assigned per-archive and repeat across rooms, so a scalar index on either
+        // would let a lookup cross rooms — and nothing queries them anyway. Every
+        // stanzaId/originId query goes through the room-scoped `identityKeys` alias
+        // instead (see roomStanzaKey / roomOriginKey / getRoomMessageByStanzaId /
+        // updateRoomMessageReactions).
+        s.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
+        s.createIndex('ids', 'ids', { unique: false, multiEntry: true })
+        s.createIndex('timestamp', 'timestamp', { unique: false })
+        s.createIndex('room_timestamp', ['roomJid', 'timestamp'], { unique: false })
+        s.createIndex('room_ts_from_id', ['roomJid', 'timestamp', 'from', 'id'], { unique: false })
+
+        // `as never`: the legacy store is not in the v4 schema, so idb's typed
+        // objectStoreNames.contains() would reject its name — but it can still be
+        // present in an upgrading DB, which is exactly what we test for here.
+        if (db.objectStoreNames.contains(LEGACY_ROOM_MESSAGES_STORE as never)) {
+          // idb does NOT await this callback, and rethrowing would be an unhandled
+          // rejection. Fire the migration and, on ANY failure, explicitly abort the
+          // version-change transaction (which rejects openDB). The transaction stays
+          // alive meanwhile via the migration's chained requests, and openDB resolves
+          // only after it commits. Do not deleteObjectStore here (illegal from the
+          // async continuation) — the migration clear()s the legacy store instead.
+          migrateRoomStoreToCanonical(transaction).catch((err) => {
+            // Log before aborting: this streaming rewrite of the whole room archive
+            // is the riskiest path in the upgrade, and the abort otherwise swallows
+            // the cause silently. Then: aborting rejects openDB (getDB's caller
+            // handles that) AND rejects transaction.done with AbortError; nothing
+            // awaits `done`, so attach a no-op catch first to keep the abort from
+            // surfacing as an unhandled rejection, then abort.
+            console.error('v4 room-store migration aborted:', err)
+            transaction.done.catch(() => {})
+            transaction.abort()
+          })
+        }
       }
     },
   })
@@ -219,7 +233,9 @@ function deserializeMessage(stored: StoredMessage): Message {
 function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
   return {
     ...message,
-    cacheKey: getRoomMessageCacheKey(message),
+    cacheKey: roomCanonicalKey(message),
+    identityKeys: roomIdentityKeys(message),
+    ids: [message.id],
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
     pollClosedAt: message.pollClosedAt?.getTime(),
@@ -236,6 +252,113 @@ function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
     pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
   }
+}
+
+// =============================================================================
+// v4 room-store canonicalization (identity-resolving upsert + streaming migration)
+// =============================================================================
+
+let migrationFaultForTesting = false
+/** @internal test seam — force the v4 migration to throw, to verify it aborts. */
+export function _setMigrationFaultForTesting(on: boolean): void {
+  migrationFaultForTesting = on
+}
+
+/** The minimal room-store surface the identity-resolving upsert needs. */
+type RoomStoreLike = {
+  put(v: StoredRoomMessage): Promise<unknown>
+  delete(key: string): Promise<void>
+  index(name: 'identityKeys'): { getAll(key: string): Promise<StoredRoomMessage[]> }
+}
+
+/**
+ * Every existing row sharing ANY identity tier with `m`, de-duped by cacheKey.
+ * SCANS the multiEntry `identityKeys` index across every one of `m`'s keys (never
+ * `.get()`): a non-unique tier or a gateway bridge can leave the same logical
+ * message under several rows, and only a scan of all tiers finds them all.
+ */
+async function findRoomRowsByIdentity(
+  store: RoomStoreLike,
+  m: StoredRoomMessage
+): Promise<StoredRoomMessage[]> {
+  const found = new Map<string, StoredRoomMessage>()
+  for (const key of m.identityKeys) {
+    for (const row of await store.index('identityKeys').getAll(key)) found.set(row.cacheKey, row)
+  }
+  return [...found.values()]
+}
+
+/**
+ * Resolve the one cached row carrying client `id` WITHIN a room. The `ids` index is
+ * store-wide and non-unique — client ids repeat across rooms, and per XEP-0359 an id
+ * is unique only per (room, sender) — so a plain index `get` returns the
+ * globally-first match and can land in the wrong room. Fetch every id match and keep
+ * the one in this room; when the caller knows the sender, also match `from`. Returns
+ * undefined when no row in the room carries the id. Shared by every room-aware
+ * by-id lookup (getRoomMessage, updateRoomMessage, deleteRoomMessage).
+ */
+async function findRoomRowById(
+  idsIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
+  roomJid: string,
+  id: string,
+  from?: string
+): Promise<StoredRoomMessage | undefined> {
+  const matches = await idsIndex.getAll(id)
+  return matches.find((r) => r.roomJid === roomJid && (from === undefined || r.from === from))
+}
+
+/**
+ * Core: resolve every existing row sharing any tier with `incoming` (echo,
+ * live/MAM, bridge), merge them and `incoming` into one, delete the losers, put
+ * the survivor. `incoming` is an already-serialized StoredRoomMessage, so callers
+ * that need to PRESERVE accumulated aliases (updateRoomMessage) union them in
+ * first. `excludeKey` skips a specific existing row from the merge — used when the
+ * caller already holds that row's data in `incoming` and must not merge its
+ * pre-update copy back in (which the union would do, re-adding a removed reaction).
+ */
+async function upsertStoredRoomRow(
+  store: RoomStoreLike,
+  incoming: StoredRoomMessage,
+  excludeKey?: string
+): Promise<void> {
+  const matches = (await findRoomRowsByIdentity(store, incoming)).filter((r) => r.cacheKey !== excludeKey)
+  let merged = incoming
+  for (const row of matches) merged = mergeRoomRows(merged, row)
+  const survivorKey = merged.cacheKey
+  if (excludeKey && excludeKey !== survivorKey) await store.delete(excludeKey)
+  for (const row of matches) if (row.cacheKey !== survivorKey) await store.delete(row.cacheKey)
+  await store.put(merged)
+}
+
+/** Insert or merge a live-arriving message by identity (migration + Task 4 write path). */
+async function upsertRoomRowByIdentity(store: RoomStoreLike, message: RoomMessage): Promise<void> {
+  await upsertStoredRoomRow(store, serializeRoomMessage(message))
+}
+
+/** Minimal cursor view over the legacy room store during migration. */
+type LegacyRoomCursor = { value: StoredRoomMessage; continue(): Promise<LegacyRoomCursor | null> }
+/** Minimal legacy-store view: stream every row out, then empty. */
+type LegacyRoomStore = { openCursor(): Promise<LegacyRoomCursor | null>; clear(): Promise<void> }
+/** Minimal version-change transaction view the streaming migration needs. */
+type MigrationTransaction = { objectStore(name: string): unknown }
+
+/**
+ * Stream every legacy room row through the identity-resolving upsert into the
+ * canonical store, one cursor step at a time (never `getAll()` the whole archive
+ * into memory), then empty the legacy store. Runs inside the v4 version-change
+ * transaction; any throw is caught by the caller, which aborts that transaction
+ * atomically — so a partial rewrite can never be observed.
+ */
+async function migrateRoomStoreToCanonical(transaction: MigrationTransaction): Promise<void> {
+  const legacy = transaction.objectStore(LEGACY_ROOM_MESSAGES_STORE) as LegacyRoomStore
+  const dest = transaction.objectStore(ROOM_MESSAGES_STORE) as RoomStoreLike
+  let cursor = await legacy.openCursor()
+  while (cursor) {
+    if (migrationFaultForTesting) throw new Error('migration fault (test)')
+    await upsertRoomRowByIdentity(dest, deserializeRoomMessage(cursor.value))
+    cursor = await cursor.continue()
+  }
+  await legacy.clear() // legacy store now empty; a future version bump can drop it synchronously
 }
 
 // =============================================================================
@@ -261,6 +384,108 @@ function decryptionRank(msg: {
   if (msg.encryptedPayload) return 1
   if (msg.unsupportedEncryption) return 0
   return 2
+}
+
+function unionSorted(a: string[] = [], b: string[] = []): string[] { return [...new Set([...a, ...b])].sort() }
+function minStr(a?: string, b?: string): string | undefined { if (a == null) return b; if (b == null) return a; return a <= b ? a : b }
+function minNum(a?: number, b?: number): number | undefined { if (a == null) return b; if (b == null) return a; return Math.min(a, b) }
+function mergeReactions(a?: Record<string, string[]>, b?: Record<string, string[]>): Record<string, string[]> | undefined {
+  if (!a) return b; if (!b) return a
+  const out: Record<string, string[]> = {}
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) out[k] = unionSorted(a[k], b[k])
+  return out
+}
+
+/** Deterministic, key-sorted serialization — a stable total order over any row. */
+function stableStringify(v: unknown): string {
+  // JSON.stringify(undefined) is `undefined`, not a string — return a token so the
+  // declared `string` return holds (undefined-valued fields do occur in the projection).
+  if (v === undefined) return '␀undefined'
+  if (v === null || typeof v !== 'object') return JSON.stringify(v)
+  // Date/Map/Set are objects but carry no own enumerable keys, so the object branch
+  // below would collapse each to `{}` — making two values that differ only in such a
+  // field stringify equal and breaking COMMUTATIVITY (not just the tiebreak). Not live
+  // today (no content-projection field is a Date), but normalize Date defensively.
+  // Map/Set remain hazards: content-projection fields must stay JSON-plain.
+  if (v instanceof Date) return v.toISOString()
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
+  const o = v as Record<string, unknown>
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`
+}
+
+/**
+ * The IMMUTABLE content projection — everything EXCEPT the fields merged
+ * separately (aliases, timestamp, reactions, retraction, moderation, poll
+ * closure, delivery error, cacheKey). The tiebreak must serialize only this,
+ * because those excluded fields CHANGE during a merge: an intermediate merged
+ * row acquires unioned aliases/reactions and a min timestamp, so serializing the
+ * whole row would make contentOwner(merge(a,b), c) differ from
+ * contentOwner(a, merge(b,c)) — destroying associativity. The content projection
+ * is identical between a merged row and its content-winner, so max over it is
+ * genuinely associative.
+ */
+function contentProjection(m: StoredRoomMessage): unknown {
+  const {
+    stanzaId: _s, originId: _o, timestamp: _t, reactions: _r, identityKeys: _ik, ids: _ids,
+    isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
+    pollClosed: _pc, pollClosedAt: _pca, deliveryError: _de, cacheKey: _ck, ...content
+  } = m
+  return content
+}
+
+/**
+ * Choose the CONTENT-owner row by a strict TOTAL order, so the choice is the same
+ * regardless of argument order AND a tie happens only when the rows are identical.
+ * Higher decryption rank, then edited, then non-empty body, then — the fix — a
+ * stable serialization of the CONTENT PROJECTION (not the whole row), so two rows
+ * differing in attachment / poll / reply / encryption metadata still resolve
+ * deterministically instead of picking `a`. Serializing the projection rather than
+ * the whole row is the LOAD-BEARING invariant for associativity: the fields
+ * {@link contentProjection} excludes (aliases, reactions, timestamp, retraction,
+ * moderation, poll closure, delivery error) CHANGE during a merge, so a whole-row
+ * serialization would make the winner grouping-dependent (see contentProjection).
+ */
+function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  const ra: number[] = [decryptionRank(a), a.isEdited ? 1 : 0, a.body ? 1 : 0]
+  const rb: number[] = [decryptionRank(b), b.isEdited ? 1 : 0, b.body ? 1 : 0]
+  for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i] ? a : b
+  // Tiebreak over the IMMUTABLE content only, so max is associative (see contentProjection).
+  return stableStringify(contentProjection(a)) <= stableStringify(contentProjection(b)) ? a : b
+}
+
+/**
+ * Merge two stored rows that are the same logical room message into one.
+ * COMMUTATIVE and ASSOCIATIVE. The correlated content block comes from
+ * {@link contentOwner} (total order); every other field uses a symmetric operator,
+ * so no edit, poll closure, retraction, reaction, moderation, or alias is lost.
+ */
+export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  const owner = contentOwner(a, b)
+  const aSid = a.stanzaId != null, bSid = b.stanzaId != null
+  const timestamp = aSid !== bSid ? (aSid ? a.timestamp : b.timestamp) : Math.min(a.timestamp, b.timestamp)
+  const retracted = !!(a.isRetracted || b.isRetracted)
+  const moderated = !!(a.isModerated || b.isModerated)
+  // Poll closure: symmetric even when both closed with different records.
+  const pollClosed = a.pollClosed && b.pollClosed
+    ? (stableStringify(a.pollClosed) <= stableStringify(b.pollClosed) ? a.pollClosed : b.pollClosed)
+    : (a.pollClosed ?? b.pollClosed)
+
+  const merged: StoredRoomMessage = {
+    ...owner,
+    stanzaId: minStr(a.stanzaId, b.stanzaId),
+    originId: minStr(a.originId, b.originId),
+    timestamp,
+    reactions: mergeReactions(a.reactions, b.reactions),
+    identityKeys: unionSorted(a.identityKeys, b.identityKeys),
+    ids: unionSorted(a.ids, b.ids),
+    deliveryError: a.deliveryError && b.deliveryError ? (stableStringify(a.deliveryError) <= stableStringify(b.deliveryError) ? a.deliveryError : b.deliveryError) : undefined,
+    ...(retracted ? { isRetracted: true, retractedAt: minNum(a.retractedAt, b.retractedAt) } : {}),
+    ...(moderated ? { isModerated: true, moderatedBy: minStr(a.moderatedBy, b.moderatedBy), moderationReason: minStr(a.moderationReason, b.moderationReason) } : {}),
+    ...(pollClosed ? { pollClosed, pollClosedAt: minNum(a.pollClosedAt, b.pollClosedAt) } : {}),
+  }
+  merged.cacheKey = roomCanonicalKey(merged)
+  merged.identityKeys = unionSorted(merged.identityKeys, roomIdentityKeys(merged))
+  return merged
 }
 
 /**
@@ -766,7 +991,11 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(ROOM_MESSAGES_STORE)
 
-    await Promise.all(messages.map((msg) => store.put(serializeRoomMessage(msg))))
+    // Sequential, NOT Promise.all: each upsert resolves existing rows by identity
+    // and merges, so a same-batch optimistic+reflection pair must collapse into one
+    // row — the second upsert has to observe the first's write. Concurrent puts would
+    // each see an empty store and leave two rows.
+    for (const msg of messages) await upsertRoomRowByIdentity(store as never, msg)
     await tx.done
     return true
   } catch (error) {
@@ -778,14 +1007,17 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean
 }
 
 /**
- * Get a room message by its client-generated ID.
- * Note: IDs may not be unique across senders. Uses the id index to find the first match.
+ * Get a room message by its client-generated ID, scoped to a room.
+ *
+ * Client ids repeat across rooms (and, per XEP-0359, are unique only per sender), so
+ * the store-wide `ids` index is filtered to `roomJid` — pass `from` to also pin the
+ * sender. A MERGED row carries every absorbed client id in `ids[]`, so it stays
+ * findable by ANY of them. See {@link findRoomRowById}.
  */
-export async function getRoomMessage(id: string): Promise<RoomMessage | null> {
+export async function getRoomMessage(roomJid: string, id: string, from?: string): Promise<RoomMessage | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Use the id index since the primary key is now cacheKey
-    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
+    const stored = await findRoomRowById(db.transaction(ROOM_MESSAGES_STORE).store.index('ids'), roomJid, id, from)
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -796,14 +1028,22 @@ export async function getRoomMessage(id: string): Promise<RoomMessage | null> {
 }
 
 /**
- * Get a room message by its stanzaId.
+ * Get a room message by its stanzaId, scoped to a room.
+ *
+ * stanzaIds are assigned per-archive and repeat across rooms, so the global
+ * `stanzaId` index could return a different room's message. Resolving through the
+ * room-scoped `identityKeys` alias ({@link roomStanzaKey}) confines the lookup to
+ * this room, and also finds a MERGED row (which carries the stanza tier in its
+ * `identityKeys[]` even when the survivor's own `stanzaId` scalar came from a
+ * different copy).
  */
 export async function getRoomMessageByStanzaId(
+  roomJid: string,
   stanzaId: string
 ): Promise<RoomMessage | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', stanzaId)
+    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, stanzaId))
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -888,8 +1128,8 @@ export async function getRoomMessagesAround(
 ): Promise<RoomMessage[]> {
   const { before = 50, after } = options
 
-  let anchor = await getRoomMessage(anchorMessageId)
-  if (!anchor) anchor = await getRoomMessageByStanzaId(anchorMessageId)
+  let anchor = await getRoomMessage(roomJid, anchorMessageId)
+  if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorMessageId)
   if (!anchor) return []
 
   const t = anchor.timestamp.getTime()
@@ -902,11 +1142,11 @@ export async function getRoomMessagesAround(
     ...(after !== undefined ? { limit: after } : {}),
   })
 
-  // Dedupe by the same key the cache uses (room ids are not unique across senders).
+  // Dedupe by the same canonical identity key the cache uses (room ids are not unique across senders).
   const seen = new Set<string>()
   const merged: RoomMessage[] = []
   for (const m of [...olderAndAnchor, ...newer]) {
-    const key = getRoomMessageCacheKey(m)
+    const key = roomCanonicalKey(m)
     if (seen.has(key)) continue
     seen.add(key)
     merged.push(m)
@@ -933,39 +1173,67 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
 }
 
 /**
- * Update specific fields of a room message.
- * Note: Looks up by client-generated ID using the id index.
+ * Update specific fields of a room message, resolving the row through the room-scoped
+ * `ids` alias so a caller holding a pre-merge id still finds it. Client ids repeat
+ * across rooms, so the lookup is confined to `roomJid` (and `from` when the caller
+ * knows the sender) — otherwise the update could mutate another room's message.
+ *
+ * When an update carries an identity FIELD it splits two ways:
+ *   - Expansion (a new stanzaId/originId, or a changed id) — the existing row's
+ *     accumulated aliases are unioned into the updated row, then it is re-keyed
+ *     and any OTHER row already at the new identity tier is merged in.
+ *   - Revocation ({ stanzaId: undefined }, as clearMessageStanzaId sends) — the
+ *     cleared tier's scoped alias is REMOVED from identityKeys, so a later message
+ *     carrying that stanzaId no longer resolves to this row and is not wrongly
+ *     merged in.
  */
 export async function updateRoomMessage(
+  roomJid: string,
   id: string,
-  updates: Partial<RoomMessage>
+  updates: Partial<RoomMessage>,
+  from?: string
 ): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Look up by id index since primary key is now cacheKey
-    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
-    if (!existing) return
+    const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
+    const store = tx.objectStore(ROOM_MESSAGES_STORE)
+    const existing = await findRoomRowById(store.index('ids'), roomJid, id, from)
+    if (!existing) { await tx.done; return }
+    const updated = { ...deserializeRoomMessage(existing), ...updates } as RoomMessage
+    // Compare identity FIELDS, not just the canonical key: adding an originId to a
+    // row that already has a stanzaId (or changing the id) leaves the canonical key
+    // unchanged yet still expands the identity — a row now matching the new tier must
+    // be merged in. Key-only comparison would take the non-identity branch and miss it.
+    const identityChanged =
+      updated.id !== existing.id ||
+      updated.from !== existing.from ||
+      updated.roomJid !== existing.roomJid ||
+      updated.stanzaId !== existing.stanzaId ||
+      updated.originId !== existing.originId
+    if (!identityChanged) {
+      const row = serializeRoomMessage(updated)
+      row.identityKeys = existing.identityKeys // unchanged
+      row.ids = existing.ids
+      await store.put(row)
+    } else {
+      // An identity field changed. Union the existing row's accumulated aliases in
+      // (do NOT delete-then-upsert — a deleted row cannot be rediscovered, and
+      // re-serialization resets ids/identityKeys). But a REVOCATION ({ stanzaId:
+      // undefined }) must REMOVE the cleared scoped alias, not union it back:
+      const revoked: string[] = []
+      if ('stanzaId' in updates && updated.stanzaId == null && existing.stanzaId) revoked.push(roomStanzaKey(existing.roomJid, existing.stanzaId))
+      if ('originId' in updates && updated.originId == null && existing.originId) revoked.push(roomOriginKey(existing.roomJid, existing.originId))
 
-    const updated = {
-      ...existing,
-      ...updates,
-      // Preserve the cacheKey - it must match the original
-      cacheKey: existing.cacheKey,
-      timestamp:
-        updates.timestamp instanceof Date
-          ? updates.timestamp.getTime()
-          : existing.timestamp,
-      retractedAt:
-        updates.retractedAt instanceof Date
-          ? updates.retractedAt.getTime()
-          : updates.retractedAt ?? existing.retractedAt,
-      pollClosedAt:
-        updates.pollClosedAt instanceof Date
-          ? updates.pollClosedAt.getTime()
-          : updates.pollClosedAt ?? existing.pollClosedAt,
+      const row = serializeRoomMessage(updated) // ids=[updated.id]; identityKeys reflect current fields (a revoked tier is already absent)
+      row.ids = unionSorted(existing.ids, row.ids)
+      row.identityKeys = unionSorted(existing.identityKeys, row.identityKeys).filter((k) => !revoked.includes(k))
+      // excludeKey = old cacheKey: overwrites when the canonical key is unchanged,
+      // re-keys + deletes the stale row when it changed; either way the pre-update
+      // copy is not merged back in. The finder uses row.identityKeys (revoked tier
+      // absent), so a row legitimately still carrying that stanzaId is NOT pulled in.
+      await upsertStoredRoomRow(store as never, row, existing.cacheKey)
     }
-
-    await db.put(ROOM_MESSAGES_STORE, updated)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update room message:', error)
@@ -976,11 +1244,13 @@ export async function updateRoomMessage(
 /**
  * Update reactions for a room message in IndexedDB.
  * Used as a fallback when the message is not currently loaded in memory.
- * Looks up by client ID or stanza-id (reactions may reference either).
+ * Resolves the target strictly within `roomJid` — a reaction may reference either
+ * a room-scoped stanza-id or a client id, and BOTH repeat across rooms.
  *
  * @returns true if the message was found and updated, false otherwise.
  */
 export async function updateRoomMessageReactions(
+  roomJid: string,
   messageId: string,
   reactorNick: string,
   emojis: string[],
@@ -988,10 +1258,18 @@ export async function updateRoomMessageReactions(
   try {
     const db = await getDB(getStorageScopeJid())
 
-    // Try by id index first, then by stanzaId index
-    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', messageId)
+    // Both resolution paths must be confined to THIS room, or a collision in
+    // another room wins. A MUC reaction references the server stanza-id, which
+    // repeats across rooms (per-archive) — so we resolve it through the
+    // room-scoped `identityKeys` alias (roomStanzaKey), a single indexed get.
+    // The `ids` multiEntry index is store-wide and non-unique, and cacheKeys sort
+    // by room JID, so getFromIndex('ids', …) could return a DIFFERENT room's
+    // message when a client id collides; take every id match and keep the one in
+    // this room. (Mirrors getRoomMessageByStanzaId's room-scoping.)
+    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, messageId))
     if (!existing) {
-      existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', messageId)
+      const idMatches = await db.getAllFromIndex(ROOM_MESSAGES_STORE, 'ids', messageId)
+      existing = idMatches.find((row) => row.roomJid === roomJid)
     }
     if (!existing) return false
 
@@ -1012,6 +1290,9 @@ export async function updateRoomMessageReactions(
       newReactions[emoji].push(reactorNick)
     }
 
+    // Authoritative: apply the change to the found row and put under its OWN
+    // cacheKey — never route through mergeRoomRows, whose reaction-union would
+    // resurrect a reactor this call just removed.
     const updated = {
       ...existing,
       reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
@@ -1028,17 +1309,19 @@ export async function updateRoomMessageReactions(
 }
 
 /**
- * Delete a room message by ID.
- * Note: Looks up by client-generated ID using the id index, then deletes by cacheKey.
+ * Delete a room message by ID, scoped to a room.
+ * Resolves the row through the room-scoped `ids` alias (so a pre-merge id still finds
+ * a merged row, and a colliding id in another room is not deleted), then deletes by
+ * its cacheKey (the primary key). Pass `from` to also pin the sender.
  */
-export async function deleteRoomMessage(id: string): Promise<void> {
+export async function deleteRoomMessage(roomJid: string, id: string, from?: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Look up by id index to find the cacheKey
-    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
-    if (!existing) return
+    const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
+    const existing = await findRoomRowById(tx.store.index('ids'), roomJid, id, from)
     // Delete using the cacheKey (the actual primary key)
-    await db.delete(ROOM_MESSAGES_STORE, existing.cacheKey)
+    if (existing) await tx.store.delete(existing.cacheKey)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to delete room message:', error)
@@ -1208,4 +1491,14 @@ export function isMessageCacheAvailable(): boolean {
 export function _resetDBForTesting(): void {
   dbPromise = null
   dbNameForPromise = null
+}
+
+/**
+ * Expose {@link contentProjection} so tests can assert its contract directly
+ * (which fields it omits/includes) rather than only exercising it indirectly
+ * through {@link mergeRoomRows}. For testing only.
+ * @internal
+ */
+export function _contentProjectionForTesting(m: StoredRoomMessage): unknown {
+  return contentProjection(m)
 }

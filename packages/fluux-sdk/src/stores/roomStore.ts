@@ -15,6 +15,7 @@ import type {
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
+import { roomIdentityKeys } from '../utils/roomMessageIdentity'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -442,11 +443,7 @@ const EMPTY_SET: Set<string> = new Set()
  * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getRoomMessageKeys(m: RoomMessage): string[] {
-  const keys: string[] = []
-  if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
-  if (m.originId) keys.push(`originId:${m.originId}`)
-  keys.push(`from:${m.from}:id:${m.id}`)
-  return keys
+  return roomIdentityKeys(m)
 }
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
@@ -597,8 +594,8 @@ function resolveRoomPendingRetractions(
 
   if (options.persist !== false) {
     for (const { messageId, retractedAt } of applied) {
-      void messageCache.updateRoomMessage(messageId, { isRetracted: true, retractedAt })
       const retracted = findMessageById(messages, messageId)
+      void messageCache.updateRoomMessage(roomJid, messageId, { isRetracted: true, retractedAt }, retracted?.from)
       if (retracted) void searchIndex.removeMessage(retracted)
     }
   }
@@ -1560,7 +1557,7 @@ export const roomStore = createStore<RoomState>()(
       if (append.kind === 'duplicate-backfilled') {
         // Persist the backfilled archive ids so pagination cursors survive a reload.
         for (const p of append.patched) {
-          void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+          void messageCache.updateRoomMessage(roomJid, p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) }, p.from)
         }
         newRooms.set(roomJid, { ...existing, messages: append.messages })
         const patchedRuntime = new Map(state.roomRuntime)
@@ -1717,14 +1714,14 @@ export const roomStore = createStore<RoomState>()(
 
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(updatedMessage.id, {
+        void messageCache.updateRoomMessage(roomJid, updatedMessage.id, {
           reactions: updatedMessage.reactions,
-        })
+        }, updatedMessage.from)
       } else {
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
         logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-        void messageCache.updateRoomMessageReactions(messageId, reactorNick, emojis)
+        void messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis)
       }
 
       newRooms.set(roomJid, { ...existing, messages: newMessages })
@@ -1759,7 +1756,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(updatedMessage.id, updates)
+        void messageCache.updateRoomMessage(roomJid, updatedMessage.id, updates, updatedMessage.from)
 
         // Update search index: re-index if body changed, remove if retracted
         if (updates.isRetracted) {
@@ -1806,7 +1803,7 @@ export const roomStore = createStore<RoomState>()(
       const { stanzaId: _staleStanzaId, ...updatedMessage } = existing.messages[targetIdx]
       newMessages[targetIdx] = updatedMessage
 
-      void messageCache.updateRoomMessage(existing.messages[targetIdx].id, { stanzaId: undefined })
+      void messageCache.updateRoomMessage(roomJid, existing.messages[targetIdx].id, { stanzaId: undefined }, existing.messages[targetIdx].from)
 
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...existing, messages: newMessages })
@@ -3043,7 +3040,7 @@ export const roomStore = createStore<RoomState>()(
       )
       // Persist backfilled archive ids so pagination cursors survive a reload.
       for (const p of patched) {
-        void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+        void messageCache.updateRoomMessage(roomJid, p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) }, p.from)
       }
       mergedForMarker = merged
 
