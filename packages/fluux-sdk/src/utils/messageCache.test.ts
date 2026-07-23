@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
+import { openDB } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
@@ -1120,5 +1121,72 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
     for (const field of ['body', 'id', 'attachment']) {
       expect(projectedKeys).toContain(field)
     }
+  })
+})
+
+describe('v4 migration — identity-resolving canonicalization (streaming)', () => {
+  const JID = 'me@example.com', ROOM = 'r@c', FROM = 'r@c/alice'
+  const dbName = `fluux-message-cache:${JID}`
+  async function seedV3(rows: Array<Record<string, unknown>>) {
+    const db = await openDB(dbName, 3, {
+      upgrade(d) {
+        if (!d.objectStoreNames.contains('messages')) {
+          const s = d.createObjectStore('messages', { keyPath: 'id' })
+          for (const [n, kp] of [['conversationId','conversationId'],['stanzaId','stanzaId'],['timestamp','timestamp'],['conv_timestamp',['conversationId','timestamp']],['encryptedPayload','encryptedPayload']] as const) s.createIndex(n, kp as never)
+        }
+        const r = d.createObjectStore('room-messages', { keyPath: 'cacheKey' })
+        for (const [n, kp] of [['roomJid','roomJid'],['stanzaId','stanzaId'],['timestamp','timestamp'],['room_timestamp',['roomJid','timestamp']],['id','id']] as const) r.createIndex(n, kp as never)
+      },
+    })
+    const tx = db.transaction('room-messages', 'readwrite')
+    for (const row of rows) await tx.objectStore('room-messages').put(row as never)
+    await tx.done; db.close()
+  }
+  beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting(); setStorageScopeJid(JID) })
+
+  it('collapses an originId echo pair (rewritten id) into one row; both ids + stanzaId resolvable', async () => {
+    await seedV3([
+      { cacheKey: 'k1', originId: 'O', type: 'groupchat', id: 'client-1', roomJid: ROOM, from: FROM, body: 'hi', timestamp: 1000, isOutgoing: true },
+      { cacheKey: 'k2', stanzaId: 'S', originId: 'O', type: 'groupchat', id: 'server-9', roomJid: ROOM, from: FROM, body: 'hi', timestamp: 2000, isOutgoing: true },
+    ])
+    const mine = (await messageCache.getRoomMessages(ROOM, {})).filter((m) => m.originId === 'O')
+    expect(mine).toHaveLength(1)
+    expect(mine[0].timestamp.getTime()).toBe(2000)
+    expect(await messageCache.getRoomMessage('client-1')).not.toBeNull()
+    expect(await messageCache.getRoomMessage('server-9')).not.toBeNull()
+    // NOTE: getRoomMessageByStanzaId stays single-arg (stanzaId) in this task — the
+    // brief's 2-arg room-scoped form is Task 4 read-path wiring (its 3 callers are
+    // 1-arg today). A single-room fixture with a unique stanzaId validates the same
+    // "merged row resolvable by its stanzaId" behaviour.
+    expect(await messageCache.getRoomMessageByStanzaId('S')).not.toBeNull()
+  })
+
+  it('does not merge identical stanzaIds across different rooms', async () => {
+    await seedV3([
+      { cacheKey: 'a', stanzaId: '1', type: 'groupchat', id: 'i', roomJid: 'A@c', from: 'A@c/x', body: 'a', timestamp: 1000, isOutgoing: false },
+      { cacheKey: 'b', stanzaId: '1', type: 'groupchat', id: 'i', roomJid: 'B@c', from: 'B@c/x', body: 'b', timestamp: 1000, isOutgoing: false },
+    ])
+    expect(await messageCache.getRoomMessages('A@c', {})).toHaveLength(1)
+    expect(await messageCache.getRoomMessages('B@c', {})).toHaveLength(1)
+  })
+
+  it('does not downgrade a decrypted body during migration', async () => {
+    await seedV3([
+      { cacheKey: 'x', stanzaId: 'S1', type: 'groupchat', id: 'o2', roomJid: ROOM, from: FROM, body: '', unsupportedEncryption: { kind: 'x' }, timestamp: 3000, isOutgoing: false },
+      { cacheKey: 'y', stanzaId: 'S1', type: 'groupchat', id: 'o2', roomJid: ROOM, from: FROM, body: 'decrypted', timestamp: 3000, isOutgoing: false },
+    ])
+    expect((await messageCache.getRoomMessages(ROOM, {})).find((m) => m.stanzaId === 'S1')!.body).toBe('decrypted')
+  })
+
+  it('aborts the whole upgrade if the migration throws — DB stays at v3', async () => {
+    await seedV3([{ cacheKey: 'z', stanzaId: 'S9', type: 'groupchat', id: 'o9', roomJid: ROOM, from: FROM, body: 'x', timestamp: 5000, isOutgoing: false }])
+    messageCache._setMigrationFaultForTesting(true)
+    await expect(messageCache.getRoomMessages(ROOM, {})).resolves.toEqual([])
+    messageCache._setMigrationFaultForTesting(false); messageCache._resetDBForTesting()
+    const raw = await openDB(dbName)
+    expect(raw.version).toBe(3)
+    expect(raw.objectStoreNames.contains('room-messages-canonical')).toBe(false)
+    expect(await raw.get('room-messages', 'z')).toBeTruthy()
+    raw.close()
   })
 })
