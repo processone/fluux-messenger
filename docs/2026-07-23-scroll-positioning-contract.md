@@ -1,7 +1,7 @@
 # Message-list scroll positioning contract
 
-Status: migration in progress. The pure model is connected to a generation-aware shadow controller,
-but existing positioning loops still own every scroll write.
+Status: migration in progress. Saved-position restoration is the first authoritative controller
+slice; unread, explicit targets, live-edge pinning, and directional history remain shadow-observed.
 
 ## Purpose
 
@@ -24,16 +24,22 @@ It intentionally separates two concerns:
 The first concern can be pure and deterministic. The second remains the hard browser-specific work;
 centralizing it later must not erase or weaken its current safeguards.
 
-## Shadow-controller fidelity findings
+## Controller migration and fidelity findings
 
-The first migration step runs the model beside `useMessageListScroll` without moving a scroll write.
-Fact adapters read current virtualizer, persisted-state, and DOM geometry; the controller is held in
-a ref and owns no React state. Every observed live decision is compared with the model decision.
-The shadow runs in production so real traces can exercise it. A shared instrumentation boundary
-therefore catches and counts adapter, validator, and controller errors; an observation failure must
-never escape into the live scroll effect or event handler. The demo scroll-invariant suite fails if
-either `divergenceCount` or `instrumentationErrorCount` is non-zero. The retained lists are capped
-diagnostic samples, not the pass criterion.
+The controller is held in a ref and owns no React state. For saved positions it now owns entry
+selection, generation/operation cancellation, reachability, one around-load attempt, and explicit
+legacy-offset/live-edge fallback. A hook executor still translates the accepted request into
+browser/virtualizer writes. `pinVirtualizedAnchor` remains the measurement reconciler, but every
+frame must hold the current controller lease before it can write.
+
+The remaining mechanisms run the model beside `useMessageListScroll`: fact adapters read current
+virtualizer and DOM geometry, and every observed live decision is compared with the model decision.
+The instrumentation runs in production so real traces can exercise it. A shared error boundary
+catches and counts adapter, validator, controller-driver, and executor errors; failure must degrade
+to a safe saved-position fallback and must never escape into the scroll effect or event handler.
+The demo scroll-invariant suite fails if either `divergenceCount` or
+`instrumentationErrorCount` is non-zero. Retained diagnostic samples are capped, not the pass
+criterion.
 
 Zero divergences means the model agrees with the hand-authored semantic `actual` label at each
 observation site: desired position plus the coarse waiting/positioning/applied/paused/fallback/idle
@@ -52,22 +58,23 @@ The three previously prose-only fidelity seams are descriptive of current behavi
   only while entry restore is pending or a directional load has not completed its initial restore.
   A replay captured from the media-growth invariant proves that an outgoing live-edge request
   supersedes an active media anchor.
-- **`position-applied` is the current release seam, before measurement settle.** Saved entry restore
-  returns after its initial anchor/offset write and is marked applied before the longer
-  restore-anchor rAF loop converges. Directional restoration likewise sets `saved.restored` after
-  the initial bounded write and before its measurement re-assert loop. Recorded restore facts prove
-  an outgoing request is rejected before that signal and accepted immediately after it.
+- **`position-applied` is the current release seam, before measurement settle.** The saved executor
+  returns after its initial anchor/offset write, and the controller marks the lease applied before
+  the longer restore-anchor rAF loop converges. Directional restoration likewise sets
+  `saved.restored` after its initial bounded write and before its measurement re-assert loop.
+  Recorded restore facts prove an outgoing request is rejected before that signal and accepted
+  immediately after it.
 - **Already-resolved synced live edge wins synchronously.** The entry effect compares the remote
-  read pointer with the resident tail and clears obsolete saved state before calling
-  `restoreSavedPosition`. Late `mds-live-edge` and `mds-settle` remain separate supersession paths
-  only for remote state that arrives after entry.
+  read pointer with the resident tail and clears obsolete saved state before beginning the
+  controller request. Late `mds-live-edge` and `mds-settle` remain separate supersession paths only
+  for remote state that arrives after entry.
 
 These checks establish policy fidelity; they do not claim that jsdom can prove pixel convergence or
 WebKit paint correctness.
 
 ## Non-goals for this stage
 
-- Replacing any production rAF loop.
+- Replacing browser measurement/repaint rAF loops in the saved-position policy migration.
 - Changing entry priority, marker placement, saved scroll data, or history loading.
 - Removing measurement settle windows, tolerances, or WebKit repaint workarounds.
 - Treating a one-shot scroll as sufficient under virtualization.
@@ -173,6 +180,11 @@ When the message list unmounts or navigation leaves conversations, a generation-
 clears the current conversation, active request, and MDS eligibility while retaining the watermark.
 Callbacks from the unmounted conversation are then rejected.
 
+Saved live-edge fallback also respects sliding-window reachability. The leased executor requests
+newer resident slices until the global tail becomes resident; only then may it apply the live-edge
+position. If no forward-window port exists, it explicitly lands at the best resident edge and ends
+ownership rather than leaving restoration permanently pending.
+
 ## Reachability lifecycle
 
 The semantic lifecycle is:
@@ -218,8 +230,9 @@ measurement, or MDS completion cannot revive cancelled work.
 
 ## Reconciler responsibilities
 
-The future single positioning reconciler owns the difficult runtime work below. None belongs in the
-pure model:
+The eventual single positioning reconciler owns the difficult runtime work below. None belongs in
+the pure model; the saved-position slice currently splits this work between controller lifecycle
+ownership and a leased hook executor:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -266,7 +279,7 @@ is already visible or above the viewport, the same activation goes directly to l
 `useMessageListScroll` currently contains separate implementations for:
 
 - `pinVirtualizedBottom`;
-- `pinVirtualizedAnchor`;
+- leased `pinVirtualizedAnchor` measurement convergence for the controller-owned saved request;
 - `runMarkerReassertLoop`;
 - the explicit target-message loop;
 - directional-load measurement reassertion.
@@ -277,7 +290,7 @@ There are also positioning owners outside their shared single-flight ref:
 - `scrollToMessage` through `activeMessageListController`;
 - keyboard selection navigation in `useMessageSelection` (`scrollIntoView({ block: 'nearest' })`);
 - resident-top's direct writer;
-- non-virtualized marker/target/restore writers inside `useMessageListScroll`;
+- non-virtualized marker/target writers inside `useMessageListScroll`;
 - static search-context positioning.
 
 A later migration is incomplete until each in-scope owner either routes through the controller or is
@@ -327,7 +340,9 @@ kinetic scrolling and stale-paint behavior.
 ## Incremental migration after this contract
 
 1. Introduce one generation-aware reconciliation controller without changing existing positioning.
-2. Migrate saved-anchor restoration, then delete its private loop.
+2. [x] Migrate saved-anchor restoration: delete the legacy restore dispatcher, pending ref, and
+   around-load status map; retain the measurement loop only as a generation/operation-leased
+   reconciler.
 3. Migrate unread and explicit message targets, then delete their private loops.
 4. Migrate live-edge pinning while retaining bottom-specific measurement/repaint safeguards.
 5. Migrate directional history preservation last, retaining kinetic cancellation and clamp recovery.

@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import type { MessageVirtualizer } from './messageVirtualizer'
-import { PositioningController, type PositionRequestDraft } from './positioningController'
+import {
+  PositioningController,
+  type PositionRequestDraft,
+  type SavedPositionExecutionLease,
+  type SavedPositionExecutor,
+} from './positioningController'
 import {
   deriveAtLiveEdge,
   deriveEntryPositionFacts,
@@ -17,8 +22,10 @@ import {
 } from './scrollPositionShadow'
 import {
   messageFraction,
+  pixelOffset,
   type BottomFractionAnchorPosition,
   type LiveEdgePosition,
+  type SavedPositionRequest,
 } from './scrollPositionModel'
 import { recordedPositioningTraces } from './positioningController.traceFixtures'
 
@@ -333,6 +340,305 @@ describe('positioning controller shadow mode', () => {
 
     controller.deactivate(conversationId, current!.generation)
     expect(controller.snapshot().currentConversationId).toBeNull()
+  })
+})
+
+describe('positioning controller saved-position ownership', () => {
+  const savedAnchor: ScrollAnchor = {
+    messageId: 'saved-message',
+    fraction: 0.5,
+  }
+
+  function savedFacts(savedOffsetPx = 900) {
+    return deriveEntryPositionFacts({
+      syncedLiveEdge: false,
+      savedAnchor,
+      savedOffsetPx,
+    })
+  }
+
+  it('loads an off-window anchor exactly once and resumes when that load settles', async () => {
+    let anchorAvailable = false
+    let resolveLoad!: () => void
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    })
+    const reconcile = vi.fn(() => true)
+    const loadAround = vi.fn(() => loadPromise)
+    const executor: SavedPositionExecutor = {
+      reachability: (desired, loadStatus) =>
+        desired.kind === 'anchor' && !anchorAvailable
+          ? { kind: 'target-absent', loadAround: loadStatus }
+          : {
+              kind: 'available',
+              index: 4,
+              mounted: true,
+              placement: 'viable',
+            },
+      loadAround,
+      reconcile,
+    }
+    const controller = new PositioningController()
+    const request = controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor,
+    })
+
+    expect(request).not.toBeNull()
+    expect(loadAround).toHaveBeenCalledTimes(1)
+    expect(reconcile).not.toHaveBeenCalled()
+    expect(controller.isSavedPositionPending(conversationId)).toBe(true)
+
+    controller.refreshSavedPosition({
+      conversationId,
+      generation: request!.generation,
+      executor,
+    })
+    expect(loadAround).toHaveBeenCalledTimes(1)
+
+    anchorAvailable = true
+    resolveLoad()
+    await loadPromise
+    await Promise.resolve()
+
+    expect(reconcile).toHaveBeenCalledTimes(1)
+    expect(controller.savedPositionStatus(conversationId)?.phase).toEqual({
+      kind: 'position-applied',
+    })
+  })
+
+  it('drops a late around-load completion after switching conversations', async () => {
+    let resolveLoad!: () => void
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    })
+    const reconcile = vi.fn(() => true)
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor: {
+        reachability: (_desired, loadStatus) => ({
+          kind: 'target-absent',
+          loadAround: loadStatus,
+        }),
+        loadAround: () => loadPromise,
+        reconcile,
+      },
+    })
+
+    observeLiveEntry(controller, 'next-room@example.test')
+    resolveLoad()
+    await loadPromise
+    await Promise.resolve()
+
+    expect(reconcile).not.toHaveBeenCalled()
+    expect(controller.snapshot().currentConversationId).toBe('next-room@example.test')
+    expect(controller.savedPositionStatus(conversationId)).toBeNull()
+  })
+
+  it('invalidates an older same-generation reconciliation operation', () => {
+    const leases: SavedPositionExecutionLease[] = []
+    const executor: SavedPositionExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 4,
+        mounted: true,
+        placement: 'viable',
+      }),
+      reconcile: (_request, lease) => {
+        leases.push(lease)
+        return true
+      },
+    }
+    const controller = new PositioningController()
+    const request = controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor,
+    })
+    controller.refreshSavedPosition({
+      conversationId,
+      generation: request!.generation,
+      executor,
+    })
+
+    expect(leases).toHaveLength(2)
+    expect(leases[0].generation).toBe(leases[1].generation)
+    expect(leases[0].operation).toBeLessThan(leases[1].operation)
+    expect(leases[0].isCurrent()).toBe(false)
+    expect(leases[1].isCurrent()).toBe(true)
+  })
+
+  it('cancels saved reconciliation immediately on genuine user input', () => {
+    let lease: SavedPositionExecutionLease | null = null
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor: {
+        reachability: () => ({
+          kind: 'available',
+          index: 4,
+          mounted: true,
+          placement: 'viable',
+        }),
+        reconcile: (_request, currentLease) => {
+          lease = currentLease
+          return true
+        },
+      },
+    })
+
+    controller.observeUserInput(conversationId)
+
+    expect(lease).not.toBeNull()
+    expect(lease!.isCurrent()).toBe(false)
+    expect(controller.savedPositionStatus(conversationId)).toBeNull()
+  })
+
+  it('promotes an unavailable anchor to its legacy offset under a new generation', () => {
+    let reconciled: SavedPositionRequest | null = null
+    const controller = new PositioningController()
+    const initial = controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(700),
+      executor: {
+        reachability: (desired) =>
+          desired.kind === 'anchor'
+            ? { kind: 'target-absent', loadAround: 'unavailable' }
+            : {
+                kind: 'available',
+                index: 0,
+                mounted: true,
+                placement: 'viable',
+              },
+        reconcile: (request) => {
+          reconciled = request
+          return true
+        },
+      },
+    })
+
+    expect(reconciled).not.toBeNull()
+    expect(reconciled!.generation).toBeGreaterThan(initial!.generation)
+    expect(reconciled!.source).toEqual({
+      kind: 'fallback',
+      reason: 'saved-position-unavailable',
+    })
+    expect(reconciled!.desired).toEqual({
+      kind: 'legacy-offset',
+      offsetPx: pixelOffset(700),
+    })
+  })
+
+  it('uses the request fallback when anchor reconciliation itself cannot land', () => {
+    const desiredKinds: string[] = []
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(650),
+      executor: {
+        reachability: () => ({
+          kind: 'available',
+          index: 3,
+          mounted: true,
+          placement: 'viable',
+        }),
+        reconcile: (request) => {
+          desiredKinds.push(request.desired.kind)
+          return request.desired.kind === 'legacy-offset'
+        },
+      },
+    })
+
+    // A generic reconcile-failure fallback would skip the usable legacy offset and go live.
+    expect(desiredKinds).toEqual(['anchor', 'legacy-offset'])
+    expect(controller.savedPositionStatus(conversationId)?.request.desired).toEqual({
+      kind: 'legacy-offset',
+      offsetPx: pixelOffset(650),
+    })
+  })
+
+  it('recenters a slid-up window before applying a saved live-edge fallback', () => {
+    let atGlobalLiveEdge = false
+    const recenter = vi.fn(() => 'requested' as const)
+    const reconcile = vi.fn(() => true)
+    const executor = (version: string): SavedPositionExecutor => ({
+      reachability: (desired) => {
+        if (desired.kind === 'anchor') {
+          return { kind: 'target-absent', loadAround: 'unavailable' }
+        }
+        return {
+          kind: 'global-live-edge',
+          state: atGlobalLiveEdge
+            ? { kind: 'resident-tail', index: 9, mounted: true }
+            : { kind: 'recenter-available' },
+        }
+      },
+      recenterVersion: version,
+      recenterLiveEdge: recenter,
+      reconcile,
+    })
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: deriveEntryPositionFacts({
+        syncedLiveEdge: false,
+        savedAnchor,
+        savedOffsetPx: null,
+      }),
+      executor: executor('slid:idle:10'),
+    })
+
+    expect(recenter).toHaveBeenCalledTimes(1)
+    expect(reconcile).not.toHaveBeenCalled()
+
+    const pending = controller.savedPositionStatus(conversationId)!
+    atGlobalLiveEdge = true
+    controller.refreshSavedPosition({
+      conversationId,
+      generation: pending.request.generation,
+      executor: executor('live:idle:20'),
+    })
+
+    expect(reconcile).toHaveBeenCalledTimes(1)
+    expect(controller.savedPositionStatus(conversationId)?.request.desired).toEqual(liveEdge)
+  })
+
+  it('aborts pending saved work when the active generation is deactivated', () => {
+    let signal: AbortSignal | null = null
+    let resolveLoad!: () => void
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    })
+    const reconcile = vi.fn(() => true)
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor: {
+        reachability: (_desired, loadStatus) => ({
+          kind: 'target-absent',
+          loadAround: loadStatus,
+        }),
+        loadAround: (_messageId, currentSignal) => {
+          signal = currentSignal
+          return loadPromise
+        },
+        reconcile,
+      },
+    })
+    const generation = controller.snapshot().watermark
+
+    controller.deactivate(conversationId, generation)
+    resolveLoad()
+
+    expect(signal).not.toBeNull()
+    expect(signal!.aborted).toBe(true)
+    expect(controller.savedPositionStatus(conversationId)).toBeNull()
+    expect(reconcile).not.toHaveBeenCalled()
   })
 })
 

@@ -123,7 +123,11 @@ type EntryRequest =
       BottomFractionAnchorPosition,
       Extract<UnavailablePolicy, { kind: 'live-edge' | 'legacy-offset' }>
     >
-  | Request<{ kind: 'entry'; reason: 'saved-position' }, LegacyOffsetPosition>
+  | Request<
+      { kind: 'entry'; reason: 'saved-position' },
+      LegacyOffsetPosition,
+      Extract<UnavailablePolicy, { kind: 'live-edge' }>
+    >
   | Request<
       { kind: 'entry'; reason: 'unread-marker' },
       MessagePosition<'start'>,
@@ -183,6 +187,12 @@ export type PositionRequest =
       },
       LiveEdgePosition
     >
+
+export type SavedPositionRequest = Extract<
+  PositionRequest,
+  | { source: { kind: 'entry'; reason: 'saved-position' } }
+  | { source: { kind: 'fallback'; reason: 'saved-position-unavailable' } }
+>
 
 export type PositionRequestSource = PositionRequest['source']
 
@@ -270,6 +280,7 @@ export type EntryPositionSelection =
   | {
       source: { kind: 'entry'; reason: 'saved-position' }
       desired: LegacyOffsetPosition
+      onUnavailable: Extract<UnavailablePolicy, { kind: 'live-edge' }>
     }
   | {
       source: { kind: 'entry'; reason: 'unread-marker' }
@@ -548,6 +559,15 @@ export function resolveReachability(
   }
 
   if (request.desired.kind === 'legacy-offset') {
+    if (
+      facts.kind !== 'available' ||
+      facts.placement === 'use-unavailable-policy'
+    ) {
+      return {
+        kind: 'unavailable',
+        policy: request.onUnavailable ?? { kind: 'live-edge' },
+      }
+    }
     return { kind: 'reconciling' }
   }
 
@@ -606,6 +626,7 @@ export function selectEntryPosition(facts: EntryPositionFacts): EntryPositionSel
     return {
       source: { kind: 'entry', reason: 'saved-position' },
       desired: { kind: 'legacy-offset', offsetPx: facts.savedOffsetPx },
+      onUnavailable: { kind: 'live-edge' },
     }
   }
 
