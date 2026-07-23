@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import tauriCapabilities from '../../src-tauri/capabilities/default.json'
 
 // Capture what the hook subscribes to and the handler it registers.
 const listened: Array<{ name: string; cb: () => void | Promise<void> }> = []
 const unlisten = vi.fn()
-const setFocus = vi.fn(() => Promise.resolve())
+const setFocus = vi.fn<() => Promise<void>>()
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: (name: string, cb: () => void | Promise<void>) => {
@@ -33,7 +34,8 @@ describe('useTauriFocusRestore', () => {
   beforeEach(() => {
     listened.length = 0
     unlisten.mockClear()
-    setFocus.mockClear()
+    setFocus.mockReset()
+    setFocus.mockResolvedValue()
   })
 
   afterEach(() => {
@@ -50,6 +52,27 @@ describe('useTauriFocusRestore', () => {
 
     await listened[0].cb()
     expect(setFocus).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows the native webview focus command in the Tauri capability', () => {
+    expect(tauriCapabilities.permissions).toContain('core:webview:allow-set-webview-focus')
+  })
+
+  it('logs native focus failures before falling back to window focus', async () => {
+    setPlatform('Win32')
+    setFocus.mockRejectedValueOnce(new Error('webview focus denied'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const focus = vi.spyOn(window, 'focus').mockImplementation(() => {})
+
+    renderHook(() => useTauriFocusRestore())
+    await flush()
+    await listened[0].cb()
+
+    expect(warn).toHaveBeenCalledWith(
+      '[FocusRestore] Failed to focus native webview:',
+      expect.any(Error),
+    )
+    expect(focus).toHaveBeenCalledTimes(1)
   })
 
   it('listens for tray-restore-focus on Linux', async () => {

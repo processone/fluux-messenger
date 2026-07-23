@@ -21,6 +21,7 @@
     "core:window:allow-set-theme",
     "core:window:allow-request-user-attention",
     "core:webview:allow-webview-position",
+    "core:webview:allow-set-webview-focus",
     "core:webview:allow-create-webview-window",
     "core:window:allow-create",
     "shell:allow-open",
