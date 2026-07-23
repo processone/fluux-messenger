@@ -1,7 +1,7 @@
 # Message-list scroll positioning contract
 
-Status: migration contract. The model and tests introduced with this document are pure and do not
-change production scroll behavior.
+Status: migration in progress. The pure model is connected to a generation-aware shadow controller,
+but existing positioning loops still own every scroll write.
 
 ## Purpose
 
@@ -23,6 +23,36 @@ It intentionally separates two concerns:
 
 The first concern can be pure and deterministic. The second remains the hard browser-specific work;
 centralizing it later must not erase or weaken its current safeguards.
+
+## Shadow-controller fidelity findings
+
+The first migration step runs the model beside `useMessageListScroll` without moving a scroll write.
+Fact adapters read current virtualizer, persisted-state, and DOM geometry; the controller is held in
+a ref and owns no React state. Every observed live decision is compared with the model decision.
+The demo scroll-invariant suite fails if its retained divergence list is non-empty.
+
+Generation allocation is module-private and shared by controller instances. Each mounted
+message-list owns its controller model, but a remount (including StrictMode effect replay) cannot
+reuse a generation. No adapter or model helper can mint one.
+
+The three previously prose-only fidelity seams are descriptive of current behavior:
+
+- **Media preservation does not suppress an outgoing send.** The live new-message effect suppresses
+  only while entry restore is pending or a directional load has not completed its initial restore.
+  A replay captured from the media-growth invariant proves that an outgoing live-edge request
+  supersedes an active media anchor.
+- **`position-applied` is the current release seam, before measurement settle.** Saved entry restore
+  returns after its initial anchor/offset write and is marked applied before the longer
+  restore-anchor rAF loop converges. Directional restoration likewise sets `saved.restored` after
+  the initial bounded write and before its measurement re-assert loop. Recorded restore facts prove
+  an outgoing request is rejected before that signal and accepted immediately after it.
+- **Already-resolved synced live edge wins synchronously.** The entry effect compares the remote
+  read pointer with the resident tail and clears obsolete saved state before calling
+  `restoreSavedPosition`. Late `mds-live-edge` and `mds-settle` remain separate supersession paths
+  only for remote state that arrives after entry.
+
+These checks establish policy fidelity; they do not claim that jsdom can prove pixel convergence or
+WebKit paint correctness.
 
 ## Non-goals for this stage
 

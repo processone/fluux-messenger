@@ -177,7 +177,9 @@ export type PositionRequest =
   | Request<
       {
         kind: 'fallback'
-        reason: 'unread-marker-unavailable'
+        reason:
+          | 'unread-marker-unavailable'
+          | 'unread-marker-resolved-at-live-edge'
       },
       LiveEdgePosition
     >

@@ -2,10 +2,10 @@
  * useMessageListScroll - Simple, imperative scroll management
  *
  * DESIGN PRINCIPLES:
- * 1. All scroll state lives in REFS, not React state (prevents render loops)
- * 2. Scroll operations are IMPERATIVE (directly set scrollTop)
+ * 1. Production scroll state lives in REFS, not React state (prevents render loops)
+ * 2. Existing scroll operations remain IMPERATIVE during the shadow-controller migration
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
- * 4. Logic is LINEAR and SIMPLE - no state machines, no complex transitions
+ * 4. The semantic controller observes decisions only; it never writes scrollTop
  *
  * BEHAVIORS:
  * - Initial load: scroll to bottom
@@ -28,6 +28,20 @@ import { isProgrammaticScroll } from './scrollGate'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
+import { PositioningController, type PositionRequestDraft } from './positioningController'
+import {
+  deriveAtLiveEdge,
+  deriveEntryPositionFacts,
+  deriveLiveEdgeNavigationFacts,
+  deriveReachabilityForDesired,
+  readScrollGeometry,
+} from './scrollPositionFacts'
+import {
+  messageFraction,
+  pixelOffset,
+  type DesiredPosition,
+  type ReachabilityFacts,
+} from './scrollPositionModel'
 
 // ============================================================================
 // DEBUG
@@ -457,6 +471,41 @@ export function useMessageListScroll({
   // `${conversationId}:${anchorMessageId}` and cleared on conversation switch so returning to the
   // same conversation re-requests. Prevents re-issuing the load on every retry frame.
   const aroundLoadStatusRef = useRef<Map<string, 'loading' | 'done'>>(new Map())
+  // Shadow-only semantic controller. It owns no React state and performs no scroll writes.
+  // The module-private generation allocator survives controller remounts (including StrictMode).
+  const positioningControllerRef = useRef<PositioningController | null>(null)
+  if (!positioningControllerRef.current) {
+    positioningControllerRef.current = new PositioningController()
+  }
+  const shadowReachabilityRef = useRef<(desired: DesiredPosition) => ReachabilityFacts>(
+    () => ({ kind: 'empty-window' }),
+  )
+  shadowReachabilityRef.current = (desired) => {
+    const anchorId =
+      desired.kind === 'anchor' || desired.kind === 'message'
+        ? desired.messageId
+        : null
+    const aroundStatus = anchorId
+      ? aroundLoadStatusRef.current.get(`${conversationId}:${anchorId}`)
+      : undefined
+    const loadAround =
+      aroundStatus === 'loading'
+        ? 'loading'
+        : aroundStatus === 'done'
+          ? 'exhausted'
+          : onLoadAround
+            ? 'available'
+            : 'unavailable'
+    return deriveReachabilityForDesired({
+      desired,
+      hasRows: messageCount > 0,
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      virtualizer: virtualizerRef.current,
+      scroller: scrollerRef.current,
+      loadAround,
+      canRecenter: true,
+    })
+  }
   // Last target message id we requested an around-load for (search / activity navigation to a
   // message older than the loaded window). Prevents re-issuing the load while the target effect
   // re-fires waiting for the slice to merge.
@@ -1045,6 +1094,20 @@ export function useMessageListScroll({
   // paint (a raw scrollTop write leaves @tanstack's offset stale → blank/clipped); otherwise a
   // direct scrollTop write. Callers must have already confirmed the user is at/near the bottom.
   const reassertBottom = useCallback((trigger: string = 'unknown') => {
+    // Entry restore calls this before its shadow entry request is installed; that decision is
+    // compared by the entry adapter immediately after restoreSavedPosition returns. Every other
+    // bottom write must agree with either semantic follow-live ownership or current live geometry;
+    // unlike the live loop, the shadow check never trusts isAtBottomRef by itself.
+    if (trigger !== 'restore-fallback') {
+      const scroller = scrollerRef.current
+      positioningControllerRef.current?.observeBottomReassert({
+        event: `reassert:${trigger}`,
+        conversationId: prevConversationRef.current ?? conversationId,
+        geometryAtLiveEdge:
+          !!scroller && deriveAtLiveEdge(readScrollGeometry(scroller)),
+        actualFollowsLive: true,
+      })
+    }
     if (virtualizerRef.current) {
       pinVirtualizedBottom(trigger)
     } else {
@@ -1052,7 +1115,7 @@ export function useMessageListScroll({
       if (s) s.scrollTop = s.scrollHeight
     }
     rememberBottomIntent()
-  }, [pinVirtualizedBottom, rememberBottomIntent])
+  }, [conversationId, pinVirtualizedBottom, rememberBottomIntent])
 
   // Re-pin a VIRTUALIZED list to a saved CONTENT ANCHOR and keep it pinned as rows measure — the
   // restore counterpart of pinVirtualizedBottom. A one-shot scrollToIndex(anchor,'end') lands on the
@@ -1180,13 +1243,44 @@ export function useMessageListScroll({
     let stableFrames = 0
     let landedTarget = -1
     let resolved = false
+    let followLiveRecorded = false
+    const recordMarkerLiveEdge = (
+      reason:
+        | 'unread-marker-unavailable'
+        | 'unread-marker-resolved-at-live-edge',
+    ) => {
+      if (followLiveRecorded) return
+      followLiveRecorded = true
+      positioningControllerRef.current?.observeRequest({
+        event:
+          reason === 'unread-marker-unavailable'
+            ? 'marker-fallback'
+            : 'marker-resolved-at-live-edge',
+        conversationId: markerConvId,
+        draft: {
+          source: { kind: 'fallback', reason },
+          desired: { kind: 'live-edge', follow: true },
+        },
+        reachability: shadowReachabilityRef.current({
+          kind: 'live-edge',
+          follow: true,
+        }),
+        actual: {
+          desired: { kind: 'live-edge', follow: true },
+          phase: 'positioning',
+        },
+      })
+    }
     const stepToMarker = () => {
       if (framesLeft-- <= 0) {
         // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
         // view at the top; fall back to the bottom. End first so the handoff to reassertBottom
         // (which begins a pin-bottom loop) is not miscounted as an overlap.
         finishMarker()
-        if (!resolved) reassertBottom('marker-fallback')
+        if (!resolved) {
+          recordMarkerLiveEdge('unread-marker-unavailable')
+          reassertBottom('marker-fallback')
+        }
         return
       }
       const s = scrollerRef.current
@@ -1220,6 +1314,7 @@ export function useMessageListScroll({
         if (offset <= viewportHeight / 3) {
           isAtBottomRef.current = true
           finishMarker()
+          recordMarkerLiveEdge('unread-marker-unavailable')
           reassertBottom('marker-fallback')
           return
         }
@@ -1248,6 +1343,9 @@ export function useMessageListScroll({
           stableFrames = 0
           const distFromBottom = s.scrollHeight - st - viewportHeight
           isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+          if (isAtBottomRef.current && !followLiveRecorded) {
+            recordMarkerLiveEdge('unread-marker-resolved-at-live-edge')
+          }
           debugLog('CONVERSATION SWITCH: scrolling to new message marker', {
             firstNewMessageId: markerId, markerIndex, offset, scrollTop: st,
             distFromBottom, isAtBottom: isAtBottomRef.current,
@@ -1434,23 +1532,69 @@ export function useMessageListScroll({
     // single click always makes progress toward the bottom: no wasted click when the
     // user is already sitting at the marker (e.g. right after opening a conversation,
     // where the init effect auto-scrolls to the marker).
+    const virt = latestRef.current.virtualizer
+    let markerOffsetPx: number | null = null
+    let markerResolvable = false
     if (firstNewMessageId) {
-      const virt = latestRef.current.virtualizer
       // Two-step: scroll to the marker first, then bottom on a second click.
       // Virtualized: use getIndexForMessageId (works for unmounted rows) + scrollToIndex.
       // Non-virtualized: DOM querySelector + offsetTop (all rows are always mounted).
       if (virt) {
         const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
         if (markerIdx !== null) {
-          const markerOffset = virt.getOffsetForMessageId(firstNewMessageId)
+          markerResolvable = true
+          markerOffsetPx = virt.getOffsetForMessageId(firstNewMessageId)
+        }
+      } else {
+        const messageElement = scroller.querySelector(
+          `[data-message-id="${CSS.escape(firstNewMessageId)}"]`,
+        ) as HTMLElement | null
+        if (messageElement) {
+          markerResolvable = true
+          markerOffsetPx = messageElement.offsetTop
+        }
+      }
+    }
+
+    const navigationFacts = deriveLiveEdgeNavigationFacts({
+      firstUnreadMessageId: markerResolvable ? firstNewMessageId : undefined,
+      markerOffsetPx,
+      geometry: readScrollGeometry(scroller),
+      virtualized: !!virt,
+    })
+    const markerDesired =
+      firstNewMessageId && navigationFacts.unreadMarkerNeedsVisit
+        ? {
+            kind: 'message' as const,
+            messageId: firstNewMessageId,
+            align: navigationFacts.unreadMarkerAlign,
+          }
+        : null
+    positioningControllerRef.current?.observeLiveEdgeNavigation({
+      event: 'fab',
+      conversationId,
+      navigationFacts,
+      reachability: (desired) => shadowReachabilityRef.current(desired),
+      actual: {
+        desired: markerDesired ?? { kind: 'live-edge', follow: true },
+        phase: 'positioning',
+      },
+    })
+
+    if (markerDesired && firstNewMessageId) {
+      if (virt) {
+        const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
+        if (markerIdx !== null) {
           const viewportBottom = scroller.scrollTop + scroller.clientHeight
-          if (markerOffset === null || markerOffset > viewportBottom) {
+          if (markerOffsetPx === null || markerOffsetPx > viewportBottom) {
             virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
             return
           }
         }
       } else {
-        const messageElement = scroller.querySelector(`[data-message-id="${CSS.escape(firstNewMessageId)}"]`)
+        const messageElement = scroller.querySelector(
+          `[data-message-id="${CSS.escape(firstNewMessageId)}"]`,
+        )
         if (messageElement) {
           const elementTop = (messageElement as HTMLElement).offsetTop
           const viewportBottom = scroller.scrollTop + scroller.clientHeight
@@ -1470,12 +1614,30 @@ export function useMessageListScroll({
 
     rememberBottomIntent()
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-  }, [firstNewMessageId, reassertBottom, rememberBottomIntent])
+  }, [
+    conversationId,
+    firstNewMessageId,
+    reassertBottom,
+    rememberBottomIntent,
+  ])
 
   const scrollToTop = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
-    scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const desired = { kind: 'resident-top' } as const
+    positioningControllerRef.current?.observeRequest({
+      event: 'home-key',
+      conversationId,
+      draft: {
+        source: { kind: 'user-navigation', reason: 'resident-top' },
+        desired,
+      },
+      reachability: shadowReachabilityRef.current(desired),
+      actual: { desired, phase: 'positioning' },
+    })
+    scroller.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [conversationId])
 
   // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
   // that is following along — most importantly when the mobile on-screen keyboard
@@ -1767,6 +1929,11 @@ export function useMessageListScroll({
 
       if (wasAtBottom) {
         if (!userScrolled) {
+          positioningControllerRef.current?.observeAppend({
+            event: 'media-live-edge',
+            conversationId,
+            actualFollowsLive: true,
+          })
           // User didn't scroll during the batch - scroll to bottom
           debugLog('MEDIA LOAD: batch complete, scrolling to bottom', {
             wasAtBottom,
@@ -1782,6 +1949,25 @@ export function useMessageListScroll({
           })
         }
       } else if (!userScrolled && anchor) {
+        const desired: DesiredPosition = {
+          kind: 'anchor',
+          messageId: anchor.messageId,
+          placement: {
+            kind: 'bottom-fraction',
+            fraction: messageFraction(anchor.fraction),
+          },
+        }
+        const request = positioningControllerRef.current?.observeRequest({
+          event: 'media-preservation',
+          conversationId,
+          draft: {
+            source: { kind: 'media-preservation', reason: 'remeasure' },
+            desired,
+            onUnavailable: { kind: 'warn-and-stop' },
+          },
+          reachability: shadowReachabilityRef.current(desired),
+          actual: { desired, phase: 'positioning' },
+        })
         // Scrolled up and the user did NOT genuinely scroll during the batch: media that decoded
         // ABOVE the viewport grew the content and pushed the reading position down/out. Re-pin to the
         // anchor captured BEFORE the growth so the reader stays put (the conversation-switch + media
@@ -1792,6 +1978,12 @@ export function useMessageListScroll({
         })
         if (virtualizerRef.current) pinVirtualizedAnchor(anchor, conversationId)
         else restoreToAnchor(currentScroller, anchor)
+        if (request) {
+          positioningControllerRef.current?.markPositionApplied(
+            conversationId,
+            request.generation,
+          )
+        }
       } else {
         debugLog('MEDIA LOAD: batch complete, was not at bottom (user scrolled / no anchor)', {
           wasAtBottom,
@@ -1927,11 +2119,19 @@ export function useMessageListScroll({
     // the window a settle frame looked like a scrollbar drag, opened the gate, and persisted a
     // drifted position that crept older on every re-open. Genuine user scrolls still open the gate
     // via the input-event listeners / handleWheel, unaffected.
-    if (
-      !isProgrammaticScroll(programmaticScroll, Date.now(), lastProgrammaticScrollAtRef.current) &&
-      prevScrollHeightRef.current === scrollHeight
-    ) {
+    const genuineUserScroll =
+      !isProgrammaticScroll(
+        programmaticScroll,
+        Date.now(),
+        lastProgrammaticScrollAtRef.current,
+      ) && prevScrollHeightRef.current === scrollHeight
+    if (genuineUserScroll) {
       userHasScrolledSinceEntryRef.current = true
+      positioningControllerRef.current?.observeUserInput(conversationId)
+      positioningControllerRef.current?.observeSettledUserGeometry({
+        conversationId,
+        atLiveEdge: deriveAtLiveEdge(readScrollGeometry(el)),
+      })
     }
     prevScrollHeightRef.current = scrollHeight
 
@@ -2009,6 +2209,7 @@ export function useMessageListScroll({
     // Genuine user scroll → open the save gate (see userHasScrolledSinceEntryRef). Mirrors the
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
     userHasScrolledSinceEntryRef.current = true
+    positioningControllerRef.current?.observeUserInput(conversationId)
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
     const distFromBottom = scrollHeight - scrollTop - clientHeight
     if (scrollTop === 0 && e.deltaY < 0 && !staticMode) triggerLoadOlder()
@@ -2064,6 +2265,11 @@ export function useMessageListScroll({
     } else if (prevConversationRef.current) {
       scrollStateManager.markAsLeft(prevConversationRef.current)
     }
+    if (prevConversationRef.current) {
+      positioningControllerRef.current?.deactivate(
+        prevConversationRef.current,
+      )
+    }
 
     // ENTERING new conversation - reset state
     hasInitializedRef.current = false
@@ -2113,19 +2319,21 @@ export function useMessageListScroll({
       // Decide: restore position or scroll to bottom?
       let action = scrollStateManager.enterConversation(conversationId, messageCount)
       const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
+      const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
       const savedReadPositionId = scrollStateManager.getSavedReadPositionId(conversationId)
+      const syncedLiveEdge =
+        action === 'restore-position' &&
+        firstNewMessageId === undefined &&
+        readPointerId !== undefined &&
+        readPointerId === lastMessageId &&
+        readPointerId !== savedReadPositionId
 
       if (action === 'restore-position') {
         pendingSyncedLiveEdgeRef.current = { conversationId, savedReadPositionId }
         // The remote pointer can resolve before this mount. When it now identifies the newest
         // downloaded row, a saved position tied to an older pointer must not win merely because
         // there was never an unread divider.
-        if (
-          firstNewMessageId === undefined &&
-          readPointerId !== undefined &&
-          readPointerId === lastMessageId &&
-          readPointerId !== savedReadPositionId
-        ) {
+        if (syncedLiveEdge) {
           scrollStateManager.clearSavedScrollState(conversationId)
           pendingSyncedLiveEdgeRef.current = null
           action = 'scroll-to-bottom'
@@ -2138,11 +2346,42 @@ export function useMessageListScroll({
       }
 
       debugLog('CONVERSATION ACTION', { action, savedPos, firstOpenThisSession, scrollHeight: scroller.scrollHeight })
+      const entryFacts = deriveEntryPositionFacts({
+        syncedLiveEdge,
+        savedAnchor,
+        savedOffsetPx: savedPos,
+        firstUnreadMessageId: firstNewMessageId,
+      })
 
       if (action === 'restore-position') {
         const restoreResult = restoreSavedPosition('entry')
         pendingRestoreConversationRef.current =
           restoreResult === 'pending' ? conversationId : null
+        const actualDesired: DesiredPosition = entryFacts.savedAnchor ??
+          (entryFacts.savedOffsetPx !== undefined
+            ? { kind: 'legacy-offset', offsetPx: entryFacts.savedOffsetPx }
+            : { kind: 'live-edge', follow: true })
+        const request = positioningControllerRef.current?.observeEntry({
+          event: 'entry-restore',
+          conversationId,
+          entryFacts,
+          reachability: (desired) => shadowReachabilityRef.current(desired),
+          actual: {
+            desired: actualDesired,
+            phase:
+              restoreResult === 'pending'
+                ? 'waiting'
+                : restoreResult === 'bottom'
+                  ? 'fallback'
+                  : 'positioning',
+          },
+        })
+        if (restoreResult === 'restored' && request) {
+          positioningControllerRef.current?.markPositionApplied(
+            conversationId,
+            request.generation,
+          )
+        }
       } else if (firstNewMessageId) {
         // Has unread messages — position the first-unread marker ~1/3 down from the top so the
         // user reads forward from where they left off. Mark NOT at bottom up front (mirrors the
@@ -2157,7 +2396,29 @@ export function useMessageListScroll({
         // non-virtualized fallback path can find it too; the virtualized path below does not need
         // it (getOffsetForMessageId resolves unmounted rows).
         void latestRef.current.virtualizer?.ensureMessageMounted(markerId)
-
+        const markerDesired = {
+          kind: 'message' as const,
+          messageId: firstNewMessageId,
+          align: 'start' as const,
+        }
+        const markerReachability =
+          shadowReachabilityRef.current(markerDesired)
+        positioningControllerRef.current?.observeEntry({
+          event: 'entry-unread',
+          conversationId,
+          entryFacts,
+          reachability: () => markerReachability,
+          actual: {
+            desired: markerDesired,
+            phase:
+              markerReachability.kind === 'available' &&
+              markerReachability.placement === 'use-unavailable-policy'
+                ? 'fallback'
+                : markerReachability.kind === 'available'
+                  ? 'positioning'
+                  : 'waiting',
+          },
+        })
         // Re-assert the marker position across frames. On entry the conversation's messages were
         // evicted on leave and rehydrate from cache ASYNCHRONOUSLY, and rows then measure over
         // several frames, so the marker offset is unresolved at first and sharpens as it settles.
@@ -2177,6 +2438,16 @@ export function useMessageListScroll({
         // to bottom when content grows (messages loading from IndexedDB).
         isAtBottomRef.current = false
         debugLog('CONVERSATION SWITCH: has targetMessageId, deferring to target scroll', { targetMessageId })
+        positioningControllerRef.current?.observeEntry({
+          event: 'entry-before-explicit-target',
+          conversationId,
+          entryFacts,
+          reachability: (desired) => shadowReachabilityRef.current(desired),
+          actual: {
+            desired: { kind: 'live-edge', follow: true },
+            phase: 'positioning',
+          },
+        })
       } else {
         // No unread messages - scroll to bottom
         // We use both immediate and deferred scroll because:
@@ -2187,6 +2458,16 @@ export function useMessageListScroll({
         // Note: Async content loading (MAM) is handled by the separate "new message" effect
         // which triggers when messageCount changes.
         isAtBottomRef.current = true
+        positioningControllerRef.current?.observeEntry({
+          event: syncedLiveEdge ? 'entry-synced-live-edge' : 'entry-live-edge',
+          conversationId,
+          entryFacts,
+          reachability: (desired) => shadowReachabilityRef.current(desired),
+          actual: {
+            desired: { kind: 'live-edge', follow: true },
+            phase: 'positioning',
+          },
+        })
         const virtSwitch = latestRef.current.virtualizer
         if (virtSwitch) {
           // Virtualizer-native bottom: uses actual measured heights, not the estimated
@@ -2241,6 +2522,25 @@ export function useMessageListScroll({
       savedReadPositionId: pending.savedReadPositionId,
       readPointerId,
     })
+    positioningControllerRef.current?.observeRequest({
+      event: 'mds-live-edge',
+      conversationId,
+      draft: {
+        source: {
+          kind: 'late-mds-supersession',
+          reason: 'read-pointer-at-live-edge',
+        },
+        desired: { kind: 'live-edge', follow: true },
+      },
+      reachability: shadowReachabilityRef.current({
+        kind: 'live-edge',
+        follow: true,
+      }),
+      actual: {
+        desired: { kind: 'live-edge', follow: true },
+        phase: 'positioning',
+      },
+    })
     reassertBottom('mds-live-edge')
   }, [conversationId, firstNewMessageId, lastMessageId, readPointerId, staticMode, isAtBottomRef, reassertBottom])
 
@@ -2276,6 +2576,22 @@ export function useMessageListScroll({
       prevMarker: prev.divider,
     })
     isAtBottomRef.current = true
+    positioningControllerRef.current?.observeRequest({
+      event: 'mds-settle',
+      conversationId,
+      draft: {
+        source: { kind: 'late-mds-supersession', reason: 'divider-cleared' },
+        desired: { kind: 'live-edge', follow: true },
+      },
+      reachability: shadowReachabilityRef.current({
+        kind: 'live-edge',
+        follow: true,
+      }),
+      actual: {
+        desired: { kind: 'live-edge', follow: true },
+        phase: 'positioning',
+      },
+    })
     reassertBottom('mds-settle')
   }, [conversationId, firstNewMessageId, staticMode, isAtBottomRef, reassertBottom])
 
@@ -2290,6 +2606,15 @@ export function useMessageListScroll({
     const restoreResult = restoreSavedPosition('retry')
     if (restoreResult !== 'pending') {
       pendingRestoreConversationRef.current = null
+      if (restoreResult === 'restored') {
+        const active = positioningControllerRef.current?.snapshot().active
+        if (active?.request.conversationId === conversationId) {
+          positioningControllerRef.current?.markPositionApplied(
+            conversationId,
+            active.request.generation,
+          )
+        }
+      }
       prevMessageCountRef.current = messageCount
       prevLastMessageIdRef.current = lastMessageId
     }
@@ -2360,6 +2685,16 @@ export function useMessageListScroll({
 
     const virt = latestRef.current.virtualizer
     const escapedId = CSS.escape(targetMessageId)
+    const shadowTargetDesired = {
+      kind: 'message',
+      messageId: targetMessageId,
+      align: 'center',
+    } as const
+    const shadowTargetDraft: PositionRequestDraft = {
+      source: { kind: 'user-navigation', reason: 'message-target' },
+      desired: shadowTargetDesired,
+      onUnavailable: { kind: 'wait' },
+    }
 
     const highlight = (el: Element) => {
       el.classList.add('message-highlight')
@@ -2373,6 +2708,13 @@ export function useMessageListScroll({
       // yet (e.g., search opens a conversation before messages finish loading from cache).
       const idx = virt.getIndexForMessageId(targetMessageId)
       if (idx === null) {
+        positioningControllerRef.current?.observeRequest({
+          event: 'explicit-target-waiting',
+          conversationId,
+          draft: shadowTargetDraft,
+          reachability: shadowReachabilityRef.current(shadowTargetDesired),
+          actual: { desired: shadowTargetDesired, phase: 'waiting' },
+        })
         // The target isn't in the loaded window — pull in the cache slice that contains it (search /
         // activity jump to a message older than the latest-N slice). The merge grows messageCount,
         // re-firing this effect with the target now resolvable. Request once per target.
@@ -2387,6 +2729,13 @@ export function useMessageListScroll({
         return
       }
       const targetConvId = conversationId
+      positioningControllerRef.current?.observeRequest({
+        event: 'explicit-target',
+        conversationId,
+        draft: shadowTargetDraft,
+        reachability: shadowReachabilityRef.current(shadowTargetDesired),
+        actual: { desired: shadowTargetDesired, phase: 'positioning' },
+      })
       const startedAt = Date.now()
       supersedeReassertLoopRef.current()
       const targetLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('target', performance.now())
@@ -2490,6 +2839,13 @@ export function useMessageListScroll({
       // Non-virtualized: all rows are always in the DOM.
       const el = scroller.querySelector(`[data-message-id="${escapedId}"]`)
       if (!el) {
+        positioningControllerRef.current?.observeRequest({
+          event: 'explicit-target-waiting',
+          conversationId,
+          draft: shadowTargetDraft,
+          reachability: shadowReachabilityRef.current(shadowTargetDesired),
+          actual: { desired: shadowTargetDesired, phase: 'waiting' },
+        })
         const loader = latestRef.current.onLoadAround
         if (loader && targetAroundRequestedRef.current !== targetMessageId) {
           targetAroundRequestedRef.current = targetMessageId
@@ -2503,6 +2859,13 @@ export function useMessageListScroll({
       // Center the target (matches the virtualized path above and the reply-scroll convention);
       // the browser clamps scrollTop, so a near-bottom target stays fully visible.
       ;(el as HTMLElement).scrollIntoView({ block: 'center' })
+      positioningControllerRef.current?.observeRequest({
+        event: 'explicit-target',
+        conversationId,
+        draft: shadowTargetDraft,
+        reachability: shadowReachabilityRef.current(shadowTargetDesired),
+        actual: { desired: shadowTargetDesired, phase: 'positioning' },
+      })
       isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
       highlight(el)
       debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
@@ -2683,6 +3046,39 @@ export function useMessageListScroll({
       maxScrollTop,
     })
 
+    const shadowWindowShiftDesired: DesiredPosition | null =
+      saved.anchorMessageId
+        ? {
+            kind: 'anchor',
+            messageId: saved.anchorMessageId,
+            placement: {
+              kind: 'top-offset',
+              offsetPx: pixelOffset(saved.anchorOffsetFromTop),
+            },
+          }
+        : null
+    const shadowWindowShiftRequest = shadowWindowShiftDesired
+      ? positioningControllerRef.current?.observeRequest({
+          event: 'window-shift-preservation',
+          conversationId,
+          draft: {
+            source: { kind: 'history-preservation', reason: 'window-shift' },
+            desired: shadowWindowShiftDesired,
+            onUnavailable: {
+              kind: 'distance-from-bottom',
+              distancePx: pixelOffset(saved.distanceFromBottom),
+            },
+          },
+          reachability: shadowReachabilityRef.current(
+            shadowWindowShiftDesired,
+          ),
+          actual: {
+            desired: shadowWindowShiftDesired,
+            phase: usedMethod === 'math-fallback' ? 'fallback' : 'positioning',
+          },
+        })
+      : null
+
     // Cancel any parked kinetic (momentum) scroll BEFORE positioning. On a fast scroll-up
     // fling the user reaches the top boundary with residual velocity that WebKit parks and
     // then resumes once we prepend older messages — overshooting the restored anchor and
@@ -2724,6 +3120,12 @@ export function useMessageListScroll({
     saved.restored = true
     saved.restoredAt = Date.now()
     lastRestoreTimeRef.current = Date.now()
+    if (shadowWindowShiftRequest) {
+      positioningControllerRef.current?.markPositionApplied(
+        conversationId,
+        shadowWindowShiftRequest.generation,
+      )
+    }
 
     // Account for the prepended rows in the new-message baseline. This layout effect runs BEFORE
     // the new-message effect in the same commit and flips `restored` true, so that effect no
@@ -2838,7 +3240,7 @@ export function useMessageListScroll({
         prependRef.current = null
       }
     }, PREPEND_COOLDOWN_MS)
-  }, [messageCount, firstMessageId, staticMode])
+  }, [conversationId, messageCount, firstMessageId, staticMode])
 
   // ==========================================================================
   // EFFECT: New message arrives
@@ -2849,6 +3251,27 @@ export function useMessageListScroll({
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
     if (pendingRestoreConversationRef.current === conversationId) {
+      if (lastMessageIsOutgoing) {
+        positioningControllerRef.current?.observeRequest({
+          event: 'new-message-during-restore',
+          conversationId,
+          draft: {
+            source: { kind: 'live-update', reason: 'outgoing-message' },
+            desired: { kind: 'live-edge', follow: true },
+          },
+          reachability: shadowReachabilityRef.current({
+            kind: 'live-edge',
+            follow: true,
+          }),
+          actual: { desired: null, phase: 'idle' },
+        })
+      } else {
+        positioningControllerRef.current?.observeAppend({
+          event: 'incoming-message-during-restore',
+          conversationId,
+          actualFollowsLive: false,
+        })
+      }
       debugLog('NEW MSG SKIP (restore pending)', {
         messageCount,
         prevCount: prevMessageCountRef.current,
@@ -2862,6 +3285,27 @@ export function useMessageListScroll({
     // Don't interfere with prepend that's actively in progress (not yet restored)
     // Once restored, allow new message auto-scroll even during cooldown period
     if (prependRef.current && !prependRef.current.restored) {
+      if (lastMessageIsOutgoing) {
+        positioningControllerRef.current?.observeRequest({
+          event: 'new-message-during-window-shift',
+          conversationId,
+          draft: {
+            source: { kind: 'live-update', reason: 'outgoing-message' },
+            desired: { kind: 'live-edge', follow: true },
+          },
+          reachability: shadowReachabilityRef.current({
+            kind: 'live-edge',
+            follow: true,
+          }),
+          actual: { desired: null, phase: 'idle' },
+        })
+      } else {
+        positioningControllerRef.current?.observeAppend({
+          event: 'incoming-message-during-window-shift',
+          conversationId,
+          actualFollowsLive: false,
+        })
+      }
       debugLog('NEW MSG SKIP (prepend in progress)', {
         messageCount,
         prevCount: prevMessageCountRef.current,
@@ -2883,6 +3327,30 @@ export function useMessageListScroll({
     // (auto-follow) OR it's the user's own send — you always want to see what you just sent, even
     // from a scrolled-up position. An incoming message while scrolled up does NOT yank the reader.
     if (newBottomRow && (isAtBottomRef.current || lastMessageIsOutgoing)) {
+      if (lastMessageIsOutgoing) {
+        positioningControllerRef.current?.observeRequest({
+          event: 'outgoing-message',
+          conversationId,
+          draft: {
+            source: { kind: 'live-update', reason: 'outgoing-message' },
+            desired: { kind: 'live-edge', follow: true },
+          },
+          reachability: shadowReachabilityRef.current({
+            kind: 'live-edge',
+            follow: true,
+          }),
+          actual: {
+            desired: { kind: 'live-edge', follow: true },
+            phase: 'positioning',
+          },
+        })
+      } else {
+        positioningControllerRef.current?.observeAppend({
+          event: 'incoming-message',
+          conversationId,
+          actualFollowsLive: true,
+        })
+      }
       debugLog('NEW MSG SCROLL TO BOTTOM', {
         messageCount,
         prevCount: prevMessageCountRef.current,
@@ -2897,6 +3365,11 @@ export function useMessageListScroll({
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
       reassertBottom('new-message')
     } else if (newBottomRow) {
+      positioningControllerRef.current?.observeAppend({
+        event: 'incoming-message',
+        conversationId,
+        actualFollowsLive: false,
+      })
       debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', {
         messageCount,
         prevCount: prevMessageCountRef.current,
@@ -3152,6 +3625,32 @@ export function useMessageListScroll({
     if (!firstNewMessageId) return
     userScrollIntentAtRef.current = Date.now()
     userHasScrolledSinceEntryRef.current = true
+    const desired = {
+      kind: 'message' as const,
+      messageId: firstNewMessageId,
+      align: virtualizerRef.current ? 'start' as const : 'top-third' as const,
+    }
+    const reachability = shadowReachabilityRef.current(desired)
+    positioningControllerRef.current?.observeRequest({
+      event: 'jump-to-last-read',
+      conversationId,
+      draft: {
+        source: { kind: 'user-navigation', reason: 'unread-marker' },
+        desired,
+        onUnavailable: { kind: 'live-edge' },
+      },
+      reachability,
+      actual: {
+        desired,
+        phase:
+          reachability.kind === 'available' &&
+          reachability.placement === 'use-unavailable-policy'
+            ? 'fallback'
+            : reachability.kind === 'available'
+              ? 'positioning'
+              : 'waiting',
+      },
+    })
     runMarkerReassertLoop(firstNewMessageId, conversationId)
   }, [firstNewMessageId, conversationId, runMarkerReassertLoop])
 
