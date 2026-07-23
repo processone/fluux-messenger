@@ -74,7 +74,33 @@ async function loadDemo(page: Page): Promise<void> {
   await page.waitForSelector('[data-nav="messages"]', { timeout: 120_000 })
   // Extra wait for the setTimeout(0) stress seeding to complete
   await page.waitForTimeout(1200)
+  await page.evaluate(() => {
+    ;(
+      window as Window & {
+        __fluuxScrollShadow?: (reset?: boolean) => unknown
+      }
+    ).__fluuxScrollShadow?.(true)
+  })
 }
+
+test.afterEach(async ({ page }) => {
+  if (page.isClosed()) return
+  const shadow = await page.evaluate(() => {
+    return (
+      window as Window & {
+        __fluuxScrollShadow?: () => {
+          divergenceCount: number
+          divergences: unknown[]
+        }
+      }
+    ).__fluuxScrollShadow?.()
+  })
+  expect(shadow, 'scroll shadow diagnostics must be installed').toBeDefined()
+  expect(
+    shadow?.divergences,
+    `scroll shadow recorded ${shadow?.divergenceCount ?? 0} divergence(s)`,
+  ).toEqual([])
+})
 
 /** Navigate to the stress room and wait for virtual rows to appear.
  *
