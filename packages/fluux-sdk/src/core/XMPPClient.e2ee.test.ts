@@ -618,13 +618,13 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         conversationMeta.set('bob@example.com', {
           ...conversationMeta.get('bob@example.com')!,
           unreadCount: 2,
-          lastSeenMessageId: 'read-msg',
+          readPointer: { messageId: 'read-msg', timestamp: new Date('2026-06-10T00:00:00Z') },
         })
         const conversations = new Map(s.conversations)
         conversations.set('bob@example.com', {
           ...conversations.get('bob@example.com')!,
           unreadCount: 2,
-          lastSeenMessageId: 'read-msg',
+          readPointer: { messageId: 'read-msg', timestamp: new Date('2026-06-10T00:00:00Z') },
         })
         return { conversationMeta, conversations, activeConversationId: null }
       })

@@ -1,5 +1,8 @@
 /**
  * @vitest-environment jsdom
+ *
+ * Note: room read state (previously `saveRooms`/`getSavedRooms`) is no longer
+ * persisted here — it is durable via the SDK's readStateStorage instead.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
@@ -10,16 +13,13 @@ import {
   getSavedViewState,
   saveRoster,
   getSavedRoster,
-  saveRooms,
-  getSavedRooms,
   saveServerInfo,
   getSavedServerInfo,
   saveOwnResources,
   getSavedOwnResources,
-  toJoinedRoomInfos,
   type ViewStateData,
 } from './useSessionPersistence'
-import type { Contact, Room, RoomMessage, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
+import type { Contact, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
 
 const TEST_JID = 'user@example.com'
 const OTHER_JID = 'other@example.com'
@@ -27,7 +27,6 @@ const TEST_SERVER = 'wss://example.com/ws'
 const ACTIVE_SESSION_JID_KEY = 'xmpp-active-session-jid'
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'
-const ROOMS_KEY = 'xmpp-rooms'
 const VIEW_STATE_KEY = 'xmpp-view-state'
 const OWN_RESOURCES_KEY = 'xmpp-own-resources'
 
@@ -105,7 +104,6 @@ describe('useSessionPersistence', () => {
       expect(getSession()).toBeNull()
       expect(getSavedViewState(TEST_JID)).toBeNull()
       expect(getSavedRoster(TEST_JID)).toBeNull()
-      expect(getSavedRooms(TEST_JID)).toBeNull()
       expect(getSavedServerInfo(TEST_JID)).toBeNull()
       expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBeUndefined()
       // Note: Presence is now managed by XState machine with key 'fluux:presence-machine'
@@ -361,238 +359,6 @@ describe('useSessionPersistence', () => {
     })
   })
 
-  describe('Room serialization', () => {
-    const createRoomMessage = (id: string, timestamp: Date, retractedAt?: Date): RoomMessage => ({
-      type: 'groupchat',
-      id,
-      roomJid: 'room@conference.example.com',
-      from: 'room@conference.example.com/user',
-      nick: 'user',
-      body: `Message ${id}`,
-      timestamp,
-      isOutgoing: false,
-      retractedAt,
-    })
-
-    it('should convert message timestamps to Date objects', () => {
-      const timestamp = new Date('2024-01-15T14:30:00Z')
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [createRoomMessage('msg1', timestamp)],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored).toHaveLength(1)
-      expect(restored![0].messages).toHaveLength(1)
-      expect(restored![0].messages[0].timestamp).toBeInstanceOf(Date)
-      expect(restored![0].messages[0].timestamp.getTime()).toBe(timestamp.getTime())
-    })
-
-    it('should convert retractedAt to Date objects', () => {
-      const timestamp = new Date('2024-01-15T14:30:00Z')
-      const retractedAt = new Date('2024-01-15T14:35:00Z')
-
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [createRoomMessage('msg1', timestamp, retractedAt)],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].messages[0].retractedAt).toBeInstanceOf(Date)
-      expect(restored![0].messages[0].retractedAt?.getTime()).toBe(retractedAt.getTime())
-    })
-
-    it('should limit messages to last 50', () => {
-      const messages: RoomMessage[] = []
-      for (let i = 0; i < 100; i++) {
-        messages.push(createRoomMessage(`msg${i}`, new Date(Date.now() + i * 1000)))
-      }
-
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages,
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].messages).toHaveLength(50)
-      // Should be the LAST 50 messages (msg50-msg99)
-      expect(restored![0].messages[0].id).toBe('msg50')
-      expect(restored![0].messages[49].id).toBe('msg99')
-    })
-
-    it('should convert lastReadAt to Date object', () => {
-      const lastReadAt = new Date('2024-01-15T16:00:00Z')
-
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-            lastReadAt,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].lastReadAt).toBeInstanceOf(Date)
-      expect(restored![0].lastReadAt?.getTime()).toBe(lastReadAt.getTime())
-    })
-
-    it('should restore occupants as Map and typingUsers as Set', () => {
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'user',
-            joined: true,
-            occupants: new Map([
-              ['alice', { nick: 'alice', jid: 'alice@example.com', affiliation: 'member', role: 'participant' }],
-            ]),
-            typingUsers: new Set(['bob']),
-            messages: [],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].occupants).toBeInstanceOf(Map)
-      expect(restored![0].occupants.get('alice')?.jid).toBe('alice@example.com')
-      // typingUsers is always reset to empty Set on restore
-      expect(restored![0].typingUsers).toBeInstanceOf(Set)
-      expect(restored![0].typingUsers.size).toBe(0)
-    })
-
-    it('should handle rooms with no messages', () => {
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Empty Room',
-            nickname: 'user',
-            joined: false,
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [],
-            unreadCount: 0,
-            mentionsCount: 0,
-            isBookmarked: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].messages).toEqual([])
-    })
-
-    it('should preserve room metadata', () => {
-      const rooms = new Map<string, Room>([
-        [
-          'room@conf.example.com',
-          {
-            jid: 'room@conf.example.com',
-            name: 'Test Room',
-            nickname: 'mynick',
-            joined: true,
-            subject: 'Room topic',
-            avatarHash: 'abc123',
-            occupants: new Map(),
-            typingUsers: new Set(),
-            messages: [],
-            unreadCount: 5,
-            mentionsCount: 2,
-            isBookmarked: true,
-            autojoin: true,
-            password: 'secret',
-            notifyAll: true,
-            notifyAllPersistent: false,
-            isQuickChat: true,
-          },
-        ],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)
-
-      expect(restored![0].name).toBe('Test Room')
-      expect(restored![0].nickname).toBe('mynick')
-      expect(restored![0].subject).toBe('Room topic')
-      expect(restored![0].avatarHash).toBe('abc123')
-      expect(restored![0].unreadCount).toBe(5)
-      expect(restored![0].mentionsCount).toBe(2)
-      expect(restored![0].autojoin).toBe(true)
-      expect(restored![0].password).toBe('secret')
-      expect(restored![0].notifyAll).toBe(true)
-      expect(restored![0].notifyAllPersistent).toBe(false)
-      expect(restored![0].isQuickChat).toBe(true)
-    })
-  })
-
   describe('Server info serialization', () => {
     it('should save and retrieve server info', () => {
       const serverInfo: ServerInfo = {
@@ -698,11 +464,6 @@ describe('useSessionPersistence', () => {
       expect(getSavedRoster(TEST_JID)).toBeNull()
     })
 
-    it('should return null for invalid JSON in rooms', () => {
-      mockStorage[scopedKey(ROOMS_KEY)] = 'not valid json'
-      expect(getSavedRooms(TEST_JID)).toBeNull()
-    })
-
     it('should return null for invalid JSON in view state', () => {
       mockStorage[scopedKey(VIEW_STATE_KEY)] = '{ broken'
       expect(getSavedViewState(TEST_JID)).toBeNull()
@@ -711,76 +472,6 @@ describe('useSessionPersistence', () => {
     it('should return null for invalid JSON in session', () => {
       mockStorage['xmpp-session'] = 'corrupted'
       expect(getSession()).toBeNull()
-    })
-  })
-
-  describe('toJoinedRoomInfos', () => {
-    const makeRoom = (overrides: Partial<Room> & { jid: string; nickname: string }): Room => ({
-      name: overrides.jid.split('@')[0],
-      joined: false,
-      occupants: new Map(),
-      typingUsers: new Set(),
-      messages: [],
-      unreadCount: 0,
-      mentionsCount: 0,
-      isBookmarked: false,
-      ...overrides,
-    })
-
-    it('should include only joined rooms', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: true }),
-        makeRoom({ jid: 'b@conf.example.com', nickname: 'me', joined: false, isBookmarked: true }),
-        makeRoom({ jid: 'c@conf.example.com', nickname: 'me', joined: true }),
-      ]
-
-      const result = toJoinedRoomInfos(rooms)
-
-      expect(result).toHaveLength(2)
-      expect(result.map(r => r.jid)).toEqual(['a@conf.example.com', 'c@conf.example.com'])
-    })
-
-    it('should preserve password and autojoin', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'secret@conf.example.com', nickname: 'me', joined: true, password: 'p4ss', autojoin: true }),
-      ]
-
-      const result = toJoinedRoomInfos(rooms)
-
-      expect(result[0]).toEqual({
-        jid: 'secret@conf.example.com',
-        nickname: 'me',
-        password: 'p4ss',
-        autojoin: true,
-      })
-    })
-
-    it('should return empty array when no rooms are joined', () => {
-      const rooms: Room[] = [
-        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: false }),
-      ]
-
-      expect(toJoinedRoomInfos(rooms)).toEqual([])
-    })
-
-    it('should return empty array for empty input', () => {
-      expect(toJoinedRoomInfos([])).toEqual([])
-    })
-
-    it('should round-trip through save/restore correctly', () => {
-      const rooms = new Map<string, Room>([
-        ['a@conf.example.com', makeRoom({ jid: 'a@conf.example.com', nickname: 'nick1', joined: true, autojoin: true })],
-        ['b@conf.example.com', makeRoom({ jid: 'b@conf.example.com', nickname: 'nick2', joined: false, isBookmarked: true })],
-        ['c@conf.example.com', makeRoom({ jid: 'c@conf.example.com', nickname: 'nick3', joined: true, password: 'pw' })],
-      ])
-
-      saveRooms(rooms, TEST_JID)
-      const restored = getSavedRooms(TEST_JID)!
-      const infos = toJoinedRoomInfos(restored)
-
-      expect(infos).toHaveLength(2)
-      expect(infos[0]).toEqual({ jid: 'a@conf.example.com', nickname: 'nick1', password: undefined, autojoin: true })
-      expect(infos[1]).toEqual({ jid: 'c@conf.example.com', nickname: 'nick3', password: 'pw', autojoin: undefined })
     })
   })
 })

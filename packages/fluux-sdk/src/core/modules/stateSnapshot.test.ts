@@ -126,8 +126,14 @@ describe('StateSnapshot', () => {
       expect(phone?.show).toBe('away')
     })
 
-    it('restores rooms with occupants, selfOccupant, subject and last-read marker', async () => {
-      const lastReadAt = new Date('2026-04-21T08:30:00Z')
+    // The read position rides in the snapshot as a `readPointer` (#1081),
+    // replacing the `lastReadAt` this case used to assert. A snapshot that
+    // dropped it would restore rooms with NO read position, and
+    // recomputeCountsFromPointer treats a pointerless entity as fresh — pointer
+    // snapped to newest, unread history silently marked read, permanently
+    // (forward-only).
+    it('restores rooms with occupants, selfOccupant, subject and read pointer', async () => {
+      const readAt = new Date('2026-04-21T08:30:00Z')
       adapterData.store.set('user@example.com', {
         rooms: [{
           jid: 'room@conf.example.com',
@@ -144,7 +150,7 @@ describe('StateSnapshot', () => {
           mentionsCount: 1,
           isBookmarked: true,
           autojoin: true,
-          lastReadAt: lastReadAt.toISOString(),
+          readPointer: { messageId: 'msg-42', timestamp: readAt.getTime() },
           messages: [],
         }],
       })
@@ -161,7 +167,27 @@ describe('StateSnapshot', () => {
       expect(room?.selfOccupant?.nick).toBe('me')
       expect(room?.unreadCount).toBe(3)
       expect(room?.autojoin).toBe(true)
-      expect(room?.lastReadAt).toEqual(lastReadAt)
+      // A Date, not the epoch number that sits on disk: a pointer carrying a
+      // number compares false against every message Date it meets, silently.
+      expect(room?.readPointer).toEqual({ messageId: 'msg-42', timestamp: readAt })
+      expect(roomStore.getState().roomMeta.get('room@conf.example.com')?.readPointer)
+        .toEqual({ messageId: 'msg-42', timestamp: readAt })
+    })
+
+    // The write half. Without it, hydrate could pass forever against a snapshot
+    // nothing ever writes a pointer into.
+    it('persists the room read pointer so it can be hydrated back', async () => {
+      const readAt = new Date('2026-04-21T09:15:00Z')
+      roomStore.getState().addRoom(makeRoom('room@conf.example.com', {
+        readPointer: { messageId: 'msg-7', timestamp: readAt },
+      }))
+
+      await snapshot.flush()
+
+      const [persisted] = adapterData.store.get('user@example.com')!.rooms as Array<{
+        readPointer?: { messageId: string; timestamp: number }
+      }>
+      expect(persisted?.readPointer).toEqual({ messageId: 'msg-7', timestamp: readAt.getTime() })
     })
 
     it('restores server info, own nickname and avatar hash', async () => {

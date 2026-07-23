@@ -381,7 +381,11 @@ describe('chatSelectors', () => {
 
   describe('metadataById', () => {
     it('should return metadata for existing conversation', () => {
-      const meta: ConversationMetadata = { unreadCount: 5, lastMessage: undefined, lastReadAt: new Date() }
+      const meta: ConversationMetadata = {
+        unreadCount: 5,
+        lastMessage: undefined,
+        readPointer: { messageId: 'm1', timestamp: new Date() },
+      }
       const conversationMeta = new Map([['user@example.com', meta]])
       const state = createMockState({ conversationMeta })
       expect(chatSelectors.metadataById('user@example.com')(state)).toEqual(meta)

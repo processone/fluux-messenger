@@ -31,7 +31,7 @@ interface HookHarnessProps {
   conversationId: string
   ids: string[]
   firstNewMessageId?: string
-  lastSeenMessageId?: string
+  readPointerId?: string
   clearFirstNewMessageId?: () => void
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   scrollHeight?: number
@@ -60,7 +60,7 @@ function HookHarness({
   conversationId,
   ids,
   firstNewMessageId,
-  lastSeenMessageId,
+  readPointerId,
   clearFirstNewMessageId,
   onLoadAround,
   scrollHeight = 1000,
@@ -79,7 +79,7 @@ function HookHarness({
     messageCount: ids.length,
     firstMessageId: ids[0],
     firstNewMessageId,
-    lastSeenMessageId,
+    readPointerId,
     clearFirstNewMessageId,
     onLoadAround,
     reactionsSignature: '',
@@ -310,7 +310,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="synced-live-edge"
         ids={manyIds()}
-        lastSeenMessageId="msg-19"
+        readPointerId="msg-19"
         onReady={(next) => { handle = next }}
       />,
     )
@@ -328,7 +328,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="same-live-edge"
         ids={manyIds()}
-        lastSeenMessageId="msg-19"
+        readPointerId="msg-19"
         onReady={(next) => { handle = next }}
       />,
     )
@@ -344,7 +344,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="late-live-edge"
         ids={manyIds()}
-        lastSeenMessageId="msg-5"
+        readPointerId="msg-5"
         onReady={(next) => { handle = next }}
       />,
     )
@@ -355,7 +355,7 @@ describe('useMessageListScroll saved-position restore', () => {
       <HookHarness
         conversationId="late-live-edge"
         ids={manyIds()}
-        lastSeenMessageId="msg-19"
+        readPointerId="msg-19"
         onReady={(next) => { handle = next }}
       />,
     )

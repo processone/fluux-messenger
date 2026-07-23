@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { roomStore } from './roomStore'
+import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { roomSelectors } from './roomSelectors'
 import type { Room, RoomMessage } from '../core/types/room'
 import { getLocalPart } from '../core/jid'
@@ -60,13 +60,32 @@ function rmsg(id: string, stanzaId: string, t: number): RoomMessage {
   } as RoomMessage
 }
 
+/** The read pointer naming `id`, carrying that message's own timestamp (#1081). */
+function pointerIn(messages: RoomMessage[], id: string): { messageId: string; timestamp: Date } {
+  const found = messages.find((m) => m.id === id)
+  if (!found) throw new Error(`pointerIn: no message ${id} in the seeded slice`)
+  return { messageId: found.id, timestamp: found.timestamp }
+}
+
 /**
  * Seed a room into the store using the real addRoom idiom (mirrors the
  * activateWith helper in roomStore.test.ts). addRoom populates rooms,
  * roomEntities, roomMeta, and roomRuntime from a single Room object.
- * An optional lastSeenMessageId is patched into roomMeta afterwards.
+ * An optional read pointer (named by message id) is patched into roomMeta
+ * afterwards, carrying that message's own timestamp.
+ *
+ * `seenMessageId` must name a message in `messages`, so a typo fails loudly
+ * instead of quietly becoming a pointer at the epoch — i.e. no read horizon at
+ * all, which changes what every unread assertion in this file means. A pointer
+ * DEEPER than the seeded slice is legitimate (the resident window does not
+ * reach it); say so by passing `pointerTimestamp` explicitly.
  */
-function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: string) {
+function seedRoom(
+  jid: string,
+  messages: RoomMessage[],
+  seenMessageId?: string,
+  pointerTimestamp?: Date
+) {
   const room: Room = {
     jid,
     name: getLocalPart(jid),
@@ -80,11 +99,15 @@ function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: stri
     typingUsers: new Set(),
   }
   roomStore.getState().addRoom(room)
-  if (lastSeenMessageId !== undefined) {
+  if (seenMessageId !== undefined) {
+    const timestamp = pointerTimestamp ?? pointerIn(messages, seenMessageId).timestamp
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(jid)!
-      meta.set(jid, { ...existing, lastSeenMessageId })
+      meta.set(jid, {
+        ...existing,
+        readPointer: { messageId: seenMessageId, timestamp },
+      })
       return { roomMeta: meta }
     })
   }
@@ -93,6 +116,10 @@ function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: stri
 describe('roomStore.applyRemoteDisplayed', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    // Room read state is durable (#1081), so wiping roomMeta by hand is no
+    // longer a clean slate: the next addRoom would restore the previous test's
+    // pointer from storage. Every beforeEach in this file drops it too.
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -107,16 +134,16 @@ describe('roomStore.applyRemoteDisplayed', () => {
     vi.clearAllMocks()
   })
 
-  it('advances lastSeenMessageId forward to the local id of the matching stanza-id', () => {
+  it('advances the read pointer forward to the local id of the matching stanza-id', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
   })
 
-  it('never regresses lastSeenMessageId (incoming marker behind current)', () => {
+  it('never regresses the read pointer (incoming marker behind current)', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm3')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
   })
 
   it('stores a pending high-water mark when the stanza-id is not yet loaded', () => {
@@ -124,7 +151,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-future')
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
-    expect(meta?.lastSeenMessageId).toBe('m1')
+    expect(meta?.readPointer?.messageId).toBe('m1')
   })
 
   it('clears a stale pending marker when the message is loaded but position already past it', () => {
@@ -139,7 +166,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
     const after = roomStore.getState().roomMeta.get(ROOM)
     expect(after?.pendingRemoteDisplayedStanzaId).toBe(undefined)
-    expect(after?.lastSeenMessageId).toBe('m2')
+    expect(after?.readPointer?.messageId).toBe('m2')
   })
 
   // Fresh-session seed race (MUC): the room is activated (divider derived from the
@@ -156,7 +183,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 
@@ -170,7 +197,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m3')
   })
 
@@ -188,16 +215,16 @@ describe('roomStore.applyRemoteDisplayed', () => {
     seedRoom(ROOM, [])
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
-      m.set(ROOM, { ...m.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      m.set(ROOM, { ...m.get(ROOM)!, readPointer: pointerIn(messages, 'm1'), unreadCount: 3, mentionsCount: 1 })
       const rooms = new Map(s.rooms)
-      rooms.set(ROOM, { ...rooms.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, readPointer: pointerIn(messages, 'm1'), unreadCount: 3, mentionsCount: 1 })
       return { roomMeta: m, rooms }
     })
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4', messages)
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m4')
+    expect(meta?.readPointer?.messageId).toBe('m4')
     expect(meta?.unreadCount).toBe(0)
     expect(meta?.mentionsCount).toBe(0)
     // The combined rooms mirror is kept coherent with roomMeta.
@@ -216,7 +243,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     seedRoom(ROOM, [])
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
-      m.set(ROOM, { ...m.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      m.set(ROOM, { ...m.get(ROOM)!, readPointer: pointerIn(messages, 'm1'), unreadCount: 3, mentionsCount: 1 })
       return { roomMeta: m }
     })
 
@@ -224,7 +251,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's2', messages)
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m2')
+    expect(meta?.readPointer?.messageId).toBe('m2')
     expect(meta?.unreadCount).toBe(2)
     expect(meta?.mentionsCount).toBe(1)
   })
@@ -242,7 +269,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     )
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.readPointer?.messageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -279,7 +306,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
     // backward page) + 10 (fetch-latest page, incl. 1 mention) = 19, NOT just
     // the 9 visible in the final page.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('p0')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
     await vi.waitFor(() => {
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(19)
     })
@@ -326,6 +353,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -340,7 +368,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     vi.clearAllMocks()
   })
 
-  it('folds a pending remote room marker into lastSeenMessageId before deriving the divider', async () => {
+  it('folds a pending remote room marker into the read pointer before deriving the divider', async () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     // A remote device read up to s4, seeded as pending before messages loaded.
     roomStore.setState((s) => {
@@ -352,7 +380,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 
@@ -370,7 +398,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
 
     // Leave (deactivation evicts the resident message array).
     await roomStore.getState().activateRoom(null)
@@ -387,13 +415,13 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomRuntime: rt, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
   })
 
   // Regression (bug: "read on another device, still unread on return"): a NEWER remote read
   // arrives while the room is inactive. Inactive rooms evict their message array, so the live
   // `read:displayed-synced` notify can only stash it as pending — it cannot advance
-  // lastSeenMessageId. The next activation fold is the only path that can apply it, so the gate
+  // the read pointer. The next activation fold is the only path that can apply it, so the gate
   // must NOT suppress a marker it has never folded, even though the room was opened before.
   it('folds a NEWER remote room marker that arrived while the room was inactive', async () => {
     const REOPEN_ROOM = 'reopen-newer@conference.example'
@@ -406,7 +434,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
 
     // Leave (deactivation evicts the resident message array).
     await roomStore.getState().activateRoom(null)
@@ -422,7 +450,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomRuntime: rt, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m4')
   })
 
   // Regression (gate burn on stash): the first activation fold may find the marker's
@@ -443,7 +471,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(RETRY_ROOM)
     // Unresolvable → stash survives, pointer untouched.
-    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.lastSeenMessageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
 
     await roomStore.getState().activateRoom(null)
@@ -459,7 +487,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(RETRY_ROOM)
     // The gate must allow the retry (the marker was never actually folded).
-    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.lastSeenMessageId).toBe('m9')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.messageId).toBe('m9')
     expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
 
@@ -471,8 +499,11 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
   it('re-attempts the fold against the slice loaded around a deep stale pointer', async () => {
     const DEEP_ROOM = 'deep-pointer@conference.example'
     const latest = [rmsg('m10', 's10', 10), rmsg('m11', 's11', 11), rmsg('m12', 's12', 12)]
-    // Resident window = latest slice; the read pointer (m2) is deeper than it.
-    seedRoom(DEEP_ROOM, latest, 'm2')
+    // Resident window = latest slice; the read pointer (m2) is deeper than it,
+    // so its timestamp is stated rather than looked up. Epoch: this case is
+    // about the fold re-attempt, and a floor there keeps every around-slice
+    // message countable.
+    seedRoom(DEEP_ROOM, latest, 'm2', new Date(0))
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
       m.set(DEEP_ROOM, { ...m.get(DEEP_ROOM)!, pendingRemoteDisplayedStanzaId: 's5' })
@@ -488,7 +519,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(DEEP_ROOM)
 
     // The retried fold advances the pointer to the synced position…
-    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.lastSeenMessageId).toBe('m5')
+    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.readPointer?.messageId).toBe('m5')
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
     expect(roomSelectors.firstNewMessageIdFor(DEEP_ROOM)(roomStore.getState())).toBe('m6')
@@ -567,7 +598,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     const full = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4), rmsg('m5', 's5', 5)]
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
-    expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m5')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
@@ -598,6 +629,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 describe('roomStore — new-message divider is session-only', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -658,6 +690,7 @@ describe('roomStore — new-message divider is session-only', () => {
 describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -674,7 +707,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
   // At the live edge, clearing the badge means the user caught up to the newest
   // message — advance the read pointer so the MDS publisher syncs the marker.
-  it('advances lastSeenMessageId to the newest loaded message when at the live edge', () => {
+  it('advances the read pointer to the newest loaded message when at the live edge', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
@@ -684,14 +717,14 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     roomStore.getState().markAsRead(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
-    expect(roomStore.getState().rooms.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().rooms.get(ROOM)?.readPointer?.messageId).toBe('m3')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
   })
 
   // Slid up into history: badge clears but the pointer stays put, so MDS never
   // publishes a read position past messages the user has not seen.
-  it('does NOT advance lastSeenMessageId when the window is slid up into history', () => {
+  it('does NOT advance the read pointer when the window is slid up into history', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
@@ -703,13 +736,13 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     roomStore.getState().markAsRead(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
   })
 })
 
 // ---------------------------------------------------------------------------
-// updateLastSeenMessageId — presence gate (issue #1076)
+// advanceReadPointer — presence gate (issue #1076)
 //
 // The viewport observer equated "rendered on screen" with "read". Combined with
 // auto-scroll-on-new-message, a backgrounded client marked every arriving message
@@ -718,9 +751,10 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 // while the user is in another app has not been seen.
 // ---------------------------------------------------------------------------
 
-describe('roomStore.updateLastSeenMessageId presence gate', () => {
+describe('roomStore.advanceReadPointer presence gate', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -739,25 +773,25 @@ describe('roomStore.updateLastSeenMessageId presence gate', () => {
   it('advances the read pointer when the window is focused', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(true)
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
   })
 
   it('does not advance the read pointer while the window is unfocused', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
   })
 
   it('resumes advancing once the window regains focus', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm2')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+    roomStore.getState().advanceReadPointer(ROOM, 'm2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
     connectionStore.getState().setWindowVisible(true)
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    roomStore.getState().advanceReadPointer(ROOM, 'm3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
   })
 })
 
@@ -768,7 +802,7 @@ describe('roomStore.updateLastSeenMessageId presence gate', () => {
 // The MDS marker from the client the user left always arrives before the room has
 // messages to resolve it against, so it lands in pendingRemoteDisplayedStanzaId.
 // The catch-up merge then recomputed counts FIRST — and its fresh-entity guard
-// ("no pointer, no lastReadAt ⇒ caught up") snapped the pointer to the newest
+// ("no read pointer ⇒ caught up") snapped the pointer to the newest
 // message. The pending fold that runs afterwards is forward-only, so the user's
 // real position was already behind it and got discarded.
 // ---------------------------------------------------------------------------
@@ -776,6 +810,7 @@ describe('roomStore.updateLastSeenMessageId presence gate', () => {
 describe('roomStore fresh-instance catch-up preserves the remote read position', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -795,14 +830,14 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
   const archive = () => Array.from({ length: 10 }, (_, i) => rmsg(`m${i + 1}`, `s${i + 1}`, i + 1))
 
   it('keeps the pointer at the marker instead of snapping to newest', () => {
-    seedRoom(ROOM, []) // fresh instance: no messages, no pointer, no lastReadAt
+    seedRoom(ROOM, []) // fresh instance: no messages, no read pointer
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3') // non-resident → pending
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s3')
 
     roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m3')
+    expect(meta?.readPointer?.messageId).toBe('m3')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -824,7 +859,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.unreadCount).toBe(0)
-    expect(meta?.lastSeenMessageId).toBe('m10')
+    expect(meta?.readPointer?.messageId).toBe('m10')
   })
 })
 
@@ -835,6 +870,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
 describe('roomStore pending-marker guard edges', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -865,7 +901,7 @@ describe('roomStore pending-marker guard edges', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-deep')
-    expect(meta?.lastSeenMessageId).toBe(undefined)
+    expect(meta?.readPointer).toBe(undefined)
   })
 
   it('resolves that held position once a later page carries the marker message', () => {
@@ -880,7 +916,7 @@ describe('roomStore pending-marker guard edges', () => {
     )
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.readPointer?.messageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -912,7 +948,7 @@ describe('roomStore pending-marker guard edges', () => {
     roomStore.getState().mergeRoomMAMMessages(ROOM, page, {}, true, 'forward')
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.lastSeenMessageId).toBe('m2')
+    expect(meta?.readPointer?.messageId).toBe('m2')
     expect(meta?.unreadCount).toBe(2)
     // m2's mention is at/behind the read position — only m3's counts.
     expect(meta?.mentionsCount).toBe(1)

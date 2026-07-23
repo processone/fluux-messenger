@@ -8,6 +8,7 @@
 import type { PresenceShow } from './roster'
 import type { MentionReference } from './chat'
 import type { BaseMessage } from './message-base'
+import type { ReadPointer } from '../../stores/shared/readPointer'
 
 /**
  * Room affiliation level (XEP-0045).
@@ -266,14 +267,27 @@ export interface RoomMetadata {
   notifyAll?: boolean
   /** Notify for all messages (persisted in bookmark) */
   notifyAllPersistent?: boolean
-  /** When room was last marked as read (for new messages marker) */
-  lastReadAt?: Date
-  /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
-  lastSeenMessageId?: string
+  /**
+   * Where the user has read to — the read position, and the only
+   * representation of it.
+   *
+   * Replaced the `lastSeenMessageId` + `lastReadAt` pair, two independently
+   * writable fields describing one fact that drifted apart in practice and
+   * silently corrupted unread counts (issue #1081). Only ever advances forward.
+   * Durable across restarts via `shared/readStateStorage` — roomStore itself has
+   * no persist middleware.
+   */
+  readPointer?: ReadPointer
+  /**
+   * When this room entered our world (join). NOT a read position — it is the
+   * floor that stops history predating the join from counting as unread.
+   * Written once, at creation.
+   */
+  historyFloor?: Date
   /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
-   * message is not yet in the loaded room cache. Resolved to lastSeenMessageId
-   * once the message arrives (see mergeRoomMAMMessages).
+   * message is not yet in the loaded room cache. Folded into `readPointer` once
+   * the message arrives (see mergeRoomMAMMessages).
    */
   pendingRemoteDisplayedStanzaId?: string
   /** Most recent message for sidebar preview */

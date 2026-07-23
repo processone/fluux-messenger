@@ -9,13 +9,14 @@
 
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
+import type { ReadPointer } from './readPointer'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
 export interface ReadMarkerMeta {
   unreadCount: number
   mentionsCount: number
-  lastReadAt?: Date
-  lastSeenMessageId?: string
+  /** The entity's read position — the sole representation of it (#1081). */
+  readPointer?: ReadPointer
   pendingRemoteDisplayedStanzaId?: string
 }
 
@@ -33,15 +34,22 @@ export type RemoteDisplayedResolution =
    * every merge.
    */
   | { kind: 'clear-pending' }
-  /** Forward advance on a non-active entity (divider recomputes on next activation). */
-  | { kind: 'advanced'; lastSeenMessageId: string }
+  /**
+   * Forward advance on a non-active entity (divider recomputes on next
+   * activation). The whole read position travels as one `readPointer` (#1081).
+   */
+  | { kind: 'advanced'; readPointer: ReadPointer }
   /**
    * Forward advance on the ACTIVE entity: the new-message divider was already
    * derived at activation from the now-stale local position, so it is
    * recomputed here from the advanced position. `firstNewMessageId`
    * undefined = no divider (delete the marker).
    */
-  | { kind: 'advanced-with-divider'; lastSeenMessageId: string; firstNewMessageId: string | undefined }
+  | {
+      kind: 'advanced-with-divider'
+      readPointer: ReadPointer
+      firstNewMessageId: string | undefined
+    }
 
 export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaId?: string }>(
   meta: ReadMarkerMeta,
@@ -58,22 +66,25 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
     {
       unreadCount: meta.unreadCount,
       mentionsCount: meta.mentionsCount,
-      lastReadAt: meta.lastReadAt,
-      lastSeenMessageId: meta.lastSeenMessageId,
+      readPointer: meta.readPointer,
       firstNewMessageId: currentFirstNewMessageId,
     },
     match.id,
     messages
   )
 
-  if (updated.lastSeenMessageId === meta.lastSeenMessageId || updated.lastSeenMessageId === undefined) {
+  // An advance always lands on `match` — `onMessageSeen` only ever moves to the
+  // id it was given, and only when that id is present in `messages`, which
+  // `match` is by construction (it came from `messages.find(...)` above).
+  const readPointer = updated.readPointer
+  if (!readPointer || readPointer.messageId === meta.readPointer?.messageId) {
     return meta.pendingRemoteDisplayedStanzaId === undefined
       ? { kind: 'unchanged' }
       : { kind: 'clear-pending' }
   }
 
   if (!options.isActive) {
-    return { kind: 'advanced', lastSeenMessageId: updated.lastSeenMessageId }
+    return { kind: 'advanced', readPointer }
   }
 
   // Recompute the divider from the advanced position (reuses onActivate's
@@ -84,8 +95,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
     {
       unreadCount: 0,
       mentionsCount: 0,
-      lastReadAt: meta.lastReadAt,
-      lastSeenMessageId: updated.lastSeenMessageId,
+      readPointer,
       firstNewMessageId: undefined,
     },
     messages,
@@ -94,7 +104,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
 
   return {
     kind: 'advanced-with-divider',
-    lastSeenMessageId: updated.lastSeenMessageId,
+    readPointer,
     firstNewMessageId: divider,
   }
 }

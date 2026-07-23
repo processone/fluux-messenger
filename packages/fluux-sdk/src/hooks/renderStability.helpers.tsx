@@ -37,8 +37,7 @@ export function createConversation(id: string, options: Partial<Conversation> = 
     type: options.type ?? 'chat',
     unreadCount: options.unreadCount ?? 0,
     lastMessage: options.lastMessage,
-    lastReadAt: options.lastReadAt,
-    lastSeenMessageId: options.lastSeenMessageId,
+    readPointer: options.readPointer,
   }
 }
 

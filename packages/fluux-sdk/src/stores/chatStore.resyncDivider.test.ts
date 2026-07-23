@@ -20,7 +20,13 @@ function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): 
 
 function seed(opts: { lastSeen: string | undefined; marker: string | undefined; messages: Message[] }) {
   const meta = new Map()
-  meta.set(CID, { unreadCount: 0, lastReadAt: new Date(2024, 0, 1, 12, 0), lastSeenMessageId: opts.lastSeen })
+  const seenMsg = opts.messages.find((m) => m.id === opts.lastSeen)
+  meta.set(CID, {
+    unreadCount: 0,
+    readPointer: opts.lastSeen
+      ? { messageId: opts.lastSeen, timestamp: seenMsg?.timestamp ?? new Date(2024, 0, 1, 12, 0) }
+      : undefined,
+  })
   const messages = new Map()
   messages.set(CID, opts.messages)
   const markers = new Map<string, string>()
@@ -68,11 +74,11 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
   })
 
-  it('does not touch lastSeenMessageId or unreadCount', () => {
+  it('does not touch the read pointer or unreadCount', () => {
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
     const meta = chatStore.getState().conversationMeta.get(CID)!
-    expect(meta.lastSeenMessageId).toBe('m2')
+    expect(meta.readPointer?.messageId).toBe('m2')
     expect(meta.unreadCount).toBe(0)
   })
 })

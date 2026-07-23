@@ -1,7 +1,7 @@
 /**
  * XEP-0490 read-position publisher side effect.
  *
- * Watches local last-read advances (chatStore.conversationMeta.lastSeenMessageId)
+ * Watches local last-read advances (chatStore.conversationMeta.readPointer)
  * and publishes the resolved stanza-id per conversation to the MDS PEP node,
  * debounced and coalesced per-JID (latest-wins). Never publishes a regressive
  * marker. On a fresh session it first seeds from the node (applying each marker
@@ -56,7 +56,7 @@ export function setupMdsSideEffects(
   const dirty = createKeyedCoalescer<string, string>()
   // Highest stanza-id we believe is on the node per JID (seed + our publishes).
   const lastKnownNodeStanzaId = new Map<string, string>()
-  // The lastSeenMessageId we last considered per JID, to detect advances.
+  // The read-pointer message id we last considered per JID, to detect advances.
   const lastConsideredSeenId = new Map<string, string | undefined>()
   // Seed markers (jid → marker) whose JID was NOT a known room at seed time.
   // The fresh-session seed runs before bookmarks load (roomStore.rooms is empty),
@@ -109,10 +109,10 @@ export function setupMdsSideEffects(
     return messages.findIndex((m) => m.stanzaId === stanzaId)
   }
 
-  /** Resolve the stanza-id of a conversation's/room's current lastSeenMessageId. */
+  /** Resolve the stanza-id of the message a conversation's/room's read pointer names. */
   function resolveSeenStanzaId(jid: string): string | undefined {
     if (isRoom(jid)) {
-      const seenId = roomStore.getState().roomMeta.get(jid)?.lastSeenMessageId
+      const seenId = roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
       if (!seenId) return undefined
       const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
       const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
@@ -124,7 +124,7 @@ export function setupMdsSideEffects(
         ?? roomStore.getState().rooms.get(jid)?.lastMessage
       return last?.id === seenId ? last.stanzaId : undefined
     }
-    const seenId = chatStore.getState().conversationMeta.get(jid)?.lastSeenMessageId
+    const seenId = chatStore.getState().conversationMeta.get(jid)?.readPointer?.messageId
     if (!seenId) return undefined
     const messages = chatStore.getState().messages.get(jid) || []
     const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
@@ -214,8 +214,8 @@ export function setupMdsSideEffects(
     if (!archiveIsTrustworthy(jid)) return
 
     const seenId = isRoom(jid)
-      ? roomStore.getState().roomMeta.get(jid)?.lastSeenMessageId
-      : chatStore.getState().conversationMeta.get(jid)?.lastSeenMessageId
+      ? roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
+      : chatStore.getState().conversationMeta.get(jid)?.readPointer?.messageId
     if (seenId === lastConsideredSeenId.get(jid)) return
     lastConsideredSeenId.set(jid, seenId)
 
@@ -408,10 +408,10 @@ export function setupMdsSideEffects(
       // isn't republished; only later advances past these will enqueue.
       lastConsideredSeenId.clear()
       for (const [jid, meta] of chatStore.getState().conversationMeta) {
-        lastConsideredSeenId.set(jid, meta.lastSeenMessageId)
+        lastConsideredSeenId.set(jid, meta.readPointer?.messageId)
       }
       for (const [jid, meta] of roomStore.getState().roomMeta) {
-        lastConsideredSeenId.set(jid, meta.lastSeenMessageId)
+        lastConsideredSeenId.set(jid, meta.readPointer?.messageId)
       }
 
       syncEnabled = true
@@ -423,7 +423,7 @@ export function setupMdsSideEffects(
   })
 
   // Live remote notify: a peer device published a new read position. The
-  // storeBindings binding applies it (advancing lastSeenMessageId, which fires
+  // storeBindings binding applies it (advancing the read pointer, which fires
   // our conversationMeta subscription → consider()). Record the node high-water
   // mark here so the no-regressive guard / exact-equal skip recognises the echo
   // and we don't re-publish the exact marker we just received. Handler order

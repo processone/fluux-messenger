@@ -131,8 +131,8 @@ export function useChatActions() {
     chatStore.getState().resyncDividerToReadPointer(conversationId)
   }, [])
 
-  const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
-    chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
+  const advanceReadPointer = useCallback((conversationId: string, messageId: string) => {
+    chatStore.getState().advanceReadPointer(conversationId, messageId)
   }, [])
 
   const fetchHistory = useCallback(
@@ -230,7 +230,7 @@ export function useChatActions() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchHistory,
       fetchOlderHistory,
     }),
@@ -255,7 +255,7 @@ export function useChatActions() {
       clearDraft,
       clearFirstNewMessageId,
       resyncDividerToReadPointer,
-      updateLastSeenMessageId,
+      advanceReadPointer,
       fetchHistory,
       fetchOlderHistory,
     ]

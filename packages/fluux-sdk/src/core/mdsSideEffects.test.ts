@@ -25,6 +25,19 @@ import type { Message } from './types/chat'
 import type { Room, RoomMessage } from './types/room'
 import { getLocalPart } from './jid'
 
+// Deterministic per-id timestamp: 'm3' → base + 3s. A read pointer carries the
+// timestamp of the message it names (#1081), so `pointerAt` can build one from
+// an id alone.
+const BASE_TIME = new Date('2026-01-01T00:00:00Z').getTime()
+function timeFor(id: string): Date {
+  return new Date(BASE_TIME + (Number(id.replace(/\D/g, '')) || 0) * 1000)
+}
+
+/** The read pointer naming `id`, carrying that message's own timestamp. */
+function pointerAt(id: string): { messageId: string; timestamp: Date } {
+  return { messageId: id, timestamp: timeFor(id) }
+}
+
 function msg(id: string, stanzaId: string | undefined): Message {
   return {
     type: 'chat',
@@ -33,7 +46,7 @@ function msg(id: string, stanzaId: string | undefined): Message {
     conversationId: 'juliet@capulet.example',
     from: 'juliet@capulet.example',
     body: id,
-    timestamp: new Date(),
+    timestamp: timeFor(id),
     isOutgoing: false,
   } as Message
 }
@@ -48,15 +61,16 @@ function seedMessages(cid: string, messages: Message[]): void {
 }
 
 /**
- * Seed a conversationMeta entry so updateLastSeenMessageId is allowed to advance.
- * updateLastSeenMessageId early-returns when no meta entry exists.
+ * Seed a conversationMeta entry so advanceReadPointer is allowed to advance.
+ * advanceReadPointer early-returns when no meta entry exists.
  */
-function seedMeta(cid: string, lastSeenMessageId?: string): void {
+function seedMeta(cid: string, seenMessageId?: string): void {
+  const readPointer = seenMessageId === undefined ? undefined : pointerAt(seenMessageId)
   chatStore.setState((state) => {
     const newMeta = new Map(state.conversationMeta)
-    newMeta.set(cid, { unreadCount: 0, lastSeenMessageId })
+    newMeta.set(cid, { unreadCount: 0, readPointer })
     const newConvs = new Map(state.conversations)
-    newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId })
+    newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer })
     return { conversationMeta: newMeta, conversations: newConvs }
   })
 }
@@ -79,9 +93,10 @@ function rmsg(room: string, id: string, stanzaId: string, t: number): RoomMessag
 /**
  * Seed a room into roomStore via the real addRoom idiom (mirrors roomStore.mds.test.ts).
  * addRoom populates rooms, roomEntities, roomMeta, and roomRuntime from one Room object,
- * so isRoom()/routing and message lookup work. An optional lastSeenMessageId is patched in.
+ * so isRoom()/routing and message lookup work. An optional read pointer (named by
+ * message id, carrying that message's own timestamp) is patched in.
  */
-function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: string): void {
+function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string): void {
   const room: Room = {
     jid,
     name: getLocalPart(jid),
@@ -95,11 +110,15 @@ function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: stri
     typingUsers: new Set(),
   }
   roomStore.getState().addRoom(room)
-  if (lastSeenMessageId !== undefined) {
+  if (seenMessageId !== undefined) {
+    const seen = messages.find((m) => m.id === seenMessageId)
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(jid)!
-      meta.set(jid, { ...existing, lastSeenMessageId })
+      meta.set(jid, {
+        ...existing,
+        readPointer: { messageId: seenMessageId, timestamp: seen?.timestamp ?? new Date(0) },
+      })
       return { roomMeta: meta }
     })
   }
@@ -172,7 +191,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled() // still debouncing
     await vi.advanceTimersByTimeAsync(2_000)
@@ -193,7 +212,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', undefined)])
     seedMeta(cid)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm1')
+    chatStore.getState().advanceReadPointer(cid, 'm1')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -210,7 +229,7 @@ describe('setupMdsSideEffects', () => {
 
     seedMessages(cid, [msg('m1', 's1')])
     seedMeta(cid)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm1')
+    chatStore.getState().advanceReadPointer(cid, 'm1')
     connectionStore.setState({ status: 'connecting' } as never) // disconnect
     await vi.advanceTimersByTimeAsync(5_000)
 
@@ -261,7 +280,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm2')
+    roomStore.getState().advanceReadPointer(ROOM, 'm2')
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled() // still debouncing
     await vi.advanceTimersByTimeAsync(2_000)
 
@@ -287,7 +306,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
     cleanup()
   })
 
@@ -312,11 +331,11 @@ describe('setupMdsSideEffects', () => {
     // The bookmark now lands: the room (with message s2) appears in roomStore,
     // firing the rooms subscription, which drains the stashed seed marker. A
     // freshly-bookmarked room starts with no read position, so the drained
-    // marker is what advances it (no lastSeenMessageId patch here).
+    // marker is what advances it (no read-pointer patch here).
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
 
     // The stashed marker was drained and applied to the room.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
 
     // And it must NOT cause an echo republish: lastKnownNodeStanzaId[ROOM] was
     // recorded during the seed, so consider() is echo-suppressed.
@@ -378,7 +397,7 @@ describe('setupMdsSideEffects', () => {
     // known message id with NO resident messages loaded to resolve it from.
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, lastSeenMessageId: 'm9' })
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: { messageId: newest.id, timestamp: newest.timestamp } })
       return { roomMeta: meta }
     })
 
@@ -409,7 +428,7 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
-    // Resident m9/s9, read pointer BEHIND it (no lastSeenMessageId patch).
+    // Resident m9/s9, read pointer BEHIND it (no read-pointer patch).
     seedRoom(ROOM, [rmsg(ROOM, 'm9', 's9', 9)])
 
     const cleanup = setupMdsSideEffects(client as never)
@@ -419,7 +438,7 @@ describe('setupMdsSideEffects', () => {
     // Advance the pointer locally: consider() resolves s9 and buffers it in
     // the dirty coalescer with the debounce still pending. Do NOT advance
     // fake timers yet — the publish must still be sitting unflushed.
-    roomStore.getState().updateLastSeenMessageId(ROOM, 'm9')
+    roomStore.getState().advanceReadPointer(ROOM, 'm9')
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
     // Before the debounce fires, another device publishes the SAME position:
@@ -516,7 +535,7 @@ describe('setupMdsSideEffects', () => {
     client.mds.publishDisplayed = vi.fn().mockResolvedValue(undefined)
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
@@ -563,7 +582,7 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
-    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
 
     // And no echo republish on top of the migration.
     await vi.advanceTimersByTimeAsync(2_000)
@@ -626,7 +645,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { isLoading: true, hasQueried: true })
 
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -637,7 +656,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: false })
 
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -648,7 +667,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     const { client, cleanup } = await armed()
     setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
 
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
@@ -661,7 +680,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
   it('publishes for an entity that has never run a MAM query', async () => {
     const { client, cleanup } = await armed()
 
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')

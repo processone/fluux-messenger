@@ -19,22 +19,24 @@ function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): 
 }
 
 function seed(opts: { lastSeen: string | undefined; marker: string | undefined; messages: RoomMessage[] }) {
+  const seenMsg = opts.messages.find((m) => m.id === opts.lastSeen)
+  const readPointer = opts.lastSeen
+    ? { messageId: opts.lastSeen, timestamp: seenMsg?.timestamp ?? new Date(2024, 0, 1, 12, 0) }
+    : undefined
   const rooms = new Map()
   rooms.set(JID, {
     jid: JID,
     messages: opts.messages,
     unreadCount: 0,
     mentionsCount: 0,
-    lastReadAt: new Date(2024, 0, 1, 12, 0),
-    lastSeenMessageId: opts.lastSeen,
+    readPointer,
   } as Room)
   const roomMeta = new Map()
   roomMeta.set(JID, {
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set<string>(),
-    lastReadAt: new Date(2024, 0, 1, 12, 0),
-    lastSeenMessageId: opts.lastSeen,
+    readPointer,
   })
   const roomRuntime = new Map()
   roomRuntime.set(JID, { occupants: new Map(), messages: opts.messages })
@@ -82,11 +84,11 @@ describe('roomStore.resyncDividerToReadPointer', () => {
     expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m4')
   })
 
-  it('does not touch lastSeenMessageId or unreadCount', () => {
+  it('does not touch the read pointer or unreadCount', () => {
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
     roomStore.getState().resyncDividerToReadPointer(JID)
     const meta = roomStore.getState().roomMeta.get(JID)!
-    expect(meta.lastSeenMessageId).toBe('m2')
+    expect(meta.readPointer?.messageId).toBe('m2')
     expect(meta.unreadCount).toBe(0)
   })
 })

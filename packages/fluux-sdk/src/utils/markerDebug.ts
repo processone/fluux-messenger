@@ -5,11 +5,11 @@
  * `[Nav]`): enable from the devtools console with `__fluuxScrollDebug(true)`, or persist with
  * `localStorage.setItem('fluux:scroll-debug', '1')`. The SDK runs in the same window as the app, so
  * it can read that flag directly — which lets XEP-0490 (Message Displayed Synchronization) read
- * position syncs and the resulting `lastSeenMessageId` / unread-marker mutations show up INLINE with
+ * position syncs and the resulting `readPointer` / unread-marker mutations show up INLINE with
  * the scroll/navigation decisions they influence.
  *
  * Why this matters for scroll: a conversation's `firstNewMessageId` divider is derived from
- * `lastSeenMessageId` at activation. XEP-0490 advances `lastSeenMessageId` from OTHER devices'
+ * `readPointer` at activation. XEP-0490 advances `readPointer` from OTHER devices'
  * read positions (applyRemoteDisplayed). When a remote read-sync lands at/just-before entry, the
  * divider shrinks or disappears, and the message-list scroll logic switches branch (scroll-to-marker
  * → scroll-to-bottom / restore), which surfaces as a "jumped to the bottom" or "wrong position" on

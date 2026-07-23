@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
-import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
-import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
+import { useRosterStore, useConnectionStore } from '@fluux/sdk/react'
+import type { Contact, ServerInfo, HttpUploadService, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
 import { isTauri } from '@/utils/tauri'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
@@ -10,7 +10,6 @@ import { getReconnectIntent } from '@/utils/reconnectIntent'
 
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'
-const ROOMS_KEY = 'xmpp-rooms'
 const SERVER_INFO_KEY = 'xmpp-server-info'
 const VIEW_STATE_KEY = 'xmpp-view-state'
 const PROFILE_KEY = 'xmpp-profile'
@@ -20,7 +19,6 @@ const ACTIVE_SESSION_JID_KEY = 'xmpp-active-session-jid'
 const SCOPED_SESSION_KEYS = [
   SESSION_KEY,
   ROSTER_KEY,
-  ROOMS_KEY,
   SERVER_INFO_KEY,
   VIEW_STATE_KEY,
   PROFILE_KEY,
@@ -292,119 +290,6 @@ export function getSavedRoster(jid?: string | null): Contact[] | null {
   }
 }
 
-/**
- * Serializable room message for sessionStorage.
- * Date fields are converted to ISO strings.
- */
-interface SerializableRoomMessage extends Omit<RoomMessage, 'timestamp' | 'retractedAt'> {
-  timestamp: string
-  retractedAt?: string
-}
-
-/**
- * Maximum number of messages to persist per room.
- * Matches ejabberd default history on join.
- */
-const MAX_MESSAGES_PER_ROOM = 50
-
-/**
- * Serializable room state for sessionStorage.
- * Includes last N messages and excludes transient state like typingUsers.
- */
-interface SerializableRoom {
-  jid: string
-  name: string
-  nickname: string
-  joined: boolean
-  subject?: string
-  avatarHash?: string
-  occupants: [string, RoomOccupant][]
-  selfOccupant?: RoomOccupant
-  unreadCount: number
-  mentionsCount: number
-  isBookmarked: boolean
-  autojoin?: boolean
-  password?: string
-  notifyAll?: boolean
-  notifyAllPersistent?: boolean
-  lastReadAt?: string
-  isQuickChat?: boolean
-  messages: SerializableRoomMessage[]
-}
-
-/**
- * Serialize a room message for storage, converting Date objects to ISO strings.
- */
-function serializeRoomMessage(message: RoomMessage): SerializableRoomMessage {
-  return {
-    ...message,
-    timestamp: message.timestamp.toISOString(),
-    retractedAt: message.retractedAt?.toISOString(),
-  }
-}
-
-/**
- * Saves room state to sessionStorage.
- * Called when room state changes to preserve it across page reloads.
- * Includes the last 50 messages per room to restore context on reload.
- */
-export function saveRooms(rooms: Map<string, Room>, jid?: string | null): void {
-  const serializable: SerializableRoom[] = Array.from(rooms.values()).map((room) => ({
-    jid: room.jid,
-    name: room.name,
-    nickname: room.nickname,
-    joined: room.joined,
-    subject: room.subject,
-    avatarHash: room.avatarHash,
-    occupants: Array.from(room.occupants.entries()),
-    selfOccupant: room.selfOccupant,
-    unreadCount: room.unreadCount,
-    mentionsCount: room.mentionsCount,
-    isBookmarked: room.isBookmarked,
-    autojoin: room.autojoin,
-    password: room.password,
-    notifyAll: room.notifyAll,
-    notifyAllPersistent: room.notifyAllPersistent,
-    lastReadAt: room.lastReadAt?.toISOString(),
-    isQuickChat: room.isQuickChat,
-    // Persist last N messages for context on reload (like history on fresh join)
-    messages: room.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
-  }))
-  setScopedSessionItem(ROOMS_KEY, JSON.stringify(serializable), jid)
-}
-
-/**
- * Deserialize a room message from storage, converting ISO strings back to Date objects.
- */
-function deserializeRoomMessage(message: SerializableRoomMessage): RoomMessage {
-  return {
-    ...message,
-    timestamp: new Date(message.timestamp),
-    retractedAt: message.retractedAt ? new Date(message.retractedAt) : undefined,
-  }
-}
-
-/**
- * Gets stored room state.
- */
-export function getSavedRooms(jid?: string | null): Room[] | null {
-  try {
-    const stored = getScopedSessionItem(ROOMS_KEY, jid)
-    if (!stored) return null
-    const parsed = JSON.parse(stored) as SerializableRoom[]
-    return parsed.map((room) => ({
-      ...room,
-      occupants: new Map(room.occupants),
-      typingUsers: new Set<string>(),
-      // Restore messages with Date objects
-      messages: (room.messages || []).map(deserializeRoomMessage),
-      avatar: undefined, // Will be restored from cache via avatarHash
-      lastReadAt: room.lastReadAt ? new Date(room.lastReadAt) : undefined,
-    })) as Room[]
-  } catch {
-    return null
-  }
-}
 
 /**
  * Server discovery state for sessionStorage.
@@ -451,17 +336,6 @@ export function getSession(jid?: string | null): SessionData | null {
 }
 
 /**
- * Convert saved Room objects to the JoinedRoomInfo format expected by
- * ConnectOptions.previouslyJoinedRooms. Only includes rooms that were
- * actually joined (not just bookmarked).
- */
-export function toJoinedRoomInfos(rooms: Room[]): JoinedRoomInfo[] {
-  return rooms
-    .filter((r) => r.joined)
-    .map((r) => ({ jid: r.jid, nickname: r.nickname, password: r.password, autojoin: r.autojoin }))
-}
-
-/**
  * Hook to auto-reconnect on page reload if session exists.
  * Uses sessionStorage which persists across reload but clears when tab closes.
  * Supports XEP-0198 Stream Management for faster session resumption.
@@ -482,7 +356,6 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   const setHttpUploadService = useConnectionStore((s) => s.setHttpUploadService)
   const setOwnNickname = useConnectionStore((s) => s.setOwnNickname)
   const updateOwnResource = useConnectionStore((s) => s.updateOwnResource)
-  const addRoom = useRoomStore((s) => s.addRoom)
   const autoReconnectCheckedRef = useRef(false)
   const isResumptionRef = useRef(false)
   const keychainRetryAttempted = useRef(false)
@@ -530,14 +403,6 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         setContacts(savedRoster)
       }
 
-      // Restore rooms (bookmarks, join status, occupants)
-      const savedRooms = getSavedRooms(session.jid)
-      let joinedRoomInfos: JoinedRoomInfo[] | undefined
-      if (savedRooms && savedRooms.length > 0) {
-        savedRooms.forEach((room) => addRoom(room))
-        joinedRoomInfos = toJoinedRoomInfos(savedRooms)
-      }
-
       // Restore server discovery info
       const savedServerInfo = getSavedServerInfo(session.jid)
       if (savedServerInfo) {
@@ -576,6 +441,8 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
       // Auto-reconnect with stored credentials (password from sessionStorage)
       // Note: SDK automatically loads SM state from storage and attempts resumption
+      // Room joining is now handled by the SDK's readStateStorage, not sessionStorage
+      const joinedRoomInfos: JoinedRoomInfo[] | undefined = undefined
       const resource = getResource()
       const disableSmKeepalive = isTauri()
       console.log('[Auth] Reconnecting on page reload with password (SDK will attempt SM resumption first)')
@@ -705,7 +572,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
       void attemptFastConnect()
     }
-  }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
+  }, [status, connect, setContacts, i18n.language, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
 
   // Note: Presence sync is now handled automatically by XState's native persistence
   // in XMPPProvider. The machine state is restored from sessionStorage on init.

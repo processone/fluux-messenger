@@ -79,7 +79,7 @@ const conv = (id: string) => ({
   id,
   name: id,
   unreadCount: 1,
-  lastSeenMessageId: undefined,
+  readPointerId: undefined,
 })
 const msg = (id: string, body: string) => ({
   id,
@@ -175,7 +175,7 @@ describe('useDesktopNotifications catch-up window', () => {
     // The web path keeps the plain title and moves the count into the body
     // (same-tag replacement swallows earlier messages, so the count belongs
     // in the body — see useDesktopNotifications.ts).
-    const multiUnreadConv = { id: 'eve', name: 'eve', unreadCount: 3, lastSeenMessageId: undefined }
+    const multiUnreadConv = { id: 'eve', name: 'eve', unreadCount: 3, readPointerId: undefined }
     act(() => {
       capturedOnConversationMessage?.(multiUnreadConv, msg('e1', 'hello'))
     })

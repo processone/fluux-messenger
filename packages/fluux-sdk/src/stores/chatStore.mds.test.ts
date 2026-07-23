@@ -2,10 +2,10 @@
  * Tests for chatStore.applyRemoteDisplayed — XEP-0490 read-position sync.
  *
  * Invariants under test:
- * 1. Forward-only: advances lastSeenMessageId to the local id of the matching stanza-id.
+ * 1. Forward-only: advances the read pointer to the local id of the matching stanza-id.
  * 2. Never regresses: incoming marker behind current position is silently ignored.
  * 3. Pending high-water mark: stanza-id not in loaded messages → stored in
- *    pendingRemoteDisplayedStanzaId; lastSeenMessageId unchanged.
+ *    pendingRemoteDisplayedStanzaId; read pointer unchanged.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
@@ -42,6 +42,20 @@ const localStorageMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
+// Deterministic per-id timestamp: 'm3' → base + 3s. Read pointers carry the
+// timestamp of the message they name (#1081), so `pointerAt` below can build one
+// from an id alone without holding the array — and message order by timestamp
+// now matches order by index, which `new Date()` for every message did not.
+const BASE_TIME = new Date('2026-01-01T00:00:00Z').getTime()
+function timeFor(id: string): Date {
+  return new Date(BASE_TIME + (Number(id.replace(/\D/g, '')) || 0) * 1000)
+}
+
+/** The read pointer naming `id`, carrying that message's own timestamp. */
+function pointerAt(id: string): { messageId: string; timestamp: Date } {
+  return { messageId: id, timestamp: timeFor(id) }
+}
+
 // Minimal Message factory — only the fields used by applyRemoteDisplayed.
 function msg(id: string, stanzaId: string): Message {
   return {
@@ -51,7 +65,7 @@ function msg(id: string, stanzaId: string): Message {
     conversationId: 'juliet@capulet.example',
     from: 'juliet@capulet.example',
     body: id,
-    timestamp: new Date(),
+    timestamp: timeFor(id),
     isOutgoing: false,
   }
 }
@@ -68,7 +82,7 @@ function seedMessages(cid: string, messages: Message[]): void {
 describe('chatStore.applyRemoteDisplayed', () => {
   beforeEach(() => chatStore.getState().reset())
 
-  it('advances lastSeenMessageId forward to the local id of the matching stanza-id', () => {
+  it('advances the read pointer forward to the local id of the matching stanza-id', () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
     seedMessages(cid, messages)
@@ -76,37 +90,37 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // Simulate conversation present in conversationMeta with m1 as last seen.
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
     const meta = chatStore.getState().conversationMeta.get(cid)
-    expect(meta?.lastSeenMessageId).toBe('m3')
+    expect(meta?.readPointer?.messageId).toBe('m3')
     // Also verify the combined conversations map is kept in sync.
-    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversations.get(cid)?.readPointer?.messageId).toBe('m3')
   })
 
-  it('never regresses lastSeenMessageId when the incoming marker is behind current', () => {
+  it('never regresses the read pointer when the incoming marker is behind current', () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
     seedMessages(cid, messages)
 
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm3' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m3') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm3' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m3') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's1') // behind → must be ignored
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
-    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
+    expect(chatStore.getState().conversations.get(cid)?.readPointer?.messageId).toBe('m3')
   })
 
   it('stores a pending high-water mark when the stanza-id is not yet loaded', () => {
@@ -125,7 +139,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
-    expect(meta?.lastSeenMessageId).toBeUndefined() // unchanged
+    expect(meta?.readPointer).toBeUndefined() // unchanged
   })
 
   it('clears a stale pending marker when the message is present but already passed', () => {
@@ -138,24 +152,24 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // advance that didn't go through applyRemoteDisplayed.
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm3', pendingRemoteDisplayedStanzaId: 's2' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m3'), pendingRemoteDisplayedStanzaId: 's2' })
       const newConvs = new Map(state.conversations)
       newConvs.set(cid, {
         id: cid,
         name: cid,
         type: 'chat',
         unreadCount: 0,
-        lastSeenMessageId: 'm3',
+        readPointer: pointerAt('m3'),
         pendingRemoteDisplayedStanzaId: 's2',
       })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
-    // s2's message IS present but lastSeenMessageId is already ahead → no advance.
+    // s2's message IS present but the read pointer is already ahead → no advance.
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
 
     const meta = chatStore.getState().conversationMeta.get(cid)
-    expect(meta?.lastSeenMessageId).toBe('m3') // unchanged
+    expect(meta?.readPointer?.messageId).toBe('m3') // unchanged
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined) // cleared
     // Combined conversations map kept in sync.
     expect(chatStore.getState().conversations.get(cid)?.pendingRemoteDisplayedStanzaId).toBe(undefined)
@@ -172,16 +186,16 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // arrives with the just-merged messages (the mergeMAMMessages override path).
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 3, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 3, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 3, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 3, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's4', messages)
 
     const meta = chatStore.getState().conversationMeta.get(cid)
-    expect(meta?.lastSeenMessageId).toBe('m4')
+    expect(meta?.readPointer?.messageId).toBe('m4')
     expect(meta?.unreadCount).toBe(0)
     // The combined conversations mirror is kept coherent with conversationMeta.
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
@@ -232,7 +246,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
     // backward page) + 10 (fetch-latest page) = 19, NOT just the 9 visible in
     // the final page.
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('p0')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('p0')
     await vi.waitFor(() => {
       expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(19)
     })
@@ -297,13 +311,13 @@ describe('chatStore.applyRemoteDisplayed', () => {
       return { ...msg(id, stanzaId), timestamp: ts }
     }
 
-    // Seed initial message m1/s1 and set up conversation meta with lastSeenMessageId=m1
+    // Seed initial message m1/s1 and set up conversation meta with the read pointer at m1
     seedMessages(cid, [timedMsg('m1', 's1', t0)])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -321,7 +335,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     )
 
     const meta = chatStore.getState().conversationMeta.get(cid)
-    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.readPointer?.messageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 })
@@ -331,36 +345,36 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
   // At the live edge the newest loaded message IS the true newest; clearing the
   // badge means the user caught up to it, so the read pointer must advance for the
-  // MDS publisher (which watches lastSeenMessageId) to sync the marker.
-  it('advances lastSeenMessageId to the newest loaded message when at the live edge', () => {
+  // MDS publisher (which watches the read pointer) to sync the marker.
+  it('advances the read pointer to the newest loaded message when at the live edge', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     chatStore.getState().markAsRead(cid)
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
-    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
+    expect(chatStore.getState().conversations.get(cid)?.readPointer?.messageId).toBe('m3')
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
   })
 
   // Slid up into history: the badge still clears (the user acknowledged the
   // conversation) but the pointer must stay put so MDS never publishes a read
   // position past messages the user has not seen.
-  it('does NOT advance lastSeenMessageId when the window is slid up into history', () => {
+  it('does NOT advance the read pointer when the window is slid up into history', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
       const newEdge = new Map(state.windowAtLiveEdge)
       newEdge.set(cid, false)
       return { conversationMeta: newMeta, conversations: newConvs, windowAtLiveEdge: newEdge }
@@ -368,7 +382,7 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     chatStore.getState().markAsRead(cid)
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m1')
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
   })
 })
@@ -383,9 +397,9 @@ describe('chatStore — new-message divider is session-only', () => {
     seedMessages(cid, messages)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -406,9 +420,9 @@ describe('chatStore — new-message divider is session-only', () => {
     seedMessages(cidA, [msg('a1', 'sa1'), msg('a2', 'sa2')])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cidA, { unreadCount: 1, lastSeenMessageId: 'a1' })
+      newMeta.set(cidA, { unreadCount: 1, readPointer: pointerAt('a1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cidA, { id: cidA, name: cidA, type: 'chat', unreadCount: 1, lastSeenMessageId: 'a1' })
+      newConvs.set(cidA, { id: cidA, name: cidA, type: 'chat', unreadCount: 1, readPointer: pointerAt('a1') })
       // Seed conversation B with no unread so its activation sets no marker.
       newMeta.set(cidB, { unreadCount: 0 })
       newConvs.set(cidB, { id: cidB, name: cidB, type: 'chat', unreadCount: 0 })
@@ -432,9 +446,9 @@ describe('chatStore — new-message divider is session-only', () => {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 1, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 1, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 1, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 1, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
     chatStore.getState().setActiveConversation(cid)
@@ -465,9 +479,9 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
     // conversation is the active one. No pending marker yet (seed hasn't landed).
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2') })
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.set(cid, 'm3')
       return { conversationMeta: newMeta, conversations: newConvs, firstNewMessageMarkers: newMarkers, activeConversationId: cid }
@@ -477,7 +491,7 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
     chatStore.getState().applyRemoteDisplayed(cid, 's4')
 
     // Read position advanced to m4 …
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
     // … and because m4 is the last message, there is nothing new: the divider clears
     // (the UI then settles to the bottom instead of holding the stale m3 marker).
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
@@ -490,9 +504,9 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
 
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2') })
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.set(cid, 'm3')
       // Some OTHER conversation is active, not cid.
@@ -502,7 +516,7 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
     chatStore.getState().applyRemoteDisplayed(cid, 's4')
 
     // Read position still advances (forward-only sync is unconditional) …
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
     // … but the session divider for the inactive conversation is left untouched;
     // it is recomputed the next time the conversation is activated.
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
@@ -512,7 +526,7 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
 describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
   beforeEach(() => chatStore.getState().reset())
 
-  it('folds a pending remote read marker into lastSeenMessageId before deriving the divider', async () => {
+  it('folds a pending remote read marker into the read pointer before deriving the divider', async () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
     seedMessages(cid, messages)
@@ -521,16 +535,16 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // before the messages were loaded (the fresh-session MDS seed ordering).
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     await chatStore.getState().activateConversation(cid)
 
     // The pending marker is resolved at activation, advancing the read position.
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
     // So the divider reflects the synced read (m4 is the last message → nothing new),
     // NOT the stale 'm3' it would show if the marker resolved after onActivate.
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
@@ -548,14 +562,14 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // First open: local read stale at m2, a remote device read up to s3 (pending) → folds to m3.
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     await chatStore.getState().activateConversation(cid)
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
 
     // Leave (deactivation evicts the resident message array — memory windowing).
     await chatStore.getState().activateConversation(null)
@@ -570,7 +584,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
       return { conversationMeta: newMeta }
     })
     await chatStore.getState().activateConversation(cid)
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
   })
 
   // Regression (bug: "read on another device, still unread on return"): a NEWER remote read
@@ -588,14 +602,14 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // First open: local read stale at m2, a remote device read up to s3 (pending) → folds to m3.
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     await chatStore.getState().activateConversation(cid)
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
 
     await chatStore.getState().activateConversation(null)
 
@@ -609,7 +623,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
       return { conversationMeta: newMeta }
     })
     await chatStore.getState().activateConversation(cid)
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
   })
 
   // Regression (gate burn on stash): a fold that could not resolve (marker's message not
@@ -623,15 +637,15 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, early)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
     await chatStore.getState().activateConversation(cid)
     // Unresolvable → stash survives, pointer untouched.
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m1')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
 
     await chatStore.getState().activateConversation(null)
@@ -641,7 +655,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     await chatStore.getState().activateConversation(cid)
     // The gate must allow the retry (the marker was never actually folded).
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m9')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m9')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
 
@@ -658,9 +672,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, latest)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's5' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's5' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's5' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's5' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
     // The IndexedDB slice around the stale pointer contains the marker's message (m5).
@@ -673,7 +687,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     await chatStore.getState().activateConversation(cid)
 
     // The retried fold advances the pointer to the synced position…
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m5')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m5')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m6')
@@ -690,9 +704,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, messages)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's0' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's0' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -716,9 +730,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, [timed('m1', 's1', 1), timed('m2', 's2', 2)])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -732,7 +746,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const cid = 'pending-no-divider@capulet.example'
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
       return { conversationMeta: newMeta }
     })
 
@@ -751,9 +765,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, loaded)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -767,7 +781,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const full = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4), timed('m5', 's5', 5)]
     chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m5')
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
@@ -780,9 +794,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, loaded)
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
 
@@ -835,7 +849,7 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
 
     const meta = chatStore.getState().conversationMeta.get(cid)
-    expect(meta?.lastSeenMessageId).toBe('m3')
+    expect(meta?.readPointer?.messageId).toBe('m3')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -856,15 +870,15 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
 
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.unreadCount).toBe(0)
-    expect(meta?.lastSeenMessageId).toBe('m10')
+    expect(meta?.readPointer?.messageId).toBe('m10')
   })
 })
 
 // ---------------------------------------------------------------------------
-// updateLastSeenMessageId presence gate (issue #1076) — twin of the roomStore case.
+// advanceReadPointer presence gate (issue #1076) — twin of the roomStore case.
 // ---------------------------------------------------------------------------
 
-describe('chatStore.updateLastSeenMessageId presence gate', () => {
+describe('chatStore.advanceReadPointer presence gate', () => {
   const cid = 'juliet@capulet.example'
 
   beforeEach(() => {
@@ -872,13 +886,13 @@ describe('chatStore.updateLastSeenMessageId presence gate', () => {
     connectionStore.getState().setWindowVisible(true)
   })
 
-  function seedWithPointer(lastSeenMessageId: string): void {
+  function seedWithPointer(seenMessageId: string): void {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId })
+      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt(seenMessageId) })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt(seenMessageId) })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
   }
@@ -886,31 +900,31 @@ describe('chatStore.updateLastSeenMessageId presence gate', () => {
   it('advances the read pointer when the window is focused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(true)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    chatStore.getState().advanceReadPointer(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
   })
 
   it('does not advance the read pointer while the window is unfocused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    chatStore.getState().advanceReadPointer(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m1')
   })
 
   it('leaves the combined conversations map untouched while unfocused', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
-    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m1')
+    chatStore.getState().advanceReadPointer(cid, 'm3')
+    expect(chatStore.getState().conversations.get(cid)?.readPointer?.messageId).toBe('m1')
   })
 
   it('resumes advancing once the window regains focus', () => {
     seedWithPointer('m1')
     connectionStore.getState().setWindowVisible(false)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m1')
     connectionStore.getState().setWindowVisible(true)
-    chatStore.getState().updateLastSeenMessageId(cid, 'm3')
-    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    chatStore.getState().advanceReadPointer(cid, 'm3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
   })
 })

@@ -219,7 +219,7 @@ describe('useChatActive render stability', () => {
       'markAsRead', 'archiveConversation', 'unarchiveConversation', 'isArchived',
       'sendChatState', 'sendReaction', 'sendCorrection', 'retractMessage',
       'sendEasterEgg', 'clearAnimation', 'setDraft', 'getDraft', 'clearDraft',
-      'clearFirstNewMessageId', 'updateLastSeenMessageId', 'fetchHistory', 'fetchOlderHistory',
+      'clearFirstNewMessageId', 'advanceReadPointer', 'fetchHistory', 'fetchOlderHistory',
       // active-specific (defined in this hook)
       'retryMessage', 'clearTargetMessageId', 'continueChatCatchUp',
       'loadMessagesAround', 'loadNewer', 'recenterToLatest',

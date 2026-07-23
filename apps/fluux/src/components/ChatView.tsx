@@ -56,7 +56,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, lastSeenMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -311,10 +311,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     [resyncDividerToReadPointer],
   )
 
-  // Viewport observer callback: update lastSeenMessageId as user scrolls
+  // Viewport observer callback: update readPointerId as user scrolls
   const handleMessageSeen = (messageId: string) => {
     if (conversationId) {
-      updateLastSeenMessageId(conversationId, messageId)
+      advanceReadPointer(conversationId, messageId)
     }
   }
 
@@ -528,7 +528,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-            lastSeenMessageId={lastSeenMessageId}
+            readPointerId={readPointerId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -637,7 +637,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   firstNewMessageIsProvisional,
-  lastSeenMessageId,
+  readPointerId,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -683,7 +683,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
-  lastSeenMessageId?: string
+  readPointerId?: string
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -789,7 +789,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
-      lastSeenMessageId={lastSeenMessageId}
+      readPointerId={readPointerId}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

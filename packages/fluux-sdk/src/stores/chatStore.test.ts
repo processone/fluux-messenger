@@ -186,10 +186,14 @@ describe('chatStore', () => {
         conversationMeta.set(cid, {
           ...conversationMeta.get(cid)!,
           unreadCount: 2,
-          lastSeenMessageId: read.id,
+          readPointer: { messageId: read.id, timestamp: read.timestamp },
         })
         const conversations = new Map(s.conversations)
-        conversations.set(cid, { ...conversations.get(cid)!, unreadCount: 2, lastSeenMessageId: read.id })
+        conversations.set(cid, {
+          ...conversations.get(cid)!,
+          unreadCount: 2,
+          readPointer: { messageId: read.id, timestamp: read.timestamp },
+        })
         const messages = new Map(s.messages)
         messages.set(cid, [read, realUnread])
         return { conversationMeta, conversations, messages, activeConversationId: null }
@@ -211,10 +215,14 @@ describe('chatStore', () => {
         conversationMeta.set(cid, {
           ...conversationMeta.get(cid)!,
           unreadCount: 2,
-          lastSeenMessageId: read.id,
+          readPointer: { messageId: read.id, timestamp: read.timestamp },
         })
         const conversations = new Map(s.conversations)
-        conversations.set(cid, { ...conversations.get(cid)!, unreadCount: 2, lastSeenMessageId: read.id })
+        conversations.set(cid, {
+          ...conversations.get(cid)!,
+          unreadCount: 2,
+          readPointer: { messageId: read.id, timestamp: read.timestamp },
+        })
         // No resident messages array — the durable (never-opened) path.
         return { conversationMeta, conversations, activeConversationId: null }
       })
@@ -807,7 +815,12 @@ describe('chatStore', () => {
 
       const state = chatStore.getState()
       expect(state.conversations.size).toBe(1)
-      expect(state.conversations.get('alice@example.com')).toEqual(conv)
+      // Creation also stamps historyFloor (#1081) — see the dedicated block at
+      // the end of this file for what that value has to be.
+      expect(state.conversations.get('alice@example.com')).toEqual({
+        ...conv,
+        historyFloor: expect.any(Date),
+      })
     })
 
     it('should update existing conversation', () => {
@@ -890,7 +903,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(conv)
       chatStore.getState().setActiveConversation('alice@example.com')
 
-      // Use toMatchObject because setActiveConversation calls markAsRead which adds lastReadAt
+      // Use toMatchObject because setActiveConversation also writes the read pointer
       expect(chatStore.getState().activeConversation()).toMatchObject(conv)
     })
 
@@ -1014,15 +1027,18 @@ describe('chatStore', () => {
 
     it('activateConversation reloads the window around a pointer deeper than the latest slice', async () => {
       // Arrange: cache holds 300 messages; the latest-100 slice (returned by
-      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
-      // ('msg-150') — the reader left off deep in history. Seeding
-      // conversationMeta.lastSeenMessageId directly mimics a persisted read
-      // pointer from a prior session (no live activation has run yet here).
+      // loadMessagesFromCache) does NOT contain the message the read pointer
+      // names ('msg-150') — the reader left off deep in history. Seeding
+      // conversationMeta.readPointer directly mimics a persisted read pointer
+      // from a prior session (no live activation has run yet here).
       const A = 'alice@example.com'
       chatStore.getState().addConversation(createConversation(A))
       chatStore.setState((state) => {
         const meta = new Map(state.conversationMeta)
-        meta.set(A, { ...meta.get(A)!, lastSeenMessageId: 'msg-150' })
+        meta.set(A, {
+          ...meta.get(A)!,
+          readPointer: { messageId: 'msg-150', timestamp: new Date(150 * 60_000) },
+        })
         return { conversationMeta: meta }
       })
 
@@ -1634,14 +1650,15 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversations.get('bob@example.com')?.unreadCount).toBe(3)
     })
 
-    it('should update lastReadAt to last message timestamp (resets new messages marker)', () => {
-      // markAsRead should reset unreadCount AND update lastReadAt
-      // This clears the "new messages" marker when switching back to a conversation
+    it('should advance the read pointer to the last message (resets new messages marker)', () => {
+      // markAsRead resets unreadCount AND advances the read pointer to the
+      // newest loaded message, which is what clears the "new messages" marker
+      // when switching back to a conversation.
       const messageTimestamp = new Date('2025-01-10T12:00:00Z')
       chatStore.getState().addConversation({
         ...createConversation('alice@example.com'),
         unreadCount: 2,
-        lastReadAt: new Date('2025-01-10T10:00:00Z'),
+        readPointer: { messageId: 'older', timestamp: new Date('2025-01-10T10:00:00Z') },
       })
       // Add a message so markAsRead can use its timestamp
       chatStore.getState().addMessage({
@@ -1658,31 +1675,33 @@ describe('chatStore', () => {
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(0)
-      expect(conv?.lastReadAt).toEqual(messageTimestamp) // lastReadAt updated to last message
+      // The whole position moved to msg1 — id and timestamp together.
+      expect(conv?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
     })
 
-    it('should set lastReadAt to current time when no messages exist', () => {
-      const beforeMark = new Date()
+    // Replaces 'should set lastReadAt to current time when no messages exist'
+    // (#1081). There is no wall-clock read time to set any more: with nothing
+    // loaded there is no message the user can be said to have read up to, and
+    // inventing a position would move a forward-only floor past unseen history.
+    it('should not invent a read position when no messages exist', () => {
       chatStore.getState().addConversation({ ...createConversation('alice@example.com'), unreadCount: 1 })
 
       chatStore.getState().markAsRead('alice@example.com')
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(0)
-      expect(conv?.lastReadAt).toBeDefined()
-      expect(conv!.lastReadAt!.getTime()).toBeGreaterThanOrEqual(beforeMark.getTime())
+      expect(conv?.readPointer).toBeUndefined()
     })
 
-    it('should update lastReadAt even when unreadCount is already 0', () => {
-      // Bug fix: when switching to a conversation with 0 unread but stale lastReadAt,
-      // the "new messages" marker would show incorrectly
-      const oldLastReadAt = new Date('2025-01-10T10:00:00Z')
+    it('should advance the read pointer even when unreadCount is already 0', () => {
+      // Bug fix: when switching to a conversation with 0 unread but a stale read
+      // position, the "new messages" marker would show incorrectly
       const messageTimestamp = new Date('2025-01-10T12:00:00Z')
 
       chatStore.getState().addConversation({
         ...createConversation('alice@example.com'),
         unreadCount: 0, // Already read
-        lastReadAt: oldLastReadAt,
+        readPointer: { messageId: 'older', timestamp: new Date('2025-01-10T10:00:00Z') },
       })
 
       // Add a newer message
@@ -1696,14 +1715,14 @@ describe('chatStore', () => {
         isOutgoing: false,
       })
 
-      // markAsRead should update lastReadAt to the new message timestamp
+      // markAsRead should advance the pointer onto the new message
       chatStore.getState().markAsRead('alice@example.com')
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.lastReadAt).toEqual(messageTimestamp)
+      expect(conv?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
     })
 
-    it('should not trigger state update when called multiple times with same timestamp (regression test for infinite loop)', () => {
+    it('should not trigger state update when called twice at the same read position (regression test for infinite loop)', () => {
       // Regression test: Date objects were compared by reference (!==) instead of value (.getTime())
       // This caused infinite re-render loops because new Date() !== new Date() is always true
       const messageTimestamp = new Date('2025-01-10T12:00:00Z')
@@ -1725,7 +1744,7 @@ describe('chatStore', () => {
       chatStore.getState().markAsRead('alice@example.com')
       const convAfterFirst = chatStore.getState().conversations.get('alice@example.com')
       expect(convAfterFirst?.unreadCount).toBe(0)
-      expect(convAfterFirst?.lastReadAt).toEqual(messageTimestamp)
+      expect(convAfterFirst?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
 
       // Capture conversation reference after first markAsRead
       const conversationsMapAfterFirst = chatStore.getState().conversations
@@ -1743,52 +1762,37 @@ describe('chatStore', () => {
       expect(convAfterSecond).toBe(convAfterFirst)
     })
 
-    it('should handle lastReadAt as string (after JSON deserialization from persist middleware)', () => {
-      // Regression test: When state is persisted to localStorage and restored,
-      // Date objects get serialized as ISO strings. The store must handle both
-      // Date objects and strings for lastReadAt comparisons.
-      const messageTimestamp = new Date('2025-01-10T12:00:00Z')
+    // Was 'should handle lastReadAt as string (after JSON deserialization from
+    // persist middleware)'. The hazard survives #1081 — a read pointer riding
+    // inside conversationMeta still goes through a plain JSON.stringify, so its
+    // timestamp lands on disk as an ISO string — but the tolerance now lives in
+    // one place, deserializeState, instead of at every comparison site. Pinned
+    // here at the restore boundary: nothing downstream can meet a string.
+    it('normalizes a persisted string-timestamp read pointer back to a Date', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
+      const payload = JSON.parse(persisted)
+      // What JSON.stringify actually writes for a `Date` inside the meta blob.
+      const isoPointer = { messageId: 'msg1', timestamp: '2025-01-10T10:00:00.000Z' }
+      payload.state.conversations[0][1].readPointer = isoPointer
+      payload.state.conversationMeta[0][1].readPointer = isoPointer
 
-      // Simulate a conversation with lastReadAt as a string (as it would be after JSON parse)
-      chatStore.setState((state) => {
-        const newConversations = new Map(state.conversations)
-        newConversations.set('alice@example.com', {
-          id: 'alice@example.com',
-          name: 'Alice',
-          type: 'chat',
-          unreadCount: 1,
-          // This simulates what happens when JSON.parse() deserializes a Date
-          lastReadAt: '2025-01-10T10:00:00.000Z' as unknown as Date,
-        })
-        return { conversations: newConversations }
-      })
+      chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
+      localStorageMock._store['xmpp-chat-storage'] = JSON.stringify(payload)
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
 
-      chatStore.getState().addMessage({
-        type: 'chat',
-        id: 'msg1',
-        conversationId: 'alice@example.com',
-        from: 'alice@example.com',
-        body: 'Hello',
-        timestamp: messageTimestamp,
-        isOutgoing: false,
-      })
-
-      // This should NOT throw "getTime is not a function"
-      expect(() => {
-        chatStore.getState().markAsRead('alice@example.com')
-      }).not.toThrow()
-
-      const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.unreadCount).toBe(0)
-      expect(conv?.lastReadAt).toEqual(messageTimestamp)
+      const pointer = chatStore.getState().conversationMeta.get('alice@example.com')?.readPointer
+      expect(pointer?.timestamp).toBeInstanceOf(Date)
+      expect(pointer).toEqual({ messageId: 'msg1', timestamp: new Date('2025-01-10T10:00:00.000Z') })
     })
 
-    it('should handle lastReadAt as string in setActiveConversation (after JSON deserialization)', () => {
-      // Regression test: setActiveConversation also compares timestamps for new messages marker
-      const oldTimestamp = '2025-01-10T10:00:00.000Z'
+    it('places the new-messages divider from the read pointer timestamp in setActiveConversation', () => {
+      // Was 'should handle lastReadAt as string in setActiveConversation'. The
+      // divider still derives from a read TIME when the position's message is
+      // not in the loaded slice — that time is now the pointer's own.
       const newMessageTimestamp = new Date('2025-01-10T12:00:00Z')
 
-      // Simulate a conversation with lastReadAt as a string
       chatStore.setState((state) => {
         const newConversations = new Map(state.conversations)
         newConversations.set('alice@example.com', {
@@ -1796,8 +1800,8 @@ describe('chatStore', () => {
           name: 'Alice',
           type: 'chat',
           unreadCount: 1,
-          // Simulates deserialized JSON
-          lastReadAt: oldTimestamp as unknown as Date,
+          // Position resolved elsewhere (deep in history, not in this slice)
+          readPointer: { messageId: 'msg-older', timestamp: new Date('2025-01-10T10:00:00.000Z') },
         })
         const newMessages = new Map(state.messages)
         newMessages.set('alice@example.com', [{
@@ -1812,12 +1816,11 @@ describe('chatStore', () => {
         return { conversations: newConversations, messages: newMessages }
       })
 
-      // This should NOT throw "cannot compare Date with string"
       expect(() => {
         chatStore.getState().setActiveConversation('alice@example.com')
       }).not.toThrow()
 
-      // Should have set the new messages marker since the message is after lastReadAt
+      // The message is after the read pointer's timestamp → divider on it
       expect(chatStore.getState().firstNewMessageMarkers.get('alice@example.com')).toBe('msg1')
     })
   })
@@ -1828,7 +1831,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation(conversationId),
         unreadCount: 2,
-        lastSeenMessageId: 'm1',
+        readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
       })
       chatStore.getState().addMessage({
         type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
@@ -1851,7 +1854,7 @@ describe('chatStore', () => {
       chatStore.getState().markReadToNewest(conversationId)
 
       const meta = chatStore.getState().conversationMeta.get(conversationId)
-      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.readPointer?.messageId).toBe('m3')
       expect(meta?.unreadCount).toBe(0)
       expect(chatStore.getState().firstNewMessageMarkers.has(conversationId)).toBe(false)
     })
@@ -1861,7 +1864,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation(conversationId),
         unreadCount: 2,
-        lastSeenMessageId: 'm1',
+        readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
       })
       chatStore.getState().addMessage({
         type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
@@ -2071,23 +2074,26 @@ describe('chatStore', () => {
       expect(conversationData[1].lastMessage.body).toBe('Test')
     })
 
-    it('should reset unreadCount to 0 when deserializing', () => {
-      // This tests the behavior that unread counts are session-specific
+    // Deserialization used to zero the count, so a cold start flashed empty
+    // badges until something recomputed them (#1081). The persisted count is
+    // now what paints first.
+    it('keeps the persisted unreadCount when deserializing', async () => {
       const conv = { ...createConversation('alice@example.com'), unreadCount: 5 }
       chatStore.getState().addConversation(conv)
 
-      // Get the serialized data
-      const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
-      const serialized = lastCall[1]
+      // The serialized data carries the count...
+      const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
+      expect(JSON.parse(persisted).state.conversations[0][1].unreadCount).toBe(5)
 
-      // Check that when we would deserialize, unreadCount gets reset
-      // (The actual deserialization logic resets unreadCount to 0)
-      const parsed = JSON.parse(serialized)
+      // ...and the restore keeps it. (Clearing the store re-persists an empty
+      // payload, so the captured one has to be put back before rehydrating.)
+      chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
+      localStorageMock._store['xmpp-chat-storage'] = persisted
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
 
-      // The serialized data preserves the unreadCount
-      expect(parsed.state.conversations[0][1].unreadCount).toBe(5)
-
-      // But the deserializeState function resets it (tested via behavior)
+      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(5)
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.unreadCount).toBe(5)
     })
 
     it('should handle corrupted localStorage gracefully', () => {
@@ -3479,7 +3485,10 @@ describe('chatStore', () => {
     it('forward merge into a non-active conversation recomputes unread count from the pointer', () => {
       chatStore.setState((state) => {
         const meta = new Map(state.conversationMeta)
-        meta.set(conversationId, { ...meta.get(conversationId)!, lastSeenMessageId: 'm1' })
+        meta.set(conversationId, {
+          ...meta.get(conversationId)!,
+          readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
+        })
         return { conversationMeta: meta }
       })
 
@@ -3526,7 +3535,7 @@ describe('chatStore', () => {
     })
 
     it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
-      // No lastSeenMessageId/lastReadAt seeded — fresh conversation, never read.
+      // No readPointer seeded — fresh conversation, never read.
       const mamMessages: Message[] = [
         {
           type: 'chat',
@@ -3564,7 +3573,7 @@ describe('chatStore', () => {
 
       const meta = chatStore.getState().conversationMeta.get(conversationId)
       expect(meta?.unreadCount).toBe(0)
-      expect(meta?.lastSeenMessageId).toBe('f3')
+      expect(meta?.readPointer?.messageId).toBe('f3')
     })
   })
 
@@ -4617,6 +4626,55 @@ describe('chatStore parity drift regressions', () => {
 
       const resident = chatStore.getState().messages.get(convId) || []
       expect(resident.map((m) => m.id)).toEqual(['cur-1', 'new-1', 'new-2'])
+    })
+  })
+  // ---------------------------------------------------------------------------
+  // historyFloor: when a conversation entered our world (#1081). NOT a read
+  // position — the floor unread derivation counts from when there is no pointer
+  // yet, so history predating the conversation cannot flood the badge.
+  // ---------------------------------------------------------------------------
+  describe('historyFloor at conversation creation', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('stamps historyFloor when a conversation is first created', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor)
+        .toBeInstanceOf(Date)
+    })
+
+    // Control: an implementation that stamps the floor on every addConversation
+    // passes "floor is set" but fails this. The clock advance is load-bearing —
+    // two calls in one tick would otherwise produce an equal Date and the
+    // control could not fail.
+    it('does NOT restamp historyFloor when an existing conversation is re-added', () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-07-22T10:00:00Z'))
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const first = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+
+      vi.setSystemTime(new Date('2026-07-22T11:00:00Z'))
+      chatStore.getState().addConversation(createConversation('alice@example.com', 'Alice Renamed'))
+
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor)
+        .toEqual(first)
+    })
+
+    // conversationMeta rides a plain JSON.stringify, so a Date lands on disk as
+    // an ISO string. Restored without conversion it would still TYPE as Date
+    // while comparing as a string — the exact trap the readPointer restore
+    // already had to cover.
+    it('restores historyFloor as a real Date across a persist round-trip', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const stamped = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
+
+      const restored = chatStore.getState().conversationMeta.get('alice@example.com')?.historyFloor
+      expect(restored).toBeInstanceOf(Date)
+      expect(restored).toEqual(stamped)
     })
   })
 })

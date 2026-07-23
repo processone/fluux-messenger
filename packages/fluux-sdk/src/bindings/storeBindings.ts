@@ -247,15 +247,15 @@ export function createStoreBindings(
   on('read:displayed-synced', ({ conversationId, stanzaId }) => {
     const stores = getStores()
     const isRoom = stores.room.rooms.has(conversationId)
-    // XEP-0490 read-position from another of our own devices. This advances lastSeenMessageId,
+    // XEP-0490 read-position from another of our own devices. This advances the read pointer,
     // from which the unread divider (firstNewMessageId) is derived — so a sync landing on/just
     // before a conversation the user is entering can shrink or erase the divider and flip the
     // message-list scroll branch (scroll-to-marker → scroll-to-bottom). Log before→after so the
     // [MDS] line sits inline with the [Scroll]/[Nav] trace at the moment it mutates the marker.
     if (isMarkerDebugEnabled()) {
       const beforeSeen = isRoom
-        ? stores.room.roomMeta.get(conversationId)?.lastSeenMessageId
-        : stores.chat.conversationMeta.get(conversationId)?.lastSeenMessageId
+        ? stores.room.roomMeta.get(conversationId)?.readPointer?.messageId
+        : stores.chat.conversationMeta.get(conversationId)?.readPointer?.messageId
       const isActive = isRoom
         ? stores.room.activeRoomJid === conversationId
         : stores.chat.activeConversationId === conversationId
@@ -263,8 +263,8 @@ export function createStoreBindings(
       else stores.chat.applyRemoteDisplayed(conversationId, stanzaId)
       const after = getStores()
       const afterSeen = isRoom
-        ? after.room.roomMeta.get(conversationId)?.lastSeenMessageId
-        : after.chat.conversationMeta.get(conversationId)?.lastSeenMessageId
+        ? after.room.roomMeta.get(conversationId)?.readPointer?.messageId
+        : after.chat.conversationMeta.get(conversationId)?.readPointer?.messageId
       markerDebugLog('read:displayed-synced (remote device)', {
         conversationId, stanzaId, kind: isRoom ? 'room' : 'chat', isActive,
         lastSeenBefore: beforeSeen, lastSeenAfter: afterSeen, advanced: beforeSeen !== afterSeen,
