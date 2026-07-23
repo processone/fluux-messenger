@@ -1220,7 +1220,8 @@ export async function updateRoomMessage(
 /**
  * Update reactions for a room message in IndexedDB.
  * Used as a fallback when the message is not currently loaded in memory.
- * Looks up by client ID or room-scoped stanza-id (reactions may reference either).
+ * Resolves the target strictly within `roomJid` — a reaction may reference either
+ * a room-scoped stanza-id or a client id, and BOTH repeat across rooms.
  *
  * @returns true if the message was found and updated, false otherwise.
  */
@@ -1233,16 +1234,18 @@ export async function updateRoomMessageReactions(
   try {
     const db = await getDB(getStorageScopeJid())
 
-    // Resolve via the `ids` multiEntry index (a merged row is findable by EVERY
-    // absorbed client id), then fall back to the room-scoped `identityKeys` alias:
-    // a MUC reaction references the server stanza-id, which is not a client id in
-    // `ids`. stanzaIds are assigned per-archive and repeat across rooms, so an
-    // unscoped stanzaId lookup could resolve to a DIFFERENT room's message —
-    // scoping through roomStanzaKey confines it to this room (mirrors
-    // getRoomMessageByStanzaId).
-    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', messageId)
+    // Both resolution paths must be confined to THIS room, or a collision in
+    // another room wins. A MUC reaction references the server stanza-id, which
+    // repeats across rooms (per-archive) — so we resolve it through the
+    // room-scoped `identityKeys` alias (roomStanzaKey), a single indexed get.
+    // The `ids` multiEntry index is store-wide and non-unique, and cacheKeys sort
+    // by room JID, so getFromIndex('ids', …) could return a DIFFERENT room's
+    // message when a client id collides; take every id match and keep the one in
+    // this room. (Mirrors getRoomMessageByStanzaId's room-scoping.)
+    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, messageId))
     if (!existing) {
-      existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, messageId))
+      const idMatches = await db.getAllFromIndex(ROOM_MESSAGES_STORE, 'ids', messageId)
+      existing = idMatches.find((row) => row.roomJid === roomJid)
     }
     if (!existing) return false
 

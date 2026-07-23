@@ -1317,4 +1317,26 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
     expect(roomBMsg!.reactions).toBeUndefined()
   })
+  it('updateRoomMessageReactions is room-scoped on the CLIENT-id path — a same-id message in another room is untouched', async () => {
+    // Two rooms each cache a message under the SAME client id (ids collide across
+    // rooms just like stanzaIds). Here the reaction references that client id, so
+    // it resolves through the store-wide `ids` index — which must be filtered to
+    // this room. ROOM_B sorts before ROOM by cacheKey, so an unscoped
+    // getFromIndex('ids', …) returns ROOM_B's row first and writes the reaction to
+    // the wrong room.
+    const ROOM_B = 'other-room@c', FROM_B = 'other-room@c/carol'
+    await messageCache.saveRoomMessage(mk({ id: 'SAME', originId: undefined }))
+    await messageCache.saveRoomMessage({
+      type: 'groupchat', id: 'SAME', roomJid: ROOM_B, from: FROM_B, body: 'hi',
+      timestamp: new Date(5000), isOutgoing: false,
+    } as RoomMessage)
+
+    const ok = await messageCache.updateRoomMessageReactions(ROOM, 'SAME', 'r@c/bob', ['🔥'])
+    expect(ok).toBe(true)
+
+    const roomAMsg = (await messageCache.getRoomMessages(ROOM, {})).find((m) => m.id === 'SAME')
+    const roomBMsg = (await messageCache.getRoomMessages(ROOM_B, {})).find((m) => m.id === 'SAME')
+    expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
+    expect(roomBMsg!.reactions).toBeUndefined()
+  })
 })
