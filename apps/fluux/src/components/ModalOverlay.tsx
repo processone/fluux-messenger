@@ -118,7 +118,14 @@ export function ModalOverlay({
   useEffect(() => {
     if (!closeOnEscape || !dismissable) return
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key !== 'Escape') return
+      // CONSUME the Escape (mirroring useCloseOnEscape) so it cannot also reach
+      // the app's window-level shortcut handler, whose Escape branch falls
+      // through to onConversationEscape (scroll-to-bottom + mark-read). Without
+      // this, closing any default ModalOverlay modal opened over a conversation
+      // would snap a reader scrolled up into history back to the newest message.
+      e.stopPropagation()
+      close()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
