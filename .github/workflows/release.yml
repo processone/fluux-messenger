@@ -276,7 +276,8 @@ jobs:
             patchelf \
             libxss-dev \
             devscripts \
-            debhelper
+            debhelper \
+            desktop-file-utils
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -476,7 +477,8 @@ jobs:
             librsvg2-dev \
             patchelf \
             libxss-dev \
-            rpm
+            rpm \
+            desktop-file-utils
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -561,7 +563,13 @@ jobs:
           sed -i "s/^Release:.*/Release:        ${RPM_RELEASE}%{?dist}/" ~/rpmbuild/SPECS/fluux-messenger.spec
 
           # Build RPM
-          rpmbuild -bb ~/rpmbuild/SPECS/fluux-messenger.spec --target ${{ matrix.rpm_arch }}
+          # The RPM is assembled on Ubuntu from a pre-built binary. APT has
+          # installed desktop-file-utils above so %install can validate the
+          # desktop entry; --nodeps only skips RPM-database BuildRequires
+          # resolution, which cannot see Debian packages.
+          rpmbuild -bb ~/rpmbuild/SPECS/fluux-messenger.spec \
+            --target ${{ matrix.rpm_arch }} \
+            --nodeps
 
           # Move RPM to dist
           mkdir -p dist

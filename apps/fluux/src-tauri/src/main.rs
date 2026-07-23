@@ -191,7 +191,7 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", all(debug_assertions, target_os = "windows")))]
 use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
@@ -204,6 +204,12 @@ mod openpgp_backup;
 mod openpgp_storage;
 mod notifications;
 mod mcp;
+
+// Runtime deep-link registration is only required for Linux development and
+// portable distributions; package-managed installs export a canonical desktop
+// entry instead. The pure policy is compiled in tests on every platform.
+#[cfg(any(target_os = "linux", test))]
+mod linux_deep_link;
 
 // Linux tray-functionality detection (pure combiner compiled everywhere; the
 // DBus probe inside is Linux-only).
@@ -1787,16 +1793,37 @@ fn main() {
                 });
             }
 
-            // Register xmpp: URI scheme for deep linking (RFC 5122)
-            // This allows the app to open when users click xmpp: links
-            // On macOS, URI schemes are registered via Info.plist at build time
-            // (configured in tauri.conf.json), so runtime registration is only
-            // needed on Linux and Windows.
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            // Ensure the statically configured xmpp: URI scheme (RFC 5122) is
+            // available when the app was not installed through a platform
+            // bundle. Windows installers own the production association; only
+            // debug builds register the current executable at runtime. Linux
+            // package/Flatpak installs export a canonical desktop entry, while
+            // development and portable/AppImage builds self-register.
+            #[cfg(any(
+                target_os = "linux",
+                all(debug_assertions, target_os = "windows")
+            ))]
             {
-                match app.deep_link().register("xmpp") {
-                    Ok(_) => tracing::info!("Deep link: registered xmpp: URI scheme"),
-                    Err(e) => tracing::warn!("Deep link: failed to register xmpp: URI scheme: {}", e),
+                #[cfg(target_os = "linux")]
+                let should_register =
+                    linux_deep_link::should_register_current_process(app.env().appimage.is_some());
+                #[cfg(all(debug_assertions, target_os = "windows"))]
+                let should_register = true;
+
+                if should_register {
+                    match app.deep_link().register_all() {
+                        Ok(_) => tracing::info!("Deep link: registered configured URI schemes"),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Deep link: failed to register configured URI schemes: {}",
+                                e
+                            )
+                        }
+                    }
+                } else {
+                    tracing::info!(
+                        "Deep link: using the xmpp: handler exported by the Linux package"
+                    );
                 }
             }
 

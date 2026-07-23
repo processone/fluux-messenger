@@ -11,9 +11,8 @@ depends=(
     'gtk3'
     'glib2'
     'libayatana-appindicator'
-)
-optdepends=(
-    'xdg-utils: for opening URLs'
+    'xdg-utils'
+    'desktop-file-utils'
 )
 provides=('fluux-messenger')
 conflicts=('fluux-messenger')
