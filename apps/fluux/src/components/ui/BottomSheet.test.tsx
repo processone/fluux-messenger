@@ -44,6 +44,27 @@ describe('BottomSheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('consumes Escape so it never reaches the window-level shortcut handler', () => {
+    // Regression (image-scroll-position-reset follow-up): a sheet opened over a
+    // conversation must not let Escape bubble to the window shortcut layer, which
+    // would scroll the conversation to the bottom and mark it read.
+    const onClose = vi.fn()
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(
+        <BottomSheet open onClose={onClose}>
+          x
+        </BottomSheet>,
+      )
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
   it('calls onClose when the backdrop is tapped', () => {
     const onClose = vi.fn()
     render(
