@@ -693,6 +693,11 @@ pub struct CertValidation {
     /// Number of encryption-capable subkeys that pass [`StandardPolicy`]:
     /// alive, not revoked, supported, and with a valid binding signature.
     pub encryption_subkey_count: u32,
+    /// `true` iff [`encryption_subkey_count`] > 0 — i.e. the cert has at least
+    /// one usable encryption subkey and is therefore a valid recipient. Callers
+    /// classify a cert with `false` as *definitively invalid* (a fetched cert
+    /// that is provably not usable), distinct from a *transient* fetch failure.
+    pub has_encryption_subkey: bool,
     /// Raw User ID strings from the certificate (e.g. `"xmpp:user@domain"`).
     pub user_ids: Vec<String>,
     /// Upper-case hex fingerprints of every subkey, independent of usage flags,
@@ -708,13 +713,14 @@ pub struct CertValidation {
 ///
 /// Applies [`StandardPolicy`] to every key component, which verifies
 /// subkey binding signatures and rejects subkeys that fail. Returns an
-/// error when the cert is unparseable, or when no encryption subkey
-/// passes the policy — i.e., when [`encrypt_and_sign`] would immediately
-/// fail with "no usable recipients".
+/// error only when the cert is *unparseable*.
 ///
-/// Callers use this at key-fetch time so a cert with bad bindings is
-/// rejected before it enters the peer cache, rather than surfacing the
-/// failure as a cryptic "no recipients" error at message-send time.
+/// A cert that parses but has **no** usable encryption subkey is NOT an error:
+/// it returns `has_encryption_subkey == false` so the caller can classify it as
+/// *definitively invalid* (a fetched-but-unusable recipient) rather than confuse
+/// it with a transient fetch failure. Callers use this at key-fetch time so a
+/// cert with bad bindings is excluded before it enters the peer cache, rather
+/// than surfacing the failure as a cryptic "no recipients" error at send time.
 pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
     let policy = StandardPolicy::new();
     let cert = Cert::from_bytes(public_armored.as_bytes())
@@ -728,12 +734,6 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
         .revoked(false)
         .for_transport_encryption()
         .count() as u32;
-
-    if encryption_subkey_count == 0 {
-        return Err(anyhow!(
-            "certificate has no usable encryption subkey with a valid binding signature"
-        ));
-    }
 
     let user_ids: Vec<String> = cert
         .userids()
@@ -751,6 +751,7 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
     Ok(CertValidation {
         fingerprint: cert.fingerprint().to_hex(),
         encryption_subkey_count,
+        has_encryption_subkey: encryption_subkey_count > 0,
         user_ids,
         subkey_fingerprints,
     })
@@ -3022,6 +3023,33 @@ mod tests {
     }
 
     #[test]
+    fn validate_cert_reports_has_encryption_subkey_true_for_a_normal_cert() {
+        // A general-purpose cert has exactly one alive encryption subkey, so
+        // validate_cert must report it usable (has_encryption_subkey == true)
+        // and no longer error out.
+        let (cert, _) = CertBuilder::general_purpose(Some("xmpp:alice@example.com"))
+            .generate()
+            .unwrap();
+        let armored = armored_string(&cert, KeyExport::Public).unwrap();
+
+        let validation = validate_cert(&armored).unwrap();
+
+        assert!(
+            validation.has_encryption_subkey,
+            "a general-purpose cert must report a usable encryption subkey"
+        );
+        assert!(
+            validation.encryption_subkey_count >= 1,
+            "encryption_subkey_count must be at least one"
+        );
+        assert_eq!(
+            validation.fingerprint,
+            cert.fingerprint().to_hex(),
+            "fingerprint must be the primary key fingerprint"
+        );
+    }
+
+    #[test]
     fn generated_cert_has_no_subkey_expiration() {
         let policy = StandardPolicy::new();
         let cert = generate_cert("xmpp:alice@example.com").unwrap();
@@ -3196,6 +3224,32 @@ mod tests {
             primary_expiration(&persisted.cert),
             None,
             "the heal must have been written back to disk"
+        );
+    }
+
+    #[test]
+    fn validate_cert_reports_no_encryption_subkey_without_erroring() {
+        // A sign-only cert (primary + signing subkey, NO encryption subkey)
+        // must parse successfully and report has_encryption_subkey == false —
+        // NOT an Err. This is the "definitively invalid" recipient signal the
+        // TS peer-cache classifier relies on to distinguish an unusable cert
+        // from a transient fetch failure.
+        let (cert, _) = CertBuilder::new()
+            .add_userid("xmpp:signonly@example.com")
+            .add_signing_subkey()
+            .generate()
+            .unwrap();
+        let armored = armored_string(&cert, KeyExport::Public).unwrap();
+
+        let validation = validate_cert(&armored).unwrap();
+
+        assert!(
+            !validation.has_encryption_subkey,
+            "a sign-only cert must report no usable encryption subkey"
+        );
+        assert_eq!(
+            validation.encryption_subkey_count, 0,
+            "a sign-only cert must have zero encryption subkeys"
         );
     }
 }

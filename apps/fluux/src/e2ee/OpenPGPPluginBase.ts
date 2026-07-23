@@ -95,13 +95,23 @@ import {
   normalizeFingerprint,
   toXep0373Fingerprint,
 } from './fingerprintCompare'
+import {
+  deserializePeerCache,
+  serializePeerCache,
+  activePublics,
+  activeFingerprints,
+  eligibleVerifierPublics,
+  upsertActive,
+  markDepartedInactive,
+  capUnverifiedInactive,
+  type CachedPeerCert,
+} from './peerCertCache'
 import { accountUserId } from './openpgpUserId'
 import { mergePublicKeysList, OX_NAMESPACE as OX_WIRE_NAMESPACE } from './oxPublicKeysList'
 import { legacyNormalizeBackupPassphrase, prepareBackupPassphrase } from './backupPassphrase'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
-  recordKeyChangeAlert,
 } from '@/stores/keyChangeAlertsStore'
 import {
   clearOwnKeyConflict,
@@ -109,7 +119,6 @@ import {
   recordOwnKeyConflict,
 } from '@/stores/ownKeyConflictStore'
 import {
-  getPinnedPrimaryFp,
   setPinnedPrimaryFp,
 } from '@/stores/pinnedPrimaryFingerprintsStore'
 import {
@@ -120,7 +129,6 @@ import {
 import {
   sealTrustState,
   verifyTrustStateSeal,
-  isTofuBlockedByCompromise,
   clearCompromisedAndReseal,
 } from './trustStateIntegrity'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
@@ -159,25 +167,22 @@ function peerKeyCacheKey(accountJid: string): string {
   return `${PEER_KEY_CACHE_PREFIX}${accountJid}`
 }
 
-function loadPeerKeyCache(accountJid: string): Map<BareJID, KeyBundle> {
-  const map = new Map<BareJID, KeyBundle>()
+function loadPeerKeyCache(accountJid: string): Map<BareJID, CachedPeerCert[]> {
   try {
     const raw = localStorage.getItem(peerKeyCacheKey(accountJid))
-    if (!raw) return map
-    const entries = JSON.parse(raw) as Array<[string, KeyBundle]>
-    for (const [jid, bundle] of entries) {
-      map.set(jid, bundle)
-    }
-  } catch { /* corrupt cache — start fresh */ }
-  return map
+    if (!raw) return new Map<BareJID, CachedPeerCert[]>()
+    // deserializePeerCache treats localStorage as untrusted (fingerprint
+    // canonicalization, fail-closed on tampered records) AND migrates the
+    // pre-Stage-1 `[jid, KeyBundle]` shape to a one-element active set.
+    return deserializePeerCache(raw)
+  } catch {
+    return new Map<BareJID, CachedPeerCert[]>()
+  }
 }
 
-function savePeerKeyCache(accountJid: string, map: Map<BareJID, KeyBundle>): void {
+function savePeerKeyCache(accountJid: string, map: Map<BareJID, CachedPeerCert[]>): void {
   try {
-    localStorage.setItem(
-      peerKeyCacheKey(accountJid),
-      JSON.stringify([...map.entries()]),
-    )
+    localStorage.setItem(peerKeyCacheKey(accountJid), serializePeerCache(map))
   } catch { /* storage full or unavailable */ }
 }
 
@@ -255,6 +260,14 @@ export interface DecryptOutput {
 export interface CertValidation {
   fingerprint: string
   encryptionSubkeyCount: number
+  /**
+   * `true` iff {@link encryptionSubkeyCount} > 0. Mirrors the Rust
+   * `CertValidation::has_encryption_subkey` (serde → `hasEncryptionSubkey`).
+   * A parsed cert with `false` is a *definitively invalid* recipient (no usable
+   * encryption subkey), which the peer-cache classifier treats as excluded —
+   * distinct from a transient fetch failure.
+   */
+  hasEncryptionSubkey: boolean
   userIds: string[]
   /**
    * Upper-case hex fingerprints of every subkey in the certificate,
@@ -283,6 +296,16 @@ const SIGNATURE_BUFFER_TTL_MS = 10 * 60 * 1000
 const SIGNCRYPT_CLOCK_SKEW_MS = 7 * 24 * 60 * 60 * 1000
 const PROBE_NEGATIVE_TTL_SECONDS = 300
 const PROBE_TRANSIENT_TTL_SECONDS = 30
+
+// Per-peer LRU cap on UNVERIFIED inactive (retired) certs — a hostile peer can
+// rotate keys indefinitely, so retained-but-unverified certs are bounded.
+// Verified inactive certs are kept indefinitely (few, meaningful).
+const UNVERIFIED_INACTIVE_CAP = 5
+
+// Clock tolerance when deciding whether an archived/deferred message predates a
+// cert's retirement (`inactiveAt`) — so a retired key can still verify eligible
+// archived traffic but never a fresh live message (see spec §Retained certs).
+const INACTIVE_ARCHIVE_TOLERANCE_MS = 5 * 60 * 1000
 
 // ---------------------------------------------------------------------------
 // Shared error helpers
@@ -403,8 +426,31 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected ctx: PluginContext | null = null
   protected ownBundle: KeyBundle | null = null
 
-  private readonly peerKeys = new Map<BareJID, KeyBundle>()
+  // A peer JID owns a SET of announced OX certs (XEP-0373 / #1059), partitioned
+  // by an `active` flag inside each CachedPeerCert (active = still announced,
+  // an encryption recipient; inactive = retired, verification-only).
+  private readonly peerKeys = new Map<BareJID, CachedPeerCert[]>()
   private readonly pendingVerifications = new Map<BareJID, PendingVerification[]>()
+
+  // ---- Session-scoped keyset-freshness/health state (NOT persisted) ----
+  // A persisted `active` flag is only tentative after startup/reconnect, so the
+  // first send to a peer this session must trigger a definitive metadata
+  // refresh. These four collections drive that and are cleared alongside
+  // `peerKeys` on shutdown/reset.
+  //
+  // A JID here has had a definitive, complete metadata refresh this session.
+  private readonly freshThisSession = new Set<BareJID>()
+  // A JID whose last refresh could not resolve every announced key (a transient
+  // metadata OR data-node failure with no prior cert). Fail-closed: blocks send.
+  private readonly keysetIncomplete = new Set<BareJID>()
+  // A JID we have EVER seen support OX (a validated cert now/previously, or a
+  // prior successful probe). Lets a transient failure keep `supported:true`.
+  private readonly everSupported = new Set<BareJID>()
+  // Backoff timestamp (ms, `this.now()` clock): before it, an incomplete keyset
+  // stays blocked without re-probing; after it, `ensureFreshKeyset` re-probes so
+  // a service that recovers mid-session heals without a restart.
+  private readonly keysetRetryAfter = new Map<BareJID, number>()
+
   protected now: () => number = () => Date.now()
 
   private _verificationStoreUnsub: (() => void) | null = null
@@ -579,10 +625,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
-    // Rehydrate peer key cache so keys are available before MAM arrives.
+    // Rehydrate peer key cache so keys are available before MAM arrives. The
+    // rehydrated `active` flags are only TENTATIVE — the first send this
+    // session forces a definitive metadata refresh (see `ensureFreshKeyset`).
     const cached = loadPeerKeyCache(ctx.account.jid)
-    for (const [jid, bundle] of cached) {
-      this.peerKeys.set(jid, bundle)
+    for (const [jid, certs] of cached) {
+      this.peerKeys.set(jid, certs)
     }
     try {
       await this.ensureIdentity()
@@ -753,8 +801,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._trustStoreUnsubs = []
     this.ownBundle = null
     this.peerKeys.clear()
+    this.clearKeysetSessionState()
     this.pendingVerifications.clear()
     this.ctx = null
+  }
+
+  /** Drop all session-scoped keyset freshness/health state. */
+  private clearKeysetSessionState(): void {
+    this.freshThisSession.clear()
+    this.keysetIncomplete.clear()
+    this.everSupported.clear()
+    this.keysetRetryAfter.clear()
   }
 
   /**
@@ -770,6 +827,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     this.ownBundle = null
     this.peerKeys.clear()
+    this.clearKeysetSessionState()
   }
 
   // ---------------------------------------------------------------------------
@@ -1763,55 +1821,115 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // ---------------------------------------------------------------------------
 
   async probePeer(peer: BareJID): Promise<PeerSupport> {
-    const cached = this.peerKeys.get(peer)
-    if (cached) {
-      return {
-        supported: true,
-        ttl: PROBE_NEGATIVE_TTL_SECONDS,
-        fingerprint: cached.fingerprint,
-      }
+    // A definitively-fresh keyset short-circuits without a network round-trip.
+    // A rehydrated-but-not-yet-refreshed cache is TENTATIVE, so we re-probe.
+    if (this.freshThisSession.has(peer)) {
+      const fps = this.getPeerFingerprints(peer)
+      return fps.length > 0
+        ? { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS, fingerprint: fps[0] }
+        : { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
     }
     return this.refetchAndCachePeerKey(peer)
   }
 
+  /**
+   * Atomic multi-key refresh (XEP-0374 §2.3.1 / #1059). Classifies every
+   * announced fingerprint as valid / definitively-invalid / transient and
+   * commits a replacement validated set ONLY on a definitive refresh — a
+   * transient blip never drops or deactivates a key we already hold. A key that
+   * LEFT the announced set is marked inactive (retained for verification), not
+   * deleted. See spec §"Atomic refresh".
+   */
   private async refetchAndCachePeerKey(peer: BareJID): Promise<PeerSupport> {
     const ctx = this.requireCtx()
-    try {
-      const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE, 1)
-      const fingerprints = parseAdvertisedFingerprints(metadataItems)
-      if (fingerprints.length === 0) {
-        clearCertRejections(peer)
-        return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
-      }
+    const existing = this.peerKeys.get(peer) ?? []
+    // ANY prior validated cert (active OR inactive) for a still-announced fp
+    // lets us ride out a transient data-node failure — an inactive cert that is
+    // authoritatively re-announced is reactivated and reused.
+    const hasPriorCert = (fp: string) =>
+      existing.some((c) => fingerprintsEqual(c.fingerprint, fp))
+    // "Prior evidence" the peer supports OX: any cached cert or a prior success.
+    const priorEvidence = existing.length > 0 || this.everSupported.has(peer)
 
-      const rejections: CertRejection[] = []
-      for (const fingerprint of fingerprints) {
-        const bundle = await this.fetchAdvertisedKey(peer, fingerprint, rejections)
-        if (bundle) {
-          clearCertRejections(peer)
-          this.cachePeerKey(peer, bundle)
-          return {
-            supported: true,
-            ttl: PROBE_NEGATIVE_TTL_SECONDS,
-            fingerprint: bundle.fingerprint,
-          }
-        }
-      }
-      if (rejections.length > 0) {
-        recordCertRejections(peer, rejections)
-      } else {
-        clearCertRejections(peer)
-      }
-      return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
+    let announced: string[]
+    try {
+      const meta = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE, 1)
+      announced = parseAdvertisedFingerprints(meta)
     } catch (err) {
+      // Metadata snapshot unavailable → keyset NOT fresh. With prior evidence
+      // OX is supported, keep supported:true so encrypt() runs and throws
+      // peer-keyset-incomplete (a transient the send path retries) — never a
+      // silent plaintext downgrade. Only with no evidence report unsupported.
       const { kind, code } = classifyBoundaryError(err)
       ctx.logger.debug(
-        `${this.pluginName()}: probePeer(${peer}) failed (${kind}/${code}): ${formatError(err)}`,
+        `${this.pluginName()}: metadata refresh for ${peer} failed (${kind}/${code}): ${formatError(err)}`,
       )
+      this.markKeysetIncomplete(peer)
       return {
-        supported: false,
+        supported: priorEvidence,
         ttl: kind === 'transient' ? PROBE_TRANSIENT_TTL_SECONDS : PROBE_NEGATIVE_TTL_SECONDS,
       }
+    }
+
+    const nowIso = new Date().toISOString()
+
+    if (announced.length === 0) {
+      // Definitive: the account announces no keys. Retire every cert, clear
+      // stale health/rejections, mark the snapshot fresh (not incomplete).
+      this.setPeerCerts(peer, markDepartedInactive(existing, new Set(), nowIso))
+      this.recordKeysetHealth(peer, { incomplete: false, rejections: [] })
+      this.markKeysetFresh(peer)
+      return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
+    }
+
+    const rejections: CertRejection[] = []
+    const validated: KeyBundle[] = []
+    const retainedReannounced: string[] = [] // canonical fps kept across a blip
+    let unresolvedTransient = false
+    for (const fp of announced) {
+      const result = await this.fetchAdvertisedKeyClassified(peer, fp, rejections)
+      if (result.kind === 'valid') validated.push(result.bundle)
+      else if (result.kind === 'transient') {
+        // A transient blip on an fp we already hold is fine — reuse it. Only a
+        // transient on a re-announced fp with NO prior cert is truly incomplete.
+        if (hasPriorCert(fp)) retainedReannounced.push(toXep0373Fingerprint(fp))
+        else unresolvedTransient = true
+      }
+      // 'definitively-invalid' → recorded in `rejections`, excluded (not a recipient).
+    }
+
+    if (unresolvedTransient) {
+      // Retain prior certs across the blip; do not commit a pruned set.
+      this.markKeysetIncomplete(peer)
+      return { supported: true, ttl: PROBE_TRANSIENT_TTL_SECONDS }
+    }
+
+    // Definitive refresh: commit. Upsert validated (active); reactivate any
+    // re-announced fp retained across a blip; mark departed inactive; cap.
+    let next = existing
+    for (const b of validated) next = upsertActive(next, b)
+    next = next.map((c) =>
+      retainedReannounced.some((fp) => fingerprintsEqual(fp, c.fingerprint))
+        ? { ...c, active: true, inactiveAt: undefined }
+        : c,
+    )
+    // Build the still-announced set in CANONICAL form so markDepartedInactive's
+    // `Set.has()` matches the canonical stored fingerprints.
+    const stillAnnounced = new Set<string>([
+      ...validated.map((b) => toXep0373Fingerprint(b.fingerprint)),
+      ...retainedReannounced,
+    ])
+    next = markDepartedInactive(next, stillAnnounced, nowIso)
+    next = capUnverifiedInactive(next, (fp) => isPeerVerified(peer, fp), UNVERIFIED_INACTIVE_CAP)
+    this.setPeerCerts(peer, next)
+    this.recordKeysetHealth(peer, { incomplete: false, rejections })
+    this.markKeysetFresh(peer)
+    const activeFps = activeFingerprints(next)
+    if (activeFps.length > 0) this.everSupported.add(peer)
+    return {
+      supported: activeFps.length > 0,
+      ttl: PROBE_NEGATIVE_TTL_SECONDS,
+      ...(activeFps.length > 0 && { fingerprint: activeFps[0] }),
     }
   }
 
@@ -1853,87 +1971,186 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return []
   }
 
-  private async fetchAdvertisedKey(
+  /**
+   * Fetch + validate one announced key's data node and CLASSIFY the outcome:
+   *
+   * - `valid` — data node fetched; cert fp matches the advertised fp; a
+   *   `xmpp:<bare jid>` UID is present; AND a usable encryption subkey exists.
+   * - `definitively-invalid` — data node fetched but the cert is provably not a
+   *   usable recipient (fp mismatch, UID mismatch, no usable encryption subkey,
+   *   or unparseable/permanently-bad material). Recorded in `rejections`.
+   * - `transient` — the data node could not be fetched at all (timeout, server
+   *   error, or an absent/empty node — half-published / replication lag). The
+   *   key may be legitimate and merely unavailable, so the caller fails closed.
+   */
+  private async fetchAdvertisedKeyClassified(
     peer: BareJID,
     fingerprint: string,
     rejections: CertRejection[],
-  ): Promise<KeyBundle | null> {
+  ): Promise<
+    | { kind: 'valid'; bundle: KeyBundle }
+    | { kind: 'definitively-invalid' }
+    | { kind: 'transient' }
+  > {
     const ctx = this.requireCtx()
     const now = new Date().toISOString()
+    let items: PEPItem[]
     try {
-      const items = await this.queryPublicKeyDataNodeTolerant(peer, fingerprint)
-      for (const item of items) {
-        const armored = parsePublicKeyDataItem(item.payload)
-        if (!armored) continue
-        let validation: CertValidation
-        try {
-          validation = await this.validateCert(armored)
-        } catch (err) {
-          const detail = formatError(err)
-          ctx.logger.warn(
-            `${this.pluginName()}: validateCert for ${peer}/${fingerprint} failed: ${detail}`,
-          )
-          rejections.push({ fingerprint, code: 'validation_failed', detail, observedAt: now })
-          continue
-        }
-        if (!fingerprintsEqual(validation.fingerprint, fingerprint)) {
-          const detail = `advertised ${fingerprint}, served ${validation.fingerprint}`
-          ctx.logger.warn(
-            `${this.pluginName()}: ${peer} ${detail}; discarding`,
-          )
-          rejections.push({ fingerprint, code: 'fingerprint_mismatch', detail, observedAt: now })
-          continue
-        }
-        const expectedUid = accountUserId(peer)
-        const uidMatch = validation.userIds.some(
-          (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
-        )
-        if (!uidMatch) {
-          const detail = `expected ${expectedUid}, got [${validation.userIds.join(', ')}]`
-          ctx.logger.warn(
-            `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (${detail}); discarding`,
-          )
-          rejections.push({ fingerprint, code: 'uid_mismatch', detail, observedAt: now })
-          continue
-        }
-        return {
-          fingerprint: validation.fingerprint,
-          publicArmored: armored,
-          keychainBacked: false,
-        }
-      }
+      items = await this.queryPublicKeyDataNodeTolerant(peer, fingerprint)
     } catch (err) {
       ctx.logger.debug(
         `${this.pluginName()}: fetch ${peer} key ${fingerprint} failed: ${formatError(err)}`,
       )
+      return { kind: 'transient' }
     }
-    return null
+    // Absent/empty data node for a still-announced fp: half-published or
+    // replication lag. Fail closed — transient, not "definitely no key".
+    if (items.length === 0) return { kind: 'transient' }
+
+    for (const item of items) {
+      const armored = parsePublicKeyDataItem(item.payload)
+      if (!armored) continue
+      let validation: CertValidation
+      try {
+        validation = await this.validateCert(armored)
+      } catch (err) {
+        // A transient IPC fault (panic/timeout) is NOT a verdict on the cert.
+        if (classifyBoundaryError(err).kind === 'transient') return { kind: 'transient' }
+        const detail = formatError(err)
+        ctx.logger.warn(
+          `${this.pluginName()}: validateCert for ${peer}/${fingerprint} failed: ${detail}`,
+        )
+        rejections.push({ fingerprint, code: 'validation_failed', detail, observedAt: now })
+        return { kind: 'definitively-invalid' }
+      }
+      if (!fingerprintsEqual(validation.fingerprint, fingerprint)) {
+        const detail = `advertised ${fingerprint}, served ${validation.fingerprint}`
+        ctx.logger.warn(`${this.pluginName()}: ${peer} ${detail}; discarding`)
+        rejections.push({ fingerprint, code: 'fingerprint_mismatch', detail, observedAt: now })
+        return { kind: 'definitively-invalid' }
+      }
+      const expectedUid = accountUserId(peer)
+      const uidMatch = validation.userIds.some(
+        (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
+      )
+      if (!uidMatch) {
+        const detail = `expected ${expectedUid}, got [${validation.userIds.join(', ')}]`
+        ctx.logger.warn(
+          `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (${detail}); discarding`,
+        )
+        rejections.push({ fingerprint, code: 'uid_mismatch', detail, observedAt: now })
+        return { kind: 'definitively-invalid' }
+      }
+      if (!validation.hasEncryptionSubkey) {
+        const detail = `cert ${fingerprint} has no usable encryption subkey`
+        ctx.logger.warn(`${this.pluginName()}: ${peer} ${detail}; discarding`)
+        rejections.push({ fingerprint, code: 'no_encryption_subkey', detail, observedAt: now })
+        return { kind: 'definitively-invalid' }
+      }
+      return {
+        kind: 'valid',
+        bundle: {
+          fingerprint: validation.fingerprint,
+          publicArmored: armored,
+          keychainBacked: false,
+        },
+      }
+    }
+    // Items present but none parsed to usable armored material (legacy Fluux
+    // Base64-of-armor shape, or junk). Fetched-but-unusable → definitive.
+    return { kind: 'definitively-invalid' }
   }
 
-  private cachePeerKey(peer: BareJID, bundle: KeyBundle): void {
-    const pinnedFp = getPinnedPrimaryFp(peer)
-    if (!pinnedFp) {
-      if (isTofuBlockedByCompromise(peer)) {
-        recordKeyChangeAlert(peer, 'unknown-cleared', bundle.fingerprint)
-        return
-      }
-      setPinnedPrimaryFp(peer, bundle.fingerprint)
-      this.peerKeys.set(peer, bundle)
-      this.persistPeerKeyCache()
-      return
-    }
-    if (pinnedFp === bundle.fingerprint) {
-      this.peerKeys.set(peer, bundle)
-      this.persistPeerKeyCache()
-      return
-    }
-    recordKeyChangeAlert(peer, pinnedFp, bundle.fingerprint)
+  /** Commit a peer's cert set to the map + persist. (Stage 2 adds reactive notify.) */
+  private setPeerCerts(peer: BareJID, certs: CachedPeerCert[]): void {
+    this.peerKeys.set(peer, certs)
+    this.persistPeerKeyCache()
+  }
+
+  /**
+   * Mark a peer's keyset incomplete (a transient couldn't be resolved). Clears
+   * `freshThisSession` (so a mid-session incompleteness re-blocks the send path
+   * rather than riding on a now-stale fresh flag) but does NOT set it — the JID
+   * stays retry-able, so a service that recovers mid-session heals without a
+   * restart (`ensureFreshKeyset` re-probes once the backoff elapses). Leaves any
+   * prior rejections untouched (retain across the blip).
+   */
+  private markKeysetIncomplete(peer: BareJID): void {
+    this.keysetIncomplete.add(peer)
+    this.freshThisSession.delete(peer)
+    this.keysetRetryAfter.set(peer, this.now() + PROBE_TRANSIENT_TTL_SECONDS * 1000)
+  }
+
+  /** Mark a peer's keyset definitively fresh + complete for this session. */
+  private markKeysetFresh(peer: BareJID): void {
+    this.freshThisSession.add(peer)
+    this.keysetIncomplete.delete(peer)
+    this.keysetRetryAfter.delete(peer)
+  }
+
+  /**
+   * Record a peer's definitive keyset health from a definitive refresh:
+   * `incomplete` reconciles the `keysetIncomplete` set; `rejections` are mirrored
+   * to the persisted cert-rejection store the app shield reads (`incomplete` and
+   * `rejections` are independent and can coexist). The in-memory `getKeysetHealth`
+   * accessor for the reactive shield lands with Stage 2.
+   */
+  private recordKeysetHealth(
+    peer: BareJID,
+    health: { incomplete: boolean; rejections: CertRejection[] },
+  ): void {
+    if (health.incomplete) this.keysetIncomplete.add(peer)
+    else this.keysetIncomplete.delete(peer)
+    if (health.rejections.length > 0) recordCertRejections(peer, health.rejections)
+    else clearCertRejections(peer)
   }
 
   private persistPeerKeyCache(): void {
     if (this.ctx?.account.jid) {
       savePeerKeyCache(this.ctx.account.jid, this.peerKeys)
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Keyset read helpers (consumed by encrypt/decrypt — Tasks 6-7)
+  // ---------------------------------------------------------------------------
+
+  /** Active (still-announced) validated public certs — the encryption recipients. */
+  private getActivePeerPublics(peer: BareJID): string[] {
+    return activePublics(this.peerKeys.get(peer) ?? [])
+  }
+
+  /** Active (still-announced) validated fingerprints for a peer. */
+  getPeerFingerprints(peer: BareJID): string[] {
+    return activeFingerprints(this.peerKeys.get(peer) ?? [])
+  }
+
+  /**
+   * The verifier public set for a message: active certs always, plus any
+   * inactive cert eligible under the archive-time policy (`messageTime` predates
+   * `inactiveAt` ± tolerance) — so a retired key verifies eligible archived
+   * traffic but never a fresh live message. See spec §Retained certs.
+   */
+  private getEligibleVerifierPublics(peer: BareJID, messageTime?: Date): string[] {
+    return eligibleVerifierPublics(
+      this.peerKeys.get(peer) ?? [],
+      { messageTime },
+      INACTIVE_ARCHIVE_TOLERANCE_MS,
+    )
+  }
+
+  /**
+   * Ensure a fresh, complete keyset before the first send. A definitively-fresh
+   * JID short-circuits. An INCOMPLETE keyset is NOT marked fresh — it stays
+   * retry-able: we re-probe once the transient backoff (`keysetRetryAfter`)
+   * elapses, so a service that recovers mid-session heals without a restart.
+   */
+  private async ensureFreshKeyset(jid: BareJID): Promise<'ok' | 'incomplete'> {
+    if (this.freshThisSession.has(jid)) return 'ok'
+    const retryAfter = this.keysetRetryAfter.get(jid)
+    if (retryAfter !== undefined && this.now() < retryAfter) return 'incomplete' // backoff
+    await this.refetchAndCachePeerKey(jid)
+    return this.keysetIncomplete.has(jid) ? 'incomplete' : 'ok'
   }
 
   async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
@@ -1958,8 +2175,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     if (asVerified) {
-      const cached = this.peerKeys.get(peer)
-      if (cached && cached.fingerprint === targetFp) {
+      if (this.getPeerFingerprints(peer).some((fp) => fp === targetFp)) {
         setPeerVerified(peer, targetFp)
       }
     }
@@ -1990,8 +2206,20 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     const peer = extractPeer(handle)
-    const peerBundle = this.peerKeys.get(peer)
-    if (!peerBundle) {
+    // Metadata freshness: the first send to a peer this session forces a
+    // definitive metadata refresh. A transient failure fails closed with a
+    // retryable `peer-keyset-incomplete` — never a silent plaintext downgrade.
+    // (Full own-keyset fan-out + degraded/deferred rules land in Task 6.)
+    if ((await this.ensureFreshKeyset(peer)) === 'incomplete') {
+      throw new E2EEPluginError(
+        'transient',
+        'peer-keyset-incomplete',
+        `${this.pluginName()}: ${peer}'s announced keyset is not fresh/complete — will retry`,
+      )
+    }
+    // Fan out to EVERY active (still-announced) validated peer cert (#1059).
+    const peerPublics = this.getActivePeerPublics(peer)
+    if (peerPublics.length === 0) {
       throw new E2EEPluginError(
         'transient',
         'peer-key-missing',
@@ -2014,7 +2242,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     })
     const ciphertext = await this.encryptToRecipients(
       ctx.account.jid,
-      [peerBundle.publicArmored],
+      peerPublics,
       envelope,
     )
 
@@ -2052,17 +2280,22 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // The signer is whoever produced this ciphertext: for a received
     // message it's the conversation peer; for a self-outgoing replay
     // (XEP-0280 sent carbon or XEP-0313 MAM self-entry) it was us.
-    // Pick the public key that should be able to verify the signature.
-    const senderPublicArmored = isSelfOutgoing
-      ? this.ownBundle?.publicArmored ?? null
-      : this.peerKeys.get(peer)?.publicArmored ?? null
+    // Pass EVERY candidate signer cert so a signature from any announced key
+    // verifies (#1059). Task 7 widens the peer set to the archive-eligible
+    // verifier set (active + eligible inactive); Stage 1 uses active certs.
+    const senderPublics = isSelfOutgoing
+      ? this.ownBundle?.publicArmored
+        ? [this.ownBundle.publicArmored]
+        : []
+      : this.getEligibleVerifierPublics(peer, context?.archiveTimestamp)
+    const hasSenderKey = senderPublics.length > 0
 
     let output: DecryptOutput
     try {
       output = await this.decryptWithOwnKey(
         ctx.account.jid,
         ciphertext,
-        senderPublicArmored ? [senderPublicArmored] : [],
+        senderPublics,
       )
     } catch (err) {
       // Classify raw backend errors (e.g. openpgp.js "Error during parsing …"
@@ -2130,7 +2363,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     // Case A: sender key available but signature did not verify.
-    if (senderPublicArmored && !output.signatureVerified) {
+    if (hasSenderKey && !output.signatureVerified) {
       // A clock-skew "not yet valid" failure is transient — the signature may
       // verify once clocks converge. Throw a distinct transient code so the
       // decrypt pipeline stashes it for retry (retryPendingDecrypts) instead
@@ -2148,7 +2381,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: signcrypt signature did not verify against available sender key`,
       )
     }
-    // Case C (signaturePresent + !senderPublicArmored + !signatureVerified)
+    // Case C (signaturePresent + !hasSenderKey + !signatureVerified)
     // falls through — the deferred-verification stash below handles it.
 
     const plaintextBytes = new TextEncoder().encode(envelope.payloadXml)
@@ -2165,7 +2398,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       context?.messageId &&
       !output.signatureVerified &&
       output.signaturePresent &&
-      !senderPublicArmored
+      !hasSenderKey
     ) {
       this.stashPendingVerification(peer, {
         messageId: context.messageId,
@@ -2182,7 +2415,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const senderJid = isSelfOutgoing ? ownBareJid : peer
     const fallbackFingerprint = isSelfOutgoing
       ? this.ownBundle?.fingerprint
-      : this.peerKeys.get(peer)?.fingerprint
+      : this.getPeerFingerprints(peer)[0]
     return {
       plaintext: plaintextBytes,
       senderDevice: {
@@ -2247,9 +2480,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
-    const cached = this.peerKeys.get(peer)
-    if (!cached) return 'unknown'
-    return isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
+    const activeFps = this.getPeerFingerprints(peer)
+    if (activeFps.length === 0) return 'unknown'
+    // Stage 1 trust is per-fingerprint: verified iff any active cert is
+    // verified (Stage 2 introduces the full announced-set derivation).
+    return activeFps.some((fp) => isPeerVerified(peer, fp)) ? 'verified' : 'tofu'
   }
 
   // ---------------------------------------------------------------------------
@@ -2278,7 +2513,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   getPeerFingerprint(peer: BareJID): string | null {
-    return this.peerKeys.get(peer)?.fingerprint ?? null
+    // Back-compat single-fp accessor: the first active announced fingerprint.
+    // Multi-key callers use `getPeerFingerprints`.
+    return this.getPeerFingerprints(peer)[0] ?? null
   }
 
   // ---------------------------------------------------------------------------
@@ -2301,8 +2538,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const entries = this.pendingVerifications.get(peer)
     if (!ctx || !entries || entries.length === 0) return
 
-    const peerBundle = this.peerKeys.get(peer)
-    if (!peerBundle) {
+    // Verify against every active peer cert (Task 7 widens to the eligible
+    // verifier set keyed on each entry's receive time).
+    const peerPublics = this.getActivePeerPublics(peer)
+    if (peerPublics.length === 0) {
       const now = this.now()
       const alive = entries.filter((e) => e.expiresAt > now)
       if (alive.length === 0) this.pendingVerifications.delete(peer)
@@ -2318,7 +2557,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         const output = await this.decryptWithOwnKey(
           ctx.account.jid,
           entry.ciphertext,
-          [peerBundle.publicArmored],
+          peerPublics,
         )
         if (output.plaintext !== entry.plaintext) continue
         if (output.signatureVerified) {
@@ -2375,20 +2614,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   private buildInboundSecurityContext(peer: BareJID, output: DecryptOutput): SecurityContext {
-    const cached = this.peerKeys.get(peer)
-    const fingerprintMatches =
-      cached && output.signerFingerprint && fingerprintsEqual(cached.fingerprint, output.signerFingerprint)
+    // The signer is placed against the peer's ACTIVE announced keyset: a
+    // signature from ANY announced key is a legitimate peer signature (#1059).
+    // Task 7 replaces this with `resolvePeerTrust` over the eligible verifier
+    // set (so a retired key can't authenticate live traffic).
+    const activeFps = this.getPeerFingerprints(peer)
+    const hasCert = activeFps.length > 0
+    const signerMatches = output.signerFingerprint
+      ? activeFps.some((fp) => fingerprintsEqual(fp, output.signerFingerprint!))
+      : false
     let trust: SecurityContext['trust']
-    if (output.signatureVerified && fingerprintMatches) {
-      trust = isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
+    if (output.signatureVerified && signerMatches) {
+      trust = isPeerVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
     }
 
     const notes: string[] = []
     if (!output.signatureVerified) {
-      notes.push(cached ? 'Signature did not verify' : 'Sender key not cached — signature not checked')
-    } else if (!fingerprintMatches) {
+      notes.push(hasCert ? 'Signature did not verify' : 'Sender key not cached — signature not checked')
+    } else if (!signerMatches) {
       notes.push('Signature verified but fingerprint does not match cached peer')
     }
 

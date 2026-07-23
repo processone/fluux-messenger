@@ -5,6 +5,7 @@ export type CertRejectionCode =
   | 'validation_failed'
   | 'fingerprint_mismatch'
   | 'uid_mismatch'
+  | 'no_encryption_subkey'
 
 export interface CertRejection {
   fingerprint: string

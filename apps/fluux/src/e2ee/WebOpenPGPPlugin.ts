@@ -317,7 +317,13 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     // the key material so the own-key consistency check can tell "same key,
     // re-signed" from "a different key was published" (OpenPGPPluginBase).
     const subkeyFingerprints = key.getSubkeys().map((sk) => sk.getFingerprint())
-    return { fingerprint, encryptionSubkeyCount, userIds, subkeyFingerprints }
+    return {
+      fingerprint,
+      encryptionSubkeyCount,
+      hasEncryptionSubkey: encryptionSubkeyCount > 0,
+      userIds,
+      subkeyFingerprints,
+    }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {

@@ -169,6 +169,15 @@ function makeFakeRust() {
     return Number(payload.match(/Rotation: (\d+)/)?.[1] ?? 0)
   }
 
+  const KIND_TAG = 'Kind:'
+  const extractKind = (armored: string): string | null => {
+    const payload = readOpenPgpArmorPayloadForTest(armored)
+    for (const line of payload.split('\n')) {
+      if (line.startsWith(KIND_TAG)) return line.slice(KIND_TAG.length).trim()
+    }
+    return null
+  }
+
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
       case 'openpgp_ensure_key': {
@@ -287,11 +296,16 @@ function makeFakeRust() {
         // expiry) leaves the rotation counter — and therefore this set —
         // untouched, mirroring how OpenPGP subkey fingerprints survive a
         // self-signature rewrite.
+        // A `Kind: no-encryption` marker (see makeNoEncryptionArmor) makes a
+        // cert PARSE fine but report no usable encryption subkey — the
+        // definitively-invalid recipient signal, distinct from a fetch failure.
+        const hasEncryptionSubkey = extractKind(armored) !== 'no-encryption'
         const rotation = extractRotation(armored)
         const subkeyFingerprints = Array.from({ length: rotation + 1 }, (_, i) => `${fp}-E${i}`)
         return {
           fingerprint: fp,
-          encryptionSubkeyCount: 1,
+          encryptionSubkeyCount: hasEncryptionSubkey ? 1 : 0,
+          hasEncryptionSubkey,
           userIds: uid ? [uid] : [],
           subkeyFingerprints,
         } as T
@@ -413,7 +427,25 @@ function makeFakeRust() {
     nextDecryptFailureCode = code
   }
 
-  return { invoke, accounts, failNextOwnDecryptWith }
+  return { invoke, accounts, failNextOwnDecryptWith, makeArmored }
+}
+
+/**
+ * Build a peer KeyBundle whose cert PARSES fine but reports NO usable
+ * encryption subkey (the `Kind: no-encryption` marker the fake validate_cert
+ * reads). Publishing it exercises the definitively-invalid "no encryption
+ * subkey" rejection path in the multi-key cache classifier.
+ */
+function makeNoEncryptionBundle(
+  fake: ReturnType<typeof makeFakeRust>,
+  fingerprint: string,
+  jid: string,
+): KeyBundle {
+  return {
+    fingerprint,
+    publicArmored: fake.makeArmored(fingerprint, `xmpp:${jid}`, 'no-encryption'),
+    keychainBacked: false,
+  }
 }
 
 /**
@@ -1384,11 +1416,14 @@ describe('SequoiaPgpPlugin', () => {
       expect(support.supported).toBe(false)
     })
 
-    it('returns supported=false when metadata advertises a fingerprint but the data node is empty', async () => {
-      // Half-published peer: metadata lists a key, data node 404s.
-      // We must NOT cache anything and must NOT declare the peer
-      // supported — otherwise encrypt will try to use a non-existent
-      // key cache entry.
+    it('reports a half-published peer (metadata but empty data node) as fail-closed, not supported-false', async () => {
+      // Half-published peer: metadata lists a key, but the data node 404s /
+      // is empty. Under the multi-key atomic-refresh model this is a TRANSIENT
+      // (the key may be legitimate and merely unavailable — replication lag /
+      // mid-publish), NOT "peer has no OX". With no prior cert the keyset is
+      // marked incomplete → fail-closed: `supported: true` (so E2EEManager
+      // still selects OX and the send blocks with peer-keyset-incomplete rather
+      // than downgrading to plaintext), but we still cache NOTHING.
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)
 
@@ -1409,8 +1444,17 @@ describe('SequoiaPgpPlugin', () => {
       // Note: no peerPublish for dataNodeFor('FP123456') — empty.
 
       const support = await plugin.probePeer('broken@example.com')
-      expect(support.supported).toBe(false)
+      // Fail-closed: OX is offered (incomplete keyset blocks the send later),
+      // but no cert is cached — the send path throws peer-keyset-incomplete.
+      expect(support.supported).toBe(true)
+      expect(support.ttl).toBeLessThan(300) // short transient TTL → retry soon
       expect(plugin.getPeerFingerprint('broken@example.com')).toBeNull()
+
+      // The send fails closed (never a silent plaintext downgrade).
+      const handle = await plugin.openConversation({ kind: 'direct', peer: 'broken@example.com' })
+      await expect(
+        plugin.encrypt(handle, encodeBodyAsPayload('blocked')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
     })
 
     it('discards a key whose actual fingerprint does not match what was advertised', async () => {
@@ -1546,6 +1590,7 @@ describe('SequoiaPgpPlugin', () => {
           return {
             fingerprint: RAW_FP,
             encryptionSubkeyCount: 1,
+            hasEncryptionSubkey: true,
             userIds: ['xmpp:bob@example.com'],
           } as T
         }
@@ -1585,7 +1630,10 @@ describe('SequoiaPgpPlugin', () => {
 
       const support = await pluginUnderTest.probePeer('bob@example.com')
       expect(support.supported).toBe(true)
-      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(RAW_FP)
+      // The multi-key cache stores fingerprints in canonical XEP-0373 §4.1 form
+      // (upper-case, no whitespace), so a mixed-case advertised fp reads back
+      // canonicalized.
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(RAW_FP.toUpperCase())
     })
 
     it('rejects the legacy Fluux public-key data shape', async () => {
@@ -1714,34 +1762,21 @@ describe('SequoiaPgpPlugin', () => {
       expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBeNull()
     })
 
-    it('silently skips a key when openpgp_validate_cert reports no usable encryption subkeys', async () => {
-      // A cert that parses OK but has no encryption subkeys with valid
-      // binding signatures should be rejected at cache time — not accepted
-      // and later discovered at send time with a cryptic "no recipients" error.
+    it('silently skips a key when validate_cert reports no usable encryption subkeys', async () => {
+      // A cert that parses OK but has no usable encryption subkey should be
+      // rejected at cache time — not accepted and later discovered at send time
+      // with a cryptic "no recipients" error. The Rust `validate_cert` reports
+      // this via `hasEncryptionSubkey: false` (NOT an error), so the classifier
+      // marks it definitively-invalid rather than a transient fetch failure.
       const built = makeContext('me@example.com')
-      const wrappedInvoke: InvokeFn = async <T>(
-        cmd: string,
-        args?: Record<string, unknown>,
-      ) => {
-        if (cmd === 'openpgp_validate_cert') {
-          throw new Error(
-            'certificate has no usable encryption subkey with a valid binding signature',
-          )
-        }
-        return fake.invoke<T>(cmd, args)
-      }
-      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
-      await pluginUnderTest.init(built.ctx)
+      await plugin.init(built.ctx)
 
-      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-        accountJid: 'bob@example.com',
-        userId: 'xmpp:bob@example.com',
-      })
-      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+      const noEncBundle = makeNoEncryptionBundle(fake, 'NOENCFP0001', 'bob@example.com')
+      publishKeyAsXep0373(built, 'bob@example.com', noEncBundle)
 
-      const support = await pluginUnderTest.probePeer('bob@example.com')
+      const support = await plugin.probePeer('bob@example.com')
       expect(support.supported).toBe(false)
-      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBeNull()
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
     })
 
     it('prefers v6-fingerprint over v4-fingerprint when both are present', async () => {
@@ -1798,6 +1833,342 @@ describe('SequoiaPgpPlugin', () => {
       const support = await plugin.probePeer('bob@example.com')
       expect(support.supported).toBe(true)
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+    })
+  })
+
+  describe('multi-key peer cache (classification / freshness / retention)', () => {
+    const PEER = 'bob@example.com'
+    const CACHE_KEY = 'fluux:e2ee:peer-keys:me@example.com'
+
+    /** A valid peer key: parses, matching `xmpp:<peer>` UID, encryption subkey. */
+    function validKey(fp: string, peer = PEER): KeyBundle {
+      return {
+        fingerprint: fp,
+        publicArmored: fake.makeArmored(fp, `xmpp:${peer}`, 'public'),
+        keychainBacked: false,
+      }
+    }
+
+    /**
+     * Install a controllable PEP surface for `peer`: serves an announced set +
+     * per-fp data nodes, and can fail the metadata fetch or a specific
+     * data-node fetch transiently. Non-peer queries (own key, sync) pass through
+     * to the default makeContext transport so init keeps working.
+     */
+    function installPeerPep(
+      built: ReturnType<typeof makeContext>,
+      peer: string,
+    ) {
+      const inner = built.ctx.xmpp.queryPEP
+      const dataPrefix = `${METADATA_NODE}:`
+      let announced: string[] = []
+      const dataByFp = new Map<string, KeyBundle>()
+      const failData = new Set<string>()
+      let failMeta = false
+      const metaItem = (fps: string[]): PEPItem => ({
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: fps.map((fp) => pubkeyMetadata(fp, '2024-01-01T00:00:00Z')),
+        },
+      })
+      const dataItem = (b: KeyBundle): PEPItem => ({
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            { name: 'data', attrs: {}, children: [encodeOpenPgpArmorForXep0373(b.publicArmored)] },
+          ],
+        },
+      })
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        if (jid === peer && node === METADATA_NODE) {
+          if (failMeta) throw new Error('remote-server-timeout')
+          return announced.length > 0 ? [metaItem(announced)] : []
+        }
+        if (jid === peer && node.startsWith(dataPrefix)) {
+          const fp = node.slice(dataPrefix.length)
+          if (failData.has(fp)) throw new Error('remote-server-timeout')
+          const b = dataByFp.get(fp)
+          return b ? [dataItem(b)] : []
+        }
+        return inner(jid, node, maxItems)
+      }
+      return {
+        announce(bundles: KeyBundle[]) {
+          announced = bundles.map((b) => b.fingerprint)
+          for (const b of bundles) dataByFp.set(b.fingerprint, b)
+        },
+        setAnnouncedFps(fps: string[]) {
+          announced = fps
+        },
+        failMetadata(v = true) {
+          failMeta = v
+        },
+        failDataFor(fp: string, v = true) {
+          if (v) failData.add(fp)
+          else failData.delete(fp)
+        },
+      }
+    }
+
+    /** Drain the fire-and-forget refetch onPeerKeysChanged kicks off. */
+    const flush = async () => {
+      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
+    }
+
+    const openBob = (p = plugin) => p.openConversation({ kind: 'direct', peer: PEER })
+
+    async function rejectionsFor(peer: string) {
+      const { useCertRejectionStore } = await import('@/stores/certRejectionStore')
+      return useCertRejectionStore.getState().rejectionsByJid[peer] ?? []
+    }
+
+    it('caches every announced key that validates, not just the first', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+
+      const support = await plugin.probePeer(PEER)
+      expect(support.supported).toBe(true)
+      const fps = plugin.getPeerFingerprints(PEER)
+      expect(fps).toContain(A.fingerprint)
+      expect(fps).toContain(B.fingerprint)
+      expect(fps).toHaveLength(2)
+    })
+
+    it('excludes a key with no usable encryption subkey and records a rejection', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)
+      pep.announce([A, N])
+
+      await plugin.probePeer(PEER)
+
+      // Only the valid key is cached; the no-encryption key is excluded…
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+      // …and recorded as a definitive rejection (non-blocking, surfaced).
+      const rejections = await rejectionsFor(PEER)
+      expect(rejections.map((r) => r.code)).toContain('no_encryption_subkey')
+      expect(rejections.some((r) => r.fingerprint === N.fingerprint)).toBe(true)
+    })
+
+    it('marks a departed key inactive (retained), not deleted, on a definitive refresh', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await plugin.probePeer(PEER)
+      expect(plugin.getPeerFingerprints(PEER)).toHaveLength(2)
+
+      // B leaves the announced set.
+      pep.setAnnouncedFps([A.fingerprint])
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      // B is no longer an ACTIVE recipient…
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+      // …but its cert is RETAINED inactive (for verifying eligible archived
+      // messages), not deleted.
+      const entries = JSON.parse(localStorage.getItem(CACHE_KEY)!) as Array<
+        [string, Array<{ fingerprint: string; active: boolean; inactiveAt?: string }>]
+      >
+      const bobCerts = entries.find(([jid]) => jid === PEER)![1]
+      const bCert = bobCerts.find((c) => c.fingerprint === B.fingerprint)
+      expect(bCert).toBeDefined()
+      expect(bCert!.active).toBe(false)
+      expect(bCert!.inactiveAt).toBeTruthy()
+    })
+
+    it('a metadata-fetch failure yields keyset-incomplete (not an empty announced set)', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      pep.failMetadata(true) // metadata snapshot unavailable, no prior evidence
+
+      await plugin.probePeer(PEER)
+
+      // A metadata FAILURE must not be read as "peer announces nothing": the
+      // send fails closed with a retryable peer-keyset-incomplete rather than
+      // downgrading to plaintext.
+      const handle = await openBob()
+      await expect(
+        plugin.encrypt(handle, encodeBodyAsPayload('blocked')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+    })
+
+    it('a metadata-fetch failure keeps supported:true when there is prior evidence of OX', async () => {
+      // 1) A successful probe caches a cert and persists it.
+      const built1 = makeContext('me@example.com')
+      await plugin.init(built1.ctx)
+      const pep1 = installPeerPep(built1, PEER)
+      pep1.announce([validKey('KEYAAAA0001')])
+      const first = await plugin.probePeer(PEER)
+      expect(first.supported).toBe(true)
+
+      // 2) Reconnect: session freshness clears, but the persisted cache
+      // rehydrates → prior evidence the peer supports OX.
+      await plugin.shutdown()
+      const built2 = makeContext('me@example.com')
+      const pep2 = installPeerPep(built2, PEER)
+      pep2.failMetadata(true)
+      await plugin.init(built2.ctx)
+
+      const support = await plugin.probePeer(PEER)
+      // supported stays true (evidence) so E2EEManager still selects OX and the
+      // send can throw the transient rather than silently downgrade.
+      expect(support.supported).toBe(true)
+      const handle = await openBob()
+      await expect(
+        plugin.encrypt(handle, encodeBodyAsPayload('blocked')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+    })
+
+    it('a transient data-node failure on a fp we already hold does NOT mark incomplete', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await plugin.probePeer(PEER) // caches {A, B}
+
+      // B's data node blips transiently, but B is still announced and already held.
+      pep.failDataFor(B.fingerprint, true)
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      // Both keys stay usable — the blip did not prune B or block the keyset.
+      expect(plugin.getPeerFingerprints(PEER)).toHaveLength(2)
+      const handle = await openBob()
+      const payload = await plugin.encrypt(handle, encodeBodyAsPayload('still works'))
+      expect(payload.stanzaElement.name).toBe('openpgp')
+    })
+
+    it('a transient data-node failure on a NEW fp with no prior cert marks incomplete', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A])
+      await plugin.probePeer(PEER) // caches {A}
+
+      // A new key B is announced but its data node fails transiently, and we
+      // hold no prior B cert → the keyset is genuinely incomplete → fail closed.
+      pep.announce([A, B])
+      pep.failDataFor(B.fingerprint, true)
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      // A is retained (not pruned), but the send blocks until B resolves.
+      expect(plugin.getPeerFingerprints(PEER)).toContain(A.fingerprint)
+      const handle = await openBob()
+      await expect(
+        plugin.encrypt(handle, encodeBodyAsPayload('blocked')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+    })
+
+    it('an empty metadata result is definitive: clears rejections + marks fresh', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)
+      pep.announce([A, N])
+      await plugin.probePeer(PEER)
+      expect((await rejectionsFor(PEER)).length).toBeGreaterThan(0)
+
+      // The account now announces NO keys — a definitive result.
+      pep.setAnnouncedFps([])
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      // Rejections are cleared, A is retired to inactive, and the keyset is
+      // FRESH (not incomplete): the send fails with peer-key-missing (nothing to
+      // encrypt to), NOT peer-keyset-incomplete (a transient it would retry).
+      expect(await rejectionsFor(PEER)).toEqual([])
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([])
+      const entries = JSON.parse(localStorage.getItem(CACHE_KEY)!) as Array<
+        [string, Array<{ fingerprint: string; active: boolean }>]
+      >
+      const aCert = entries.find(([jid]) => jid === PEER)![1].find((c) => c.fingerprint === A.fingerprint)
+      expect(aCert!.active).toBe(false)
+      const handle = await openBob()
+      await expect(
+        plugin.encrypt(handle, encodeBodyAsPayload('none')),
+      ).rejects.toMatchObject({ code: 'peer-key-missing' })
+    })
+
+    it('an incomplete keyset recovers mid-session without a restart (retry after backoff)', async () => {
+      let clock = Date.now()
+      plugin._setClockForTesting(() => clock)
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      pep.announce([A])
+      pep.failDataFor(A.fingerprint, true) // service down: data node fails, no prior cert
+
+      // 1) The first send blocks: keyset incomplete, no cert to encrypt to.
+      const handle1 = await openBob()
+      await expect(
+        plugin.encrypt(handle1, encodeBodyAsPayload('blocked-1')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+
+      // 2) Within the backoff window the send stays blocked WITHOUT re-probing.
+      await expect(
+        plugin.encrypt(handle1, encodeBodyAsPayload('blocked-2')),
+      ).rejects.toMatchObject({ code: 'peer-keyset-incomplete' })
+
+      // 3) The service recovers and the transient backoff elapses.
+      pep.failDataFor(A.fingerprint, false)
+      clock += 31_000 // > PROBE_TRANSIENT_TTL (30s)
+
+      // 4) The next send re-probes, the keyset becomes fresh, and it succeeds —
+      // no restart required.
+      const payload = await plugin.encrypt(handle1, encodeBodyAsPayload('recovered'))
+      expect(payload.stanzaElement.name).toBe('openpgp')
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+    })
+
+    it('reactivates a re-announced inactive key across a transient data-node blip', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const B = validKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await plugin.probePeer(PEER) // caches {A, B}
+
+      // B departs → retained inactive.
+      pep.setAnnouncedFps([A.fingerprint])
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+      expect(plugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+
+      // B is re-announced, but its data node blips transiently. Because we hold
+      // B's retained cert, it is reactivated from cache — NOT incomplete.
+      pep.setAnnouncedFps([A.fingerprint, B.fingerprint])
+      pep.failDataFor(B.fingerprint, true)
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      const fps = plugin.getPeerFingerprints(PEER)
+      expect(fps).toContain(A.fingerprint)
+      expect(fps).toContain(B.fingerprint) // reactivated from the retained cert
+      const handle = await openBob()
+      const payload = await plugin.encrypt(handle, encodeBodyAsPayload('reactivated'))
+      expect(payload.stanzaElement.name).toBe('openpgp')
     })
   })
 
@@ -3999,288 +4370,14 @@ describe('SequoiaPgpPlugin', () => {
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
 
-    /**
-     * Helper: rewire alice's PEP query so bob's metadata + data nodes
-     * serve `bundle` instead of whatever was cross-published at setup.
-     * Used by the rotation tests to simulate a server advertising a
-     * different cert under bob's JID.
-     */
-    function rewireBobPepFor(
-      alice: { ctx: PluginContext },
-      bundle: KeyBundle,
-    ) {
-      const dataNode = `urn:xmpp:openpgp:0:public-keys:${bundle.fingerprint}`
-      alice.ctx.xmpp.queryPEP = async (jid, node, _maxItems) => {
-        if (jid !== 'bob@example.com') return []
-        if (node === 'urn:xmpp:openpgp:0:public-keys') {
-          return [
-            {
-              id: 'current',
-              payload: {
-                name: 'public-keys-list',
-                attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-                children: [
-                  {
-                    name: 'pubkey-metadata',
-                    attrs: { 'v4-fingerprint': bundle.fingerprint, date: '2024-01-01T00:00:00Z' },
-                    children: [],
-                  },
-                ],
-              },
-            },
-          ]
-        }
-        if (node === dataNode) {
-          return [
-            {
-              id: 'current',
-              payload: {
-                name: 'pubkey',
-                attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-                children: [
-                  {
-                    name: 'data',
-                    attrs: {},
-                    children: [encodeOpenPgpArmorForXep0373(bundle.publicArmored)],
-                  },
-                ],
-              },
-            },
-          ]
-        }
-        return []
-      }
-    }
-
-    it('TOFU-pins the primary fingerprint on first cache', async () => {
-      // The pin is what makes server-tampering detectable later: with
-      // no pin, every key change is silent. Verify that probing a peer
-      // for the first time lands the fingerprint in the pin store.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const fp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(fp)
-    })
-
-    /**
-     * Helper: run the full rotation simulation end-to-end and wait for
-     * the fire-and-forget refetch in `onPeerKeysChanged` to settle.
-     * Returns the fresh bob bundle so callers can assert on the new
-     * fingerprint. Order matters — the rewire MUST happen before
-     * `onPeerKeysChanged` fires its refetch, or the refetch sees the
-     * old PEP state and the pin gate sees no rotation.
-     */
-    async function simulateBobRotation(alice: { plugin: SequoiaPgpPlugin; ctx: PluginContext }) {
-      fake.accounts.delete('bob@example.com')
-      const newBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-        accountJid: 'bob@example.com',
-        userId: 'xmpp:bob@example.com',
-      })
-      rewireBobPepFor(alice, newBob)
-      alice.plugin.onPeerKeysChanged('bob@example.com')
-      // The fetch is fire-and-forget; let microtasks drain so the
-      // pin-gate evaluation has run by the time the assertions
-      // execute.
-      await new Promise((r) => setTimeout(r, 5))
-      return newBob
-    }
-
-    it('refuses to update peerKeys on a pin-mismatched cache and records an alert', async () => {
-      // Server-tampering simulation: bob's PEP suddenly serves a
-      // different primary fp. The pin gate must keep the OLD cert in
-      // peerKeys (so ongoing crypto stays anchored to a key the user
-      // trusted) AND record a key-change alert (so the UI demands a
-      // user decision).
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      // User has verified the OLD cert out of band.
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', oldFp)
-
-      const newBob = await simulateBobRotation(alice)
-      expect(newBob.fingerprint).not.toBe(oldFp)
-
-      // peerKeys still serves the OLD cert — ongoing crypto stays
-      // anchored to the trusted material.
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
-      // Pin is unchanged — the new fp isn't trusted.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
-      // Verification stays valid (it was against the OLD cert, which
-      // is what we still cache).
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(oldFp)
-      // …but a key-change alert must have been recorded so the UI
-      // surfaces the rotation to the user.
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      const alert = alerts.getKeyChangeAlert('bob@example.com')
-      expect(alert).not.toBeNull()
-      expect(alert!.previousFingerprint).toBe(oldFp)
-      expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
-    })
-
-    it('encrypt throws pin-mismatch when an alert is active', async () => {
-      // The encrypt path is the security-sensitive surface that turns
-      // the silent block into an observable failure. A pin-mismatch
-      // alert MUST translate to a refusal — the alternative (silent
-      // continued encryption to the OLD cert that the rotated peer
-      // can no longer decrypt) is the worst of both worlds.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-
-      await simulateBobRotation(alice)
-      // Sanity: the alert was recorded and the cached fp stayed put.
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      expect(alerts.getKeyChangeAlert('bob@example.com')).not.toBeNull()
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
-
-      // Now try to encrypt. The plugin must refuse with a classified
-      // E2EEPluginError — host code keys on `code === 'pin-mismatch'`
-      // to render the appropriate fallback (no silent plaintext).
-      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      let caught: unknown
-      try {
-        await alice.plugin.encrypt(handle, encodeBodyAsPayload('this should be blocked'))
-      } catch (err) {
-        caught = err
-      }
-      expect(isE2EEPluginError(caught)).toBe(true)
-      const e = caught as E2EEPluginError
-      expect(e.kind).toBe('permanent')
-      expect(e.code).toBe('pin-mismatch')
-    })
-
-    it('acceptPeerKeyChange (asVerified=false) re-pins and unblocks encryption without recording verification', async () => {
-      // BTBV re-anchor flow: user takes the 'Accept without verifying'
-      // button on the banner. Pin moves to the new fp, peerKeys is
-      // refreshed, alert clears, encryption resumes — but the peer
-      // ends up at `trusted`, not `verified`.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', oldFp)
-
-      const newBob = await simulateBobRotation(alice)
-
-      // User accepts without verifying.
-      await alice.plugin.acceptPeerKeyChange('bob@example.com', false)
-
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      // Alert cleared.
-      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
-      // Pin promoted to NEW fp.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
-      // peerKeys refreshed.
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      // Verification dropped — accept-without-verifying never lifts trust.
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
-
-      // Encryption is unblocked: a fresh encrypt call must succeed.
-      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('post-accept'))
-      expect(payload.stanzaElement.name).toBe('openpgp')
-    })
-
-    it('acceptPeerKeyChange (asVerified=true) re-pins AND records verification', async () => {
-      // Verify-and-accept flow: user came through the verify dialog,
-      // which compares peer's NEW fp out of band. Pin moves AND
-      // verification is recorded, so the chip flips to green.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-
-      const newBob = await simulateBobRotation(alice)
-
-      await alice.plugin.acceptPeerKeyChange('bob@example.com', true)
-
-      // Pin + cached cert + verification all moved to NEW fp in lockstep.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
-    })
-
-    it('acceptPeerKeyChange rolls back pin and preserves alert when the fetch fails', async () => {
-      // Regression guard for: acceptPeerKeyChange promoted the pin and
-      // cleared the alert BEFORE confirming the new key was cached. A
-      // network failure in refetchAndCachePeerKey left the old bundle in
-      // peerKeys (old fp) but the pin pointing at the new fp — no alert
-      // active — so the next send would silently re-encrypt to the old
-      // cert while appearing to the user as if the rotation was accepted.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-
-      const newBob = await simulateBobRotation(alice)
-
-      // Poison the XMPP transport so any re-fetch throws.
-      alice.ctx.xmpp.queryPEP = async () => {
-        throw new Error('remote-server-timeout')
-      }
-
-      let caught: unknown
-      try {
-        await alice.plugin.acceptPeerKeyChange('bob@example.com', false)
-      } catch (err) {
-        caught = err
-      }
-
-      // Method must propagate the failure.
-      expect(caught).toBeInstanceOf(Error)
-
-      // Pin must be rolled back — not left stranded at the unverified new fp.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
-
-      // Alert must still be present and coherent with the pin.
-      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
-      expect(alert).not.toBeNull()
-      expect(alert!.previousFingerprint).toBe(oldFp)
-      expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
-
-      // peerKeys still holds the old cert — outbound encryption stays blocked.
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
-    })
-
-    it('acceptPeerKeyChange clears original alert and opens a fresh one when server rotates again during fetch', async () => {
-      // Regression guard for: after promoting the pin to targetFp, the
-      // refetch itself can trigger a *second* rotation detection inside
-      // cachePeerKey, which overwrites the alert store with a new entry
-      // {previousFp: targetFp, currentFp: newerFp}. A naive unconditional
-      // clearKeyChangeAlert would erase that fresh alert, silently swallowing
-      // the second rotation.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-
-      // First rotation: alice sees alert(oldFp → newFp).
-      const newBob = await simulateBobRotation(alice)
-
-      // Second rotation races in while the user is clicking "Accept":
-      // rewire PEP to serve an even newer key.
-      fake.accounts.delete('bob@example.com')
-      const newerBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-        accountJid: 'bob@example.com',
-        userId: 'xmpp:bob@example.com',
-      })
-      rewireBobPepFor(alice, newerBob)
-
-      // Accept with asVerified=true — should NOT record verification because
-      // the fetched fp (newerFp) ≠ targetFp (newFp).
-      await alice.plugin.acceptPeerKeyChange('bob@example.com', true)
-
-      // The original alert (oldFp → newFp) must be gone.
-      // A fresh alert (newFp → newerFp) must have taken its place.
-      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
-      expect(alert).not.toBeNull()
-      expect(alert!.previousFingerprint).toBe(newBob.fingerprint)
-      expect(alert!.currentFingerprint).toBe(newerBob.fingerprint)
-
-      // Verification was NOT recorded — the key we fetched differs from
-      // the one the user was presented with in the verify dialog.
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
-    })
+    // NOTE: the single-primary TOFU-pin / key-change-alert model is RETIRED
+    // for OX by the multi-key cache (spec §Store changes: pinnedPrimary +
+    // keyChangeAlerts "retired for OX"). A different announced key is a normal
+    // additional key, not a rotation-alert — covered by the multi-key cache
+    // tests (departed→inactive, re-announce reactivation). The former
+    // TOFU-pin / pin-mismatch / acceptPeerKeyChange rotation tests were
+    // removed with that model; the pin-persistence stores are left intact for
+    // Stage 2's ordered seal migration (encrypt gate deletion is Task 6).
 
     it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
       // Caching the FIRST-ever key for a peer (no prior pin) is the
