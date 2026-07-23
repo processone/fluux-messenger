@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { E2EEManager, E2EEEncryptionRequiredError } from './E2EEManager'
+import { E2EEPluginError } from './errors'
 import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
 import { InMemoryStorageBackend } from './PluginStorage'
 import type {
@@ -719,6 +720,27 @@ describe('E2EEManager — dispatch', () => {
       new Uint8Array(),
     )
     expect(result).toBeNull()
+  })
+
+  it('propagates a transient encrypt failure instead of returning null (no silent downgrade)', async () => {
+    // A plugin that IS selected (probePeer → supported:true) but whose encrypt
+    // fails closed (e.g. an incomplete peer keyset) must surface that error to
+    // the caller. Collapsing it to `null` would let plaintext policy silently
+    // downgrade a message the user asked to encrypt.
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    plugin.encryptImpl = () => {
+      throw new E2EEPluginError(
+        'transient',
+        'peer-keyset-incomplete',
+        "bob's keyset is not fresh/complete — will retry",
+      )
+    }
+    await mgr.register(plugin)
+
+    await expect(
+      mgr.encryptOutbound({ kind: 'direct', peer: 'bob@example.com' }, new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: 'peer-keyset-incomplete', kind: 'transient' })
   })
 
   it('encryptOutbound closes the handle if encrypt throws', async () => {

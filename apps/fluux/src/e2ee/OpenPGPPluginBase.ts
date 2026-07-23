@@ -2120,6 +2120,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return activePublics(this.peerKeys.get(peer) ?? [])
   }
 
+  /**
+   * Our OWN account's active announced public certs — the sibling devices we
+   * fan an outgoing message out to so every one of our clients can read it
+   * (XEP-0373 §4 shares one key list per account). It is just the active peer
+   * set keyed by our own bare JID; a definitive refresh via
+   * {@link ensureFreshKeyset} populates it before the first send.
+   */
+  private getOwnAnnouncedPublics(): string[] {
+    return this.getActivePeerPublics(getBareJid(this.requireCtx().account.jid))
+  }
+
   /** Active (still-announced) validated fingerprints for a peer. */
   getPeerFingerprints(peer: BareJID): string[] {
     return activeFingerprints(this.peerKeys.get(peer) ?? [])
@@ -2206,10 +2217,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
     }
     const peer = extractPeer(handle)
+    const ownBareJid = getBareJid(ctx.account.jid)
+    const isSelfChat = peer === ownBareJid
+
     // Metadata freshness: the first send to a peer this session forces a
     // definitive metadata refresh. A transient failure fails closed with a
     // retryable `peer-keyset-incomplete` — never a silent plaintext downgrade.
-    // (Full own-keyset fan-out + degraded/deferred rules land in Task 6.)
+    // Self-chat (peer === own JID) is covered here for free: an incomplete own
+    // keyset defers (this same throw) rather than sending degraded.
     if ((await this.ensureFreshKeyset(peer)) === 'incomplete') {
       throw new E2EEPluginError(
         'transient',
@@ -2226,13 +2241,27 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: no cached public key for ${peer} — probe first`,
       )
     }
-    if (getKeyChangeAlert(peer)) {
-      throw new E2EEPluginError(
-        'permanent',
-        'pin-mismatch',
-        `${this.pluginName()}: ${peer}'s primary fingerprint has changed and the rotation hasn't been confirmed`,
-      )
+
+    // Also fan out to our OWN announced siblings so every one of our devices can
+    // read this outgoing message. Self-chat needs no extra set — the peer IS our
+    // own keyset (the dedup below collapses the union).
+    let recipients = [...peerPublics]
+    if (!isSelfChat) {
+      const ownFresh = await this.ensureFreshKeyset(ownBareJid)
+      recipients.push(...this.getOwnAnnouncedPublics())
+      if (ownFresh === 'incomplete') {
+        // Degraded send: the local cert is always a recipient (appended in Rust),
+        // so the author + this device always decrypt; a sibling omitted here can
+        // never decrypt THIS archived message (future messages recover once the
+        // own keyset refreshes). Stage 1 emits a log-only diagnostic; the
+        // persistent account-level warning is an explicit Stage 2 trust-surface
+        // item, deliberately NOT built here.
+        ctx.logger.warn(
+          `${this.pluginName()}: own keyset incomplete — message sent degraded; some sibling clients may not decrypt it`,
+        )
+      }
     }
+    recipients = [...new Set(recipients)] // dedup (matters when peer JID == own JID)
 
     const payloadXml = new TextDecoder().decode(plaintext)
     const envelope = wrapForSigncrypt({
@@ -2242,7 +2271,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     })
     const ciphertext = await this.encryptToRecipients(
       ctx.account.jid,
-      peerPublics,
+      recipients,
       envelope,
     )
 

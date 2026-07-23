@@ -52,6 +52,22 @@ function decodeBodyFromPayload(plaintext: Uint8Array): string {
   return body?.text() ?? ''
 }
 
+/**
+ * Pull the recipient fingerprint list out of an `encrypt()` payload's stub
+ * ciphertext. The fake Rust `openpgp_encrypt` encodes every recipient as
+ * `OPENPGP-STUB:<fp1,fp2,…>:<senderFp>:<base64-envelope>`, so the fan-out set
+ * the plugin handed to Rust is recoverable for assertions (#1059).
+ */
+function recipientFpsFromEncrypt(payload: { stanzaElement: XMLElementData }): string[] {
+  const encoded = payload.stanzaElement.children[0] as string
+  const ciphertext = decodeURIComponent(escape(atob(encoded)))
+  const prefix = 'OPENPGP-STUB:'
+  if (!ciphertext.startsWith(prefix)) {
+    throw new Error(`recipientFpsFromEncrypt: not a stub ciphertext: ${ciphertext.slice(0, 40)}`)
+  }
+  return ciphertext.slice(prefix.length).split(':')[0].split(',')
+}
+
 function bytesToBinaryString(bytes: Uint8Array): string {
   const chunks: string[] = []
   const chunkSize = 0x8000
@@ -2169,6 +2185,147 @@ describe('SequoiaPgpPlugin', () => {
       const handle = await openBob()
       const payload = await plugin.encrypt(handle, encodeBodyAsPayload('reactivated'))
       expect(payload.stanzaElement.name).toBe('openpgp')
+    })
+
+    describe('encrypt fan-out (peer keyset + own announced siblings)', () => {
+      /** A sibling device of OUR OWN account: a valid cert bearing our UID. */
+      const ownSibling = (fp: string) => validKey(fp, 'me@example.com')
+
+      it('encrypts to every valid peer key AND every own-announced sibling key, deduped', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+
+        // Own account announces {SELF (published on init), SIB (another device)}.
+        const mePep = installPeerPep(built, 'me@example.com')
+        const meSelf = fake.accounts.get('me@example.com')!
+        const meSib = ownSibling('SIBLINGKEY0001')
+        mePep.announce([meSelf, meSib])
+
+        // Peer bob announces two keys of his own.
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        const P2 = validKey('KEYBBBB0002')
+        bobPep.announce([P1, P2])
+        await plugin.probePeer(PEER)
+
+        const handle = await openBob()
+        const payload = await plugin.encrypt(handle, encodeBodyAsPayload('fan out'))
+
+        const fps = recipientFpsFromEncrypt(payload)
+        // Peer keyset ∪ own-announced keyset (a sibling only reachable via the
+        // own-set union), deduped — no fingerprint appears twice.
+        expect(new Set(fps)).toEqual(
+          new Set([P1.fingerprint, P2.fingerprint, meSelf.fingerprint, meSib.fingerprint]),
+        )
+        expect(fps.length).toBe(new Set(fps).size)
+      })
+
+      it('self-chat dedupes: peer JID == own JID → recipients are the own keyset once', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const mePep = installPeerPep(built, 'me@example.com')
+        const meSelf = fake.accounts.get('me@example.com')!
+        const meSib = ownSibling('SIBLINGKEY0001')
+        mePep.announce([meSelf, meSib])
+
+        const handle = await plugin.openConversation({ kind: 'direct', peer: 'me@example.com' })
+        const payload = await plugin.encrypt(handle, encodeBodyAsPayload('note to self'))
+
+        const fps = recipientFpsFromEncrypt(payload)
+        // The own set unioned with itself must collapse to each key exactly once.
+        expect(new Set(fps)).toEqual(new Set([meSelf.fingerprint, meSib.fingerprint]))
+        expect(fps.length).toBe(2)
+      })
+
+      it('peer keyset incomplete → encrypt throws transient peer-keyset-incomplete', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        bobPep.announce([P1])
+        bobPep.failDataFor(P1.fingerprint, true) // announced but data node down, no prior cert
+
+        const handle = await openBob()
+        await expect(
+          plugin.encrypt(handle, encodeBodyAsPayload('blocked')),
+        ).rejects.toMatchObject({ code: 'peer-keyset-incomplete', kind: 'transient' })
+      })
+
+      it('own keyset incomplete, normal peer → sends degraded and logs the diagnostic', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+
+        // Peer bob is fully available.
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        bobPep.announce([P1])
+        await plugin.probePeer(PEER)
+
+        // Own keyset is incomplete: SELF is announced but its data node is down
+        // and we hold no prior own cert → fail-closed on the OWN set only.
+        const mePep = installPeerPep(built, 'me@example.com')
+        const meSelf = fake.accounts.get('me@example.com')!
+        mePep.announce([meSelf])
+        mePep.failDataFor(meSelf.fingerprint, true)
+
+        // Spy on the diagnostic AFTER setup so only the degraded-send warning is
+        // asserted (not incidental init/probe warnings).
+        const warn = vi.fn()
+        built.ctx.logger.warn = warn
+
+        const handle = await openBob()
+        const payload = await plugin.encrypt(handle, encodeBodyAsPayload('degraded send'))
+
+        // A degraded send resolves — it does NOT throw. The author + this device
+        // always decrypt (the local cert is appended in Rust); only bob is
+        // reachable via the announced set here.
+        expect(payload.stanzaElement.name).toBe('openpgp')
+        expect(recipientFpsFromEncrypt(payload)).toEqual([P1.fingerprint])
+        // Stage 1 emits a log-only diagnostic; the persistent user-facing warning
+        // is an explicit Stage 2 item and must NOT be faked here.
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('own keyset incomplete'))
+      })
+
+      it('own keyset incomplete, self-chat → defers (peer-keyset-incomplete), no degraded send', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const mePep = installPeerPep(built, 'me@example.com')
+        const meSelf = fake.accounts.get('me@example.com')!
+        mePep.announce([meSelf])
+        mePep.failDataFor(meSelf.fingerprint, true)
+
+        const handle = await plugin.openConversation({ kind: 'direct', peer: 'me@example.com' })
+        // Self-chat: the peer IS the own keyset, so an incomplete own keyset must
+        // DEFER (retry) rather than send degraded to a subset.
+        await expect(
+          plugin.encrypt(handle, encodeBodyAsPayload('to self')),
+        ).rejects.toMatchObject({ code: 'peer-keyset-incomplete', kind: 'transient' })
+      })
+
+      it('a cached second peer key no longer throws pin-mismatch (encrypt gate retired)', async () => {
+        const built = makeContext('me@example.com')
+        await plugin.init(built.ctx)
+        const bobPep = installPeerPep(built, PEER)
+        const P1 = validKey('KEYAAAA0001')
+        const P2 = validKey('KEYBBBB0002')
+        bobPep.announce([P1, P2])
+        await plugin.probePeer(PEER)
+
+        // A live key-change alert is Stage-2 seal-migration data that MUST NOT
+        // gate encryption anymore: BTBV treats an extra announced key as normal,
+        // not a rotation to confirm. The encrypt gate is retired.
+        const alerts = await import('@/stores/keyChangeAlertsStore')
+        alerts.recordKeyChangeAlert(PEER, P1.fingerprint, P2.fingerprint)
+        expect(alerts.getKeyChangeAlert(PEER)).not.toBeNull()
+
+        const handle = await openBob()
+        const payload = await plugin.encrypt(handle, encodeBodyAsPayload('still encrypts'))
+        expect(payload.stanzaElement.name).toBe('openpgp')
+        // Both of bob's announced keys are reached — no pin-mismatch short-circuit.
+        const fps = recipientFpsFromEncrypt(payload)
+        expect(fps).toContain(P1.fingerprint)
+        expect(fps).toContain(P2.fingerprint)
+      })
     })
   })
 
@@ -4292,29 +4449,19 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('verification trust', () => {
-    // Reuses the real verifiedPeerKeysStore + keyChangeAlertsStore +
-    // pinnedPrimaryFingerprintsStore — the plugin reads from / writes to
-    // them imperatively, and any regression in those paths should
-    // surface here rather than be hidden by mocks.
+    // Reuses the real verifiedPeerKeysStore — the plugin reads from / writes to
+    // it imperatively, and any regression in that path should surface here
+    // rather than be hidden by mocks. (The pin / key-change-alert stores are
+    // retired for OX and no longer touched by these tests.)
     type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    type AlertsStore = typeof import('@/stores/keyChangeAlertsStore')
-    type PinStore = typeof import('@/stores/pinnedPrimaryFingerprintsStore')
     let verifiedStore: VerifiedStore
-    let alertsStore: AlertsStore
-    let pinStore: PinStore
     beforeEach(async () => {
       localStorage.clear()
       verifiedStore = (await import('@/stores/verifiedPeerKeysStore')) as VerifiedStore
-      alertsStore = (await import('@/stores/keyChangeAlertsStore')) as AlertsStore
-      pinStore = (await import('@/stores/pinnedPrimaryFingerprintsStore')) as PinStore
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
     })
     afterEach(() => {
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
     })
 
     it("getPeerTrust returns 'verified' when the cached fingerprint is in the store", async () => {
@@ -4370,24 +4517,18 @@ describe('SequoiaPgpPlugin', () => {
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
 
-    // NOTE: the single-primary TOFU-pin / key-change-alert model is RETIRED
-    // for OX by the multi-key cache (spec §Store changes: pinnedPrimary +
+    // NOTE: the single-primary TOFU-pin / key-change-alert model is RETIRED for
+    // OX by the multi-key cache (spec §Store changes: pinnedPrimary +
     // keyChangeAlerts "retired for OX"). A different announced key is a normal
     // additional key, not a rotation-alert — covered by the multi-key cache
-    // tests (departed→inactive, re-announce reactivation). The former
-    // TOFU-pin / pin-mismatch / acceptPeerKeyChange rotation tests were
-    // removed with that model; the pin-persistence stores are left intact for
-    // Stage 2's ordered seal migration (encrypt gate deletion is Task 6).
-
-    it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
-      // Caching the FIRST-ever key for a peer (no prior pin) is the
-      // TOFU baseline — pin is set, no alert. A new alert here would
-      // surface a banner on every fresh peer probe.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
-    })
+    // tests (departed→inactive, re-announce reactivation). The former TOFU-pin /
+    // pin-mismatch / acceptPeerKeyChange rotation tests were removed with that
+    // model; the encrypt pin-mismatch GATE is retired here in Task 6 (see
+    // "encrypt fan-out … a cached second peer key no longer throws pin-mismatch").
+    // The pin-persistence stores are left intact for Stage 2's ordered seal
+    // migration. The old "does NOT record a key-change alert on first key cache"
+    // test was deleted: no production path records an alert on cache anymore, so
+    // the assertion could never fail (a hollow test worse than none).
   })
 
   describe('cross-device verification sync', () => {
