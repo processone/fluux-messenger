@@ -94,6 +94,11 @@ export function IdentityChoiceDialog({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // This dialog owns Escape while open (ModalOverlay's own handler is off via
+      // closeOnEscape={false}). Consume it so it can't also fire the window-level
+      // conversation shortcut (scroll-to-bottom / mark-read) behind the modal —
+      // the same leak useCloseOnEscape fixes for the shared overlays.
+      e.stopPropagation()
       // Escape backs out of the sub-phase to the chooser, NOT out of the
       // dialog entirely — Cancel is the only path that closes, to make
       // sure the user is making an explicit choice.

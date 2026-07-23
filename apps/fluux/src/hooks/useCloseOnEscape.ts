@@ -16,9 +16,16 @@ import { useEffect } from 'react'
  * also running — the overlay "wins" the Escape, mirroring {@link useFocusTrap}'s
  * stacked-overlay behavior. Same-target listeners (e.g. a nested context menu on
  * `document`) are unaffected, so their own Escape handling still works.
+ *
+ * `enabled` (default `true`) gates the listener for overlays that stay mounted and
+ * toggle open/closed via state — dropdown and bottom-sheet menus. Pass the open
+ * flag so Escape is consumed ONLY while the overlay is open; when closed the event
+ * must flow through untouched (e.g. to the conversation's own Escape handling).
+ * Overlays that unmount when closed (lightboxes) can omit it.
  */
-export function useCloseOnEscape(onClose: () => void): void {
+export function useCloseOnEscape(onClose: () => void, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
@@ -26,5 +33,5 @@ export function useCloseOnEscape(onClose: () => void): void {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [onClose, enabled])
 }

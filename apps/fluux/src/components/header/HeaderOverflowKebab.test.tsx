@@ -49,6 +49,40 @@ describe('HeaderOverflowKebab', () => {
     expect(screen.queryByText('Invite')).not.toBeInTheDocument()
   })
 
+  it('consumes Escape so it never reaches the window-level shortcut handler', () => {
+    // Regression (image-scroll-position-reset follow-up): this kebab lives in the
+    // conversation/room header. Closing it with Escape must not also fire the
+    // window shortcut that scrolls the conversation to the bottom and marks it read.
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)
+      fireEvent.click(screen.getByLabelText('More'))
+      expect(screen.getByText('Search')).toBeInTheDocument()
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+
+      expect(screen.queryByText('Search')).not.toBeInTheDocument()
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
+  it('leaves Escape alone while closed (window handler still runs)', () => {
+    // The listener is gated on the open state: a closed kebab must not swallow
+    // Escape meant for the conversation underneath.
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<HeaderOverflowKebab ariaLabel="More" entries={makeEntries()} />)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(windowKeydown).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
+
   it('touch: opens a bottom sheet, navigates into a submenu and back', () => {
     mockHasHover.mockReturnValue(false)
     const onMode = vi.fn()

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { MoreVertical, ChevronLeft, ChevronRight, Check, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { BottomSheet } from '../ui/BottomSheet'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useAnchoredMenu, useClickOutside } from '@/hooks'
+import { useCloseOnEscape } from '@/hooks/useCloseOnEscape'
 import type { HeaderActionGroup, HeaderActionItem } from './headerOverflow'
 
 export type OverflowEntry =
@@ -74,12 +75,9 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
 
   const close = () => { setIsOpen(false); setSheetView('root') }
 
-  useEffect(() => {
-    if (!isOpen) return
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    document.addEventListener('keydown', onEsc)
-    return () => document.removeEventListener('keydown', onEsc)
-  }, [isOpen])
+  // Consume Escape only while open so it can't also fire the window-level
+  // conversation shortcut (scroll-to-bottom / mark-read). See useCloseOnEscape.
+  useCloseOnEscape(close, isOpen)
 
   if (entries.length === 0) return null
 

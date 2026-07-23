@@ -302,4 +302,21 @@ describe('IdentityChoiceDialog', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
   })
+
+  it('consumes Escape so it never reaches the window-level shortcut handler', () => {
+    // Regression (image-scroll-position-reset follow-up): this dialog can appear
+    // over the live app (App.tsx auto-init). Its Escape handling — backing out a
+    // sub-phase or cancelling from the chooser — must not also fire the window
+    // shortcut that scrolls the conversation to the bottom and marks it read.
+    const windowKeydown = vi.fn()
+    window.addEventListener('keydown', windowKeydown)
+    try {
+      render(<IdentityChoiceDialog {...baseProps} />)
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+      expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
+      expect(windowKeydown).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('keydown', windowKeydown)
+    }
+  })
 })
