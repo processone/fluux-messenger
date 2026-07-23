@@ -17,6 +17,7 @@ import {
   isE2EEPluginError,
   parsePayloadEnvelope,
   serializePayloadEnvelope,
+  wrapForSigncrypt,
   xml,
   type PEPItem,
   type PluginContext,
@@ -264,19 +265,34 @@ function makeFakeRust() {
         // Mirror the Rust `signature_status`: verified when a supplied sender
         // cert matches the embedded signer fp; missing-key when the message is
         // signed but the signer's cert is not among the supplied senders; none
-        // when there is no embedded signer. (The stub has no tamper channel,
-        // so 'bad' is not produced here.)
+        // when there is no embedded signer.
+        //
+        // Tamper channel (test-only): a signer fp prefixed with `TAMPER!` models
+        // a forged/corrupt signature whose ISSUER is `<realFp>` — i.e. the cert
+        // that made it IS identifiable, but the signature does not verify. When
+        // that issuer cert is among the supplied senders the outcome is `bad`
+        // (forgery — a cert we hold matched the issuer but verification failed);
+        // when it is absent the outcome is still `missing-key` (we could not
+        // even attempt verification). This lets tests drive the `bad` branch
+        // without a real crypto tamper.
         const senderArmored = (args!.senderPublicArmored as string[] | undefined) ?? []
         const suppliedFps = senderArmored
           .map((armored) => extractFingerprint(armored))
           .filter((fp): fp is string => fp !== null)
+        const TAMPER_PREFIX = 'TAMPER!'
+        const tampered = embeddedSenderFp.startsWith(TAMPER_PREFIX)
+        const issuerFp = tampered ? embeddedSenderFp.slice(TAMPER_PREFIX.length) : embeddedSenderFp
         let signatureStatus: 'none' | 'verified' | 'bad' | 'missing-key'
         let signerFingerprint: string | null = null
-        if (!embeddedSenderFp) {
+        if (!issuerFp) {
           signatureStatus = 'none'
-        } else if (suppliedFps.includes(embeddedSenderFp)) {
-          signatureStatus = 'verified'
-          signerFingerprint = embeddedSenderFp
+        } else if (suppliedFps.includes(issuerFp)) {
+          if (tampered) {
+            signatureStatus = 'bad'
+          } else {
+            signatureStatus = 'verified'
+            signerFingerprint = issuerFp
+          }
         } else {
           signatureStatus = 'missing-key'
         }
@@ -548,6 +564,40 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
   return {
     alice: { plugin: alicePlugin, ctx: aliceBuilt.ctx },
     bob: { plugin: bobPlugin, ctx: bobBuilt.ctx },
+  }
+}
+
+/**
+ * Craft an `<openpgp/>` stanza whose stub ciphertext is signed by an ARBITRARY
+ * fingerprint and addressed to an arbitrary JID — without routing through a
+ * real second plugin instance. This is the only way to forge "a message from
+ * peer P signed by P's key K" for a K that isn't the primary key of a fake
+ * account, which the multi-key verifier tests need (second active key, a
+ * now-inactive key, an own sibling key, a tampered signature, …).
+ *
+ * `recipientFps` MUST include the receiving account's own fingerprint so the
+ * fake `openpgp_decrypt` lets it open the message. `signerFp` may carry the
+ * `TAMPER!` prefix to model a forged signature (see the fake's tamper channel).
+ */
+function craftSigncryptStanza(opts: {
+  recipientFps: string[]
+  signerFp: string
+  toJid: string
+  body: string
+  timestamp?: Date
+}): XMLElementData {
+  const payloadXml = serializePayloadEnvelope([xml('body', {}, opts.body)])
+  const envelope = wrapForSigncrypt({
+    payloadXml,
+    peerJid: opts.toJid,
+    timestamp: opts.timestamp ?? new Date(),
+  })
+  const encodedEnvelope = btoa(unescape(encodeURIComponent(envelope)))
+  const stub = `OPENPGP-STUB:${opts.recipientFps.join(',')}:${opts.signerFp}:${encodedEnvelope}`
+  return {
+    name: 'openpgp',
+    attrs: { xmlns: OX_NS },
+    children: [encodeOpenPgpArmorForXep0373(makeOpenPgpArmor('PGP MESSAGE', stub))],
   }
 }
 
@@ -2522,10 +2572,13 @@ describe('SequoiaPgpPlugin', () => {
       expect(bobBuilt.securityUpdates).toHaveLength(0)
     })
 
-    it('stash-then-verify-fails rejects the entry when key arrives', async () => {
-      // The key that finally arrives is a DIFFERENT identity (eve's). The
-      // re-verify reports signatureVerified=false, so the message is
-      // rejected with its body expunged — not kept pending.
+    it('retains (does not reject) the entry when a DECOY key of a different identity arrives', async () => {
+      // The key that finally arrives is a DIFFERENT identity (eve's). Under the
+      // multi-key verifier model this is `missing-key` (the real signer's cert
+      // still isn't in our set), NOT a forgery: the entry is RETAINED for a
+      // later drain (the genuine signing key may still arrive), never rejected.
+      // A genuine forgery from a cached signer (signatureStatus 'bad') is what
+      // gets permanently rejected — see the drain state-machine test.
       const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
       const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
@@ -2562,9 +2615,13 @@ describe('SequoiaPgpPlugin', () => {
       bobPlugin.onPeerKeysChanged('alice@example.com')
       await flushAsync()
 
-      expect(bobBuilt.securityUpdates).toHaveLength(1)
-      expect(bobBuilt.securityUpdates[0].securityContext.trust).toBe('rejected')
-      expect(bobBuilt.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
+      // Not a forgery (different issuer) → no rejection is emitted; the entry
+      // stays pending for a future drain rather than being expunged.
+      expect(bobBuilt.securityUpdates).toHaveLength(0)
+      const pending = (
+        bobPlugin as unknown as { pendingVerifications: Map<string, unknown[]> }
+      ).pendingVerifications.get('alice@example.com')
+      expect(pending).toHaveLength(1)
     })
 
     it('enforces the per-peer buffer size cap by evicting oldest entries', async () => {
@@ -2797,7 +2854,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Sender key not cached/)
     })
 
-    it('rejects when the signature does not match the cached sender cert', async () => {
+    it('bakes untrusted (defers) when the cached cert is a different key than the signer', async () => {
       const { alice, bob } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
@@ -2805,9 +2862,11 @@ describe('SequoiaPgpPlugin', () => {
 
       // Before bob probes alice for the first time, intercept his PEP
       // queries so the metadata-then-data flow returns eve's key
-      // (with eve's fingerprint advertised AND served). The plugin
-      // will successfully cache eve-as-alice; decrypt must then flag
-      // the signature mismatch against what was actually signed.
+      // (with eve's fingerprint advertised AND served). The plugin caches
+      // eve-as-alice; the real-alice signature verifies against NONE of the
+      // certs we hold → `missing-key`, NOT a forgery. The multi-key model
+      // delivers such a message UNTRUSTED and defers (the genuine signer key
+      // may still arrive) rather than permanently rejecting it.
       const evePubkey = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'eve@example.com',
         userId: 'xmpp:alice@example.com',
@@ -2856,7 +2915,8 @@ describe('SequoiaPgpPlugin', () => {
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
 
-      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toThrow(/signature did not verify/)
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-subst' })
+      expect(decrypted.securityContext.trust).toBe('untrusted')
     })
 
     it('wraps the plaintext in a XEP-0373 §4.1 <signcrypt> envelope with all affixes', async () => {
@@ -4861,6 +4921,457 @@ describe('SequoiaPgpPlugin', () => {
 
       expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+    })
+  })
+
+  describe('decrypt — eligible verifier keyset (Task 7)', () => {
+    const PEER = 'alice@example.com'
+    const OWN = 'bob@example.com'
+
+    const flushAsync = async () => {
+      for (let i = 0; i < 5; i++) await new Promise<void>((r) => setTimeout(r, 0))
+    }
+
+    /** A valid peer key: parses, matching `xmpp:<peer>` UID, encryption subkey. */
+    function validPeerKey(fp: string, peer = PEER): KeyBundle {
+      return {
+        fingerprint: fp,
+        publicArmored: fake.makeArmored(fp, `xmpp:${peer}`, 'public'),
+        keychainBacked: false,
+      }
+    }
+
+    /**
+     * Install a controllable PEP surface for `peer`: serves an announced set +
+     * per-fp data nodes. `announce` sets both the metadata list and the data
+     * bodies; `setAnnouncedFps` narrows the announced set WITHOUT dropping the
+     * data bodies (so a departed key stays fetchable while it leaves the list).
+     */
+    function mountPeerPep(built: ReturnType<typeof makeContext>, peer: string) {
+      const inner = built.ctx.xmpp.queryPEP
+      const dataPrefix = `${METADATA_NODE}:`
+      let announced: string[] = []
+      const dataByFp = new Map<string, KeyBundle>()
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        if (jid === peer && node === METADATA_NODE) {
+          return announced.length > 0
+            ? [
+                {
+                  id: 'current',
+                  payload: {
+                    name: 'public-keys-list',
+                    attrs: { xmlns: OX_NS },
+                    children: announced.map((fp) => pubkeyMetadata(fp, '2024-01-01T00:00:00Z')),
+                  },
+                },
+              ]
+            : []
+        }
+        if (jid === peer && node.startsWith(dataPrefix)) {
+          const fp = node.slice(dataPrefix.length)
+          const b = dataByFp.get(fp)
+          return b
+            ? [
+                {
+                  id: 'current',
+                  payload: {
+                    name: 'pubkey',
+                    attrs: { xmlns: OX_NS },
+                    children: [
+                      {
+                        name: 'data',
+                        attrs: {},
+                        children: [encodeOpenPgpArmorForXep0373(b.publicArmored)],
+                      },
+                    ],
+                  },
+                },
+              ]
+            : []
+        }
+        return inner(jid, node, maxItems)
+      }
+      return {
+        announce(bundles: KeyBundle[]) {
+          announced = bundles.map((b) => b.fingerprint)
+          for (const b of bundles) dataByFp.set(b.fingerprint, b)
+        },
+        setAnnouncedFps(fps: string[]) {
+          announced = fps
+        },
+      }
+    }
+
+    type PeerKeysInternals = {
+      peerKeys: Map<
+        string,
+        Array<{
+          fingerprint: string
+          publicArmored: string
+          keychainBacked: boolean
+          active: boolean
+          inactiveAt?: string
+        }>
+      >
+      stashPendingVerification: (
+        peer: string,
+        entry: {
+          messageId: string
+          ciphertext: string
+          plaintext: string
+          expiresAt: number
+          receivedAt: string
+          isSelfOutgoing: boolean
+        },
+      ) => void
+      drainPendingVerifications: (peer: string) => Promise<void>
+      decryptWithOwnKey: (
+        jid: string,
+        ciphertext: string,
+        senders: string[],
+      ) => Promise<{
+        plaintext: string
+        signatureVerified: boolean
+        signerFingerprint: string | null
+        signaturePresent: boolean
+        signatureStatus: 'none' | 'verified' | 'bad' | 'missing-key'
+      }>
+      pendingVerifications: Map<string, unknown[]>
+      now: () => number
+    }
+
+    async function makeBob() {
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const built = makeContext(OWN)
+      await bobPlugin.init(built.ctx)
+      const ownFp = bobPlugin.getOwnFingerprint()!
+      return { bobPlugin, built, ownFp }
+    }
+
+    it("decrypts and bakes tofu for a message signed by the peer's SECOND active key", async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await bobPlugin.probePeer(PEER)
+      expect(bobPlugin.getPeerFingerprints(PEER)).toEqual(
+        expect.arrayContaining([A.fingerprint, B.fingerprint]),
+      )
+
+      // A live message signed by the SECOND active key must verify against the
+      // full active keyset and bake tofu (signer ∈ active cached fingerprints).
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'from the second device',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-second',
+      })
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('from the second device')
+      expect(decrypted.securityContext.trust).toBe('tofu')
+    })
+
+    it('verifies an eligible archived message signed by a now-inactive key', async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await bobPlugin.probePeer(PEER) // caches {A, B} active
+      // B leaves the announced set → retained inactive (inactiveAt ≈ now).
+      pep.setAnnouncedFps([A.fingerprint])
+      bobPlugin.onPeerKeysChanged(PEER)
+      await flushAsync()
+      expect(bobPlugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+
+      // A MAM message from before B's retirement, signed by B.
+      const archiveTimestamp = new Date(Date.now() - 3600_000)
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'archived, signed by the retired key',
+        timestamp: archiveTimestamp,
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-arch',
+        fromArchive: true,
+        archiveTimestamp,
+      })
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('archived, signed by the retired key')
+      // Eligible verifier set includes B at archiveTimestamp → verified → tofu.
+      expect(decrypted.securityContext.trust).toBe('tofu')
+    })
+
+    it('bakes untrusted for a NEW LIVE message signed only by an inactive key', async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      pep.announce([A, B])
+      await bobPlugin.probePeer(PEER)
+      pep.setAnnouncedFps([A.fingerprint])
+      bobPlugin.onPeerKeysChanged(PEER)
+      await flushAsync()
+
+      // A fresh LIVE message signed only by the retired key. The eligible
+      // verifier set for a live message is active-only → B excluded → the
+      // signature can't be attributed to an eligible key → untrusted.
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'live, from a retired key',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-live-retired',
+      })
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('live, from a retired key')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+    })
+
+    it('a signature from an UNCACHED device (missing-key) refreshes + defers, not permanent-rejects', async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      // Only A is cached initially; B is announced+fetchable but never probed.
+      pep.announce([A])
+      await bobPlugin.probePeer(PEER)
+      pep.announce([A, B]) // B now announced and its data node is available
+      expect(bobPlugin.getPeerFingerprints(PEER)).toEqual([A.fingerprint])
+
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'from an uncached device',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      // Must NOT throw signature-failed — a valid message from an uncached
+      // device defers, delivered untrusted.
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-uncached',
+      })
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('from an uncached device')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+
+      // The missing-key branch fired a refresh of the peer keyset → B is fetched.
+      await flushAsync()
+      expect(bobPlugin.getPeerFingerprints(PEER)).toEqual(
+        expect.arrayContaining([A.fingerprint, B.fingerprint]),
+      )
+      // …and the entry deferred, so the drain upgrades it to tofu now B is cached.
+      bobPlugin.onPeerKeysChanged(PEER)
+      await flushAsync()
+      const upgrade = built.securityUpdates.find((u) => u.messageId === 'm-uncached')
+      expect(upgrade?.securityContext.trust).toBe('tofu')
+    })
+
+    it('a deferred message received while B was active becomes TRUSTED after B goes inactive', async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      const internals = bobPlugin as unknown as PeerKeysInternals
+
+      // The message from B arrives before we hold ANY key → deferred untrusted.
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'deferred, signed by B',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-deferred',
+      })
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+      const stashed = (internals.pendingVerifications.get(PEER) ?? [])[0] as { receivedAt: string }
+      expect(stashed).toBeDefined()
+
+      // B is later fetched, then RETIRED: its `inactiveAt` lands AFTER the
+      // message's receivedAt, so B is still eligible to verify THIS message but
+      // not fresh live traffic. Seed that state directly for determinism.
+      const inactiveAt = new Date(new Date(stashed.receivedAt).getTime() + 60_000).toISOString()
+      internals.peerKeys.set(PEER, [
+        { fingerprint: A.fingerprint, publicArmored: A.publicArmored, keychainBacked: false, active: true },
+        {
+          fingerprint: B.fingerprint,
+          publicArmored: B.publicArmored,
+          keychainBacked: false,
+          active: false,
+          inactiveAt,
+        },
+      ])
+
+      // Drain now that B is INACTIVE-but-eligible for receivedAt.
+      await internals.drainPendingVerifications(PEER)
+
+      // Bug-1(f) guard: verifier selection AND trust bake both use receivedAt,
+      // so the deferred message bakes TRUSTED (not merely "crypto passed").
+      const upgrade = built.securityUpdates.find((u) => u.messageId === 'm-deferred')
+      expect(upgrade).toBeDefined()
+      expect(upgrade!.securityContext.trust).toBe('tofu')
+      // …and the entry is consumed.
+      expect(internals.pendingVerifications.get(PEER) ?? []).toHaveLength(0)
+
+      // A brand-new LIVE message signed by the now-retired B → untrusted: a
+      // live message's eligible verifier set is active-only, excluding B.
+      const liveStanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'new live from retired B',
+      })
+      const liveDecrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(liveStanza)!, {
+        messageId: 'm-new-live',
+      })
+      expect(liveDecrypted.securityContext.trust).toBe('untrusted')
+    })
+
+    it('a genuinely BAD signature from a cached signer is permanently rejected', async () => {
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      pep.announce([A])
+      await bobPlugin.probePeer(PEER)
+
+      // The issuer (A) IS cached, but the signature is a forgery (tamper channel).
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: `TAMPER!${A.fingerprint}`,
+        toJid: OWN,
+        body: 'forged',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      await expect(
+        bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, { messageId: 'm-bad' }),
+      ).rejects.toMatchObject({ code: 'signature-failed', kind: 'permanent' })
+      // A forgery is NOT deferred: nothing stashed.
+      const internals = bobPlugin as unknown as PeerKeysInternals
+      expect(internals.pendingVerifications.get(PEER) ?? []).toHaveLength(0)
+      expect(built.securityUpdates).toHaveLength(0)
+    })
+
+    it('self-outgoing signed by a SIBLING own key bakes tofu, not untrusted (distinct-key)', async () => {
+      const { bobPlugin, ownFp } = await makeBob()
+      const ownBundle = fake.accounts.get(OWN)!
+      const siblingArmored = fake.makeArmored(SIBLING_FP, `xmpp:${OWN}`, 'public')
+      // Our own account announces {local, sibling}. Seed the own keyset directly
+      // (both active) — the verifier set for a self-outgoing message.
+      const internals = bobPlugin as unknown as PeerKeysInternals
+      internals.peerKeys.set(OWN, [
+        { fingerprint: ownFp, publicArmored: ownBundle.publicArmored, keychainBacked: true, active: true },
+        { fingerprint: SIBLING_FP, publicArmored: siblingArmored, keychainBacked: false, active: true },
+      ])
+
+      // A self-outgoing carbon signed by the SIBLING key, addressed to the peer.
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: SIBLING_FP,
+        toJid: PEER,
+        body: 'sent from my other device',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-self-sibling',
+        isSelfOutgoing: true,
+      })
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('sent from my other device')
+      expect(decrypted.securityContext.trust).toBe('tofu')
+    })
+
+    it('drain: verified → upgrade + remove; missing-key → retain; bad → reject + remove', async () => {
+      const { bobPlugin, built } = await makeBob()
+      const internals = bobPlugin as unknown as PeerKeysInternals
+      // One active cert so buildInboundSecurityContext can grant tofu to the
+      // verified entry (its signer fp is this cert).
+      const signerFp = 'DRAINKEYAAA1'
+      internals.peerKeys.set(PEER, [
+        {
+          fingerprint: signerFp,
+          publicArmored: fake.makeArmored(signerFp, `xmpp:${PEER}`, 'public'),
+          keychainBacked: false,
+          active: true,
+        },
+      ])
+
+      const receivedAt = new Date().toISOString()
+      const expiresAt = internals.now() + 10 * 60 * 1000
+      internals.stashPendingVerification(PEER, {
+        messageId: 'm-verify',
+        ciphertext: 'ct-verify',
+        plaintext: 'pt-verify',
+        expiresAt,
+        receivedAt,
+        isSelfOutgoing: false,
+      })
+      internals.stashPendingVerification(PEER, {
+        messageId: 'm-missing',
+        ciphertext: 'ct-missing',
+        plaintext: 'pt-missing',
+        expiresAt,
+        receivedAt,
+        isSelfOutgoing: false,
+      })
+      internals.stashPendingVerification(PEER, {
+        messageId: 'm-bad',
+        ciphertext: 'ct-bad',
+        plaintext: 'pt-bad',
+        expiresAt,
+        receivedAt,
+        isSelfOutgoing: false,
+      })
+
+      // Script the re-decrypt outcome per entry (plaintext MUST match the stash
+      // so the equality guard passes and the state machine decides the fate).
+      vi.spyOn(internals, 'decryptWithOwnKey').mockImplementation(async (_jid, ct) => {
+        if (ct === 'ct-verify') {
+          return {
+            plaintext: 'pt-verify',
+            signatureVerified: true,
+            signerFingerprint: signerFp,
+            signaturePresent: true,
+            signatureStatus: 'verified',
+          }
+        }
+        if (ct === 'ct-missing') {
+          return {
+            plaintext: 'pt-missing',
+            signatureVerified: false,
+            signerFingerprint: null,
+            signaturePresent: true,
+            signatureStatus: 'missing-key',
+          }
+        }
+        return {
+          plaintext: 'pt-bad',
+          signatureVerified: false,
+          signerFingerprint: null,
+          signaturePresent: true,
+          signatureStatus: 'bad',
+        }
+      })
+
+      await internals.drainPendingVerifications(PEER)
+
+      // verified → an upgrade report; bad → a rejection report.
+      const verifyUpdate = built.securityUpdates.find((u) => u.messageId === 'm-verify')
+      const badUpdate = built.securityUpdates.find((u) => u.messageId === 'm-bad')
+      expect(verifyUpdate?.securityContext.trust).toBe('tofu')
+      expect(badUpdate?.securityContext.trust).toBe('rejected')
+      // missing-key produced no report — the entry stays pending.
+      expect(built.securityUpdates.some((u) => u.messageId === 'm-missing')).toBe(false)
+      const remaining = (internals.pendingVerifications.get(PEER) ?? []) as Array<{
+        messageId: string
+      }>
+      expect(remaining.map((e) => e.messageId)).toEqual(['m-missing'])
     })
   })
 })

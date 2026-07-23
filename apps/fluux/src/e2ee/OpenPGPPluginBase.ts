@@ -285,6 +285,20 @@ interface PendingVerification {
   ciphertext: string
   plaintext: string
   expiresAt: number
+  /**
+   * ISO-8601 eligibility time for THIS message — the archive `<delay/>` stamp
+   * for an archived message, or the live reception time otherwise. The drain
+   * re-selects the verifier set AND re-bakes trust against this same instant so
+   * a message whose signer key was active/eligible at receipt still verifies (and
+   * bakes trusted) after that key is later retired (see spec §Retained certs).
+   */
+  receivedAt: string
+  /**
+   * `true` when the deferred message is one of our own outgoing carbons/MAM
+   * replays — the drain then bakes with {@link buildSelfOutgoingSecurityContext}
+   * (own keyset) rather than the inbound peer builder.
+   */
+  isSelfOutgoing: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -2309,22 +2323,28 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // The signer is whoever produced this ciphertext: for a received
     // message it's the conversation peer; for a self-outgoing replay
     // (XEP-0280 sent carbon or XEP-0313 MAM self-entry) it was us.
+    //
+    // ONE eligibility time drives BOTH verifier selection here and the trust
+    // bake below, so verification and trust can never disagree (blocker #1(f)).
+    // Archive → the `<delay/>` stamp; live → undefined (active certs only, so a
+    // retired key never authenticates fresh traffic — spec §Retained certs).
+    const eligibilityTime = context?.fromArchive ? context.archiveTimestamp : undefined
     // Pass EVERY candidate signer cert so a signature from any announced key
-    // verifies (#1059). Task 7 widens the peer set to the archive-eligible
-    // verifier set (active + eligible inactive); Stage 1 uses active certs.
+    // verifies (#1059): the eligible verifier set (active + archive-eligible
+    // inactive) for the peer, or the own-announced set for a self-outgoing
+    // replay. `ownBundle` (the local cert) is always in the self-signature
+    // verifier set even if own-PEP is incomplete — it is known without a fetch.
     const senderPublics = isSelfOutgoing
-      ? this.ownBundle?.publicArmored
-        ? [this.ownBundle.publicArmored]
-        : []
-      : this.getEligibleVerifierPublics(peer, context?.archiveTimestamp)
-    const hasSenderKey = senderPublics.length > 0
+      ? this.getEligibleVerifierPublics(ownBareJid, eligibilityTime)
+      : this.getEligibleVerifierPublics(peer, eligibilityTime)
+    if (isSelfOutgoing && this.ownBundle) senderPublics.push(this.ownBundle.publicArmored)
 
     let output: DecryptOutput
     try {
       output = await this.decryptWithOwnKey(
         ctx.account.jid,
         ciphertext,
-        senderPublics,
+        [...new Set(senderPublics)],
       )
     } catch (err) {
       // Classify raw backend errors (e.g. openpgp.js "Error during parsing …"
@@ -2382,17 +2402,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
     }
 
-    // XEP-0373 signcrypt mandate: signing AND encryption are required.
-    // Case B: no signature at all — malformed signcrypt.
-    if (!output.signaturePresent) {
+    // XEP-0373 signcrypt mandate + verifier-set classification. Branch on the
+    // discrete `signatureStatus` so a genuine forgery (a cert we hold IS the
+    // issuer but the signature is invalid → permanent) is kept distinct from an
+    // uncached signing device (the issuer is not in our verifier set → defer).
+    if (output.signatureStatus === 'none') {
+      // Signcrypt requires a signature — none present is a malformed message.
       throw new E2EEPluginError(
         'permanent',
         'signature-missing',
         `${this.pluginName()}: signcrypt message contains no signature`,
       )
     }
-    // Case A: sender key available but signature did not verify.
-    if (hasSenderKey && !output.signatureVerified) {
+    if (output.signatureStatus === 'bad') {
       // A clock-skew "not yet valid" failure is transient — the signature may
       // verify once clocks converge. Throw a distinct transient code so the
       // decrypt pipeline stashes it for retry (retryPendingDecrypts) instead
@@ -2404,38 +2426,41 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           `${this.pluginName()}: signcrypt signature creation time is ahead of our clock beyond tolerance — will retry`,
         )
       }
+      // A cert we hold matches the signer, but the signature did not verify → forgery.
       throw new E2EEPluginError(
         'permanent',
         'signature-failed',
         `${this.pluginName()}: signcrypt signature did not verify against available sender key`,
       )
     }
-    // Case C (signaturePresent + !hasSenderKey + !signatureVerified)
-    // falls through — the deferred-verification stash below handles it.
+    if (output.signatureStatus === 'missing-key') {
+      // The signer's cert is not among the keys we supplied — an uncached
+      // device, INCLUDING (under distinct-key multi-client) an uncached OWN
+      // sibling on a self-outgoing carbon. Refresh the relevant JID and stash
+      // for deferred re-verification. Never a permanent reject: the plaintext
+      // is delivered untrusted and trust upgrades once the signing cert is
+      // fetched (the security-context bake below returns 'untrusted' because
+      // the signer fp is not in the eligible cached set).
+      const refreshJid = isSelfOutgoing ? ownBareJid : peer
+      void this.refetchAndCachePeerKey(refreshJid).catch(() => {})
+      if (context?.messageId) {
+        this.stashPendingVerification(refreshJid, {
+          messageId: context.messageId,
+          ciphertext,
+          plaintext: output.plaintext,
+          expiresAt: this.now() + SIGNATURE_BUFFER_TTL_MS,
+          receivedAt: (context.archiveTimestamp ?? new Date(this.now())).toISOString(),
+          isSelfOutgoing,
+        })
+      }
+      // fall through to the untrusted bake below.
+    }
+    // output.signatureStatus === 'verified' → proceed to the verified bake.
 
     const plaintextBytes = new TextEncoder().encode(envelope.payloadXml)
     const securityContext = isSelfOutgoing
-      ? this.buildSelfOutgoingSecurityContext(output)
-      : this.buildInboundSecurityContext(peer, output)
-
-    // Deferred signature re-verification: only meaningful for received
-    // messages where the sender's key may arrive after the message did.
-    // For self-outgoing, our own key is by definition already cached on
-    // this device — if the signature didn't verify here, it never will.
-    if (
-      !isSelfOutgoing &&
-      context?.messageId &&
-      !output.signatureVerified &&
-      output.signaturePresent &&
-      !hasSenderKey
-    ) {
-      this.stashPendingVerification(peer, {
-        messageId: context.messageId,
-        ciphertext,
-        plaintext: output.plaintext,
-        expiresAt: this.now() + SIGNATURE_BUFFER_TTL_MS,
-      })
-    }
+      ? this.buildSelfOutgoingSecurityContext(output, eligibilityTime)
+      : this.buildInboundSecurityContext(peer, output, eligibilityTime)
 
     // For self-outgoing replays, the originating device is one of our own
     // resources. The carbon doesn't reveal which one to the plugin layer,
@@ -2567,10 +2592,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const entries = this.pendingVerifications.get(peer)
     if (!ctx || !entries || entries.length === 0) return
 
-    // Verify against every active peer cert (Task 7 widens to the eligible
-    // verifier set keyed on each entry's receive time).
-    const peerPublics = this.getActivePeerPublics(peer)
-    if (peerPublics.length === 0) {
+    // No verifier material at all for this peer → nothing can be re-verified
+    // yet. Retain non-expired entries for a future drain rather than rejecting.
+    if ((this.peerKeys.get(peer) ?? []).length === 0) {
       const now = this.now()
       const alive = entries.filter((e) => e.expiresAt > now)
       if (alive.length === 0) this.pendingVerifications.delete(peer)
@@ -2582,15 +2606,31 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const remaining: PendingVerification[] = []
     for (const entry of entries) {
       if (entry.expiresAt <= now) continue
+      // Re-select the verifier set against the entry's OWN eligibility time, so
+      // a signer key that was active/eligible at receipt still verifies after it
+      // is later retired (spec §Retained certs).
+      const eligibilityTime = new Date(entry.receivedAt)
       try {
         const output = await this.decryptWithOwnKey(
           ctx.account.jid,
           entry.ciphertext,
-          peerPublics,
+          this.getEligibleVerifierPublics(peer, eligibilityTime),
         )
         if (output.plaintext !== entry.plaintext) continue
-        if (output.signatureVerified) {
-          const securityContext = this.buildInboundSecurityContext(peer, output)
+        // Signer's cert still not in our set (an uncached device): keep the
+        // entry pending, do NOT reject — the signing key may still arrive.
+        if (output.signatureStatus === 'missing-key') {
+          remaining.push(entry)
+          continue
+        }
+        if (output.signatureStatus === 'verified') {
+          // Bake trust with the SAME eligibility time used for verifier
+          // selection (blocker #1(f)) — else a deferred live message verified
+          // via receivedAt < inactiveAt would re-bake as a live context and
+          // stay untrusted. Self-outgoing entries use the own-keyset builder.
+          const securityContext = entry.isSelfOutgoing
+            ? this.buildSelfOutgoingSecurityContext(output, eligibilityTime)
+            : this.buildInboundSecurityContext(peer, output, eligibilityTime)
           ctx.reportSecurityContextUpdate({
             peer,
             messageId: entry.messageId,
@@ -2598,8 +2638,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           })
           continue
         }
-        // Case D: key now available but signature still invalid — reject
-        // and expunge the plaintext body that was delivered optimistically.
+        // Case D: 'bad' | 'none' — key now available but the signature is a
+        // genuine failure. Reject and expunge the optimistically delivered body.
         ctx.reportSecurityContextUpdate({
           peer,
           messageId: entry.messageId,
@@ -2642,18 +2682,27 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     else this.pendingVerifications.set(peer, remaining)
   }
 
-  private buildInboundSecurityContext(peer: BareJID, output: DecryptOutput): SecurityContext {
-    // The signer is placed against the peer's ACTIVE announced keyset: a
-    // signature from ANY announced key is a legitimate peer signature (#1059).
-    // Task 7 replaces this with `resolvePeerTrust` over the eligible verifier
-    // set (so a retired key can't authenticate live traffic).
-    const activeFps = this.getPeerFingerprints(peer)
-    const hasCert = activeFps.length > 0
-    const signerMatches = output.signerFingerprint
-      ? activeFps.some((fp) => fingerprintsEqual(fp, output.signerFingerprint!))
-      : false
+  private buildInboundSecurityContext(
+    peer: BareJID,
+    output: DecryptOutput,
+    eligibilityTime?: Date,
+  ): SecurityContext {
+    // Fingerprints eligible to grant trust for THIS message: the active
+    // partition always, plus any inactive cert eligible at `eligibilityTime`
+    // (archive/deferred). A live message (`eligibilityTime` undefined) ⇒ active
+    // only, so a retired key never grants trust to fresh traffic. This is the
+    // SAME set used to pick the verifier certs, so verification and trust can
+    // never disagree (blocker #1(f)).
+    const eligiblePublics = this.getEligibleVerifierPublics(peer, eligibilityTime)
+    const eligibleFps = (this.peerKeys.get(peer) ?? [])
+      .filter((c) => eligiblePublics.includes(c.publicArmored))
+      .map((c) => c.fingerprint)
+    const hasCert = eligibleFps.length > 0
+    const signerEligible =
+      !!output.signerFingerprint &&
+      eligibleFps.some((fp) => fingerprintsEqual(fp, output.signerFingerprint!))
     let trust: SecurityContext['trust']
-    if (output.signatureVerified && signerMatches) {
+    if (output.signatureVerified && signerEligible) {
       trust = isPeerVerified(peer, output.signerFingerprint!) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
@@ -2662,8 +2711,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const notes: string[] = []
     if (!output.signatureVerified) {
       notes.push(hasCert ? 'Signature did not verify' : 'Sender key not cached — signature not checked')
-    } else if (!signerMatches) {
-      notes.push('Signature verified but fingerprint does not match cached peer')
+    } else if (!signerEligible) {
+      notes.push('Signature verified but signer is not in the eligible key set')
     }
 
     return {
@@ -2676,32 +2725,34 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /**
    * Trust evaluation for a self-outgoing ciphertext (sent carbon or
-   * MAM-replayed self-entry). The signer is us — we measure trust against
-   * our own published key bundle, not a peer's. A verified signature that
-   * matches our own fingerprint earns `verified`; anything else stays
-   * `untrusted` (e.g. server-injected payload that won't verify, or a
-   * fingerprint mismatch indicating identity rotation we haven't seen).
+   * MAM-replayed self-entry). The signer is us. The local (this-device) key is
+   * authoritative — a verified signature matching `ownBundle` earns `verified`.
+   * Any OTHER own-announced key (a sibling device under distinct-key
+   * multi-client — the Gajim-alongside-Fluux case) is trusted via the SAME
+   * eligible-keyset rule as an inbound message from our own JID (BTBV: `tofu`
+   * unless the user verified that sibling key; inactive-for-live → `untrusted`).
    */
-  private buildSelfOutgoingSecurityContext(output: DecryptOutput): SecurityContext {
-    const ownBundle = this.ownBundle
-    const fingerprintMatches =
-      ownBundle && output.signerFingerprint && fingerprintsEqual(ownBundle.fingerprint, output.signerFingerprint)
-    const trust: SecurityContext['trust'] =
-      output.signatureVerified && fingerprintMatches ? 'verified' : 'untrusted'
-
-    const notes: string[] = []
-    if (!output.signatureVerified) {
-      notes.push(ownBundle ? 'Own signature did not verify' : 'Own key not loaded — signature not checked')
-    } else if (!fingerprintMatches) {
-      notes.push('Signature verified but signer fingerprint does not match own key')
+  private buildSelfOutgoingSecurityContext(
+    output: DecryptOutput,
+    eligibilityTime?: Date,
+  ): SecurityContext {
+    const ownJid = getBareJid(this.requireCtx().account.jid)
+    if (
+      output.signatureVerified &&
+      output.signerFingerprint &&
+      this.ownBundle &&
+      fingerprintsEqual(this.ownBundle.fingerprint, output.signerFingerprint)
+    ) {
+      return {
+        protocolId: OPENPGP_DESCRIPTOR.id,
+        trust: 'verified',
+        fingerprint: output.signerFingerprint,
+      }
     }
-
-    return {
-      protocolId: OPENPGP_DESCRIPTOR.id,
-      trust,
-      ...(notes.length > 0 && { notes }),
-      ...(output.signerFingerprint && { fingerprint: output.signerFingerprint }),
-    }
+    // A sibling own-announced key: evaluate exactly like an inbound message
+    // from our own JID keyset, sharing the eligibility time so verifier
+    // selection and trust never disagree.
+    return this.buildInboundSecurityContext(ownJid, output, eligibilityTime)
   }
 
   private unwrapOrRethrow(plaintext: string) {

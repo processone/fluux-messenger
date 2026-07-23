@@ -2360,7 +2360,7 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/not cached/)
     })
 
-    it('rejects when the signature does not match the cached sender cert (Case A)', async () => {
+    it('bakes untrusted (defers) when the cached cert is a different key than the signer', async () => {
       const { shared, alice, bob } = await buildCrossPublishedPair()
 
       await alice.plugin.probePeer('bob@example.com')
@@ -2386,7 +2386,12 @@ describe('WebOpenPGPPlugin', () => {
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
 
-      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toThrow(/signature did not verify/)
+      // The real-alice signature verifies against none of the certs we hold
+      // (only eve's) → `missing-key`, not a forgery. The message is delivered
+      // untrusted and deferred, not permanently rejected. (A genuine forgery
+      // from a cached signer — status 'bad' — is what gets rejected.)
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-subst' })
+      expect(decrypted.securityContext.trust).toBe('untrusted')
     })
 
     it('rejects an envelope whose <time/> is more than 7 days skewed', async () => {
@@ -2443,6 +2448,10 @@ describe('WebOpenPGPPlugin', () => {
         .mockImplementation(async (...args) => ({
           ...(await real(...args)),
           signatureVerified: false,
+          // A clock-skew failure means the issuer cert WAS identified but the
+          // signature did not verify (creation time ahead) → status 'bad' with
+          // the not-yet-valid flag, which the decrypt path treats as transient.
+          signatureStatus: 'bad',
           signatureNotYetValid: true,
           signerFingerprint: null,
         }))
@@ -2503,27 +2512,35 @@ describe('WebOpenPGPPlugin', () => {
         expect(bob.securityUpdates).toHaveLength(0)
       })
 
-      it('stash-then-verify-fails rejects the entry when key arrives (Case D)', async () => {
+      it('does not falsely reject a genuine message when a decoy key of a different identity later appears', async () => {
         const { shared, alice, bob } = await buildCrossPublishedPair()
 
         await alice.plugin.probePeer('bob@example.com')
         const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
         const payload = await alice.plugin.encrypt(handle, encodeBody('from real alice'))
 
-        // Bob decrypts without alice's key → stashed
+        // Bob decrypts before caching alice's key → stashed (missing-key). The
+        // missing-key branch fetches alice's real, currently-announced key.
         clearSessionPassphrase()
         setSessionPassphrase('bob-strong-pp')
         const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
         const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
         await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-mismatch' })
+        // Wait for the missing-key refetch to cache alice's real key (the only
+        // key in shared PEP right now) BEFORE eve overwrites it.
+        await vi.waitFor(
+          () =>
+            expect(bob.plugin.getPeerFingerprints('alice@example.com').length).toBeGreaterThan(0),
+          { timeout: 5000 },
+        )
 
-        // Bob later sees eve's key advertised as alice (server misbehavior).
-        // Eve's key carries UID xmpp:alice@example.com so probePeer accepts it.
+        // Eve substitutes her key as alice's (server misbehavior). Alice's real
+        // key departs the announced set → retained INACTIVE, still eligible for
+        // the already-received message (receivedAt < its inactiveAt).
         clearSessionPassphrase()
         setSessionPassphrase('eve-strong-pp')
         const eve = new TestableWebOpenPGPPlugin()
-        const eveCtx = makeCtx('alice@example.com').ctx
-        await eve.init(eveCtx)
+        await eve.init(makeCtx('alice@example.com').ctx)
         const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
         publishKeyToSharedPep(shared, 'alice@example.com', eveBundle)
 
@@ -2531,9 +2548,21 @@ describe('WebOpenPGPPlugin', () => {
         setSessionPassphrase('bob-strong-pp')
         bob.plugin.onPeerKeysChanged('alice@example.com')
 
-        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
-        expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
-        expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
+        // The genuine message — signed by alice while her key was current —
+        // still verifies against the receivedAt-eligible retained key → tofu,
+        // NEVER a false rejection just because a decoy key later appeared.
+        await vi.waitFor(
+          () =>
+            expect(
+              bob.securityUpdates.some(
+                (u) => u.messageId === 'm-mismatch' && u.securityContext.trust === 'tofu',
+              ),
+            ).toBe(true),
+          { timeout: 5000 },
+        )
+        expect(
+          bob.securityUpdates.filter((u) => u.securityContext.trust === 'rejected'),
+        ).toHaveLength(0)
       })
 
       it('preserves the entry on a transient re-verify error instead of falsely rejecting', async () => {
