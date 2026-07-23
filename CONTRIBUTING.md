@@ -119,6 +119,11 @@ The SDK (`packages/fluux-sdk`) should:
 - Mock external dependencies
 - Test files go next to source files (`*.test.ts`)
 
+For correctness-sensitive changes, use the
+[Fluux Messenger code-review checklist](docs/2026-07-23-fluux-code-review-checklist.md).
+It captures recurring regressions around store semantics, MAM/read state, E2EE,
+virtualized scrolling, lifecycle, and platform boundaries.
+
 ## Branching Strategy
 
 ### Feature Development
