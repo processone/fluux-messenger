@@ -224,6 +224,25 @@ export interface DecryptOutput {
   signerFingerprint: string | null
   signaturePresent: boolean
   /**
+   * Machine-readable outcome of signature verification, mirroring the Rust
+   * `DecryptOutput::signature_status` (serde → `signatureStatus`):
+   *
+   * - `'none'`     — the message carried no signature at all.
+   * - `'verified'` — a signature verified against one of the supplied sender
+   *   keys; {@link signerFingerprint} names its primary certificate.
+   * - `'bad'`      — a supplied sender key matched the signature's issuer but
+   *   the signature itself did not verify (tamper / genuine failure).
+   * - `'missing-key'` — the message was signed, but none of the supplied
+   *   sender keys is the issuer, so verification could not be attempted. The
+   *   caller may refetch the sender's announced keyset and retry.
+   *
+   * `signatureVerified === (signatureStatus === 'verified')` and
+   * `signaturePresent === (signatureStatus !== 'none')`; the discrete field
+   * lets callers distinguish a genuinely bad signature from a merely
+   * unavailable signing key without re-deriving it from the booleans.
+   */
+  signatureStatus: 'none' | 'verified' | 'bad' | 'missing-key'
+  /**
    * Set when signature verification failed specifically because the
    * signature's creation time is ahead of the verifier's clock (beyond the
    * skew tolerance) — i.e. a *transient* clock-skew failure that may verify
@@ -439,23 +458,29 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected abstract ensureKeyMaterial(accountJid: string): Promise<KeyBundle>
 
   /**
-   * Sign and encrypt `plaintext` to `recipientPublicArmored`, returning
-   * armored ciphertext. `senderAccountJid` identifies the signing identity.
+   * Sign and encrypt `plaintext` to EVERY key in `recipientPublics`
+   * (XEP-0373 OX may advertise several public keys per JID — #1059),
+   * returning armored ciphertext. `accountJid` identifies the signing
+   * identity. A malformed recipient key is a hard error — the message must
+   * not be sent to a subset of the intended keys.
    */
-  protected abstract encryptToRecipient(
-    senderAccountJid: string,
-    recipientPublicArmored: string,
+  protected abstract encryptToRecipients(
+    accountJid: string,
+    recipientPublics: string[],
     plaintext: string,
   ): Promise<string>
 
   /**
-   * Decrypt `ciphertext` encrypted to our own key. `senderPublicArmored`
-   * is provided when available for signature verification; may be `null`.
+   * Decrypt `ciphertext` encrypted to our own key. `senderPublics` carries
+   * every candidate signer certificate available for signature verification
+   * (the sender may advertise several keys); it may be empty when no key is
+   * known yet, in which case the signature — if present — is reported as
+   * `'missing-key'`.
    */
   protected abstract decryptWithOwnKey(
     accountJid: string,
     ciphertext: string,
-    senderPublicArmored: string | null,
+    senderPublics: string[],
   ): Promise<DecryptOutput>
 
   /**
@@ -661,7 +686,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     try {
       const jid = this.ctx.account.jid
       await sealTrustState(
-        (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
+        (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
         ownPublicArmored,
       )
       setTrustStateStatus('sealed')
@@ -676,7 +701,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
     const jid = this.ctx.account.jid
     const { status, details } = await verifyTrustStateSeal(
-      (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
+      (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : []),
       ownPublicArmored,
       ownFingerprint,
       isSecretKeyUnavailableError,
@@ -708,7 +733,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ownPublicArmored || !this.ctx) return
     const jid = this.ctx.account.jid
     await clearCompromisedAndReseal(
-      (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
+      (plaintext, recipientKey) => this.encryptToRecipients(jid, [recipientKey], plaintext),
       ownPublicArmored,
     )
   }
@@ -1429,7 +1454,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const remote = await fetchVerificationsFromServer(
         ctx,
         (ciphertext, senderKey) =>
-          this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderKey),
+          this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderKey ? [senderKey] : []),
         ctx.account.jid,
         ownPublicArmored,
         ownFingerprint,
@@ -1464,7 +1489,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       void publishVerificationsToServer(
         ctx,
         (plaintext, recipientKey) =>
-          this.encryptToRecipient(ctx.account.jid, recipientKey, plaintext),
+          this.encryptToRecipients(ctx.account.jid, [recipientKey], plaintext),
         ownPublicArmored,
         verifications,
         nextVersion,
@@ -1987,9 +2012,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       peerJid: getBareJid(peer),
       timestamp: new Date(this.now()),
     })
-    const ciphertext = await this.encryptToRecipient(
+    const ciphertext = await this.encryptToRecipients(
       ctx.account.jid,
-      peerBundle.publicArmored,
+      [peerBundle.publicArmored],
       envelope,
     )
 
@@ -2034,7 +2059,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     let output: DecryptOutput
     try {
-      output = await this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderPublicArmored)
+      output = await this.decryptWithOwnKey(
+        ctx.account.jid,
+        ciphertext,
+        senderPublicArmored ? [senderPublicArmored] : [],
+      )
     } catch (err) {
       // Classify raw backend errors (e.g. openpgp.js "Error during parsing …"
       // on a structurally malformed payload) into a typed E2EEPluginError so
@@ -2289,7 +2318,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         const output = await this.decryptWithOwnKey(
           ctx.account.jid,
           entry.ciphertext,
-          peerBundle.publicArmored,
+          [peerBundle.publicArmored],
         )
         if (output.plaintext !== entry.plaintext) continue
         if (output.signatureVerified) {

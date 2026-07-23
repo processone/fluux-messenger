@@ -31,7 +31,7 @@ const META_PATH = resolve(FIXTURES_DIR, 'sequoia_meta.json')
 
 class TestablePlugin extends WebOpenPGPPlugin {
   callDecryptWithOwnKey(jid: string, ct: string, senderPub: string | null) {
-    return this.decryptWithOwnKey(jid, ct, senderPub)
+    return this.decryptWithOwnKey(jid, ct, senderPub ? [senderPub] : [])
   }
   callValidateCert(armored: string) {
     return this.validateCert(armored)
@@ -40,7 +40,7 @@ class TestablePlugin extends WebOpenPGPPlugin {
     return this.backupImport(jid, msg, pp)
   }
   callEncryptToRecipient(jid: string, recipientPub: string, plaintext: string) {
-    return this.encryptToRecipient(jid, recipientPub, plaintext)
+    return this.encryptToRecipients(jid, [recipientPub], plaintext)
   }
 }
 

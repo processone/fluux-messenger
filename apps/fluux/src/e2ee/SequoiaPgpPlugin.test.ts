@@ -191,14 +191,23 @@ function makeFakeRust() {
         const senderJid = args!.senderAccountJid as string
         const senderBundle = accounts.get(senderJid)
         if (!senderBundle) throw new Error(`no key for sender account: ${senderJid}`)
-        const recipientFp = extractFingerprint(args!.recipientPublicArmored as string)
-        if (!recipientFp) throw new Error('bad recipient key')
+        // Mirror the Rust command: `recipient_public_armored: Vec<String>`.
+        // Encode EVERY recipient fingerprint so decrypt can assert the
+        // message was addressed to all of them (OX multi-key, #1059). A
+        // malformed key is a hard error — parity with the Rust side.
+        const recipientArmored = args!.recipientPublicArmored as string[]
+        const recipientFps = recipientArmored.map((armored) => {
+          const fp = extractFingerprint(armored)
+          if (!fp) throw new Error('bad recipient key')
+          return fp
+        })
+        if (recipientFps.length === 0) throw new Error('no recipient keys supplied')
         const encoded = btoa(unescape(encodeURIComponent(args!.plaintext as string)))
-        // Embed both fingerprints so decrypt can simulate signcrypt:
-        //   OPENPGP-STUB:<recipientFp>:<senderFp>:<base64-plaintext>
+        // Embed recipient + signer fingerprints so decrypt can simulate signcrypt:
+        //   OPENPGP-STUB:<recipientFp1,recipientFp2,…>:<senderFp>:<base64-plaintext>
         return makeOpenPgpArmor(
           'PGP MESSAGE',
-          `${STUB_ENCRYPT_PREFIX}${recipientFp}:${senderBundle.fingerprint}:${encoded}`,
+          `${STUB_ENCRYPT_PREFIX}${recipientFps.join(',')}:${senderBundle.fingerprint}:${encoded}`,
         ) as T
       }
       case 'openpgp_decrypt': {
@@ -216,34 +225,46 @@ function makeFakeRust() {
         if (parts.length !== 3) {
           throw new Error(`malformed stub ciphertext (expected 3 parts, got ${parts.length})`)
         }
-        const [targetFp, embeddedSenderFp, payload] = parts
-        if (targetFp !== bundle.fingerprint) {
-          throw new Error(`addressed to ${targetFp}, this account holds ${bundle.fingerprint}`)
+        const [targetFps, embeddedSenderFp, payload] = parts
+        // The message may be addressed to several recipients (OX multi-key);
+        // this account can open it as long as ITS fingerprint is among them.
+        const recipientFps = targetFps.split(',')
+        if (!recipientFps.includes(bundle.fingerprint)) {
+          throw new Error(
+            `addressed to [${targetFps}], this account holds ${bundle.fingerprint}`,
+          )
         }
         const plaintext = decodeURIComponent(escape(atob(payload)))
 
-        // Simulate signature verification: only succeeds if a sender cert
-        // was supplied AND its fingerprint matches the one embedded at
-        // encrypt time.
-        let signatureVerified = false
+        // Mirror the Rust `signature_status`: verified when a supplied sender
+        // cert matches the embedded signer fp; missing-key when the message is
+        // signed but the signer's cert is not among the supplied senders; none
+        // when there is no embedded signer. (The stub has no tamper channel,
+        // so 'bad' is not produced here.)
+        const senderArmored = (args!.senderPublicArmored as string[] | undefined) ?? []
+        const suppliedFps = senderArmored
+          .map((armored) => extractFingerprint(armored))
+          .filter((fp): fp is string => fp !== null)
+        let signatureStatus: 'none' | 'verified' | 'bad' | 'missing-key'
         let signerFingerprint: string | null = null
-        const senderArmored = args!.senderPublicArmored as string | null | undefined
-        if (senderArmored) {
-          const claimedFp = extractFingerprint(senderArmored)
-          if (claimedFp && claimedFp === embeddedSenderFp) {
-            signatureVerified = true
-            signerFingerprint = embeddedSenderFp
-          }
+        if (!embeddedSenderFp) {
+          signatureStatus = 'none'
+        } else if (suppliedFps.includes(embeddedSenderFp)) {
+          signatureStatus = 'verified'
+          signerFingerprint = embeddedSenderFp
+        } else {
+          signatureStatus = 'missing-key'
         }
 
         return {
           plaintext,
-          signatureVerified,
+          signatureVerified: signatureStatus === 'verified',
           signerFingerprint,
           // Stub ciphertext always embeds a sender fingerprint, so every
           // decrypt mimics a signcrypted OpenPGP message for the purposes
           // of "was there a signature at all" bookkeeping.
-          signaturePresent: true,
+          signaturePresent: signatureStatus !== 'none',
+          signatureStatus,
         } as T
       }
       case 'openpgp_forget_account': {
@@ -2500,6 +2521,139 @@ describe('SequoiaPgpPlugin', () => {
       await expect(
         plugin.openConversation({ kind: 'muc', room: 'r@muc', participants: [] }),
       ).rejects.toThrow(/MUC encryption/)
+    })
+
+    it('encrypts to every recipient public and verifies a signature from any', async () => {
+      // OX advertises several public keys per JID (#1059). encryptToRecipients
+      // must reach EVERY supplied recipient — the array boundary is where a
+      // regression that drops all-but-the-first would surface. We drive the
+      // array-shaped crypto wrappers directly (the message path still passes a
+      // single peer key; multi-key peer bundles are a separate task).
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      await alicePlugin.init(makeContext('alice@example.com').ctx)
+
+      // Two recipients (bob + carol) and the signer (alice's own key).
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
+      })
+      const carolBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'carol@example.com',
+        userId: 'xmpp:carol@example.com',
+      })
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'xmpp:alice@example.com',
+      })
+
+      const aliceCrypto = alicePlugin as unknown as {
+        encryptToRecipients(
+          jid: string,
+          recipientPublics: string[],
+          plaintext: string,
+        ): Promise<string>
+      }
+      const ciphertext = await aliceCrypto.encryptToRecipients(
+        'alice@example.com',
+        [bobBundle.publicArmored, carolBundle.publicArmored],
+        'hello everyone',
+      )
+
+      // The stub encodes ALL recipient fingerprints — both must be present.
+      const stubText = readOpenPgpArmorPayloadForTest(ciphertext)
+      expect(stubText).toContain(bobBundle.fingerprint)
+      expect(stubText).toContain(carolBundle.fingerprint)
+
+      // Each recipient can open the message addressed to it.
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      await bobPlugin.init(makeContext('bob@example.com').ctx)
+      const carolPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      await carolPlugin.init(makeContext('carol@example.com').ctx)
+
+      type DecryptShape = {
+        plaintext: string
+        signatureVerified: boolean
+        signatureStatus: string
+        signerFingerprint: string | null
+        signaturePresent: boolean
+      }
+      const bobCrypto = bobPlugin as unknown as {
+        decryptWithOwnKey(jid: string, ct: string, senders: string[]): Promise<DecryptShape>
+      }
+      const carolCrypto = carolPlugin as unknown as {
+        decryptWithOwnKey(jid: string, ct: string, senders: string[]): Promise<DecryptShape>
+      }
+
+      // Bob verifies the signature with the signer (alice) among SEVERAL
+      // supplied sender keys — verification must find it, not assume position.
+      const bobDecrypted = await bobCrypto.decryptWithOwnKey('bob@example.com', ciphertext, [
+        carolBundle.publicArmored,
+        aliceBundle.publicArmored,
+      ])
+      expect(bobDecrypted.plaintext).toBe('hello everyone')
+      expect(bobDecrypted.signatureStatus).toBe('verified')
+      expect(bobDecrypted.signatureVerified).toBe(true)
+      expect(bobDecrypted.signerFingerprint).toBe(aliceBundle.fingerprint)
+
+      // Carol — the second recipient — can also open it.
+      const carolDecrypted = await carolCrypto.decryptWithOwnKey(
+        'carol@example.com',
+        ciphertext,
+        [aliceBundle.publicArmored],
+      )
+      expect(carolDecrypted.plaintext).toBe('hello everyone')
+      expect(carolDecrypted.signatureStatus).toBe('verified')
+    })
+
+    it('reports signatureStatus missing-key when the signer fp is not among supplied senders', async () => {
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      await alicePlugin.init(makeContext('alice@example.com').ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
+      })
+      const carolBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'carol@example.com',
+        userId: 'xmpp:carol@example.com',
+      })
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'xmpp:alice@example.com',
+      })
+
+      const aliceCrypto = alicePlugin as unknown as {
+        encryptToRecipients(jid: string, recipientPublics: string[], plaintext: string): Promise<string>
+      }
+      const ciphertext = await aliceCrypto.encryptToRecipients(
+        'alice@example.com',
+        [bobBundle.publicArmored],
+        'secret for bob',
+      )
+
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      await bobPlugin.init(makeContext('bob@example.com').ctx)
+      const bobCrypto = bobPlugin as unknown as {
+        decryptWithOwnKey(
+          jid: string,
+          ct: string,
+          senders: string[],
+        ): Promise<{
+          plaintext: string
+          signatureVerified: boolean
+          signatureStatus: string
+          signerFingerprint: string | null
+        }>
+      }
+
+      // Bob supplies only a decoy (carol) sender — the real signer (alice) is
+      // absent, so verification cannot be attempted: missing-key, null fp.
+      const decrypted = await bobCrypto.decryptWithOwnKey('bob@example.com', ciphertext, [
+        carolBundle.publicArmored,
+      ])
+      expect(decrypted.plaintext).toBe('secret for bob')
+      expect(decrypted.signatureStatus).toBe('missing-key')
+      expect(decrypted.signatureVerified).toBe(false)
+      expect(decrypted.signerFingerprint).toBeNull()
     })
   })
 

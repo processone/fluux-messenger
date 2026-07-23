@@ -101,10 +101,10 @@ class TestablePlugin extends WebOpenPGPPlugin {
     return this.backupImportSelected(jid, msg, pp, fp)
   }
   callEncryptToRecipient(jid: string, recipientPub: string, plaintext: string) {
-    return this.encryptToRecipient(jid, recipientPub, plaintext)
+    return this.encryptToRecipients(jid, [recipientPub], plaintext)
   }
   callDecryptWithOwnKey(jid: string, ciphertext: string, senderPub: string | null) {
-    return this.decryptWithOwnKey(jid, ciphertext, senderPub)
+    return this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : [])
   }
 }
 

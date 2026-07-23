@@ -35,7 +35,7 @@ class TestablePlugin extends WebOpenPGPPlugin {
     return this.ensureKeyMaterial(jid)
   }
   callEncryptToRecipient(jid: string, recipientPub: string, plaintext: string) {
-    return this.encryptToRecipient(jid, recipientPub, plaintext)
+    return this.encryptToRecipients(jid, [recipientPub], plaintext)
   }
   callBackupEncrypt(jid: string, pp: string) {
     return this.backupEncrypt(jid, pp)
