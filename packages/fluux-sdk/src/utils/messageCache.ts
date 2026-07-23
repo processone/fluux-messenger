@@ -289,6 +289,25 @@ async function findRoomRowsByIdentity(
 }
 
 /**
+ * Resolve the one cached row carrying client `id` WITHIN a room. The `ids` index is
+ * store-wide and non-unique — client ids repeat across rooms, and per XEP-0359 an id
+ * is unique only per (room, sender) — so a plain index `get` returns the
+ * globally-first match and can land in the wrong room. Fetch every id match and keep
+ * the one in this room; when the caller knows the sender, also match `from`. Returns
+ * undefined when no row in the room carries the id. Shared by every room-aware
+ * by-id lookup (getRoomMessage, updateRoomMessage, deleteRoomMessage).
+ */
+async function findRoomRowById(
+  idsIndex: { getAll(key: string): Promise<StoredRoomMessage[]> },
+  roomJid: string,
+  id: string,
+  from?: string
+): Promise<StoredRoomMessage | undefined> {
+  const matches = await idsIndex.getAll(id)
+  return matches.find((r) => r.roomJid === roomJid && (from === undefined || r.from === from))
+}
+
+/**
  * Core: resolve every existing row sharing any tier with `incoming` (echo,
  * live/MAM, bridge), merge them and `incoming` into one, delete the losers, put
  * the survivor. `incoming` is an already-serialized StoredRoomMessage, so callers
@@ -988,16 +1007,17 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<boolean
 }
 
 /**
- * Get a room message by its client-generated ID.
- * Note: IDs may not be unique across senders. Uses the id index to find the first match.
+ * Get a room message by its client-generated ID, scoped to a room.
+ *
+ * Client ids repeat across rooms (and, per XEP-0359, are unique only per sender), so
+ * the store-wide `ids` index is filtered to `roomJid` — pass `from` to also pin the
+ * sender. A MERGED row carries every absorbed client id in `ids[]`, so it stays
+ * findable by ANY of them. See {@link findRoomRowById}.
  */
-export async function getRoomMessage(id: string): Promise<RoomMessage | null> {
+export async function getRoomMessage(roomJid: string, id: string, from?: string): Promise<RoomMessage | null> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Resolve via the `ids` multiEntry index: a MERGED row carries every absorbed
-    // client id in `ids[]`, so it stays findable by ANY of them — not only the
-    // survivor's own `id` (which a single-`id` index lookup would miss).
-    const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', id)
+    const stored = await findRoomRowById(db.transaction(ROOM_MESSAGES_STORE).store.index('ids'), roomJid, id, from)
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -1108,7 +1128,7 @@ export async function getRoomMessagesAround(
 ): Promise<RoomMessage[]> {
   const { before = 50, after } = options
 
-  let anchor = await getRoomMessage(anchorMessageId)
+  let anchor = await getRoomMessage(roomJid, anchorMessageId)
   if (!anchor) anchor = await getRoomMessageByStanzaId(roomJid, anchorMessageId)
   if (!anchor) return []
 
@@ -1153,8 +1173,10 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
 }
 
 /**
- * Update specific fields of a room message, resolving the row through the `ids`
- * alias index so a caller holding a pre-merge id still finds it.
+ * Update specific fields of a room message, resolving the row through the room-scoped
+ * `ids` alias so a caller holding a pre-merge id still finds it. Client ids repeat
+ * across rooms, so the lookup is confined to `roomJid` (and `from` when the caller
+ * knows the sender) — otherwise the update could mutate another room's message.
  *
  * When an update carries an identity FIELD it splits two ways:
  *   - Expansion (a new stanzaId/originId, or a changed id) — the existing row's
@@ -1166,14 +1188,16 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  *     merged in.
  */
 export async function updateRoomMessage(
+  roomJid: string,
   id: string,
-  updates: Partial<RoomMessage>
+  updates: Partial<RoomMessage>,
+  from?: string
 ): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(ROOM_MESSAGES_STORE)
-    const existing = await store.index('ids').get(id)
+    const existing = await findRoomRowById(store.index('ids'), roomJid, id, from)
     if (!existing) { await tx.done; return }
     const updated = { ...deserializeRoomMessage(existing), ...updates } as RoomMessage
     // Compare identity FIELDS, not just the canonical key: adding an originId to a
@@ -1285,18 +1309,19 @@ export async function updateRoomMessageReactions(
 }
 
 /**
- * Delete a room message by ID.
- * Resolves the row through the `ids` alias index (so a pre-merge id still finds a
- * merged row), then deletes by its cacheKey (the primary key).
+ * Delete a room message by ID, scoped to a room.
+ * Resolves the row through the room-scoped `ids` alias (so a pre-merge id still finds
+ * a merged row, and a colliding id in another room is not deleted), then deletes by
+ * its cacheKey (the primary key). Pass `from` to also pin the sender.
  */
-export async function deleteRoomMessage(id: string): Promise<void> {
+export async function deleteRoomMessage(roomJid: string, id: string, from?: string): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    // Resolve via the `ids` multiEntry index to find the cacheKey.
-    const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', id)
-    if (!existing) return
+    const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
+    const existing = await findRoomRowById(tx.store.index('ids'), roomJid, id, from)
     // Delete using the cacheKey (the actual primary key)
-    await db.delete(ROOM_MESSAGES_STORE, existing.cacheKey)
+    if (existing) await tx.store.delete(existing.cacheKey)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to delete room message:', error)

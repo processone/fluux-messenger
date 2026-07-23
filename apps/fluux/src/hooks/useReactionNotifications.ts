@@ -139,7 +139,7 @@ export function useReactionNotifications(): void {
       const roomMessages = room.messages
       let message = state.getMessage(roomJid, messageId)
       if (!message) {
-        message = (await getCachedRoomMessage(messageId)) ?? (await getCachedRoomMessageByStanzaId(roomJid, messageId)) ?? undefined
+        message = (await getCachedRoomMessage(roomJid, messageId)) ?? (await getCachedRoomMessageByStanzaId(roomJid, messageId)) ?? undefined
       }
       if (!message || message.nick !== room.nickname) return
 

@@ -276,7 +276,7 @@ describe('useReactionNotifications — room reaction resolution', () => {
     renderHook(() => useReactionNotifications())
     await roomHandler()({ roomJid: ROOM, messageId: 'r-old', reactorNick: 'Alice', emojis: ['🔥'], isLive: true })
 
-    expect(mockGetCachedRoomMessage).toHaveBeenCalledWith('r-old')
+    expect(mockGetCachedRoomMessage).toHaveBeenCalledWith(ROOM, 'r-old')
     expect(mockAddToast).toHaveBeenCalledTimes(1)
   })
 
