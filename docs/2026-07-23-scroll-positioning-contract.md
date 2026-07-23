@@ -1,7 +1,8 @@
 # Message-list scroll positioning contract
 
-Status: migration in progress. Saved-position restoration is the first authoritative controller
-slice; unread, explicit targets, live-edge pinning, and directional history remain shadow-observed.
+Status: migration in progress. Saved-position restoration, unread-marker positioning, and explicit
+message targets are authoritative controller slices. Live-edge pinning and directional history
+preservation remain shadow-observed.
 
 ## Purpose
 
@@ -26,27 +27,36 @@ centralizing it later must not erase or weaken its current safeguards.
 
 ## Controller migration and fidelity findings
 
-The controller is held in a ref and owns no React state. For saved positions it now owns entry
-selection, generation/operation cancellation, reachability, one around-load attempt, and explicit
-legacy-offset/live-edge fallback. A hook executor still translates the accepted request into
-browser/virtualizer writes. `pinVirtualizedAnchor` remains the measurement reconciler, but every
-frame must hold the current controller lease before it can write.
+The controller is held in a ref and owns no React state. For saved positions it owns entry selection,
+generation/operation cancellation, reachability, one around-load attempt, and explicit
+legacy-offset/live-edge fallback. For unread markers it owns entry and jump-to-last-read requests,
+frame scheduling, stale-work cancellation, convergence, and live-edge fallback. For explicit
+message targets it owns supersession, one around-load attempt, mounting and center-position
+convergence, user takeover, and completion. Hook executors translate accepted requests into
+browser/virtualizer writes, and every frame must hold the current controller lease before it can
+write. `pinVirtualizedAnchor` remains the saved-position measurement reconciler; the controller-owned
+unread and explicit-target executors likewise retain their measurement settle behavior without
+retaining independent policy loops.
 
-The remaining mechanisms run the model beside `useMessageListScroll`: fact adapters read current
-virtualizer and DOM geometry, and every observed live decision is compared with the model decision.
-The instrumentation runs in production so real traces can exercise it. A shared error boundary
-catches and counts adapter, validator, controller-driver, and executor errors; failure must degrade
-to a safe saved-position fallback and must never escape into the scroll effect or event handler.
-The demo scroll-invariant suite fails if either `divergenceCount` or
-`instrumentationErrorCount` is non-zero. Retained diagnostic samples are capped, not the pass
-criterion.
+Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
+native smooth animation is intentionally not retained: restarting a smooth animation while
+remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
+
+The remaining live-edge and directional-history mechanisms run the model beside
+`useMessageListScroll`: fact adapters read current virtualizer and DOM geometry, and every observed
+live decision is compared with the model decision. The instrumentation runs in production so real
+traces can exercise it. A shared error boundary catches and counts adapter, validator,
+controller-driver, and executor errors; failure must degrade according to the active request's
+source-specific policy and must never escape into the scroll effect or event handler. The demo
+scroll-invariant suite fails if either `divergenceCount` or `instrumentationErrorCount` is non-zero.
+Retained diagnostic samples are capped, not the pass criterion.
 
 Zero divergences means the model agrees with the hand-authored semantic `actual` label at each
 observation site: desired position plus the coarse waiting/positioning/applied/paused/fallback/idle
 phase. It does **not** compare rendered pixels and must not be read as proof that the browser landed
 or painted at the requested position, nor does it prove that every ownership site was observed.
 Pixel geometry, measurement convergence, and WebKit repaint remain covered by the scroll-invariant
-scenarios and the unchanged imperative implementation.
+scenarios and the leased imperative reconcilers.
 
 Generation allocation is module-private and shared by controller instances. Each mounted
 message-list owns its controller model, but a remount (including StrictMode effect replay) cannot
@@ -74,7 +84,7 @@ WebKit paint correctness.
 
 ## Non-goals for this stage
 
-- Replacing browser measurement/repaint rAF loops in the saved-position policy migration.
+- Replacing browser measurement/repaint safeguards while migrating positioning policy.
 - Changing entry priority, marker placement, saved scroll data, or history loading.
 - Removing measurement settle windows, tolerances, or WebKit repaint workarounds.
 - Treating a one-shot scroll as sufficient under virtualization.
@@ -276,22 +286,28 @@ is already visible or above the viewport, the same activation goes directly to l
 
 ## Current owners to migrate
 
-`useMessageListScroll` currently contains separate implementations for:
+The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
+and explicit center-aligned message targets. These reconcilers implement measurement convergence;
+they are not separate positioning authorities. The remaining independent implementations inside
+`useMessageListScroll` are:
 
 - `pinVirtualizedBottom`;
-- leased `pinVirtualizedAnchor` measurement convergence for the controller-owned saved request;
-- `runMarkerReassertLoop`;
-- the explicit target-message loop;
+- media-preservation reconciliation while reading history;
 - directional-load measurement reassertion.
 
 There are also positioning owners outside their shared single-flight ref:
 
 - send/composer resize writes in `ChatView` and `RoomView`;
-- `scrollToMessage` through `activeMessageListController`;
-- keyboard selection navigation in `useMessageSelection` (`scrollIntoView({ block: 'nearest' })`);
 - resident-top's direct writer;
-- non-virtualized marker/target writers inside `useMessageListScroll`;
-- static search-context positioning.
+
+Two visually similar scroll operations are explicitly outside this migration:
+
+- `SearchContextView` is a static preview with its own scroller and no live-conversation persistence,
+  follow-live, unread, or history-window ownership. Its persistent-highlight positioning loop remains
+  isolated from the live message-list controller.
+- Keyboard selection in `useMessageSelection` uses
+  `scrollIntoView({ block: 'nearest' })` only to keep the selected row visible. It is viewport
+  maintenance, not a semantic message-position request, and remains intentionally direct.
 
 A later migration is incomplete until each in-scope owner either routes through the controller or is
 explicitly documented as an isolated, non-competing context. New controller code must replace and
@@ -343,7 +359,9 @@ kinetic scrolling and stale-paint behavior.
 2. [x] Migrate saved-anchor restoration: delete the legacy restore dispatcher, pending ref, and
    around-load status map; retain the measurement loop only as a generation/operation-leased
    reconciler.
-3. Migrate unread and explicit message targets, then delete their private loops.
+3. [x] Migrate unread and explicit message targets: the controller owns their generations,
+   supersession, reachability, frame convergence, and cancellation; their private loops and target
+   around-load ref are deleted.
 4. Migrate live-edge pinning while retaining bottom-specific measurement/repaint safeguards.
 5. Migrate directional history preservation last, retaining kinetic cancellation and clamp recovery.
 6. Route or isolate the remaining owners outside `useMessageListScroll`.

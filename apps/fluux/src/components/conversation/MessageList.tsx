@@ -516,6 +516,7 @@ export function MessageList<T extends BaseMessage>({
     handleLoadEarlier,
     handleMediaLoad,
     scrollToBottom,
+    requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
     bottomVisibleMessageId,
@@ -552,28 +553,20 @@ export function MessageList<T extends BaseMessage>({
     setScrollContainerRefFromHook(element)
   }
 
-  // Register this list so outside code can reach it without threading a prop through
-  // every caller: scrollToMessage (reply-quote taps, find-on-page, poll and reaction
-  // jumps) windows an off-screen row in before its DOM read, and ChatLayout's Escape
-  // handler (spec §3 step 3, conversation catch-up) triggers the same scroll-to-bottom
-  // as the ⌘/Ctrl+↓ shortcut and FAB. hasMessage/ensureMessageMounted are virtualized-only
-  // (non-virtualized lists keep every row mounted, so scrollToMessage's plain DOM path
-  // works unchanged); scrollToBottom is always available. Identity-checked cleanup so a
-  // fast conversation switch can't clear the newly mounted list's registration.
+  // Register this list so outside code can submit reply/poll/find targets to the same
+  // generation-aware owner as store-driven search/activity jumps. ChatLayout's Escape handler
+  // also reaches the list's scroll-to-bottom action here. Identity-checked cleanup ensures a fast
+  // conversation switch cannot clear the new list's registration.
   useEffect(() => {
     const controller: ActiveMessageListController = {
-      hasMessage: (id) => activeVirtualizer ? activeVirtualizer.getIndexForMessageId(id) !== null : false,
-      ensureMessageMounted: (id) => { void activeVirtualizer?.ensureMessageMounted(id) },
-      // Reuse the same cache-slice loader as the targetMessageId jump so scrollToMessage can reach a
-      // target that scrolled out of the loaded item set entirely (issue #955: reply-quote / poll).
-      loadAround: onLoadAround,
+      requestMessageTarget,
       scrollToBottom,
     }
     setActiveMessageListController(controller)
     return () => {
       if (getActiveMessageListController() === controller) setActiveMessageListController(null)
     }
-  }, [activeVirtualizer, scrollToBottom, onLoadAround])
+  }, [requestMessageTarget, scrollToBottom])
 
   // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
   // so tests can fire it without scrolling to 0, which would change findAnchorElement's

@@ -194,6 +194,11 @@ export type SavedPositionRequest = Extract<
   | { source: { kind: 'fallback'; reason: 'saved-position-unavailable' } }
 >
 
+export type ExplicitTargetRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'user-navigation'; reason: 'message-target' } }
+>
+
 export type UnreadMarkerRequest = Extract<
   PositionRequest,
   | { source: { kind: 'entry'; reason: 'unread-marker' } }

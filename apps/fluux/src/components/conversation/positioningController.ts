@@ -11,6 +11,7 @@ import {
   settleUserPosition,
   shouldReconcileAfterAppend,
   type EntryPositionFacts,
+  type ExplicitTargetRequest,
   type LiveEdgeNavigationFacts,
   type PositionRequest,
   type PositioningModel,
@@ -53,6 +54,12 @@ export interface PositionExecutionLease {
 
 export type SavedPositionExecutionLease = PositionExecutionLease
 
+export interface PositionFrameLoop {
+  schedule: (callback: () => void) => void
+  recordFrame: (wrote: boolean) => void
+  finish: () => void
+}
+
 export interface SavedPositionExecutor {
   reachability: (
     desired: SavedPositionRequest['desired'],
@@ -73,11 +80,7 @@ export interface SavedPositionExecutor {
   ) => boolean
 }
 
-export interface UnreadMarkerFrameLoop {
-  schedule: (callback: () => void) => void
-  recordFrame: (wrote: boolean) => void
-  finish: () => void
-}
+export type UnreadMarkerFrameLoop = PositionFrameLoop
 
 export type UnreadMarkerFrameResult =
   | { kind: 'waiting' }
@@ -104,6 +107,42 @@ export interface UnreadMarkerExecutor {
   ) => boolean
 }
 
+export type ExplicitTargetCompletion =
+  | 'settled'
+  | 'best-effort'
+  | 'user-takeover'
+
+export type ExplicitTargetFrameResult =
+  | { kind: 'waiting' }
+  | { kind: 'unavailable' }
+  | {
+      kind: 'positioned'
+      scrollTop: number
+      wrote: boolean
+    }
+
+export interface ExplicitTargetExecutor {
+  reachability: (
+    desired: ExplicitTargetRequest['desired'],
+    loadAround: SavedPositionLoadAroundStatus,
+  ) => ReachabilityFacts
+  loadAround?: (
+    messageId: string,
+    signal: AbortSignal,
+  ) => Promise<unknown> | unknown
+  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
+  readScrollTop: () => number | null
+  positionFrame: (
+    request: ExplicitTargetRequest,
+    lease: PositionExecutionLease,
+  ) => ExplicitTargetFrameResult
+  complete: (
+    request: ExplicitTargetRequest,
+    outcome: ExplicitTargetCompletion,
+    applied: boolean,
+  ) => void
+}
+
 interface SavedPositionExecutionState {
   request: SavedPositionRequest
   executor: SavedPositionExecutor
@@ -127,6 +166,24 @@ interface UnreadMarkerExecutionState {
   resolvedAtLiveEdge: boolean
 }
 
+interface ExplicitTargetExecutionState {
+  request: ExplicitTargetRequest
+  executor: ExplicitTargetExecutor
+  operation: number
+  abortController: AbortController | null
+  aroundAttempted: boolean
+  loadingAround: boolean
+  loop: PositionFrameLoop | null
+  framesLeft: number
+  stableFrames: number
+  landedTarget: number | null
+  applied: boolean
+}
+
+const EXPLICIT_TARGET_REASSERT_FRAMES = 30
+const EXPLICIT_TARGET_STABLE_FRAMES = 4
+const EXPLICIT_TARGET_DRIFT_PX = 16
+const EXPLICIT_TARGET_TAKEOVER_DRIFT_PX = 300
 const UNREAD_MARKER_REASSERT_FRAMES = 120
 const UNREAD_MARKER_STABLE_FRAMES = 8
 const UNREAD_MARKER_DRIFT_PX = 16
@@ -174,6 +231,7 @@ export class PositioningController {
   private model: PositioningModel = initialPositioningModel()
   private savedExecution: SavedPositionExecutionState | null = null
   private unreadExecution: UnreadMarkerExecutionState | null = null
+  private explicitTargetExecution: ExplicitTargetExecutionState | null = null
 
   snapshot(): PositioningModel {
     return this.model
@@ -214,6 +272,7 @@ export class PositioningController {
     if (accepted === this.model) return null
     this.cancelSavedExecution()
     this.cancelUnreadExecution()
+    this.cancelExplicitTargetExecution()
     this.model = advancePhaseIfCurrent(
       accepted,
       input.conversationId,
@@ -329,6 +388,118 @@ export class PositioningController {
         )
       },
     })
+  }
+
+  beginExplicitTarget(input: {
+    conversationId: string
+    messageId: string
+    executor: ExplicitTargetExecutor
+  }): ExplicitTargetRequest | null {
+    return runScrollShadowSafely({
+      event: 'explicit-target-begin',
+      conversationId: input.conversationId,
+      fallback: null,
+      observe: () => {
+        const current = this.explicitTargetExecution
+        if (
+          current &&
+          this.isExplicitTargetExecutionCurrent(current) &&
+          current.request.conversationId === input.conversationId &&
+          current.request.desired.messageId === input.messageId
+        ) {
+          current.executor = input.executor
+          this.driveExplicitTarget(current)
+          return current.request
+        }
+
+        const generation = mintPositionGeneration()
+        const request = withIdentity(
+          input.conversationId,
+          generation,
+          {
+            source: { kind: 'user-navigation', reason: 'message-target' },
+            desired: {
+              kind: 'message',
+              messageId: input.messageId,
+              align: 'center',
+            },
+            onUnavailable: { kind: 'wait' },
+          },
+        ) as ExplicitTargetRequest
+        const reachability = input.executor.reachability(
+          request.desired,
+          input.executor.loadAround ? 'available' : 'unavailable',
+        )
+        if (!reachabilityMatchesRequest(request, reachability)) return null
+
+        const accepted = acceptPositionRequest(this.model, request)
+        if (accepted === this.model) return null
+        this.cancelSavedExecution()
+        this.cancelUnreadExecution()
+        this.cancelExplicitTargetExecution()
+        this.model = advancePhaseIfCurrent(
+          accepted,
+          input.conversationId,
+          generation,
+          resolveReachability(request, reachability),
+        )
+        const execution: ExplicitTargetExecutionState = {
+          request,
+          executor: input.executor,
+          operation: 0,
+          abortController: null,
+          aroundAttempted: false,
+          loadingAround: false,
+          loop: null,
+          framesLeft: EXPLICIT_TARGET_REASSERT_FRAMES,
+          stableFrames: 0,
+          landedTarget: null,
+          applied: false,
+        }
+        this.explicitTargetExecution = execution
+        this.driveExplicitTarget(execution)
+        return request
+      },
+    })
+  }
+
+  refreshExplicitTarget(input: {
+    conversationId: string
+    generation: number
+    executor: ExplicitTargetExecutor
+  }): boolean {
+    const execution = this.explicitTargetExecution
+    if (
+      !execution ||
+      execution.request.conversationId !== input.conversationId ||
+      execution.request.generation !== input.generation ||
+      !this.isExplicitTargetExecutionCurrent(execution)
+    ) {
+      return false
+    }
+    execution.executor = input.executor
+    this.driveExplicitTarget(execution)
+    return true
+  }
+
+  cancelExplicitTarget(conversationId: string, generation: number): boolean {
+    const execution = this.explicitTargetExecution
+    if (
+      !execution ||
+      execution.request.conversationId !== conversationId ||
+      execution.request.generation !== generation ||
+      !this.isExplicitTargetExecutionCurrent(execution)
+    ) {
+      return false
+    }
+    this.model = advancePhaseIfCurrent(
+      this.model,
+      conversationId,
+      generation,
+      { kind: 'settled' },
+    )
+    this.cancelExplicitTargetExecution()
+    return true
   }
 
   observeEntry(input: {
@@ -545,11 +716,23 @@ export class PositioningController {
       observe: () => {
         const generation = this.model.active?.request.generation
         if (generation === undefined) return
+        const targetExecution = this.explicitTargetExecution
+        const targetWasCurrent =
+          targetExecution !== null &&
+          targetExecution.request.conversationId === conversationId &&
+          this.isExplicitTargetExecutionCurrent(targetExecution)
         this.model = cancelReconciliationForUserInput(
           this.model,
           conversationId,
           generation,
         )
+        if (targetWasCurrent && targetExecution) {
+          this.finishExplicitTargetExecution(
+            targetExecution,
+            false,
+            'user-takeover',
+          )
+        }
         this.cancelExecutionsIfSuperseded()
       },
     })
@@ -621,6 +804,7 @@ export class PositioningController {
     if (accepted === this.model) return null
     this.cancelSavedExecution()
     this.cancelUnreadExecution()
+    this.cancelExplicitTargetExecution()
     this.model = advancePhaseIfCurrent(
       accepted,
       conversationId,
@@ -647,6 +831,383 @@ export class PositioningController {
       this.startUnreadMarkerLoop(execution)
     }
     return request
+  }
+
+  private driveExplicitTarget(
+    execution: ExplicitTargetExecutionState,
+  ): void {
+    if (
+      !this.isExplicitTargetExecutionCurrent(execution) ||
+      execution.loop
+    ) {
+      return
+    }
+
+    const loadAround: SavedPositionLoadAroundStatus = execution.loadingAround
+      ? 'loading'
+      : execution.aroundAttempted
+        ? 'exhausted'
+        : execution.executor.loadAround
+          ? 'available'
+          : 'unavailable'
+    const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
+      event: 'explicit-target-reachability',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.reachability(
+        execution.request.desired,
+        loadAround,
+      ),
+    })
+    if (!reachability) return
+
+    const phase = resolveReachability(execution.request, reachability)
+    this.model = advancePhaseIfCurrent(
+      this.model,
+      execution.request.conversationId,
+      execution.request.generation,
+      phase,
+    )
+    if (!this.isExplicitTargetExecutionCurrent(execution)) return
+
+    switch (phase.kind) {
+      case 'loading-around':
+        this.startExplicitTargetAroundLoad(execution, phase.messageId)
+        return
+      case 'mounting':
+      case 'reconciling':
+        execution.loadingAround = false
+        this.startExplicitTargetLoop(execution)
+        return
+      case 'unavailable':
+        // Explicit navigation has `onUnavailable: wait`; retain the request so a later resident
+        // window refresh can make it reachable.
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          execution.request.conversationId,
+          execution.request.generation,
+          { kind: 'pending', reason: 'target-not-indexed' },
+        )
+        return
+      case 'resolving':
+      case 'pending':
+      case 'recentering-live-edge':
+      case 'position-applied':
+      case 'settled':
+      case 'paused-user-input':
+        return
+    }
+  }
+
+  private startExplicitTargetAroundLoad(
+    execution: ExplicitTargetExecutionState,
+    messageId: string,
+  ): void {
+    if (execution.loadingAround || execution.aroundAttempted) return
+    execution.aroundAttempted = true
+    execution.loadingAround = true
+    const lease = this.beginExplicitTargetOperation(execution)
+    const load = execution.executor.loadAround
+      ? runScrollShadowSafely<Promise<unknown> | unknown | null>({
+          event: 'explicit-target-load-around',
+          conversationId: execution.request.conversationId,
+          fallback: null,
+          observe: () =>
+            execution.executor.loadAround?.(messageId, lease.signal) ?? null,
+        })
+      : null
+    if (load === null) {
+      if (lease.isCurrent()) {
+        execution.loadingAround = false
+        this.driveExplicitTarget(execution)
+      }
+      return
+    }
+    void Promise.resolve(load)
+      .catch(() => undefined)
+      .finally(() => {
+        if (!lease.isCurrent()) return
+        execution.loadingAround = false
+        this.driveExplicitTarget(execution)
+      })
+  }
+
+  private startExplicitTargetLoop(
+    execution: ExplicitTargetExecutionState,
+  ): void {
+    if (
+      !this.isExplicitTargetExecutionCurrent(execution) ||
+      execution.loop
+    ) {
+      return
+    }
+    execution.framesLeft = EXPLICIT_TARGET_REASSERT_FRAMES
+    execution.stableFrames = 0
+    execution.landedTarget = null
+    execution.applied = false
+    const lease = this.beginExplicitTargetOperation(execution)
+    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
+      event: 'explicit-target-loop-start',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.beginLoop(lease),
+    })
+    if (!lease.isCurrent()) {
+      if (loop) {
+        runScrollShadowSafely({
+          event: 'explicit-target-loop-stale-finish',
+          conversationId: execution.request.conversationId,
+          fallback: undefined,
+          observe: () => loop.finish(),
+        })
+      }
+      return
+    }
+    if (!loop) {
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+        { kind: 'pending', reason: 'target-not-indexed' },
+      )
+      return
+    }
+    execution.loop = loop
+    this.scheduleExplicitTargetFrame(execution, lease)
+  }
+
+  private driveExplicitTargetFrame(
+    execution: ExplicitTargetExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent()) return
+    if (execution.framesLeft-- <= 0) {
+      if (execution.applied) {
+        this.finishExplicitTargetExecution(
+          execution,
+          true,
+          'best-effort',
+        )
+      } else {
+        this.finishExplicitTargetLoop(execution)
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          execution.request.conversationId,
+          execution.request.generation,
+          { kind: 'pending', reason: 'target-not-indexed' },
+        )
+      }
+      return
+    }
+
+    const currentScrollTop = runScrollShadowSafely<number | null>({
+      event: 'explicit-target-read-scroll-top',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.readScrollTop(),
+    })
+    if (
+      currentScrollTop !== null &&
+      execution.landedTarget !== null &&
+      Math.abs(currentScrollTop - execution.landedTarget) >
+        EXPLICIT_TARGET_TAKEOVER_DRIFT_PX
+    ) {
+      const { conversationId, generation } = execution.request
+      this.model = cancelReconciliationForUserInput(
+        this.model,
+        conversationId,
+        generation,
+      )
+      this.finishExplicitTargetExecution(
+        execution,
+        false,
+        'user-takeover',
+      )
+      return
+    }
+
+    const result = runScrollShadowSafely<ExplicitTargetFrameResult>({
+      event: 'explicit-target-frame',
+      conversationId: execution.request.conversationId,
+      fallback: { kind: 'unavailable' },
+      observe: () => execution.executor.positionFrame(
+        execution.request,
+        lease,
+      ),
+    })
+    if (!lease.isCurrent()) return
+
+    if (result.kind === 'waiting') {
+      this.recordExplicitTargetFrame(execution, false)
+      this.scheduleExplicitTargetFrame(execution, lease)
+      return
+    }
+    if (result.kind === 'unavailable') {
+      this.finishExplicitTargetLoop(execution)
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+        { kind: 'pending', reason: 'target-not-indexed' },
+      )
+      return
+    }
+
+    execution.applied = true
+    lease.markApplied()
+    if (!lease.isCurrent()) return
+
+    if (
+      execution.landedTarget !== null &&
+      Math.abs(result.scrollTop - execution.landedTarget) <=
+        EXPLICIT_TARGET_DRIFT_PX
+    ) {
+      execution.stableFrames += 1
+      if (execution.stableFrames >= EXPLICIT_TARGET_STABLE_FRAMES) {
+        this.recordExplicitTargetFrame(execution, result.wrote)
+        this.finishExplicitTargetExecution(execution, true, 'settled')
+        return
+      }
+    } else {
+      execution.stableFrames = 0
+    }
+    execution.landedTarget = result.scrollTop
+    this.recordExplicitTargetFrame(execution, result.wrote)
+    this.scheduleExplicitTargetFrame(execution, lease)
+  }
+
+  private scheduleExplicitTargetFrame(
+    execution: ExplicitTargetExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent() || !execution.loop) return
+    const scheduled = runScrollShadowSafely({
+      event: 'explicit-target-frame-schedule',
+      conversationId: execution.request.conversationId,
+      fallback: false,
+      observe: () => {
+        execution.loop?.schedule(
+          () => this.driveExplicitTargetFrame(execution, lease),
+        )
+        return true
+      },
+    })
+    if (!scheduled && lease.isCurrent()) {
+      this.finishExplicitTargetLoop(execution)
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+        { kind: 'pending', reason: 'target-not-indexed' },
+      )
+    }
+  }
+
+  private recordExplicitTargetFrame(
+    execution: ExplicitTargetExecutionState,
+    wrote: boolean,
+  ): void {
+    runScrollShadowSafely({
+      event: 'explicit-target-frame-monitor',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.recordFrame(wrote),
+    })
+  }
+
+  private beginExplicitTargetOperation(
+    execution: ExplicitTargetExecutionState,
+  ): PositionExecutionLease {
+    execution.abortController?.abort()
+    const abortController = new AbortController()
+    execution.abortController = abortController
+    const operation = ++execution.operation
+    const { conversationId, generation } = execution.request
+    const isCurrent = () =>
+      !abortController.signal.aborted &&
+      this.explicitTargetExecution === execution &&
+      execution.operation === operation &&
+      execution.request.conversationId === conversationId &&
+      execution.request.generation === generation &&
+      isCurrentGeneration(this.model, conversationId, generation)
+    const advance = (phase: PositioningPhase) => {
+      if (!isCurrent()) return false
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        conversationId,
+        generation,
+        phase,
+      )
+      return isCurrent()
+    }
+    return {
+      conversationId,
+      generation,
+      operation,
+      signal: abortController.signal,
+      isCurrent,
+      markApplied: () => advance({ kind: 'position-applied' }),
+      settle: () => advance({ kind: 'settled' }),
+    }
+  }
+
+  private isExplicitTargetExecutionCurrent(
+    execution: ExplicitTargetExecutionState,
+  ): boolean {
+    return (
+      this.explicitTargetExecution === execution &&
+      isCurrentGeneration(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+      )
+    )
+  }
+
+  private finishExplicitTargetExecution(
+    execution: ExplicitTargetExecutionState,
+    settle: boolean,
+    outcome?: ExplicitTargetCompletion,
+  ): void {
+    if (settle && this.isExplicitTargetExecutionCurrent(execution)) {
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+        { kind: 'settled' },
+      )
+    }
+    this.finishExplicitTargetLoop(execution)
+    execution.abortController?.abort()
+    if (this.explicitTargetExecution === execution) {
+      this.explicitTargetExecution = null
+    }
+    if (outcome) {
+      runScrollShadowSafely({
+        event: 'explicit-target-complete',
+        conversationId: execution.request.conversationId,
+        fallback: undefined,
+        observe: () => execution.executor.complete(
+          execution.request,
+          outcome,
+          execution.applied,
+        ),
+      })
+    }
+  }
+
+  private finishExplicitTargetLoop(
+    execution: ExplicitTargetExecutionState,
+  ): void {
+    const loop = execution.loop
+    execution.loop = null
+    if (!loop) return
+    runScrollShadowSafely({
+      event: 'explicit-target-loop-finish',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => loop.finish(),
+    })
   }
 
   private resolveUnreadMarkerReachability(
@@ -1216,6 +1777,13 @@ export class PositioningController {
     ) {
       this.cancelUnreadExecution()
     }
+    const targetExecution = this.explicitTargetExecution
+    if (
+      targetExecution &&
+      !this.isExplicitTargetExecutionCurrent(targetExecution)
+    ) {
+      this.cancelExplicitTargetExecution()
+    }
   }
 
   private cancelSavedExecution(): void {
@@ -1229,6 +1797,14 @@ export class PositioningController {
       this.unreadExecution.abortController?.abort()
     }
     this.unreadExecution = null
+  }
+
+  private cancelExplicitTargetExecution(): void {
+    if (this.explicitTargetExecution) {
+      this.finishExplicitTargetLoop(this.explicitTargetExecution)
+      this.explicitTargetExecution.abortController?.abort()
+    }
+    this.explicitTargetExecution = null
   }
 }
 

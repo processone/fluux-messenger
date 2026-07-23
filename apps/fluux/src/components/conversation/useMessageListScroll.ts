@@ -3,8 +3,9 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Saved-position and unread-marker policy/retry ownership lives in PositioningController;
- *    browser writes stay imperative in hook executors while the remaining mechanisms migrate
+ * 2. Saved-position, unread-marker, and explicit-target policy/retry ownership lives in
+ *    PositioningController; browser writes stay imperative in hook executors while the remaining
+ *    mechanisms migrate
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
@@ -31,7 +32,7 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import {
   PositioningController,
-  type PositionRequestDraft,
+  type ExplicitTargetExecutor,
   type PositionExecutionLease,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
@@ -48,11 +49,13 @@ import {
   messageFraction,
   pixelOffset,
   type DesiredPosition,
+  type ExplicitTargetRequest,
   type ReachabilityFacts,
   type SavedPositionRequest,
   type UnreadMarkerRequest,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
+import { findMessageTargetElement } from './messageTargetElement'
 
 // ============================================================================
 // DEBUG
@@ -114,11 +117,6 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
-// Target jumps (reply/search/activity) need the same measurement-aware behavior as unread-marker
-// entry, but for a shorter window: the target row is explicitly requested and should settle fast.
-const TARGET_REASSERT_FRAMES = 30
-const TARGET_STABLE_FRAMES = 4
-const TARGET_DRIFT_PX = 16
 // Saved-position (content-anchor) restore needs the SAME measurement-aware re-assert as the marker
 // path. A one-shot scrollToIndex(anchor,'end') lands on the rows' ESTIMATED sizes; those rows then
 // measure TALLER over the next frames (media, wrapping), the content above the anchor grows, and the
@@ -317,6 +315,8 @@ export interface UseMessageListScrollResult {
   handleMediaLoad: () => void
   scrollToBottom: () => void
   scrollToTop: () => void
+  /** Submit a reply/poll/find target to the generation-aware positioning controller. */
+  requestMessageTarget: (messageReference: string) => void
   showScrollToBottom: boolean
   /** Whether the first-new-message divider is currently scrolled above the viewport. Drives the
    *  jump-to-last-read pill. */
@@ -423,6 +423,13 @@ export function useMessageListScroll({
   // loader synchronous with the render so a conversation switch cannot invoke the room we left.
   const onLoadAroundRef = useRef(onLoadAround)
   onLoadAroundRef.current = onLoadAround
+  // Explicit-target completion may run after the render that submitted it. Keep the current target
+  // and callback synchronous so a stale generation can never clear a newer search/activity target.
+  const targetMessageIdRef = useRef(targetMessageId)
+  targetMessageIdRef.current = targetMessageId
+  const onTargetMessageConsumedRef = useRef(onTargetMessageConsumed)
+  onTargetMessageConsumedRef.current = onTargetMessageConsumed
+  const storeTargetRequestRef = useRef<ExplicitTargetRequest | null>(null)
 
   // Latest MAM-loading state (forward catch-up on entry, or backward "load older" pagination) for
   // the active conversation, read imperatively inside pinVirtualizedBottom's stable useCallback —
@@ -469,8 +476,8 @@ export function useMessageListScroll({
   // React StrictMode replays layout-effect cleanup/setup without unmounting the DOM. Defer controller
   // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
   const unmountDeactivationTokenRef = useRef<object | null>(null)
-  // Generation-aware semantic controller. Saved-position restoration and unread-marker
-  // reconciliation are authoritative; the remaining positioning mechanisms still report shadow
+  // Generation-aware semantic controller. Saved-position restoration, unread-marker positioning,
+  // and explicit message targets are authoritative; the remaining mechanisms still report shadow
   // decisions. Pixel writes stay in hook executors, while the module-private generation allocator
   // survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
@@ -504,10 +511,6 @@ export function useMessageListScroll({
       },
     })
   }
-  // Last target message id we requested an around-load for (search / activity navigation to a
-  // message older than the loaded window). Prevents re-issuing the load while the target effect
-  // re-fires waiting for the slice to merge.
-  const targetAroundRequestedRef = useRef<string | null>(null)
   // Track prepend (loading older messages)
   // When we load older messages, we save the anchor element position BEFORE the load,
   // then restore it AFTER React renders the new messages.
@@ -1349,6 +1352,42 @@ export function useMessageListScroll({
     windowAtLiveEdge,
   ])
 
+  const beginControllerFrameLoop = useCallback((
+    label: string,
+    lease: PositionExecutionLease,
+  ) => {
+    if (!lease.isCurrent()) return null
+    supersedeReassertLoopRef.current()
+    const monitor = (reassertMonitorRef.current ??=
+      createReassertLoopMonitor()).begin(label, performance.now())
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      monitor.end()
+      const activeLoop = reassertLoopRef.current
+      if (activeLoop?.handle === monitor) {
+        cancelAnimationFrame(activeLoop.raf)
+        reassertLoopRef.current = null
+      }
+    }
+    return {
+      schedule: (callback: () => void) => {
+        if (finished || !lease.isCurrent()) return
+        // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop that
+        // completed from inside the callback.
+        const entry = { raf: 0, handle: monitor }
+        reassertLoopRef.current = entry
+        entry.raf = requestAnimationFrame(callback)
+      },
+      recordFrame: (wrote: boolean) => {
+        const warning = monitor.frame(performance.now(), wrote)
+        if (warning) console.warn(warning)
+      },
+      finish,
+    }
+  }, [])
+
   const createUnreadMarkerExecutor = useCallback((): UnreadMarkerExecutor => ({
     reachability: (desired) => deriveReachabilityForDesired({
       desired,
@@ -1359,38 +1398,8 @@ export function useMessageListScroll({
       loadAround: 'unavailable',
       canRecenter: false,
     }),
-    beginLoop: (lease: PositionExecutionLease) => {
-      if (!lease.isCurrent()) return null
-      supersedeReassertLoopRef.current()
-      const monitor = (reassertMonitorRef.current ??=
-        createReassertLoopMonitor()).begin('marker', performance.now())
-      let finished = false
-      const finish = () => {
-        if (finished) return
-        finished = true
-        monitor.end()
-        const activeLoop = reassertLoopRef.current
-        if (activeLoop?.handle === monitor) {
-          cancelAnimationFrame(activeLoop.raf)
-          reassertLoopRef.current = null
-        }
-      }
-      return {
-        schedule: (callback) => {
-          if (finished || !lease.isCurrent()) return
-          // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop
-          // that completed from inside the callback.
-          const entry = { raf: 0, handle: monitor }
-          reassertLoopRef.current = entry
-          entry.raf = requestAnimationFrame(callback)
-        },
-        recordFrame: (wrote) => {
-          const warning = monitor.frame(performance.now(), wrote)
-          if (warning) console.warn(warning)
-        },
-        finish,
-      }
-    },
+    beginLoop: (lease: PositionExecutionLease) =>
+      beginControllerFrameLoop('marker', lease),
     readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
     positionFrame: (
       request: UnreadMarkerRequest,
@@ -1468,10 +1477,160 @@ export function useMessageListScroll({
     },
   }), [
     firstMessageId,
+    beginControllerFrameLoop,
     isAtBottomRef,
     messageCount,
     reassertBottom,
     windowAtLiveEdge,
+  ])
+
+  const createExplicitTargetExecutor = useCallback((
+    messageReference: string,
+    consumeStoreTarget: boolean,
+  ): ExplicitTargetExecutor => ({
+    reachability: (desired, loadAround) => {
+      const scroller = scrollerRef.current
+      const virtualizer = virtualizerRef.current
+      const element = scroller
+        ? findMessageTargetElement(scroller, desired.messageId)
+        : null
+      if (element) {
+        return {
+          kind: 'available',
+          index: virtualizer?.getIndexForMessageId(desired.messageId) ?? 0,
+          mounted: true,
+          placement: 'viable',
+        }
+      }
+      const facts = deriveReachabilityForDesired({
+        desired,
+        hasRows: messageCount > 0 && firstMessageId !== undefined,
+        windowAtLiveEdge: windowAtLiveEdge !== false,
+        virtualizer,
+        scroller,
+        loadAround,
+        canRecenter: false,
+      })
+      // Unlike ordinary entry hydration, an explicit target is meaningful even when the resident
+      // window is empty: it can name the cache slice that must be loaded.
+      return facts.kind === 'empty-window'
+        ? { kind: 'target-absent', loadAround }
+        : facts
+    },
+    loadAround: onLoadAroundRef.current
+      ? (messageId, signal) => {
+          if (
+            signal.aborted ||
+            activeConversationIdRef.current !== conversationId
+          ) {
+            return
+          }
+          isAtBottomRef.current = false
+          debugLog('TARGET MESSAGE: requesting cache slice around target', {
+            conversationId,
+            messageId,
+          })
+          return onLoadAroundRef.current?.(messageId)
+        }
+      : undefined,
+    beginLoop: (lease) => beginControllerFrameLoop('target', lease),
+    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
+    positionFrame: (
+      request: ExplicitTargetRequest,
+      lease: PositionExecutionLease,
+    ) => {
+      if (!lease.isCurrent()) return { kind: 'unavailable' }
+      const scroller = scrollerRef.current
+      if (!scroller) return { kind: 'unavailable' }
+
+      // The request may be submitted during entry. Wait for the passive handoff so a stale
+      // virtualizer from the room we left cannot receive the first center write.
+      const latest = latestRef.current
+      if (latest.conversationId !== request.conversationId) {
+        return { kind: 'waiting' }
+      }
+
+      const targetId = request.desired.messageId
+      const virtualizer = latest.virtualizer
+      const index = virtualizer?.getIndexForMessageId(targetId) ?? null
+      const element = findMessageTargetElement(scroller, targetId)
+      if (index === null && !element) return { kind: 'waiting' }
+      if (!lease.isCurrent()) return { kind: 'unavailable' }
+
+      if (index !== null && virtualizer) {
+        virtualizer.scrollToIndex(index, { align: 'center' })
+      } else {
+        element?.scrollIntoView({ block: 'center' })
+      }
+      const scrollTop = scroller.scrollTop
+      const distanceFromBottom =
+        scroller.scrollHeight - scrollTop - scroller.clientHeight
+      isAtBottomRef.current = distanceFromBottom < AT_BOTTOM_THRESHOLD
+      debugLog('TARGET MESSAGE: controller positioned frame', {
+        conversationId: request.conversationId,
+        generation: request.generation,
+        targetId,
+        index,
+        scrollTop,
+        distanceFromBottom,
+      })
+      return { kind: 'positioned', scrollTop, wrote: true }
+    },
+    complete: (request, outcome, applied) => {
+      if (
+        activeConversationIdRef.current !== request.conversationId ||
+        request.desired.messageId !== messageReference
+      ) {
+        return
+      }
+      if (
+        consumeStoreTarget &&
+        targetMessageIdRef.current !== request.desired.messageId
+      ) {
+        return
+      }
+
+      const element = scrollerRef.current
+        ? findMessageTargetElement(
+            scrollerRef.current,
+            request.desired.messageId,
+          )
+        : null
+      if (element && applied) {
+        element.classList.add('message-highlight')
+        setTimeout(() => element.classList.remove('message-highlight'), 1500)
+      }
+      debugLog('TARGET MESSAGE: controller completed', {
+        conversationId: request.conversationId,
+        generation: request.generation,
+        targetId: request.desired.messageId,
+        outcome,
+        highlighted: Boolean(element && applied),
+      })
+      if (consumeStoreTarget) onTargetMessageConsumedRef.current?.()
+    },
+  }), [
+    beginControllerFrameLoop,
+    conversationId,
+    firstMessageId,
+    isAtBottomRef,
+    messageCount,
+    windowAtLiveEdge,
+  ])
+
+  const requestMessageTarget = useCallback((messageReference: string) => {
+    if (staticMode) return
+    isAtBottomRef.current = false
+    positioningControllerRef.current?.beginExplicitTarget({
+      conversationId,
+      messageId: messageReference,
+      executor: createExplicitTargetExecutor(messageReference, false),
+    })
+  }, [
+    conversationId,
+    createExplicitTargetExecutor,
+    isAtBottomRef,
+    staticMode,
   ])
 
   // ==========================================================================
@@ -2392,11 +2551,11 @@ export function useMessageListScroll({
         // to bottom when content grows (messages loading from IndexedDB).
         isAtBottomRef.current = false
         debugLog('CONVERSATION SWITCH: has targetMessageId, deferring to target scroll', { targetMessageId })
-        if (entryFacts) {
+        if (entryExecutionFacts) {
           positioningControllerRef.current?.observeEntry({
             event: 'entry-before-explicit-target',
             conversationId,
-            entryFacts,
+            entryFacts: entryExecutionFacts,
             reachability: (desired) => shadowReachabilityRef.current(desired),
             actual: {
               desired: { kind: 'live-edge', follow: true },
@@ -2645,216 +2804,51 @@ export function useMessageListScroll({
     }
   }, [])
 
-  // ==========================================================================
-  // EFFECT: Scroll to target message (from activity log click, etc.)
-  // ==========================================================================
-  //
-  // When targetMessageId is set (e.g., user clicked a reaction in the activity log),
-  // scroll to that specific message. Uses the same data-message-id attribute pattern
-  // as the unread marker scroll. Clears the target after consumption.
-
+  // Store-driven search/activity/reaction targets use the same controller execution as reply,
+  // poll, and find-on-page requests. Re-renders refresh the executor for the existing generation;
+  // load-around completion also re-drives it without relying on messageCount changing.
   useEffect(() => {
+    const previous = storeTargetRequestRef.current
     if (!targetMessageId || staticMode) {
-      // Target cleared (consumed or navigated away): allow a future jump to the same id to
-      // re-request its slice (it may have been evicted again in the meantime).
-      if (!targetMessageId) targetAroundRequestedRef.current = null
+      if (previous) {
+        positioningControllerRef.current?.cancelExplicitTarget(
+          previous.conversationId,
+          previous.generation,
+        )
+        storeTargetRequestRef.current = null
+      }
       return
     }
-    const scroller = scrollerRef.current
-    if (!scroller) return
 
-    const virt = latestRef.current.virtualizer
-    const escapedId = CSS.escape(targetMessageId)
-    const shadowTargetDesired = {
-      kind: 'message',
+    isAtBottomRef.current = false
+    const executor = createExplicitTargetExecutor(targetMessageId, true)
+    if (
+      previous &&
+      previous.conversationId === conversationId &&
+      previous.desired.messageId === targetMessageId &&
+      positioningControllerRef.current?.refreshExplicitTarget({
+        conversationId,
+        generation: previous.generation,
+        executor,
+      })
+    ) {
+      return
+    }
+
+    const request = positioningControllerRef.current?.beginExplicitTarget({
+      conversationId,
       messageId: targetMessageId,
-      align: 'center',
-    } as const
-    const shadowTargetDraft: PositionRequestDraft = {
-      source: { kind: 'user-navigation', reason: 'message-target' },
-      desired: shadowTargetDesired,
-      onUnavailable: { kind: 'wait' },
-    }
-
-    const highlight = (el: Element) => {
-      el.classList.add('message-highlight')
-      setTimeout(() => el.classList.remove('message-highlight'), 1500)
-    }
-
-    if (virt) {
-      // Virtualized: resolve the row by index (works whether or not the row is mounted)
-      // and let the virtualizer window it in. No DOM query or retry timeouts needed.
-      // messageCount is in deps so this effect re-fires if the message isn't in the list
-      // yet (e.g., search opens a conversation before messages finish loading from cache).
-      const idx = virt.getIndexForMessageId(targetMessageId)
-      if (idx === null) {
-        positioningControllerRef.current?.observeRequest({
-          event: 'explicit-target-waiting',
-          conversationId,
-          draft: shadowTargetDraft,
-          reachability: shadowReachabilityRef.current(shadowTargetDesired),
-          actual: { desired: shadowTargetDesired, phase: 'waiting' },
-        })
-        // The target isn't in the loaded window — pull in the cache slice that contains it (search /
-        // activity jump to a message older than the latest-N slice). The merge grows messageCount,
-        // re-firing this effect with the target now resolvable. Request once per target.
-        const loader = latestRef.current.onLoadAround
-        if (loader && targetAroundRequestedRef.current !== targetMessageId) {
-          targetAroundRequestedRef.current = targetMessageId
-          debugLog('TARGET MESSAGE: not loaded, requesting cache slice around it', { targetMessageId })
-          void Promise.resolve(loader(targetMessageId))
-        } else {
-          debugLog('TARGET MESSAGE: not in item set yet, waiting for load', { targetMessageId })
-        }
-        return
-      }
-      const targetConvId = conversationId
-      positioningControllerRef.current?.observeRequest({
-        event: 'explicit-target',
-        conversationId,
-        draft: shadowTargetDraft,
-        reachability: shadowReachabilityRef.current(shadowTargetDesired),
-        actual: { desired: shadowTargetDesired, phase: 'positioning' },
-      })
-      const startedAt = Date.now()
-      supersedeReassertLoopRef.current()
-      const targetLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('target', performance.now())
-      let framesLeft = TARGET_REASSERT_FRAMES
-      let stableFrames = 0
-      let landedTarget = -1
-      let targetRafId: number | null = null
-      let finished = false
-      let consumed = false
-
-      const finishTarget = () => {
-        if (finished) return
-        finished = true
-        targetLoop.end()
-        if (reassertLoopRef.current?.handle === targetLoop) {
-          if (targetRafId !== null) cancelAnimationFrame(targetRafId)
-          reassertLoopRef.current = null
-        }
-      }
-
-      const consumeAndHighlight = () => {
-        if (consumed) return
-        consumed = true
-        // Apply the highlight synchronously BEFORE clearing the target (mirrors the non-virtualized
-        // branch below). onTargetMessageConsumed clears targetMessageId, which re-runs this effect and
-        // fires its cleanup in the same tick; a deferred (rAF) highlight got cancelled by that cleanup
-        // before it could paint, so the "go to message" flash silently vanished. The reassert loop has
-        // already settled the target row into the window, so it is mounted and queryable now.
-        const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
-        if (el) highlight(el)
-        onTargetMessageConsumed?.()
-      }
-
-      const stepToTarget = () => {
-        if (framesLeft-- <= 0) {
-          finishTarget()
-          consumeAndHighlight()
-          return
-        }
-        const s = scrollerRef.current
-        const v = latestRef.current.virtualizer
-        if (!s || !v) { finishTarget(); return }
-        if (prevConversationRef.current !== targetConvId) { finishTarget(); return }
-        if (userScrollIntentAtRef.current > startedAt) {
-          finishTarget()
-          consumeAndHighlight()
-          return
-        }
-
-        const currentIdx = v.getIndexForMessageId(targetMessageId)
-        if (currentIdx === null) {
-          finishTarget()
-          return
-        }
-
-        // Center the target rather than pinning it to the top edge (align:'start'), which tucks it
-        // under the sticky date header where it reads as misaligned and the highlight flash is easy
-        // to miss. scrollToIndex('center') windows the (possibly far-out-of-window) row in, measures
-        // it, and clamps internally — so a near-bottom target stays visible instead of being scrolled
-        // past the fold (the failure mode of a manual getOffsetForMessageId − clientHeight/3 shift,
-        // since getOffsetForMessageId returns an offset already clamped to the scrollable range).
-        // Re-asserting each frame converges as rows settle. Matches the reply-scroll block:'center'.
-        v.scrollToIndex(currentIdx, { align: 'center' })
-        const st = s.scrollTop
-        const distFromBottom = s.scrollHeight - st - s.clientHeight
-        isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-
-        let wrote = false
-        if (landedTarget >= 0 && Math.abs(st - landedTarget) <= TARGET_DRIFT_PX) {
-          if (++stableFrames >= TARGET_STABLE_FRAMES) {
-            finishTarget()
-            consumeAndHighlight()
-            return
-          }
-        } else {
-          wrote = true
-          stableFrames = 0
-          debugLog('TARGET MESSAGE: reasserting virtualizer index', {
-            targetMessageId,
-            idx: currentIdx,
-            scrollTop: st,
-            distFromBottom,
-            isAtBottom: isAtBottomRef.current,
-          })
-        }
-        landedTarget = st
-
-        const warning = targetLoop.frame(performance.now(), wrote)
-        if (warning) console.warn(warning)
-        targetRafId = requestAnimationFrame(stepToTarget)
-        reassertLoopRef.current = { raf: targetRafId, handle: targetLoop }
-      }
-
-      debugLog('TARGET MESSAGE: scrolling via virtualizer index', { targetMessageId, idx })
-      stepToTarget()
-
-      return () => {
-        finishTarget()
-      }
-    } else {
-      // Non-virtualized: all rows are always in the DOM.
-      const el = scroller.querySelector(`[data-message-id="${escapedId}"]`)
-      if (!el) {
-        positioningControllerRef.current?.observeRequest({
-          event: 'explicit-target-waiting',
-          conversationId,
-          draft: shadowTargetDraft,
-          reachability: shadowReachabilityRef.current(shadowTargetDesired),
-          actual: { desired: shadowTargetDesired, phase: 'waiting' },
-        })
-        const loader = latestRef.current.onLoadAround
-        if (loader && targetAroundRequestedRef.current !== targetMessageId) {
-          targetAroundRequestedRef.current = targetMessageId
-          debugLog('TARGET MESSAGE: not loaded (non-virtualized), requesting cache slice around it', { targetMessageId })
-          void Promise.resolve(loader(targetMessageId))
-        } else {
-          debugLog('TARGET MESSAGE: element not found (non-virtualized), waiting for load', { targetMessageId })
-        }
-        return
-      }
-      // Center the target (matches the virtualized path above and the reply-scroll convention);
-      // the browser clamps scrollTop, so a near-bottom target stays fully visible.
-      ;(el as HTMLElement).scrollIntoView({ block: 'center' })
-      positioningControllerRef.current?.observeRequest({
-        event: 'explicit-target',
-        conversationId,
-        draft: shadowTargetDraft,
-        reachability: shadowReachabilityRef.current(shadowTargetDesired),
-        actual: { desired: shadowTargetDesired, phase: 'positioning' },
-      })
-      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-      highlight(el)
-      debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
-      onTargetMessageConsumed?.()
-    }
-
-    // messageCount is in deps so this re-fires when messages load from async sources
-    // (e.g., IndexedDB in search context view)
-  }, [targetMessageId, messageCount, conversationId, isAtBottomRef, onTargetMessageConsumed, staticMode])
+      executor,
+    }) ?? null
+    storeTargetRequestRef.current = request
+  }, [
+    targetMessageId,
+    messageCount,
+    conversationId,
+    createExplicitTargetExecutor,
+    isAtBottomRef,
+    staticMode,
+  ])
 
   // ==========================================================================
   // EFFECT: Cleanup on unmount
@@ -3630,6 +3624,7 @@ export function useMessageListScroll({
     handleMediaLoad,
     scrollToBottom,
     scrollToTop,
+    requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
     bottomVisibleMessageId,

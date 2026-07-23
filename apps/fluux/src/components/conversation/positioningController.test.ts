@@ -3,6 +3,8 @@ import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManag
 import type { MessageVirtualizer } from './messageVirtualizer'
 import {
   PositioningController,
+  type ExplicitTargetExecutor,
+  type ExplicitTargetFrameResult,
   type PositionExecutionLease,
   type PositionRequestDraft,
   type SavedPositionExecutionLease,
@@ -27,6 +29,7 @@ import {
   messageFraction,
   pixelOffset,
   type BottomFractionAnchorPosition,
+  type ReachabilityFacts,
   type LiveEdgePosition,
   type SavedPositionRequest,
 } from './scrollPositionModel'
@@ -895,6 +898,411 @@ describe('positioning controller unread-marker ownership', () => {
       'unread-marker-unavailable',
       expect.any(Object),
     )
+  })
+})
+
+describe('positioning controller explicit-target ownership', () => {
+  function targetHarness(options: {
+    reachability?: (
+      loadStatus: Parameters<ExplicitTargetExecutor['reachability']>[1],
+    ) => ReachabilityFacts
+    loadAround?: ExplicitTargetExecutor['loadAround']
+  } = {}) {
+    const callbacks: Array<() => void> = []
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const complete = vi.fn()
+    const leases: PositionExecutionLease[] = []
+    let frameResult: ExplicitTargetFrameResult = { kind: 'waiting' }
+    let scrollTop = 0
+    const positionFrame = vi.fn(() => frameResult)
+    const beginLoop = vi.fn((lease: PositionExecutionLease) => {
+      leases.push(lease)
+      return {
+        schedule: (callback: () => void) => callbacks.push(callback),
+        recordFrame,
+        finish,
+      }
+    })
+    const executor: ExplicitTargetExecutor = {
+      reachability: (_desired, loadStatus) =>
+        options.reachability?.(loadStatus) ?? {
+          kind: 'available',
+          index: 12,
+          mounted: true,
+          placement: 'viable',
+        },
+      loadAround: options.loadAround,
+      beginLoop,
+      readScrollTop: () => scrollTop,
+      positionFrame,
+      complete,
+    }
+    return {
+      executor,
+      callbacks,
+      finish,
+      recordFrame,
+      complete,
+      leases,
+      positionFrame,
+      beginLoop,
+      setFrameResult: (result: ExplicitTargetFrameResult) => {
+        frameResult = result
+        if (result.kind === 'positioned') scrollTop = result.scrollTop
+      },
+      setScrollTop: (value: number) => {
+        scrollTop = value
+      },
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback).toBeDefined()
+        callback!()
+      },
+    }
+  }
+
+  it('loads an absent target once and re-drives it when the load completes', async () => {
+    let available = false
+    let resolveLoad!: () => void
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    })
+    const loadAround = vi.fn(() => loadPromise)
+    const harness = targetHarness({
+      reachability: (loadStatus) =>
+        available
+          ? {
+              kind: 'available',
+              index: 12,
+              mounted: false,
+              placement: 'viable',
+            }
+          : { kind: 'target-absent', loadAround: loadStatus },
+      loadAround,
+    })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'target-a',
+      executor: harness.executor,
+    })
+    const refreshed = controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'target-a',
+      executor: harness.executor,
+    })
+
+    expect(refreshed?.generation).toBe(request?.generation)
+    expect(loadAround).toHaveBeenCalledTimes(1)
+    expect(harness.beginLoop).not.toHaveBeenCalled()
+
+    available = true
+    resolveLoad()
+    await loadPromise
+    await Promise.resolve()
+
+    expect(harness.beginLoop).toHaveBeenCalledTimes(1)
+    expect(harness.callbacks).toHaveLength(1)
+  })
+
+  it('keeps an exhausted wait target pending without repeating its around load', async () => {
+    const loadAround = vi.fn().mockResolvedValue(undefined)
+    const harness = targetHarness({
+      reachability: (loadStatus) => ({
+        kind: 'target-absent',
+        loadAround: loadStatus,
+      }),
+      loadAround,
+    })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'missing-target',
+      executor: harness.executor,
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(controller.snapshot().active).toMatchObject({
+      request: { generation: request!.generation },
+      phase: { kind: 'pending', reason: 'target-not-indexed' },
+    })
+    controller.refreshExplicitTarget({
+      conversationId,
+      generation: request!.generation,
+      executor: harness.executor,
+    })
+    expect(loadAround).toHaveBeenCalledTimes(1)
+    expect(harness.complete).not.toHaveBeenCalled()
+  })
+
+  it('settles after four stable frames and records every actual write', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'stable-target',
+      executor: harness.executor,
+    })
+
+    for (const scrollTop of [100, 115, 116, 117, 118]) {
+      harness.setFrameResult({
+        kind: 'positioned',
+        scrollTop,
+        wrote: true,
+      })
+      harness.runFrame()
+    }
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(5)
+    expect(harness.recordFrame).toHaveBeenCalledTimes(5)
+    expect(harness.recordFrame).toHaveBeenCalledWith(true)
+    expect(harness.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desired: expect.objectContaining({ messageId: 'stable-target' }),
+      }),
+      'settled',
+      true,
+    )
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('completes best-effort after exactly thirty non-converging writes', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'moving-target',
+      executor: harness.executor,
+    })
+
+    for (let frame = 0; frame < 30; frame += 1) {
+      harness.setFrameResult({
+        kind: 'positioned',
+        scrollTop: frame * 20,
+        wrote: true,
+      })
+      harness.runFrame()
+    }
+    expect(harness.complete).not.toHaveBeenCalled()
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(30)
+    expect(harness.recordFrame).toHaveBeenCalledTimes(30)
+    expect(harness.complete).toHaveBeenCalledWith(
+      expect.any(Object),
+      'best-effort',
+      true,
+    )
+  })
+
+  it('reports user takeover and invalidates the queued target frame', () => {
+    const harness = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'cancelled-target',
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    controller.observeUserInput(conversationId)
+    staleFrame()
+
+    expect(harness.positionFrame).not.toHaveBeenCalled()
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+    expect(harness.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        desired: expect.objectContaining({ messageId: 'cancelled-target' }),
+      }),
+      'user-takeover',
+      false,
+    )
+  })
+
+  it('treats a 301px geometry drift as user takeover', () => {
+    const harness = targetHarness()
+    harness.setFrameResult({
+      kind: 'positioned',
+      scrollTop: 100,
+      wrote: true,
+    })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'dragged-away-target',
+      executor: harness.executor,
+    })
+    harness.runFrame()
+    harness.setScrollTop(401)
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenCalledWith(
+      expect.any(Object),
+      'user-takeover',
+      true,
+    )
+    expect(controller.snapshot().active).toBeNull()
+  })
+
+  it('silently supersedes target A with B and drops A queued work', () => {
+    const targetA = targetHarness()
+    const targetB = targetHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'target-a',
+      executor: targetA.executor,
+    })
+    const staleFrame = targetA.callbacks.shift()!
+    const targetBRequest = controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'target-b',
+      executor: targetB.executor,
+    })
+
+    staleFrame()
+
+    expect(targetA.finish).toHaveBeenCalledTimes(1)
+    expect(targetA.positionFrame).not.toHaveBeenCalled()
+    expect(targetA.complete).not.toHaveBeenCalled()
+    expect(targetB.callbacks).toHaveLength(1)
+    expect(controller.snapshot().active?.request).toBe(targetBRequest)
+  })
+
+  it('drops an around-load completion after switching rooms without completing the target', async () => {
+    let resolveLoad!: () => void
+    const loadPromise = new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    })
+    const harness = targetHarness({
+      reachability: (loadStatus) => ({
+        kind: 'target-absent',
+        loadAround: loadStatus,
+      }),
+      loadAround: () => loadPromise,
+    })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'old-room-target',
+      executor: harness.executor,
+    })
+
+    observeLiveEntry(controller, 'next-room@example.test')
+    resolveLoad()
+    await loadPromise
+    await Promise.resolve()
+
+    expect(harness.beginLoop).not.toHaveBeenCalled()
+    expect(harness.complete).not.toHaveBeenCalled()
+    expect(controller.snapshot().currentConversationId).toBe(
+      'next-room@example.test',
+    )
+  })
+
+  it('lets a target supersede unread entry without completing the marker or target', () => {
+    const markerCallbacks: Array<() => void> = []
+    const markerFinish = vi.fn()
+    const markerExecutor: UnreadMarkerExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 3,
+        mounted: true,
+        placement: 'viable',
+      }),
+      beginLoop: () => ({
+        schedule: (callback) => markerCallbacks.push(callback),
+        recordFrame: vi.fn(),
+        finish: markerFinish,
+      }),
+      readScrollTop: () => 0,
+      positionFrame: () => ({ kind: 'waiting' }),
+      applyLiveEdge: () => true,
+    }
+    const target = targetHarness()
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: deriveEntryPositionFacts({
+        syncedLiveEdge: false,
+        savedAnchor: null,
+        savedOffsetPx: null,
+        firstUnreadMessageId: 'first-unread',
+        unreadMarkerAlign: 'start',
+      }),
+      executor: markerExecutor,
+    })
+    const staleMarkerFrame = markerCallbacks.shift()!
+
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'explicit-target',
+      executor: target.executor,
+    })
+    staleMarkerFrame()
+
+    expect(markerFinish).toHaveBeenCalledTimes(1)
+    expect(target.complete).not.toHaveBeenCalled()
+    expect(target.callbacks).toHaveLength(1)
+  })
+
+  it('lets a newer unread entry silently cancel an explicit target', () => {
+    const target = targetHarness()
+    const markerFinish = vi.fn()
+    const markerExecutor: UnreadMarkerExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 3,
+        mounted: true,
+        placement: 'viable',
+      }),
+      beginLoop: () => ({
+        schedule: vi.fn(),
+        recordFrame: vi.fn(),
+        finish: markerFinish,
+      }),
+      readScrollTop: () => 0,
+      positionFrame: () => ({ kind: 'waiting' }),
+      applyLiveEdge: () => true,
+    }
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'superseded-target',
+      executor: target.executor,
+    })
+    const staleTargetFrame = target.callbacks.shift()!
+
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: deriveEntryPositionFacts({
+        syncedLiveEdge: false,
+        savedAnchor: null,
+        savedOffsetPx: null,
+        firstUnreadMessageId: 'first-unread',
+        unreadMarkerAlign: 'start',
+      }),
+      executor: markerExecutor,
+    })
+    staleTargetFrame()
+
+    expect(target.finish).toHaveBeenCalledTimes(1)
+    expect(target.positionFrame).not.toHaveBeenCalled()
+    expect(target.complete).not.toHaveBeenCalled()
+    expect(markerFinish).not.toHaveBeenCalled()
   })
 })
 
