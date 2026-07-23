@@ -7,11 +7,15 @@ License:        AGPL-3.0-or-later
 URL:            https://github.com/processone/fluux-messenger
 Source0:        fluux-messenger-%{version}.tar.gz
 
+BuildRequires:  desktop-file-utils
+
 # Runtime dependencies
 Requires:       webkit2gtk4.1
 Requires:       gtk3
 Requires:       glib2
 Requires:       libayatana-appindicator-gtk3
+Requires:       xdg-utils
+Requires:       desktop-file-utils
 
 # Disable automatic dependency generation (we use pre-built binary)
 AutoReqProv:    no
@@ -41,6 +45,7 @@ install -Dm755 fluux-messenger %{buildroot}%{_bindir}/fluux-messenger
 
 # Install desktop file
 install -Dm644 fluux-messenger.desktop %{buildroot}%{_datadir}/applications/fluux-messenger.desktop
+desktop-file-validate %{buildroot}%{_datadir}/applications/fluux-messenger.desktop
 
 # Install icons
 install -Dm644 icons/32x32.png %{buildroot}%{_datadir}/icons/hicolor/32x32/apps/fluux-messenger.png

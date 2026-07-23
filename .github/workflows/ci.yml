@@ -204,7 +204,11 @@ jobs:
             librsvg2-dev \
             patchelf \
             libxss-dev \
-            libdbus-1-dev
+            libdbus-1-dev \
+            desktop-file-utils
+
+      - name: Validate Linux packaging metadata
+        run: bash scripts/check-linux-packaging.sh
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

@@ -12,7 +12,8 @@ Build-Depends: debhelper-compat (= 13),
                libayatana-appindicator3-dev,
                librsvg2-dev,
                libssl-dev,
-               pkg-config
+               pkg-config,
+               desktop-file-utils
 Standards-Version: 4.6.2
 Homepage: https://github.com/processone/fluux-messenger
 Vcs-Git: https://github.com/processone/fluux-messenger.git
@@ -25,7 +26,9 @@ Depends: ${misc:Depends},
          libwebkit2gtk-4.1-0,
          libgtk-3-0 | libgtk-3-0t64,
          libglib2.0-0 | libglib2.0-0t64,
-         libayatana-appindicator3-1
+         libayatana-appindicator3-1,
+         xdg-utils,
+         desktop-file-utils
 Description: Modern XMPP desktop client
  Fluux Messenger is a modern, user-friendly XMPP chat client built with
  Tauri and React. It provides a clean interface for real-time messaging

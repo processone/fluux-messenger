@@ -26,7 +26,8 @@ sudo apt-get install -y \
     librsvg2-dev \
     libssl-dev \
     pkg-config \
-    patchelf
+    patchelf \
+    desktop-file-utils
 
 # Check for Node.js
 if ! command -v node &> /dev/null; then
