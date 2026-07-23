@@ -136,6 +136,20 @@ pub struct DecryptOutput {
     /// upgradable) from "signed but we didn't have the key to verify yet"
     /// (stash for later re-verification when the sender's PEP key arrives).
     pub signature_present: bool,
+    /// Precise signature classification, one of:
+    /// - `"verified"`: a supplied sender cert verified the signature.
+    /// - `"bad"`: we hold the signer's cert but the signature is invalid
+    ///   (forgery/expired/malformed) — a permanent failure.
+    /// - `"missing-key"`: the message is signed but no supplied cert is the
+    ///   signer (an uncached device) — the plugin must refresh the sender's
+    ///   keyset and re-verify, NOT reject.
+    /// - `"none"`: the message carried no signature.
+    ///
+    /// This is stricter than `signature_verified`/`signature_present`: it
+    /// lets the plugin distinguish a real forgery (`"bad"`, drop) from a
+    /// message whose signing device we simply haven't cached yet
+    /// (`"missing-key"`, defer), which the two booleans cannot express.
+    pub signature_status: String,
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
@@ -305,7 +319,7 @@ impl OpenpgpState {
     pub fn encrypt(
         &self,
         sender_account_jid: &str,
-        recipient_public_armored: &str,
+        recipient_public_armored: &[String],
         plaintext: &str,
     ) -> Result<String, String> {
         let bundle = self.read_cached_bundle(sender_account_jid, "sender")?;
@@ -313,17 +327,35 @@ impl OpenpgpState {
             .map_err(anyhow_to_string)
     }
 
-    /// Decrypt `ciphertext` with the secret key for `account_jid`. When
-    /// `sender_public_armored` is provided, verify signatures against
-    /// that cert and report the verified signer fingerprint.
+    /// Decrypt `ciphertext` with the secret key for `account_jid`. Each entry
+    /// in `sender_public_armored` is a candidate signer cert; the signature is
+    /// verified against any of them and the verified signer fingerprint is
+    /// reported. Passing an empty slice decrypts without verification.
+    ///
+    /// A malformed sender cert is logged and skipped — NOT a hard error —
+    /// because the remaining certs may still verify the message; aborting
+    /// would fail a verifiable message. (Defense in depth: with the
+    /// deserialize sanitizer upstream, malformed certs should not reach here.)
     pub fn decrypt(
         &self,
         account_jid: &str,
         ciphertext: &str,
-        sender_public_armored: Option<&str>,
+        sender_public_armored: &[String],
     ) -> Result<DecryptOutput, String> {
         let bundle = self.read_cached_bundle(account_jid, "account")?;
-        decrypt_and_verify(&bundle.secret_armored, ciphertext, sender_public_armored)
+
+        let mut senders: Vec<Cert> = Vec::with_capacity(sender_public_armored.len());
+        for armored in sender_public_armored {
+            match Cert::from_bytes(armored.as_bytes()) {
+                Ok(cert) => senders.push(cert),
+                Err(e) => {
+                    tracing::warn!("skipping malformed sender cert during decrypt: {e}")
+                }
+            }
+        }
+
+        let policy = StandardPolicy::new();
+        decrypt_and_verify(ciphertext.as_bytes(), &bundle.secret_armored, senders, &policy)
             .map_err(anyhow_to_string)
     }
 
@@ -767,7 +799,7 @@ pub async fn openpgp_prewarm(
 #[tauri::command]
 pub fn openpgp_encrypt(
     sender_account_jid: String,
-    recipient_public_armored: String,
+    recipient_public_armored: Vec<String>,
     plaintext: String,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<String, String> {
@@ -778,10 +810,10 @@ pub fn openpgp_encrypt(
 pub fn openpgp_decrypt(
     account_jid: String,
     ciphertext: String,
-    sender_public_armored: Option<String>,
+    sender_public_armored: Vec<String>,
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<DecryptOutput, String> {
-    state.decrypt(&account_jid, &ciphertext, sender_public_armored.as_deref())
+    state.decrypt(&account_jid, &ciphertext, &sender_public_armored)
 }
 
 #[tauri::command]
@@ -1275,45 +1307,56 @@ fn format_iso8601(epoch_secs: u64) -> String {
 }
 
 fn encrypt_and_sign(
-    recipient_public_armored: &str,
+    recipient_public_armored: &[String],
     sender_secret_armored: &str,
     plaintext: &str,
 ) -> Result<String> {
     let policy = StandardPolicy::new();
-    let recipient_cert = Cert::from_bytes(recipient_public_armored.as_bytes())
-        .context("parse recipient public key")?;
     let sender_cert =
         Cert::from_bytes(sender_secret_armored.as_bytes()).context("parse sender secret key")?;
 
-    let mut recipients: Vec<Recipient> = recipient_cert
-        .keys()
-        .with_policy(&policy, None)
-        .supported()
-        .alive()
-        .revoked(false)
-        .for_transport_encryption()
-        .map(Recipient::from)
-        .collect();
-
-    if recipients.is_empty() {
-        return Err(anyhow!(
-            "recipient certificate has no usable encryption-capable key"
-        ));
+    // Parse every recipient cert up front. A malformed recipient is a HARD
+    // error — silently dropping one means that recipient can never read the
+    // message (a silent security downgrade). A malformed *sender* cert on
+    // decrypt is skipped instead; the asymmetry is deliberate.
+    let mut recipient_certs: Vec<Cert> = Vec::with_capacity(recipient_public_armored.len());
+    for armored in recipient_public_armored {
+        let cert = Cert::from_bytes(armored.as_bytes())
+            .context("parse recipient public key (multi-recipient encrypt)")?;
+        recipient_certs.push(cert);
     }
 
-    // Encrypt-to-self: also add the sender's own encryption subkeys so that
-    // our other devices (and this device on MAM replay) can read outgoing
-    // messages. Without this, a second logged-in client pulling history
-    // from the archive would only see the XEP-0373 fallback body.
-    let self_recipients = sender_cert
-        .keys()
-        .with_policy(&policy, None)
-        .supported()
-        .alive()
-        .revoked(false)
-        .for_transport_encryption()
-        .map(Recipient::from);
-    recipients.extend(self_recipients);
+    // Collect encryption-capable keys from every recipient cert PLUS the
+    // sender's own (encrypt-to-self, so our other devices and this device on
+    // MAM replay can read outgoing messages), deduped by fingerprint.
+    //
+    // Dedup must happen in Rust: the TS-side string dedup cannot remove the
+    // local cert, which we append here for encrypt-to-self and which is also
+    // present in the own-announced keyset the caller passes when the peer JID
+    // equals the account JID. `Recipient` in this Sequoia version exposes only
+    // `key_handle()` (no `key_id()`), so we dedup the encryption KEYS by
+    // fingerprint BEFORE mapping to `Recipient` — the `recipients` vec is then
+    // unique by construction.
+    let mut seen_fingerprints = std::collections::HashSet::new();
+    let mut recipients: Vec<Recipient> = Vec::new();
+    for cert in recipient_certs.iter().chain(std::iter::once(&sender_cert)) {
+        for ka in cert
+            .keys()
+            .with_policy(&policy, None)
+            .supported()
+            .alive()
+            .revoked(false)
+            .for_transport_encryption()
+        {
+            if seen_fingerprints.insert(ka.key().fingerprint()) {
+                recipients.push(Recipient::from(ka));
+            }
+        }
+    }
+
+    if recipients.is_empty() {
+        return Err(anyhow!("no usable encryption-capable recipient key"));
+    }
 
     let signer_keypair = sender_cert
         .keys()
@@ -1356,36 +1399,33 @@ fn encrypt_and_sign(
 }
 
 fn decrypt_and_verify(
+    ciphertext: &[u8],
     secret_armored: &str,
-    ciphertext: &str,
-    sender_public_armored: Option<&str>,
+    senders: Vec<Cert>,
+    policy: &StandardPolicy,
 ) -> Result<DecryptOutput> {
-    let policy = StandardPolicy::new();
     let secret_cert =
         Cert::from_bytes(secret_armored.as_bytes()).context("parse own secret key")?;
-
-    let sender_cert = match sender_public_armored {
-        Some(armored) => {
-            Some(Cert::from_bytes(armored.as_bytes()).context("parse sender public key")?)
-        }
-        None => None,
-    };
 
     // Shared state set by the helper during stream reading.
     let verified_fingerprint: Arc<Mutex<Option<Fingerprint>>> = Arc::new(Mutex::new(None));
     let signature_present: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    // Precise classification, refined as signatures are inspected. Starts at
+    // "none" (no signature) and is upgraded by [`check`].
+    let signature_status: Arc<Mutex<&'static str>> = Arc::new(Mutex::new("none"));
 
     let helper = DecryptHelper {
         secret: &secret_cert,
-        sender: sender_cert.as_ref(),
-        policy: &policy,
+        senders,
+        policy,
         verified_fingerprint: verified_fingerprint.clone(),
         signature_present: signature_present.clone(),
+        signature_status: signature_status.clone(),
     };
 
-    let mut decryptor = DecryptorBuilder::from_bytes(ciphertext.as_bytes())
+    let mut decryptor = DecryptorBuilder::from_bytes(ciphertext)
         .context("parse ciphertext")?
-        .with_policy(&policy, None, helper)
+        .with_policy(policy, None, helper)
         .context("open decryptor")?;
 
     let mut plaintext = Vec::new();
@@ -1396,65 +1436,92 @@ fn decrypt_and_verify(
         .lock()
         .map_err(|e| anyhow!("verification state poisoned: {e}"))?
         .clone();
-    let had_signature = *signature_present
+    let status = *signature_status
         .lock()
-        .map_err(|e| anyhow!("signature presence state poisoned: {e}"))?;
+        .map_err(|e| anyhow!("signature status state poisoned: {e}"))?;
 
     Ok(DecryptOutput {
-        signature_verified: signer.is_some(),
+        // Only a VERIFIED signature yields a fingerprint — and it is the
+        // signing key's cert PRIMARY fingerprint, which is what trust
+        // comparison expects. 'missing-key'/'bad'/'none' → None.
+        signature_verified: status == "verified",
         signer_fingerprint: signer.map(|fp| fp.to_hex()),
         plaintext,
-        signature_present: had_signature,
+        signature_present: status != "none",
+        signature_status: status.to_string(),
     })
 }
 
 struct DecryptHelper<'a> {
     secret: &'a Cert,
-    sender: Option<&'a Cert>,
+    /// Every candidate signer cert supplied by the caller (the peer's
+    /// announced keyset, possibly with our own for encrypt-to-self replay).
+    /// Any one of them verifying a signature is enough.
+    senders: Vec<Cert>,
     policy: &'a StandardPolicy<'a>,
-    /// Set by [`check`] when at least one signature validates against
-    /// `sender`. Observed by the outer function after the stream is drained.
+    /// Set by [`check`] when at least one signature validates against a
+    /// supplied sender. Observed by the outer function after the stream is
+    /// drained.
     verified_fingerprint: Arc<Mutex<Option<Fingerprint>>>,
     /// Set to true by [`check`] when any signature result is observed —
     /// verified or not, keyed or not. The outer function uses this to
     /// distinguish an unsigned message from a signed one whose verification
     /// was deferred pending a cert.
     signature_present: Arc<Mutex<bool>>,
+    /// Precise classification set by [`check`]: `"verified"`, `"bad"`,
+    /// `"missing-key"`, or the initial `"none"`.
+    signature_status: Arc<Mutex<&'static str>>,
 }
 
 impl VerificationHelper for DecryptHelper<'_> {
     fn get_certs(&mut self, _ids: &[KeyHandle]) -> openpgp::Result<Vec<Cert>> {
-        // Hand the verifier the sender's cert (when supplied) so it can
-        // check signatures. Returning an empty Vec — the default — causes
-        // every signature to be reported as `MissingKey`, which is exactly
-        // what we want when no sender cert was provided: decrypt without
-        // verification.
-        Ok(self.sender.map(|c| vec![c.clone()]).unwrap_or_default())
+        // Hand the verifier every supplied sender cert so it can check the
+        // signature against any of them. An empty Vec causes every signature
+        // to be reported as `MissingKey`, which is exactly what we want when
+        // no sender cert was provided: decrypt without verification.
+        Ok(self.senders.clone())
     }
 
     fn check(&mut self, structure: MessageStructure) -> openpgp::Result<()> {
-        // Walk the structure looking for a valid signature. Decryption still
-        // succeeds if none is found — we report the state through
-        // `verified_fingerprint` rather than aborting, because the UI wants
-        // to render an "untrusted" lock for unsigned messages, not drop
-        // them entirely.
+        use openpgp::parse::stream::VerificationError;
+        // Walk the structure classifying each signature. Decryption still
+        // succeeds regardless — we report the state through
+        // `signature_status`/`verified_fingerprint` rather than aborting,
+        // because the UI wants to render an "untrusted"/"missing-key" lock
+        // rather than drop the message entirely.
         for layer in structure.iter() {
             if let MessageLayer::SignatureGroup { results } = layer {
                 for result in results {
                     // Any result (Ok OR Err) means a signature packet was
-                    // observed. MissingKey errors surface here when no
-                    // sender cert was provided; record presence so the
-                    // plugin can distinguish "unsigned" from "we just
-                    // couldn't verify yet".
+                    // observed.
                     if let Ok(mut slot) = self.signature_present.lock() {
                         *slot = true;
                     }
-                    if let Ok(verification) = result {
-                        let fp = verification.ka.cert().fingerprint();
-                        if let Ok(mut slot) = self.verified_fingerprint.lock() {
-                            *slot = Some(fp);
+                    match result {
+                        Ok(verification) => {
+                            let fp = verification.ka.cert().fingerprint();
+                            if let Ok(mut slot) = self.verified_fingerprint.lock() {
+                                *slot = Some(fp);
+                            }
+                            *self.signature_status.lock().unwrap() = "verified";
+                            return Ok(());
                         }
-                        return Ok(());
+                        Err(VerificationError::MissingKey { .. }) => {
+                            // We hold no cert for this signer (an uncached
+                            // device). Do not downgrade a prior 'bad' to
+                            // 'missing-key'.
+                            let mut s = self.signature_status.lock().unwrap();
+                            if *s == "none" {
+                                *s = "missing-key";
+                            }
+                        }
+                        Err(_) => {
+                            // BadSignature / BadKey / MalformedSignature /
+                            // UnboundKey / UnknownSignature: we hold the
+                            // signer's cert but the signature is invalid → a
+                            // forgery (or an expired/malformed signature).
+                            *self.signature_status.lock().unwrap() = "bad";
+                        }
                     }
                 }
             }
@@ -1637,10 +1704,10 @@ mod tests {
         assert_eq!(bob_reloaded.fingerprint, bob.fingerprint);
 
         let ciphertext = reloaded
-            .encrypt("alice@example.com", &bob.public_armored, "ping")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "ping")
             .unwrap();
         let out = reloaded
-            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "ping");
         assert!(out.signature_verified);
@@ -1650,7 +1717,7 @@ mod tests {
     fn encrypt_then_decrypt_round_trip() {
         let (state, alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, "hello, bob")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hello, bob")
             .unwrap();
         assert!(
             ciphertext.contains("BEGIN PGP MESSAGE"),
@@ -1660,7 +1727,7 @@ mod tests {
 
         // Decrypt WITH alice's public key supplied — must verify the signature.
         let out = state
-            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "hello, bob");
         assert!(
@@ -1677,9 +1744,9 @@ mod tests {
     fn decrypt_without_sender_key_succeeds_but_signature_not_verified() {
         let (state, _alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hi")
             .unwrap();
-        let out = state.decrypt("bob@example.com", &ciphertext, None).unwrap();
+        let out = state.decrypt("bob@example.com", &ciphertext, &[]).unwrap();
         assert_eq!(out.plaintext, "hi");
         assert!(
             !out.signature_verified,
@@ -1705,6 +1772,7 @@ mod tests {
         sender_secret_armored: &str,
         plaintext: &str,
         signed_at: SystemTime,
+        sig_validity: Option<Duration>,
     ) -> Result<String> {
         let policy = StandardPolicy::new();
         let recipient = Cert::from_bytes(recipient_public_armored.as_bytes())?;
@@ -1736,9 +1804,20 @@ mod tests {
             let message = Message::new(&mut sink);
             let message = Armorer::new(message).build()?;
             let message = Encryptor::for_recipients(message, recipients).build()?;
-            let message = Signer::new(message, signer_keypair)?
-                .creation_time(signed_at)
-                .build()?;
+            // When set, stamp a signature-expiration subpacket so the signature
+            // is well-formed at sign time but policy-INVALID once it lapses —
+            // used to exercise the `"bad"` (expired) classification on decrypt.
+            // `build()` layers `creation_time` over the template, so the
+            // expiration lands at `signed_at + validity`.
+            let signer = match sig_validity {
+                Some(validity) => {
+                    let template = SignatureBuilder::new(SignatureType::Binary)
+                        .set_signature_validity_period(validity)?;
+                    Signer::with_template(message, signer_keypair, template)?
+                }
+                None => Signer::new(message, signer_keypair)?,
+            };
+            let message = signer.creation_time(signed_at).build()?;
             let mut message = LiteralWriter::new(message).build()?;
             message.write_all(plaintext.as_bytes())?;
             message.finalize()?;
@@ -1754,10 +1833,21 @@ mod tests {
         // window, otherwise a freshly-signed message is rejected.
         let (_state, alice, bob) = setup_two_accounts();
         let ten_min_ahead = SystemTime::now() + Duration::from_secs(600);
-        let ct =
-            sign_encrypt_at(&bob.public_armored, &alice.secret_armored, "hello", ten_min_ahead)
-                .unwrap();
-        let out = decrypt_and_verify(&bob.secret_armored, &ct, Some(&alice.public_armored)).unwrap();
+        let ct = sign_encrypt_at(
+            &bob.public_armored,
+            &alice.secret_armored,
+            "hello",
+            ten_min_ahead,
+            None,
+        )
+        .unwrap();
+        let out = decrypt_and_verify(
+            ct.as_bytes(),
+            &bob.secret_armored,
+            vec![published_cert(&Cert::from_bytes(alice.public_armored.as_bytes()).unwrap())],
+            &StandardPolicy::new(),
+        )
+        .unwrap();
         assert_eq!(out.plaintext, "hello");
         assert!(
             out.signature_verified,
@@ -1771,13 +1861,140 @@ mod tests {
         // is still not trusted.
         let (_state, alice, bob) = setup_two_accounts();
         let far_future = SystemTime::now() + Duration::from_secs(30 * 24 * 3600);
-        let ct = sign_encrypt_at(&bob.public_armored, &alice.secret_armored, "x", far_future)
-            .unwrap();
-        let out = decrypt_and_verify(&bob.secret_armored, &ct, Some(&alice.public_armored)).unwrap();
+        let ct = sign_encrypt_at(
+            &bob.public_armored,
+            &alice.secret_armored,
+            "x",
+            far_future,
+            None,
+        )
+        .unwrap();
+        let out = decrypt_and_verify(
+            ct.as_bytes(),
+            &bob.secret_armored,
+            vec![published_cert(&Cert::from_bytes(alice.public_armored.as_bytes()).unwrap())],
+            &StandardPolicy::new(),
+        )
+        .unwrap();
         assert!(
             !out.signature_verified,
             "a grossly future-dated signature must still be rejected"
         );
+    }
+
+    #[test]
+    fn encrypts_to_two_recipients_each_can_decrypt() {
+        let policy = StandardPolicy::new();
+        let a = generate_cert("xmpp:a@example.com").unwrap();
+        let b = generate_cert("xmpp:b@example.com").unwrap();
+        let signer = generate_cert("xmpp:me@example.com").unwrap();
+
+        let a_pub = armored_string(&published_cert(&a), KeyExport::Public).unwrap();
+        let b_pub = armored_string(&published_cert(&b), KeyExport::Public).unwrap();
+        let signer_secret = armored_string(&signer, KeyExport::Secret).unwrap();
+
+        let ct = encrypt_and_sign(&[a_pub, b_pub], &signer_secret, "hello").unwrap();
+
+        // Each recipient decrypts independently, verifying against the signer.
+        for recipient in [&a, &b] {
+            let secret = armored_string(recipient, KeyExport::Secret).unwrap();
+            let out = decrypt_and_verify(
+                ct.as_bytes(),
+                &secret,
+                vec![published_cert(&signer)],
+                &policy,
+            )
+            .unwrap();
+            assert_eq!(out.plaintext, "hello");
+            assert!(out.signature_verified);
+        }
+    }
+
+    #[test]
+    fn verifies_signature_from_any_of_several_sender_certs() {
+        let policy = StandardPolicy::new();
+        let recipient = generate_cert("xmpp:me@example.com").unwrap();
+        let signer = generate_cert("xmpp:peer@example.com").unwrap();
+        let decoy = generate_cert("xmpp:decoy@example.com").unwrap();
+
+        let recipient_pub = armored_string(&published_cert(&recipient), KeyExport::Public).unwrap();
+        let signer_secret = armored_string(&signer, KeyExport::Secret).unwrap();
+        let recipient_secret = armored_string(&recipient, KeyExport::Secret).unwrap();
+
+        let ct = encrypt_and_sign(&[recipient_pub], &signer_secret, "hi").unwrap();
+
+        // Sender list contains the real signer among decoys, in any order.
+        let out = decrypt_and_verify(
+            ct.as_bytes(),
+            &recipient_secret,
+            vec![published_cert(&decoy), published_cert(&signer)],
+            &policy,
+        )
+        .unwrap();
+        assert_eq!(out.plaintext, "hi");
+        assert_eq!(out.signature_status, "verified");
+        assert_eq!(out.signer_fingerprint.unwrap(), signer.fingerprint().to_hex());
+    }
+
+    #[test]
+    fn signer_key_not_supplied_reports_missing_key() {
+        // The real signer's cert is NOT among the supplied senders → 'missing-key'
+        // (an uncached device, must refresh + defer), NOT 'bad'. No fingerprint is
+        // returned — only a verified signature yields one.
+        let policy = StandardPolicy::new();
+        let recipient = generate_cert("xmpp:me@example.com").unwrap();
+        let signer = generate_cert("xmpp:peer@example.com").unwrap();
+        let decoy = generate_cert("xmpp:decoy@example.com").unwrap();
+        let recipient_pub = armored_string(&published_cert(&recipient), KeyExport::Public).unwrap();
+        let signer_secret = armored_string(&signer, KeyExport::Secret).unwrap();
+        let recipient_secret = armored_string(&recipient, KeyExport::Secret).unwrap();
+        let ct = encrypt_and_sign(&[recipient_pub], &signer_secret, "hi").unwrap();
+
+        let out = decrypt_and_verify(
+            ct.as_bytes(),
+            &recipient_secret,
+            vec![published_cert(&decoy)],
+            &policy,
+        )
+        .unwrap();
+        assert_eq!(out.signature_status, "missing-key");
+        assert!(out.signer_fingerprint.is_none());
+    }
+
+    #[test]
+    fn expired_signature_from_a_supplied_signer_reports_bad() {
+        // A ciphertext's integrity protection (SEIPD/MDC) catches any byte-tampering
+        // before signature check, so tampering can't reliably produce a 'bad' (it
+        // errors the decrypt). Instead produce a signature that is cryptographically
+        // well-formed but policy-INVALID at verify time: sign at time T with a short
+        // signature expiration, then verify after it has expired. The signer's cert
+        // IS supplied, so Sequoia reports an Err (not MissingKey) → status 'bad'.
+        let policy = StandardPolicy::new();
+        let recipient = generate_cert("xmpp:me@example.com").unwrap();
+        let signer = generate_cert("xmpp:peer@example.com").unwrap();
+        let recipient_pub = armored_string(&published_cert(&recipient), KeyExport::Public).unwrap();
+        let signer_secret = armored_string(&signer, KeyExport::Secret).unwrap();
+        let recipient_secret = armored_string(&recipient, KeyExport::Secret).unwrap();
+
+        // Signed one hour ago with a 1-second validity → expired at verify time (now).
+        let signed_at = SystemTime::now() - Duration::from_secs(3600);
+        let ct = sign_encrypt_at(
+            &recipient_pub,
+            &signer_secret,
+            "payload",
+            signed_at,
+            Some(Duration::from_secs(1)),
+        )
+        .unwrap();
+        let out = decrypt_and_verify(
+            ct.as_bytes(),
+            &recipient_secret,
+            vec![published_cert(&signer)],
+            &policy,
+        )
+        .unwrap();
+        // Cert supplied + signature invalid at verify time ⇒ Err(_) (not MissingKey) ⇒ 'bad'.
+        assert_eq!(out.signature_status, "bad");
     }
 
     #[test]
@@ -1787,10 +2004,10 @@ mod tests {
         // the "already verified" branch without re-inspecting the payload.
         let (state, alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, "hey")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hey")
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .decrypt("bob@example.com", &ciphertext, &[alice.public_armored.clone()])
             .unwrap();
         assert!(out.signature_verified);
         assert!(out.signature_present);
@@ -1803,10 +2020,10 @@ mod tests {
         let (state, _alice, bob) = setup_two_accounts();
         let eve = state.ensure_key_sync("eve@example.com", "Eve").unwrap();
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hi")
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &ciphertext, Some(&eve.public_armored))
+            .decrypt("bob@example.com", &ciphertext, &[eve.public_armored.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "hi");
         assert!(
@@ -1819,10 +2036,10 @@ mod tests {
     fn decrypt_rejects_ciphertext_for_another_account() {
         let (state, _alice, _bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &_alice.public_armored, "for alice")
+            .encrypt("alice@example.com", &[_alice.public_armored.clone()], "for alice")
             .unwrap();
         let err = state
-            .decrypt("bob@example.com", &ciphertext, Some(&_alice.public_armored))
+            .decrypt("bob@example.com", &ciphertext, &[_alice.public_armored.clone()])
             .expect_err("bob must not decrypt alice's ciphertext");
         assert!(!err.is_empty(), "expected an error");
     }
@@ -1832,7 +2049,7 @@ mod tests {
         let state = new_state();
         state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let err = state
-            .decrypt("alice@example.com", "not-a-pgp-ciphertext", None)
+            .decrypt("alice@example.com", "not-a-pgp-ciphertext", &[])
             .expect_err("malformed ciphertext must be rejected");
         assert!(!err.is_empty(), "expected an error");
     }
@@ -1845,10 +2062,10 @@ mod tests {
         // plaintext instead of the fallback body.
         let (state, alice, bob) = setup_two_accounts();
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, "note to self + bob")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "note to self + bob")
             .unwrap();
         let out = state
-            .decrypt("alice@example.com", &ciphertext, Some(&alice.public_armored))
+            .decrypt("alice@example.com", &ciphertext, &[alice.public_armored.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "note to self + bob");
         assert!(
@@ -1863,7 +2080,7 @@ mod tests {
         // Generate only Bob's key; Alice is absent.
         let bob = state.ensure_key_sync("bob@example.com", "Bob").unwrap();
         let err = state
-            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "hi")
             .expect_err("encrypt must fail without sender account");
         assert!(err.contains("no key for sender"), "unexpected error: {err}");
     }
@@ -1874,14 +2091,14 @@ mod tests {
         let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
         let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let ciphertext = state
-            .encrypt("alice@example.com", &alice.public_armored, "self-note")
+            .encrypt("alice@example.com", &[alice.public_armored.clone()], "self-note")
             .unwrap();
 
         state.forget_account("alice@example.com").unwrap();
 
         // In-memory cache was cleared: decrypt now fails.
         let err = state
-            .decrypt("alice@example.com", &ciphertext, None)
+            .decrypt("alice@example.com", &ciphertext, &[])
             .expect_err("decrypt must fail after forget");
         assert!(err.contains("no key"), "unexpected error: {err}");
 
@@ -2284,7 +2501,7 @@ mod tests {
 
         // Bob encrypts to Alice while she's still on her original [E].
         let pre_rotation_ciphertext = state
-            .encrypt("bob@example.com", &_alice.public_armored, "pre-rotation greeting")
+            .encrypt("bob@example.com", &[_alice.public_armored.clone()], "pre-rotation greeting")
             .unwrap();
 
         // Alice rotates.
@@ -2303,7 +2520,7 @@ mod tests {
             .decrypt(
                 "alice@example.com",
                 &pre_rotation_ciphertext,
-                Some(&bob.public_armored),
+                &[bob.public_armored.clone()],
             )
             .unwrap();
         assert_eq!(out.plaintext, "pre-rotation greeting");
@@ -2322,7 +2539,7 @@ mod tests {
         let (state, _alice, bob) = setup_two_accounts();
 
         let pre_rotation_ciphertext = state
-            .encrypt("bob@example.com", &_alice.public_armored, "historical message")
+            .encrypt("bob@example.com", &[_alice.public_armored.clone()], "historical message")
             .unwrap();
 
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -2340,7 +2557,7 @@ mod tests {
             .decrypt(
                 "alice@example.com",
                 &pre_rotation_ciphertext,
-                Some(&bob.public_armored),
+                &[bob.public_armored.clone()],
             )
             .unwrap();
         assert_eq!(out.plaintext, "historical message");
@@ -2378,10 +2595,10 @@ mod tests {
 
         // Alice → Bob: new ciphertext must decrypt cleanly with Bob's key.
         let new_ct = state
-            .encrypt("alice@example.com", &bob.public_armored, "after rotation")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "after rotation")
             .unwrap();
         let out = state
-            .decrypt("bob@example.com", &new_ct, Some(&alice_after.public_armored))
+            .decrypt("bob@example.com", &new_ct, &[alice_after.public_armored.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "after rotation");
         assert!(out.signature_verified);
@@ -2397,10 +2614,10 @@ mod tests {
         let (state, alice, bob) = setup_two_accounts();
 
         let ct_before = state
-            .encrypt("alice@example.com", &bob.public_armored, "before")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "before")
             .unwrap();
         let out_before = state
-            .decrypt("bob@example.com", &ct_before, Some(&alice.public_armored))
+            .decrypt("bob@example.com", &ct_before, &[alice.public_armored.clone()])
             .unwrap();
         assert_eq!(
             out_before.signer_fingerprint.as_deref(),
@@ -2416,13 +2633,13 @@ mod tests {
             .unwrap();
 
         let ct_after = state
-            .encrypt("alice@example.com", &bob.public_armored, "after")
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], "after")
             .unwrap();
         let out_after = state
             .decrypt(
                 "bob@example.com",
                 &ct_after,
-                Some(&alice_after.public_armored),
+                &[alice_after.public_armored.clone()],
             )
             .unwrap();
         assert_eq!(
@@ -2522,7 +2739,7 @@ mod tests {
         // 2. Alice → Bob ciphertext (signed by Alice, encrypted to Bob + Alice-self)
         let plaintext = "Hello from Sequoia — cross-library interop test";
         let ciphertext = state
-            .encrypt("alice@example.com", &bob.public_armored, plaintext)
+            .encrypt("alice@example.com", &[bob.public_armored.clone()], plaintext)
             .unwrap();
         std::fs::write(dir.join("sequoia_alice_to_bob.asc"), &ciphertext).unwrap();
 
@@ -2642,7 +2859,7 @@ mod tests {
 
         let ciphertext = std::fs::read_to_string(dir.join("web_alice_to_bob.asc")).unwrap();
         let output = bob_state
-            .decrypt("bob@example.com", &ciphertext, Some(&alice_pub))
+            .decrypt("bob@example.com", &ciphertext, &[alice_pub.clone()])
             .expect("Sequoia must decrypt a message encrypted by openpgp.js");
         assert_eq!(output.plaintext, expected_plaintext);
         assert!(
@@ -2931,10 +3148,14 @@ mod tests {
         let alice_secret = armored_string(&healed, KeyExport::Secret).unwrap();
         let alice_public = armored_string(&published_cert(&healed), KeyExport::Public).unwrap();
 
-        let ciphertext =
-            encrypt_and_sign(&bob.public_armored, &alice_secret, "healed and working").unwrap();
+        let ciphertext = encrypt_and_sign(
+            &[bob.public_armored.clone()],
+            &alice_secret,
+            "healed and working",
+        )
+        .unwrap();
         let out = state
-            .decrypt("bob@example.com", &ciphertext, Some(&alice_public))
+            .decrypt("bob@example.com", &ciphertext, &[alice_public.clone()])
             .unwrap();
         assert_eq!(out.plaintext, "healed and working");
         assert!(out.signature_verified, "healed key must still sign");
