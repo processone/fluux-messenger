@@ -168,6 +168,7 @@ export function deriveReachabilityForDesired(input: {
   scroller?: HTMLElement | null
   loadAround: 'available' | 'loading' | 'exhausted' | 'unavailable'
   canRecenter?: boolean
+  legacyOffsetViable?: boolean
 }): ReachabilityFacts {
   if (input.desired.kind === 'live-edge') {
     return deriveGlobalLiveEdgeReachability(input)
@@ -215,6 +216,10 @@ export function deriveReachabilityForDesired(input: {
     mounted: input.virtualizer
       ? isVirtualIndexMounted(input.virtualizer, index)
       : true,
-    placement: 'viable',
+    placement:
+      input.desired.kind === 'legacy-offset' &&
+      input.legacyOffsetViable === false
+        ? 'use-unavailable-policy'
+        : 'viable',
   }
 }

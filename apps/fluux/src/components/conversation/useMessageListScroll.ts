@@ -3,9 +3,10 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Existing scroll operations remain IMPERATIVE during the shadow-controller migration
+ * 2. Saved-position policy/retry ownership lives in PositioningController; browser writes stay
+ *    imperative in its hook executor while the remaining mechanisms migrate incrementally
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
- * 4. The semantic controller observes decisions only; it never writes scrollTop
+ * 4. The controller owns generations and saved-position arbitration, not React state or geometry
  *
  * BEHAVIORS:
  * - Initial load: scroll to bottom
@@ -28,7 +29,12 @@ import { isProgrammaticScroll } from './scrollGate'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
-import { PositioningController, type PositionRequestDraft } from './positioningController'
+import {
+  PositioningController,
+  type PositionRequestDraft,
+  type SavedPositionExecutionLease,
+  type SavedPositionExecutor,
+} from './positioningController'
 import {
   deriveAtLiveEdge,
   deriveEntryPositionFacts,
@@ -41,6 +47,7 @@ import {
   pixelOffset,
   type DesiredPosition,
   type ReachabilityFacts,
+  type SavedPositionRequest,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 
@@ -335,8 +342,6 @@ export interface UseMessageListScrollResult {
   scrollToMarker: () => void
 }
 
-type RestoreSavedPositionResult = 'restored' | 'pending' | 'bottom'
-
 // ============================================================================
 // HOOK
 // ============================================================================
@@ -423,6 +428,10 @@ export function useMessageListScroll({
   // useEffect = after paint, too late for the prepend restore useLayoutEffect).
   const virtualizerRef = useRef<MessageVirtualizer | undefined>(undefined)
   virtualizerRef.current = virtualizer
+  // Saved-position entry runs in a layout effect, before latestRef's passive update. Keep the
+  // loader synchronous with the render so a conversation switch cannot invoke the room we left.
+  const onLoadAroundRef = useRef(onLoadAround)
+  onLoadAroundRef.current = onLoadAround
 
   // Latest MAM-loading state (forward catch-up on entry, or backward "load older" pagination) for
   // the active conversation, read imperatively inside pinVirtualizedBottom's stable useCallback —
@@ -432,11 +441,12 @@ export function useMessageListScroll({
   isLoadingOlderRef.current = isLoadingOlder
 
   // Track conversation
+  const activeConversationIdRef = useRef(conversationId)
+  activeConversationIdRef.current = conversationId
   const prevConversationRef = useRef<string | null>(null)
   const prevMessageCountRef = useRef(0)
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
-  const pendingRestoreConversationRef = useRef<string | null>(null)
   const pendingSyncedLiveEdgeRef = useRef<{
     conversationId: string
     savedReadPositionId: string | undefined
@@ -465,15 +475,12 @@ export function useMessageListScroll({
   // Teardown for the native user-input listeners attached to the scroller (set them via addEventListener
   // so touch/keyboard scrolls — which don't go through the React onWheel handler — also count).
   const userInputCleanupRef = useRef<(() => void) | null>(null)
-  // Per-anchor status for the on-demand "load the cache slice around the anchor" request used when
-  // a saved content anchor (or navigation target) is older than the latest-N slice loaded on
-  // activation. 'loading' → request in flight (stay pending); 'done' → attempted (resolved by the
-  // index path, or the anchor wasn't in the cache → fall through to the legacy fallback). Keyed by
-  // `${conversationId}:${anchorMessageId}` and cleared on conversation switch so returning to the
-  // same conversation re-requests. Prevents re-issuing the load on every retry frame.
-  const aroundLoadStatusRef = useRef<Map<string, 'loading' | 'done'>>(new Map())
-  // Shadow-only semantic controller. It owns no React state and performs no scroll writes.
-  // The module-private generation allocator survives controller remounts (including StrictMode).
+  // React StrictMode replays layout-effect cleanup/setup without unmounting the DOM. Defer controller
+  // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
+  const unmountDeactivationTokenRef = useRef<object | null>(null)
+  // Generation-aware semantic controller. Saved-position restoration is its first authoritative
+  // slice; the other positioning mechanisms still report shadow decisions. Pixel writes remain in
+  // the hook executor, while the module-private generation allocator survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -492,21 +499,7 @@ export function useMessageListScroll({
       conversationId,
       fallback: { kind: 'empty-window' },
       observe: () => {
-        const anchorId =
-          desired.kind === 'anchor' || desired.kind === 'message'
-            ? desired.messageId
-            : null
-        const aroundStatus = anchorId
-          ? aroundLoadStatusRef.current.get(`${conversationId}:${anchorId}`)
-          : undefined
-        const loadAround =
-          aroundStatus === 'loading'
-            ? 'loading'
-            : aroundStatus === 'done'
-              ? 'exhausted'
-              : onLoadAround
-                ? 'available'
-                : 'unavailable'
+        const loadAround = onLoadAround ? 'available' : 'unavailable'
         return deriveReachabilityForDesired({
           desired,
           hasRows: messageCount > 0,
@@ -523,10 +516,6 @@ export function useMessageListScroll({
   // message older than the loaded window). Prevents re-issuing the load while the target effect
   // re-fires waiting for the slice to merge.
   const targetAroundRequestedRef = useRef<string | null>(null)
-  // Stable indirection so the async around-load completion can re-run restore without making
-  // restoreSavedPosition a dependency of itself.
-  const restoreSavedPositionRef = useRef<((source: 'entry' | 'retry') => RestoreSavedPositionResult) | null>(null)
-
   // Track prepend (loading older messages)
   // When we load older messages, we save the anchor element position BEFORE the load,
   // then restore it AFTER React renders the new messages.
@@ -851,7 +840,13 @@ export function useMessageListScroll({
         userInputCleanupRef.current?.()
         userInputCleanupRef.current = null
         if (el) {
-          const markUserScrolled = () => { userHasScrolledSinceEntryRef.current = true }
+          const markUserScrolled = () => {
+            userHasScrolledSinceEntryRef.current = true
+            userScrollIntentAtRef.current = Date.now()
+            positioningControllerRef.current?.observeUserInput(
+              activeConversationIdRef.current,
+            )
+          }
           el.addEventListener('wheel', markUserScrolled, { passive: true })
           el.addEventListener('touchstart', markUserScrolled, { passive: true })
           el.addEventListener('keydown', markUserScrolled)
@@ -1107,10 +1102,9 @@ export function useMessageListScroll({
   // paint (a raw scrollTop write leaves @tanstack's offset stale → blank/clipped); otherwise a
   // direct scrollTop write. Callers must have already confirmed the user is at/near the bottom.
   const reassertBottom = useCallback((trigger: string = 'unknown') => {
-    // Entry restore calls this before its shadow entry request is installed; that decision is
-    // compared by the entry adapter immediately after restoreSavedPosition returns. Every other
-    // bottom write must agree with either semantic follow-live ownership or current live geometry;
-    // unlike the live loop, the shadow check never trusts isAtBottomRef by itself.
+    // The saved-position executor calls this only after installing its generation-bearing fallback
+    // request. Every other bottom write must agree with semantic follow-live ownership or current
+    // live geometry; unlike the live loop, the shadow check never trusts isAtBottomRef by itself.
     if (trigger !== 'restore-fallback') {
       const scroller = scrollerRef.current
       runScrollShadowSafely({
@@ -1145,15 +1139,22 @@ export function useMessageListScroll({
   // reassertLoopRef makes handleScroll treat these scrolls as programmatic — so the drifting
   // transient is NOT saved (which is what made the drift compound across re-opens). Bails on a user
   // scroll or a conversation switch; converges (and stops early) once the landing position is stable.
-  const pinVirtualizedAnchor = useCallback((anchor: ScrollAnchor, anchorConvId: string) => {
+  const pinVirtualizedAnchor = useCallback((
+    anchor: ScrollAnchor,
+    anchorConvId: string,
+    lease?: SavedPositionExecutionLease,
+  ): boolean => {
     const scroller = scrollerRef.current
-    if (!virtualizerRef.current || !scroller) return
+    if (!virtualizerRef.current || !scroller || (lease && !lease.isCurrent())) {
+      return false
+    }
 
     supersedeReassertLoopRef.current()
 
     // Re-derive and apply the anchor's pixel position from the CURRENT measured layout. Returns the
     // resulting scrollTop, or null when the anchor row is no longer resolvable.
     const applyAnchor = (): number | null => {
+      if (lease && !lease.isCurrent()) return null
       const v = virtualizerRef.current
       const s = scrollerRef.current
       if (!v || !s) return null
@@ -1181,7 +1182,7 @@ export function useMessageListScroll({
     }
 
     // Immediate pin (pre-paint when called from the restore path's layout effect).
-    applyAnchor()
+    if (applyAnchor() === null) return false
 
     const startedAt = Date.now()
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('restore-anchor', performance.now())
@@ -1190,7 +1191,10 @@ export function useMessageListScroll({
     let landed = -1
     const finish = () => {
       loop.end()
-      reassertLoopRef.current = null
+      if (reassertLoopRef.current?.handle === loop) {
+        reassertLoopRef.current = null
+      }
+      if (lease && !lease.isCurrent()) return
       // The loop just stopped owning scrollTop; keep the brief measurement settle that follows it
       // classified as programmatic so it can't open the save gate (see lastProgrammaticScrollAtRef).
       lastProgrammaticScrollAtRef.current = Date.now()
@@ -1201,11 +1205,15 @@ export function useMessageListScroll({
         isAtBottomRef.current = (s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD
         rememberCurrentScrollSnapshot()
       }
+      lease?.settle()
     }
     const step = () => {
       const s = scrollerRef.current
       if (!s) { finish(); return }
       if (framesLeft-- <= 0) { finish(); return }
+      // Generation + operation ownership is authoritative. A late frame from a superseded restore
+      // must not write into a newer request in the same conversation.
+      if (lease && !lease.isCurrent()) { finish(); return }
       // Stale loop must never scroll the new conversation (prevConversationRef is set synchronously
       // at the end of the conversation-switch effect).
       if (prevConversationRef.current !== anchorConvId) { finish(); return }
@@ -1226,9 +1234,15 @@ export function useMessageListScroll({
 
       const warning = loop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+      register(step)
     }
-    reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+    const register = (callback: () => void) => {
+      const entry = { raf: 0, handle: loop }
+      reassertLoopRef.current = entry
+      entry.raf = requestAnimationFrame(callback)
+    }
+    register(step)
+    return true
   }, [isAtBottomRef, rememberCurrentScrollSnapshot])
 
   // Scroll to (and keep re-asserting toward) the first-new-message marker, re-assert-loop style —
@@ -1380,155 +1394,117 @@ export function useMessageListScroll({
     registerMarkerLoop(stepToMarker)
   }, [isAtBottomRef, reassertBottom])
 
-  const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
-    const scroller = scrollerRef.current
-    if (!scroller) return 'pending'
+  const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
+    reachability: (desired, loadAround) => {
+      const scroller = scrollerRef.current
+      const virtualizer = virtualizerRef.current
+      const legacyOffsetViable =
+        desired.kind !== 'legacy-offset' ||
+        Boolean(
+          virtualizer ||
+          (
+            scroller &&
+            scroller.scrollHeight - scroller.clientHeight > 0 &&
+            desired.offsetPx >= 0 &&
+            desired.offsetPx <= scroller.scrollHeight - scroller.clientHeight
+          )
+        )
+      return deriveReachabilityForDesired({
+        desired,
+        hasRows: messageCount > 0 && firstMessageId !== undefined,
+        windowAtLiveEdge: windowAtLiveEdge !== false,
+        virtualizer,
+        scroller,
+        loadAround,
+        canRecenter: Boolean(onLoadNewer),
+        legacyOffsetViable,
+      })
+    },
+    loadAround: onLoadAroundRef.current
+      ? (messageId, signal) => {
+          if (signal.aborted) return
+          isAtBottomRef.current = false
+          debugLog('RESTORE: anchor not loaded, requesting cache slice around it', {
+            messageId,
+            conversationId,
+          })
+          return onLoadAroundRef.current?.(messageId)
+        }
+      : undefined,
+    recenterVersion: [
+      windowAtLiveEdge === false ? 'slid' : 'live',
+      isLoadingNewer ? 'loading' : 'idle',
+      messageCount,
+      lastMessageId ?? '',
+    ].join(':'),
+    recenterLiveEdge: onLoadNewer
+      ? (signal) => {
+          if (signal.aborted) return 'unavailable'
+          if (isLoadingNewer) return 'waiting'
+          onLoadNewer()
+          return 'requested'
+        }
+      : undefined,
+    reconcile: (request: SavedPositionRequest, lease: SavedPositionExecutionLease) => {
+      if (!lease.isCurrent()) return false
+      const scroller = scrollerRef.current
+      if (!scroller) return false
 
-    const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
-    const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
-    const hasSavedState = savedPos !== null || savedAnchor !== null
+      let restored = false
+      if (request.desired.kind === 'anchor') {
+        const anchor: ScrollAnchor = {
+          messageId: request.desired.messageId,
+          fraction: request.desired.placement.fraction,
+        }
+        restored = virtualizerRef.current
+          ? pinVirtualizedAnchor(anchor, conversationId, lease)
+          : restoreToAnchor(scroller, anchor)
+      } else if (request.desired.kind === 'legacy-offset') {
+        const virtualizer = virtualizerRef.current
+        if (virtualizer) {
+          virtualizer.scrollToOffset(request.desired.offsetPx)
+          restored = true
+        } else {
+          const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+          if (
+            maxScrollTop > 0 &&
+            request.desired.offsetPx >= 0 &&
+            request.desired.offsetPx <= maxScrollTop
+          ) {
+            scroller.scrollTop = request.desired.offsetPx
+            restored = true
+          }
+        }
+      } else if (request.desired.kind === 'live-edge') {
+        isAtBottomRef.current = true
+        reassertBottom('restore-fallback')
+        restored = true
+      }
 
-    if (!hasSavedState) {
-      // No saved scrolled-up position → caller scrolls to bottom. This is the silent path behind a
-      // "jumps to bottom on return" report: it means the leave-side SAVE did not persist a
-      // scrolled-up anchor (saved as wasAtBottom, throttled-out, or cleared as stale). Log it so the
-      // trace shows restore was ASKED to restore but had nothing to restore TO — distinct from a
-      // restore that ran and landed wrong.
-      debugLog('RESTORE: no saved state, scrolling to bottom', { source, conversationId })
-      return 'bottom'
-    }
-
-    // Rooms often mount once with a loading/empty message set, then hydrate from
-    // cache/MAM. A saved scrolled-up position is still valid, just not restorable
-    // until there is at least one row/virtualizer item to target.
-    if (messageCount === 0 || !firstMessageId) {
-      isAtBottomRef.current = false
-      debugLog('RESTORE pending (no rows yet)', { source, savedPos, savedAnchor })
-      return 'pending'
-    }
-
-    const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
-    const virtRestore = virtualizerRef.current
-    const finishRestore = (
-      action: string,
-      data: Record<string, unknown>
-    ): RestoreSavedPositionResult => {
+      if (!restored || !lease.isCurrent()) return false
       isAtBottomRef.current = getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
       rememberCurrentScrollSnapshot()
-      // We just wrote scrollTop programmatically; the measurement settle that follows must not be
-      // mistaken for a user scroll and open the save gate (see lastProgrammaticScrollAtRef).
       lastProgrammaticScrollAtRef.current = Date.now()
-      debugLog(action, { source, ...data })
-      return 'restored'
-    }
-
-    // The saved anchor message is not in the currently-loaded window (the user had scrolled deep
-    // into history, so it sits OLDER than the latest-N slice rehydrated on activation). Request the
-    // cache slice that CONTAINS it; the merge grows messageCount, which re-runs this restore via the
-    // retry effect, and the anchor then resolves through the virtualizer-index path below. Without
-    // this the restore fell through to the saved scrollTop on the short rehydrated list and landed
-    // near the top at the load-more trigger — the reported bug. Returns true while the load should
-    // hold the restore in 'pending'; false when there's no loader or the load already completed
-    // without recovering the anchor (then the legacy fallbacks run).
-    const requestAnchorAroundLoad = (anchorMessageId: string): boolean => {
-      const loader = latestRef.current.onLoadAround
-      if (!loader) return false
-      const key = `${conversationId}:${anchorMessageId}`
-      const status = aroundLoadStatusRef.current.get(key)
-      if (status === 'done') return false
-      if (status === 'loading') return true
-      aroundLoadStatusRef.current.set(key, 'loading')
-      isAtBottomRef.current = false
-      debugLog('RESTORE: anchor not loaded, requesting cache slice around it', { source, anchorMessageId, conversationId })
-      void Promise.resolve(loader(anchorMessageId)).finally(() => {
-        aroundLoadStatusRef.current.set(key, 'done')
-        // The merge bumps messageCount → the retry effect re-runs restore. Force one attempt too,
-        // covering the empty-slice case (anchor not in cache → no count change → no retry) so the
-        // restore can fall through to its bottom fallback instead of hanging in 'pending'.
-        if (pendingRestoreConversationRef.current === conversationId) {
-          restoreSavedPositionRef.current?.('retry')
-        }
+      debugLog('RESTORE: controller applied position', {
+        conversationId,
+        generation: request.generation,
+        desired: request.desired,
       })
       return true
-    }
-
-    // THE CONTENT ANCHOR IS AUTHORITATIVE. The saved fraction anchor — re-derived from the anchor
-    // message's CURRENT measured height on every restore — is correct in every case: identical
-    // layout, MAM prepend, font-size change, view-density change, or a viewport-width change (which
-    // rewraps bubbles and so invalidates any saved pixel). We therefore try the anchor FIRST and
-    // UNCONDITIONALLY — no "layout unchanged" height/width gate. The saved scrollTop is only a pixel
-    // PROXY that holds when the layout is byte-identical; it is demoted to a last-resort fallback,
-    // used solely when there is NO usable anchor (a legacy save with no captured anchor, or an
-    // anchor message that is no longer in the loaded set). Pixel correctness is covered by the
-    // real-engine scroll-invariants e2e — jsdom/happy-dom have no layout, so the captured fraction
-    // degenerates (last row, fraction 1) and cannot be exercised in a unit test.
-    if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
-      if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
-      return finishRestore('RESTORE via anchor', { savedAnchor })
-    }
-
-    if (virtRestore && savedAnchor) {
-      const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
-      if (anchorIndex !== null) {
-        // Position the anchor's bottom at the viewport bottom (align:'end') refined to the saved
-        // fraction, and KEEP it pinned across frames as the just-windowed rows measure taller. A
-        // one-shot landing here drifts older (and compounds across re-opens) because it lands on
-        // estimated sizes — see pinVirtualizedAnchor / the RESTORE_* constants.
-        pinVirtualizedAnchor(savedAnchor, conversationId)
-        return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
-      }
-
-      // Anchor is older than the loaded window — pull in the slice that contains it, then retry.
-      if (requestAnchorAroundLoad(savedAnchor.messageId)) {
-        return 'pending'
-      }
-
-      if (savedPos !== null) {
-        virtRestore.scrollToOffset(savedPos)
-        return finishRestore('RESTORE via savedPos (virt, anchor not indexed)', { savedPos })
-      }
-
-      debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { source, savedAnchor })
-      reassertBottom('restore-fallback')
-      return 'bottom'
-    }
-
-    // Non-virtualized: all loaded rows are in the DOM, so a missing anchor row means the anchor
-    // isn't loaded. Pull in its slice and retry before falling back to the saved scrollTop.
-    if (!virtRestore && savedAnchor && requestAnchorAroundLoad(savedAnchor.messageId)) {
-      return 'pending'
-    }
-
-    if (virtRestore && savedPos !== null) {
-      // Virtualized, no anchor: use savedPos without bounds check because the
-      // initial estimated scrollHeight may be smaller than the real saved offset.
-      virtRestore.scrollToOffset(savedPos)
-      return finishRestore('RESTORE via savedPos (virtualized, no anchor)', { savedPos })
-    }
-
-    if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
-      scroller.scrollTop = savedPos
-      return finishRestore('RESTORE via savedPos', { savedPos })
-    }
-
-    debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
-      source, savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
-    })
-    reassertBottom('restore-fallback')
-    return 'bottom'
-  }, [
+    },
+  }), [
     conversationId,
     firstMessageId,
     isAtBottomRef,
+    isLoadingNewer,
+    lastMessageId,
     messageCount,
+    onLoadNewer,
     pinVirtualizedAnchor,
     reassertBottom,
     rememberCurrentScrollSnapshot,
+    windowAtLiveEdge,
   ])
-
-  // Stable handle so the async around-load completion can re-run restore (see
-  // requestAnchorAroundLoad) without restoreSavedPosition depending on itself. Updated each render.
-  restoreSavedPositionRef.current = restoreSavedPosition
 
   // ==========================================================================
   // SCROLL ACTIONS
@@ -2333,10 +2309,7 @@ export function useMessageListScroll({
     lastScrollDataRef.current = null
     lastAnchorRef.current = null
     prependRef.current = null
-    pendingRestoreConversationRef.current = null
     pendingSyncedLiveEdgeRef.current = null
-    // Returning to this conversation later must be free to re-request its anchor slice.
-    aroundLoadStatusRef.current.clear()
     // Fresh entry: the saved position is locked until the user genuinely scrolls (see the ref).
     userHasScrolledSinceEntryRef.current = false
     prevScrollHeightRef.current = null
@@ -2412,36 +2385,36 @@ export function useMessageListScroll({
           firstUnreadMessageId: firstNewMessageId,
         }),
       })
+      // Observation validators must never strand production positioning. If a transient saved
+      // anchor is malformed (for example a zero-height row produced NaN), retain a finite legacy
+      // offset when possible and otherwise let the controller choose its live-edge fallback.
+      const savedExecutionFacts = entryFacts ?? runScrollShadowSafely({
+        event: 'entry-fallback-facts',
+        conversationId,
+        fallback: null,
+        observe: () => deriveEntryPositionFacts({
+          syncedLiveEdge,
+          savedAnchor: null,
+          savedOffsetPx: savedPos !== null && Number.isFinite(savedPos) ? savedPos : null,
+          firstUnreadMessageId: firstNewMessageId,
+        }),
+      })
 
       if (action === 'restore-position') {
-        const restoreResult = restoreSavedPosition('entry')
-        pendingRestoreConversationRef.current =
-          restoreResult === 'pending' ? conversationId : null
-        const request = entryFacts
-          ? positioningControllerRef.current?.observeEntry({
-              event: 'entry-restore',
+        isAtBottomRef.current = false
+        const request = savedExecutionFacts
+          ? positioningControllerRef.current?.beginSavedPositionEntry({
               conversationId,
-              entryFacts,
-              reachability: (desired) => shadowReachabilityRef.current(desired),
-              actual: {
-                desired: entryFacts.savedAnchor ??
-                  (entryFacts.savedOffsetPx !== undefined
-                    ? { kind: 'legacy-offset', offsetPx: entryFacts.savedOffsetPx }
-                    : { kind: 'live-edge', follow: true }),
-                phase:
-                  restoreResult === 'pending'
-                    ? 'waiting'
-                    : restoreResult === 'bottom'
-                      ? 'fallback'
-                      : 'positioning',
-              },
+              entryFacts: savedExecutionFacts,
+              executor: createSavedPositionExecutor(),
             })
           : null
-        if (restoreResult === 'restored' && request) {
-          positioningControllerRef.current?.markPositionApplied(
-            conversationId,
-            request.generation,
-          )
+        if (!request) {
+          // Controller construction/instrumentation failure must degrade safely instead of leaving
+          // entry half-positioned. This is the only saved-position write outside the controller and
+          // exists solely as its failure boundary.
+          isAtBottomRef.current = true
+          reassertBottom('restore-fallback')
         }
       } else if (firstNewMessageId) {
         // Has unread messages — position the first-unread marker ~1/3 down from the top so the
@@ -2568,7 +2541,7 @@ export function useMessageListScroll({
     prevLastMessageIdRef.current = lastMessageId
     previousReadPositionRef.current = readPointerId
 
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, readPointerId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition, runMarkerReassertLoop])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, readPointerId, isAtBottomRef, staticMode, createSavedPositionExecutor, pinVirtualizedBottom, reassertBottom, runMarkerReassertLoop])
 
   // Zero-unread twin of the divider-clear settle below. The old local position may be restored
   // before MAM resolves the other device's pointer to the newest downloaded row; with no divider,
@@ -2581,7 +2554,6 @@ export function useMessageListScroll({
     if (readPointerId !== lastMessageId || readPointerId === pending.savedReadPositionId) return
 
     pendingSyncedLiveEdgeRef.current = null
-    pendingRestoreConversationRef.current = null
     scrollStateManager.clearSavedScrollState(conversationId)
     isAtBottomRef.current = true
     debugLog('MDS LIVE EDGE: late synced read supersedes restored position', {
@@ -2662,35 +2634,36 @@ export function useMessageListScroll({
     reassertBottom('mds-settle')
   }, [conversationId, firstNewMessageId, staticMode, isAtBottomRef, reassertBottom])
 
-  // Retry a saved-position restore that entered before any rows were mounted.
-  // This is common for rooms: the MessageList mounts in a loading state, then
-  // cache/MAM rows arrive in the same conversation id. Until the restore lands,
-  // keep isAtBottom=false so the async message-count growth does not auto-pin.
+  // Refresh controller-owned saved positioning when cache/MAM rows or the active window change.
+  // Async around-load completion also drives itself, covering an empty slice that changes no props.
   useLayoutEffect(() => {
     if (staticMode) return
-    if (pendingRestoreConversationRef.current !== conversationId) return
-
-    const restoreResult = restoreSavedPosition('retry')
-    if (restoreResult !== 'pending') {
-      pendingRestoreConversationRef.current = null
-      if (restoreResult === 'restored') {
-        const active = runScrollShadowSafely({
-          event: 'restore-retry-snapshot',
-          conversationId,
-          fallback: null,
-          observe: () => positioningControllerRef.current?.snapshot().active ?? null,
-        })
-        if (active?.request.conversationId === conversationId) {
-          positioningControllerRef.current?.markPositionApplied(
-            conversationId,
-            active.request.generation,
-          )
-        }
-      }
+    const controller = positioningControllerRef.current
+    const status = controller?.savedPositionStatus(conversationId)
+    if (!controller || !status) return
+    if (
+      status.phase.kind === 'position-applied' ||
+      status.phase.kind === 'settled'
+    ) {
+      return
+    }
+    if (controller.refreshSavedPosition({
+      conversationId,
+      generation: status.request.generation,
+      executor: createSavedPositionExecutor(),
+    })) {
       prevMessageCountRef.current = messageCount
       prevLastMessageIdRef.current = lastMessageId
     }
-  }, [conversationId, messageCount, lastMessageId, staticMode, restoreSavedPosition])
+  }, [
+    conversationId,
+    createSavedPositionExecutor,
+    firstMessageId,
+    lastMessageId,
+    messageCount,
+    staticMode,
+    windowAtLiveEdge,
+  ])
 
   // Cleanup: properly leave conversation in scrollStateManager only when the message list
   // actually unmounts. The conversation-switch effect above intentionally has broad deps
@@ -2698,7 +2671,24 @@ export function useMessageListScroll({
   // there would also run on same-conversation updates and mark the singleton manager "left"
   // while the room is still mounted.
   useLayoutEffect(() => {
+    unmountDeactivationTokenRef.current = null
     return () => {
+      const activeConversationId = prevConversationRef.current
+      const controller = positioningControllerRef.current
+      if (controller && activeConversationId) {
+        const token = {}
+        unmountDeactivationTokenRef.current = token
+        queueMicrotask(() => {
+          if (unmountDeactivationTokenRef.current !== token) return
+          const controllerSnapshot = controller.snapshot()
+          if (controllerSnapshot.currentConversationId === activeConversationId) {
+            controller.deactivate(
+              activeConversationId,
+              controllerSnapshot.watermark,
+            )
+          }
+        })
+      }
       if (prevConversationRef.current) {
         // Same gate as the conversation-switch leave: only persist the live scroll data when the
         // user genuinely scrolled this visit; otherwise keep the existing saved anchor (markAsLeft)
@@ -3323,7 +3313,7 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
-    if (pendingRestoreConversationRef.current === conversationId) {
+    if (positioningControllerRef.current?.isSavedPositionPending(conversationId)) {
       if (lastMessageIsOutgoing) {
         positioningControllerRef.current?.observeRequest({
           event: 'new-message-during-restore',

@@ -34,6 +34,7 @@ interface HarnessHandle {
 interface HookHarnessProps {
   conversationId: string
   ids: string[]
+  messageCount?: number
   firstNewMessageId?: string
   readPointerId?: string
   clearFirstNewMessageId?: () => void
@@ -68,6 +69,7 @@ function seedSavedAnchor(
 function HookHarness({
   conversationId,
   ids,
+  messageCount,
   firstNewMessageId,
   readPointerId,
   clearFirstNewMessageId,
@@ -85,7 +87,7 @@ function HookHarness({
 
   const api = useMessageListScroll({
     conversationId,
-    messageCount: ids.length,
+    messageCount: messageCount ?? ids.length,
     firstMessageId: ids[0],
     firstNewMessageId,
     readPointerId,
@@ -209,6 +211,33 @@ describe('useMessageListScroll saved-position restore', () => {
 
     expect(handle?.scrollTopSets).toContain(200)
     expect(handle?.scrollTopSets).not.toContain(1000)
+  })
+
+  it('waits for the first resident row even when the store count is already populated', () => {
+    seedSavedScrollPosition('room-first-row-pending', 200)
+    let handle: HarnessHandle | undefined
+    const view = render(
+      <HookHarness
+        conversationId="room-first-row-pending"
+        ids={[]}
+        messageCount={3}
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.scrollTopSets).not.toContain(200)
+    expect(handle?.scrollTopSets).not.toContain(1000)
+
+    view.rerender(
+      <HookHarness
+        conversationId="room-first-row-pending"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        messageCount={3}
+        onReady={(next) => { handle = next }}
+      />,
+    )
+
+    expect(handle?.scrollTopSets).toContain(200)
   })
 
   it('can restore the same scrolled-up room again without an intervening scroll event', () => {
@@ -401,37 +430,45 @@ describe('useMessageListScroll saved-position restore', () => {
   // an OLD message that the latest-N rehydration didn't load, so restore can't resolve it. It must
   // request the cache slice AROUND the anchor (onLoadAround) rather than fall back to the saved
   // scrollTop on the short list (which landed near the top at the load-more trigger — the bug).
-  it('requests the cache slice around a saved anchor that is not in the loaded set', () => {
+  it('requests one cache slice and falls back when the anchor remains unavailable', async () => {
     seedSavedAnchor('around-missing', 'old-anchor')
     const onLoadAround = vi.fn().mockResolvedValue([])
+    let handle: HarnessHandle | undefined
 
     render(
       <HookHarness
         conversationId="around-missing"
         ids={['msg-0', 'msg-1', 'msg-2']}
         onLoadAround={onLoadAround}
-        onReady={() => {}}
+        onReady={(next) => { handle = next }}
       />,
     )
 
     expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(onLoadAround).toHaveBeenCalledTimes(1)
+    expect(handle?.scrollTopSets).toContain(200)
   })
 
-  it('continues the live restore when malformed shadow facts are rejected', () => {
+  it('degrades a malformed anchor to its finite saved offset', () => {
     seedSavedAnchor('around-invalid-shadow', 'old-anchor', 200, Number.NaN)
     const onLoadAround = vi.fn().mockResolvedValue([])
+    let handle: HarnessHandle | undefined
 
     render(
       <HookHarness
         conversationId="around-invalid-shadow"
         ids={['msg-0', 'msg-1', 'msg-2']}
         onLoadAround={onLoadAround}
-        onReady={() => {}}
+        onReady={(next) => { handle = next }}
       />,
     )
 
-    // The production restore still requests its missing anchor; only the shadow observation skips.
-    expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+    expect(onLoadAround).not.toHaveBeenCalled()
+    expect(handle?.scrollTopSets).toContain(200)
     expect(getScrollShadowSnapshot()).toMatchObject({
       instrumentationErrorCount: 1,
       instrumentationErrors: [{
@@ -439,6 +476,71 @@ describe('useMessageListScroll saved-position restore', () => {
         conversationId: 'around-invalid-shadow',
       }],
     })
+  })
+
+  it('does not let a late around-load completion write into the next conversation', async () => {
+    seedSavedAnchor('around-stale', 'old-anchor', 200)
+    let resolveLoad!: () => void
+    const onLoadAround = vi.fn(() => new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    }))
+    let handle: HarnessHandle | undefined
+    const view = render(
+      <HookHarness
+        conversationId="around-stale"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        onLoadAround={onLoadAround}
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    expect(onLoadAround).toHaveBeenCalledTimes(1)
+
+    view.rerender(
+      <HookHarness
+        conversationId="around-next"
+        ids={['next-0', 'next-1']}
+        onLoadAround={onLoadAround}
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    handle?.scrollTopSets.splice(0)
+
+    await act(async () => {
+      resolveLoad()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(handle?.scrollTopSets).not.toContain(200)
+    expect(handle?.getScrollTop()).toBe(1000)
+  })
+
+  it('does not resume a pending around-load after the message list unmounts', async () => {
+    seedSavedAnchor('around-unmount', 'old-anchor', 200)
+    let resolveLoad!: () => void
+    const onLoadAround = vi.fn(() => new Promise<void>((resolve) => {
+      resolveLoad = resolve
+    }))
+    let handle: HarnessHandle | undefined
+    const view = render(
+      <HookHarness
+        conversationId="around-unmount"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        onLoadAround={onLoadAround}
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    expect(onLoadAround).toHaveBeenCalledTimes(1)
+
+    view.unmount()
+    handle?.scrollTopSets.splice(0)
+    await act(async () => {
+      resolveLoad()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(handle?.scrollTopSets).toHaveLength(0)
   })
 
   it('does not request a slice when the saved anchor is already in the loaded set', () => {

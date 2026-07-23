@@ -169,6 +169,7 @@ describe('scroll position model', () => {
       conversationId,
       source: { kind: 'entry', reason: 'saved-position' },
       desired: { kind: 'legacy-offset', offsetPx: pixelOffset(50) },
+      onUnavailable: { kind: 'live-edge' },
     }
     const model = acceptPositionRequest(initialPositioningModel(), legacyEntry)
     expect(shouldReconcileAfterAppend(model, conversationId)).toBe(false)
@@ -342,6 +343,7 @@ describe('scroll position model', () => {
       conversationId,
       source: { kind: 'entry', reason: 'saved-position' },
       desired: { kind: 'legacy-offset', offsetPx: pixelOffset(400) },
+      onUnavailable: { kind: 'live-edge' },
     }
     expect(
       resolveReachability(legacy, {
@@ -351,6 +353,17 @@ describe('scroll position model', () => {
         placement: 'viable',
       }),
     ).toEqual({ kind: 'reconciling' })
+    expect(
+      resolveReachability(legacy, {
+        kind: 'available',
+        index: 99,
+        mounted: false,
+        placement: 'use-unavailable-policy',
+      }),
+    ).toEqual({
+      kind: 'unavailable',
+      policy: { kind: 'live-edge' },
+    })
     expect(
       resolveReachability(liveEntry(1), {
         kind: 'global-live-edge',
@@ -430,6 +443,7 @@ describe('scroll position model', () => {
     const expected = {
       source: { kind: 'entry', reason: 'saved-position' },
       desired: { kind: 'legacy-offset', offsetPx: pixelOffset(1234) },
+      onUnavailable: { kind: 'live-edge' },
     }
     expect(withUnread).toEqual(expected)
     expect(withoutUnread).toEqual(expected)
