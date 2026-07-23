@@ -18,6 +18,7 @@ pub struct NavTarget {
 impl NavTarget {
     /// Stable grouping key used to dismiss every delivered notification for a
     /// conversation without conflating notifications from different accounts.
+    #[cfg(any(target_os = "linux", target_os = "macos", test))]
     pub fn group_key(&self) -> String {
         format!(
             "{}\u{1f}{}\u{1f}{}",
@@ -39,6 +40,7 @@ pub struct NativeNotification {
 }
 
 /// Authorization state, mirrored to the JS permission gate.
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthState {

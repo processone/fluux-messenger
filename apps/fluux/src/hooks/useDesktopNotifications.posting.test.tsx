@@ -83,11 +83,15 @@ describe('useDesktopNotifications posting + guard', () => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
 
-  it('posts a conversation via the native desktop command', async () => {
+  it('posts a conversation with its client id even when a stanza id exists', async () => {
     renderHook(() => useDesktopNotifications())
     await handlers.onConversationMessage?.(
       { id: 'alice@example.com', name: 'Alice' },
-      { id: 'message-1', from: 'alice@example.com' },
+      {
+        id: 'message-1',
+        stanzaId: 'server-stanza-1',
+        from: 'alice@example.com',
+      },
     )
     expect(invoke).toHaveBeenCalledWith('post_notification', {
       title: 'Alice',

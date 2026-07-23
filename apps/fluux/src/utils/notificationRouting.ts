@@ -18,10 +18,8 @@ export function routeNotificationTarget(
 ): void {
   if (!navTarget) return
   if (navType === 'room') {
-    if (messageId) nav.navigateToRoom(navTarget, messageId)
-    else nav.navigateToRoom(navTarget)
+    nav.navigateToRoom(navTarget, messageId)
   } else {
-    if (messageId) nav.navigateToConversation(navTarget, messageId)
-    else nav.navigateToConversation(navTarget)
+    nav.navigateToConversation(navTarget, messageId)
   }
 }

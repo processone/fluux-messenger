@@ -95,6 +95,8 @@ pub fn post_notification(
     return linux::post(notification);
     #[cfg(target_os = "windows")]
     return windows::post(notification);
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    let _ = notification;
     #[allow(unreachable_code)]
     Err("native desktop notifications are unsupported on this platform".to_string())
 }
@@ -132,7 +134,7 @@ pub fn set_notification_listener_ready(ready: bool) {
 }
 
 #[tauri::command]
-pub fn dismiss_notifications(
+pub async fn dismiss_notifications(
     nav_type: String,
     nav_target: String,
     account_id: Option<String>,
@@ -140,7 +142,11 @@ pub fn dismiss_notifications(
     #[cfg(target_os = "macos")]
     return macos::dismiss(&nav_type, &nav_target, account_id.as_deref());
     #[cfg(target_os = "linux")]
-    return linux::dismiss(&nav_type, &nav_target, account_id.as_deref());
+    return tauri::async_runtime::spawn_blocking(move || {
+        linux::dismiss(&nav_type, &nav_target, account_id.as_deref())
+    })
+    .await
+    .map_err(|error| format!("Linux notification dismissal task failed: {error}"))?;
     #[cfg(target_os = "windows")]
     return windows::dismiss(&nav_type, &nav_target, account_id.as_deref());
     #[allow(unreachable_code)]

@@ -77,7 +77,9 @@ describe('useDesktopNotifications click routing', () => {
   it('drains a pending target on startup', async () => {
     drainResult.current = { navType: 'conversation', navTarget: 'a@example.com' }
     renderHook(() => useDesktopNotifications())
-    await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledWith('a@example.com'))
+    await vi.waitFor(() =>
+      expect(navigateToConversation).toHaveBeenCalledWith('a@example.com', undefined),
+    )
   })
 
   it('ignores a stale notification belonging to another account', async () => {

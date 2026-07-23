@@ -49,7 +49,8 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     // wait_for_action is blocking and owns the D-Bus connection/handle. A
     // short-lived worker per delivered notification is required so actions
     // remain observable on notification servers that tie signals to the
-    // sender's connection.
+    // sender's connection. Its lifetime follows the OS notification: compliant
+    // daemons emit NotificationClosed on expiry, dismissal, or user action.
     std::thread::spawn(move || {
         let target = n.target;
         handle.wait_for_action(|action| {
