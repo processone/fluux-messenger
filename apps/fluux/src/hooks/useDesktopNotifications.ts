@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { rosterStore, usePresence, useConnectionStatus, getLocalPart } from '@fluux/sdk'
+import { connectionStore, rosterStore, usePresence, useConnectionStatus, getBareJid, getLocalPart } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { onAction } from '@tauri-apps/plugin-notification'
 import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
-import { isMacOSDesktop } from '@/utils/tauriPlatform'
+import { isMobileTauri } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import {
@@ -30,13 +30,27 @@ import { requestAttention } from '@/utils/attention'
  *  notifications are coalesced to one per conversation. */
 const CATCHUP_WINDOW_MS = 3000
 
+function currentAccountId(): string | null {
+  const jid = connectionStore.getState().jid
+  return jid ? getBareJid(jid) : null
+}
+
+async function postNativeDesktopNotification(payload: Record<string, unknown>): Promise<void> {
+  try {
+    await invoke('post_notification', payload)
+  } catch (error) {
+    console.error('[Notifications] Native notification failed:', error)
+  }
+}
+
 /**
  * Hook to show desktop notifications for new messages and room mentions.
  * - Requests permission on mount (after login)
  * - Shows notification for messages in non-active conversations
  * - Shows notification for mentions in MUC rooms
  * - Clicking notification focuses the conversation/room and switches view
- * - macOS: posts natively (UNUserNotificationCenter), routes clicks via the 'notification-activated' event; mobile uses onAction()
+ * - Desktop: native platform backends route clicks through 'notification-activated'
+ * - Mobile: the Tauri notification plugin routes actions through onAction()
  * - Falls back to web Notification API for non-Tauri environments
  */
 export function useDesktopNotifications(): void {
@@ -71,20 +85,33 @@ export function useDesktopNotifications(): void {
 
   // Handle notification clicks.
   //
-  // Desktop (macOS native): the Rust delegate emits "notification-activated"
-  // and stashes a target for cold starts (drained on mount). Mobile: the
-  // plugin's onAction() is the click source — but registerListener only exists
-  // on iOS/Android, so guard it there (on desktop it rejects with
-  // "not allowed by ACL"). Web routes clicks in sw.ts and is untouched here.
+  // Desktop: a native Rust backend emits "notification-activated" and stashes
+  // a target until this listener is ready. Mobile: the plugin's onAction() is
+  // the click source — registerListener only exists on iOS/Android, so guard
+  // it there. Web routes clicks in sw.ts and is untouched here.
   useEffect(() => {
     if (!isTauri) return
 
     const route = (payload: unknown) => {
-      const p = (payload ?? {}) as { navType?: string; navTarget?: string }
+      const p = (payload ?? {}) as {
+        navType?: string
+        navTarget?: string
+        messageId?: string
+        accountId?: string
+      }
+      const currentAccount = connectionStore.getState().jid
+      if (
+        p.accountId
+        && currentAccount
+        && getBareJid(currentAccount) !== getBareJid(p.accountId)
+      ) {
+        console.warn('[Notifications] Ignoring activation for a different account')
+        return
+      }
       routeNotificationTarget(p.navType, p.navTarget, {
         navigateToConversation: navigateToConversationRef.current,
         navigateToRoom: navigateToRoomRef.current,
-      })
+      }, p.messageId)
     }
 
     let cancelled = false
@@ -105,8 +132,8 @@ export function useDesktopNotifications(): void {
         .then((target) => {
           if (!cancelled && target) route(target)
         })
-        .catch(() => {
-          // Commands are macOS-only; absent elsewhere — ignore.
+        .catch((error) => {
+          console.warn('[Notifications] Failed to initialize native click routing:', error)
         })
     })
 
@@ -119,6 +146,8 @@ export function useDesktopNotifications(): void {
         route({
           navType: notification.extra?.navType,
           navTarget: notification.extra?.navTarget,
+          messageId: notification.extra?.messageId,
+          accountId: notification.extra?.accountId,
         })
       })
       if (cancelled) void listener.unregister()
@@ -163,12 +192,15 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(contact?.avatar, contact?.avatarHash)
 
     if (isTauri) {
-      if (await isMacOSDesktop()) {
-        await invoke('post_notification', {
+      const accountId = currentAccountId()
+      if (!(await isMobileTauri())) {
+        await postNativeDesktopNotification({
           title,
           body,
           navType: 'conversation',
           navTarget: conv.id,
+          messageId: message.id,
+          accountId,
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
@@ -176,7 +208,12 @@ export function useDesktopNotifications(): void {
           title,
           body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: { navType: 'conversation', navTarget: conv.id },
+          extra: {
+            navType: 'conversation',
+            navTarget: conv.id,
+            messageId: message.id,
+            accountId,
+          },
         })
       }
     } else {
@@ -223,12 +260,15 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(room.avatar, room.avatarHash)
 
     if (isTauri) {
-      if (await isMacOSDesktop()) {
-        await invoke('post_notification', {
+      const accountId = currentAccountId()
+      if (!(await isMobileTauri())) {
+        await postNativeDesktopNotification({
           title,
           body,
           navType: 'room',
           navTarget: room.jid,
+          messageId: message.id,
+          accountId,
           avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
@@ -236,7 +276,12 @@ export function useDesktopNotifications(): void {
           title,
           body,
           attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-          extra: { navType: 'room', navTarget: room.jid },
+          extra: {
+            navType: 'room',
+            navTarget: room.jid,
+            messageId: message.id,
+            accountId,
+          },
         })
       }
     } else {

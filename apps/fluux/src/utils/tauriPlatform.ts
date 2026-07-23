@@ -1,20 +1,25 @@
-/**
- * Cached check for "running in the Tauri desktop app on macOS".
- * Used to route notification posting through the native UNUserNotificationCenter
- * command on macOS while other platforms keep the Tauri notification plugin.
- */
+/** Cached Tauri platform checks used to select desktop/mobile native APIs. */
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-let cached: boolean | undefined
+let cachedPlatform: string | undefined
 
-export async function isMacOSDesktop(): Promise<boolean> {
-  if (!isTauri) return false
-  if (cached !== undefined) return cached
+async function getTauriPlatform(): Promise<string | undefined> {
+  if (!isTauri) return undefined
+  if (cachedPlatform !== undefined) return cachedPlatform
   try {
     const { platform } = await import('@tauri-apps/plugin-os')
-    cached = (await platform()) === 'macos'
+    cachedPlatform = await platform()
   } catch {
-    cached = false
+    cachedPlatform = ''
   }
-  return cached
+  return cachedPlatform
+}
+
+export async function isMacOSDesktop(): Promise<boolean> {
+  return (await getTauriPlatform()) === 'macos'
+}
+
+export async function isMobileTauri(): Promise<boolean> {
+  const platform = await getTauriPlatform()
+  return platform === 'ios' || platform === 'android'
 }

@@ -12,26 +12,21 @@ use objc2_user_notifications::{
     UNNotificationSettings, UNNotificationTrigger, UNUserNotificationCenter,
     UNUserNotificationCenterDelegate,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
-
-/// App handle for emitting `notification-activated` from the delegate.
-static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
-
-/// Target stashed when a click fires before the webview is ready (cold start).
-static PENDING_TARGET: Mutex<Option<NavTarget>> = Mutex::new(None);
-
-/// Whether the JS `notification-activated` listener is attached. Set by the JS
-/// layer via `set_notification_listener_ready` once its `listen()` resolves.
-static LISTENER_READY: AtomicBool = AtomicBool::new(false);
+use tauri::AppHandle;
 
 /// Keeps the notification-center delegate alive for the app's lifetime.
 /// `setDelegate:` stores it as a weak reference, so we must own it here.
 static DELEGATE: OnceLock<Retained<NotificationDelegate>> = OnceLock::new();
+
+/// Identifiers delivered during this process, grouped by conversation. The
+/// native identifier now carries optional message/account context, so a read
+/// action needs this index to remove every notification for the conversation.
+static DELIVERED_IDS: Mutex<Option<HashMap<String, Vec<String>>>> = Mutex::new(None);
 
 /// Whether the process is running from a proper `.app` bundle. The notification
 /// APIs require it: `+[UNUserNotificationCenter currentNotificationCenter]`
@@ -54,22 +49,25 @@ fn current_center() -> Option<Retained<UNUserNotificationCenter>> {
     Some(UNUserNotificationCenter::currentNotificationCenter())
 }
 
-/// Encode a nav target into a notification identifier. The identifier survives
-/// cold start (the OS persists it), so the click handler can recover the target
-/// without any in-memory state. Format: "<navType>:<navTarget>" — navType never
-/// contains ':'; navTarget is a bare JID.
+/// Encode the complete target into the identifier. The identifier survives a
+/// cold start, unlike in-memory callback state.
 fn encode_identifier(target: &NavTarget) -> String {
-    format!("{}:{}", target.nav_type, target.nav_target)
+    serde_json::to_string(target)
+        .unwrap_or_else(|_| format!("{}:{}", target.nav_type, target.nav_target))
 }
 
-/// Parse an identifier produced by `encode_identifier`. Splits on the FIRST ':'
-/// only, so a navTarget that itself contains ':' is preserved intact. Returns
-/// `None` if there is no delimiter.
+/// Parse the current JSON identifier, with a compatibility fallback for
+/// notifications delivered by older Fluux versions.
 fn parse_identifier(identifier: &str) -> Option<NavTarget> {
+    if let Ok(target) = serde_json::from_str(identifier) {
+        return Some(target);
+    }
     let (nav_type, nav_target) = identifier.split_once(':')?;
     Some(NavTarget {
         nav_type: nav_type.to_string(),
         nav_target: nav_target.to_string(),
+        message_id: None,
+        account_id: None,
     })
 }
 
@@ -131,52 +129,19 @@ fn set_delegate() {
     let _ = DELEGATE.set(delegate);
 }
 
-/// Mark whether the JS `notification-activated` listener is attached. Called by
-/// the JS layer once its `listen()` has resolved, and reset to false on unmount.
-pub fn set_listener_ready(ready: bool) {
-    LISTENER_READY.store(ready, Ordering::SeqCst);
-}
-
-/// Parse "<navType>:<navTarget>" and route it. Emits to the webview if the JS
-/// listener is attached, otherwise stashes for the startup drain (cold start).
+/// Parse the persisted target and hand it to the shared activation dispatcher.
 fn handle_activation(identifier: &str) {
     let Some(target) = parse_identifier(identifier) else {
         return;
     };
-
-    let app = APP_HANDLE.get();
-
-    // Always bring the window forward on a click.
-    if let Some(win) = app.and_then(|a| a.get_webview_window("main")) {
-        let _ = win.show();
-        let _ = win.set_focus();
-    }
-
-    // Emit only if the JS listener is attached; otherwise stash for the
-    // startup drain. On a cold start the delegate fires before the React
-    // bundle has registered its listener, so the "main" window existing is
-    // NOT a reliable readiness signal — the explicit flag is.
-    if LISTENER_READY.load(Ordering::SeqCst) {
-        if let Some(a) = app {
-            let _ = a.emit("notification-activated", target);
-            return;
-        }
-    }
-    // Never unwrap here: this runs inside the ObjC delegate on the main thread,
-    // and a panic unwinding across the FFI boundary is undefined behavior /
-    // abort. A poisoned mutex still holds a usable Option slot, so recover the
-    // guard instead of panicking.
-    *PENDING_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = Some(target);
+    super::activate_target(target);
 }
 
-pub fn setup(app: &AppHandle) {
-    let _ = APP_HANDLE.set(app.clone());
+pub fn setup(_app: &AppHandle) {
     if !is_bundled() {
         // Common under `tauri dev` (raw `target/debug/fluux`): the notification
         // APIs would abort, so skip them and run without native notifications.
-        tracing::warn!(
-            "not running from an app bundle; native notifications disabled"
-        );
+        tracing::warn!("not running from an app bundle; native notifications disabled");
         return;
     }
     set_delegate();
@@ -213,10 +178,20 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         }
     }
 
-    // Identifier carries the nav target and survives cold start.
-    // Format: "<navType>:<navTarget>" — navType has no ':'; navTarget is a
-    // bare JID. Parsed on the FIRST ':' so JIDs are safe.
+    // Identifier carries the complete JSON navigation target and survives a
+    // cold start. The parser retains compatibility with the old
+    // "<navType>:<navTarget>" form.
     let identifier = NSString::from_str(&encode_identifier(&n.target));
+    let identifier_string = identifier.to_string();
+    let group_key = n.target.group_key();
+    {
+        let mut delivered = DELIVERED_IDS.lock().unwrap_or_else(|e| e.into_inner());
+        delivered
+            .get_or_insert_with(HashMap::new)
+            .entry(group_key)
+            .or_default()
+            .push(identifier_string);
+    }
 
     let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
         &identifier,
@@ -242,7 +217,7 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
 /// read so its stale entry disappears. Best-effort: no-op when the process is
 /// not app-bundled (`current_center()` returns `None`) or when an identifier
 /// has no matching delivered notification.
-pub fn remove_delivered(identifiers: Vec<String>) {
+fn remove_delivered(identifiers: Vec<String>) {
     let Some(center) = current_center() else {
         return;
     };
@@ -252,6 +227,25 @@ pub fn remove_delivered(identifiers: Vec<String>) {
     let refs: Vec<&NSString> = ids.iter().map(|s| &**s).collect();
     let array = NSArray::from_slice(&refs);
     center.removeDeliveredNotificationsWithIdentifiers(&array);
+}
+
+pub fn dismiss(nav_type: &str, nav_target: &str, account_id: Option<&str>) -> Result<(), String> {
+    let target = NavTarget {
+        nav_type: nav_type.to_string(),
+        nav_target: nav_target.to_string(),
+        message_id: None,
+        account_id: account_id.map(str::to_string),
+    };
+    let mut identifiers = DELIVERED_IDS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .remove(&target.group_key())
+        .unwrap_or_default();
+    // Also clear the identifier used by pre-routing releases.
+    identifiers.push(format!("{nav_type}:{nav_target}"));
+    remove_delivered(identifiers);
+    Ok(())
 }
 
 fn map_status(status: UNAuthorizationStatus) -> AuthState {
@@ -332,11 +326,6 @@ pub fn request_authorization() -> AuthState {
         .unwrap_or(AuthState::NotDetermined)
 }
 
-pub fn take_pending_target() -> Option<NavTarget> {
-    // Poison-tolerant: the drain must never panic across the IPC boundary.
-    PENDING_TARGET.lock().unwrap_or_else(|e| e.into_inner()).take()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,10 +335,11 @@ mod tests {
         let t = NavTarget {
             nav_type: "conversation".to_string(),
             nav_target: "alice@example.com".to_string(),
+            message_id: Some("message-1".to_string()),
+            account_id: Some("me@example.com".to_string()),
         };
         let parsed = parse_identifier(&encode_identifier(&t)).expect("parses");
-        assert_eq!(parsed.nav_type, "conversation");
-        assert_eq!(parsed.nav_target, "alice@example.com");
+        assert_eq!(parsed, t);
     }
 
     #[test]
@@ -357,19 +347,22 @@ mod tests {
         let t = NavTarget {
             nav_type: "room".to_string(),
             nav_target: "team@conference.example.com".to_string(),
+            message_id: None,
+            account_id: None,
         };
         let parsed = parse_identifier(&encode_identifier(&t)).expect("parses");
-        assert_eq!(parsed.nav_type, "room");
-        assert_eq!(parsed.nav_target, "team@conference.example.com");
+        assert_eq!(parsed, t);
     }
 
     #[test]
-    fn parse_splits_on_first_colon_only() {
+    fn parses_legacy_identifier_and_splits_on_first_colon_only() {
         // A navTarget containing ':' must be preserved intact (only the first
         // colon delimits navType).
         let parsed = parse_identifier("room:team@host/weird:resource").expect("parses");
         assert_eq!(parsed.nav_type, "room");
         assert_eq!(parsed.nav_target, "team@host/weird:resource");
+        assert_eq!(parsed.message_id, None);
+        assert_eq!(parsed.account_id, None);
     }
 
     #[test]

@@ -2,8 +2,9 @@ import { invoke } from '@tauri-apps/api/core'
 import type { Options } from '@tauri-apps/plugin-notification'
 
 /**
- * Post a notification through the Tauri notification plugin (Windows/Linux;
- * macOS uses the native `post_notification` command instead).
+ * Post a notification through the Tauri notification plugin on mobile.
+ * Desktop platforms use native Rust backends so notification clicks can be
+ * routed back into the application.
  *
  * Calls the plugin command directly rather than going through the plugin's
  * `sendNotification()`: that wrapper is synchronous (`(options) => void`) and
@@ -18,11 +19,7 @@ import type { Options } from '@tauri-apps/plugin-notification'
  * already merged in by the caller.
  *
  * Scope note: this can only observe failures up to the command boundary. The
- * plugin's Rust side spawns the real D-Bus/WinRT call and discards its
- * `Result`, so the command resolves before the OS has seen anything — a
- * notification the OS accepts and then withdraws still looks like success from
- * here. Closing that gap needs a Linux backend under `src-tauri/notifications/`
- * alongside the macOS one.
+ * mobile plugin owns the later OS delivery lifecycle.
  *
  * Never rejects: callers post notifications fire-and-forget, and a failed
  * banner must not break message handling.

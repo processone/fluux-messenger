@@ -230,3 +230,32 @@ jobs:
 
       - name: Check generated files are up to date
         run: git diff --exit-code apps/fluux/src-tauri/gen/
+
+  rust-windows:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+
+      # Windows notification activation is cfg-gated and cannot be type-checked
+      # by the Ubuntu Rust job. Keep a native compiler backstop on every PR.
+      - name: Check Windows backend
+        working-directory: apps/fluux/src-tauri
+        run: cargo check --locked
+
+      - name: Clippy
+        working-directory: apps/fluux/src-tauri
+        run: cargo clippy --locked -- -D warnings

@@ -8,7 +8,7 @@ const {
   sendNotification,
   onAction,
   listen,
-  isMacOSDesktop,
+  isMobileTauri,
   platform,
   navigateToConversation,
   navigateToRoom,
@@ -19,7 +19,7 @@ const {
   sendNotification: vi.fn(),
   onAction: vi.fn(() => Promise.resolve({ unregister: vi.fn() })),
   listen: vi.fn(() => Promise.resolve(() => {})),
-  isMacOSDesktop: vi.fn(),
+  isMobileTauri: vi.fn().mockResolvedValue(false),
   platform: vi.fn().mockResolvedValue('macos'),
   navigateToConversation: vi.fn(),
   navigateToRoom: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('@tauri-apps/api/event', () => ({ listen }))
 vi.mock('@tauri-apps/plugin-notification', () => ({ sendNotification, onAction }))
 vi.mock('@tauri-apps/plugin-os', () => ({ platform }))
-vi.mock('@/utils/tauriPlatform', () => ({ isMacOSDesktop }))
+vi.mock('@/utils/tauriPlatform', () => ({ isMobileTauri }))
 vi.mock('@/utils/attention', () => ({ requestAttention }))
 vi.mock('@/utils/notificationAvatar', () => ({ getNotificationAvatarUrl: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/utils/messagePreviewText', () => ({ formatLocalizedPreview: () => 'body text' }))
@@ -60,6 +60,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
+    connectionStore: { getState: () => ({ jid: 'me@example.com' }) },
     usePresence: () => ({ presenceStatus: mockPresenceStatus }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
   }
@@ -73,6 +74,7 @@ describe('useDesktopNotifications posting + guard', () => {
     vi.clearAllMocks()
     handlers = {}
     platform.mockResolvedValue('macos')
+    isMobileTauri.mockResolvedValue(false)
     mockPresenceStatus = 'online'
     getNotificationPermissionGranted.mockReturnValue(true)
     ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
@@ -81,65 +83,90 @@ describe('useDesktopNotifications posting + guard', () => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
   })
 
-  it('posts a conversation via the native command on macOS', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
+  it('posts a conversation with its client id even when a stanza id exists', async () => {
     renderHook(() => useDesktopNotifications())
-    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { from: 'alice@example.com' })
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice' },
+      {
+        id: 'message-1',
+        stanzaId: 'server-stanza-1',
+        from: 'alice@example.com',
+      },
+    )
     expect(invoke).toHaveBeenCalledWith('post_notification', {
       title: 'Alice',
       body: 'body text',
       navType: 'conversation',
       navTarget: 'alice@example.com',
+      messageId: 'message-1',
+      accountId: 'me@example.com',
       avatarPath: null,
     })
     expect(sendNotification).not.toHaveBeenCalled()
     expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
-  it('posts a room via the native command on macOS', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
+  it('posts a room via the native desktop command', async () => {
     renderHook(() => useDesktopNotifications())
-    await handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team' }, { nick: 'bob' })
+    await handlers.onRoomMessage?.(
+      { jid: 'team@conf.example.com', name: 'Team' },
+      { id: 'room-message-1', nick: 'bob' },
+    )
     expect(invoke).toHaveBeenCalledWith('post_notification', {
       title: 'bob @ Team',
       body: 'body text',
       navType: 'room',
       navTarget: 'team@conf.example.com',
+      messageId: 'room-message-1',
+      accountId: 'me@example.com',
       avatarPath: null,
     })
     expect(sendNotification).not.toHaveBeenCalled()
     expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
-  // Windows/Linux go through the plugin command directly rather than the
-  // plugin's sendNotification() wrapper, which discards the invoke promise and
-  // hid every failure. See utils/postPluginNotification.
-  it('posts via the plugin notify command on non-macOS Tauri', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
+  it('keeps the plugin notification path on mobile Tauri', async () => {
+    isMobileTauri.mockResolvedValue(true)
     renderHook(() => useDesktopNotifications())
-    await handlers.onConversationMessage?.({ id: 'alice@example.com', name: 'Alice' }, { from: 'alice@example.com' })
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice' },
+      { id: 'message-1', from: 'alice@example.com' },
+    )
     expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
       options: {
         title: 'Alice',
         body: 'body text',
         attachments: undefined,
-        extra: { navType: 'conversation', navTarget: 'alice@example.com' },
+        extra: {
+          navType: 'conversation',
+          navTarget: 'alice@example.com',
+          messageId: 'message-1',
+          accountId: 'me@example.com',
+        },
       },
     })
     expect(sendNotification).not.toHaveBeenCalled()
     expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
   })
 
-  it('posts a room via the plugin notify command on non-macOS Tauri', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
+  it('keeps room notifications on the plugin path for mobile Tauri', async () => {
+    isMobileTauri.mockResolvedValue(true)
     renderHook(() => useDesktopNotifications())
-    await handlers.onRoomMessage?.({ jid: 'team@conf.example.com', name: 'Team' }, { nick: 'bob' })
+    await handlers.onRoomMessage?.(
+      { jid: 'team@conf.example.com', name: 'Team' },
+      { id: 'room-message-1', nick: 'bob' },
+    )
     expect(invoke).toHaveBeenCalledWith('plugin:notification|notify', {
       options: {
         title: 'bob @ Team',
         body: 'body text',
         attachments: undefined,
-        extra: { navType: 'room', navTarget: 'team@conf.example.com' },
+        extra: {
+          navType: 'room',
+          navTarget: 'team@conf.example.com',
+          messageId: 'room-message-1',
+          accountId: 'me@example.com',
+        },
       },
     })
     expect(sendNotification).not.toHaveBeenCalled()
@@ -155,7 +182,7 @@ describe('useDesktopNotifications posting + guard', () => {
     )
 
     expect(requestAttention).toHaveBeenCalledTimes(1)
-    expect(invoke).not.toHaveBeenCalledWith('plugin:notification|notify', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('post_notification', expect.anything())
   })
 
   it('does not request attention while Do Not Disturb is active', async () => {
@@ -171,7 +198,6 @@ describe('useDesktopNotifications posting + guard', () => {
   })
 
   it('does NOT call onAction on macOS desktop (mobile-only guard)', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
     platform.mockResolvedValue('macos')
     renderHook(() => useDesktopNotifications())
     await vi.waitFor(() => expect(listen).toHaveBeenCalled())
@@ -181,7 +207,6 @@ describe('useDesktopNotifications posting + guard', () => {
   })
 
   it('DOES call onAction on mobile (ios)', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
     platform.mockResolvedValue('ios')
     renderHook(() => useDesktopNotifications())
     await vi.waitFor(() => expect(onAction).toHaveBeenCalled())

@@ -1,4 +1,5 @@
-import { isMacOSDesktop } from '@/utils/tauriPlatform'
+import { connectionStore, getBareJid } from '@fluux/sdk'
+import { isMobileTauri } from '@/utils/tauriPlatform'
 import { webTag, type NavType } from './notificationNavigation'
 
 export type { NavType }
@@ -13,26 +14,23 @@ function inTauri(): boolean {
  * Remove the delivered notification(s) for a single conversation/room when it
  * is read, leaving other conversations' notifications untouched. Best-effort
  * and platform-specific:
- * - macOS Tauri: native UNUserNotificationCenter command, keyed by identifier
- *   `"<navType>:<navTarget>"`.
- * - Windows/Linux Tauri: no-op. The notification plugin can only reference a
- *   sent notification by a 32-bit integer id, not by our JID-based tag, so
- *   there is no reliable way to remove a single conversation's notification;
- *   it is left to auto-expire.
+ * - Desktop Tauri: native backend, grouped by account + conversation.
+ *   Windows currently treats the command as best-effort because the inbox
+ *   WinRT wrapper does not expose notification history tags.
+ * - Mobile Tauri: no-op; mobile lifecycle owns notification dismissal.
  * - Web (PWA): service worker registration, keyed by tag.
  */
 export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
   try {
-    if (await isMacOSDesktop()) {
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('remove_delivered_notifications', {
-        identifiers: [`${navType}:${navTarget}`],
-      })
-      return
-    }
-
     if (inTauri()) {
-      // Windows/Linux Tauri: no per-conversation removal available (see above).
+      if (await isMobileTauri()) return
+      const { invoke } = await import('@tauri-apps/api/core')
+      const jid = connectionStore.getState().jid
+      await invoke('dismiss_notifications', {
+        navType,
+        navTarget,
+        accountId: jid ? getBareJid(jid) : null,
+      })
       return
     }
 
