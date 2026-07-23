@@ -11,6 +11,7 @@ import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
 import { isRenderableStoredMessage } from './messageRenderability'
+import { roomCanonicalKey, roomIdentityKeys } from './roomMessageIdentity'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
@@ -18,31 +19,6 @@ const DB_NAME = 'fluux-message-cache'
 const DB_VERSION = 3
 const MESSAGES_STORE = 'messages'
 const ROOM_MESSAGES_STORE = 'room-messages'
-
-/**
- * Generate a unique cache key for a room message.
- * Uses stanzaId if available (globally unique from server),
- * otherwise falls back to roomJid:from:id (unique per sender).
- *
- * This fixes the duplicate message issue where different senders
- * could have the same message ID (XMPP IDs are only unique per sender).
- */
-function getRoomMessageCacheKey(message: {
-  stanzaId?: string
-  roomJid: string
-  from: string
-  id: string
-}): string {
-  // Prefer stanzaId - it's globally unique (XEP-0359)
-  if (message.stanzaId) {
-    return message.stanzaId
-  }
-  // Fallback: composite key using roomJid:from:id
-  // Known cosmetic edge: an id-less cached copy and its stanzaId-carrying
-  // re-fetch land under different keys (double row in the raw cache); the
-  // rehydrate merge dedupes them by from:id, so the UI shows one row.
-  return `${message.roomJid}:${message.from}:${message.id}`
-}
 
 /**
  * Stored message format with timestamps as numbers for efficient indexing.
@@ -59,10 +35,14 @@ interface StoredMessage extends Omit<Message, 'timestamp' | 'retractedAt' | 'rep
 /**
  * Stored room message format with timestamps as numbers for efficient indexing.
  */
-interface StoredRoomMessage
+export interface StoredRoomMessage
   extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
-  /** Cache key used as the primary key in IndexedDB */
+  /** Cache key used as the primary key in IndexedDB — the canonical (highest-tier) identity key. */
   cacheKey: string
+  /** Every room-scoped identity tier this row is known under (see {@link roomIdentityKeys}). */
+  identityKeys: string[]
+  /** Every client-generated `id` this row has absorbed (a merged row may carry more than one). */
+  ids: string[]
   /** Timestamp as milliseconds since epoch for indexing */
   timestamp: number
   /** Retracted timestamp as milliseconds if message was retracted */
@@ -219,7 +199,9 @@ function deserializeMessage(stored: StoredMessage): Message {
 function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
   return {
     ...message,
-    cacheKey: getRoomMessageCacheKey(message),
+    cacheKey: roomCanonicalKey(message),
+    identityKeys: roomIdentityKeys(message),
+    ids: [message.id],
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
     pollClosedAt: message.pollClosedAt?.getTime(),
@@ -261,6 +243,97 @@ function decryptionRank(msg: {
   if (msg.encryptedPayload) return 1
   if (msg.unsupportedEncryption) return 0
   return 2
+}
+
+function unionSorted(a: string[] = [], b: string[] = []): string[] { return [...new Set([...a, ...b])].sort() }
+function minStr(a?: string, b?: string): string | undefined { if (a == null) return b; if (b == null) return a; return a <= b ? a : b }
+function minNum(a?: number, b?: number): number | undefined { if (a == null) return b; if (b == null) return a; return Math.min(a, b) }
+function mergeReactions(a?: Record<string, string[]>, b?: Record<string, string[]>): Record<string, string[]> | undefined {
+  if (!a) return b; if (!b) return a
+  const out: Record<string, string[]> = {}
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) out[k] = unionSorted(a[k], b[k])
+  return out
+}
+
+/** Deterministic, key-sorted serialization — a stable total order over any row. */
+function stableStringify(v: unknown): string {
+  // JSON.stringify(undefined) is `undefined`, not a string — return a token so the
+  // declared `string` return holds (undefined-valued fields do occur in the projection).
+  if (v === undefined) return '␀undefined'
+  if (v === null || typeof v !== 'object') return JSON.stringify(v)
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
+  const o = v as Record<string, unknown>
+  return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(o[k])}`).join(',')}}`
+}
+
+/**
+ * Choose the CONTENT-owner row by a strict TOTAL order, so the choice is the same
+ * regardless of argument order AND a tie happens only when the rows are identical.
+ * Higher decryption rank, then edited, then non-empty body, then — the fix — a
+ * full stable serialization, so two rows differing in attachment / poll / reply /
+ * encryption metadata still resolve deterministically instead of picking `a`.
+ */
+/**
+ * The IMMUTABLE content projection — everything EXCEPT the fields merged
+ * separately (aliases, timestamp, reactions, retraction, moderation, poll
+ * closure, delivery error, cacheKey). The tiebreak must serialize only this,
+ * because those excluded fields CHANGE during a merge: an intermediate merged
+ * row acquires unioned aliases/reactions and a min timestamp, so serializing the
+ * whole row would make contentOwner(merge(a,b), c) differ from
+ * contentOwner(a, merge(b,c)) — destroying associativity. The content projection
+ * is identical between a merged row and its content-winner, so max over it is
+ * genuinely associative.
+ */
+function contentProjection(m: StoredRoomMessage): unknown {
+  const {
+    stanzaId: _s, originId: _o, timestamp: _t, reactions: _r, identityKeys: _ik, ids: _ids,
+    isRetracted: _rt, retractedAt: _ra, isModerated: _m, moderatedBy: _mb, moderationReason: _mr,
+    pollClosed: _pc, pollClosedAt: _pca, deliveryError: _de, cacheKey: _ck, ...content
+  } = m
+  return content
+}
+
+function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  const ra: number[] = [decryptionRank(a), a.isEdited ? 1 : 0, a.body ? 1 : 0]
+  const rb: number[] = [decryptionRank(b), b.isEdited ? 1 : 0, b.body ? 1 : 0]
+  for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i] ? a : b
+  // Tiebreak over the IMMUTABLE content only, so max is associative (see contentProjection).
+  return stableStringify(contentProjection(a)) <= stableStringify(contentProjection(b)) ? a : b
+}
+
+/**
+ * Merge two stored rows that are the same logical room message into one.
+ * COMMUTATIVE and ASSOCIATIVE. The correlated content block comes from
+ * {@link contentOwner} (total order); every other field uses a symmetric operator,
+ * so no edit, poll closure, retraction, reaction, moderation, or alias is lost.
+ */
+export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
+  const owner = contentOwner(a, b)
+  const aSid = a.stanzaId != null, bSid = b.stanzaId != null
+  const timestamp = aSid !== bSid ? (aSid ? a.timestamp : b.timestamp) : Math.min(a.timestamp, b.timestamp)
+  const retracted = !!(a.isRetracted || b.isRetracted)
+  const moderated = !!(a.isModerated || b.isModerated)
+  // Poll closure: symmetric even when both closed with different records.
+  const pollClosed = a.pollClosed && b.pollClosed
+    ? (stableStringify(a.pollClosed) <= stableStringify(b.pollClosed) ? a.pollClosed : b.pollClosed)
+    : (a.pollClosed ?? b.pollClosed)
+
+  const merged: StoredRoomMessage = {
+    ...owner,
+    stanzaId: minStr(a.stanzaId, b.stanzaId),
+    originId: minStr(a.originId, b.originId),
+    timestamp,
+    reactions: mergeReactions(a.reactions, b.reactions),
+    identityKeys: unionSorted(a.identityKeys, b.identityKeys),
+    ids: unionSorted(a.ids, b.ids),
+    deliveryError: a.deliveryError && b.deliveryError ? (stableStringify(a.deliveryError) <= stableStringify(b.deliveryError) ? a.deliveryError : b.deliveryError) : undefined,
+    ...(retracted ? { isRetracted: true, retractedAt: minNum(a.retractedAt, b.retractedAt) } : {}),
+    ...(moderated ? { isModerated: true, moderatedBy: minStr(a.moderatedBy, b.moderatedBy), moderationReason: minStr(a.moderationReason, b.moderationReason) } : {}),
+    ...(pollClosed ? { pollClosed, pollClosedAt: minNum(a.pollClosedAt, b.pollClosedAt) } : {}),
+  }
+  merged.cacheKey = roomCanonicalKey(merged)
+  merged.identityKeys = unionSorted(merged.identityKeys, roomIdentityKeys(merged))
+  return merged
 }
 
 /**
@@ -902,11 +975,11 @@ export async function getRoomMessagesAround(
     ...(after !== undefined ? { limit: after } : {}),
   })
 
-  // Dedupe by the same key the cache uses (room ids are not unique across senders).
+  // Dedupe by the same canonical identity key the cache uses (room ids are not unique across senders).
   const seen = new Set<string>()
   const merged: RoomMessage[] = []
   for (const m of [...olderAndAnchor, ...newer]) {
-    const key = getRoomMessageCacheKey(m)
+    const key = roomCanonicalKey(m)
     if (seen.has(key)) continue
     seen.add(key)
     merged.push(m)

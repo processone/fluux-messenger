@@ -4,9 +4,12 @@ import { IDBFactory } from 'fake-indexeddb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 import { selectCatchUpQuery } from './mamCatchUpUtils'
+import { roomIdentityKeys, roomCanonicalKey } from './roomMessageIdentity'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
+import { mergeRoomRows } from './messageCache'
+import type { StoredRoomMessage } from './messageCache'
 
 /**
  * Create a mock Message for testing
@@ -1011,5 +1014,70 @@ describe('messageCache', () => {
       // ...and NOT on the blank row's (newer) timestamp.
       expect(query).not.toEqual(selectCatchUpQuery([{ timestamp: blankTs }], { sessionStartTime }))
     })
+  })
+})
+
+const rrow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
+  const base = { type: 'groupchat', id: 'origin-1', roomJid: 'r@c', from: 'r@c/alice', body: 'hi', timestamp: 1000, isOutgoing: false, ...over } as StoredRoomMessage
+  return { ...base, cacheKey: roomCanonicalKey(base), identityKeys: roomIdentityKeys(base), ids: [base.id], ...over } as StoredRoomMessage
+}
+const both = (a: StoredRoomMessage, b: StoredRoomMessage) => [mergeRoomRows(a, b), mergeRoomRows(b, a)]
+
+describe('mergeRoomRows — commutative, associative, field-complete', () => {
+  it('never downgrades decrypted content, both orders', () => {
+    for (const m of both(rrow({ body: 'plaintext' }), rrow({ body: '', unsupportedEncryption: { kind: 'x' } as never }))) expect(m.body).toBe('plaintext')
+  })
+  it('keeps an edit from either row', () => {
+    for (const m of both(rrow({ body: 'v1' }), rrow({ body: 'v2', isEdited: true, originalBody: 'v1' }))) { expect(m.isEdited).toBe(true); expect(m.body).toBe('v2') }
+  })
+  it('keeps a poll closure from either row', () => {
+    for (const m of both(rrow({}), rrow({ pollClosed: { by: 'alice' } as never, pollClosedAt: 8000 }))) expect(m.pollClosed).toBeTruthy()
+  })
+  it('resolves a both-closed-with-different-records tie order-independently', () => {
+    const [m1, m2] = both(
+      rrow({ pollClosed: { by: 'alice' } as never, pollClosedAt: 8000 }),
+      rrow({ pollClosed: { by: 'bob' } as never, pollClosedAt: 9000 })
+    )
+    expect(m1).toEqual(m2)
+  })
+  it('prefers the stanza-bearing timestamp, both orders', () => {
+    for (const m of both(rrow({ timestamp: 5000 }), rrow({ timestamp: 4000, stanzaId: 'S' }))) expect(m.timestamp).toBe(4000)
+  })
+  it('unions reactions', () => {
+    for (const m of both(rrow({ reactions: { a: ['alice'] } }), rrow({ reactions: { a: ['bob'], b: ['c'] } }))) { expect(new Set(m.reactions!.a)).toEqual(new Set(['alice','bob'])); expect(m.reactions!.b).toEqual(['c']) }
+  })
+  it('preserves a retraction from either row', () => {
+    const [m] = both(rrow({}), rrow({ isRetracted: true, retractedAt: 7000 })); expect(m.isRetracted).toBe(true); expect(m.retractedAt).toBe(7000)
+  })
+  it('clears a delivery error when either copy delivered cleanly', () => {
+    expect(both(rrow({ deliveryError: { text: 'x' } as never }), rrow({}))[0].deliveryError).toBeUndefined()
+  })
+  it('unions identityKeys/ids and recomputes cacheKey to the highest tier', () => {
+    const echo = rrow({ originId: 'O', id: 'client-1' })
+    const refl = rrow({ originId: 'O', stanzaId: 'S', id: 'server-9' })
+    const [m] = both(echo, refl)
+    expect(m.cacheKey).toBe(roomCanonicalKey({ roomJid: 'r@c', from: 'r@c/alice', id: 'server-9', stanzaId: 'S', originId: 'O' }))
+    expect(new Set(m.ids)).toEqual(new Set(['client-1','server-9']))
+  })
+
+  it('is commutative on a mixed pair with EQUAL ids', () => {
+    const a = rrow({ body: 'plain', originId: 'O', id: 'client-1', timestamp: 5000, reactions: { a: ['alice'] } })
+    const b = rrow({ body: '', unsupportedEncryption: { kind: 'x' } as never, stanzaId: 'S', id: 'client-1', timestamp: 4000, reactions: { a: ['bob'] } })
+    expect(mergeRoomRows(a, b)).toEqual(mergeRoomRows(b, a))
+  })
+
+  // The tie the old contentOwner got wrong: identical id/body/rank/edit, DIFFERENT attachment.
+  it('is commutative when rows tie on rank/body/id but differ in attachment', () => {
+    const a = rrow({ id: 'x', body: 'same', attachment: { url: 'a://1' } as never })
+    const b = rrow({ id: 'x', body: 'same', attachment: { url: 'a://2' } as never })
+    expect(mergeRoomRows(a, b)).toEqual(mergeRoomRows(b, a))
+  })
+
+  it('is associative and order-independent across three rows', () => {
+    const a = rrow({ originId: 'O', id: 'c1', timestamp: 5000, reactions: { a: ['a'] } })
+    const b = rrow({ stanzaId: 'S', id: 'c2', timestamp: 4000, reactions: { r: ['b'] } })
+    const c = rrow({ body: 'edited', isEdited: true, id: 'c1', timestamp: 4500, reactions: { a: ['d'] } })
+    const rs = [mergeRoomRows(mergeRoomRows(a,b),c), mergeRoomRows(a,mergeRoomRows(b,c)), mergeRoomRows(mergeRoomRows(b,a),c), mergeRoomRows(mergeRoomRows(c,b),a)]
+    for (const r of rs) expect(r).toEqual(rs[0])
   })
 })
