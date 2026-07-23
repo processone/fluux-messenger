@@ -25,18 +25,26 @@ export function serializePeerCache(map: Map<string, CachedPeerCert[]>): string {
   return JSON.stringify([...map.entries()])
 }
 
-/** True when a value is a usable cert record (has a non-empty fp + armored key). */
-function sanitizeCert(raw: unknown, active: boolean): CachedPeerCert | null {
+/**
+ * Sanitizes a raw cert record, or returns null when it is not a usable cert
+ * (missing/empty fp or armored key). When `requireActive` is true (new,
+ * array-shaped format) a missing/non-boolean `active` signals tampered data
+ * and the whole cert is discarded (fail closed). When false (legacy
+ * pre-Stage-1 single-`KeyBundle` shape, which legitimately has no `active`
+ * field) the cert is migrated by defaulting `active` to `true`.
+ */
+function sanitizeCert(raw: unknown, requireActive: boolean): CachedPeerCert | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (typeof r.fingerprint !== 'string' || r.fingerprint.trim() === '') return null
   if (typeof r.publicArmored !== 'string' || r.publicArmored.trim() === '') return null
+  if (requireActive && typeof r.active !== 'boolean') return null
   return {
     fingerprint: toXep0373Fingerprint(r.fingerprint), // canonicalize (upper, no whitespace)
     publicArmored: r.publicArmored,
     keychainBacked: r.keychainBacked === true,
     ...(typeof r.createdAt === 'string' ? { createdAt: r.createdAt } : {}),
-    active: typeof r.active === 'boolean' ? r.active : active,
+    active: typeof r.active === 'boolean' ? r.active : true,
     ...(typeof r.inactiveAt === 'string' ? { inactiveAt: r.inactiveAt } : {}),
   }
 }
@@ -62,7 +70,7 @@ export function deserializePeerCache(json: string): Map<string, CachedPeerCert[]
     if (Array.isArray(value)) {
       certs = value.map((c) => sanitizeCert(c, true)).filter((c): c is CachedPeerCert => c !== null)
     } else {
-      const migrated = sanitizeCert(value, true) // legacy single KeyBundle
+      const migrated = sanitizeCert(value, false) // legacy single KeyBundle: no `active` field, migrate to active
       certs = migrated ? [migrated] : null
     }
     if (certs && certs.length > 0) out.set(jid, certs)
@@ -141,7 +149,9 @@ export function capUnverifiedInactive(
     else unverifiedInactive.push(c)
   }
   unverifiedInactive.sort((a, b) => (a.inactiveAt ?? '').localeCompare(b.inactiveAt ?? ''))
-  const survivors = unverifiedInactive.slice(-cap)
+  // `slice(-cap)` with cap === 0 is `slice(-0)` === `slice(0)`, which would
+  // return the WHOLE array. Fail closed: cap <= 0 keeps no unverified inactive certs.
+  const survivors = cap <= 0 ? [] : unverifiedInactive.slice(-cap)
   // Preserve original order.
   const survivorSet = new Set(survivors)
   return certs.filter((c) => keep.includes(c) || survivorSet.has(c))
