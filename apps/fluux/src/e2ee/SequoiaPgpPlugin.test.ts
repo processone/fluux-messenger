@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { OPENPGP_DESCRIPTOR } from './OpenPGPPluginBase'
 import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
 import {
@@ -19,6 +20,8 @@ import {
   serializePayloadEnvelope,
   wrapForSigncrypt,
   xml,
+  type ConversationHandle,
+  type EncryptedPayload,
   type PEPItem,
   type PluginContext,
   type SecurityContextUpdate,
@@ -152,6 +155,10 @@ function makeFakeRust() {
 
   let nextFingerprint = 1
   const accounts = new Map<string, KeyBundle>()
+  // Certs minted by {@link generateCert} that are NOT a plugin's own account key
+  // (a sibling client's key under the SAME bare JID, #1059). Keyed by fingerprint
+  // so {@link armoredForFingerprint} can serve their data node on a peer probe.
+  const generatedCerts = new Map<string, string>()
   // One-shot decrypt-failure hook (test-only). When set, the NEXT
   // `openpgp_decrypt` invoke rejects with an E2EEPluginError carrying this
   // code, then the hook clears itself. Lets a test drive the trust-state
@@ -459,7 +466,72 @@ function makeFakeRust() {
     nextDecryptFailureCode = code
   }
 
-  return { invoke, accounts, failNextOwnDecryptWith, makeArmored }
+  /**
+   * Mint a fresh public cert for `uid` WITHOUT registering it as an account's
+   * own key. Models a sibling client of the same account (#1059 distinct-key):
+   * a second cert announced under the same bare JID that the Fluux plugin never
+   * generated. Returns the fingerprint; the armored is retrievable via
+   * {@link armoredForFingerprint} so a peer probe can fetch its data node.
+   */
+  const generateCert = (uid: string): string => {
+    const fp = `FP${String(nextFingerprint++).padStart(6, '0')}`
+    generatedCerts.set(fp, makeArmored(fp, uid, 'public'))
+    return fp
+  }
+
+  /**
+   * Resolve the armored public key for a fingerprint — from an account's own
+   * key or from a {@link generateCert} sibling. Lets the same-bare-JID fixture
+   * publish a two-key `public-keys-list` without threading armored blocks by
+   * hand.
+   */
+  const armoredForFingerprint = (fp: string): string => {
+    for (const b of accounts.values()) if (b.fingerprint === fp) return b.publicArmored
+    const generated = generatedCerts.get(fp)
+    if (generated) return generated
+    throw new Error(`armoredForFingerprint: no cert for fingerprint ${fp}`)
+  }
+
+  /**
+   * Forge a self-addressed `<openpgp/>` payload signed by `signerFp` — a message
+   * one of the account's resources sent to itself (#1059). Encrypts to the
+   * receiving account's OWN key so the stub decrypt can open it, and stamps the
+   * signcrypt envelope for `to`. `timestamp` sets the envelope `<time/>` (default
+   * now) — MAM self-entries pass their archive `<delay/>` so the skew check holds.
+   */
+  const buildSigncrypt = (opts: {
+    from: string
+    to: string
+    signerFp: string
+    body: string
+    timestamp?: Date
+  }): EncryptedPayload => {
+    const receiver = accounts.get(opts.from)
+    if (!receiver) throw new Error(`buildSigncrypt: no account for ${opts.from}`)
+    const stanzaElement = craftSigncryptStanza({
+      recipientFps: [receiver.fingerprint],
+      signerFp: opts.signerFp,
+      toJid: opts.to,
+      body: opts.body,
+      timestamp: opts.timestamp,
+    })
+    return { protocolId: OPENPGP_DESCRIPTOR.id, stanzaElement }
+  }
+
+  /** Fingerprints a stub ciphertext produced by `encrypt()` was encrypted to. */
+  const recipientsOf = (payload: { stanzaElement: XMLElementData }): string[] =>
+    recipientFpsFromEncrypt(payload)
+
+  return {
+    invoke,
+    accounts,
+    failNextOwnDecryptWith,
+    makeArmored,
+    generateCert,
+    armoredForFingerprint,
+    buildSigncrypt,
+    recipientsOf,
+  }
 }
 
 /**
@@ -531,6 +603,68 @@ function publishKeyAsXep0373(
       ],
     },
   })
+}
+
+/**
+ * A synchronous `ConversationHandle` for a bare JID. `openConversation` is
+ * stateless (it only stores the peer), so the fixture can build a handle inline
+ * without a round-trip — mirrors what `plugin.openConversation({kind:'direct'})`
+ * returns.
+ */
+function handleFor(jid: string): ConversationHandle {
+  return { protocolId: OPENPGP_DESCRIPTOR.id, state: { peer: jid } }
+}
+
+/**
+ * Announce SEVERAL keys under ONE bare JID (#1059) — the XEP-0373 shape a real
+ * account with multiple clients has: a single `<public-keys-list>` enumerating
+ * every fingerprint plus one `<pubkey><data/></pubkey>` data node per key.
+ *
+ * Written through `publishPEP` (which REPLACES the `id:'current'` item), not
+ * `peerPublish` (which appends): `probePeer` reads the metadata node with
+ * `maxItems:1`, so an appended second list would be invisible and the account's
+ * own init-published single-key list would win. Fingerprints are deduped, so
+ * shared-key mode (sibling fp === own fp) collapses to a one-entry list. The
+ * ctx's account JID must equal `jid` — this publishes to the OWN account tree.
+ */
+async function publishBothKeysAsXep0373(
+  ctx: PluginContext,
+  jid: string,
+  fps: string[],
+  fake: ReturnType<typeof makeFakeRust>,
+) {
+  // publishPEP writes to the ctx's own account tree, so this helper only makes
+  // sense for the OWN account's key list — enforce the documented precondition.
+  if (ctx.account.jid !== jid) {
+    throw new Error(`publishBothKeysAsXep0373: ctx account ${ctx.account.jid} !== ${jid}`)
+  }
+  const uniqueFps = [...new Set(fps)]
+  await ctx.xmpp.publishPEP(METADATA_NODE, {
+    id: 'current',
+    payload: {
+      name: 'public-keys-list',
+      attrs: { xmlns: OX_NS },
+      children: uniqueFps.map((fp, i) =>
+        pubkeyMetadata(fp, `2024-01-0${i + 1}T00:00:00Z`),
+      ),
+    },
+  })
+  for (const fp of uniqueFps) {
+    await ctx.xmpp.publishPEP(dataNodeFor(fp), {
+      id: 'current',
+      payload: {
+        name: 'pubkey',
+        attrs: { xmlns: OX_NS },
+        children: [
+          {
+            name: 'data',
+            attrs: {},
+            children: [encodeOpenPgpArmorForXep0373(fake.armoredForFingerprint(fp))],
+          },
+        ],
+      },
+    })
+  }
 }
 
 /**
@@ -5373,5 +5507,122 @@ describe('SequoiaPgpPlugin', () => {
       }>
       expect(remaining.map((e) => e.messageId)).toEqual(['m-missing'])
     })
+  })
+
+  // ---------------------------------------------------------------------------
+  // #1059 release gate: the reporter's exact scenario. An account `me@example.com`
+  // runs Fluux AND a sibling client (e.g. Gajim) whose key is announced under the
+  // SAME bare JID. Proven end-to-end in BOTH key-distribution modes:
+  //   • shared-key   — both resources hold the SAME cert (XEP-0373 secret sync):
+  //                    one fingerprint announced.
+  //   • distinct-key — Fluux and the sibling hold DIFFERENT certs, both announced
+  //                    under me@example.com.
+  // Every case runs against the real plugin: a live self-message, a sent carbon,
+  // a MAM self-entry, sibling-signer verifiability, and encrypt fan-out reaching
+  // the sibling key. If any FAILS, the bug is in an earlier task's production code
+  // (self-outgoing derivation / eligible-verifier selection / own-keyset fan-out),
+  // not in this fixture — do not weaken an assertion to make it pass.
+  // ---------------------------------------------------------------------------
+  describe('#1059 same-bare-JID interop', () => {
+    const SELF = 'me@example.com'
+
+    for (const mode of ['shared-key', 'distinct-key'] as const) {
+      describe(mode, () => {
+        /**
+         * Stand up the Fluux plugin for SELF plus a "sibling" key also announced
+         * under SELF. shared-key: sibling fp === Fluux own fp (secret sync).
+         * distinct-key: sibling is a separately-generated cert. Both are published
+         * to SELF's `public-keys-list` + data nodes, then probed so the own-account
+         * keyset (both fps) is cached.
+         */
+        async function setup() {
+          const fake = makeFakeRust()
+          const plugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+          const { ctx } = makeContext(SELF)
+          await plugin.init(ctx)
+          const ownFp = plugin.getOwnFingerprint()!
+          const siblingFp =
+            mode === 'shared-key' ? ownFp : fake.generateCert(`xmpp:${SELF}`)
+          await publishBothKeysAsXep0373(ctx, SELF, [ownFp, siblingFp], fake)
+          await plugin.probePeer(SELF) // caches the own-account keyset (both fps)
+          return { fake, plugin, ctx, ownFp, siblingFp }
+        }
+
+        it('(a) a live self-addressed message from the other resource decrypts', async () => {
+          const { fake, plugin, siblingFp } = await setup()
+          const payload = fake.buildSigncrypt({
+            from: SELF,
+            to: SELF,
+            signerFp: siblingFp,
+            body: 'hi self',
+          })
+          const res = await plugin.decrypt(handleFor(SELF), payload, {
+            isSelfOutgoing: true,
+          })
+          expect(new TextDecoder().decode(res.plaintext!)).toContain('hi self')
+          expect(res.securityContext?.trust).not.toBe('rejected')
+        })
+
+        it('(b) a sent carbon (isSelfOutgoing) decrypts and is outgoing', async () => {
+          const { fake, plugin, siblingFp } = await setup()
+          const payload = fake.buildSigncrypt({
+            from: SELF,
+            to: SELF,
+            signerFp: siblingFp,
+            body: 'carbon',
+          })
+          const res = await plugin.decrypt(handleFor(SELF), payload, {
+            isSelfOutgoing: true,
+          })
+          expect(new TextDecoder().decode(res.plaintext!)).toContain('carbon')
+        })
+
+        it('(c) a MAM self-entry replays and decrypts', async () => {
+          const { fake, plugin, siblingFp } = await setup()
+          // The archived envelope's <time/> matches its <delay/> stamp, as a real
+          // MAM self-entry would — the skew check validates against the archive
+          // timestamp, not now().
+          const archiveTimestamp = new Date('2026-07-01T00:00:00Z')
+          const payload = fake.buildSigncrypt({
+            from: SELF,
+            to: SELF,
+            signerFp: siblingFp,
+            body: 'archived',
+            timestamp: archiveTimestamp,
+          })
+          const res = await plugin.decrypt(handleFor(SELF), payload, {
+            isSelfOutgoing: true,
+            fromArchive: true,
+            archiveTimestamp,
+          })
+          expect(new TextDecoder().decode(res.plaintext!)).toContain('archived')
+        })
+
+        it('(d) the sibling signer key is verifiable (bakes tofu/verified, not rejected)', async () => {
+          const { fake, plugin, siblingFp } = await setup()
+          const payload = fake.buildSigncrypt({
+            from: SELF,
+            to: SELF,
+            signerFp: siblingFp,
+            body: 'x',
+          })
+          const res = await plugin.decrypt(handleFor(SELF), payload, {
+            isSelfOutgoing: true,
+          })
+          expect(['tofu', 'verified']).toContain(res.securityContext?.trust)
+        })
+
+        it('(e) a message Fluux sends is decryptable by the SIBLING key, not only the local private key', async () => {
+          const { fake, plugin, siblingFp, ownFp } = await setup()
+          const enc = await plugin.encrypt(
+            handleFor(SELF),
+            encodeBodyAsPayload('to my other client'),
+          )
+          const recipients = fake.recipientsOf(enc) // fps the stub ciphertext is encrypted to
+          expect(recipients).toContain(siblingFp)
+          if (mode === 'distinct-key') expect(siblingFp).not.toBe(ownFp)
+        })
+      })
+    }
   })
 })
