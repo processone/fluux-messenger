@@ -42,6 +42,7 @@ export function deriveEntryPositionFacts(input: {
   savedAnchor: ScrollAnchor | null
   savedOffsetPx: number | null
   firstUnreadMessageId?: string
+  unreadMarkerAlign?: 'start' | 'top-third'
 }): EntryPositionFacts {
   const savedAnchor: BottomFractionAnchorPosition | undefined = input.savedAnchor
     ? {
@@ -61,6 +62,9 @@ export function deriveEntryPositionFacts(input: {
       : { savedOffsetPx: pixelOffset(input.savedOffsetPx) }),
     ...(input.firstUnreadMessageId
       ? { firstUnreadMessageId: input.firstUnreadMessageId }
+      : {}),
+    ...(input.unreadMarkerAlign
+      ? { unreadMarkerAlign: input.unreadMarkerAlign }
       : {}),
   }
 }

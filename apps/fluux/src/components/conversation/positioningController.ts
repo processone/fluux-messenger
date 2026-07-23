@@ -17,6 +17,8 @@ import {
   type PositioningPhase,
   type ReachabilityFacts,
   type SavedPositionRequest,
+  type UnreadMarkerFallbackRequest,
+  type UnreadMarkerRequest,
   type UnavailablePolicy,
 } from './scrollPositionModel'
 import {
@@ -39,7 +41,7 @@ export type SavedPositionLoadAroundStatus =
   | 'exhausted'
   | 'unavailable'
 
-export interface SavedPositionExecutionLease {
+export interface PositionExecutionLease {
   conversationId: string
   generation: number
   operation: number
@@ -48,6 +50,8 @@ export interface SavedPositionExecutionLease {
   markApplied: () => boolean
   settle: () => boolean
 }
+
+export type SavedPositionExecutionLease = PositionExecutionLease
 
 export interface SavedPositionExecutor {
   reachability: (
@@ -69,6 +73,37 @@ export interface SavedPositionExecutor {
   ) => boolean
 }
 
+export interface UnreadMarkerFrameLoop {
+  schedule: (callback: () => void) => void
+  recordFrame: (wrote: boolean) => void
+  finish: () => void
+}
+
+export type UnreadMarkerFrameResult =
+  | { kind: 'waiting' }
+  | { kind: 'unavailable' }
+  | {
+      kind: 'positioned'
+      scrollTop: number
+      atLiveEdge: boolean
+    }
+
+export interface UnreadMarkerExecutor {
+  reachability: (desired: UnreadMarkerRequest['desired']) => ReachabilityFacts
+  beginLoop: (lease: PositionExecutionLease) => UnreadMarkerFrameLoop | null
+  readScrollTop: () => number | null
+  positionFrame: (
+    request: UnreadMarkerRequest,
+    lease: PositionExecutionLease,
+  ) => UnreadMarkerFrameResult
+  applyLiveEdge: (
+    reason:
+      | 'unread-marker-unavailable'
+      | 'unread-marker-resolved-at-live-edge',
+    lease: PositionExecutionLease,
+  ) => boolean
+}
+
 interface SavedPositionExecutionState {
   request: SavedPositionRequest
   executor: SavedPositionExecutor
@@ -78,6 +113,24 @@ interface SavedPositionExecutionState {
   loadingAround: boolean
   lastRecenterVersion: string | null
 }
+
+interface UnreadMarkerExecutionState {
+  request: UnreadMarkerRequest | UnreadMarkerFallbackRequest
+  executor: UnreadMarkerExecutor
+  operation: number
+  abortController: AbortController | null
+  loop: UnreadMarkerFrameLoop | null
+  framesLeft: number
+  stableFrames: number
+  landedTarget: number | null
+  resolved: boolean
+  resolvedAtLiveEdge: boolean
+}
+
+const UNREAD_MARKER_REASSERT_FRAMES = 120
+const UNREAD_MARKER_STABLE_FRAMES = 8
+const UNREAD_MARKER_DRIFT_PX = 16
+const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
 
 let nextPositionGeneration = 1
 
@@ -120,6 +173,7 @@ export function reachabilityMatchesRequest(
 export class PositioningController {
   private model: PositioningModel = initialPositioningModel()
   private savedExecution: SavedPositionExecutionState | null = null
+  private unreadExecution: UnreadMarkerExecutionState | null = null
 
   snapshot(): PositioningModel {
     return this.model
@@ -159,6 +213,7 @@ export class PositioningController {
     const accepted = acceptPositionRequest(this.model, request)
     if (accepted === this.model) return null
     this.cancelSavedExecution()
+    this.cancelUnreadExecution()
     this.model = advancePhaseIfCurrent(
       accepted,
       input.conversationId,
@@ -222,6 +277,58 @@ export class PositioningController {
     return status !== null &&
       status.phase.kind !== 'position-applied' &&
       status.phase.kind !== 'settled'
+  }
+
+  beginUnreadMarkerEntry(input: {
+    conversationId: string
+    entryFacts: EntryPositionFacts
+    executor: UnreadMarkerExecutor
+  }): UnreadMarkerRequest | null {
+    return runScrollShadowSafely({
+      event: 'unread-marker-entry',
+      conversationId: input.conversationId,
+      fallback: null,
+      observe: () => {
+        const selection = selectEntryPosition(input.entryFacts)
+        if (
+          selection.source.kind !== 'entry' ||
+          selection.source.reason !== 'unread-marker'
+        ) {
+          return null
+        }
+        return this.beginUnreadMarkerRequest(
+          input.conversationId,
+          selection as PositionRequestDraft,
+          input.executor,
+        )
+      },
+    })
+  }
+
+  beginUnreadMarkerNavigation(input: {
+    conversationId: string
+    navigationFacts: LiveEdgeNavigationFacts
+    executor: UnreadMarkerExecutor
+  }): UnreadMarkerRequest | null {
+    return runScrollShadowSafely({
+      event: 'unread-marker-navigation',
+      conversationId: input.conversationId,
+      fallback: null,
+      observe: () => {
+        const selection = selectLiveEdgeNavigation(input.navigationFacts)
+        if (
+          selection.source.kind !== 'user-navigation' ||
+          selection.source.reason !== 'unread-marker'
+        ) {
+          return null
+        }
+        return this.beginUnreadMarkerRequest(
+          input.conversationId,
+          selection as PositionRequestDraft,
+          input.executor,
+        )
+      },
+    })
   }
 
   observeEntry(input: {
@@ -294,7 +401,7 @@ export class PositioningController {
           generation,
           phase,
         )
-        this.cancelSavedExecutionIfSuperseded()
+        this.cancelExecutionsIfSuperseded()
         compareShadowDecision({
           event: input.event,
           conversationId: input.conversationId,
@@ -443,7 +550,7 @@ export class PositioningController {
           conversationId,
           generation,
         )
-        this.cancelSavedExecutionIfSuperseded()
+        this.cancelExecutionsIfSuperseded()
       },
     })
   }
@@ -475,7 +582,7 @@ export class PositioningController {
           input.atLiveEdge,
           rearmRequest,
         )
-        this.cancelSavedExecutionIfSuperseded()
+        this.cancelExecutionsIfSuperseded()
       },
     })
   }
@@ -491,8 +598,363 @@ export class PositioningController {
           conversationId,
           generation,
         )
-        this.cancelSavedExecutionIfSuperseded()
+        this.cancelExecutionsIfSuperseded()
       },
+    })
+  }
+
+  private beginUnreadMarkerRequest(
+    conversationId: string,
+    draft: PositionRequestDraft,
+    executor: UnreadMarkerExecutor,
+  ): UnreadMarkerRequest | null {
+    const generation = mintPositionGeneration()
+    const request = withIdentity(
+      conversationId,
+      generation,
+      draft,
+    ) as UnreadMarkerRequest
+    const reachability = executor.reachability(request.desired)
+    if (!reachabilityMatchesRequest(request, reachability)) return null
+
+    const accepted = acceptPositionRequest(this.model, request)
+    if (accepted === this.model) return null
+    this.cancelSavedExecution()
+    this.cancelUnreadExecution()
+    this.model = advancePhaseIfCurrent(
+      accepted,
+      conversationId,
+      generation,
+      this.resolveUnreadMarkerReachability(request, reachability),
+    )
+    const execution: UnreadMarkerExecutionState = {
+      request,
+      executor,
+      operation: 0,
+      abortController: null,
+      loop: null,
+      framesLeft: UNREAD_MARKER_REASSERT_FRAMES,
+      stableFrames: 0,
+      landedTarget: null,
+      resolved: false,
+      resolvedAtLiveEdge: false,
+    }
+    this.unreadExecution = execution
+
+    if (this.model.active?.phase.kind === 'unavailable') {
+      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
+    } else {
+      this.startUnreadMarkerLoop(execution)
+    }
+    return request
+  }
+
+  private resolveUnreadMarkerReachability(
+    request: UnreadMarkerRequest,
+    facts: ReachabilityFacts,
+  ): PositioningPhase {
+    // Unread hydration intentionally waits for the ordinary resident window instead of issuing a
+    // deep load-around. The bounded frame budget below eventually promotes an honest live-edge
+    // fallback if cache hydration never makes the marker reachable.
+    if (facts.kind === 'empty-window') {
+      return { kind: 'pending', reason: 'empty-window' }
+    }
+    if (facts.kind === 'target-absent') {
+      return { kind: 'pending', reason: 'target-not-indexed' }
+    }
+    // A reachable unread row still has to pass the executor's live geometry check. In
+    // particular, `placement: use-unavailable-policy` is only a preflight hint that the row may
+    // sit in the top third; row measurement can change that answer before the first frame. Let the
+    // owned reconciler observe the frame and promote the fallback itself instead of bottom-pinning
+    // synchronously during the entry layout effect.
+    if (facts.kind === 'available') return { kind: 'reconciling' }
+    return resolveReachability(request, facts)
+  }
+
+  private startUnreadMarkerLoop(
+    execution: UnreadMarkerExecutionState,
+  ): void {
+    if (!this.isUnreadExecutionCurrent(execution)) return
+    const lease = this.beginUnreadOperation(execution)
+    const loop = runScrollShadowSafely<UnreadMarkerFrameLoop | null>({
+      event: 'unread-marker-loop-start',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.beginLoop(lease),
+    })
+    if (!lease.isCurrent()) {
+      if (loop) {
+        runScrollShadowSafely({
+          event: 'unread-marker-loop-stale-finish',
+          conversationId: execution.request.conversationId,
+          fallback: undefined,
+          observe: () => loop.finish(),
+        })
+      }
+      return
+    }
+    if (!loop) {
+      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
+      return
+    }
+    execution.loop = loop
+    this.scheduleUnreadMarkerFrame(execution, lease)
+  }
+
+  private driveUnreadMarkerFrame(
+    execution: UnreadMarkerExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent()) return
+    if (
+      execution.request.source.kind === 'fallback' ||
+      execution.framesLeft-- <= 0
+    ) {
+      if (execution.resolvedAtLiveEdge) {
+        this.promoteUnreadFallback(
+          execution,
+          'unread-marker-resolved-at-live-edge',
+        )
+      } else if (execution.resolved) {
+        this.finishUnreadExecution(execution, true)
+      } else {
+        this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
+      }
+      return
+    }
+
+    const currentScrollTop = runScrollShadowSafely<number | null>({
+      event: 'unread-marker-read-scroll-top',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.readScrollTop(),
+    })
+    if (
+      currentScrollTop !== null &&
+      execution.landedTarget !== null &&
+      Math.abs(currentScrollTop - execution.landedTarget) >
+        UNREAD_MARKER_TAKEOVER_DRIFT_PX
+    ) {
+      const { conversationId, generation } = execution.request
+      this.model = cancelReconciliationForUserInput(
+        this.model,
+        conversationId,
+        generation,
+      )
+      this.finishUnreadExecution(execution, false)
+      return
+    }
+
+    const result = runScrollShadowSafely<UnreadMarkerFrameResult>({
+      event: 'unread-marker-frame',
+      conversationId: execution.request.conversationId,
+      fallback: { kind: 'unavailable' },
+      observe: () => execution.executor.positionFrame(
+        execution.request as UnreadMarkerRequest,
+        lease,
+      ),
+    })
+    if (!lease.isCurrent()) return
+
+    if (result.kind === 'waiting') {
+      this.recordUnreadMarkerFrame(execution, false)
+      this.scheduleUnreadMarkerFrame(execution, lease)
+      return
+    }
+    if (result.kind === 'unavailable') {
+      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
+      return
+    }
+
+    execution.resolved = true
+    lease.markApplied()
+    if (!lease.isCurrent()) return
+    execution.resolvedAtLiveEdge ||= result.atLiveEdge
+
+    let wrote = false
+    if (
+      execution.landedTarget !== null &&
+      Math.abs(result.scrollTop - execution.landedTarget) <=
+        UNREAD_MARKER_DRIFT_PX
+    ) {
+      execution.stableFrames += 1
+      if (execution.stableFrames >= UNREAD_MARKER_STABLE_FRAMES) {
+        if (execution.resolvedAtLiveEdge) {
+          this.promoteUnreadFallback(
+            execution,
+            'unread-marker-resolved-at-live-edge',
+          )
+        } else {
+          this.finishUnreadExecution(execution, true)
+        }
+        return
+      }
+    } else {
+      wrote = true
+      execution.stableFrames = 0
+    }
+    execution.landedTarget = result.scrollTop
+    this.recordUnreadMarkerFrame(execution, wrote)
+    this.scheduleUnreadMarkerFrame(execution, lease)
+  }
+
+  private scheduleUnreadMarkerFrame(
+    execution: UnreadMarkerExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent() || !execution.loop) return
+    const scheduled = runScrollShadowSafely({
+      event: 'unread-marker-frame-schedule',
+      conversationId: execution.request.conversationId,
+      fallback: false,
+      observe: () => {
+        execution.loop?.schedule(
+          () => this.driveUnreadMarkerFrame(execution, lease),
+        )
+        return true
+      },
+    })
+    if (!scheduled && lease.isCurrent()) {
+      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
+    }
+  }
+
+  private recordUnreadMarkerFrame(
+    execution: UnreadMarkerExecutionState,
+    wrote: boolean,
+  ): void {
+    runScrollShadowSafely({
+      event: 'unread-marker-frame-monitor',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.recordFrame(wrote),
+    })
+  }
+
+  private promoteUnreadFallback(
+    execution: UnreadMarkerExecutionState,
+    reason:
+      | 'unread-marker-unavailable'
+      | 'unread-marker-resolved-at-live-edge',
+  ): void {
+    if (!this.isUnreadExecutionCurrent(execution)) return
+    this.finishUnreadLoop(execution)
+    execution.abortController?.abort()
+
+    const generation = mintPositionGeneration()
+    const request = withIdentity(
+      execution.request.conversationId,
+      generation,
+      {
+        source: { kind: 'fallback', reason },
+        desired: { kind: 'live-edge', follow: true },
+      },
+    ) as UnreadMarkerFallbackRequest
+    const accepted = acceptPositionRequest(this.model, request)
+    if (accepted === this.model) {
+      this.cancelUnreadExecution()
+      return
+    }
+
+    execution.request = request
+    execution.operation += 1
+    execution.abortController = null
+    this.model = advancePhaseIfCurrent(
+      accepted,
+      request.conversationId,
+      request.generation,
+      { kind: 'reconciling' },
+    )
+    const lease = this.beginUnreadOperation(execution)
+    const applied = runScrollShadowSafely({
+      event: reason,
+      conversationId: request.conversationId,
+      fallback: false,
+      observe: () => execution.executor.applyLiveEdge(reason, lease),
+    })
+    if (!lease.isCurrent()) return
+    if (applied) lease.markApplied()
+    this.finishUnreadExecution(execution, false)
+  }
+
+  private beginUnreadOperation(
+    execution: UnreadMarkerExecutionState,
+  ): PositionExecutionLease {
+    execution.abortController?.abort()
+    const abortController = new AbortController()
+    execution.abortController = abortController
+    const operation = ++execution.operation
+    const { conversationId, generation } = execution.request
+    const isCurrent = () =>
+      !abortController.signal.aborted &&
+      this.unreadExecution === execution &&
+      execution.operation === operation &&
+      execution.request.conversationId === conversationId &&
+      execution.request.generation === generation &&
+      isCurrentGeneration(this.model, conversationId, generation)
+    const advance = (phase: PositioningPhase) => {
+      if (!isCurrent()) return false
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        conversationId,
+        generation,
+        phase,
+      )
+      return isCurrent()
+    }
+    return {
+      conversationId,
+      generation,
+      operation,
+      signal: abortController.signal,
+      isCurrent,
+      markApplied: () => advance({ kind: 'position-applied' }),
+      settle: () => advance({ kind: 'settled' }),
+    }
+  }
+
+  private isUnreadExecutionCurrent(
+    execution: UnreadMarkerExecutionState,
+  ): boolean {
+    return (
+      this.unreadExecution === execution &&
+      isCurrentGeneration(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+      )
+    )
+  }
+
+  private finishUnreadExecution(
+    execution: UnreadMarkerExecutionState,
+    settle: boolean,
+  ): void {
+    if (settle && this.isUnreadExecutionCurrent(execution)) {
+      const active = this.model.active
+      if (active) {
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          active.request.conversationId,
+          active.request.generation,
+          { kind: 'settled' },
+        )
+      }
+    }
+    this.finishUnreadLoop(execution)
+    execution.abortController?.abort()
+    if (this.unreadExecution === execution) this.unreadExecution = null
+  }
+
+  private finishUnreadLoop(execution: UnreadMarkerExecutionState): void {
+    const loop = execution.loop
+    execution.loop = null
+    if (!loop) return
+    runScrollShadowSafely({
+      event: 'unread-marker-loop-finish',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => loop.finish(),
     })
   }
 
@@ -742,16 +1204,31 @@ export class PositioningController {
     )
   }
 
-  private cancelSavedExecutionIfSuperseded(): void {
+  private cancelExecutionsIfSuperseded(): void {
     const execution = this.savedExecution
     if (execution && !this.isSavedExecutionCurrent(execution)) {
       this.cancelSavedExecution()
+    }
+    const unreadExecution = this.unreadExecution
+    if (
+      unreadExecution &&
+      !this.isUnreadExecutionCurrent(unreadExecution)
+    ) {
+      this.cancelUnreadExecution()
     }
   }
 
   private cancelSavedExecution(): void {
     this.savedExecution?.abortController?.abort()
     this.savedExecution = null
+  }
+
+  private cancelUnreadExecution(): void {
+    if (this.unreadExecution) {
+      this.finishUnreadLoop(this.unreadExecution)
+      this.unreadExecution.abortController?.abort()
+    }
+    this.unreadExecution = null
   }
 }
 

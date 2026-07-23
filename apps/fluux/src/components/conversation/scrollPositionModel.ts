@@ -130,7 +130,7 @@ type EntryRequest =
     >
   | Request<
       { kind: 'entry'; reason: 'unread-marker' },
-      MessagePosition<'start'>,
+      MessagePosition<'start' | 'top-third'>,
       Extract<UnavailablePolicy, { kind: 'live-edge' }>
     >
   | Request<{ kind: 'entry'; reason: 'live-edge' }, LiveEdgePosition>
@@ -192,6 +192,24 @@ export type SavedPositionRequest = Extract<
   PositionRequest,
   | { source: { kind: 'entry'; reason: 'saved-position' } }
   | { source: { kind: 'fallback'; reason: 'saved-position-unavailable' } }
+>
+
+export type UnreadMarkerRequest = Extract<
+  PositionRequest,
+  | { source: { kind: 'entry'; reason: 'unread-marker' } }
+  | { source: { kind: 'user-navigation'; reason: 'unread-marker' } }
+>
+
+export type UnreadMarkerFallbackRequest = Extract<
+  PositionRequest,
+  {
+    source: {
+      kind: 'fallback'
+      reason:
+        | 'unread-marker-unavailable'
+        | 'unread-marker-resolved-at-live-edge'
+    }
+  }
 >
 
 export type PositionRequestSource = PositionRequest['source']
@@ -269,6 +287,7 @@ export interface EntryPositionFacts {
   savedAnchor?: BottomFractionAnchorPosition
   savedOffsetPx?: PixelOffset
   firstUnreadMessageId?: string
+  unreadMarkerAlign?: 'start' | 'top-third'
 }
 
 export type EntryPositionSelection =
@@ -284,7 +303,7 @@ export type EntryPositionSelection =
     }
   | {
       source: { kind: 'entry'; reason: 'unread-marker' }
-      desired: MessagePosition<'start'>
+      desired: MessagePosition<'start' | 'top-third'>
       onUnavailable: Extract<UnavailablePolicy, { kind: 'live-edge' }>
     }
   | {
@@ -636,7 +655,7 @@ export function selectEntryPosition(facts: EntryPositionFacts): EntryPositionSel
       desired: {
         kind: 'message',
         messageId: facts.firstUnreadMessageId,
-        align: 'start',
+        align: facts.unreadMarkerAlign ?? 'start',
       },
       onUnavailable: { kind: 'live-edge' },
     }

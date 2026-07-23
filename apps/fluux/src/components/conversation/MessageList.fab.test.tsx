@@ -536,7 +536,9 @@ describe('MessageList FAB badge and scroll behavior', () => {
         Object.defineProperty(markerElement, 'offsetTop', { value: 800, configurable: true })
       }
 
-      simulateScrollUp(scrollCtx.container)
+      act(() => {
+        scrollCtx.container.dispatchEvent(new Event('scroll'))
+      })
 
       const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]') as HTMLButtonElement
       if (!fab) return
@@ -544,16 +546,10 @@ describe('MessageList FAB badge and scroll behavior', () => {
       act(() => { fireEvent.click(fab) })
 
       if (markerElement) {
-        // Should scroll to marker position (offsetTop - viewport/3 = 800 - 500/3 ≈ 633)
-        expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
-          expect.objectContaining({
-            top: expect.any(Number),
-            behavior: 'smooth',
-          })
-        )
-        // First call should NOT be to bottom
-        const firstCallTop = scrollCtx.scrollToSpy.mock.calls[0]?.[0]?.top
-        expect(firstCallTop).not.toBe(2000)
+        // Controller-owned convergence uses immediate writes so each frame observes the actual
+        // landing instead of repeatedly restarting a native smooth animation.
+        expect(scrollCtx.getScrollTop()).toBeCloseTo(800 - 500 / 3, 0)
+        expect(scrollCtx.scrollToSpy).not.toHaveBeenCalled()
       }
     })
 

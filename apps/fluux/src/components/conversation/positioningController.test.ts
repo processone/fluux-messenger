@@ -3,9 +3,12 @@ import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManag
 import type { MessageVirtualizer } from './messageVirtualizer'
 import {
   PositioningController,
+  type PositionExecutionLease,
   type PositionRequestDraft,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
+  type UnreadMarkerExecutor,
+  type UnreadMarkerFrameResult,
 } from './positioningController'
 import {
   deriveAtLiveEdge,
@@ -639,6 +642,259 @@ describe('positioning controller saved-position ownership', () => {
     expect(signal!.aborted).toBe(true)
     expect(controller.savedPositionStatus(conversationId)).toBeNull()
     expect(reconcile).not.toHaveBeenCalled()
+  })
+})
+
+describe('positioning controller unread-marker ownership', () => {
+  function unreadFacts() {
+    return deriveEntryPositionFacts({
+      syncedLiveEdge: false,
+      savedAnchor: null,
+      savedOffsetPx: null,
+      firstUnreadMessageId: 'first-unread',
+      unreadMarkerAlign: 'start',
+    })
+  }
+
+  function unreadHarness(
+    initialReachability: ReturnType<UnreadMarkerExecutor['reachability']> = {
+      kind: 'target-absent',
+      loadAround: 'unavailable',
+    },
+  ) {
+    const callbacks: Array<() => void> = []
+    let frameResult: UnreadMarkerFrameResult = { kind: 'waiting' }
+    let scrollTop = 0
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const leases: PositionExecutionLease[] = []
+    const positionFrame = vi.fn(() => frameResult)
+    const applyLiveEdge = vi.fn(() => true)
+    const executor: UnreadMarkerExecutor = {
+      reachability: () => initialReachability,
+      beginLoop: (lease) => {
+        leases.push(lease)
+        return {
+          schedule: (callback) => callbacks.push(callback),
+          recordFrame,
+          finish,
+        }
+      },
+      readScrollTop: () => scrollTop,
+      positionFrame,
+      applyLiveEdge,
+    }
+    return {
+      executor,
+      callbacks,
+      finish,
+      recordFrame,
+      leases,
+      positionFrame,
+      applyLiveEdge,
+      setFrameResult: (result: UnreadMarkerFrameResult) => {
+        frameResult = result
+        if (result.kind === 'positioned') scrollTop = result.scrollTop
+      },
+      setScrollTop: (value: number) => {
+        scrollTop = value
+      },
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback).toBeDefined()
+        callback!()
+      },
+    }
+  }
+
+  it('keeps an absent marker pending during local hydration, then converges it', () => {
+    const harness = unreadHarness()
+    const controller = new PositioningController()
+    const request = controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+
+    expect(request).not.toBeNull()
+    expect(controller.snapshot().active?.phase).toEqual({
+      kind: 'pending',
+      reason: 'target-not-indexed',
+    })
+    harness.runFrame()
+    expect(harness.positionFrame).toHaveBeenCalledTimes(1)
+    expect(harness.callbacks).toHaveLength(1)
+
+    harness.setFrameResult({
+      kind: 'positioned',
+      scrollTop: 800,
+      atLiveEdge: false,
+    })
+    for (let frame = 0; frame < 9; frame += 1) harness.runFrame()
+
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.applyLiveEdge).not.toHaveBeenCalled()
+  })
+
+  it('promotes a marker that never hydrates to live edge under a new generation', () => {
+    const harness = unreadHarness()
+    const controller = new PositioningController()
+    const request = controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+
+    for (let frame = 0; frame <= 120; frame += 1) harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(120)
+    expect(harness.applyLiveEdge).toHaveBeenCalledWith(
+      'unread-marker-unavailable',
+      expect.objectContaining({ conversationId }),
+    )
+    expect(controller.snapshot().active?.request).toMatchObject({
+      generation: expect.any(Number),
+      source: {
+        kind: 'fallback',
+        reason: 'unread-marker-unavailable',
+      },
+      desired: { kind: 'live-edge', follow: true },
+    })
+    expect(controller.snapshot().watermark).toBeGreaterThan(request!.generation)
+  })
+
+  it('drops a queued marker frame after switching conversations', () => {
+    const harness = unreadHarness()
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    observeLiveEntry(controller, 'next-room@example.test')
+    staleFrame()
+
+    expect(harness.positionFrame).not.toHaveBeenCalled()
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().currentConversationId).toBe('next-room@example.test')
+  })
+
+  it('cancels unread reconciliation immediately on genuine user input', () => {
+    const harness = unreadHarness()
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    controller.observeUserInput(conversationId)
+    staleFrame()
+
+    expect(harness.positionFrame).not.toHaveBeenCalled()
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+  })
+
+  it('treats geometry takeover as cancellation rather than a settled marker', () => {
+    const harness = unreadHarness({
+      kind: 'available',
+      index: 12,
+      mounted: true,
+      placement: 'viable',
+    })
+    harness.setFrameResult({
+      kind: 'positioned',
+      scrollTop: 800,
+      atLiveEdge: false,
+    })
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+
+    harness.runFrame()
+    harness.setScrollTop(1200)
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(1)
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().active).toBeNull()
+    expect(controller.snapshot().lateMdsEligibleFor).toBeNull()
+  })
+
+  it('supersedes entry with pill navigation before the first frame and writes once per frame', () => {
+    const entry = unreadHarness()
+    const pill = unreadHarness({
+      kind: 'available',
+      index: 12,
+      mounted: false,
+      placement: 'viable',
+    })
+    pill.setFrameResult({
+      kind: 'positioned',
+      scrollTop: 900,
+      atLiveEdge: false,
+    })
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: entry.executor,
+    })
+    const staleEntryFrame = entry.callbacks.shift()!
+    controller.beginUnreadMarkerNavigation({
+      conversationId,
+      navigationFacts: {
+        firstUnreadMessageId: 'first-unread',
+        unreadMarkerNeedsVisit: true,
+        unreadMarkerAlign: 'start',
+      },
+      executor: pill.executor,
+    })
+
+    staleEntryFrame()
+    pill.runFrame()
+
+    expect(entry.positionFrame).not.toHaveBeenCalled()
+    expect(entry.finish).toHaveBeenCalledTimes(1)
+    expect(pill.positionFrame).toHaveBeenCalledTimes(1)
+    expect(pill.callbacks).toHaveLength(1)
+  })
+
+  it('promotes an executor-declared near-top target without issuing another marker frame', () => {
+    const harness = unreadHarness({
+      kind: 'available',
+      index: 1,
+      mounted: true,
+      // Preflight geometry is only a hint. The final near-top decision belongs to the owned frame
+      // reconciler after row measurement, so this must not synchronously promote the fallback.
+      placement: 'use-unavailable-policy',
+    })
+    harness.setFrameResult({ kind: 'unavailable' })
+    const controller = new PositioningController()
+    controller.beginUnreadMarkerEntry({
+      conversationId,
+      entryFacts: unreadFacts(),
+      executor: harness.executor,
+    })
+
+    expect(harness.callbacks).toHaveLength(1)
+    expect(harness.applyLiveEdge).not.toHaveBeenCalled()
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(1)
+    expect(harness.callbacks).toHaveLength(0)
+    expect(harness.applyLiveEdge).toHaveBeenCalledWith(
+      'unread-marker-unavailable',
+      expect.any(Object),
+    )
   })
 })
 

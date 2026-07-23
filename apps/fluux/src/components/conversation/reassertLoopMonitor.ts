@@ -5,7 +5,7 @@
  * Background: useMessageListScroll keeps the virtualized list pinned to the
  * right place by RE-ASSERTING a scroll target across several frames as rows
  * measure asynchronously — `pinVirtualizedBottom` (stick to bottom), the
- * conversation-switch `stepToMarker` (unread marker), and the MAM-prepend
+ * controller-owned unread-marker reconciliation, and the MAM-prepend
  * `runMeasureAssert` (anchor restore). Each is a `requestAnimationFrame` loop
  * that calls the virtualizer's `scrollToOffset`/`scrollToIndex`, which re-windows
  * and re-renders.
