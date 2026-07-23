@@ -18,6 +18,12 @@ describe('routeNotificationTarget', () => {
     expect(n.navigateToRoom).not.toHaveBeenCalled()
   })
 
+  it('passes an exact message target to the navigator', () => {
+    const n = nav()
+    routeNotificationTarget('conversation', 'a@example.com', n, 'message-42')
+    expect(n.navigateToConversation).toHaveBeenCalledWith('a@example.com', 'message-42')
+  })
+
   it('defaults unknown navType to conversation', () => {
     const n = nav()
     routeNotificationTarget(undefined, 'a@example.com', n)

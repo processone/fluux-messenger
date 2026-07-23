@@ -1624,18 +1624,14 @@ fn main() {
             openpgp::openpgp_backup_import_all,
             openpgp::openpgp_backup_import_selected,
             openpgp::openpgp_rotate_encryption_subkey,
-            #[cfg(target_os = "macos")]
             notifications::post_notification,
             #[cfg(target_os = "macos")]
             notifications::notification_permission_state,
             #[cfg(target_os = "macos")]
             notifications::request_notification_permission,
-            #[cfg(target_os = "macos")]
             notifications::take_pending_notification_target,
-            #[cfg(target_os = "macos")]
             notifications::set_notification_listener_ready,
-            #[cfg(target_os = "macos")]
-            notifications::remove_delivered_notifications
+            notifications::dismiss_notifications
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs

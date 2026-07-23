@@ -37,6 +37,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     rosterStore: { getState: () => ({ getContact: () => undefined }) },
+    connectionStore: { getState: () => ({ jid: 'me@example.com' }) },
     usePresence: () => ({ presenceStatus: 'online' }),
     useConnectionStatus: () => ({ status: 'disconnected' }),
   }
@@ -59,13 +60,36 @@ describe('useDesktopNotifications click routing', () => {
   it('routes a notification-activated event through the shared router', async () => {
     renderHook(() => useDesktopNotifications())
     await vi.waitFor(() => expect(eventCb).toBeTypeOf('function'))
-    eventCb!({ payload: { navType: 'room', navTarget: 'team@conf.example.com' } })
-    expect(navigateToRoom).toHaveBeenCalledWith('team@conf.example.com')
+    eventCb!({
+      payload: {
+        navType: 'room',
+        navTarget: 'team@conf.example.com',
+        messageId: 'room-message-1',
+        accountId: 'me@example.com',
+      },
+    })
+    expect(navigateToRoom).toHaveBeenCalledWith(
+      'team@conf.example.com',
+      'room-message-1',
+    )
   })
 
   it('drains a pending target on startup', async () => {
     drainResult.current = { navType: 'conversation', navTarget: 'a@example.com' }
     renderHook(() => useDesktopNotifications())
     await vi.waitFor(() => expect(navigateToConversation).toHaveBeenCalledWith('a@example.com'))
+  })
+
+  it('ignores a stale notification belonging to another account', async () => {
+    renderHook(() => useDesktopNotifications())
+    await vi.waitFor(() => expect(eventCb).toBeTypeOf('function'))
+    eventCb!({
+      payload: {
+        navType: 'conversation',
+        navTarget: 'alice@example.com',
+        accountId: 'other@example.com',
+      },
+    })
+    expect(navigateToConversation).not.toHaveBeenCalled()
   })
 })

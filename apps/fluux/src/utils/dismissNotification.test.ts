@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { isMacOSDesktop, invoke } = vi.hoisted(() => ({
-  isMacOSDesktop: vi.fn(),
+const { isMobileTauri, invoke } = vi.hoisted(() => ({
+  isMobileTauri: vi.fn().mockResolvedValue(false),
   invoke: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@/utils/tauriPlatform', () => ({ isMacOSDesktop }))
+vi.mock('@/utils/tauriPlatform', () => ({ isMobileTauri }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
+vi.mock('@fluux/sdk', () => ({
+  connectionStore: { getState: () => ({ jid: 'me@example.com/resource' }) },
+  getBareJid: (jid: string) => jid.split('/')[0],
+}))
 
 import { dismissNotification } from './dismissNotification'
 
@@ -18,36 +22,38 @@ function setTauri(on: boolean) {
 describe('dismissNotification', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isMobileTauri.mockResolvedValue(false)
   })
   afterEach(() => setTauri(false))
 
-  it('macOS: invokes the native command with the conversation identifier', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
+  it('desktop: invokes the native command with the scoped conversation', async () => {
     setTauri(true)
     await dismissNotification('conversation', 'alice@example.com')
-    expect(invoke).toHaveBeenCalledWith('remove_delivered_notifications', {
-      identifiers: ['conversation:alice@example.com'],
+    expect(invoke).toHaveBeenCalledWith('dismiss_notifications', {
+      navType: 'conversation',
+      navTarget: 'alice@example.com',
+      accountId: 'me@example.com',
     })
   })
 
-  it('macOS: uses the room identifier for rooms', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
+  it('desktop: scopes room dismissal to the current account', async () => {
     setTauri(true)
     await dismissNotification('room', 'team@conf.example.com')
-    expect(invoke).toHaveBeenCalledWith('remove_delivered_notifications', {
-      identifiers: ['room:team@conf.example.com'],
+    expect(invoke).toHaveBeenCalledWith('dismiss_notifications', {
+      navType: 'room',
+      navTarget: 'team@conf.example.com',
+      accountId: 'me@example.com',
     })
   })
 
-  it('Windows/Linux Tauri: no-op (no native command, no throw)', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
+  it('mobile Tauri: remains a no-op', async () => {
+    isMobileTauri.mockResolvedValue(true)
     setTauri(true)
     await expect(dismissNotification('conversation', 'alice@example.com')).resolves.toBeUndefined()
     expect(invoke).not.toHaveBeenCalled()
   })
 
   it('Web: closes service-worker notifications matching the conversation tag', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
     setTauri(false)
     const close = vi.fn()
     const getNotifications = vi.fn().mockResolvedValue([{ close }, { close }])
@@ -62,7 +68,6 @@ describe('dismissNotification', () => {
   })
 
   it('Web: uses the room- tag for rooms', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
     setTauri(false)
     const close = vi.fn()
     const getNotifications = vi.fn().mockResolvedValue([{ close }])
@@ -76,7 +81,6 @@ describe('dismissNotification', () => {
   })
 
   it('swallows errors from the platform call', async () => {
-    isMacOSDesktop.mockResolvedValue(true)
     setTauri(true)
     invoke.mockRejectedValueOnce(new Error('boom'))
     await expect(dismissNotification('conversation', 'alice@example.com')).resolves.toBeUndefined()
