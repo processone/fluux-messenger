@@ -81,7 +81,6 @@ interface MessageCacheSchema extends DBSchema {
     value: StoredRoomMessage
     indexes: {
       roomJid: string
-      stanzaId: string
       originId: string
       // multiEntry over identityKeys[] — the finder resolves every identity tier here.
       identityKeys: string
@@ -162,7 +161,10 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
       if (!db.objectStoreNames.contains(ROOM_MESSAGES_STORE)) {
         const s = db.createObjectStore(ROOM_MESSAGES_STORE, { keyPath: 'cacheKey' })
         s.createIndex('roomJid', 'roomJid', { unique: false })
-        s.createIndex('stanzaId', 'stanzaId', { unique: false })
+        // No unscoped `stanzaId` index: stanzaIds are assigned per-archive and repeat
+        // across rooms, so a scalar index on it would let a lookup cross rooms. Every
+        // stanzaId query goes through the room-scoped `identityKeys` alias instead
+        // (see roomStanzaKey / getRoomMessageByStanzaId / updateRoomMessageReactions).
         s.createIndex('originId', 'originId', { unique: false })
         s.createIndex('identityKeys', 'identityKeys', { unique: false, multiEntry: true })
         s.createIndex('ids', 'ids', { unique: false, multiEntry: true })
@@ -1204,11 +1206,12 @@ export async function updateRoomMessage(
 /**
  * Update reactions for a room message in IndexedDB.
  * Used as a fallback when the message is not currently loaded in memory.
- * Looks up by client ID or stanza-id (reactions may reference either).
+ * Looks up by client ID or room-scoped stanza-id (reactions may reference either).
  *
  * @returns true if the message was found and updated, false otherwise.
  */
 export async function updateRoomMessageReactions(
+  roomJid: string,
   messageId: string,
   reactorNick: string,
   emojis: string[],
@@ -1217,11 +1220,15 @@ export async function updateRoomMessageReactions(
     const db = await getDB(getStorageScopeJid())
 
     // Resolve via the `ids` multiEntry index (a merged row is findable by EVERY
-    // absorbed client id), then fall back to the stanzaId scalar index: a MUC
-    // reaction references the server stanza-id, which is not a client id in `ids`.
+    // absorbed client id), then fall back to the room-scoped `identityKeys` alias:
+    // a MUC reaction references the server stanza-id, which is not a client id in
+    // `ids`. stanzaIds are assigned per-archive and repeat across rooms, so an
+    // unscoped stanzaId lookup could resolve to a DIFFERENT room's message —
+    // scoping through roomStanzaKey confines it to this room (mirrors
+    // getRoomMessageByStanzaId).
     let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'ids', messageId)
     if (!existing) {
-      existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', messageId)
+      existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'identityKeys', roomStanzaKey(roomJid, messageId))
     }
     if (!existing) return false
 

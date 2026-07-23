@@ -1241,13 +1241,35 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
   })
   it('updateRoomMessageReactions resolves a pre-merge id and is authoritative (does not un-remove)', async () => {
     await messageCache.saveRoomMessage(mk()); await messageCache.saveRoomMessage(mk({ id: 'server-9', stanzaId: 'S' }))
-    await messageCache.updateRoomMessageReactions('client-1', 'r@c/bob', ['👍'])
+    await messageCache.updateRoomMessageReactions(ROOM, 'client-1', 'r@c/bob', ['👍'])
     expect((await messageCache.getRoomMessage('server-9'))!.reactions?.['👍']).toContain('r@c/bob')
-    await messageCache.updateRoomMessageReactions('client-1', 'r@c/bob', []) // removal
+    await messageCache.updateRoomMessageReactions(ROOM, 'client-1', 'r@c/bob', []) // removal
     expect((await messageCache.getRoomMessage('server-9'))!.reactions?.['👍'] ?? []).not.toContain('r@c/bob')
   })
   it('getRoomMessagesAround returns each logical message once', async () => {
     await messageCache.saveRoomMessage(mk({ stanzaId: 'S' }))
     expect((await messageCache.getRoomMessagesAround(ROOM, 'client-1', { before: 5, after: 5 })).filter((m) => m.originId === 'O')).toHaveLength(1)
+  })
+  it('updateRoomMessageReactions on a stanza-id fallback is room-scoped — a same-stanzaId message in another room is untouched', async () => {
+    // Two DIFFERENT rooms each cache a message under the SAME server-assigned
+    // stanzaId (stanzaIds are per-archive, so this collision is routine). Neither
+    // row is reachable via the `ids` index for this reaction (the reaction only
+    // knows the stanza-id), so the lookup MUST fall through to the room-scoped
+    // stanza alias — a global stanzaId index would resolve to whichever row it
+    // hits first, independent of which room the reaction actually belongs to.
+    const ROOM_B = 'other-room@c', FROM_B = 'other-room@c/carol'
+    await messageCache.saveRoomMessage(mk({ id: 'a-room-msg', stanzaId: 'DUP', originId: undefined }))
+    await messageCache.saveRoomMessage({
+      type: 'groupchat', id: 'b-room-msg', roomJid: ROOM_B, from: FROM_B, body: 'hi',
+      timestamp: new Date(5000), isOutgoing: false, stanzaId: 'DUP',
+    } as RoomMessage)
+
+    const ok = await messageCache.updateRoomMessageReactions(ROOM, 'DUP', 'r@c/bob', ['🔥'])
+    expect(ok).toBe(true)
+
+    const roomAMsg = (await messageCache.getRoomMessages(ROOM, {})).find((m) => m.id === 'a-room-msg')
+    const roomBMsg = (await messageCache.getRoomMessages(ROOM_B, {})).find((m) => m.id === 'b-room-msg')
+    expect(roomAMsg!.reactions?.['🔥']).toContain('r@c/bob')
+    expect(roomBMsg!.reactions).toBeUndefined()
   })
 })

@@ -1721,7 +1721,7 @@ export const roomStore = createStore<RoomState>()(
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
         logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
-        void messageCache.updateRoomMessageReactions(messageId, reactorNick, emojis)
+        void messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis)
       }
 
       newRooms.set(roomJid, { ...existing, messages: newMessages })
