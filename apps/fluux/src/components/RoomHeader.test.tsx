@@ -381,7 +381,28 @@ describe('RoomHeader', () => {
         />
       )
 
-      expect(screen.getByLabelText('Hide members')).toBeInTheDocument()
+      const toggle = screen.getByLabelText('Hide members')
+      expect(toggle).toBeInTheDocument()
+      expect(toggle.querySelector('.lucide-chevron-right')).not.toHaveClass('rotate-180')
+    })
+
+    it('points the chevron toward the closed members panel', () => {
+      render(
+        <RoomHeader
+          room={createRoom()}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      const toggle = screen.getByLabelText('Show members')
+      expect(toggle.querySelector('.lucide-chevron-right')).toHaveClass('rotate-180')
     })
   })
 

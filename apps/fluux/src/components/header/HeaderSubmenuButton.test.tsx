@@ -13,10 +13,14 @@ describe('HeaderSubmenuButton', () => {
   }
 
   it('opens the dropdown and lists the group items', () => {
-    render(<HeaderSubmenuButton ariaLabel="Notify" tooltip="Notify" icon={Bell} group={group} />)
+    const { container } = render(<HeaderSubmenuButton ariaLabel="Notify" tooltip="Notify" icon={Bell} group={group} />)
     fireEvent.click(screen.getByLabelText('Notify'))
     expect(screen.getByText('Mentions only')).toBeInTheDocument()
     expect(screen.getByText('All messages')).toBeInTheDocument()
+    expect(container.querySelector('.lucide-chevron-down')).toHaveClass(
+      '[transition-duration:var(--fluux-duration-fast)]',
+    )
+    expect(screen.getByRole('menu')).toHaveClass('header-submenu-in')
   })
 
   it('fires an item onSelect and closes', () => {
