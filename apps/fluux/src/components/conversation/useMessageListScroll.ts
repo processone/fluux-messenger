@@ -1906,14 +1906,27 @@ export function useMessageListScroll({
     // (the transient scrollTop:0 of the virtualized initial render was saved as a "scrolled-up"
     // position, poisoning the next re-entry into restore-position and bypassing the marker entirely).
 
+    // A height change between consecutive scroll events is a measurement settle (rows re-measuring,
+    // media decoding), never a user scroll — keep the programmatic-settle window alive across it.
+    // isProgrammaticScroll's window is anchored to the last programmatic WRITE, but a WebKit settle
+    // can fire 'scroll' events well beyond PROGRAMMATIC_SETTLE_MS after that write; once one of them
+    // happened to match the previous frame's height, the gate below mistook it for a scrollbar drag,
+    // opened, and persisted a drifted anchor that crept between room visits. Re-anchoring the window
+    // to the last measurement CHANGE covers a settle of any duration. A genuine scrollbar-drag leaves
+    // height unchanged, so it never refreshes the window and still opens the gate.
+    if (prevScrollHeightRef.current !== null && prevScrollHeightRef.current !== scrollHeight) {
+      lastProgrammaticScrollAtRef.current = Date.now()
+    }
+
     // Open the save gate when this is a genuine user scroll: content height UNCHANGED from the
     // previous scroll event (a media/measurement-driven shift changes the height; a wheel / touch /
     // scrollbar-drag does not). Complements the input-event listeners so scrollbar-drag — which
-    // fires no wheel/touch — also counts. Excluded: programmatic loop scrolls AND the brief
-    // post-restore / post-re-pin measurement settle (isProgrammaticScroll's window) — that settle is
-    // height-unchanged too, so without the window a SECOND settle event looked like a scrollbar drag,
-    // opened the gate, and persisted a drifted position that crept older on every re-open. Genuine
-    // user scrolls still open the gate via the input-event listeners / handleWheel, unaffected.
+    // fires no wheel/touch — also counts. Excluded: programmatic loop scrolls AND the
+    // post-restore / post-re-pin measurement settle (isProgrammaticScroll's window, refreshed on the
+    // height change just above) — that settle is height-unchanged on its final frames too, so without
+    // the window a settle frame looked like a scrollbar drag, opened the gate, and persisted a
+    // drifted position that crept older on every re-open. Genuine user scrolls still open the gate
+    // via the input-event listeners / handleWheel, unaffected.
     if (
       !isProgrammaticScroll(programmaticScroll, Date.now(), lastProgrammaticScrollAtRef.current) &&
       prevScrollHeightRef.current === scrollHeight
