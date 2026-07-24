@@ -252,6 +252,7 @@
         "joinToLoadHistory": "Liitu sõnumite laadimiseks",
         "notificationSettings": "Teavituste seaded",
         "roomActions": "Ruumi toimingud",
+        "showRoomInfo": "Näita toa teavet",
         "mentionsOnly": "Ainult mainimised",
         "defaultBehavior": "Vaikekäitumine",
         "allMessages": "Kõik sõnumid",

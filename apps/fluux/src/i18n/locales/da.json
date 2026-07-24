@@ -250,6 +250,7 @@
         "joinToLoadHistory": "Deltag for at indlæse beskeder",
         "notificationSettings": "Notifikationsindstillinger",
         "roomActions": "Rumshandlinger",
+        "showRoomInfo": "Vis rumoplysninger",
         "mentionsOnly": "Kun omtaler",
         "defaultBehavior": "Standardadfærd",
         "allMessages": "Alle beskeder",

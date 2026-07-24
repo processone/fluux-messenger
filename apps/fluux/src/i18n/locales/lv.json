@@ -251,6 +251,7 @@
         "joinToLoadHistory": "Pievienojieties, lai ielādētu ziņojumus",
         "notificationSettings": "Paziņojumu iestatījumi",
         "roomActions": "Istabas darbības",
+        "showRoomInfo": "Rādīt istabas informāciju",
         "mentionsOnly": "Tikai pieminējumi",
         "defaultBehavior": "Noklusējuma uzvedība",
         "allMessages": "Visi ziņojumi",

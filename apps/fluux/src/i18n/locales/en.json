@@ -250,6 +250,7 @@
         "joinToLoadHistory": "Join to load messages",
         "notificationSettings": "Notification settings",
         "roomActions": "Room actions",
+        "showRoomInfo": "Show room info",
         "mentionsOnly": "Mentions only",
         "defaultBehavior": "Default behavior",
         "allMessages": "All messages",

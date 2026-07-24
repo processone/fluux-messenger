@@ -252,6 +252,7 @@
         "joinToLoadHistory": "Uneix-te per carregar els missatges",
         "notificationSettings": "Configuració de notificacions",
         "roomActions": "Accions de la sala",
+        "showRoomInfo": "Mostra la informació de la sala",
         "mentionsOnly": "Només mencions",
         "defaultBehavior": "Comportament per defecte",
         "allMessages": "Tots els missatges",

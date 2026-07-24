@@ -250,6 +250,7 @@
         "joinToLoadHistory": "Войдите, чтобы загрузить сообщения",
         "notificationSettings": "Настройки уведомлений",
         "roomActions": "Действия комнаты",
+        "showRoomInfo": "Показать информацию о конференции",
         "mentionsOnly": "Только упоминания",
         "defaultBehavior": "Поведение по умолчанию",
         "allMessages": "Все сообщения",
