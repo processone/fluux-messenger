@@ -137,7 +137,7 @@ describe('RoomItem tooltip', () => {
   })
 })
 
-describe('RoomItem unread activity dot', () => {
+describe('RoomItem unread indicators', () => {
   it('renders a larger dot after the timestamp at the fixed metadata edge', () => {
     const { container } = renderRoom(makeRoom({
       unreadCount: 37,
@@ -162,5 +162,30 @@ describe('RoomItem unread activity dot', () => {
     expect(dot).not.toBeNull()
     expect(timestamp.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(dot.className).toContain('size-3')
+  })
+
+  it('renders the mention-count badge after the timestamp in the same metadata slot', () => {
+    const { container } = renderRoom(makeRoom({
+      unreadCount: 37,
+      mentionsCount: 3,
+      lastMessage: {
+        type: 'groupchat',
+        id: 'm1',
+        roomJid: 'team@conference.fluux.chat',
+        from: 'team@conference.fluux.chat/alice',
+        body: 'hello',
+        timestamp: new Date('2026-07-24T12:00:00Z'),
+        isOutgoing: false,
+        nick: 'alice',
+      },
+    }))
+
+    const metadata = container.querySelector('.ms-auto') as HTMLElement
+    const timestamp = metadata.querySelector('.text-xs') as HTMLElement
+    const badge = screen.getByText('@3')
+
+    expect(metadata.contains(badge)).toBe(true)
+    expect(timestamp.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(metadata.querySelector('.size-3')).toBeNull()
   })
 })

@@ -446,12 +446,6 @@ export const RoomItem = memo(function RoomItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
-            {/* Mentions count badge — red, the loud "wants your attention" tier. */}
-            {room.mentionsCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
-                @{room.mentionsCount}
-              </span>
-            )}
             <div className="ms-auto flex flex-shrink-0 items-center gap-2">
               {/* Timestamp */}
               {lastMessage && (
@@ -472,6 +466,14 @@ export const RoomItem = memo(function RoomItem({
                     roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
                   }`}
                 />
+              )}
+              {/* Mentions count badge — red, the loud "wants your attention"
+                  variant of the unread indicator. It uses the same trailing
+                  slot as the plain activity dot. */}
+              {room.mentionsCount > 0 && (
+                <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+                  @{room.mentionsCount}
+                </span>
               )}
             </div>
           </div>
