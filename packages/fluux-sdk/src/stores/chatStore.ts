@@ -16,6 +16,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
+import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { advance, deserializeReadPointer, makeReadPointer, type ReadPointer } from './shared/readPointer'
@@ -86,7 +87,7 @@ function mergeCachedChatMessages(
   state: ChatState,
   conversationId: string,
   cachedMessages: Message[]
-): Partial<Pick<ChatState, 'messages' | 'conversationMeta' | 'conversations' | 'pendingRetractions'>> | null {
+): Partial<Pick<ChatState, 'messages' | 'conversationEntities' | 'conversationMeta' | 'conversations' | 'pendingRetractions'>> | null {
   const existingMessages = state.messages.get(conversationId) || []
 
   const { merged, newMessages } = timeline.latestSlice(
@@ -108,15 +109,13 @@ function mergeCachedChatMessages(
   // supersedes (or heals) the stored preview — e.g. opening a conversation
   // whose stored preview is a stuck placeholder heals it here.
   const meta = state.conversationMeta.get(conversationId)
-  const conv = state.conversations.get(conversationId)
   const { lastMessage, changed } = derivePreviewAfterMerge(meta?.lastMessage, trimmed, findLastPreviewableMessage)
   const retractionPatch = resolved.pendingRetractions ? { pendingRetractions: resolved.pendingRetractions } : {}
-  if (meta && conv && changed) {
-    const newMeta = new Map(state.conversationMeta)
-    newMeta.set(conversationId, { ...meta, lastMessage })
-    const newConversations = new Map(state.conversations)
-    newConversations.set(conversationId, { ...conv, lastMessage })
-    return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations, ...retractionPatch }
+  if (changed) {
+    const draft = draftConversationMaps(state)
+    if (draft.patchMeta(conversationId, { lastMessage })) {
+      return { messages: newMessagesMap, ...draft.commit(), ...retractionPatch }
+    }
   }
 
   return { messages: newMessagesMap, ...retractionPatch }
@@ -581,8 +580,11 @@ interface PersistedState {
   // New separated storage (Phase 6)
   conversationEntities?: [string, ConversationEntity][]
   conversationMeta?: [string, PersistedConversationMetadata][]
-  // Legacy combined storage for backward compatibility
-  conversations: [string, PersistedConversation][]
+  // Legacy combined storage, read-only: blobs written before the entity/meta
+  // split carry this and nothing else. Never written any more — the new-format
+  // load rebuilds the compat map from the two maps above, so persisting it was
+  // storing the same data a second time (halving every write to remove it).
+  conversations?: [string, PersistedConversation][]
   archivedConversations?: string[] // Optional for backwards compatibility
   drafts?: [string, string][] // Optional for backwards compatibility
   conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
@@ -622,15 +624,16 @@ function withUnmigratedReadState<T extends { readPointer?: ReadPointer }>(
 }
 
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
   // Un-migrated legacy read state belonging to THIS blob (see the map's doc).
   const legacy = unmigratedLegacyReadState.get(storageKey)
   return {
-    // Serialize separated maps (Phase 6)
+    // Serialize separated maps (Phase 6). The `conversations` compat map is
+    // deliberately NOT written: `deserializeState` rebuilds it from these two
+    // (see its new-format branch), and `shared/conversationMaps` guarantees the
+    // live map is nothing but that rebuild, so the copy was pure duplication.
     conversationEntities: Array.from(state.conversationEntities.entries()),
     conversationMeta: withUnmigratedReadState(state.conversationMeta, legacy),
-    // Also serialize combined map for backward compatibility
-    conversations: withUnmigratedReadState(state.conversations, legacy),
     // Messages are NOT stored in localStorage - they're in IndexedDB
     archivedConversations: Array.from(state.archivedConversations),
     drafts: Array.from(state.drafts.entries()),
@@ -702,33 +705,24 @@ export async function migrateReadPointer(
  * rehydrate, so it is at or behind the true position by construction — it can
  * only ever fill a gap, never push the pointer past something unread.
  *
- * `conversationMeta` and `conversations` are written in ONE `setState`, so the
- * conversation is never observable holding a pointer in one map and not the
- * other. Until this lands it simply looks un-migrated, which is a valid state.
+ * `conversationMeta` and `conversations` are written in ONE `setState` (see
+ * shared/conversationMaps), so the conversation is never observable holding a
+ * pointer in one map and not the other. Until this lands it simply looks
+ * un-migrated, which is a valid state.
  */
 function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer): void {
   chatStore.setState((state) => {
     const meta = state.conversationMeta.get(conversationId)
-    const conv = state.conversations.get(conversationId)
     // Gone (deleted, logged out, account switched) — nothing to migrate into.
-    if (!meta && !conv) return {}
+    if (!meta) return {}
 
-    const current = meta?.readPointer ?? conv?.readPointer
+    const current = meta.readPointer
     const next = advance(current, migrated)
     if (next === current) return {}
 
-    const update: Partial<ChatState> = {}
-    if (meta) {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(conversationId, { ...meta, readPointer: next })
-      update.conversationMeta = newMeta
-    }
-    if (conv) {
-      const newConversations = new Map(state.conversations)
-      newConversations.set(conversationId, { ...conv, readPointer: next })
-      update.conversations = newConversations
-    }
-    return update
+    const draft = draftConversationMaps(state)
+    draft.patchMeta(conversationId, { readPointer: next })
+    return draft.commit()
   })
 }
 
@@ -897,18 +891,22 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
       })
     )
 
-    // Rebuild combined map from separated maps
+    // Rebuild the combined map from the separated maps. This — not the blob —
+    // is where `conversations` comes from on every new-format load, which is
+    // why the map is no longer persisted at all. `shared/conversationMaps`
+    // holds the same expression and is the only writer while the store is live,
+    // so a restored map and a mutated one cannot disagree.
     conversations = new Map()
     for (const [id, entity] of conversationEntities) {
       const meta = conversationMeta.get(id)
       if (meta) {
-        conversations.set(id, { ...entity, ...meta })
+        conversations.set(id, rebuildCompatEntry(entity, meta))
       }
     }
   } else {
     // Legacy format: deserialize combined map and extract separated maps
     conversations = new Map(
-      persisted.conversations.map(([id, conv]) => {
+      (persisted.conversations ?? []).map(([id, conv]) => {
         captureLegacyReadState(id, conv)
         const { lastSeenMessageId: _seen, lastReadAt: _readAt, ...rest } = conv
         return [
@@ -1052,10 +1050,11 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
     migrated.conversations = restored.conversations
     migrated.archivedConversations = restored.archivedConversations
 
+    // The blob written here carries entities + meta only; the new-format read
+    // branch rebuilds the compat map from them on the next load.
     const serialized = serializeState({
       conversationEntities: migrated.conversationEntities,
       conversationMeta: migrated.conversationMeta,
-      conversations: migrated.conversations,
       messages: migrated.messages,
       archivedConversations: migrated.archivedConversations,
       drafts: migrated.drafts,
@@ -1193,23 +1192,16 @@ export const chatStore = createStore<ChatState>()(
             const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
             set((state) => {
-              const newMetaEntry = {
-                ...(meta ?? { unreadCount: 0, readPointer: undefined }),
-                unreadCount: activated.unreadCount,
-                readPointer: activated.readPointer,
-              }
-              const newMeta = new Map(state.conversationMeta)
-              newMeta.set(id, newMetaEntry)
-              const newConversations = new Map(state.conversations)
-              newConversations.set(id, {
-                ...conv,
+              const draft = draftConversationMaps(state)
+              draft.setMeta(id, {
+                ...(draft.getMeta(id) ?? { unreadCount: 0, readPointer: undefined }),
                 unreadCount: activated.unreadCount,
                 readPointer: activated.readPointer,
               })
               const newMarkers = new Map(state.firstNewMessageMarkers)
               if (activated.firstNewMessageId) newMarkers.set(id, activated.firstNewMessageId)
               else newMarkers.delete(id)
-              return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id, firstNewMessageMarkers: newMarkers }
+              return { ...draft.commit(), activeConversationId: id, firstNewMessageMarkers: newMarkers }
             })
             return
           }
@@ -1309,44 +1301,21 @@ export const chatStore = createStore<ChatState>()(
             // value comes back through `deserializeState`, so a conversation
             // re-added after a restart finds its original floor here.
             historyFloor: existingMeta?.historyFloor ?? conv.historyFloor ?? new Date(),
+            pendingRemoteDisplayedStanzaId: conv.pendingRemoteDisplayedStanzaId,
           }
 
-          const newEntities = new Map(state.conversationEntities)
-          newEntities.set(conv.id, entity)
-
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conv.id, meta)
-
-          // Also update combined map for backward compatibility
-          const newConversations = new Map(state.conversations)
-          newConversations.set(conv.id, { ...conv, historyFloor: meta.historyFloor })
-
-          return {
-            conversationEntities: newEntities,
-            conversationMeta: newMeta,
-            conversations: newConversations,
-          }
+          const draft = draftConversationMaps(state)
+          draft.upsert(conv.id, entity, meta)
+          return draft.commit()
         })
       },
 
       updateConversationName: (id, name) => {
         set((state) => {
-          const entity = state.conversationEntities.get(id)
-          if (!entity) return state
-
-          // Update entity (name is entity data)
-          const newEntities = new Map(state.conversationEntities)
-          newEntities.set(id, { ...entity, name })
-
-          // Update combined map
-          const conv = state.conversations.get(id)
-          if (conv) {
-            const newConversations = new Map(state.conversations)
-            newConversations.set(id, { ...conv, name })
-            return { conversationEntities: newEntities, conversations: newConversations }
-          }
-
-          return { conversationEntities: newEntities }
+          // Name is entity data; the compat entry follows from it.
+          const draft = draftConversationMaps(state)
+          if (!draft.patchEntity(id, { name })) return state
+          return draft.commit()
         })
       },
 
@@ -1360,16 +1329,9 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
 
         set((state) => {
-          // Remove from separated maps
-          const newEntities = new Map(state.conversationEntities)
-          newEntities.delete(id)
-
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.delete(id)
-
-          // Remove from combined map
-          const newConversations = new Map(state.conversations)
-          newConversations.delete(id)
+          // Remove from all three conversation maps
+          const draft = draftConversationMaps(state)
+          draft.remove(id)
 
           // Also delete all messages for this conversation from memory
           const newMessages = new Map(state.messages)
@@ -1389,9 +1351,7 @@ export const chatStore = createStore<ChatState>()(
           const newActiveId = state.activeConversationId === id ? null : state.activeConversationId
 
           return {
-            conversationEntities: newEntities,
-            conversationMeta: newMeta,
-            conversations: newConversations,
+            ...draft.commit(),
             messages: newMessages,
             archivedConversations: newArchived,
             conversationGaps: newGaps,
@@ -1494,19 +1454,8 @@ export const chatStore = createStore<ChatState>()(
                 ? msg
                 : meta.lastMessage
 
-            // Update metadata map
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(msg.conversationId, {
-              ...meta,
-              unreadCount: notif.unreadCount,
-              lastMessage: previewMessage,
-              readPointer: notif.readPointer,
-            })
-
-            // Update combined map for backward compatibility
-            const newConversations = new Map(state.conversations)
-            newConversations.set(msg.conversationId, {
-              ...conv,
+            const draft = draftConversationMaps(state)
+            draft.patchMeta(msg.conversationId, {
               unreadCount: notif.unreadCount,
               lastMessage: previewMessage,
               readPointer: notif.readPointer,
@@ -1526,8 +1475,7 @@ export const chatStore = createStore<ChatState>()(
                 newArchived.delete(msg.conversationId)
                 return {
                   messages: newMessages,
-                  conversationMeta: newMeta,
-                  conversations: newConversations,
+                  ...draft.commit(),
                   archivedConversations: newArchived,
                   firstNewMessageMarkers: newMarkers,
                   lastArrivedMessage: newArrived,
@@ -1535,7 +1483,7 @@ export const chatStore = createStore<ChatState>()(
               }
             }
 
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived }
+            return { messages: newMessages, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived }
           }
 
           return { messages: newMessages, lastArrivedMessage: newArrived }
@@ -1575,18 +1523,14 @@ export const chatStore = createStore<ChatState>()(
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
 
-          const newMetaEntry = {
-            ...(meta ?? { unreadCount: 0, readPointer: undefined }),
+          const draft = draftConversationMaps(state)
+          draft.setMeta(conversationId, {
+            ...(draft.getMeta(conversationId) ?? { unreadCount: 0, readPointer: undefined }),
             unreadCount: updated.unreadCount,
             readPointer: updated.readPointer,
-          }
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, newMetaEntry)
+          })
 
-          const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, readPointer: updated.readPointer })
-
-          return { conversationMeta: newMeta, conversations: newConversations }
+          return draft.commit()
         })
       },
 
@@ -1612,21 +1556,17 @@ export const chatStore = createStore<ChatState>()(
             return state
           }
 
-          const read = {
+          const draft = draftConversationMaps(state)
+          draft.setMeta(conversationId, {
+            ...(draft.getMeta(conversationId) ?? { unreadCount: 0 }),
             readPointer: makeReadPointer(newest),
             unreadCount: 0,
-          }
-
-          const newMeta = new Map(state.conversationMeta)
-          if (meta) newMeta.set(conversationId, { ...meta, ...read })
-
-          const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...existing, ...read })
+          })
 
           const newMarkers = new Map(state.firstNewMessageMarkers)
           newMarkers.delete(conversationId)
 
-          return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
+          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
         })
       },
 
@@ -1679,7 +1619,6 @@ export const chatStore = createStore<ChatState>()(
 
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
-          const conv = state.conversations.get(conversationId)
           if (!meta) return state
 
           const messages = state.messages.get(conversationId) || []
@@ -1700,16 +1639,9 @@ export const chatStore = createStore<ChatState>()(
           // reference) whenever it did not advance, and a fresh object when it did.
           if (updated.readPointer === meta.readPointer) return state
 
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, readPointer: updated.readPointer })
-
-          if (conv) {
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, readPointer: updated.readPointer })
-            return { conversationMeta: newMeta, conversations: newConversations }
-          }
-
-          return { conversationMeta: newMeta }
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(conversationId, { readPointer: updated.readPointer })
+          return draft.commit()
         })
       },
 
@@ -1719,7 +1651,6 @@ export const chatStore = createStore<ChatState>()(
         let advancedNonActive = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
-          const conv = state.conversations.get(conversationId)
           if (!meta) return state
 
           // A non-active conversation keeps no resident array (memory windowing), so
@@ -1752,8 +1683,8 @@ export const chatStore = createStore<ChatState>()(
                     pendingRemoteDisplayedStanzaId: undefined,
                   }
 
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, ...metaPatch })
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(conversationId, metaPatch)
 
           // Inbound read-state sync (spec §4): a marker published by another
           // client clears this conversation's badge now, not on the next
@@ -1764,10 +1695,9 @@ export const chatStore = createStore<ChatState>()(
           // countMentions is omitted (default false) and mentionsCount is an
           // inert 0: conversations don't track mentions the way rooms do
           // (parity with the hydration path in mergeMAMMessages).
-          let recomputed: notifState.EntityNotificationState | undefined
           if (resolution.kind === 'advanced') {
             advancedNonActive = true
-            recomputed = notifState.recomputeCountsFromPointer(
+            const recomputed = notifState.recomputeCountsFromPointer(
               {
                 unreadCount: meta.unreadCount,
                 mentionsCount: 0,
@@ -1776,10 +1706,7 @@ export const chatStore = createStore<ChatState>()(
               },
               messages
             )
-            newMeta.set(conversationId, {
-              ...newMeta.get(conversationId)!,
-              unreadCount: recomputed.unreadCount,
-            })
+            draft.patchMeta(conversationId, { unreadCount: recomputed.unreadCount })
           }
 
           // The divider is recomputed only for the active conversation; inactive
@@ -1791,18 +1718,7 @@ export const chatStore = createStore<ChatState>()(
             else newMarkers.delete(conversationId)
           }
 
-          if (conv) {
-            // Keep the combined map coherent with conversationMeta.
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, {
-              ...conv,
-              ...metaPatch,
-              // Keep the combined map coherent with the recomputed count.
-              ...(recomputed ? { unreadCount: recomputed.unreadCount } : {}),
-            })
-            return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
-          }
-          return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
+          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
         })
 
         // EXACT badge recount for a non-resident conversation: the sync
@@ -1841,21 +1757,12 @@ export const chatStore = createStore<ChatState>()(
                   hasUnmigratedLegacyReadState: hasUnmigratedLegacyReadState(conversationId),
                 })
                 if (exact === pointerState) return state
-                const newMeta = new Map(state.conversationMeta)
-                newMeta.set(conversationId, {
-                  ...meta,
+                const draft = draftConversationMaps(state)
+                draft.patchMeta(conversationId, {
                   unreadCount: exact.unreadCount,
                   readPointer: exact.readPointer,
                 })
-                const conv = state.conversations.get(conversationId)
-                if (!conv) return { conversationMeta: newMeta }
-                const newConversations = new Map(state.conversations)
-                newConversations.set(conversationId, {
-                  ...conv,
-                  unreadCount: exact.unreadCount,
-                  readPointer: exact.readPointer,
-                })
-                return { conversationMeta: newMeta, conversations: newConversations }
+                return draft.commit()
               })
             } catch {
               // Cache read failed — keep the page-scoped count (an undercount,
@@ -1889,13 +1796,11 @@ export const chatStore = createStore<ChatState>()(
 
       mergeServerConversations: (convs) => {
         set((state) => {
-          const newEntities = new Map(state.conversationEntities)
-          const newMeta = new Map(state.conversationMeta)
-          const newConversations = new Map(state.conversations)
+          const draft = draftConversationMaps(state)
           const newArchived = new Set(state.archivedConversations)
 
           for (const serverConv of convs) {
-            if (newConversations.has(serverConv.id)) {
+            if (draft.getEntity(serverConv.id)) {
               // Existing conversation: sync archived status
               if (serverConv.archived) {
                 newArchived.add(serverConv.id)
@@ -1916,11 +1821,8 @@ export const chatStore = createStore<ChatState>()(
                 // it can never restamp an existing floor.
                 historyFloor: new Date(),
               }
-              const conv: Conversation = { ...entity, ...meta }
 
-              newEntities.set(serverConv.id, entity)
-              newMeta.set(serverConv.id, meta)
-              newConversations.set(serverConv.id, conv)
+              draft.upsert(serverConv.id, entity, meta)
 
               if (serverConv.archived) {
                 newArchived.add(serverConv.id)
@@ -1929,9 +1831,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           return {
-            conversationEntities: newEntities,
-            conversationMeta: newMeta,
-            conversations: newConversations,
+            ...draft.commit(),
             archivedConversations: newArchived,
           }
         })
@@ -2075,22 +1975,14 @@ export const chatStore = createStore<ChatState>()(
           // purely positional gate would leave the sidebar stuck on
           // "[OpenPGP-encrypted message]" after the real message decrypts.
           const meta = state.conversationMeta.get(conversationId)
-          const conv = state.conversations.get(conversationId)
           const isLastMessage = messageIndex === updatedConvMessages.length - 1
           const isPreviewMessage =
             !!meta?.lastMessage &&
             findMessageIndexById([meta.lastMessage], updatedMessage.id) !== -1
           if (isLastMessage || isPreviewMessage) {
-            if (meta && conv) {
-              // Update metadata map
-              const newMeta = new Map(state.conversationMeta)
-              newMeta.set(conversationId, { ...meta, lastMessage: updatedMessage })
-
-              // Update combined map
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv, lastMessage: updatedMessage })
-
-              return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+            const draft = draftConversationMaps(state)
+            if (draft.patchMeta(conversationId, { lastMessage: updatedMessage })) {
+              return { messages: newMessages, ...draft.commit() }
             }
           }
 
@@ -2115,19 +2007,15 @@ export const chatStore = createStore<ChatState>()(
           void messageCache.updateMessage(convMessages[messageIndex].id, { stanzaId: undefined })
 
           const meta = state.conversationMeta.get(conversationId)
-          const conv = state.conversations.get(conversationId)
           const wasLastMessage =
             !!meta?.lastMessage &&
             (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
 
-          if (meta && conv && wasLastMessage) {
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta, lastMessage: updatedMessage })
-
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, lastMessage: updatedMessage })
-
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+          if (wasLastMessage) {
+            const draft = draftConversationMaps(state)
+            if (draft.patchMeta(conversationId, { lastMessage: updatedMessage })) {
+              return { messages: newMessages, ...draft.commit() }
+            }
           }
 
           return { messages: newMessages }
@@ -2203,13 +2091,10 @@ export const chatStore = createStore<ChatState>()(
               (!!removed.originId && meta.lastMessage.originId === removed.originId))
 
           if (wasLastMessage) {
-            const conv = state.conversations.get(conversationId)
             const lastMessage = findLastPreviewableMessage(updatedConvMessages)
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta!, lastMessage })
-            const newConversations = new Map(state.conversations)
-            if (conv) newConversations.set(conversationId, { ...conv, lastMessage })
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+            const draft = draftConversationMaps(state)
+            draft.patchMeta(conversationId, { lastMessage })
+            return { messages: newMessages, ...draft.commit() }
           }
 
           return { messages: newMessages }
@@ -2262,21 +2147,12 @@ export const chatStore = createStore<ChatState>()(
           // Same-reference return = nothing changed; skip the map churn.
           if (recomputed === pointerState) return state
 
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, {
-            ...meta,
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(conversationId, {
             unreadCount: recomputed.unreadCount,
             readPointer: recomputed.readPointer,
           })
-          const conv = state.conversations.get(conversationId)
-          if (!conv) return { conversationMeta: newMeta }
-          const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, {
-            ...conv,
-            unreadCount: recomputed.unreadCount,
-            readPointer: recomputed.readPointer,
-          })
-          return { conversationMeta: newMeta, conversations: newConversations }
+          return draft.commit()
         })
       },
 
@@ -2587,25 +2463,15 @@ export const chatStore = createStore<ChatState>()(
             }
 
             if (previewUpdate || hydrated) {
-              const newMeta = new Map(state.conversationMeta)
-              newMeta.set(conversationId, {
-                ...meta!,
+              const draft = draftConversationMaps(state)
+              draft.patchMeta(conversationId, {
                 ...(previewUpdate ? { lastMessage } : {}),
                 ...(hydrated ? {
                   unreadCount: hydrated.unreadCount,
                   readPointer: hydrated.readPointer,
                 } : {}),
               })
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, {
-                ...conv!,
-                ...(previewUpdate ? { lastMessage } : {}),
-                ...(hydrated ? {
-                  unreadCount: hydrated.unreadCount,
-                  readPointer: hydrated.readPointer,
-                } : {}),
-              })
-              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
+              return { mamQueryStates: newStates, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
             }
             return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
           }
@@ -2633,11 +2499,9 @@ export const chatStore = createStore<ChatState>()(
           }
 
           if (previewUpdate) {
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta!, lastMessage })
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv!, lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
+            const draft = draftConversationMaps(state)
+            draft.patchMeta(conversationId, { lastMessage })
+            return { messages: newMessagesMap, mamQueryStates: newStates, ...draft.commit(), conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
           }
 
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
@@ -2697,15 +2561,9 @@ export const chatStore = createStore<ChatState>()(
           // Update if newer, or if the existing preview is a stuck placeholder
           if (!shouldReplaceLastMessage(meta.lastMessage, lastMessage)) return state
 
-          // Update metadata map
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, lastMessage })
-
-          // Update combined map for backward compatibility
-          const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...conv, lastMessage })
-
-          return { conversationMeta: newMeta, conversations: newConversations }
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(conversationId, { lastMessage })
+          return draft.commit()
         })
       },
 
@@ -2723,13 +2581,9 @@ export const chatStore = createStore<ChatState>()(
 
           const updated = { ...existing, ...updates }
 
-          const newMeta = new Map(state.conversationMeta)
-          if (meta) newMeta.set(conversationId, { ...meta, lastMessage: updated })
-
-          const newConversations = new Map(state.conversations)
-          if (conv) newConversations.set(conversationId, { ...conv, lastMessage: updated })
-
-          return { conversationMeta: newMeta, conversations: newConversations }
+          const draft = draftConversationMaps(state)
+          draft.patchMeta(conversationId, { lastMessage: updated })
+          return draft.commit()
         })
       },
 
@@ -2978,8 +2832,11 @@ export const chatStore = createStore<ChatState>()(
         // Persist separated maps (Phase 6)
         conversationEntities: state.conversationEntities,
         conversationMeta: state.conversationMeta,
-        // Also persist combined map for backward compatibility
-        conversations: state.conversations,
+        // Empty, like `messages` below: the partialized shape has to match what
+        // `getItem` hands back (deserializeState rebuilds the compat map, so it
+        // is present there), but `serializeState` no longer reads this field and
+        // nothing about it reaches disk.
+        conversations: new Map<string, Conversation>(),
         // Note: messages are NOT persisted in localStorage anymore - they're in IndexedDB
         // This allows unlimited message storage and efficient pagination
         messages: new Map(), // Empty - messages loaded from IndexedDB on demand
