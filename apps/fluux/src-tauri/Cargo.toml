@@ -70,7 +70,7 @@ sequoia-openpgp = { version = "2.0", default-features = false, features = [
     "allow-variable-time-crypto",
 ] }
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 
 # XEP-0454 media encryption for the native upload path (upload.rs). The
 # WebView cannot ship large bodies over IPC without a main-thread stall, so
@@ -112,7 +112,7 @@ user-idle = "0.6"
 # Direct use for native toast activation callbacks. This crate is already in
 # the dependency graph through tauri-plugin-notification; declaring it here
 # makes the Windows backend's API dependency explicit.
-tauri-winrt-notification = "0.7"
+tauri-winrt-notification = "0.8"
 
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
