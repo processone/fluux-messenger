@@ -101,6 +101,23 @@ describe('throttledStorage', () => {
     expect(localStorage.getItem(KEY)).toBe('b')
   })
 
+  // Guards the quiet-close branch of onTimer: a window that expires with
+  // NOTHING pending must delete the entry, not just leave the timer to rot.
+  // If `entries.delete(key)` were dropped there, the stale entry would
+  // survive with a dead timer id, and the next `schedule()` would see a
+  // truthy entry, stash into `pending`, and never arm a new timer — losing
+  // the write silently until something else flushes the key.
+  it('closes the window after a quiet period, so the next schedule is a leading edge', () => {
+    schedule(KEY, () => 'a') // leading edge; window opens
+    vi.advanceTimersByTime(1000) // fires with NOTHING pending -> quiet close
+    expect(vi.getTimerCount()).toBe(0)
+
+    localStorageMock.setItem.mockClear()
+    schedule(KEY, () => 'b') // must take a fresh leading edge
+    expect(localStorage.getItem(KEY)).toBe('b')
+    expect(localStorageMock.setItem.mock.calls.length).toBe(1)
+  })
+
   it('pagehide flushes pending writes', () => {
     schedule(KEY, () => 'a')
     schedule(KEY, () => 'b')
