@@ -3,7 +3,6 @@ import {
   makeReadPointer,
   isAhead,
   advance,
-  readFloor,
   serializeReadPointer,
   deserializeReadPointer,
 } from './readPointer'
@@ -60,34 +59,6 @@ describe('advance', () => {
   it('adopts the candidate when there is no current pointer', () => {
     const next = makeReadPointer({ id: 'm1', timestamp: at(1000) })
     expect(advance(undefined, next)).toBe(next)
-  })
-})
-
-describe('readFloor', () => {
-  it('is the pointer timestamp when there is no history floor', () => {
-    const p = makeReadPointer({ id: 'm1', timestamp: at(1000) })
-    expect(readFloor(p, undefined)).toEqual(at(1000))
-  })
-
-  it('is the history floor when there is no pointer', () => {
-    expect(readFloor(undefined, at(500))).toEqual(at(500))
-  })
-
-  it('is undefined when neither is set', () => {
-    expect(readFloor(undefined, undefined)).toBeUndefined()
-  })
-
-  // Control: an implementation returning the EARLIER of the two passes the three
-  // tests above and fails these. Taking the earlier value would count history the
-  // user already read (or that predates the join) as unread.
-  it('takes the LATER value when the pointer is ahead of the floor', () => {
-    const p = makeReadPointer({ id: 'm1', timestamp: at(2000) })
-    expect(readFloor(p, at(500))).toEqual(at(2000))
-  })
-
-  it('takes the LATER value when the floor is ahead of the pointer', () => {
-    const p = makeReadPointer({ id: 'm1', timestamp: at(500) })
-    expect(readFloor(p, at(2000))).toEqual(at(2000))
   })
 })
 

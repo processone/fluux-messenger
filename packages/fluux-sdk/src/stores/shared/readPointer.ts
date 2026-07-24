@@ -75,25 +75,6 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
   return isAhead(candidate, current) ? candidate : current
 }
 
-/**
- * The floor every unread derivation counts from: the LATER of the read pointer
- * and the entity's history watermark.
- *
- * `historyFloor` records when the entity entered our world (join / creation). It
- * is not a read position — it is what stops a freshly joined room with 10k
- * messages of history from reporting 10k unread, without anyone having to write
- * the pointer to do it.
- */
-export function readFloor(
-  pointer: ReadPointer | undefined,
-  historyFloor: Date | undefined
-): Date | undefined {
-  if (pointer && historyFloor) {
-    return pointer.timestamp.getTime() >= historyFloor.getTime() ? pointer.timestamp : historyFloor
-  }
-  return pointer?.timestamp ?? historyFloor
-}
-
 export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointer {
   return { messageId: pointer.messageId, timestamp: pointer.timestamp.getTime() }
 }

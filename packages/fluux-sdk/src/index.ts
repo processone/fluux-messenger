@@ -196,7 +196,7 @@ export type { EntityNotificationState, NotificationMessage, EntityContext, Badge
 
 // Read pointer (canonical read position; supersedes lastSeenMessageId + lastReadAt, issue #1081)
 export type { ReadPointer } from './stores/shared/readPointer'
-export { makeReadPointer, isAhead, advance, readFloor } from './stores/shared/readPointer'
+export { makeReadPointer, isAhead, advance } from './stores/shared/readPointer'
 
 // Store bindings (wire SDK events to Zustand stores)
 export { createStoreBindings } from './bindings'
