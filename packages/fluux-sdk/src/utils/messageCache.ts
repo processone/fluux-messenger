@@ -458,7 +458,8 @@ function contentOwner(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMes
  * Merge two stored rows that are the same logical room message into one.
  * COMMUTATIVE and ASSOCIATIVE. The correlated content block comes from
  * {@link contentOwner} (total order); every other field uses a symmetric operator,
- * so no edit, poll closure, retraction, reaction, moderation, or alias is lost.
+ * so no edit, poll closure, retraction, reaction, moderation, mention, or alias
+ * is lost.
  */
 export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): StoredRoomMessage {
   const owner = contentOwner(a, b)
@@ -466,6 +467,13 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
   const timestamp = aSid !== bSid ? (aSid ? a.timestamp : b.timestamp) : Math.min(a.timestamp, b.timestamp)
   const retracted = !!(a.isRetracted || b.isRetracted)
   const moderated = !!(a.isModerated || b.isModerated)
+  // isMention is set only on the live stanza path and never recomputed for a MAM
+  // copy of the same message (see countRoomUnreadInArchive's doc), so it must be
+  // treated as MONOTONIC evidence here: an absent/false flag on one copy must
+  // never erase a `true` established by the other. OR it independently of
+  // contentOwner — taking it from `owner` alone would silently drop a live-set
+  // `true` whenever the MAM copy (no flag) wins content ownership.
+  const mentioned = !!(a.isMention || b.isMention)
   // Poll closure: symmetric even when both closed with different records.
   const pollClosed = a.pollClosed && b.pollClosed
     ? (stableStringify(a.pollClosed) <= stableStringify(b.pollClosed) ? a.pollClosed : b.pollClosed)
@@ -483,6 +491,7 @@ export function mergeRoomRows(a: StoredRoomMessage, b: StoredRoomMessage): Store
     ...(retracted ? { isRetracted: true, retractedAt: minNum(a.retractedAt, b.retractedAt) } : {}),
     ...(moderated ? { isModerated: true, moderatedBy: minStr(a.moderatedBy, b.moderatedBy), moderationReason: minStr(a.moderationReason, b.moderationReason) } : {}),
     ...(pollClosed ? { pollClosed, pollClosedAt: minNum(a.pollClosedAt, b.pollClosedAt) } : {}),
+    ...(mentioned ? { isMention: true } : {}),
   }
   merged.cacheKey = roomCanonicalKey(merged)
   merged.identityKeys = unionSorted(merged.identityKeys, roomIdentityKeys(merged))
@@ -811,13 +820,11 @@ export async function getMessageCount(conversationId: string): Promise<number> {
 }
 
 // =============================================================================
-// PR B: archive count primitive (unread + independent mention scan)
+// PR B: archive count primitive (unread only — mentions stay on the live +1 path)
 // =============================================================================
 
 /** Default cap on the reported `unread` count — the badge saturates here. */
 const DEFAULT_UNREAD_CAP = 999
-/** Default cap on how many candidate (unread-eligible) rows the mention walk will scan. */
-const DEFAULT_MENTION_SCAN_CAP = 5000
 
 export interface UnreadCountArgs {
   /** Cursor start: the read pointer's timestamp, or the entity's history watermark. */
@@ -839,21 +846,12 @@ export interface UnreadCountArgs {
   pointer?: { timestamp: Date; archiveOrderKey?: ArchiveOrderKey }
   /** Cap on the reported `unread` count. Default {@link DEFAULT_UNREAD_CAP}. */
   unreadCap?: number
-  /** Cap on candidate rows scanned for mentions. Default {@link DEFAULT_MENTION_SCAN_CAP}. */
-  mentionScanCap?: number
 }
 
-/** Result of an archive unread/mention count. */
+/** Result of an archive unread count. */
 export interface ArchiveCount {
   /** Renderable incoming messages strictly after the pointer, saturating at `unreadCap`. */
   unread: number
-  /** Renderable incoming mentions strictly after the pointer. Always 0 for chat (no `isMention`). */
-  mentions: number
-  /**
-   * `true` iff the mention scan reached the end of the range — i.e. `mentions` is
-   * exact, not truncated by `mentionScanCap`. Always `true` for chat.
-   */
-  mentionsComplete: boolean
 }
 
 /** The pointer's position as an `OrderPosition`, or `undefined` when there is no pointer. */
@@ -878,12 +876,14 @@ function isStrictlyAfterPointer(position: OrderPosition, pointerPosition: OrderP
  *
  * Cursors `conv_timestamp` forward from `floor`, counting renderable incoming
  * rows strictly after the pointer's POSITION (not just its timestamp — see
- * {@link isStrictlyAfterPointer}). `unread` saturates at `unreadCap`; chat has
- * no `isMention` field, so `mentions` is always `0` and `mentionsComplete`
- * always `true`. Once `unread` reaches its cap there is nothing further to
- * learn (no mentions to keep scanning for), so the walk stops there rather than
- * continuing to `mentionScanCap` — that cap exists only to bound the
- * independent mention scan, which chat never performs.
+ * {@link isStrictlyAfterPointer}). `unread` saturates at `unreadCap`; once it
+ * reaches the cap there is nothing further this walk can learn, so it ends
+ * there.
+ *
+ * This derives `unread` only. Mentions stay on the existing live `+1` counter
+ * (`isMention` is set only on the live stanza path — see `Chat.ts` — and
+ * never recomputed for archive rows, so an archive scan cannot report a
+ * trustworthy mention count).
  *
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
@@ -921,7 +921,7 @@ export async function countUnreadInArchive(
       cursor = await cursor.continue()
     }
 
-    return { unread, mentions: 0, mentionsComplete: true }
+    return { unread }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to count unread in archive:', error)
@@ -1296,8 +1296,7 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
 /**
  * Count unread room messages in the durable archive, independent of what is
  * resident in memory. Room counterpart of {@link countUnreadInArchive} — see it
- * for the general shape — but rooms additionally track mentions, which is what
- * makes the walk here more than a saturating counter.
+ * for the general shape.
  *
  * Cursors `room_ts_from_id` — `[roomJid, timestamp, from, id]` — forward from
  * `floor`. This is that index's first consumer. The upper bound is
@@ -1309,19 +1308,23 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  * `Infinity` for `Number.MAX_SAFE_INTEGER` (the convention used in the chat
  * range above) would make those sentinels suddenly load-bearing, and could
  * silently drop a row whose `from` sorts above `'￿'`. `unread` saturates at
- * `unreadCap`, but unlike chat the walk MUST continue past that cap: a
- * mention can sit far behind a deep unread backlog, and reporting
- * `mentions: 0` there would silently drop the red attention badge in exactly
- * the noisiest rooms. The walk instead keeps tallying `mentions` until either
- * the range is exhausted or `mentionScanCap` candidate rows have been
- * scanned. `mentionsComplete` is `true` only for the former — a
- * `mentionScanCap` stop means `mentions` may be an undercount.
+ * `unreadCap`; once it reaches the cap there is nothing further this walk can
+ * learn, so it ends there.
+ *
+ * This derives `unread` only, deliberately — an earlier revision of this
+ * primitive also tallied mentions from the archive, but `isMention` is set
+ * only on the live stanza path (`Chat.ts`'s `checkForMention`) and is never
+ * recomputed for MAM rows (`MAM.ts`'s `RoomMessage` construction), so an
+ * archive scan reports `0` for every mention that arrived while offline —
+ * and a "complete scan may lower the count" rule would zero out a correctly
+ * live-counted mention. Mentions stay on the existing live `+1` counter,
+ * cleared by explicit read / mark-read.
  *
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
  */
 export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCountArgs): Promise<ArchiveCount | null> {
-  const { floor, pointer, unreadCap = DEFAULT_UNREAD_CAP, mentionScanCap = DEFAULT_MENTION_SCAN_CAP } = args
+  const { floor, pointer, unreadCap = DEFAULT_UNREAD_CAP } = args
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
@@ -1330,11 +1333,6 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
 
     const pointerPosition = toPointerPosition(pointer)
     let unread = 0
-    let mentions = 0
-    let scanned = 0
-    // Overwritten to `false` only when the scan cap forces an early stop; the
-    // range-exhausted path (cursor runs out on its own) leaves this `true`.
-    let mentionsComplete = true
 
     let cursor = await index.openCursor(range, 'next')
     while (cursor) {
@@ -1347,20 +1345,15 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
             archiveOrderKey: makeArchiveOrderKey(message, 'room'),
           }
           if (isStrictlyAfterPointer(position, pointerPosition)) {
-            if (scanned >= mentionScanCap) {
-              mentionsComplete = false
-              break
-            }
-            scanned++
-            if (unread < unreadCap) unread++
-            if (message.isMention) mentions++
+            unread++
+            if (unread >= unreadCap) break
           }
         }
       }
       cursor = await cursor.continue()
     }
 
-    return { unread, mentions, mentionsComplete }
+    return { unread }
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to count room unread in archive:', error)

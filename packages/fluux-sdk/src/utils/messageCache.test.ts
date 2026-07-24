@@ -1059,6 +1059,19 @@ describe('mergeRoomRows — commutative, associative, field-complete', () => {
   it('preserves a retraction from either row', () => {
     const [m] = both(rrow({}), rrow({ isRetracted: true, retractedAt: 7000 })); expect(m.isRetracted).toBe(true); expect(m.retractedAt).toBe(7000)
   })
+  // isMention is set only on the live stanza path (Chat.ts) and never recomputed
+  // for a MAM copy of the same message, so a merge of a live-counted row (flag
+  // true) with its MAM counterpart (no flag) must not erase it. The mentioning
+  // row is given a strictly LOWER decryption rank so contentOwner picks the
+  // non-mentioning row as content owner in BOTH orders (contentOwner's rank
+  // comparison is symmetric) — a naive `...owner` read would drop the mention
+  // in both directions, which is exactly what an owner-sourced bug would do.
+  // Checked in both orders because mergeRoomRows is required to be commutative.
+  it('keeps isMention true from either row, in both merge orders (monotonic)', () => {
+    const mentioning = rrow({ id: 'm1', isMention: true, unsupportedEncryption: { kind: 'x' } as never, body: '' })
+    const mam = rrow({ id: 'm1', body: 'hi' })
+    for (const m of both(mentioning, mam)) expect(m.isMention).toBe(true)
+  })
   it('clears a delivery error when either copy delivered cleanly', () => {
     expect(both(rrow({ deliveryError: { text: 'x' } as never }), rrow({}))[0].deliveryError).toBeUndefined()
   })
@@ -1420,7 +1433,7 @@ describe('countUnreadInArchive (chat)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 2, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 2 })
   })
 
   it('excludes outgoing messages', async () => {
@@ -1433,7 +1446,7 @@ describe('countUnreadInArchive (chat)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('excludes non-renderable (blank legacy) rows', async () => {
@@ -1446,7 +1459,7 @@ describe('countUnreadInArchive (chat)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('same-ms: pointer at m1@t, unread m2@t later by id, counts exactly 1', async () => {
@@ -1459,7 +1472,7 @@ describe('countUnreadInArchive (chat)', () => {
       floor: t,
       pointer: { timestamp: t, archiveOrderKey: { kind: 'chat', id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('saturates unread at unreadCap', async () => {
@@ -1468,8 +1481,6 @@ describe('countUnreadInArchive (chat)', () => {
     )
     const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 999 })
     expect(res!.unread).toBe(999)
-    expect(res!.mentions).toBe(0)
-    expect(res!.mentionsComplete).toBe(true)
   })
 
   it('missing archiveOrderKey falls back to strict-after-timestamp (over-counts, safe)', async () => {
@@ -1488,7 +1499,7 @@ describe('countUnreadInArchive (chat)', () => {
       floor: t,
       pointer: { timestamp: t },
     })
-    expect(res).toEqual({ unread: 3, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 3 })
   })
 
   it('returns null on IndexedDB error', async () => {
@@ -1509,25 +1520,6 @@ describe('countRoomUnreadInArchive (room)', () => {
   const ROOM = 'room@conference.example.com'
   beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
 
-  /**
-   * Bulk-seed rows directly into the store, bypassing the identity-resolving
-   * upsert (`saveRoomMessages` does a per-row multiEntry lookup+merge, which is
-   * the right cost for real writes but far too slow — and pointless here, since
-   * every row is already uniquely keyed — for a large synthetic fixture).
-   */
-  async function seedRoomRowsFast(rows: StoredRoomMessage[]) {
-    await messageCache.getRoomMessages(ROOM, { limit: 1 }) // ensure the v4 schema exists
-    const raw = await openDB('fluux-message-cache', 4)
-    const tx = raw.transaction('room-messages-canonical', 'readwrite')
-    for (const row of rows) await tx.store.put(row as never)
-    await tx.done
-    raw.close()
-  }
-  const fastRoomRow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
-    const base = { type: 'groupchat', id: 'x', roomJid: ROOM, from: `${ROOM}/user`, body: 'hi', timestamp: 1000, isOutgoing: false, ...over } as StoredRoomMessage
-    return { ...base, cacheKey: roomCanonicalKey(base), identityKeys: roomIdentityKeys(base), ids: [base.id] } as StoredRoomMessage
-  }
-
   it('counts renderable incoming messages after the pointer', async () => {
     await messageCache.saveRoomMessages([
       createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
@@ -1538,7 +1530,7 @@ describe('countRoomUnreadInArchive (room)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 2, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 2 })
   })
 
   it('excludes outgoing messages', async () => {
@@ -1551,7 +1543,7 @@ describe('countRoomUnreadInArchive (room)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('excludes non-renderable (blank legacy) rows', async () => {
@@ -1564,7 +1556,7 @@ describe('countRoomUnreadInArchive (room)', () => {
       floor: new Date(1000),
       pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('same-ms: pointer at m1@t (from alice), unread m2@t (from bob, sorts after) counts exactly 1', async () => {
@@ -1577,7 +1569,7 @@ describe('countRoomUnreadInArchive (room)', () => {
       floor: t,
       pointer: { timestamp: t, archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
     })
-    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+    expect(res).toEqual({ unread: 1 })
   })
 
   it('missing archiveOrderKey falls back to strict-after-timestamp (over-counts, safe)', async () => {
@@ -1590,41 +1582,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     // Same over-count rationale as the chat case: both same-ms rows (m1, m2) resolve
     // as "after" an unresolved pointer position; m3 counts regardless of the key.
     const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { timestamp: t } })
-    expect(res).toEqual({ unread: 3, mentions: 0, mentionsComplete: true })
-  })
-
-  it('isMention survives the real saveRoomMessages write path', async () => {
-    await messageCache.saveRoomMessages([
-      createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false, isMention: true }),
-    ])
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(1000) })
-    expect(res).toEqual({ unread: 1, mentions: 1, mentionsComplete: true })
-  })
-
-  it('counts a mention beyond the unread cap and reports completeness', async () => {
-    // 1200 unread room messages, the 1100th is a mention; unreadCap 999, scan cap 5000 (default).
-    // fake-indexeddb's cursor walk over 1200 rows is comfortably under a second in
-    // isolation but can brush the default 5s budget alongside the rest of this
-    // (large) suite — give it explicit headroom rather than a flaky margin.
-    const rows = Array.from({ length: 1200 }, (_, i) =>
-      fastRoomRow({ id: `m${i}`, timestamp: 1000 + i, isOutgoing: false, isMention: i === 1099 })
-    )
-    await seedRoomRowsFast(rows)
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 999 })
-    expect(res!.unread).toBe(999) // saturated
-    expect(res!.mentions).toBe(1) // NOT lost to the early-out
-    expect(res!.mentionsComplete).toBe(true)
-  }, 15000)
-
-  it('reports mentionsComplete: false when the scan cap is hit before the range is exhausted', async () => {
-    const msgs = Array.from({ length: 20 }, (_, i) =>
-      createMockRoomMessage(ROOM, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false, isMention: i === 15 })
-    )
-    await messageCache.saveRoomMessages(msgs)
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 999, mentionScanCap: 10 })
-    expect(res!.mentionsComplete).toBe(false)
-    // The mention at index 15 is beyond the 10-row scan cap — not (yet) counted.
-    expect(res!.mentions).toBe(0)
+    expect(res).toEqual({ unread: 3 })
   })
 
   it('returns null on IndexedDB error', async () => {

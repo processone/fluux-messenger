@@ -86,8 +86,13 @@ export function isValidArchiveOrderKey(v: unknown): v is ArchiveOrderKey {
   return false
 }
 
-/** The result of deriving unread state for one conversation/room. */
+/**
+ * The result of deriving unread state for one conversation/room. Derives
+ * `unread` only — mentions stay on the existing live `+1` counter, cleared by
+ * explicit read / mark-read (see `countRoomUnreadInArchive` in
+ * `messageCache.ts` for why an archive scan cannot recount mentions).
+ */
 export type RecomputeOutcome =
-  | { kind: 'exact'; unread: number; mentions: number; mentionsComplete: boolean }
+  | { kind: 'exact'; unread: number }
   | { kind: 'deferred' }
   | { kind: 'unavailable' }
