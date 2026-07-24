@@ -4,7 +4,8 @@
  * Single-flight invariant for the message-list rAF scroll re-assert loops.
  *
  * The list keeps the virtualized view pinned by re-asserting a scroll target across ~1s of
- * frames (`pinVirtualizedBottom` → bottom; the MAM-prepend `runMeasureAssert` → a history
+ * frames (the controller-owned live-edge executor → bottom; the MAM-prepend
+ * `runMeasureAssert` → a history
  * anchor). When two of these run at once they fight over scrollTop — the `[ScrollReassertLoop]`
  * overlap the reassert monitor warns about, observed in the wild as `(pin-bottom, pin-bottom)`.
  * pin-bottom was made single-flight against itself; this suite pins the FULL invariant: across
@@ -172,7 +173,7 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     flush(2) // prepend loop in-flight
 
     // A SENT (outgoing) message arrives while the prepend loop is still running -> the outgoing
-    // path forces a scroll-to-bottom (pinVirtualizedBottom). pin-bottom and prepend target
+    // path forces a controller-owned scroll-to-bottom. pin-bottom and prepend target
     // opposite positions, so they must not coexist.
     const sent: BaseMessage = {
       id: 'sent-1', from: 'me@example.com', body: 'my reply',

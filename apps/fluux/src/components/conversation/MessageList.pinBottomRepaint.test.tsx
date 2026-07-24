@@ -10,10 +10,10 @@
  * looked stranded, and toggling `overflow` (a forced reflow) made the already-correctly-positioned
  * message appear without any scroll.
  *
- * The fix: pinVirtualizedBottom calls forceRepaint() after every programmatic scroll — it toggles the
- * scroller's overflow (`hidden` → reflow via offsetHeight → restore). This test asserts the pin issues
- * that repaint after a send. jsdom has no compositor, so we can't observe the paint itself; instead we
- * count the forced-reflow reads of `offsetHeight`, which only forceRepaint performs on this path.
+ * The fix: the live-edge executor calls forceRepaint() after every programmatic scroll — it toggles
+ * the scroller's overflow (`hidden` → reflow via offsetHeight → restore). This test asserts the pin
+ * issues that repaint after a send. jsdom has no compositor, so we can't observe the paint itself;
+ * instead we count the forced-reflow reads of `offsetHeight`, which only forceRepaint performs here.
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'

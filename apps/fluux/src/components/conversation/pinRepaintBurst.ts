@@ -1,5 +1,5 @@
 /**
- * Cross-run burst coalescing for `pinVirtualizedBottom`'s forced repaint.
+ * Cross-run burst coalescing for the live-edge executor's forced repaint.
  *
  * WHY THIS EXISTS
  * ---------------
@@ -33,9 +33,9 @@
 /**
  * Two content-arrival pins landing within this window count as a burst; while a
  * burst is live, forced repaints are suppressed. Sized a touch above the pin
- * loop's settle time (8 frames ≈ 133ms) so that "arrival stopped long enough for
- * the loop to converge" reliably implies "burst window expired", letting the
- * convergence own the single trailing repaint.
+ * controller's live-edge settle time (8 frames ≈ 133ms) so that "arrival stopped
+ * long enough for the controller to converge" reliably implies "burst window
+ * expired", letting controller convergence own the single trailing repaint.
  */
 export const PIN_BURST_WINDOW_MS = 200
 
@@ -52,7 +52,7 @@ export interface PinBurstSummary {
 export interface PinRepaintBurst {
   /**
    * Record a content-arrival pin (new-message / content-growth / media-load /
-   * reaction / mam-catchup-complete). Call at the top of `pinVirtualizedBottom`
+   * reaction / mam-catchup-complete). Call when the live-edge executor begins
    * for those triggers — BEFORE it supersedes the running loop — so every arrival
    * is counted even though its run may be immediately replaced.
    */
@@ -74,7 +74,7 @@ export interface PinRepaintBurst {
    * exhausted path right before forcing the one final repaint.
    */
   settle(): PinBurstSummary
-  /** Drop all burst state (conversation switch, user-scroll takeover). */
+  /** Drop all burst state and owed paint (conversation switch, supersession, user takeover). */
   reset(): void
 }
 

@@ -1,6 +1,6 @@
 /**
- * Unit tests for the pin-bottom run helper: per-run convergence tracking, forced-work
- * accounting for the [PinLoopProbe] fluux.log line, and the repaint gating policy.
+ * Unit tests for the pin-bottom run helper: timing/probe accounting for the
+ * [PinLoopProbe] fluux.log line, and the repaint gating policy.
  *
  * Pure logic — timestamps and storage are passed in, no DOM.
  */
@@ -10,31 +10,6 @@ import {
   shouldForceRepaint,
   readPinRepaintMode,
 } from './pinBottomRun'
-
-describe('createPinRunTracker — convergence', () => {
-  it('settles after the configured number of consecutive stable (non-write) frames', () => {
-    const run = createPinRunTracker({ settledFrames: 3 })
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('settled')
-  })
-
-  it('a write frame resets the stable streak', () => {
-    const run = createPinRunTracker({ settledFrames: 3 })
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(true)).toBe('continue') // height moved → re-pinned → not stable
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('settled')
-  })
-
-  it('defaults to 8 stable frames (matches the marker/restore stability precedent)', () => {
-    const run = createPinRunTracker()
-    for (let i = 0; i < 7; i++) expect(run.frame(false)).toBe('continue')
-    expect(run.frame(false)).toBe('settled')
-  })
-})
 
 describe('createPinRunTracker — forced-work accounting', () => {
   it('accumulates ms by kind and reports the total', () => {
@@ -47,7 +22,7 @@ describe('createPinRunTracker — forced-work accounting', () => {
   })
 
   it('summary line carries trigger, frame/write counts and rounded per-kind ms', () => {
-    const run = createPinRunTracker({ settledFrames: 4 })
+    const run = createPinRunTracker()
     run.frame(true)
     run.frame(true)
     run.frame(false)
