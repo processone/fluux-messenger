@@ -5,8 +5,8 @@
  * Background: useMessageListScroll keeps the virtualized list pinned to the
  * right place by RE-ASSERTING a scroll target across several frames as rows
  * measure asynchronously — the live-edge executor (stick to bottom), the
- * controller-owned unread-marker reconciliation, and the MAM-prepend
- * `runMeasureAssert` (anchor restore). Each is a `requestAnimationFrame` loop
+ * controller-owned unread-marker reconciliation, and the directional-history
+ * executor (anchor restore). Each is a `requestAnimationFrame` loop
  * that calls the virtualizer's `scrollToOffset`/`scrollToIndex`, which re-windows
  * and re-renders.
  *
@@ -22,10 +22,8 @@
  *     instead of settling, e.g. two anchors disagree by more than the tolerance
  *     and it ping-pongs.
  *  2. OVERLAP — two re-assert loops are alive at the same time and fight over
- *     scrollTop. The prime suspect: `runMeasureAssert` has no cleanup and no
- *     early-stable exit, so a second MAM prepend (fast scroll-up through history)
- *     starts a second loop against a different anchor while the first ~1s loop is
- *     still running.
+ *     scrollTop. This historically happened when a second MAM prepend started an
+ *     unleased loop against a different anchor while the first ~1s loop remained.
  *
  * Like resizeLoopMonitor/slowCorrectionMonitor this NEVER cancels or throttles a
  * loop; it only emits a single rate-limited log line so the loop class finally

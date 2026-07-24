@@ -4,9 +4,9 @@
  * Single-flight invariant for the message-list rAF scroll re-assert loops.
  *
  * The list keeps the virtualized view pinned by re-asserting a scroll target across ~1s of
- * frames (the controller-owned live-edge executor → bottom; the MAM-prepend
- * `runMeasureAssert` → a history
- * anchor). When two of these run at once they fight over scrollTop — the `[ScrollReassertLoop]`
+ * frames (the controller-owned live-edge executor → bottom; the controller-owned directional
+ * executor → a history anchor). When two of these run at once they fight over scrollTop — the
+ * `[ScrollReassertLoop]`
  * overlap the reassert monitor warns about, observed in the wild as `(pin-bottom, pin-bottom)`.
  * pin-bottom was made single-flight against itself; this suite pins the FULL invariant: across
  * any rapid multi-trigger sequence, at most ONE re-assert loop is ever active — including the
@@ -64,6 +64,7 @@ vi.mock('@/hooks', () => ({
 }))
 
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
+const scrollToOffsetCalls: number[] = []
 vi.mock('./tanstackMessageVirtualizer', () => ({
   useTanstackMessageVirtualizer: (args: { items: { key: string }[]; scrollRef: React.RefObject<HTMLElement | null> }) => ({
     getVirtualItems: () => args.items.map((it, index) => ({ index, start: index * 40, size: 40, key: it.key })),
@@ -72,7 +73,11 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     getOffsetForMessageId,
     ensureMessageMounted: vi.fn(() => Promise.resolve()),
     measureElement: () => {},
-    scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+    scrollToOffset: (offset: number) => {
+      scrollToOffsetCalls.push(offset)
+      const el = args.scrollRef.current
+      if (el) el.scrollTop = offset
+    },
     scrollToIndex: (index: number, opts?: { align?: string }) => {
       const el = args.scrollRef.current
       if (!el) return
@@ -111,6 +116,7 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     loopTracker.active = 0
     loopTracker.peak = 0
     loopTracker.begins = []
+    scrollToOffsetCalls.length = 0
     getOffsetForMessageId.mockClear()
     getOffsetForMessageId.mockImplementation(() => 0)
   })
@@ -128,6 +134,12 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
       set: (v: number) => { scrollTopVal = v },
       configurable: true,
     })
+    return {
+      get: () => scrollTopVal,
+      set: (value: number) => {
+        scrollTopVal = value
+      },
+    }
   }
 
   const props = {
@@ -144,14 +156,13 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // First load-older -> older messages prepended -> prepend restore begins runMeasureAssert.
+    // First load-older -> older messages prepended -> the controller begins its directional loop.
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     rerender(<MessageList messages={[...makeMessages(10, 'older1'), ...makeMessages(50)]} conversationId="conv-pp" {...props} />)
     flush(2) // a couple of frames pass; the first loop still has ~58 frames left
 
     // Second load-older BEFORE the first settles -> a second prepend restore. It must supersede
-    // the first, not run alongside it (the documented prime suspect: runMeasureAssert had no
-    // cleanup and no early-stable exit).
+    // the first, not run alongside it. Each accepted generation has an exact cancellation lease.
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     rerender(<MessageList messages={[...makeMessages(10, 'older2'), ...makeMessages(10, 'older1'), ...makeMessages(50)]} conversationId="conv-pp" {...props} />)
 
@@ -167,7 +178,7 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
     instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // Load older -> prepend restore begins runMeasureAssert (the 'prepend' loop).
+    // Load older -> the directional controller begins the monitor's 'prepend' loop.
     fireEvent.click(getByText('chat.loadEarlierMessages'))
     rerender(<MessageList messages={[...makeMessages(10, 'older1'), ...makeMessages(50)]} conversationId="conv-mix" {...props} />)
     flush(2) // prepend loop in-flight
@@ -183,5 +194,41 @@ describe('MessageList — re-assert loops are single-flight (at most one active)
 
     expect(loopTracker.begins).toContain('pin-bottom')
     expect(loopTracker.peak).toBeLessThanOrEqual(1)
+  })
+
+  it('re-pins the directional anchor after a content-shrink clamp without treating it as takeover', () => {
+    getOffsetForMessageId.mockImplementation((id) =>
+      id === 'msg-0' ? 0 : null,
+    )
+    const { container, getByText, rerender } = render(
+      <MessageList
+        messages={makeMessages(50)}
+        conversationId="conv-clamp"
+        {...props}
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const geometry = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    fireEvent.click(getByText('chat.loadEarlierMessages'))
+    getOffsetForMessageId.mockImplementation((id) =>
+      id === 'msg-0' ? 1000 : null,
+    )
+    rerender(
+      <MessageList
+        messages={[...makeMessages(10, 'older'), ...makeMessages(50)]}
+        conversationId="conv-clamp"
+        {...props}
+      />,
+    )
+    expect(scrollToOffsetCalls).toContain(1000)
+
+    scrollToOffsetCalls.length = 0
+    geometry.set(4500) // browser clamp after content shrink; no genuine input event
+    flush(1)
+
+    expect(scrollToOffsetCalls).toContain(1000)
+    expect(geometry.get()).toBe(1000)
   })
 })

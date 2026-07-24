@@ -3,6 +3,8 @@ import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManag
 import type { MessageVirtualizer } from './messageVirtualizer'
 import {
   PositioningController,
+  type DirectionalHistoryExecutor,
+  type DirectionalHistoryFrameResult,
   type ExplicitTargetExecutor,
   type ExplicitTargetFrameResult,
   type LiveEdgeExecutor,
@@ -34,6 +36,7 @@ import {
   messageFraction,
   pixelOffset,
   type BottomFractionAnchorPosition,
+  type DirectionalHistoryRequest,
   type ReachabilityFacts,
   type LiveEdgePosition,
   type SavedPositionRequest,
@@ -588,6 +591,292 @@ describe('positioning controller live-edge ownership', () => {
     staleMediaFrame()
     expect(mediaPositionFrame).toHaveBeenCalledTimes(1)
     expect(outgoing.positionFrame).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('positioning controller directional-history ownership', () => {
+  function directionalHarness(
+    overrides: {
+      reachability?: ReachabilityFacts
+      frameResult?: DirectionalHistoryFrameResult
+    } = {},
+  ) {
+    const callbacks: Array<() => void> = []
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const complete = vi.fn()
+    const leases: PositionExecutionLease[] = []
+    let frameResult: DirectionalHistoryFrameResult =
+      overrides.frameResult ?? {
+        kind: 'positioned',
+        scrollTop: 400,
+        wrote: false,
+        reassert: true,
+      }
+    const positionFrame = vi.fn(() => frameResult)
+    const executor: DirectionalHistoryExecutor = {
+      reachability: () => overrides.reachability ?? {
+        kind: 'available',
+        index: 5,
+        mounted: false,
+        placement: 'viable',
+      },
+      beginLoop: (lease) => {
+        leases.push(lease)
+        return {
+          schedule: (callback) => callbacks.push(callback),
+          recordFrame,
+          finish,
+        }
+      },
+      positionFrame,
+      complete,
+    }
+    return {
+      callbacks,
+      complete,
+      executor,
+      finish,
+      leases,
+      positionFrame,
+      recordFrame,
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback).toBeDefined()
+        callback!()
+      },
+      setFrameResult: (result: DirectionalHistoryFrameResult) => {
+        frameResult = result
+      },
+    }
+  }
+
+  function beginDirectional(
+    controller: PositioningController,
+    executor: DirectionalHistoryExecutor,
+    messageId = 'top-visible',
+  ): DirectionalHistoryRequest {
+    return controller.beginDirectionalHistory({
+      conversationId,
+      desired: {
+        kind: 'anchor',
+        messageId,
+        placement: {
+          kind: 'top-offset',
+          offsetPx: pixelOffset(-12),
+        },
+      },
+      distanceFromBottom: pixelOffset(640),
+      executor,
+    })!
+  }
+
+  it('owns the pending window shift, then releases outgoing suppression after the pre-paint write', () => {
+    const history = directionalHarness()
+    const outgoingPositionFrame = vi.fn(
+      (): LiveEdgeFrameResult => ({
+        kind: 'positioned',
+        scrollTop: 1000,
+        atLiveEdge: true,
+        wrote: true,
+        reassert: false,
+      }),
+    )
+    const outgoingExecutor = inertLiveEdgeExecutor(outgoingPositionFrame)
+    const controller = new PositioningController()
+    controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: inertLiveEdgeExecutor(),
+    })
+    const request = beginDirectional(controller, history.executor)
+
+    expect(controller.snapshot().active).toEqual({
+      request,
+      phase: { kind: 'pending', reason: 'window-shift' },
+    })
+    expect(controller.beginLiveEdgeRequest({
+      conversationId,
+      source: { kind: 'live-update', reason: 'outgoing-message' },
+      executor: outgoingExecutor,
+    })).toBeNull()
+    expect(outgoingPositionFrame).not.toHaveBeenCalled()
+
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })).toBe(true)
+    expect(history.positionFrame).toHaveBeenCalledTimes(1)
+    expect(history.complete).toHaveBeenCalledWith(request, 'applied')
+    expect(controller.snapshot().active?.phase).toEqual({
+      kind: 'position-applied',
+    })
+
+    expect(controller.beginLiveEdgeRequest({
+      conversationId,
+      source: { kind: 'live-update', reason: 'outgoing-message' },
+      executor: outgoingExecutor,
+    })).not.toBeNull()
+    expect(history.complete).toHaveBeenLastCalledWith(request, 'superseded')
+    expect(outgoingPositionFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains the exact sixty-frame late-measurement budget without an early-stable exit', () => {
+    const history = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(controller, history.executor)
+    controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })
+
+    for (let frame = 0; frame < 60; frame += 1) history.runFrame()
+    expect(history.positionFrame).toHaveBeenCalledTimes(61)
+    expect(history.recordFrame).toHaveBeenCalledTimes(60)
+    expect(history.complete).not.toHaveBeenCalledWith(request, 'best-effort')
+    history.runFrame()
+
+    expect(history.positionFrame).toHaveBeenCalledTimes(61)
+    expect(history.complete).toHaveBeenLastCalledWith(request, 'best-effort')
+    expect(history.finish).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('cancels on genuine user input and rejects the already-queued frame', () => {
+    const history = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(controller, history.executor)
+    controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })
+    const staleFrame = history.callbacks.shift()!
+
+    controller.observeUserInput(conversationId)
+    staleFrame()
+
+    expect(history.finish).toHaveBeenCalledTimes(1)
+    expect(history.positionFrame).toHaveBeenCalledTimes(1)
+    expect(history.complete).toHaveBeenLastCalledWith(
+      request,
+      'user-takeover',
+    )
+    expect(controller.snapshot().active).toBeNull()
+  })
+
+  it('retains the captured anchor through boundary input while the history load is pending', () => {
+    const history = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(controller, history.executor)
+
+    controller.observeUserInput(conversationId)
+
+    expect(history.complete).not.toHaveBeenCalled()
+    expect(controller.snapshot().active).toEqual({
+      request,
+      phase: { kind: 'pending', reason: 'window-shift' },
+    })
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })).toBe(true)
+    expect(history.positionFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies the distance-from-bottom fallback once when the anchor was evicted', () => {
+    const history = directionalHarness({
+      reachability: {
+        kind: 'target-absent',
+        loadAround: 'unavailable',
+      },
+      frameResult: {
+        kind: 'positioned',
+        scrollTop: 120,
+        wrote: true,
+        reassert: false,
+      },
+    })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(
+      controller,
+      history.executor,
+      'evicted-anchor',
+    )
+
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })).toBe(true)
+    expect(history.positionFrame).toHaveBeenCalledTimes(1)
+    expect(history.complete.mock.calls).toEqual([
+      [request, 'applied'],
+      [request, 'settled'],
+    ])
+    expect(history.callbacks).toHaveLength(0)
+  })
+
+  it('supersedes an unresolved load with a newer directional generation', () => {
+    const first = directionalHarness()
+    const second = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const firstRequest = beginDirectional(
+      controller,
+      first.executor,
+      'first-anchor',
+    )
+    const secondRequest = beginDirectional(
+      controller,
+      second.executor,
+      'second-anchor',
+    )
+
+    expect(first.complete).toHaveBeenCalledWith(firstRequest, 'superseded')
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: firstRequest.generation,
+      executor: first.executor,
+    })).toBe(false)
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: secondRequest.generation,
+      executor: second.executor,
+    })).toBe(true)
+    expect(first.positionFrame).not.toHaveBeenCalled()
+    expect(second.positionFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a pending anchor when a forward load reaches the live edge without shifting', () => {
+    const history = directionalHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = beginDirectional(controller, history.executor)
+
+    expect(controller.cancelDirectionalHistoryWithoutShift({
+      conversationId,
+      generation: request.generation,
+    })).toBe(true)
+    expect(history.complete).toHaveBeenCalledWith(
+      request,
+      'no-window-shift',
+    )
+    expect(controller.isDirectionalHistoryPending(conversationId)).toBe(false)
+    expect(controller.snapshot().active).toBeNull()
+    expect(controller.reconcileDirectionalHistory({
+      conversationId,
+      generation: request.generation,
+      executor: history.executor,
+    })).toBe(false)
+    expect(history.positionFrame).not.toHaveBeenCalled()
   })
 })
 

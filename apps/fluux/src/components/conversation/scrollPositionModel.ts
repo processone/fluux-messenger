@@ -234,6 +234,11 @@ export type MediaPreservationRequest = Extract<
   { source: { kind: 'media-preservation'; reason: 'remeasure' } }
 >
 
+export type DirectionalHistoryRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'history-preservation'; reason: 'window-shift' } }
+>
+
 export type PositionRequestSource = PositionRequest['source']
 
 /**
@@ -247,7 +252,12 @@ export type PositioningPhase =
   | { kind: 'resolving' }
   | {
       kind: 'pending'
-      reason: 'empty-window' | 'around-load' | 'live-edge-recenter' | 'target-not-indexed'
+      reason:
+        | 'empty-window'
+        | 'around-load'
+        | 'live-edge-recenter'
+        | 'target-not-indexed'
+        | 'window-shift'
     }
   | { kind: 'loading-around'; messageId: string }
   | { kind: 'recentering-live-edge' }

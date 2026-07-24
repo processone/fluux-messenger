@@ -3,9 +3,9 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Saved-position, unread-marker, explicit-target, live-edge, and media-preservation
- *    policy/retry ownership lives in PositioningController; browser writes stay imperative in
- *    leased hook executors while directional history remains to migrate
+ * 2. Saved-position, unread-marker, explicit-target, live-edge, media-preservation, and
+ *    directional-history policy/retry ownership lives in PositioningController; browser writes
+ *    stay imperative in leased hook executors
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
@@ -32,6 +32,7 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import {
   PositioningController,
+  type DirectionalHistoryExecutor,
   type ExplicitTargetExecutor,
   type LiveEdgeExecutor,
   type LiveEdgeCompletion,
@@ -51,6 +52,7 @@ import {
 import {
   messageFraction,
   pixelOffset,
+  type DirectionalHistoryRequest,
   type DesiredPosition,
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
@@ -345,6 +347,17 @@ export interface UseMessageListScrollResult {
   scrollToMarker: () => void
 }
 
+interface DirectionalHistorySnapshot {
+  anchorMessageId: string
+  anchorOffsetFromTop: number
+  distanceFromBottom: number
+  oldFirstId: string
+  oldMessageCount: number
+  generation?: number
+  restored?: boolean
+  restoredAt?: number
+}
+
 // ============================================================================
 // HOOK
 // ============================================================================
@@ -388,15 +401,13 @@ export function useMessageListScroll({
   const resizeMonitorRef = useRef<ReturnType<typeof createResizeLoopMonitor> | null>(null)
   // Diagnostic-only monitor for SLOW corrections (reflow cost, not fire rate).
   const slowCorrectionMonitorRef = useRef<ReturnType<typeof createSlowCorrectionMonitor> | null>(null)
-  // Diagnostic-only monitor for the rAF scroll re-assert loops (pin-bottom / marker / prepend):
+  // Diagnostic-only monitor for the controller-owned rAF scroll re-assert loops:
   // surfaces a non-converging loop or two overlapping loops fighting over scrollTop on WebKit
   // (frame-coupled, so invisible to the headless harness and the other monitors). Never cancels.
   const reassertMonitorRef = useRef<ReturnType<typeof createReassertLoopMonitor> | null>(null)
-  // In-flight scroll re-assert loop (rAF id + monitor handle), SHARED across pin-bottom and the
-  // MAM-prepend re-assert. Starting any re-assert loop supersedes whatever is in-flight, so only
-  // one ever runs: two loops fight over scrollTop (the overlap the monitor warns about), and
-  // pin-bottom vs prepend target opposite positions (bottom vs a history anchor). Single-flight:
-  // latest call wins with a fresh settle window.
+  // In-flight controller-owned scroll re-assert loop (rAF id + monitor handle). Starting any loop
+  // supersedes whatever is in flight so bottom, message, restore, media, and history targets cannot
+  // fight over scrollTop. Single-flight: latest accepted generation wins with a fresh budget.
   const reassertLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
   // True while a pin-bottom re-assert loop is in flight. The typing/reactions re-pin defers to an
   // active loop (it re-checks scrollHeight every frame and picks the change up itself) instead of
@@ -455,6 +466,8 @@ export function useMessageListScroll({
   activeConversationIdRef.current = conversationId
   const prevConversationRef = useRef<string | null>(null)
   const prevMessageCountRef = useRef(0)
+  const messageCountRef = useRef(messageCount)
+  messageCountRef.current = messageCount
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
   const pendingSyncedLiveEdgeRef = useRef<{
@@ -488,10 +501,9 @@ export function useMessageListScroll({
   // React StrictMode replays layout-effect cleanup/setup without unmounting the DOM. Defer controller
   // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
   const unmountDeactivationTokenRef = useRef<object | null>(null)
-  // Generation-aware semantic controller. Saved-position restoration, unread-marker positioning,
-  // explicit targets, live edge, and media preservation are authoritative. Directional history
-  // still reports shadow decisions. Pixel writes stay in hook executors, while the module-private
-  // generation allocator survives StrictMode remounts.
+  // Generation-aware semantic controller. All live-conversation positioning slices, including
+  // directional history, are authoritative. Pixel writes stay in hook executors, while the
+  // module-private generation allocator survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -530,17 +542,7 @@ export function useMessageListScroll({
   // When we load older messages, we save the anchor element position BEFORE the load,
   // then restore it AFTER React renders the new messages.
   // Using element-based positioning is more reliable than pure scroll math.
-  const prependRef = useRef<{
-    // Element-based: ID and offset of the anchor element (first visible message)
-    anchorMessageId: string
-    anchorOffsetFromTop: number
-    // Fallback: distance from bottom (in case element isn't found)
-    distanceFromBottom: number
-    oldFirstId: string
-    oldMessageCount: number
-    restored?: boolean  // Set after restore, cleared after cooldown
-    restoredAt?: number // Timestamp of restore
-  } | null>(null)
+  const prependRef = useRef<DirectionalHistorySnapshot | null>(null)
 
   // Throttling/cooldown
   const lastSaveTimeRef = useRef(0)
@@ -553,9 +555,8 @@ export function useMessageListScroll({
   // Tracks the previous windowAtLiveEdge so we can detect the false→true transition (returning to
   // the live edge) and drop a stale prepend/append anchor — see the effect below.
   const prevWindowAtLiveEdgeRef = useRef(windowAtLiveEdge)
-  // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The prepend re-assert
-  // loop yields to a deliberate scroll recorded after it starts, but keeps re-pinning the
-  // anchor through a content-shrink clamp (which records no such intent).
+  // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The controller receives the
+  // same input directly; this timestamp also supports marker clearing and resize heuristics.
   const userScrollIntentAtRef = useRef(0)
 
   // Media load batching (for images, videos, link previews)
@@ -738,7 +739,11 @@ export function useMessageListScroll({
         const currentScrollTop = currentScroller.scrollTop
 
         // Skip during prepend that's actively in progress (not yet restored)
-        if (prependRef.current && !prependRef.current.restored) {
+        if (
+          positioningControllerRef.current?.isDirectionalHistoryPending(
+            activeConversationIdRef.current,
+          )
+        ) {
           debugLog('RESIZE SKIP (prepend in progress)', {
             newHeight,
             lastHeight,
@@ -1263,6 +1268,168 @@ export function useMessageListScroll({
     ],
   )
 
+  const createDirectionalHistoryExecutor = useCallback(
+    (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor => {
+      let initialized = false
+      let previousTarget = 0
+      let usedFallback = false
+
+      return {
+        reachability: (desired) => {
+          const scroller = scrollerRef.current
+          const virtualizer = virtualizerRef.current
+          return deriveReachabilityForDesired({
+            desired,
+            hasRows: Boolean(
+              (virtualizer && virtualizer.itemCount > 0) ||
+              scroller?.querySelector('[data-message-id]'),
+            ),
+            windowAtLiveEdge: true,
+            virtualizer,
+            scroller,
+            loadAround: 'unavailable',
+            canRecenter: false,
+          })
+        },
+        beginLoop: (lease) => beginControllerFrameLoop('prepend', lease),
+        positionFrame: (
+          request: DirectionalHistoryRequest,
+          lease: PositionExecutionLease,
+        ) => {
+          if (
+            !lease.isCurrent() ||
+            activeConversationIdRef.current !== request.conversationId
+          ) {
+            return { kind: 'unavailable' }
+          }
+          const scroller = scrollerRef.current
+          if (!scroller) return { kind: 'unavailable' }
+          const virtualizer = virtualizerRef.current
+
+          if (!initialized) {
+            // Preserve the pre-paint WebKit momentum cancellation from the former layout effect.
+            void scroller.offsetHeight
+            cancelKineticScroll(scroller)
+          }
+
+          let target: number | null = null
+          let usedMethod = 'none'
+          if (request.desired.messageId) {
+            const virtualOffset =
+              virtualizer?.getOffsetForMessageId(
+                request.desired.messageId,
+              ) ?? null
+            if (virtualOffset !== null) {
+              target =
+                virtualOffset - request.desired.placement.offsetPx
+              usedMethod = 'virtualizer-offset'
+            } else {
+              const anchorElement = scroller.querySelector(
+                `[data-message-id="${CSS.escape(request.desired.messageId)}"]`,
+              ) as HTMLElement | null
+              if (anchorElement) {
+                target =
+                  anchorElement.offsetTop -
+                  request.desired.placement.offsetPx
+                usedMethod = 'element-based'
+              }
+            }
+          }
+
+          if (target === null) {
+            if (initialized) {
+              // The former loop kept its full late-measurement budget if an already-applied anchor
+              // temporarily disappeared. Do not switch fallback policy after the initial landing.
+              return {
+                kind: 'positioned',
+                scrollTop: scroller.scrollTop,
+                wrote: false,
+                reassert: Boolean(virtualizer && !usedFallback),
+              }
+            }
+            target =
+              scroller.scrollHeight -
+              scroller.clientHeight -
+              request.onUnavailable.distancePx
+            usedMethod = 'distance-from-bottom'
+            usedFallback = true
+          }
+
+          const maxScrollTop = Math.max(
+            0,
+            scroller.scrollHeight - scroller.clientHeight,
+          )
+          const boundedTarget = Math.max(
+            0,
+            Math.min(target, maxScrollTop),
+          )
+          const targetMoved =
+            initialized && Math.abs(boundedTarget - previousTarget) > 2
+          const geometryDrift =
+            initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
+          const shouldWrite = !initialized || targetMoved || geometryDrift
+          if (shouldWrite) {
+            if (virtualizer) {
+              virtualizer.scrollToOffset(boundedTarget)
+            } else {
+              scroller.scrollTop = boundedTarget
+            }
+          }
+          previousTarget = boundedTarget
+          initialized = true
+
+          debugLog('DIRECTIONAL HISTORY POSITION', {
+            generation: request.generation,
+            usedMethod,
+            target: boundedTarget,
+            targetMoved,
+            geometryDrift,
+            wrote: shouldWrite,
+          })
+          return {
+            kind: 'positioned',
+            scrollTop: scroller.scrollTop,
+            wrote: shouldWrite,
+            reassert: Boolean(virtualizer && !usedFallback),
+          }
+        },
+        complete: (request, outcome) => {
+          if (activeConversationIdRef.current !== request.conversationId) return
+          if (outcome === 'applied') {
+            saved.restored = true
+            saved.restoredAt = Date.now()
+            lastRestoreTimeRef.current = saved.restoredAt
+            prevMessageCountRef.current = messageCountRef.current
+            lastProgrammaticScrollAtRef.current = saved.restoredAt
+            setTimeout(() => {
+              if (
+                prependRef.current === saved &&
+                prependRef.current.restoredAt === saved.restoredAt
+              ) {
+                debugLog('DIRECTIONAL HISTORY CLEAR')
+                prependRef.current = null
+              }
+            }, PREPEND_COOLDOWN_MS)
+          } else if (
+            !saved.restored &&
+            prependRef.current === saved
+          ) {
+            prependRef.current = null
+          }
+          if (outcome !== 'applied') {
+            lastProgrammaticScrollAtRef.current = Date.now()
+          }
+          debugLog('DIRECTIONAL HISTORY COMPLETE', {
+            generation: request.generation,
+            outcome,
+            restored: Boolean(saved.restored),
+          })
+        },
+      }
+    },
+    [beginControllerFrameLoop],
+  )
+
   const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
     liveEdge: createLiveEdgeExecutor('restore-fallback'),
     reachability: (desired, loadAround) => {
@@ -1655,9 +1822,8 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    // FAB / scroll-to-bottom is a deliberate user action — record it so the prepend re-assert
-    // loop yields instead of fighting it back to the anchor (it can fire while the loop runs:
-    // entering at the top triggers a load-older, then the user clicks the FAB).
+    // FAB / scroll-to-bottom is deliberate user input. Record it for the marker/resize heuristics;
+    // observeUserInput separately cancels any controller-owned history loop.
     userScrollIntentAtRef.current = Date.now()
     // Deliberate user action → open the save gate so the resulting position persists.
     userHasScrolledSinceEntryRef.current = true
@@ -1884,6 +2050,43 @@ export function useMessageListScroll({
     return null
   }
 
+  const beginDirectionalHistoryLoad = (
+    scroller: HTMLDivElement,
+  ): {
+    saved: DirectionalHistorySnapshot
+    anchor: { id: string; offsetFromTop: number } | null
+  } => {
+    const anchor = findAnchorElement()
+    const saved: DirectionalHistorySnapshot = {
+      anchorMessageId: anchor?.id ?? '',
+      anchorOffsetFromTop: anchor?.offsetFromTop ?? 0,
+      distanceFromBottom: getDistanceFromBottom(scroller),
+      oldFirstId: firstMessageId ?? '',
+      oldMessageCount: messageCount,
+    }
+    prependRef.current = saved
+    const request = runScrollShadowSafely({
+      event: 'directional-history-capture',
+      conversationId,
+      fallback: null,
+      observe: () => positioningControllerRef.current?.beginDirectionalHistory({
+        conversationId,
+        desired: {
+          kind: 'anchor',
+          messageId: saved.anchorMessageId,
+          placement: {
+            kind: 'top-offset',
+            offsetPx: pixelOffset(saved.anchorOffsetFromTop),
+          },
+        },
+        distanceFromBottom: pixelOffset(saved.distanceFromBottom),
+        executor: createDirectionalHistoryExecutor(saved),
+      }) ?? null,
+    })
+    saved.generation = request?.generation
+    return { saved, anchor }
+  }
+
   const triggerLoadOlder = () => {
     if (!canLoadMore) return
     const scroller = scrollerRef.current
@@ -1905,21 +2108,11 @@ export function useMessageListScroll({
       lastLoadTimeRef.current = now
       scrolledAwayFromTopRef.current = false
 
-      const distFromBottom = getDistanceFromBottom(scroller)
-      const anchor = findAnchorElement()
-
-      // SAVE position before load - we'll restore this distance after messages render
-      prependRef.current = {
-        anchorMessageId: anchor?.id || '',
-        anchorOffsetFromTop: anchor?.offsetFromTop || 0,
-        distanceFromBottom: distFromBottom,
-        oldFirstId: firstMessageId || '',
-        oldMessageCount: messageCount,
-      }
+      const { saved, anchor } = beginDirectionalHistoryLoad(scroller)
 
       debugLog('PREPEND START', {
         anchor,
-        distanceFromBottom: distFromBottom,
+        distanceFromBottom: saved.distanceFromBottom,
         scrollHeight: scroller.scrollHeight,
         scrollTop: scroller.scrollTop,
         clientHeight: scroller.clientHeight,
@@ -1949,14 +2142,7 @@ export function useMessageListScroll({
     lastLoadTimeRef.current = now
     scrolledAwayFromBottomRef.current = false
 
-    const anchor = findAnchorElement()
-    prependRef.current = {
-      anchorMessageId: anchor?.id || '',
-      anchorOffsetFromTop: anchor?.offsetFromTop || 0,
-      distanceFromBottom: getDistanceFromBottom(scroller),
-      oldFirstId: firstMessageId || '',
-      oldMessageCount: messageCount,
-    }
+    beginDirectionalHistoryLoad(scroller)
 
     onLoadNewer?.()
   }
@@ -1968,21 +2154,11 @@ export function useMessageListScroll({
 
     lastLoadTimeRef.current = Date.now()
 
-    const distFromBottom = getDistanceFromBottom(scroller)
-    const anchor = findAnchorElement()
-
-    // SAVE position before load
-    prependRef.current = {
-      anchorMessageId: anchor?.id || '',
-      anchorOffsetFromTop: anchor?.offsetFromTop || 0,
-      distanceFromBottom: distFromBottom,
-      oldFirstId: firstMessageId || '',
-      oldMessageCount: messageCount,
-    }
+    const { saved, anchor } = beginDirectionalHistoryLoad(scroller)
 
     debugLog('LOAD EARLIER', {
       anchor,
-      distanceFromBottom: distFromBottom,
+      distanceFromBottom: saved.distanceFromBottom,
       scrollHeight: scroller.scrollHeight,
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
@@ -2317,9 +2493,8 @@ export function useMessageListScroll({
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    // A wheel is a deliberate user scroll — record it so the prepend re-assert loop yields if
-    // the user keeps scrolling after a load (rather than fighting a content-shrink clamp). The
-    // wheel that triggers the load itself is recorded BEFORE the loop starts, so it won't bail.
+    // A wheel cancels any older controller generation before a new directional request is captured
+    // below; later wheel input cancels that new request.
     userScrollIntentAtRef.current = Date.now()
     // Genuine user scroll → open the save gate (see userHasScrolledSinceEntryRef). Mirrors the
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
@@ -2884,12 +3059,20 @@ export function useMessageListScroll({
   // clears the already-`restored` ref harmlessly.
   useEffect(() => {
     if (windowAtLiveEdge === true && prevWindowAtLiveEdgeRef.current === false) {
-      if (prependRef.current && !prependRef.current.restored) {
-        prependRef.current = null
+      const saved = prependRef.current
+      if (saved && !saved.restored) {
+        if (saved.generation !== undefined) {
+          positioningControllerRef.current?.cancelDirectionalHistoryWithoutShift({
+            conversationId,
+            generation: saved.generation,
+          })
+        } else {
+          prependRef.current = null
+        }
       }
     }
     prevWindowAtLiveEdgeRef.current = windowAtLiveEdge
-  }, [windowAtLiveEdge])
+  }, [conversationId, windowAtLiveEdge])
 
   // EFFECT: Prepend complete (older messages loaded)
   // ==========================================================================
@@ -2928,291 +3111,31 @@ export function useMessageListScroll({
       return
     }
 
-    // Force reflow first to ensure browser has calculated new layout
-    void scroller.offsetHeight
-
-    const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
-
-    // Try element-based positioning first (more reliable)
-    let newScrollTop: number | null = null
-    let usedMethod = 'none'
-
-    if (saved.anchorMessageId) {
-      // Virtualized: read the anchor's offset from the CURRENT render's virtualizer
-      // (virtualizerRef, updated synchronously in the render body). Using
-      // latestRef.current.virtualizer here would give the STALE pre-prepend indexById
-      // because latestRef is updated in useEffect (after paint) — too late for this
-      // useLayoutEffect (before paint). The current virtualizer has the new indexById
-      // with post-prepend indices, giving the correct anchor offset.
-      const virtualOffset =
-        virtualizerRef.current?.getOffsetForMessageId(saved.anchorMessageId) ?? null
-
-      if (virtualOffset != null) {
-        newScrollTop = virtualOffset - saved.anchorOffsetFromTop
-        usedMethod = 'virtualizer-offset'
-
-        debugLog('PREPEND RESTORE (virtualizer offset)', {
-          anchorMessageId: saved.anchorMessageId,
-          virtualOffset,
-          savedOffsetFromTop: saved.anchorOffsetFromTop,
-          newScrollTop,
-          maxScrollTop,
-        })
-      } else {
-        const anchorElement = scroller.querySelector(
-          `[data-message-id="${saved.anchorMessageId}"]`
-        ) as HTMLElement | null
-
-        if (anchorElement) {
-          // Position the anchor element at the same offset from viewport top as before
-          newScrollTop = anchorElement.offsetTop - saved.anchorOffsetFromTop
-          usedMethod = 'element-based'
-
-          debugLog('PREPEND RESTORE (element-based)', {
-            anchorMessageId: saved.anchorMessageId,
-            anchorOffsetTop: anchorElement.offsetTop,
-            savedOffsetFromTop: saved.anchorOffsetFromTop,
-            newScrollTop,
-            maxScrollTop,
-          })
-        }
-      }
-    }
-
-    // Fallback to distance-from-bottom math if element not found
-    if (newScrollTop === null) {
-      newScrollTop = scroller.scrollHeight - scroller.clientHeight - saved.distanceFromBottom
-      usedMethod = 'math-fallback'
-
-      debugLog('PREPEND RESTORE (math-based fallback)', {
-        newScrollTop,
-        scrollHeight: scroller.scrollHeight,
-        clientHeight: scroller.clientHeight,
-        savedDistanceFromBottom: saved.distanceFromBottom,
-        maxScrollTop,
+    if (saved.generation === undefined) {
+      debugLog('DIRECTIONAL HISTORY DROPPED (controller unavailable)', {
+        oldFirstId: saved.oldFirstId,
+        firstMessageId,
       })
+      prependRef.current = null
+      return
     }
 
-    // BOUNDS CHECK: Ensure scroll position is valid
-    // This prevents blank window when scroll position is out of range
-    const boundedScrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop))
-
-    if (boundedScrollTop !== newScrollTop) {
-      debugLog('PREPEND RESTORE BOUNDS CLAMPED', {
-        original: newScrollTop,
-        bounded: boundedScrollTop,
-        maxScrollTop,
-        usedMethod,
-      })
-    }
-
-    debugLog('PREPEND RESTORE FINAL', {
-      newScrollTop: boundedScrollTop,
-      usedMethod,
-      oldFirstId: saved.oldFirstId,
-      newFirstId: firstMessageId,
-      messageCount,
-      scrollHeightBefore: scroller.scrollHeight,
-      scrollTopBefore: scroller.scrollTop,
-      maxScrollTop,
-    })
-
-    const shadowWindowShiftRequest = runScrollShadowSafely({
-      event: 'window-shift-preservation',
+    // The controller performs the first write synchronously in this layout effect, preserving the
+    // pre-paint landing. Its leased executor retains kinetic cancellation, anchor/fallback geometry,
+    // clamp recovery, and the full late-measurement frame budget.
+    positioningControllerRef.current?.reconcileDirectionalHistory({
       conversationId,
-      fallback: null,
-      observe: () => {
-        if (!saved.anchorMessageId) return null
-        const desired: DesiredPosition = {
-          kind: 'anchor',
-          messageId: saved.anchorMessageId,
-          placement: {
-            kind: 'top-offset',
-            offsetPx: pixelOffset(saved.anchorOffsetFromTop),
-          },
-        }
-        return positioningControllerRef.current?.observeRequest({
-          event: 'window-shift-preservation',
-          conversationId,
-          draft: {
-            source: { kind: 'history-preservation', reason: 'window-shift' },
-            desired,
-            onUnavailable: {
-              kind: 'distance-from-bottom',
-              distancePx: pixelOffset(saved.distanceFromBottom),
-            },
-          },
-          reachability: shadowReachabilityRef.current(desired),
-          actual: {
-            desired,
-            phase: usedMethod === 'math-fallback' ? 'fallback' : 'positioning',
-          },
-        }) ?? null
-      },
+      generation: saved.generation,
+      executor: createDirectionalHistoryExecutor(saved),
     })
 
-    // Cancel any parked kinetic (momentum) scroll BEFORE positioning. On a fast scroll-up
-    // fling the user reaches the top boundary with residual velocity that WebKit parks and
-    // then resumes once we prepend older messages — overshooting the restored anchor and
-    // landing in an unmounted region (blank window) or driving scrollTop out of bounds (jump
-    // to bottom). Toggling overflow off, forcing a reflow, and turning it back on cancels
-    // WebKit's momentum animation. This runs inside the useLayoutEffect (pre-paint), so there
-    // is no visible scrollbar flash. Programmatic scrolls carry no momentum, so this is inert
-    // in the Playwright/preview harness — the fix is only observable on real hardware.
-    cancelKineticScroll(scroller)
-
-    // Set via the virtualizer's own scroll path so @tanstack's internal state stays
-    // consistent and it does not re-process this as an external scroll event.
-    // For the non-virtualized path, write scrollTop directly as before.
-    // Use virtualizerRef (updated in render body) NOT latestRef (updated in useEffect,
-    // which runs after paint — too late for this useLayoutEffect).
-    const virtRestore = virtualizerRef.current
-    if (virtRestore) {
-      virtRestore.scrollToOffset(boundedScrollTop)
-    } else {
-      scroller.scrollTop = boundedScrollTop
-    }
-
-    // Verify it was applied (browser may have clamped further)
-    const actualScrollTop = scroller.scrollTop
-    if (Math.abs(actualScrollTop - boundedScrollTop) > 1) {
-      debugLog('PREPEND RESTORE MISMATCH', {
-        requested: boundedScrollTop,
-        actual: actualScrollTop,
-        diff: actualScrollTop - boundedScrollTop,
-      })
-    }
-
-    debugLog('PREPEND RESTORE APPLIED', {
-      scrollTopAfter: actualScrollTop,
-      scrollHeightAfter: scroller.scrollHeight,
-    })
-
-    // Mark as restored but keep the ref for a cooldown period
-    saved.restored = true
-    saved.restoredAt = Date.now()
-    lastRestoreTimeRef.current = Date.now()
-    if (shadowWindowShiftRequest) {
-      positioningControllerRef.current?.markPositionApplied(
-        conversationId,
-        shadowWindowShiftRequest.generation,
-      )
-    }
-
-    // Account for the prepended rows in the new-message baseline. This layout effect runs BEFORE
-    // the new-message effect in the same commit and flips `restored` true, so that effect no
-    // longer takes its `!restored` skip branch. Without syncing the count here it would compare
-    // the post-prepend messageCount against the STALE pre-prepend count, misread the load-older as
-    // a new message, and (in a short conversation, where the top is still within AT_BOTTOM_THRESHOLD
-    // so isAtBottom stays true) pin the view to the bottom — the reported "scroll up to the top
-    // jumps back to the bottom". A genuine new message arriving later still grows the count past
-    // this and scrolls normally.
-    prevMessageCountRef.current = messageCount
-
-    // Measurement-aware re-assert loop: tanstack's estimated sizes for prepended rows
-    // may differ from actual heights. As ResizeObserver reports measurements,
-    // getOffsetForMessageId(anchor) shifts upward. Re-apply the anchor-based target
-    // on each frame until it stabilises (max 20 frames ≈ 333ms at 60fps).
-    //
-    // Runs entirely in rAF — NOT in useLayoutEffect — to avoid the scroll→rerender→
-    // scrollTop-override oscillation (PR #646). The initial scroll was momentum-corrected
-    // by frame 0; subsequent frames track measurement drift only.
-    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
-    // heights may differ. ResizeObserver fires asynchronously — often AFTER the first
-    // rAF. Run unconditionally for 20 frames (≈333ms) so we track every measurement
-    // update and keep the anchor at its correct viewport offset.
-    //
-    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
-    // oscillation from PR #646.
-    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
-    // heights may differ. ResizeObserver fires asynchronously — often AFTER the first
-    // rAF. Run for up to 20 frames (≈333ms) so every measurement update is tracked.
-    //
-    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
-    // oscillation from PR #646.
-    //
-    // Large external scrolls (FAB, keyboard, conversation switch) are detected as
-    // |scrollTop − prevTarget| > 200px and cancel the loop immediately.
-    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
-    // heights may differ. ResizeObserver fires asynchronously over many frames. Keep
-    // tracking until stable for STABLE_FRAMES consecutive frames (max MAX_FRAMES total).
-    //
-    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
-    // oscillation from PR #646.
-    //
-    // Large external scrolls (FAB click, keyboard nav) cancel the loop immediately.
-    const anchorForAssert = saved.anchorMessageId
-    const offsetForAssert = saved.anchorOffsetFromTop
-    // Hard stop after 60 frames (≈1 second). No early-stable exit: ResizeObserver
-    // callbacks can arrive late (beyond a 5-frame window). A big one-frame drift is
-    // re-pinned once (clamp recovery) and only treated as a genuine external scroll —
-    // FAB / keyboard / user fling — if it persists the next frame.
-    const MAX_FRAMES = 60
-    let framesLeft = MAX_FRAMES
-    let prevTarget = boundedScrollTop
-    // Snapshot the loop start. A deliberate user scroll (FAB / wheel) recorded AFTER this means
-    // the user took over → yield. A content-shrink clamp records no intent, so the loop keeps
-    // re-pinning the anchor through it (clamp recovery — the "jump to bottom" fix).
-    const assertStartedAt = Date.now()
-    // Single-flight (shared with pin-bottom): supersede any re-assert loop still in-flight so two
-    // never run at once. This loop has no early-stable exit, so a second MAM prepend (fast
-    // scroll-up through history) would otherwise start a second 'prepend' loop against a different
-    // anchor while this one runs; and a pin-bottom from a send can land mid-prepend. Both fight
-    // over scrollTop. The latest re-assert wins.
-    supersedeReassertLoopRef.current()
-    const assertLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('prepend', performance.now())
-    const finishAssert = () => {
-      assertLoop.end()
-      reassertLoopRef.current = null
-    }
-    const runMeasureAssert = () => {
-      if (framesLeft-- <= 0) { finishAssert(); return }
-      // Deliberate user scroll (FAB / wheel) since the loop started → the user took over;
-      // stop re-pinning and yield. A content-shrink clamp does NOT set this, so we keep going.
-      if (userScrollIntentAtRef.current > assertStartedAt) {
-        debugLog('PREPEND ASSERT CANCELLED (user scroll intent)', { scrollTop: scrollerRef.current?.scrollTop })
-        finishAssert()
-        return
-      }
-      let wrote = false
-      const virt = virtualizerRef.current
-      const s = scrollerRef.current
-      if (virt && s) {
-        const currentOffset = virt.getOffsetForMessageId(anchorForAssert)
-        if (currentOffset != null) {
-          const newTarget = Math.max(0, Math.round(currentOffset - offsetForAssert))
-          const scrollDrift = s.scrollTop - newTarget
-          if (Math.abs(newTarget - prevTarget) > 2) {
-            // Measurements shifted since last frame — update scroll to match
-            debugLog('PREPEND MEASURE ASSERT', { newTarget, prevTarget, delta: newTarget - prevTarget })
-            virt.scrollToOffset(newTarget)
-            prevTarget = newTarget
-            wrote = true
-          } else if (Math.abs(scrollDrift) > 5) {
-            // scrollTop diverged from the (stable) anchor target — a content-shrink clamp
-            // pinned us to the bottom, or the browser nudged us. Re-pin the anchor. We do NOT
-            // bail on a big drift here: that previously mistook the clamp for a user scroll and
-            // left the view stuck at the bottom (the reported "jump to bottom"). Genuine user
-            // scrolls are handled by the intent check at the top of the loop instead.
-            virt.scrollToOffset(newTarget)
-            wrote = true
-          }
-        }
-      }
-      const warning = assertLoop.frame(performance.now(), wrote)
-      if (warning) console.warn(warning)
-      reassertLoopRef.current = { raf: requestAnimationFrame(runMeasureAssert), handle: assertLoop }
-    }
-    reassertLoopRef.current = { raf: requestAnimationFrame(runMeasureAssert), handle: assertLoop }
-
-    // Clear after cooldown
-    setTimeout(() => {
-      if (prependRef.current?.restoredAt === saved.restoredAt) {
-        debugLog('PREPEND CLEAR')
-        prependRef.current = null
-      }
-    }, PREPEND_COOLDOWN_MS)
-  }, [conversationId, messageCount, firstMessageId, staticMode])
+  }, [
+    conversationId,
+    createDirectionalHistoryExecutor,
+    firstMessageId,
+    messageCount,
+    staticMode,
+  ])
 
   // ==========================================================================
   // EFFECT: New message arrives
@@ -3240,9 +3163,13 @@ export function useMessageListScroll({
       return
     }
 
-    // Don't interfere with prepend that's actively in progress (not yet restored)
-    // Once restored, allow new message auto-scroll even during cooldown period
-    if (prependRef.current && !prependRef.current.restored) {
+    // Don't interfere while a controller-owned directional restore is still waiting to land.
+    // Once applied, allow new-message auto-scroll even during the snapshot cooldown period.
+    if (
+      positioningControllerRef.current?.isDirectionalHistoryPending(
+        conversationId,
+      )
+    ) {
       if (lastMessageIsOutgoing) {
         positioningControllerRef.current?.beginLiveEdgeRequest({
           conversationId,
