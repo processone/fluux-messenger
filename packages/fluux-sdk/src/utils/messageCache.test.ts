@@ -1593,6 +1593,14 @@ describe('countRoomUnreadInArchive (room)', () => {
     expect(res).toEqual({ unread: 3, mentions: 0, mentionsComplete: true })
   })
 
+  it('isMention survives the real saveRoomMessages write path', async () => {
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false, isMention: true }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(1000) })
+    expect(res).toEqual({ unread: 1, mentions: 1, mentionsComplete: true })
+  })
+
   it('counts a mention beyond the unread cap and reports completeness', async () => {
     // 1200 unread room messages, the 1100th is a mention; unreadCap 999, scan cap 5000 (default).
     // fake-indexeddb's cursor walk over 1200 rows is comfortably under a second in

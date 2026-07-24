@@ -824,10 +824,17 @@ export interface UnreadCountArgs {
   floor: Date
   /**
    * The read pointer's position, for a strict-after-POSITION test rather than a
-   * timestamp-only test — two messages can share a millisecond. Omitted
-   * `archiveOrderKey` (a pointer migrated from the pre-#1081 legacy fields) falls
-   * back to strict-after-TIMESTAMP, which over-counts rather than under-counts —
-   * the safe direction. Omitting `pointer` entirely counts everything from `floor`.
+   * timestamp-only test — two messages can share a millisecond. When
+   * `archiveOrderKey` is omitted (a pointer migrated from the pre-#1081 legacy
+   * fields), `compareOrder` treats the pointer's key as unresolved, and an
+   * unresolved key sorts BEFORE any resolved one at an equal timestamp — so
+   * every row at the pointer's exact millisecond, including the pointer's own
+   * message, resolves as "after" the pointer and gets counted. That is
+   * at-or-after-TIMESTAMP semantics, not strict-after-timestamp: it over-counts
+   * by up to the same-ms sibling set, which is the safe direction (an
+   * over-count clears the moment the user reads; an under-count would hide a
+   * message permanently). Omitting `pointer` entirely counts everything from
+   * `floor`.
    */
   pointer?: { timestamp: Date; archiveOrderKey?: ArchiveOrderKey }
   /** Cap on the reported `unread` count. Default {@link DEFAULT_UNREAD_CAP}. */
@@ -1293,15 +1300,22 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  * makes the walk here more than a saturating counter.
  *
  * Cursors `room_ts_from_id` — `[roomJid, timestamp, from, id]` — forward from
- * `floor`. This is that index's first consumer: {@link getRoomMessages} cursors
- * `room_timestamp` instead, which cannot break same-millisecond ties, so it must
- * not be reused here. `unread` saturates at `unreadCap`, but unlike chat the
- * walk MUST continue past that cap: a mention can sit far behind a deep unread
- * backlog, and reporting `mentions: 0` there would silently drop the red
- * attention badge in exactly the noisiest rooms. The walk instead keeps
- * tallying `mentions` until either the range is exhausted or `mentionScanCap`
- * candidate rows have been scanned. `mentionsComplete` is `true` only for the
- * former — a `mentionScanCap` stop means `mentions` may be an undercount.
+ * `floor`. This is that index's first consumer. The upper bound is
+ * `[roomJid, Infinity, '￿', '￿']`; every row in range is visited and
+ * adjudicated independently by {@link compareOrder}, so it is the `Infinity`
+ * in the timestamp slot — not the `'￿'` string sentinels — that makes the
+ * bound safe: any finite timestamp compares less than `Infinity`, so the
+ * trailing `from`/`id` components are never actually reached. Swapping
+ * `Infinity` for `Number.MAX_SAFE_INTEGER` (the convention used in the chat
+ * range above) would make those sentinels suddenly load-bearing, and could
+ * silently drop a row whose `from` sorts above `'￿'`. `unread` saturates at
+ * `unreadCap`, but unlike chat the walk MUST continue past that cap: a
+ * mention can sit far behind a deep unread backlog, and reporting
+ * `mentions: 0` there would silently drop the red attention badge in exactly
+ * the noisiest rooms. The walk instead keeps tallying `mentions` until either
+ * the range is exhausted or `mentionScanCap` candidate rows have been
+ * scanned. `mentionsComplete` is `true` only for the former — a
+ * `mentionScanCap` stop means `mentions` may be an undercount.
  *
  * Returns `null` on any IndexedDB error, so callers can distinguish "zero
  * unread" from "could not determine."
