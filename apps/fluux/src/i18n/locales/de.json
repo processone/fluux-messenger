@@ -535,7 +535,6 @@
             "encryptedCouldNotDecrypt": "Diese Nachricht konnte nicht entschlüsselt werden",
             "encryptedDecrypting": "Verschlüsselte Nachricht, Entschlüsselung…",
             "encryptedDisabled": "Verschlüsselung deaktiviert. In den Einstellungen aktivieren",
-            "couldNotDecryptTooltip": "Nachricht für einen auf diesem Gerät nicht verfügbaren Schlüssel verschlüsselt",
             "unsupportedMethodTooltip": "Mit {{method}} verschlüsselt, eine Methode, die dieses Gerät noch nicht unterstützt",
             "unsupportedMessage": "Verschlüsselte Nachricht: {{method}} wird nicht unterstützt",
             "unsupportedMessageGeneric": "Verschlüsselte Nachricht: Methode wird nicht unterstützt",
@@ -561,7 +560,10 @@
                     "untrusted": "nicht verifiziert",
                     "rejected": "ABGELEHNT: ungültige Signatur"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Mit einem Schlüssel verschlüsselt, den dieses Gerät nicht hat",
+            "couldNotDecryptSignature": "Diese Nachricht wurde nicht angezeigt, weil ihrer Signatur nicht vertraut werden konnte",
+            "couldNotDecryptUnreadable": "Diese Nachricht konnte nicht gelesen werden"
         },
         "verifyPeer": {
             "chipAriaLabel": "Verschlüsselt an {{name}}. Klicken, um Fingerabdruck zu verifizieren",

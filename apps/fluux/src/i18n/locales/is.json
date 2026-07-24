@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Tókst ekki að afkóða þessi skilaboð",
             "encryptedDecrypting": "Dulkóðuð skilaboð, afkóðun…",
             "encryptedDisabled": "Dulkóðun er óvirk. Virkjaðu hana í stillingunum",
-            "couldNotDecryptTooltip": "Skilaboð dulkóðuð fyrir lykil sem er ekki tiltækur á þessu tæki",
             "unsupportedMethodTooltip": "Dulkóðað með {{method}}, aðferð sem þetta tæki styður ekki enn",
             "unsupportedMessage": "Dulkóðuð skilaboð: {{method}} er ekki stutt",
             "unsupportedMessageGeneric": "Dulkóðuð skilaboð: aðferð er ekki studd",
@@ -559,7 +558,10 @@
                     "untrusted": "óstaðfest",
                     "rejected": "HAFNAÐ: ógild undirskrift"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Dulkóðað með lykli sem þetta tæki hefur ekki",
+            "couldNotDecryptSignature": "Þessi skilaboð voru ekki sýnd því ekki var hægt að treysta undirskrift þeirra",
+            "couldNotDecryptUnreadable": "Ekki tókst að lesa þessi skilaboð"
         },
         "verifyPeer": {
             "chipAriaLabel": "Dulritað til {{name}}. Smelltu til að staðfesta fingrafarið",

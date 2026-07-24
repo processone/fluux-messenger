@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Dit bericht kon niet worden ontsleuteld",
             "encryptedDecrypting": "Versleuteld bericht, ontsleutelen…",
             "encryptedDisabled": "Versleuteling uitgeschakeld. Schakel deze in de instellingen in",
-            "couldNotDecryptTooltip": "Bericht versleuteld met een sleutel die niet beschikbaar is op dit apparaat",
             "unsupportedMethodTooltip": "Versleuteld met {{method}}, een methode die dit apparaat nog niet ondersteunt",
             "unsupportedMessage": "Versleuteld bericht: {{method}} wordt niet ondersteund",
             "unsupportedMessageGeneric": "Versleuteld bericht: methode wordt niet ondersteund",
@@ -559,7 +558,10 @@
                     "untrusted": "niet geverifieerd",
                     "rejected": "GEWEIGERD: ongeldige handtekening"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Versleuteld met een sleutel die dit apparaat niet heeft",
+            "couldNotDecryptSignature": "Dit bericht is niet weergegeven omdat de handtekening niet vertrouwd kon worden",
+            "couldNotDecryptUnreadable": "Dit bericht kon niet gelezen worden"
         },
         "verifyPeer": {
             "chipAriaLabel": "Versleuteld naar {{name}}. Klik om vingerafdruk te verifiëren",

@@ -539,7 +539,6 @@
             "encryptedCouldNotDecrypt": "Tega sporočila ni bilo mogoče dešifrirati",
             "encryptedDecrypting": "Šifrirano sporočilo, dešifriranje…",
             "encryptedDisabled": "Šifriranje je izklopljeno. Vklopite ga v nastavitvah",
-            "couldNotDecryptTooltip": "Sporočilo je šifrirano za ključ, ki v tej napravi ni na voljo",
             "unsupportedMethodTooltip": "Šifrirano z {{method}}, metoda, ki je ta naprava še ne podpira",
             "unsupportedMessage": "Šifrirano sporočilo: {{method}} ni podprto",
             "unsupportedMessageGeneric": "Šifrirano sporočilo: metoda ni podprta",
@@ -565,7 +564,10 @@
                     "untrusted": "nepreverjeno",
                     "rejected": "ZAVRNJENO: neveljaven podpis"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Šifrirano s ključem, ki ga ta naprava nima",
+            "couldNotDecryptSignature": "To sporočilo ni bilo prikazano, ker njegovemu podpisu ni bilo mogoče zaupati",
+            "couldNotDecryptUnreadable": "Tega sporočila ni bilo mogoče prebrati"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}}. Kliknite za preverjanje prstnega odtisa",

@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Kunde inte dekryptera detta meddelande",
             "encryptedDecrypting": "Krypterat meddelande, dekrypterar…",
             "encryptedDisabled": "Kryptering inaktiverad. Aktivera den i inställningarna",
-            "couldNotDecryptTooltip": "Meddelandet är krypterat till en nyckel som inte är tillgänglig på denna enhet",
             "unsupportedMethodTooltip": "Krypterat med {{method}}, en metod som den här enheten inte stöder ännu",
             "unsupportedMessage": "Krypterat meddelande: {{method}} stöds inte",
             "unsupportedMessageGeneric": "Krypterat meddelande: metoden stöds inte",
@@ -559,7 +558,10 @@
                     "untrusted": "overifierat",
                     "rejected": "AVVISAD: ogiltig signatur"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Krypterat med en nyckel som den här enheten inte har",
+            "couldNotDecryptSignature": "Meddelandet visades inte eftersom dess signatur inte gick att lita på",
+            "couldNotDecryptUnreadable": "Meddelandet gick inte att läsa"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krypterat till {{name}}. Klicka för att verifiera fingeravtrycket",

@@ -537,7 +537,6 @@
             "encryptedCouldNotDecrypt": "Nepavyko iššifruoti šio pranešimo",
             "encryptedDecrypting": "Užšifruota žinutė, iššifruojama…",
             "encryptedDisabled": "Šifravimas išjungtas. Įjunkite jį nustatymuose",
-            "couldNotDecryptTooltip": "Pranešimas užšifruotas raktu, kuris šiame įrenginyje nepasiekiamas",
             "unsupportedMethodTooltip": "Užšifruota naudojant {{method}}, šis metodas dar nepalaikomas šiame įrenginyje",
             "unsupportedMessage": "Šifruotas pranešimas: {{method}} nepalaikomas",
             "unsupportedMessageGeneric": "Šifruotas pranešimas: metodas nepalaikomas",
@@ -563,7 +562,10 @@
                     "untrusted": "nepatikrinta",
                     "rejected": "ATMESTA: neteisingas parašas"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Užšifruota raktu, kurio šis įrenginys neturi",
+            "couldNotDecryptSignature": "Ši žinutė nebuvo parodyta, nes jos parašu nepavyko pasitikėti",
+            "couldNotDecryptUnreadable": "Šios žinutės nepavyko perskaityti"
         },
         "verifyPeer": {
             "chipAriaLabel": "Užšifruota {{name}}. Spustelėkite norėdami patvirtinti pirštų atspaudą",
