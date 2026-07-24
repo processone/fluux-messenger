@@ -1014,8 +1014,10 @@ html, body {
      2. An accent frame (inset ring) that stays high-contrast against both the
         fill and the selection tint in every theme and both modes — the frame is
         what guarantees the card is always readable as a distinct block.
-   The reply card carries its frame inline in the sender's colour (see
-   MessageBubble); the blockquote uses the brand accent it already borders with. */
+   The reply card exposes its sender colour through --fluux-quote-frame-color
+   (see MessageBubble); the blockquote uses the brand accent it already borders
+   with. MessageList also sets data-msg-selected on bulk-copy rows, so keyboard,
+   action-sheet, and copy-range selection share this exact treatment. */
 [data-msg-selected] .blockquote-decorated,
 [data-msg-selected] .reply-quote-card {
   background-image: linear-gradient(
@@ -1025,6 +1027,9 @@ html, body {
 }
 [data-msg-selected] .blockquote-decorated {
   box-shadow: inset 0 0 0 1px var(--fluux-brand);
+}
+[data-msg-selected] .reply-quote-card {
+  box-shadow: inset 0 0 0 1px var(--fluux-quote-frame-color, var(--fluux-brand));
 }
 
 /* Remove default focus outline */
