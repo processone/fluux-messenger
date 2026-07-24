@@ -1363,6 +1363,37 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
 }
 
 /**
+ * Resolve an archive id — a MAM `rsm.first`/`rsm.last` value, which is what a
+ * {@link CoverageRecord}'s `bottomId` names — to its position in archive
+ * order. `parseArchiveMessage`/`parseRoomArchiveMessage` (`MAM.ts`) store this
+ * id as the row's `stanzaId` (`stanzaId = parsed.stanzaId || archiveId`), so
+ * the lookup goes through the stanza-id path, never the client-generated
+ * `id`. Rooms reuse their own per-archive id sequence, so a bare `stanzaId`
+ * index lookup could return a DIFFERENT room's row — {@link
+ * getRoomMessageByStanzaId} confines it to `entityId` (room-scoping
+ * footgun, see that function's doc). Chat's single per-account archive makes
+ * a plain `getMessageByStanzaId` lookup unambiguous.
+ *
+ * Returns `null` when the id is not cached (evicted, or the coverage record
+ * is stale) — the caller (`resolveCoverageBottom`) turns that into
+ * `'unresolvable'` rather than treating it as "nothing to resolve."
+ */
+export async function resolveArchivePosition(
+  entityId: string,
+  archiveId: string,
+  isRoom: boolean
+): Promise<OrderPosition | null> {
+  const message = isRoom
+    ? await getRoomMessageByStanzaId(entityId, archiveId)
+    : await getMessageByStanzaId(archiveId)
+  if (!message) return null
+  return {
+    timestamp: message.timestamp.getTime(),
+    archiveOrderKey: makeArchiveOrderKey(message, isRoom ? 'room' : 'chat'),
+  }
+}
+
+/**
  * Update specific fields of a room message, resolving the row through the room-scoped
  * `ids` alias so a caller holding a pre-merge id still finds it. Client ids repeat
  * across rooms, so the lookup is confined to `roomJid` (and `from` when the caller

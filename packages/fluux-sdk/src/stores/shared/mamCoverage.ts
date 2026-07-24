@@ -1,3 +1,6 @@
+import { resolveArchivePosition } from '../../utils/messageCache'
+import type { OrderPosition } from './readState'
+
 /**
  * Persisted contiguous-with-live coverage (Codex r3 #3/#4).
  *
@@ -164,4 +167,67 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
     return next
   }
   return coverage
+}
+
+/**
+ * Count-trustworthy gate: is this entity's archive complete enough to derive
+ * an exact unread count from it?
+ *
+ * This mirrors `mdsSideEffects.ts`'s `archiveIsTrustworthy` — the gate the
+ * XEP-0490 publisher uses before speaking a read position — with ONE
+ * deliberate difference: `archiveIsTrustworthy` treats "never queried and not
+ * loading" as trustworthy, because for the publisher that state only ever
+ * describes a conversation/room created fresh during THIS session, which has
+ * no archive to misreport.
+ *
+ * That shortcut does not hold here. A RESTORED entity — reopened from
+ * persisted state — carries durable coverage from a previous session, and at
+ * cold start `hasQueried` is false (it is session-scoped, not persisted)
+ * while the archive may be genuinely stale until this session's catch-up
+ * runs. Counting during that window would under-count and overwrite a
+ * correct persisted value — the unsafe direction, and at the worst possible
+ * time (cold start, before catch-up has had a chance to run). So this gate
+ * requires `!isLoading && isCaughtUpToLive` unconditionally: `hasQueried` is
+ * accepted (callers pass the same MAM query state used elsewhere) but
+ * deliberately never consulted. Do not "restore" a never-queried shortcut
+ * here — see this module's test file for the case that catches it.
+ */
+export function isCaughtUpForCounting(mam: {
+  hasQueried: boolean
+  isLoading: boolean
+  isCaughtUpToLive: boolean
+}): boolean {
+  return !mam.isLoading && mam.isCaughtUpToLive
+}
+
+/**
+ * The result of resolving a {@link CoverageRecord}'s `bottomId` to a position
+ * in archive order: the position when it is cached, `'missing'` when there is
+ * no record at all, or `'unresolvable'` when the record names an archive id
+ * that is no longer in the cache (evicted, or the record is stale).
+ *
+ * `'missing'` is NOT `null`-as-fine: a missing record means the entity has
+ * not yet been proven contiguous with the live edge, so the caller must defer
+ * counting rather than proceed as if there were nothing to worry about.
+ * `'unresolvable'` is the caller's cue to invalidate the stale record and
+ * defer too — the two are kept distinct because a future caller may want to
+ * react to them differently (e.g. only the latter warrants dropping the
+ * record).
+ */
+export type CoverageBottom = OrderPosition | 'missing' | 'unresolvable'
+
+/**
+ * Resolve a coverage record's `bottomId` to its archive position, scoped to
+ * `entityId` (conversation id or room JID). See {@link CoverageBottom} for
+ * the three outcomes and {@link resolveArchivePosition} (`messageCache.ts`)
+ * for how the lookup itself is scoped between chat and room.
+ */
+export async function resolveCoverageBottom(
+  entityId: string,
+  record: CoverageRecord | undefined,
+  isRoom: boolean
+): Promise<CoverageBottom> {
+  if (!record) return 'missing'
+  const position = await resolveArchivePosition(entityId, record.bottomId, isRoom)
+  return position ?? 'unresolvable'
 }

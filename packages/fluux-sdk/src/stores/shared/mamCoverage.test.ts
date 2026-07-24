@@ -1,8 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import 'fake-indexeddb/auto'
+import { IDBFactory } from 'fake-indexeddb'
+import type { Message, RoomMessage } from '../../core/types'
+import { _resetStorageScopeForTesting } from '../../utils/storageScope'
+// Must import after fake-indexeddb/auto
+import * as messageCache from '../../utils/messageCache'
 import {
   syncCoverageAfterArchiveMerge,
   serializeCoverage,
   deserializeCoverage,
+  isCaughtUpForCounting,
+  resolveCoverageBottom,
   type CoverageRecord,
   type ArchiveMergeCoverageInput,
 } from './mamCoverage'
@@ -180,5 +188,91 @@ describe('coverage (de)serialization', () => {
     const out = deserializeCoverage(json)
     expect(out.has('a@b')).toBe(false)
     expect(out.get('c@d')).toEqual({ bottomId: 'ok' })
+  })
+})
+
+describe('isCaughtUpForCounting', () => {
+  // Task 5's whole point: this gate is STRICTER than the publisher's
+  // `archiveIsTrustworthy` (mdsSideEffects.ts:200), which treats "never
+  // queried and not loading" as trustworthy. That shortcut is correct for a
+  // freshly-created entity (nothing to misreport) but unsafe here: a
+  // RESTORED entity carries durable coverage from a prior session, so at
+  // cold start `hasQueried` is false (session state) while the archive is
+  // genuinely stale until this session's catch-up runs. Counting from it
+  // would under-count and overwrite a correct persisted value — the unsafe
+  // direction. So this gate never looks at `hasQueried` at all.
+  it('restored entity — never queried this session, idle, archive stale ⇒ false (the naive gate would say true)', () => {
+    expect(isCaughtUpForCounting({ hasQueried: false, isLoading: false, isCaughtUpToLive: false })).toBe(false)
+  })
+
+  it('loading ⇒ false', () => {
+    expect(isCaughtUpForCounting({ hasQueried: true, isLoading: true, isCaughtUpToLive: true })).toBe(false)
+  })
+
+  it('caught up, idle ⇒ true', () => {
+    expect(isCaughtUpForCounting({ hasQueried: true, isLoading: false, isCaughtUpToLive: true })).toBe(true)
+  })
+
+  it('not caught up, idle ⇒ false', () => {
+    expect(isCaughtUpForCounting({ hasQueried: true, isLoading: false, isCaughtUpToLive: false })).toBe(false)
+  })
+})
+
+describe('resolveCoverageBottom', () => {
+  const CONV = 'alice@example.com'
+  const ROOM = 'room@conference.example.com'
+
+  beforeEach(() => {
+    globalThis.indexedDB = new IDBFactory()
+    ;(messageCache as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
+    _resetStorageScopeForTesting()
+  })
+
+  const mockMessage = (overrides: Partial<Message> = {}): Message => ({
+    type: 'chat',
+    id: 'client-id-1',
+    conversationId: CONV,
+    from: CONV,
+    body: 'hi',
+    timestamp: new Date(1000),
+    isOutgoing: false,
+    ...overrides,
+  })
+
+  const mockRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
+    type: 'groupchat',
+    id: 'client-id-1',
+    roomJid: ROOM,
+    from: `${ROOM}/alice`,
+    body: 'hi',
+    timestamp: new Date(1000),
+    isOutgoing: false,
+    nick: 'alice',
+    ...overrides,
+  })
+
+  it('resolves a bottomId that is cached to its archive position', async () => {
+    await messageCache.saveMessage(mockMessage({ stanzaId: 'archive-42', timestamp: new Date(9000) }))
+    const out = await resolveCoverageBottom(CONV, { bottomId: 'archive-42' }, false)
+    expect(out).toEqual({ timestamp: 9000, archiveOrderKey: { kind: 'chat', id: 'client-id-1' } })
+  })
+
+  it('resolves a bottomId scoped to a room, distinct from the chat lookup', async () => {
+    await messageCache.saveRoomMessages([mockRoomMessage({ stanzaId: 'archive-42', timestamp: new Date(7000) })])
+    const out = await resolveCoverageBottom(ROOM, { bottomId: 'archive-42' }, true)
+    expect(out).toEqual({
+      timestamp: 7000,
+      archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'client-id-1' },
+    })
+  })
+
+  it('no coverage record ⇒ "missing" (caller must defer, not treat as covered)', async () => {
+    const out = await resolveCoverageBottom(CONV, undefined, false)
+    expect(out).toBe('missing')
+  })
+
+  it('dangling bottomId (record names a message no longer cached) ⇒ "unresolvable"', async () => {
+    const out = await resolveCoverageBottom(ROOM, { bottomId: 'evicted-id' }, true)
+    expect(out).toBe('unresolvable')
   })
 })
