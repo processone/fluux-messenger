@@ -10,6 +10,7 @@ import {
   selectLiveEdgeNavigation,
   settleUserPosition,
   shouldReconcileAfterAppend,
+  type DirectionalHistoryRequest,
   type EntryPositionFacts,
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
@@ -189,6 +190,39 @@ export interface MediaPreservationExecutor {
   ) => void
 }
 
+export type DirectionalHistoryCompletion =
+  | 'applied'
+  | 'settled'
+  | 'best-effort'
+  | 'user-takeover'
+  | 'superseded'
+  | 'no-window-shift'
+
+export type DirectionalHistoryFrameResult =
+  | { kind: 'unavailable' }
+  | {
+      kind: 'positioned'
+      scrollTop: number
+      wrote: boolean
+      /** False for a one-shot distance-from-bottom fallback or non-virtualized placement. */
+      reassert: boolean
+    }
+
+export interface DirectionalHistoryExecutor {
+  reachability: (
+    desired: DirectionalHistoryRequest['desired'],
+  ) => ReachabilityFacts
+  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
+  positionFrame: (
+    request: DirectionalHistoryRequest,
+    lease: PositionExecutionLease,
+  ) => DirectionalHistoryFrameResult
+  complete: (
+    request: DirectionalHistoryRequest,
+    outcome: DirectionalHistoryCompletion,
+  ) => void
+}
+
 export type ExplicitTargetCompletion =
   | 'settled'
   | 'best-effort'
@@ -289,6 +323,16 @@ interface MediaPreservationExecutionState {
   landedTarget: number | null
 }
 
+interface DirectionalHistoryExecutionState {
+  request: DirectionalHistoryRequest
+  executor: DirectionalHistoryExecutor
+  operation: number
+  abortController: AbortController | null
+  loop: PositionFrameLoop | null
+  framesLeft: number
+  applied: boolean
+}
+
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
@@ -308,6 +352,9 @@ const LIVE_EDGE_STABLE_FRAMES = 8
 const MEDIA_PRESERVATION_REASSERT_FRAMES = 90
 const MEDIA_PRESERVATION_STABLE_FRAMES = 8
 const MEDIA_PRESERVATION_DRIFT_PX = 8
+// Preserved from the former hook-local prepend/window-shift loop. It intentionally has no
+// early-stable exit because virtualizer measurements can arrive late after several quiet frames.
+const DIRECTIONAL_HISTORY_REASSERT_FRAMES = 60
 
 let nextPositionGeneration = 1
 
@@ -354,6 +401,7 @@ export class PositioningController {
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
   private liveEdgeExecution: LiveEdgeExecutionState | null = null
   private mediaPreservationExecution: MediaPreservationExecutionState | null = null
+  private directionalHistoryExecution: DirectionalHistoryExecutionState | null = null
 
   snapshot(): PositioningModel {
     return this.model
@@ -659,6 +707,137 @@ export class PositioningController {
     })
   }
 
+  beginDirectionalHistory(input: {
+    conversationId: string
+    desired: DirectionalHistoryRequest['desired']
+    distanceFromBottom: Extract<
+      DirectionalHistoryRequest['onUnavailable'],
+      { kind: 'distance-from-bottom' }
+    >['distancePx']
+    executor: DirectionalHistoryExecutor
+  }): DirectionalHistoryRequest | null {
+    return runScrollShadowSafely({
+      event: 'directional-history-begin',
+      conversationId: input.conversationId,
+      fallback: null,
+      observe: () => {
+        const generation = mintPositionGeneration()
+        const request = withIdentity(
+          input.conversationId,
+          generation,
+          {
+            source: { kind: 'history-preservation', reason: 'window-shift' },
+            desired: input.desired,
+            onUnavailable: {
+              kind: 'distance-from-bottom',
+              distancePx: input.distanceFromBottom,
+            },
+          },
+        ) as DirectionalHistoryRequest
+        const accepted = acceptPositionRequest(this.model, request)
+        if (accepted === this.model) return null
+
+        this.cancelAllExecutions('superseded')
+        this.model = advancePhaseIfCurrent(
+          accepted,
+          input.conversationId,
+          generation,
+          { kind: 'pending', reason: 'window-shift' },
+        )
+        this.directionalHistoryExecution = {
+          request,
+          executor: input.executor,
+          operation: 0,
+          abortController: null,
+          loop: null,
+          framesLeft: DIRECTIONAL_HISTORY_REASSERT_FRAMES,
+          applied: false,
+        }
+        return request
+      },
+    })
+  }
+
+  reconcileDirectionalHistory(input: {
+    conversationId: string
+    generation: number
+    executor: DirectionalHistoryExecutor
+  }): boolean {
+    return runScrollShadowSafely({
+      event: 'directional-history-reconcile',
+      conversationId: input.conversationId,
+      fallback: false,
+      observe: () => {
+        const execution = this.directionalHistoryExecution
+        if (
+          !execution ||
+          execution.request.conversationId !== input.conversationId ||
+          execution.request.generation !== input.generation ||
+          !this.isDirectionalHistoryExecutionCurrent(execution)
+        ) {
+          return false
+        }
+        execution.executor = input.executor
+        const reachability = execution.executor.reachability(
+          execution.request.desired,
+        )
+        if (!reachabilityMatchesRequest(execution.request, reachability)) {
+          this.cancelDirectionalHistoryExecution('superseded')
+          return false
+        }
+        const phase = resolveReachability(execution.request, reachability)
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          input.conversationId,
+          input.generation,
+          phase,
+        )
+        if (
+          phase.kind !== 'mounting' &&
+          phase.kind !== 'reconciling' &&
+          phase.kind !== 'unavailable'
+        ) {
+          return false
+        }
+        this.startDirectionalHistoryLoop(execution)
+        return execution.applied
+      },
+    })
+  }
+
+  cancelDirectionalHistoryWithoutShift(input: {
+    conversationId: string
+    generation: number
+  }): boolean {
+    const execution = this.directionalHistoryExecution
+    if (
+      !execution ||
+      execution.request.conversationId !== input.conversationId ||
+      execution.request.generation !== input.generation ||
+      !this.isDirectionalHistoryExecutionCurrent(execution)
+    ) {
+      return false
+    }
+    this.cancelDirectionalHistoryExecution('no-window-shift')
+    if (
+      this.model.active?.request.conversationId === input.conversationId &&
+      this.model.active.request.generation === input.generation
+    ) {
+      this.model = { ...this.model, active: null }
+    }
+    return true
+  }
+
+  isDirectionalHistoryPending(conversationId: string): boolean {
+    const execution = this.directionalHistoryExecution
+    return Boolean(
+      execution &&
+      execution.request.conversationId === conversationId &&
+      this.isDirectionalHistoryExecutionCurrent(execution) &&
+      !execution.applied,
+    )
+  }
+
   beginUnreadMarkerEntry(input: {
     conversationId: string
     entryFacts: EntryPositionFacts
@@ -946,6 +1125,20 @@ export class PositioningController {
           mediaExecution !== null &&
           mediaExecution.request.conversationId === conversationId &&
           this.isMediaPreservationExecutionCurrent(mediaExecution)
+        const directionalExecution = this.directionalHistoryExecution
+        const directionalWasCurrent =
+          directionalExecution !== null &&
+          directionalExecution.request.conversationId === conversationId &&
+          this.isDirectionalHistoryExecutionCurrent(directionalExecution)
+        // A boundary wheel can start a directional load and be followed by more wheel events while
+        // the network request is still pending. The former prepend loop armed user takeover only
+        // after the batch landed and reconciliation began, so those pre-load events could not
+        // discard the saved anchor. Preserve that contract: there is no pixel owner to take over
+        // until the synchronous initial write has run. Explicit competing position requests still
+        // supersede this pending generation through normal request arbitration.
+        if (directionalWasCurrent && directionalExecution && !directionalExecution.applied) {
+          return
+        }
         this.model = cancelReconciliationForUserInput(
           this.model,
           conversationId,
@@ -963,6 +1156,9 @@ export class PositioningController {
         }
         if (mediaWasCurrent) {
           this.cancelMediaPreservationExecution('user-takeover')
+        }
+        if (directionalWasCurrent) {
+          this.cancelDirectionalHistoryExecution('user-takeover')
         }
         this.cancelExecutionsIfSuperseded()
       },
@@ -1637,6 +1833,217 @@ export class PositioningController {
   ): boolean {
     return (
       this.mediaPreservationExecution === execution &&
+      isCurrentGeneration(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+      )
+    )
+  }
+
+  private startDirectionalHistoryLoop(
+    execution: DirectionalHistoryExecutionState,
+  ): void {
+    if (
+      !this.isDirectionalHistoryExecutionCurrent(execution) ||
+      execution.loop ||
+      execution.applied
+    ) {
+      return
+    }
+    execution.framesLeft = DIRECTIONAL_HISTORY_REASSERT_FRAMES
+    const lease = this.beginDirectionalHistoryOperation(execution)
+    const initial = this.positionDirectionalHistoryFrame(execution, lease)
+    if (!lease.isCurrent()) return
+    if (initial.kind === 'unavailable') {
+      this.settleDirectionalHistory(execution, lease, 'best-effort')
+      return
+    }
+
+    execution.applied = true
+    lease.markApplied()
+    if (!lease.isCurrent()) return
+    this.completeDirectionalHistory(execution, 'applied')
+    if (!initial.reassert) {
+      this.settleDirectionalHistory(execution, lease, 'settled')
+      return
+    }
+
+    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
+      event: 'directional-history-loop-start',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.beginLoop(lease),
+    })
+    if (!lease.isCurrent()) {
+      loop?.finish()
+      return
+    }
+    if (!loop) {
+      this.settleDirectionalHistory(execution, lease, 'best-effort')
+      return
+    }
+    execution.loop = loop
+    this.scheduleDirectionalHistoryFrame(execution, lease)
+  }
+
+  private driveDirectionalHistoryFrame(
+    execution: DirectionalHistoryExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent()) return
+    if (execution.framesLeft-- <= 0) {
+      this.settleDirectionalHistory(execution, lease, 'best-effort')
+      return
+    }
+    const result = this.positionDirectionalHistoryFrame(execution, lease)
+    if (!lease.isCurrent()) return
+    if (result.kind === 'unavailable') {
+      this.settleDirectionalHistory(execution, lease, 'best-effort')
+      return
+    }
+    this.recordDirectionalHistoryFrame(execution, result.wrote)
+    if (!result.reassert) {
+      this.settleDirectionalHistory(execution, lease, 'settled')
+      return
+    }
+    this.scheduleDirectionalHistoryFrame(execution, lease)
+  }
+
+  private positionDirectionalHistoryFrame(
+    execution: DirectionalHistoryExecutionState,
+    lease: PositionExecutionLease,
+  ): DirectionalHistoryFrameResult {
+    return runScrollShadowSafely<DirectionalHistoryFrameResult>({
+      event: 'directional-history-frame',
+      conversationId: execution.request.conversationId,
+      fallback: { kind: 'unavailable' },
+      observe: () => execution.executor.positionFrame(
+        execution.request,
+        lease,
+      ),
+    })
+  }
+
+  private scheduleDirectionalHistoryFrame(
+    execution: DirectionalHistoryExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent() || !execution.loop) return
+    const scheduled = runScrollShadowSafely({
+      event: 'directional-history-frame-schedule',
+      conversationId: execution.request.conversationId,
+      fallback: false,
+      observe: () => {
+        execution.loop?.schedule(
+          () => this.driveDirectionalHistoryFrame(execution, lease),
+        )
+        return true
+      },
+    })
+    if (!scheduled && lease.isCurrent()) {
+      this.settleDirectionalHistory(execution, lease, 'best-effort')
+    }
+  }
+
+  private recordDirectionalHistoryFrame(
+    execution: DirectionalHistoryExecutionState,
+    wrote: boolean,
+  ): void {
+    runScrollShadowSafely({
+      event: 'directional-history-frame-monitor',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.recordFrame(wrote),
+    })
+  }
+
+  private settleDirectionalHistory(
+    execution: DirectionalHistoryExecutionState,
+    lease: PositionExecutionLease,
+    outcome: Extract<
+      DirectionalHistoryCompletion,
+      'settled' | 'best-effort'
+    >,
+  ): void {
+    if (!lease.isCurrent()) return
+    this.finishDirectionalHistoryLoop(execution)
+    this.completeDirectionalHistory(execution, outcome)
+    lease.settle()
+    execution.abortController?.abort()
+    if (this.directionalHistoryExecution === execution) {
+      this.directionalHistoryExecution = null
+    }
+  }
+
+  private completeDirectionalHistory(
+    execution: DirectionalHistoryExecutionState,
+    outcome: DirectionalHistoryCompletion,
+  ): void {
+    runScrollShadowSafely({
+      event: 'directional-history-complete',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.executor.complete(
+        execution.request,
+        outcome,
+      ),
+    })
+  }
+
+  private finishDirectionalHistoryLoop(
+    execution: DirectionalHistoryExecutionState,
+  ): void {
+    const loop = execution.loop
+    execution.loop = null
+    if (!loop) return
+    runScrollShadowSafely({
+      event: 'directional-history-loop-finish',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => loop.finish(),
+    })
+  }
+
+  private beginDirectionalHistoryOperation(
+    execution: DirectionalHistoryExecutionState,
+  ): PositionExecutionLease {
+    execution.abortController?.abort()
+    const abortController = new AbortController()
+    execution.abortController = abortController
+    const operation = ++execution.operation
+    const { conversationId, generation } = execution.request
+    const isCurrent = () =>
+      !abortController.signal.aborted &&
+      this.directionalHistoryExecution === execution &&
+      execution.operation === operation &&
+      isCurrentGeneration(this.model, conversationId, generation)
+    const advance = (phase: PositioningPhase) => {
+      if (!isCurrent()) return false
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        conversationId,
+        generation,
+        phase,
+      )
+      return isCurrent()
+    }
+    return {
+      conversationId,
+      generation,
+      operation,
+      signal: abortController.signal,
+      isCurrent,
+      markApplied: () => advance({ kind: 'position-applied' }),
+      settle: () => advance({ kind: 'settled' }),
+    }
+  }
+
+  private isDirectionalHistoryExecutionCurrent(
+    execution: DirectionalHistoryExecutionState,
+  ): boolean {
+    return (
+      this.directionalHistoryExecution === execution &&
       isCurrentGeneration(
         this.model,
         execution.request.conversationId,
@@ -2830,6 +3237,13 @@ export class PositioningController {
     ) {
       this.cancelMediaPreservationExecution('superseded')
     }
+    const directionalExecution = this.directionalHistoryExecution
+    if (
+      directionalExecution &&
+      !this.isDirectionalHistoryExecutionCurrent(directionalExecution)
+    ) {
+      this.cancelDirectionalHistoryExecution('superseded')
+    }
   }
 
   private cancelAllExecutions(outcome: 'superseded'): void {
@@ -2838,6 +3252,7 @@ export class PositioningController {
     this.cancelExplicitTargetExecution()
     this.cancelLiveEdgeExecution(outcome)
     this.cancelMediaPreservationExecution(outcome)
+    this.cancelDirectionalHistoryExecution(outcome)
   }
 
   private cancelSavedExecution(): void {
@@ -2884,6 +3299,18 @@ export class PositioningController {
       this.completeMediaPreservation(execution, outcome)
     }
     this.mediaPreservationExecution = null
+  }
+
+  private cancelDirectionalHistoryExecution(
+    outcome: DirectionalHistoryCompletion,
+  ): void {
+    const execution = this.directionalHistoryExecution
+    if (execution) {
+      this.finishDirectionalHistoryLoop(execution)
+      execution.abortController?.abort()
+      this.completeDirectionalHistory(execution, outcome)
+    }
+    this.directionalHistoryExecution = null
   }
 }
 
