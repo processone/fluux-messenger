@@ -535,7 +535,6 @@
             "encryptedCouldNotDecrypt": "Ovu poruku nije bilo moguće dešifrirati",
             "encryptedDecrypting": "Šifrirana poruka, dešifriranje…",
             "encryptedDisabled": "Šifriranje je isključeno. Uključite ga u postavkama",
-            "couldNotDecryptTooltip": "Poruka je šifrirana za ključ koji nije dostupan na ovom uređaju",
             "unsupportedMethodTooltip": "Šifrirano pomoću {{method}}, metoda koju ovaj uređaj još ne podržava",
             "unsupportedMessage": "Šifrirana poruka: {{method}} nije podržan",
             "unsupportedMessageGeneric": "Šifrirana poruka: metoda nije podržana",
@@ -561,7 +560,10 @@
                     "untrusted": "nije provjereno",
                     "rejected": "ODBIJENO: nevažeći potpis"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Šifrirano ključem koji ovaj uređaj nema",
+            "couldNotDecryptSignature": "Ova poruka nije prikazana jer se njezinu potpisu nije moglo vjerovati",
+            "couldNotDecryptUnreadable": "Ovu poruku nije bilo moguće pročitati"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}}. Kliknite za provjeru otiska",

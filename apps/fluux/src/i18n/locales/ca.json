@@ -537,7 +537,6 @@
             "encryptedCouldNotDecrypt": "No s'ha pogut desxifrar aquest missatge",
             "encryptedDecrypting": "Missatge xifrat, desxifrant…",
             "encryptedDisabled": "Xifratge desactivat. Activeu-lo a la configuració",
-            "couldNotDecryptTooltip": "Missatge xifrat per a una clau no disponible en aquest dispositiu",
             "unsupportedMethodTooltip": "Xifrat amb {{method}}, un mètode que aquest dispositiu encara no admet",
             "unsupportedMessage": "Missatge xifrat: {{method}} no compatible",
             "unsupportedMessageGeneric": "Missatge xifrat: mètode no compatible",
@@ -563,7 +562,10 @@
                     "untrusted": "no verificat",
                     "rejected": "REBUTJAT: signatura no vàlida"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Xifrat amb una clau que aquest dispositiu no té",
+            "couldNotDecryptSignature": "Aquest missatge no s'ha mostrat perquè no s'ha pogut confiar en la seva signatura",
+            "couldNotDecryptUnreadable": "No s'ha pogut llegir aquest missatge"
         },
         "verifyPeer": {
             "chipAriaLabel": "Xifrat per a {{name}}. Fes clic per verificar l'empremta",

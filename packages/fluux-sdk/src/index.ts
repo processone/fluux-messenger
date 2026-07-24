@@ -391,6 +391,7 @@ export type {
   CapabilityCacheOptions,
   ConversationHandle,
   ConversationTarget,
+  DecryptFailureReason,
   DecryptResult,
   DecryptStatus,
   DeviceIdentifier,

@@ -535,7 +535,6 @@
             "encryptedCouldNotDecrypt": "Selle sõnumi dekrüpteerimine ebaõnnestus",
             "encryptedDecrypting": "Krüpteeritud sõnum, dekrüpteerimine…",
             "encryptedDisabled": "Krüpteerimine on välja lülitatud. Lülitage see seadetes sisse",
-            "couldNotDecryptTooltip": "Sõnum on krüpteeritud võtmega, mis ei ole selles seadmes saadaval",
             "unsupportedMethodTooltip": "Krüptitud meetodiga {{method}}, seda meetodit see seade veel ei toeta",
             "unsupportedMessage": "Krüpteeritud sõnum: {{method}} pole toetatud",
             "unsupportedMessageGeneric": "Krüpteeritud sõnum: meetod pole toetatud",
@@ -561,7 +560,10 @@
                     "untrusted": "kontrollimata",
                     "rejected": "TAGASI LÜKATUD: kehtetu allkiri"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Krüpteeritud võtmega, mida sellel seadmel pole",
+            "couldNotDecryptSignature": "Seda sõnumit ei kuvatud, sest selle allkirja ei saanud usaldada",
+            "couldNotDecryptUnreadable": "Seda sõnumit ei õnnestunud lugeda"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krüpteeritud {{name}}-le. Klõpsa sõrmejälje kinnitamiseks",

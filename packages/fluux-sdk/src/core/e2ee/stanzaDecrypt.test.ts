@@ -17,6 +17,7 @@ import {
   stanzaHasEMEHint,
   recordUnclaimedEME,
   readStashedUnsupportedEncryption,
+  decryptFailureReasonFor,
   COULD_NOT_DECRYPT_BODY,
 } from './stanzaDecrypt'
 import { E2EEManager, InMemoryStorageBackend, type XMPPPrimitives } from './index'
@@ -1115,5 +1116,25 @@ describe('stanzaDecrypt — broken-session status', () => {
 
     const warn = calls.find((c) => c.level === 'warn' && c.message.includes('decrypt failed'))
     expect(warn?.message).toContain('broken session')
+  })
+})
+
+describe('decryptFailureReasonFor', () => {
+  it.each([
+    ['signature-failed', 'signature-invalid'],
+    ['signature-missing', 'signature-invalid'],
+    ['no-session-key', 'key-unavailable'],
+    ['key-locked', 'key-unavailable'],
+    ['peer-key-missing', 'key-unavailable'],
+    ['malformed-data', 'unreadable'],
+    ['envelope-reflection', 'unreadable'],
+    ['envelope-stale', 'unreadable'],
+  ])('buckets %s as %s', (code, expected) => {
+    expect(decryptFailureReasonFor(code)).toBe(expected)
+  })
+
+  it('buckets an unrecognised code as unreadable rather than guessing at a key problem', () => {
+    expect(decryptFailureReasonFor('something-new')).toBe('unreadable')
+    expect(decryptFailureReasonFor(undefined)).toBe('unreadable')
   })
 })

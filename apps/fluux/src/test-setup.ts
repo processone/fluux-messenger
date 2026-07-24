@@ -100,6 +100,15 @@ void i18n.use(initReactI18next).init({
         },
         // Typing indicator translations (needed for ChatView/RoomView tests)
         chat: {
+          // Decrypt-failure placeholder copy (EncryptedPlaceholder tests).
+          // These must stay verbatim in sync with en.json: the tests assert on
+          // the rendered wording precisely because #1059 was a wording bug.
+          encryption: {
+            couldNotDecryptKeyUnavailable: "Encrypted to a key this device doesn't have",
+            couldNotDecryptSignature:
+              "This message wasn't shown because its signature could not be trusted",
+            couldNotDecryptUnreadable: 'This message could not be read',
+          },
           typing: {
             one: '{{name}} is typing...',
             two: '{{name1}} and {{name2}} are typing...',

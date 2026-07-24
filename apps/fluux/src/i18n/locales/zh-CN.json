@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "无法解密此消息",
             "encryptedDecrypting": "加密消息，正在解密…",
             "encryptedDisabled": "加密已禁用。请在设置中启用",
-            "couldNotDecryptTooltip": "消息已加密给本设备不可用的密钥",
             "unsupportedMethodTooltip": "已使用 {{method}} 加密，此设备尚不支持该方式",
             "unsupportedMessage": "加密消息：不支持 {{method}}",
             "unsupportedMessageGeneric": "加密消息：不支持此方法",
@@ -559,7 +558,10 @@
                     "untrusted": "未验证",
                     "rejected": "已拒绝：签名无效"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "使用本设备没有的密钥加密",
+            "couldNotDecryptSignature": "此消息未显示，因为无法信任它的签名",
+            "couldNotDecryptUnreadable": "无法读取此消息"
         },
         "verifyPeer": {
             "chipAriaLabel": "已加密至 {{name}}。点击即可验证指纹",

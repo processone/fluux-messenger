@@ -220,6 +220,17 @@ export interface MessageSecurityContext {
   /** Optional display notes (e.g. "subkey 3 days old"). */
   notes?: string[]
   /**
+   * Set only when the message could not be shown: why, bucketed for display.
+   * Mirrors `DecryptFailureReason` from the e2ee module — inlined here for the
+   * same import-cycle reason as `trust` above.
+   *
+   * `key-unavailable` — no session key for us; the only case really about a
+   * missing key. `signature-invalid` — decrypted, but the signature was absent
+   * or did not hold up. `unreadable` — malformed, reflected, stale envelope, or
+   * a session needing repair.
+   */
+  failureReason?: 'key-unavailable' | 'signature-invalid' | 'unreadable'
+  /**
    * Fingerprint of the key that signed this message, when the protocol exposes
    * one (OpenPGP). Lets the UI confirm the verified lock against the ACTUAL
    * signing key rather than "some key for this JID was verified once" — a

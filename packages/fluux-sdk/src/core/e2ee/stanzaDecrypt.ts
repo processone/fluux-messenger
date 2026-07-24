@@ -23,7 +23,7 @@ import { elementToData } from './stanzaAdapter'
 import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
 import { isE2EEPluginError } from './errors'
-import type { InboundDecryptContext, InboundSource } from './types'
+import type { DecryptFailureReason, InboundDecryptContext, InboundSource } from './types'
 import { getBareJid, getDomain } from '../jid'
 import { logInfo } from '../logger'
 import {
@@ -47,6 +47,28 @@ export const COULD_NOT_DECRYPT_BODY = '[Encrypted message: could not decrypt]'
 
 /** Client-side placeholder body for a message whose signature was rejected. */
 export const MESSAGE_REJECTED_BODY = '[Message rejected: invalid signature]'
+
+/**
+ * Bucket an `E2EEPluginError.code` into the reason the UI shows the user.
+ *
+ * Unknown codes read as `unreadable`, never `key-unavailable`: claiming a cause
+ * we have not established is precisely the bug this replaces (#1059), so the
+ * fallback has to be the arm that asserts least. A new error code added later
+ * degrades to a vague-but-true message rather than a confident-but-wrong one.
+ */
+export function decryptFailureReasonFor(code: string | undefined): DecryptFailureReason {
+  switch (code) {
+    case 'signature-failed':
+    case 'signature-missing':
+      return 'signature-invalid'
+    case 'no-session-key':
+    case 'key-locked':
+    case 'peer-key-missing':
+      return 'key-unavailable'
+    default:
+      return 'unreadable'
+  }
+}
 
 // Elements permitted inside a decrypted payload envelope. Anything not
 // in this set is dropped to prevent a malicious sender from injecting
@@ -197,6 +219,10 @@ export async function decryptStanzaInPlace(
   let securityContext: SecurityContext | null = null
   let authoredAt: Date | null = null
   let failureReason: string | null = null
+  // The plugin error's `code`, kept alongside the human-readable
+  // `failureReason` so both failure paths below can bucket it for display and
+  // the diagnostic log can record it verbatim.
+  let failureCode: string | undefined
   // Set when the failure is a structurally malformed payload (not valid
   // OpenPGP): it will never decrypt regardless of keys, so it is terminal —
   // do NOT stash for retry. Distinct from a signature rejection.
@@ -253,10 +279,12 @@ export async function decryptStanzaInPlace(
     }
   } catch (err) {
     failureReason = err instanceof Error ? err.message : String(err)
+    failureCode = isE2EEPluginError(err) ? err.code : undefined
     if (isE2EEPluginError(err) && (err.code === 'signature-failed' || err.code === 'signature-missing')) {
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
         trust: 'rejected',
+        failureReason: decryptFailureReasonFor(failureCode),
         notes: [failureReason],
       }
     } else if (isE2EEPluginError(err) && err.kind === 'permanent' && err.code === 'malformed-data') {
@@ -289,7 +317,7 @@ export async function decryptStanzaInPlace(
                 : sessionNeedsRepair
                   ? 'broken session — repair triggered, not retried'
                   : 'retryable'
-        }): ${failureReason}`,
+        }): [${failureCode ?? 'no-code'}] ${failureReason}`,
       )
     if (isRejection) {
       // Signature rejection: the rejection is final, so do NOT stash for
@@ -329,6 +357,7 @@ export async function decryptStanzaInPlace(
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
         trust: 'untrusted',
+        failureReason: decryptFailureReasonFor(failureCode),
         notes: [
           terminalFailure
             ? 'Could not decrypt (malformed)'

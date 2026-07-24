@@ -531,7 +531,6 @@
             "encryptedCouldNotDecrypt": "Ce message n'a pas pu être déchiffré",
             "encryptedDecrypting": "Message chiffré, déchiffrement…",
             "encryptedDisabled": "Chiffrement désactivé. Activez-le dans les paramètres",
-            "couldNotDecryptTooltip": "Message chiffré pour une clé qui n'est pas disponible sur cet appareil",
             "unsupportedMethodTooltip": "Chiffré avec {{method}}, méthode non prise en charge sur cet appareil",
             "unsupportedMessage": "Message chiffré: {{method}} non pris en charge",
             "unsupportedMessageGeneric": "Message chiffré: méthode non prise en charge",
@@ -562,7 +561,10 @@
                     "untrusted": "non vérifié",
                     "rejected": "REJETÉ: signature invalide"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Chiffré avec une clé que cet appareil ne possède pas",
+            "couldNotDecryptSignature": "Ce message n'a pas été affiché car sa signature n'a pas pu être validée",
+            "couldNotDecryptUnreadable": "Ce message n'a pas pu être lu"
         },
         "verifyPeer": {
             "chipAriaLabel": "Chiffré à destination de {{name}}. Cliquez pour vérifier l'empreinte",
