@@ -37,7 +37,10 @@ browser/virtualizer writes, and every frame must hold the current controller lea
 write. Saved-position, unread-marker, and explicit-target reconciliation now share the same
 controller-owned `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
-convergence state, and lifecycle ownership moved out of the hook-local loop.
+convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
+and explicit-target loops, saved-position restoration deliberately has no fixed geometry-drift
+takeover threshold: legitimate deep-history measurement corrections can exceed 300px while rows
+settle, so user-input cancellation remains its takeover signal.
 
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
