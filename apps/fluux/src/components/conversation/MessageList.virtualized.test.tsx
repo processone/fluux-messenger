@@ -13,14 +13,18 @@ import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
+const rangeSelectionState = vi.hoisted(() => ({
+  selectedIds: new Set<string>(),
+}))
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 vi.mock('@/hooks', () => ({
   useMessageCopyFormatter: vi.fn(),
   useMessageRangeSelection: vi.fn(() => ({
-    copySelectedIds: new Set<string>(),
-    selectionCount: 0,
+    copySelectedIds: rangeSelectionState.selectedIds,
+    selectionCount: rangeSelectionState.selectedIds.size,
     isSelecting: false,
     selectAll: vi.fn(),
     extendTo: vi.fn(),
@@ -89,6 +93,7 @@ describe('MessageList — virtualized render path (flag ON)', () => {
   beforeEach(() => {
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     _capturedAdapterArgs = {}
+    rangeSelectionState.selectedIds = new Set<string>()
   })
   afterEach(() => localStorage.clear())
 
@@ -101,6 +106,18 @@ describe('MessageList — virtualized render path (flag ON)', () => {
     expect(screen.getByText('Body 0')).toBeInTheDocument()
     expect(screen.getByText('Body 2')).toBeInTheDocument()
     expect(container.querySelectorAll('[data-date-separator]')).toHaveLength(1)
+  })
+
+  it('marks bulk-copy rows with the shared selected-message styling hook', () => {
+    rangeSelectionState.selectedIds = new Set(['msg-1'])
+
+    const { container } = render(
+      <MessageList messages={makeMessages(3)} conversationId="conv-1" renderMessage={(msg) => <div>{msg.body}</div>} />,
+    )
+
+    expect(container.querySelector('[data-message-id="msg-1"]')).toHaveAttribute('data-msg-selected', '')
+    expect(container.querySelector('[data-message-id="msg-0"]')).not.toHaveAttribute('data-msg-selected')
+    expect(container.querySelector('[data-message-id="msg-2"]')).not.toHaveAttribute('data-msg-selected')
   })
 
   it('renders the load-earlier header item when history is incomplete', () => {

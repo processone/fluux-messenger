@@ -686,6 +686,10 @@ export function MessageList<T extends BaseMessage>({
             data-message-id={msg.id}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
+            // Bulk-copy selection lives on the virtualized row, outside
+            // MessageBubble. Share the same semantic marker as keyboard/action
+            // selection so nested quote/reply cards receive identical framing.
+            data-msg-selected={copySelectedIds.has(msg.id) ? '' : undefined}
             style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
           >
             {msg.id === gapMarkerMessageId && onCatchUpHistory && (
@@ -867,6 +871,7 @@ export function MessageList<T extends BaseMessage>({
                     data-message-id={msg.id}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}
+                    data-msg-selected={copySelectedIds.has(msg.id) ? '' : undefined}
                     style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}

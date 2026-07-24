@@ -4,7 +4,7 @@
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, memo, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -32,6 +32,17 @@ import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
 import { computeMessageActions } from './messageActionCapabilities'
+
+type ReplyQuoteCardStyle = CSSProperties & {
+  '--fluux-quote-frame-color': string
+}
+
+function replyQuoteCardStyle(senderColor: string): ReplyQuoteCardStyle {
+  return {
+    borderColor: senderColor,
+    '--fluux-quote-frame-color': senderColor,
+  }
+}
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -681,13 +692,10 @@ export const MessageBubble = memo(function MessageBubble({
             type="button"
             onClick={() => scrollToMessage(replyContext.messageId)}
             className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
-            // When the row is selected the selection tint melts into the card fill
-            // (light themes); a full frame in the sender's colour keeps the card
-            // distinct in every theme/mode without touching the fill. Issue #1008.
-            style={{
-              borderColor: replyContext.senderColor,
-              boxShadow: isSelected || showActionSheet ? `inset 0 0 0 1px ${replyContext.senderColor}` : undefined,
-            }}
+            // CSS applies the selected-state frame because selection can live on
+            // this message chrome (keyboard/action sheet) or the outer MessageList
+            // row (bulk copy). Expose the sender hue once so both paths stay equal.
+            style={replyQuoteCardStyle(replyContext.senderColor)}
           >
             <CornerUpRight
               className="rtl-mirror size-3.5 flex-shrink-0 mt-0.5"
