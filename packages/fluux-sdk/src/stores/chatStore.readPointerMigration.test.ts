@@ -6,6 +6,7 @@ import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid, buildScopedStorageKey } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import { chatStore, migrateReadPointer } from './chatStore'
+import { _resetForTesting, flush as flushThrottledStorage } from './shared/throttledStorage'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -33,6 +34,13 @@ beforeEach(async () => {
   messageCache._resetDBForTesting()
   _resetStorageScopeForTesting()
   setStorageScopeJid(JID)
+  // This file exercises the persist adapter directly with real timers, so an
+  // open throttle window from one test would otherwise coalesce the next
+  // test's leading write. Several assertions here read localStorage
+  // synchronously right after a persisting call, on the strength of the
+  // adapter's write landing immediately — see scheduleReadPointerBackfill's
+  // "that set persists immediately" comment.
+  _resetForTesting()
   await messageCache.saveMessages([
     { type: 'chat', id: 'm1', conversationId: CONV, from: CONV, body: 'a', timestamp: at(1000), isOutgoing: false },
     { type: 'chat', id: 'm2', conversationId: CONV, from: CONV, body: 'b', timestamp: at(2000), isOutgoing: false },
@@ -326,6 +334,9 @@ describe('unmigrated legacy read state survives the persist', () => {
 
     relaunch()
     await vi.waitFor(() => expect(pointerOf(CONV)).toEqual({ messageId: 'm2', timestamp: at(2000) }))
+    // This assertion means to observe the final persisted blob, not a
+    // mid-pass write still sitting in the throttle's pending thunk.
+    flushThrottledStorage()
 
     expect(diskEntry('conversationMeta', CONV).readPointer).toEqual({
       messageId: 'm2',
@@ -352,6 +363,9 @@ describe('unmigrated legacy read state survives the persist', () => {
       conversations.set(LATE, { ...conversations.get(LATE)!, readPointer: live })
       return { conversationMeta: meta, conversations }
     })
+    // This assertion means to observe the final persisted blob, not a
+    // mid-pass write still sitting in the throttle's pending thunk.
+    flushThrottledStorage()
 
     expect(diskEntry('conversationMeta', LATE).readPointer).toEqual({
       messageId: 'live1',

@@ -24,6 +24,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -2912,6 +2913,11 @@ export const chatStore = createStore<ChatState>()(
       },
 
       switchAccount: (jid) => {
+        // The outgoing account's pending blob must land before we load the
+        // incoming one: a fast A -> B -> A would otherwise reload A from a
+        // blob that predates its last mutations, and that stale load becomes
+        // the live state.
+        flushThrottledStorage()
         clearAllTypingTimeouts()
         // In-flight archive-save gates belong to the previous account; their
         // deferred commits must not land in the new account's maps.
@@ -2957,18 +2963,24 @@ export const chatStore = createStore<ChatState>()(
           }
         },
         setItem: (_, value) => {
+          // Resolved HERE, not inside the thunk: a trailing write that fires
+          // after a switchAccount must land under the key that was current
+          // when this state was produced.
           const scopedStorageKey = getScopedStorageKey()
-          try {
-            const state = value.state as ChatState
-            const serialized = serializeState(state, scopedStorageKey)
-            localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
-          } catch {
-            // Storage quota exceeded or other error, continue without persistence
-          }
+          const state = value.state as ChatState
+          // Lazy — a coalesced write never pays for serializeState at all.
+          // Error absorption lives in the throttle's `write`.
+          schedule(scopedStorageKey, () =>
+            JSON.stringify({ state: serializeState(state, scopedStorageKey) })
+          )
         },
         removeItem: () => {
+          const scopedStorageKey = getScopedStorageKey()
+          // Before the removal: a write scheduled moments ago would otherwise
+          // fire afterwards and resurrect the blob.
+          cancel(scopedStorageKey)
           try {
-            localStorage.removeItem(getScopedStorageKey())
+            localStorage.removeItem(scopedStorageKey)
           } catch {
             // Ignore storage errors
           }

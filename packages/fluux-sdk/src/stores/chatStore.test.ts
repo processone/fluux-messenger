@@ -5,6 +5,7 @@ import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
 import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
+import { _resetForTesting, flush as flushThrottledStorage } from './shared/throttledStorage'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -94,6 +95,10 @@ describe('chatStore', () => {
       drafts: new Map(),
       windowAtLiveEdge: new Map(),
     })
+    // The setState above went through the persist adapter and opened a
+    // throttle window. Drop it, so each test starts with a closed window and
+    // its first mutation takes the leading edge.
+    _resetForTesting()
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
     // rejecting/false-resolving saveMessages would leak it into every later
@@ -289,6 +294,8 @@ describe('chatStore', () => {
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
       })
+      // This test means to observe the final persisted blob (survives reload).
+      flushThrottledStorage()
       const scoped = localStorageMock._store['xmpp-chat-storage:alice@example.com']
       expect(scoped).toBeDefined()
       expect(scoped).toContain('conversationGaps')
@@ -1955,6 +1962,11 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setDraft('alice@example.com', 'local draft')
 
+      // The mutations above left a pending throttled write for the bare key.
+      // Dropping it (not just the on-disk copy) is what makes "no saved data
+      // anywhere" true — otherwise switchAccount's flush would resurrect it
+      // into the legacy-migration path below.
+      _resetForTesting()
       localStorageMock.removeItem('xmpp-chat-storage')
       setStorageScopeJid('bob@example.com')
       chatStore.getState().switchAccount('bob@example.com')
@@ -1998,6 +2010,8 @@ describe('chatStore', () => {
     it('should serialize conversations Map to array', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com', 'Alice'))
       chatStore.getState().addConversation(createConversation('bob@example.com', 'Bob'))
+      // This test means to observe the final persisted blob, not a mid-burst write.
+      flushThrottledStorage()
 
       // Check localStorage was called with serialized data
       expect(localStorageMock.setItem).toHaveBeenCalled()
@@ -2055,6 +2069,8 @@ describe('chatStore', () => {
         isOutgoing: false,
       }
       chatStore.getState().addMessage(msg)
+      // This test means to observe the final persisted blob, not a mid-burst write.
+      flushThrottledStorage()
 
       // Get the serialized data
       const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
@@ -2384,6 +2400,10 @@ describe('chatStore', () => {
     beforeEach(() => {
       // Reset drafts state
       chatStore.setState({ drafts: new Map() })
+      // Same gotcha as the outer beforeEach: this setState opened a throttle
+      // window via the persist adapter. Close it so each test's first
+      // mutation takes the leading edge instead of being coalesced behind it.
+      _resetForTesting()
     })
 
     it('should save a draft for a conversation', () => {
