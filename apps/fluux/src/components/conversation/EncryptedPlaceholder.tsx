@@ -6,17 +6,25 @@ import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useRouteSync } from '@/hooks/useRouteSync'
 import { Tooltip } from '@/components/Tooltip'
+import type { DecryptFailureReason } from '@fluux/sdk'
 
 export interface EncryptedPlaceholderProps {
   /**
-   * `true` when the failure was almost certainly a wrong-key situation
-   * (we tried to decrypt and the cipher rejected the unlocked private
-   * key). The placeholder still renders, but the click affordance is
-   * dropped — unlocking again won't help.
+   * Why the message could not be shown, as recorded by the SDK.
    *
-   * Left optional for now; consumers don't yet distinguish.
+   * Absent on messages stored before the reason was recorded — those fall
+   * back to the neutral string rather than asserting a cause we never
+   * established. See #1059: a single fixed "encrypted to a key not available
+   * on this device" was rendered for every failure, including ones that had
+   * nothing to do with keys, and it misdirected the investigation for weeks.
    */
-  hardFailure?: boolean
+  reason?: DecryptFailureReason
+}
+
+const REASON_KEYS: Record<DecryptFailureReason, string> = {
+  'key-unavailable': 'chat.encryption.couldNotDecryptKeyUnavailable',
+  'signature-invalid': 'chat.encryption.couldNotDecryptSignature',
+  unreadable: 'chat.encryption.couldNotDecryptUnreadable',
 }
 
 /**
@@ -41,7 +49,7 @@ export interface EncryptedPlaceholderProps {
  *   static; a tooltip explains why clicking again won't help.
  */
 export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
-  _props: EncryptedPlaceholderProps,
+  props: EncryptedPlaceholderProps,
 ) {
   const { t } = useTranslation()
   const locked = useWebKeyLocked()
@@ -92,14 +100,19 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
     )
   }
 
+  // The reason is rendered in the visible span as well as the tooltip: the
+  // tooltip only surfaces on hover, so the span is what actually tells the
+  // user what happened (and what a test can assert against).
+  const reasonKey = REASON_KEYS[props.reason ?? 'unreadable']
+
   return (
     <Tooltip
-      content={t('chat.encryption.couldNotDecryptTooltip')}
+      content={t(reasonKey)}
       position="top"
       className="flex items-center gap-2 text-fluux-muted italic"
     >
       <LockOpen className="size-3.5 flex-shrink-0" aria-hidden="true" />
-      <span>{t('chat.encryption.encryptedCouldNotDecrypt')}</span>
+      <span>{t(reasonKey)}</span>
     </Tooltip>
   )
 })
