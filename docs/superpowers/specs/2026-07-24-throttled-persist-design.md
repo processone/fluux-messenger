@@ -152,12 +152,25 @@ the whole blob a second time and write it again — two full O(conversations) se
 retraction. It would also duplicate the exact serialization expression the adapter owns, and would
 have to re-derive the scoped key that the adapter captured eagerly. `flushKey` reuses both.
 
-`flushKey` is additionally robust to a question this design cannot settle from the worktree: whether
-zustand's `persist` invokes `setItem` synchronously inside `set()`. If it does, `flushKey` either
-no-ops (leading edge already wrote) or flushes the pending thunk. If it did not, `flushKey` would
-close an empty window and the subsequent `schedule` would find no window open and write immediately
-on its own leading edge. Both orderings persist the retraction synchronously. A `writeNow` placed
-after `set()` would need that ordering assumption to hold merely to avoid being pure duplicate work.
+**This depends on zustand's `persist` calling `setItem` synchronously inside `set()`, and that is a
+load-bearing assumption, not a robustness property.** `flushKey` can only flush a thunk that has
+already been registered; if the adapter were driven later, `flushKey` would close an empty window
+and the eventual `schedule` would write on its own leading edge *at that later time* — still
+deferred, still lost to a hard kill in between.
+
+Verified against the installed build (zustand 5.0.13,
+`node_modules/zustand/esm/middleware.mjs:365-368`): the `set` override is
+`savedSetState(state, replace); return setItem()`. `setItem` runs synchronously before `set()`
+returns, so by the time `recordPendingRetraction` calls `flushKey`, the thunk is registered.
+
+Because this is an assumption rather than a guarantee, §5.2 pins it with a test that asserts
+`recordPendingRetraction()` has persisted *before it returns*. If a zustand upgrade ever defers the
+adapter, that test fails rather than the retraction silently becoming losable.
+
+**Open item for the plan:** `packages/fluux-sdk/package.json` declares zustand as a peer at
+`^4.0.0 || ^5.0.0`. The synchronous-`setItem` behaviour is verified for 5.0.13 only. Since the SDK
+is published for reuse, either v4's `persist` must be verified to behave the same way, or the peer
+range narrowed to `^5.0.0`. This is not a blocker for the app, which pins `^5.0.0`.
 
 Rejected alternative: splitting `pendingRetractions` into its own key, matching roomStore's layout.
 That is the cleaner long-term shape, but it changes the persisted blob format and needs its own
@@ -246,8 +259,21 @@ schedule(key, () => serializeRows(snapshot))
 
 The map is mutated in place via `.set()` rather than replaced, so holding the reference still gives
 latest-value semantics within an account — which is the desired behaviour — while `switchAccount`'s
-reassignment leaves the old reference pinned to the old account's data. `switchAccount` also
-flushes, so this is defence in depth rather than the only guard.
+reassignment leaves the old reference pinned to the old account's data.
+
+**Honest accounting of what guards what.** Because `switchAccount` flushes *before* reassigning
+(§3 item 4), every pending thunk has already run while the binding still pointed at the old map. The
+flush is therefore the actual guard, and the reference capture is unreachable defence-in-depth: with
+the flush in place, deleting `const snapshot = ...` changes no observable behaviour, so no
+end-to-end test can distinguish the two. §5.3's A → B → A case catches *both* being removed, not the
+capture alone.
+
+The capture stays anyway — it is one line, and it is what makes the trap survivable if a later
+change reorders or drops the flush. But it must be documented at the call site as depending on the
+flush for its testability, so that a future PR removing the flush understands it is promoting this
+line from insurance to load-bearing. Extracting the scheduling into a separately testable function
+with an artificial reassignment was considered and rejected: it would test a state the production
+path cannot reach, which is its own species of hollow test.
 
 `chatStore` has no equivalent trap: `serializeState` closes over the partialized snapshot passed
 into `setItem`, and store state objects are replaced, not mutated.
@@ -367,6 +393,11 @@ nothing" claim above does not hold on desktop.
   Starting at step 2 — recording a retraction into an idle store — is hollow: with no window open,
   `schedule` writes it on the leading edge anyway, so the test passes with `flushKey` removed. Step 1
   is the whole test. Remove `flushKey` and this must go red.
+
+- **Retraction persists before `recordPendingRetraction` returns.** Assert the blob is on disk
+  immediately after the call, with no clock advance and no microtask yielded. This pins the
+  synchronous-`setItem` assumption documented in §1.2: if a zustand upgrade ever defers the adapter,
+  this fails loudly instead of the retraction quietly becoming losable.
 - **Abrupt close:** mutate → dispatch `pagehide` → assert the write landed with no explicit flush
   call.
 - **Logout:** schedule a write → `reset()` → advance timers past the window → assert no pre-logout
@@ -390,14 +421,26 @@ are wired to it. A helper left calling `localStorage.setItem` directly passes ev
 - Key independence: a draft write does not coalesce, delay or clobber gaps, coverage or read state.
   Each key holds its own window.
 - Account A → B → A with a write pending on A: assert A's data landed under A's key and that B's
-  key never received it. This is the §3.1 binding trap, asserted end to end.
+  key never received it. This covers the `switchAccount` flush, freshness on an immediate return to
+  A, and A/B key isolation. **It does not cover the §3.1 reference capture** — see below.
 - `reset()` → advance past the window → assert no room read state, gaps, coverage or drafts
   reappear.
 - `_clearAllRoomReadStateForTesting()` → advance past the window → assert no row reappears. This is
   the cross-test-contamination guard from §3.2; without it the failure surfaces as an unrelated
   flaky suite.
-- Pending retractions remain synchronous: record one with a window open on the room read-state key,
-  fire nothing, assert it is on disk (the §1.2 exclusion, asserted rather than assumed).
+- **Pending retractions remain synchronous — the window must be open on _their own_ key.** The
+  throttle is per-key, so opening a window on `room-read-state` says nothing about
+  `room-pending-retractions`; a mistakenly throttled helper would still write its first retraction
+  on its own leading edge and pass. The discriminating sequence stays entirely on the retraction
+  key:
+
+  1. Record a room pending retraction. If the helper were throttled, this opens *its* window.
+  2. Without advancing the clock, record a second one.
+  3. Fire no timer and no flush.
+  4. Assert **both** are on disk.
+
+  The second retraction is the assertion that matters: it is the one that would be sitting in a
+  pending thunk if this key were ever routed through `schedule`.
 
 ### 5.4 Tauri quit ordering
 
@@ -421,6 +464,17 @@ it in the order that cannot fail, in the same document that warns about exactly 
 lesson for every test here: a test of "the escape hatch persisted X" must first put the system into
 the state where the ordinary path would *not* have persisted X.** Otherwise it measures the ordinary
 path.
+
+The same error then recurred in §5.3's retraction case in a subtler form — the window was opened on
+a *different key*, and the throttle is per-key, so the system was never actually put into the state
+that discriminates. **Corollary: "put the system into that state" means on the exact key under
+test.** Both of these passed a reading that only checked whether a window was open somewhere.
+
+A third variant is worth naming because it is not about ordering at all: §5.3's A → B → A case was
+labelled as covering the §3.1 reference capture, which it cannot, because the flush that runs first
+makes the capture unobservable. **A test cannot cover a guard that a preceding guard renders
+unreachable** — mislabelling one as covering the other manufactures false confidence in exactly the
+line most likely to be deleted as redundant.
 
 Four specific guards:
 
@@ -464,3 +518,5 @@ fails. A break check is necessary but not sufficient (#1064).
 | Reordering `reset()` re-migrates legacy data on next login | Behaviour left unchanged; test corrected instead (§2.1) |
 | 1 s of lagging-mirror state lost on hard kill | Bounded and analysed as safe-direction only (§4) |
 | `resolveRoomReadPosition` rationale silently goes stale | Comment updated in the same change (§3.3) |
+| A zustand upgrade defers `setItem`, silently making retractions losable | §5.2 asserts the retraction is on disk before `recordPendingRetraction` returns |
+| SDK peer range admits zustand v4, where sync `setItem` is unverified | Verify v4 or narrow the peer range to `^5.0.0` (§1.2 open item) |
