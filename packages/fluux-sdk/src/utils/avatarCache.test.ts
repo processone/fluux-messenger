@@ -266,6 +266,47 @@ describe('avatarCache blob URL pool', () => {
         ]],
       ]))
     })
+
+    it('shares one grouped read across room joins and updates it after writes', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'occupant-b',
+        'hash-b',
+      )
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      await expect(
+        getRoomOccupantAvatarHashes('room-b@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-b', hash: 'hash-b' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+      // Writes after the first join update the loaded snapshot in place, so a
+      // later manual/autojoined room is visible without another full read.
+      await saveRoomOccupantAvatarHash(
+        'room-c@conference.example.com',
+        'occupant-c',
+        'hash-c',
+      )
+      await expect(
+        getRoomOccupantAvatarHashes('room-c@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-c', hash: 'hash-c' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+      await clearAllAvatarData()
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([])
+      expect(getAllSpy).toHaveBeenCalledTimes(2)
+      getAllSpy.mockRestore()
+    })
   })
 
   describe('diagnostics', () => {

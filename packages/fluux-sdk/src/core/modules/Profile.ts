@@ -296,9 +296,11 @@ export class Profile extends BaseModule {
     realJid?: string,
     occupantId?: string,
   ): Promise<void> {
-    // Check privacy options: if avatar fetching is disabled for anonymous rooms
-    // and we don't have a real JID (meaning we'd query via room@conf/nick),
-    // skip fetching to protect user privacy
+    // This gate intentionally uses per-presence evidence while restore uses the
+    // room's disco result: with the privacy option enabled, fetching/persistence
+    // is allowed only when this occupant exposes a real JID; restore is
+    // suppressed once disco confirms the room anonymous
+    // (`isNonAnonymous === false`).
     if (this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms && !realJid) {
       return
     }

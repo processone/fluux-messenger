@@ -106,6 +106,17 @@ let dbPromise: Promise<IDBDatabase> | null = null
 const blobUrlPool = new Map<string, string>()
 
 /**
+ * Lazily shared snapshot of durable XEP-0421 bindings.
+ *
+ * Room joins complete independently, so each `mucJoined` callback asks for one
+ * room. Sharing the grouped snapshot here turns an autojoin burst into one
+ * IndexedDB read without coupling the cache layer to join ordering. Successful
+ * writes update the loaded snapshot below; clearing avatar data drops it.
+ */
+let occupantMappingsByRoomPromise:
+  Promise<RoomOccupantAvatarHashesByRoom> | null = null
+
+/**
  * In-memory set of domains known to block PEP avatar access.
  * Populated from IndexedDB on load, updated on new forbidden responses.
  * Enables synchronous checks to skip PEP requests entirely.
@@ -309,6 +320,27 @@ export async function saveAvatarHash(
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve()
     })
+
+    if (type === 'occupant' && occupantMappingsByRoomPromise) {
+      const parsed = parseOccupantHashMappingKey(jid)
+      if (parsed) {
+        const byRoom = await occupantMappingsByRoomPromise
+        const roomMappings = byRoom.get(parsed.roomJid)
+        const entry = { occupantId: parsed.occupantId, hash }
+        if (!roomMappings) {
+          byRoom.set(parsed.roomJid, [entry])
+        } else {
+          const existingIndex = roomMappings.findIndex(
+            (mapping) => mapping.occupantId === parsed.occupantId
+          )
+          if (existingIndex >= 0) {
+            roomMappings[existingIndex] = entry
+          } else {
+            roomMappings.push(entry)
+          }
+        }
+      }
+    }
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -400,8 +432,12 @@ export async function saveRoomOccupantAvatarHash(
 export async function getRoomOccupantAvatarHashes(
   roomJid: string
 ): Promise<RoomOccupantAvatarHashMapping[]> {
-  const mappings = await getAllAvatarHashes('occupant')
-  return groupRoomOccupantAvatarHashes(mappings).get(getBareJid(roomJid)) ?? []
+  if (!occupantMappingsByRoomPromise) {
+    occupantMappingsByRoomPromise = getAllAvatarHashes('occupant')
+      .then(groupRoomOccupantAvatarHashes)
+  }
+  const mappingsByRoom = await occupantMappingsByRoomPromise
+  return [...(mappingsByRoom.get(getBareJid(roomJid)) ?? [])]
 }
 
 /**
@@ -443,6 +479,7 @@ export async function clearAllAvatarHashes(): Promise<void> {
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve()
     })
+    occupantMappingsByRoomPromise = null
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -762,6 +799,7 @@ export function _resetPepForbiddenDomainsForTesting(): void {
  */
 export function _resetDBForTesting(): void {
   dbPromise = null
+  occupantMappingsByRoomPromise = null
 }
 
 /**
