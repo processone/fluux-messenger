@@ -120,16 +120,13 @@ const TARGET_HIGHLIGHT_MS = 1500
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
-// Saved-position (content-anchor) restore needs the SAME measurement-aware re-assert as the marker
-// path. A one-shot scrollToIndex(anchor,'end') lands on the rows' ESTIMATED sizes; those rows then
-// measure TALLER over the next frames (media, wrapping), the content above the anchor grows, and the
-// anchor slides below the fold — the view drifts OLDER. handleScroll then saves that drifted position
-// and the (now older) bottom-visible message becomes the next anchor, so each re-open drifts further
-// back ("goes back in time on every open"). Re-pinning the anchor across frames lands it on settled
-// measurements, and registering the loop gates the save so the transient can't compound.
-const RESTORE_REASSERT_FRAMES = 90
-const RESTORE_STABLE_FRAMES = 8
-const RESTORE_DRIFT_PX = 8
+// Media decoded above a scrolled-up viewport changes the measured offsets after the batch snapshot.
+// Re-apply that snapshot's bottom-fraction anchor until measurements settle so the reading point
+// stays fixed. Saved-position restoration uses the same per-frame geometry, but its budget and
+// convergence state are controller-owned.
+const MEDIA_ANCHOR_REASSERT_FRAMES = 90
+const MEDIA_ANCHOR_STABLE_FRAMES = 8
+const MEDIA_ANCHOR_DRIFT_PX = 8
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -1148,62 +1145,51 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [conversationId, pinVirtualizedBottom, rememberBottomIntent])
 
-  // Re-pin a VIRTUALIZED list to a saved CONTENT ANCHOR and keep it pinned as rows measure — the
-  // restore counterpart of pinVirtualizedBottom. A one-shot scrollToIndex(anchor,'end') lands on the
-  // rows' estimated sizes; they then measure taller and the anchor drifts below the fold (see the
-  // RESTORE_* constants). Re-deriving the anchor's pixel target each frame (align:'end' + the saved
-  // fraction, both from CURRENT measurements) lands it on settled layout. Registering the loop in
-  // reassertLoopRef makes handleScroll treat these scrolls as programmatic — so the drifting
-  // transient is NOT saved (which is what made the drift compound across re-opens). Bails on a user
-  // scroll or a conversation switch; converges (and stops early) once the landing position is stable.
-  const pinVirtualizedAnchor = useCallback((
+  // Apply one virtualized bottom-fraction anchor write from CURRENT measurements. Saved-position
+  // restoration and media preservation deliberately share this browser geometry, but not ownership:
+  // the positioning controller schedules saved restore frames, while the retained media loop below
+  // remains outside the controller until the content-growth migration.
+  const applyVirtualizedAnchorFrame = useCallback((anchor: ScrollAnchor): number | null => {
+    const v = virtualizerRef.current
+    const s = scrollerRef.current
+    if (!v || !s) return null
+    const idx = v.getIndexForMessageId(anchor.messageId)
+    if (idx === null) return null
+    // Issue the fractional target as the ONLY scroll write per frame. The old code ALSO called
+    // scrollToIndex(idx,'end') every frame; the two targets differ by (1-fraction)*rowHeight, and
+    // for a tall anchor at a mid fraction that per-frame kick knocks the row across the
+    // virtualization window boundary — its height flips between estimate and measured, the offsets
+    // shift, and the loop never converges ([ScrollReassertLoop] 'restore-anchor', observed as a
+    // ~253px scrollTop ping-pong). scrollToOffset re-windows just like scrollToIndex, so the
+    // fractional write alone both positions the anchor AND keeps it mounted, so it settles.
+    const item =
+      anchor.fraction < 1 ? v.getVirtualItems().find((vi) => vi.index === idx) : undefined
+    const size = item?.size
+    const start = size ? v.getOffsetForMessageId(anchor.messageId) : null
+    if (size && start !== null) {
+      v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
+    } else {
+      // Anchor not yet in the measured window (or fraction===1): mount it / pin its bottom to the
+      // viewport bottom. Once it measures in, later frames take the fractional branch above.
+      v.scrollToIndex(idx, { align: 'end' })
+    }
+    return s.scrollTop
+  }, [])
+
+  // Standalone media-preservation loop. Saved-position restoration no longer enters this owner.
+  const reassertMediaAnchor = useCallback((
     anchor: ScrollAnchor,
     anchorConvId: string,
-    lease?: SavedPositionExecutionLease,
   ): boolean => {
-    const scroller = scrollerRef.current
-    if (!virtualizerRef.current || !scroller || (lease && !lease.isCurrent())) {
-      return false
-    }
+    if (!virtualizerRef.current || !scrollerRef.current) return false
 
     supersedeReassertLoopRef.current()
 
-    // Re-derive and apply the anchor's pixel position from the CURRENT measured layout. Returns the
-    // resulting scrollTop, or null when the anchor row is no longer resolvable.
-    const applyAnchor = (): number | null => {
-      if (lease && !lease.isCurrent()) return null
-      const v = virtualizerRef.current
-      const s = scrollerRef.current
-      if (!v || !s) return null
-      const idx = v.getIndexForMessageId(anchor.messageId)
-      if (idx === null) return null
-      // Issue the fractional target as the ONLY scroll write per frame. The old code ALSO called
-      // scrollToIndex(idx,'end') every frame; the two targets differ by (1-fraction)*rowHeight, and
-      // for a tall anchor at a mid fraction that per-frame kick knocks the row across the
-      // virtualization window boundary — its height flips between estimate and measured, the offsets
-      // shift, and the loop never converges ([ScrollReassertLoop] 'restore-anchor', observed as a
-      // ~253px scrollTop ping-pong). scrollToOffset re-windows just like scrollToIndex, so the
-      // fractional write alone both positions the anchor AND keeps it mounted, so it settles.
-      const item =
-        anchor.fraction < 1 ? v.getVirtualItems().find((vi) => vi.index === idx) : undefined
-      const size = item?.size
-      const start = size ? v.getOffsetForMessageId(anchor.messageId) : null
-      if (size && start !== null) {
-        v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
-      } else {
-        // Anchor not yet in the measured window (or fraction===1): mount it / pin its bottom to the
-        // viewport bottom. Once it measures in, later frames take the fractional branch above.
-        v.scrollToIndex(idx, { align: 'end' })
-      }
-      return s.scrollTop
-    }
-
-    // Immediate pin (pre-paint when called from the restore path's layout effect).
-    if (applyAnchor() === null) return false
+    if (applyVirtualizedAnchorFrame(anchor) === null) return false
 
     const startedAt = Date.now()
-    const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('restore-anchor', performance.now())
-    let framesLeft = RESTORE_REASSERT_FRAMES
+    const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('media-anchor', performance.now())
+    let framesLeft = MEDIA_ANCHOR_REASSERT_FRAMES
     let stableFrames = 0
     let landed = -1
     const finish = () => {
@@ -1211,38 +1197,33 @@ export function useMessageListScroll({
       if (reassertLoopRef.current?.handle === loop) {
         reassertLoopRef.current = null
       }
-      if (lease && !lease.isCurrent()) return
       // The loop just stopped owning scrollTop; keep the brief measurement settle that follows it
       // classified as programmatic so it can't open the save gate (see lastProgrammaticScrollAtRef).
       lastProgrammaticScrollAtRef.current = Date.now()
-      // Capture the settled position so a leave right after restore saves the anchor we LANDED on,
-      // not a mid-settle transient.
+      // Capture the settled position so a leave immediately after media decode saves the anchor we
+      // landed on, not a mid-settle transient.
       const s = scrollerRef.current
       if (s) {
         isAtBottomRef.current = (s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD
         rememberCurrentScrollSnapshot()
       }
-      lease?.settle()
     }
     const step = () => {
       const s = scrollerRef.current
       if (!s) { finish(); return }
       if (framesLeft-- <= 0) { finish(); return }
-      // Generation + operation ownership is authoritative. A late frame from a superseded restore
-      // must not write into a newer request in the same conversation.
-      if (lease && !lease.isCurrent()) { finish(); return }
       // Stale loop must never scroll the new conversation (prevConversationRef is set synchronously
       // at the end of the conversation-switch effect).
       if (prevConversationRef.current !== anchorConvId) { finish(); return }
       // User took over → stop fighting them.
       if (userScrollIntentAtRef.current > startedAt) { finish(); return }
 
-      const st = applyAnchor()
+      const st = applyVirtualizedAnchorFrame(anchor)
       if (st === null) { finish(); return }
 
       let wrote = false
-      if (landed >= 0 && Math.abs(st - landed) <= RESTORE_DRIFT_PX) {
-        if (++stableFrames >= RESTORE_STABLE_FRAMES) { finish(); return }
+      if (landed >= 0 && Math.abs(st - landed) <= MEDIA_ANCHOR_DRIFT_PX) {
+        if (++stableFrames >= MEDIA_ANCHOR_STABLE_FRAMES) { finish(); return }
       } else {
         wrote = true
         stableFrames = 0
@@ -1260,7 +1241,43 @@ export function useMessageListScroll({
     }
     register(step)
     return true
-  }, [isAtBottomRef, rememberCurrentScrollSnapshot])
+  }, [applyVirtualizedAnchorFrame, isAtBottomRef, rememberCurrentScrollSnapshot])
+
+  const beginControllerFrameLoop = useCallback((
+    label: string,
+    lease: PositionExecutionLease,
+  ) => {
+    if (!lease.isCurrent()) return null
+    supersedeReassertLoopRef.current()
+    const monitor = (reassertMonitorRef.current ??=
+      createReassertLoopMonitor()).begin(label, performance.now())
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      monitor.end()
+      const activeLoop = reassertLoopRef.current
+      if (activeLoop?.handle === monitor) {
+        cancelAnimationFrame(activeLoop.raf)
+        reassertLoopRef.current = null
+      }
+    }
+    return {
+      schedule: (callback: () => void) => {
+        if (finished || !lease.isCurrent()) return
+        // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop that
+        // completed from inside the callback.
+        const entry = { raf: 0, handle: monitor }
+        reassertLoopRef.current = entry
+        entry.raf = requestAnimationFrame(callback)
+      },
+      recordFrame: (wrote: boolean) => {
+        const warning = monitor.frame(performance.now(), wrote)
+        if (warning) console.warn(warning)
+      },
+      finish,
+    }
+  }, [])
 
   const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
     reachability: (desired, loadAround) => {
@@ -1313,20 +1330,25 @@ export function useMessageListScroll({
           return 'requested'
         }
       : undefined,
-    reconcile: (request: SavedPositionRequest, lease: SavedPositionExecutionLease) => {
-      if (!lease.isCurrent()) return false
+    beginLoop: (lease) => beginControllerFrameLoop('restore-anchor', lease),
+    positionFrame: (request: SavedPositionRequest, lease: SavedPositionExecutionLease) => {
+      if (!lease.isCurrent()) return { kind: 'unavailable' }
       const scroller = scrollerRef.current
-      if (!scroller) return false
+      if (!scroller) return { kind: 'unavailable' }
 
       let restored = false
+      let reassert = false
       if (request.desired.kind === 'anchor') {
         const anchor: ScrollAnchor = {
           messageId: request.desired.messageId,
           fraction: request.desired.placement.fraction,
         }
-        restored = virtualizerRef.current
-          ? pinVirtualizedAnchor(anchor, conversationId, lease)
-          : restoreToAnchor(scroller, anchor)
+        if (virtualizerRef.current) {
+          restored = applyVirtualizedAnchorFrame(anchor) !== null
+          reassert = restored
+        } else {
+          restored = restoreToAnchor(scroller, anchor)
+        }
       } else if (request.desired.kind === 'legacy-offset') {
         const virtualizer = virtualizerRef.current
         if (virtualizer) {
@@ -1349,18 +1371,29 @@ export function useMessageListScroll({
         restored = true
       }
 
-      if (!restored || !lease.isCurrent()) return false
+      if (!restored || !lease.isCurrent()) return { kind: 'unavailable' }
+      return {
+        kind: 'positioned',
+        scrollTop: scroller.scrollTop,
+        reassert,
+      }
+    },
+    complete: (request, outcome) => {
+      const scroller = scrollerRef.current
+      if (!scroller) return
       isAtBottomRef.current = getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
       rememberCurrentScrollSnapshot()
       lastProgrammaticScrollAtRef.current = Date.now()
-      debugLog('RESTORE: controller applied position', {
+      debugLog('RESTORE: controller completed position', {
         conversationId,
         generation: request.generation,
         desired: request.desired,
+        outcome,
       })
-      return true
     },
   }), [
+    applyVirtualizedAnchorFrame,
+    beginControllerFrameLoop,
     conversationId,
     firstMessageId,
     isAtBottomRef,
@@ -1368,47 +1401,10 @@ export function useMessageListScroll({
     lastMessageId,
     messageCount,
     onLoadNewer,
-    pinVirtualizedAnchor,
     reassertBottom,
     rememberCurrentScrollSnapshot,
     windowAtLiveEdge,
   ])
-
-  const beginControllerFrameLoop = useCallback((
-    label: string,
-    lease: PositionExecutionLease,
-  ) => {
-    if (!lease.isCurrent()) return null
-    supersedeReassertLoopRef.current()
-    const monitor = (reassertMonitorRef.current ??=
-      createReassertLoopMonitor()).begin(label, performance.now())
-    let finished = false
-    const finish = () => {
-      if (finished) return
-      finished = true
-      monitor.end()
-      const activeLoop = reassertLoopRef.current
-      if (activeLoop?.handle === monitor) {
-        cancelAnimationFrame(activeLoop.raf)
-        reassertLoopRef.current = null
-      }
-    }
-    return {
-      schedule: (callback: () => void) => {
-        if (finished || !lease.isCurrent()) return
-        // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop that
-        // completed from inside the callback.
-        const entry = { raf: 0, handle: monitor }
-        reassertLoopRef.current = entry
-        entry.raf = requestAnimationFrame(callback)
-      },
-      recordFrame: (wrote: boolean) => {
-        const warning = monitor.frame(performance.now(), wrote)
-        if (warning) console.warn(warning)
-      },
-      finish,
-    }
-  }, [])
 
   const createUnreadMarkerExecutor = useCallback((): UnreadMarkerExecutor => ({
     reachability: (desired) => deriveReachabilityForDesired({
@@ -2135,7 +2131,7 @@ export function useMessageListScroll({
           wasAtBottom,
           anchorId: anchor.messageId,
         })
-        if (virtualizerRef.current) pinVirtualizedAnchor(anchor, conversationId)
+        if (virtualizerRef.current) reassertMediaAnchor(anchor, conversationId)
         else restoreToAnchor(currentScroller, anchor)
         if (request) {
           positioningControllerRef.current?.markPositionApplied(
@@ -2154,7 +2150,7 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current = null
       mediaLoadDebounceRef.current = null
     }, MEDIA_LOAD_DEBOUNCE_MS)
-  }, [isAtBottomRef, reassertBottom, pinVirtualizedAnchor, conversationId])
+  }, [isAtBottomRef, reassertBottom, reassertMediaAnchor, conversationId])
 
   // ==========================================================================
   // SCROLL EVENT HANDLER

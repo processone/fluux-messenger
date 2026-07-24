@@ -60,6 +60,20 @@ export interface PositionFrameLoop {
   finish: () => void
 }
 
+export type SavedPositionFrameResult =
+  | { kind: 'unavailable' }
+  | {
+      kind: 'positioned'
+      scrollTop: number
+      /** Whether measured geometry must be re-applied until it stabilises. */
+      reassert: boolean
+    }
+
+export type SavedPositionCompletion =
+  | 'applied'
+  | 'settled'
+  | 'best-effort'
+
 export interface SavedPositionExecutor {
   reachability: (
     desired: SavedPositionRequest['desired'],
@@ -74,10 +88,15 @@ export interface SavedPositionExecutor {
   recenterLiveEdge?: (
     signal: AbortSignal,
   ) => 'requested' | 'waiting' | 'unavailable'
-  reconcile: (
+  beginLoop: (lease: SavedPositionExecutionLease) => PositionFrameLoop | null
+  positionFrame: (
     request: SavedPositionRequest,
     lease: SavedPositionExecutionLease,
-  ) => boolean
+  ) => SavedPositionFrameResult
+  complete: (
+    request: SavedPositionRequest,
+    outcome: SavedPositionCompletion,
+  ) => void
 }
 
 export type UnreadMarkerFrameLoop = PositionFrameLoop
@@ -151,6 +170,10 @@ interface SavedPositionExecutionState {
   aroundAttempted: boolean
   loadingAround: boolean
   lastRecenterVersion: string | null
+  loop: PositionFrameLoop | null
+  framesLeft: number
+  stableFrames: number
+  landedTarget: number | null
 }
 
 interface UnreadMarkerExecutionState {
@@ -184,6 +207,10 @@ const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
 const EXPLICIT_TARGET_TAKEOVER_DRIFT_PX = 300
+// Preserved from the former hook-local restore-anchor loop.
+const SAVED_POSITION_REASSERT_FRAMES = 90
+const SAVED_POSITION_STABLE_FRAMES = 8
+const SAVED_POSITION_DRIFT_PX = 8
 const UNREAD_MARKER_REASSERT_FRAMES = 120
 const UNREAD_MARKER_STABLE_FRAMES = 8
 const UNREAD_MARKER_DRIFT_PX = 16
@@ -287,6 +314,10 @@ export class PositioningController {
       aroundAttempted: false,
       loadingAround: false,
       lastRecenterVersion: null,
+      loop: null,
+      framesLeft: SAVED_POSITION_REASSERT_FRAMES,
+      stableFrames: 0,
+      landedTarget: null,
     }
     this.driveSavedPosition()
     return request
@@ -1521,7 +1552,13 @@ export class PositioningController {
 
   private driveSavedPosition(): void {
     const execution = this.savedExecution
-    if (!execution || !this.isSavedExecutionCurrent(execution)) return
+    if (
+      !execution ||
+      !this.isSavedExecutionCurrent(execution) ||
+      execution.loop
+    ) {
+      return
+    }
 
     const loadAround: SavedPositionLoadAroundStatus = execution.loadingAround
       ? 'loading'
@@ -1572,24 +1609,203 @@ export class PositioningController {
       case 'mounting':
       case 'reconciling': {
         execution.loadingAround = false
-        const lease = this.beginSavedOperation(execution)
-        const applied = runScrollShadowSafely({
-          event: 'saved-position-reconcile',
-          conversationId: execution.request.conversationId,
-          fallback: false,
-          observe: () => execution.executor.reconcile(execution.request, lease),
-        })
-        if (!lease.isCurrent()) return
-        if (applied) {
-          lease.markApplied()
-        } else {
-          this.promoteSavedFallback(
-            execution,
-            execution.request.onUnavailable ?? { kind: 'live-edge' },
-          )
-        }
+        this.startSavedPositionLoop(execution)
       }
     }
+  }
+
+  private startSavedPositionLoop(
+    execution: SavedPositionExecutionState,
+  ): void {
+    if (
+      !this.isSavedExecutionCurrent(execution) ||
+      execution.loop
+    ) {
+      return
+    }
+
+    execution.framesLeft = SAVED_POSITION_REASSERT_FRAMES
+    execution.stableFrames = 0
+    execution.landedTarget = null
+    const lease = this.beginSavedOperation(execution)
+
+    // Preserve the pre-paint entry write: the first measured application happens synchronously
+    // from the conversation-entry layout effect. Only the subsequent measurement settle is
+    // scheduled through the shared frame-loop owner.
+    const initial = this.positionSavedFrame(execution, lease)
+    if (!lease.isCurrent()) return
+    if (initial.kind === 'unavailable') {
+      if (
+        execution.request.source.kind === 'fallback' &&
+        execution.request.desired.kind === 'live-edge'
+      ) {
+        this.cancelSavedExecution()
+        return
+      }
+      this.promoteSavedFallback(
+        execution,
+        execution.request.onUnavailable ?? { kind: 'live-edge' },
+      )
+      return
+    }
+
+    lease.markApplied()
+    if (!lease.isCurrent()) return
+    this.completeSavedPosition(execution, 'applied')
+    if (!initial.reassert) return
+
+    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
+      event: 'saved-position-loop-start',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.beginLoop(lease),
+    })
+    if (!lease.isCurrent()) {
+      if (loop) {
+        runScrollShadowSafely({
+          event: 'saved-position-loop-stale-finish',
+          conversationId: execution.request.conversationId,
+          fallback: undefined,
+          observe: () => loop.finish(),
+        })
+      }
+      return
+    }
+    if (!loop) {
+      this.settleSavedPosition(execution, lease, 'best-effort')
+      return
+    }
+    execution.loop = loop
+    this.scheduleSavedPositionFrame(execution, lease)
+  }
+
+  private driveSavedPositionFrame(
+    execution: SavedPositionExecutionState,
+    lease: SavedPositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent()) return
+    if (execution.framesLeft-- <= 0) {
+      this.settleSavedPosition(execution, lease, 'best-effort')
+      return
+    }
+
+    const result = this.positionSavedFrame(execution, lease)
+    if (!lease.isCurrent()) return
+    if (result.kind === 'unavailable') {
+      // Once the initial anchor write landed, losing the row during re-windowing was historically
+      // a best-effort stop, not a new fallback request. Preserve that release seam.
+      this.settleSavedPosition(execution, lease, 'best-effort')
+      return
+    }
+    if (!result.reassert) {
+      this.settleSavedPosition(execution, lease, 'settled')
+      return
+    }
+
+    let wrote = false
+    if (
+      execution.landedTarget !== null &&
+      Math.abs(result.scrollTop - execution.landedTarget) <=
+        SAVED_POSITION_DRIFT_PX
+    ) {
+      execution.stableFrames += 1
+      if (execution.stableFrames >= SAVED_POSITION_STABLE_FRAMES) {
+        this.settleSavedPosition(execution, lease, 'settled')
+        return
+      }
+    } else {
+      wrote = true
+      execution.stableFrames = 0
+    }
+    execution.landedTarget = result.scrollTop
+    this.recordSavedPositionFrame(execution, wrote)
+    this.scheduleSavedPositionFrame(execution, lease)
+  }
+
+  private positionSavedFrame(
+    execution: SavedPositionExecutionState,
+    lease: SavedPositionExecutionLease,
+  ): SavedPositionFrameResult {
+    return runScrollShadowSafely<SavedPositionFrameResult>({
+      event: 'saved-position-frame',
+      conversationId: execution.request.conversationId,
+      fallback: { kind: 'unavailable' },
+      observe: () => execution.executor.positionFrame(
+        execution.request,
+        lease,
+      ),
+    })
+  }
+
+  private scheduleSavedPositionFrame(
+    execution: SavedPositionExecutionState,
+    lease: SavedPositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent() || !execution.loop) return
+    const scheduled = runScrollShadowSafely({
+      event: 'saved-position-frame-schedule',
+      conversationId: execution.request.conversationId,
+      fallback: false,
+      observe: () => {
+        execution.loop?.schedule(
+          () => this.driveSavedPositionFrame(execution, lease),
+        )
+        return true
+      },
+    })
+    if (!scheduled && lease.isCurrent()) {
+      this.settleSavedPosition(execution, lease, 'best-effort')
+    }
+  }
+
+  private recordSavedPositionFrame(
+    execution: SavedPositionExecutionState,
+    wrote: boolean,
+  ): void {
+    runScrollShadowSafely({
+      event: 'saved-position-frame-monitor',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.recordFrame(wrote),
+    })
+  }
+
+  private settleSavedPosition(
+    execution: SavedPositionExecutionState,
+    lease: SavedPositionExecutionLease,
+    outcome: Extract<SavedPositionCompletion, 'settled' | 'best-effort'>,
+  ): void {
+    if (!lease.isCurrent()) return
+    this.finishSavedLoop(execution)
+    this.completeSavedPosition(execution, outcome)
+    lease.settle()
+  }
+
+  private completeSavedPosition(
+    execution: SavedPositionExecutionState,
+    outcome: SavedPositionCompletion,
+  ): void {
+    runScrollShadowSafely({
+      event: 'saved-position-complete',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.executor.complete(
+        execution.request,
+        outcome,
+      ),
+    })
+  }
+
+  private finishSavedLoop(execution: SavedPositionExecutionState): void {
+    const loop = execution.loop
+    execution.loop = null
+    if (!loop) return
+    runScrollShadowSafely({
+      event: 'saved-position-loop-finish',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => loop.finish(),
+    })
   }
 
   private startSavedAroundLoad(
@@ -1652,19 +1868,7 @@ export class PositioningController {
     execution: SavedPositionExecutionState,
   ): void {
     if (!this.isSavedExecutionCurrent(execution)) return
-    const lease = this.beginSavedOperation(execution)
-    const applied = runScrollShadowSafely({
-      event: 'saved-position-live-edge-best-effort',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => execution.executor.reconcile(execution.request, lease),
-    })
-    if (!lease.isCurrent()) return
-    if (applied) {
-      lease.markApplied()
-    } else {
-      this.cancelSavedExecution()
-    }
+    this.startSavedPositionLoop(execution)
   }
 
   private promoteSavedFallback(
@@ -1699,6 +1903,7 @@ export class PositioningController {
       this.cancelSavedExecution()
       return
     }
+    this.finishSavedLoop(execution)
     execution.abortController?.abort()
     execution.request = request
     execution.operation += 1
@@ -1706,6 +1911,9 @@ export class PositioningController {
     execution.loadingAround = false
     execution.aroundAttempted = true
     execution.lastRecenterVersion = null
+    execution.framesLeft = SAVED_POSITION_REASSERT_FRAMES
+    execution.stableFrames = 0
+    execution.landedTarget = null
     this.model = accepted
     this.driveSavedPosition()
   }
@@ -1787,7 +1995,10 @@ export class PositioningController {
   }
 
   private cancelSavedExecution(): void {
-    this.savedExecution?.abortController?.abort()
+    if (this.savedExecution) {
+      this.finishSavedLoop(this.savedExecution)
+      this.savedExecution.abortController?.abort()
+    }
     this.savedExecution = null
   }
 
