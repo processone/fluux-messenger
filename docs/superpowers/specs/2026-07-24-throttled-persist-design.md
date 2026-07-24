@@ -63,11 +63,15 @@ A per-key leading + trailing throttle over `localStorage`.
 
 ```ts
 export function schedule(key: string, produce: () => string): void
-export function writeNow(key: string, produce: () => string): void
+export function flushKey(key: string): void
 export function cancel(key: string): void
 export function flush(): void
 export function _resetForTesting(): void
 ```
+
+`flush` is re-exported from the SDK's public `index.ts` as **`flushPersistentStorage`** — the
+generic name is meaningless at the package boundary, where callers (§4.1) are flushing storage, not
+some unspecified queue.
 
 The module is a **singleton** holding one timer registry keyed by storage key, not a factory. A
 singleton is what lets one `pagehide` handler flush every key — chat blob, room read state, gaps,
@@ -95,16 +99,17 @@ a steady ~1/second and is never starved. On-disk state is never more than 1 s st
 Window: **1000 ms**. `stateSnapshot.ts` uses `PERSIST_DEBOUNCE_MS = 500` for the SM snapshot; this
 module is deliberately a different mechanism with a different constant, and does not share it.
 
-`writeNow(key, produce)` is the durability escape hatch (§1.2): it discards any pending thunk for
-the key, writes `produce()` synchronously, and **closes** the window — so the next `schedule` for
-that key writes immediately on its leading edge rather than being coalesced behind a stale window.
+`flushKey(key)` is the durability escape hatch (§1.2): it writes that key's pending thunk if there
+is one, then **closes** the window, so the next `schedule` for that key writes immediately on its
+leading edge rather than being coalesced behind a stale window. It carries no thunk of its own — it
+reuses whatever the caller already scheduled.
 
 ### 1.1 Error absorption and flush semantics
 
 Every current call site swallows storage errors (quota exceeded, private-mode denial) and continues
 without persistence. The module preserves that exactly: errors thrown by `produce()` **and** by
-`localStorage.setItem` are caught and discarded on all three paths — leading edge, timer callback,
-and `flush`/`writeNow`. A throwing `produce` must not leave a timer armed or a window half-open, and
+`localStorage.setItem` are caught and discarded on all four paths — leading edge, timer callback,
+`flush` and `flushKey`. A throwing `produce` must not leave a timer armed or a window half-open, and
 must not propagate out of a `set()` call or a `pagehide` handler.
 
 `flush()` writes every pending thunk, clears all timers, and **closes** all windows. A `schedule`
@@ -137,14 +142,26 @@ favour of the room behaviour.
 
 **Resolution:** `recordPendingRetraction` — the `set()` at
 [chatStore.ts:2150-2155](../../../packages/fluux-sdk/src/stores/chatStore.ts) that appends to
-`pendingRetractions` — is followed by an explicit `writeNow` on the chat storage key. Cost is one
-synchronous serialize, identical to today's behaviour, on a path that fires only when a retraction
-target is not resident. It is rare and not on the catch-up hot path, so it does not reintroduce the
-stall.
+`pendingRetractions` — is followed by `flushKey(chatStorageKey)`. The `set()` has already driven the
+persist adapter, so the blob carrying the retraction is either on disk (leading edge) or sitting in
+the pending thunk; `flushKey` guarantees the second case lands and leaves the first alone.
+
+**Why `flushKey` and not a `writeNow(key, produce)` that serializes on the spot.** In the idle case
+`schedule` has *already* serialized and written on its leading edge, so a `writeNow` would serialize
+the whole blob a second time and write it again — two full O(conversations) serializations for one
+retraction. It would also duplicate the exact serialization expression the adapter owns, and would
+have to re-derive the scoped key that the adapter captured eagerly. `flushKey` reuses both.
+
+`flushKey` is additionally robust to a question this design cannot settle from the worktree: whether
+zustand's `persist` invokes `setItem` synchronously inside `set()`. If it does, `flushKey` either
+no-ops (leading edge already wrote) or flushes the pending thunk. If it did not, `flushKey` would
+close an empty window and the subsequent `schedule` would find no window open and write immediately
+on its own leading edge. Both orderings persist the retraction synchronously. A `writeNow` placed
+after `set()` would need that ordering assumption to hold merely to avoid being pure duplicate work.
 
 Rejected alternative: splitting `pendingRetractions` into its own key, matching roomStore's layout.
 That is the cleaner long-term shape, but it changes the persisted blob format and needs its own
-migration for entries already on disk. `writeNow` gets the same durability with no format change.
+migration for entries already on disk. `flushKey` gets the same durability with no format change.
 
 ## 2. chatStore
 
@@ -161,7 +178,7 @@ migration for entries already on disk. `writeNow` gets the same durability with 
 3. `switchAccount` → `flush()` before `set(loadScopedChatState(jid))`, so the outgoing account's
    blob is current on disk and an immediate switch-back cannot read a stale one.
 
-4. `recordPendingRetraction` → `writeNow` on the chat key, per §1.2.
+4. `recordPendingRetraction` → `flushKey(scopedKey)` after the `set()`, per §1.2.
 
 5. **Drop the compat map:**
    - Remove `conversations` from `partialize`.
@@ -198,13 +215,20 @@ is load-bearing and stays.
 
 ## 3. roomStore
 
-Route all six writers through the shared module, each under its own resolved storage key so room
-read state coalesces independently of gaps and coverage:
+Changes, as an explicit list:
 
-`saveDraftsToStorage`, `saveVotedPollsToStorage`, `saveDismissedPollsToStorage`,
-`saveGapsToStorage`, `saveCoverageToStorage`, and `persistRoomReadState` (via `saveRoomReadState`).
-
-`savePendingRetractionsToStorage` is deliberately **excluded** and stays synchronous, per §1.2.
+1. Route all six writers through the shared module, each under its own resolved storage key so room
+   read state coalesces independently of gaps and coverage: `saveDraftsToStorage`,
+   `saveVotedPollsToStorage`, `saveDismissedPollsToStorage`, `saveGapsToStorage`,
+   `saveCoverageToStorage`, and `persistRoomReadState` (via `saveRoomReadState`).
+2. `savePendingRetractionsToStorage` is deliberately **excluded** and stays synchronous, per §1.2.
+3. `persistRoomReadState` captures the map into a local before scheduling (§3.1).
+4. **`roomStore.switchAccount` calls `flush()` before reassigning `persistedRoomReadState` and
+   before `set(createEmptyRoomState(...))`.** Without it the outgoing account's pending writes are
+   left to fire on their own, against a module binding that has already been reassigned.
+5. `roomStore.reset` cancels all seven keys before clearing them (§3.2).
+6. `clearRoomReadState` and `_clearAllRoomReadStateForTesting` cancel before removing (§3.2).
+7. The `resolveRoomReadPosition` doc comment is corrected (§3.3).
 
 ### 3.1 Trap: capture the map reference, not the module binding
 
@@ -277,7 +301,7 @@ mutations. Per persisted map, the *direction* of that loss:
 | **Pending retractions** | **A retraction is forgotten and the message is never tombstoned. Not recoverable — the covered range is not re-queried.** | **Durable event** |
 
 The first three are bounded-redundancy losses in the safe direction. The fourth is not, which is why
-it is excluded from the throttle via `writeNow` (§1.2). With that carve-out, no unsafe loss mode
+it is excluded from the throttle via `flushKey` (§1.2). With that carve-out, no unsafe loss mode
 remains.
 
 Ordinary termination — tab close, app quit, mobile backgrounding — loses nothing, provided §4.1
@@ -290,12 +314,14 @@ lands.
 ([useTauriCloseHandler.ts](../../../apps/fluux/src/hooks/useTauriCloseHandler.ts)). Nothing flushes,
 and `pagehide` firing inside the webview before `exit_app` is not something to rely on.
 
-Required: call the flush **synchronously, immediately after `markShuttingDown()`, before the first
-`await`**. Placing it after any `await` risks the process exiting first.
+Required: call `flushPersistentStorage()` **synchronously, immediately after `markShuttingDown()`,
+before the first `await`**. Placing it after any `await` risks the process exiting first — the
+disconnect races a 2 s timeout and `exit_app` follows it.
 
-This makes flush part of the SDK's public API — exported from `index.ts` alongside the other
-lifecycle helpers — rather than an internal detail of the stores module. Until this lands, the
-"ordinary termination loses nothing" claim above does not hold on desktop.
+This makes the flush part of the SDK's public API — exported from `index.ts` as
+`flushPersistentStorage` alongside the other lifecycle helpers — rather than an internal detail of
+the stores module. Ordering is pinned by §5.4. Until this lands, the "ordinary termination loses
+nothing" claim above does not hold on desktop.
 
 ## 5. Testing
 
@@ -309,7 +335,10 @@ lifecycle helpers — rather than an internal detail of the stores module. Until
 - `cancel` drops the pending write and the key is never written.
 - `flush` writes pending state synchronously, and a `schedule` after a flush writes immediately
   (window closed, per §1.1).
-- `writeNow` writes synchronously, discards a pending thunk for that key, and closes the window.
+- `flushKey` writes that key's pending thunk and closes its window, leaving other keys' windows and
+  pending thunks untouched.
+- `flushKey` on a key with **no** pending thunk performs **zero** writes and still closes the
+  window. This is the property that makes the idle case free rather than a second serialization.
 - `pagehide` triggers a flush.
 - `produce` is *not* invoked for coalesced writes (the lazy-serialization property that motivates
   the thunk API).
@@ -324,9 +353,20 @@ lifecycle helpers — rather than an internal detail of the stores module. Until
   `JSON.stringify` would produce for the same final state.
 - **Durability round-trip:** mutate read pointers, gaps and coverage → flush → rehydrate via
   `loadScopedChatState` → assert all three survive exactly.
-- **Retraction durability:** record a pending retraction, then simulate a hard kill (advance no
-  timers, fire no flush) → rehydrate → assert the retraction is on disk. This test must fail if
-  `recordPendingRetraction` is left on the throttled path.
+- **Retraction durability — the window must be open first.** The sequence is load-bearing and the
+  obvious ordering does not test anything:
+
+  1. Perform an ordinary chat mutation. Its leading edge writes a blob with **no** retraction and
+     **opens** the window.
+  2. Without advancing the clock, call `recordPendingRetraction`. Its `set()` is now *coalesced*
+     into the pending thunk rather than written.
+  3. Fire no timer, no `flush`, no lifecycle event — this is the hard kill.
+  4. Rehydrate from whatever is on disk.
+  5. Assert the retraction is present.
+
+  Starting at step 2 — recording a retraction into an idle store — is hollow: with no window open,
+  `schedule` writes it on the leading edge anyway, so the test passes with `flushKey` removed. Step 1
+  is the whole test. Remove `flushKey` and this must go red.
 - **Abrupt close:** mutate → dispatch `pagehide` → assert the write landed with no explicit flush
   call.
 - **Logout:** schedule a write → `reset()` → advance timers past the window → assert no pre-logout
@@ -341,10 +381,48 @@ lifecycle helpers — rather than an internal detail of the stores module. Until
   but left stale in `conversationMeta` satisfies containment and still loses data on the next
   reload. Content equality is what licenses dropping the compat blob.
 
-### 5.3 Guarding against hollow tests
+### 5.3 `stores/roomStore.throttledPersist.test.ts`
+
+Module-level tests (§5.1) prove the throttle works; they prove nothing about whether the six helpers
+are wired to it. A helper left calling `localStorage.setItem` directly passes every test in §5.1.
+
+- Two mutations of the same key inside one window → the **later** value is on disk after flush.
+- Key independence: a draft write does not coalesce, delay or clobber gaps, coverage or read state.
+  Each key holds its own window.
+- Account A → B → A with a write pending on A: assert A's data landed under A's key and that B's
+  key never received it. This is the §3.1 binding trap, asserted end to end.
+- `reset()` → advance past the window → assert no room read state, gaps, coverage or drafts
+  reappear.
+- `_clearAllRoomReadStateForTesting()` → advance past the window → assert no row reappears. This is
+  the cross-test-contamination guard from §3.2; without it the failure surfaces as an unrelated
+  flaky suite.
+- Pending retractions remain synchronous: record one with a window open on the room read-state key,
+  fire nothing, assert it is on disk (the §1.2 exclusion, asserted rather than assumed).
+
+### 5.4 Tauri quit ordering
+
+`useTauriCloseHandler.test.tsx` already pins ordering by recording `shuttingDownAtDisconnect` at
+disconnect time. Extend that pattern with a third recorded fact so the assertion becomes:
+
+```
+markShuttingDown → flushPersistentStorage → disconnect
+```
+
+Recording *whether the flush had happened by the time disconnect was called* is what makes this
+fail if the flush is placed after the first `await`, which is the mistake §4.1 exists to prevent.
+Asserting only that `flushPersistentStorage` was called at some point would pass with it placed
+after `disconnect`, where a 2 s race and an `exit_app` can beat it.
+
+### 5.5 Guarding against hollow tests
 
 Hollow tests — assertions that cannot fail — are this repo's recurring defect, and review does not
-catch them. Three specific guards:
+catch them. The retraction test in §5.2 is a worked example: the first draft of this spec specified
+it in the order that cannot fail, in the same document that warns about exactly this. **The general
+lesson for every test here: a test of "the escape hatch persisted X" must first put the system into
+the state where the ordinary path would *not* have persisted X.** Otherwise it measures the ordinary
+path.
+
+Four specific guards:
 
 **The write-count assertion cannot stand alone.** An implementation that simply drops every trailing
 write satisfies "writes ≤ 25". The staleness control in §5.1 is the paired test that kills that
@@ -355,6 +433,10 @@ count test and fails the control. Neither test is sufficient alone; together the
 hand-built pair of maps proves nothing — it tests the test's own setup. The matrix must drive real
 store actions and assert afterwards, so that a future write site which updates `conversations`
 without `conversationMeta` fails it.
+
+**The roomStore suite must drive the store, not the module.** §5.1 passing tells you nothing about
+whether `saveGapsToStorage` still calls `localStorage.setItem` directly. §5.3 exists to catch a
+helper that was never rewired.
 
 **Tests install a counting `localStorage` object mock rather than an injected sink.** The store
 suites already use object mocks with no key enumeration
@@ -371,7 +453,9 @@ fails. A break check is necessary but not sufficient (#1064).
 
 | Risk | Mitigation |
 |---|---|
-| Pending retraction lost on hard kill → message never tombstoned | Excluded from the throttle; `writeNow` after `recordPendingRetraction` (§1.2); asserted by the retraction-durability test |
+| Pending retraction lost on hard kill → message never tombstoned | Excluded from the throttle; `flushKey` after `recordPendingRetraction` (§1.2); asserted by the window-open-first test (§5.2) |
+| A room helper is never rewired and keeps writing directly | §5.3 drives the store, not the module — module tests cannot catch this |
+| Tauri flush placed after the first `await` and beaten by `exit_app` | §5.4 records whether the flush had happened *by disconnect time*, not merely that it happened |
 | Pending write resurrects room data after logout | `cancel(key)` before every `removeItem`, including `clearRoomReadState` and the test-only clear (§3.2) |
 | Trailing write lands under the wrong account's key | Key resolved eagerly at schedule time; `flush()` on `switchAccount` |
 | roomStore thunk reads a reassigned module binding | Capture the map reference into a local before scheduling (§3.1) |
