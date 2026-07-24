@@ -167,23 +167,58 @@ describe('throttledStorage', () => {
     expect(localStorage.getItem(KEY)).toBe('b')
   })
 
-  it('absorbs a throwing produce without arming a stuck timer', () => {
+  it('a failed leading write leaves no window and no timer', () => {
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error('quota')
+    })
+    expect(() => schedule(KEY, () => 'a')).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+
+    // The next save must write immediately, not be coalesced behind a window
+    // that is guarding a write which never landed.
+    schedule(KEY, () => 'b')
+    expect(localStorage.getItem(KEY)).toBe('b')
+  })
+
+  it('a failed trailing write closes the window instead of rearming', () => {
+    schedule(KEY, () => 'a')
+    schedule(KEY, () => 'b')
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error('quota')
+    })
+    expect(() => vi.advanceTimersByTime(1000)).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+
+    schedule(KEY, () => 'c')
+    expect(localStorage.getItem(KEY)).toBe('c')
+  })
+
+  it('a throwing produce on the trailing edge leaves no timer armed', () => {
     schedule(KEY, () => 'a')
     schedule(KEY, () => {
       throw new Error('serialize failed')
     })
     expect(() => vi.advanceTimersByTime(1000)).not.toThrow()
-    // The window must be usable again afterwards.
+    expect(vi.getTimerCount()).toBe(0)
+
     schedule(KEY, () => 'c')
-    flush()
     expect(localStorage.getItem(KEY)).toBe('c')
   })
 
-  it('absorbs a throwing setItem', () => {
-    localStorageMock.setItem.mockImplementationOnce(() => {
-      throw new Error('quota')
+  it('a throwing produce inside flush and flushKey does not propagate', () => {
+    schedule(KEY, () => 'a')
+    schedule(KEY, () => {
+      throw new Error('serialize failed')
     })
-    expect(() => schedule(KEY, () => 'a')).not.toThrow()
+    expect(() => flush()).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+
+    schedule(OTHER, () => 'x')
+    schedule(OTHER, () => {
+      throw new Error('serialize failed')
+    })
+    expect(() => flushKey(OTHER)).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 ```
@@ -250,11 +285,15 @@ let lifecycleRegistered = false
  * throw escaping here would propagate out of a `set()` call or a `pagehide`
  * handler.
  */
-function write(key: string, produce: () => string): void {
+function write(key: string, produce: () => string): boolean {
   try {
     localStorage.setItem(key, produce())
+    return true
   } catch {
-    // Continue without persistence, as every replaced call site did.
+    // Continue without persistence, as every replaced call site did — but the
+    // CALLER must know, so it can avoid arming a window around a write that
+    // never landed.
+    return false
   }
 }
 
@@ -272,7 +311,13 @@ function onTimer(key: string): void {
   // Cleared BEFORE the write: a throwing `produce` must not leave the thunk
   // armed to be retried forever.
   entry.pending = undefined
-  write(key, pending)
+  if (!write(key, pending)) {
+    // Failed write: close the window instead of rearming. Leaving a timer
+    // armed around a failure would make the next good save wait a full window
+    // for no reason; closing lets it take the leading edge immediately.
+    entries.delete(key)
+    return
+  }
   // Open a fresh window rather than closing. This is what makes a sustained
   // burst write at a steady rate instead of going silent after two writes.
   entry.timer = setTimeout(() => onTimer(key), WINDOW_MS)
@@ -310,7 +355,11 @@ export function schedule(key: string, produce: () => string): void {
     return
   }
 
-  write(key, produce)
+  // Only arm a window if the leading write actually landed. A failed write
+  // must leave no window and no timer, so the next schedule can retry
+  // immediately on its own leading edge rather than being coalesced behind a
+  // window that is guarding nothing.
+  if (!write(key, produce)) return
   entries.set(key, { timer: setTimeout(() => onTimer(key), WINDOW_MS) })
 }
 
@@ -586,18 +635,52 @@ cd packages/fluux-sdk && npx vitest run src/stores/chatStore.persist.test.ts
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 7: Run the full chat store suite for regressions**
+- [ ] **Step 7: Adapt the existing chatStore suite to the new timing contract**
+
+The throttle changes when writes land, so suites written against synchronous
+persistence break. These are known, not hypothetical:
+
+`chatStore.test.ts`'s `beforeEach` calls `chatStore.setState({...})` after
+`localStorageMock.clear()`. That `setState` goes through the persist adapter and
+**opens a throttle window**, so the first mutation of every test body is
+coalesced instead of writing immediately. Add `_resetForTesting()` to the
+`beforeEach`, after the `setState`:
+
+```typescript
+import { _resetForTesting } from './shared/throttledStorage'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    chatStore.setState({ /* ...existing reset... */ })
+    // The setState above went through the persist adapter and opened a
+    // throttle window. Drop it, so each test starts with a closed window and
+    // its first mutation takes the leading edge.
+    _resetForTesting()
+  })
+```
+
+Then run the suite and fix the fallout. For any test that asserts on-disk
+state, add an explicit `flush()` before the assertion — **only** where the test
+genuinely means to observe the final persisted blob. Do not sprinkle `flush()`
+to make failures disappear: a test that was asserting on a mid-burst write is a
+test whose intent needs re-reading.
+
+- [ ] **Step 8: Run the full chat store suite for regressions**
 
 ```bash
 cd packages/fluux-sdk && npx vitest run src/stores/chatStore
 ```
 
-Expected: PASS, no stderr.
+Expected: PASS, no stderr. Two tests at `chatStore.test.ts:2067` and `:2086`
+assert `parsed.state.conversations` and will still fail here — they are Task 3's
+to fix, since Task 3 is what removes that field. If anything *else* fails,
+resolve it before moving on.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add packages/fluux-sdk/src/stores/chatStore.ts packages/fluux-sdk/src/stores/chatStore.persist.test.ts
+git add packages/fluux-sdk/src/stores/chatStore.ts packages/fluux-sdk/src/stores/chatStore.persist.test.ts packages/fluux-sdk/src/stores/chatStore.test.ts
 git commit -m "perf(sdk): throttle chatStore localStorage writes"
 ```
 
@@ -884,6 +967,17 @@ to:
     "zustand": "^5.0.0"
 ```
 
+Then regenerate the root lockfile, which carries workspace dependency metadata:
+
+```bash
+npm install --package-lock-only
+git diff --stat package-lock.json
+```
+
+Expected: `package-lock.json` shows the narrowed peer range. It must be
+committed with the manifest change — a lockfile left describing the old range
+is a dirty tree on the next `npm install` and a CI diff.
+
 - [ ] **Step 6: Verify the whole SDK suite and typecheck**
 
 ```bash
@@ -895,7 +989,7 @@ Expected: PASS, no stderr.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/fluux-sdk/src/stores/chatStore.ts packages/fluux-sdk/src/stores/chatStore.persist.test.ts packages/fluux-sdk/package.json
+git add packages/fluux-sdk/src/stores/chatStore.ts packages/fluux-sdk/src/stores/chatStore.persist.test.ts packages/fluux-sdk/package.json package-lock.json
 git commit -m "fix(sdk): keep pending retractions off the persist throttle
 
 Narrows the zustand peer range to ^5.0.0: the storage adapter was never
@@ -930,6 +1024,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 
 import { roomStore } from './roomStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
+import { _clearAllRoomReadStateForTesting } from './shared/readStateStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 
 const ROOM = 'room@conference.example.com'
@@ -978,14 +1073,69 @@ describe('roomStore throttled persistence', () => {
     roomStore.getState().setDraft(ROOM, 'a-first')
     roomStore.getState().setDraft(ROOM, 'a-pending')
 
+    // Production order: XMPPClient.ts:1020-1022 sets the storage scope FIRST,
+    // then calls switchAccount on both stores. Skipping the scope change would
+    // test a sequence that never occurs.
+    setStorageScopeJid('b@example.com')
     roomStore.getState().switchAccount('b@example.com')
     vi.advanceTimersByTime(5000)
 
     expect(localStorage.getItem('fluux-room-drafts:a@example.com')).toContain('a-pending')
     expect(localStorage.getItem('fluux-room-drafts:b@example.com') ?? '').not.toContain('a-pending')
 
+    setStorageScopeJid('a@example.com')
     roomStore.getState().switchAccount('a@example.com')
     expect(roomStore.getState().roomDrafts.get(ROOM)).toBe('a-pending')
+  })
+
+  // Drafts and polls alone leave the three durable maps untested — and those
+  // are the ones the #1081 read-pointer work depends on.
+  it('coalesces gaps and keeps the latest', () => {
+    const gapKey = 'fluux-room-gaps'
+    roomStore.getState().recordRoomGap(ROOM, { startId: 'g1', endTimestamp: new Date(1000) })
+    roomStore.getState().recordRoomGap(ROOM, { startId: 'g2', endTimestamp: new Date(2000) })
+    flush()
+    expect(localStorage.getItem(gapKey)).toContain('g2')
+  })
+
+  it('coalesces coverage and keeps the latest', () => {
+    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'c1', newestId: 'c2' })
+    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'c1', newestId: 'c3' })
+    flush()
+    expect(localStorage.getItem('fluux-room-coverage')).toContain('c3')
+  })
+
+  it('coalesces room read state and keeps the latest pointer', () => {
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'r1', timestamp: new Date(1000) })
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'r2', timestamp: new Date(2000) })
+    flush()
+    expect(localStorage.getItem('fluux-room-read-state')).toContain('r2')
+  })
+
+  it('reset cancels pending gap, coverage and read-state writes', () => {
+    roomStore.getState().recordRoomGap(ROOM, { startId: 'g-first', endTimestamp: new Date(1000) })
+    roomStore.getState().recordRoomGap(ROOM, { startId: 'g-pending', endTimestamp: new Date(2000) })
+    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'cov-first', newestId: 'cov-first' })
+    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'cov-first', newestId: 'cov-pending' })
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'read-first', timestamp: new Date(1000) })
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'read-pending', timestamp: new Date(2000) })
+
+    roomStore.getState().reset()
+    vi.advanceTimersByTime(5000)
+
+    expect(localStorage.getItem('fluux-room-gaps') ?? '').not.toContain('g-pending')
+    expect(localStorage.getItem('fluux-room-coverage') ?? '').not.toContain('cov-pending')
+    expect(localStorage.getItem('fluux-room-read-state') ?? '').not.toContain('read-pending')
+  })
+
+  it('_clearAllRoomReadStateForTesting leaves no row to resurrect', () => {
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'r-first', timestamp: new Date(1000) })
+    roomStore.getState().markRoomAsRead(ROOM, { id: 'r-pending', timestamp: new Date(2000) })
+
+    _clearAllRoomReadStateForTesting()
+    vi.advanceTimersByTime(5000)
+
+    expect(localStorage.getItem('fluux-room-read-state') ?? '').not.toContain('r-pending')
   })
 
   it('reset does not let a pending write resurrect room data', () => {
@@ -1172,18 +1322,41 @@ At ~line 300, replace the paragraph beginning "Between the other two…" — spe
  * lag more, never lead — so "later" only ever recovers the freshest one.
 ```
 
-- [ ] **Step 9: Run tests, typecheck, lint**
+- [ ] **Step 9: Adapt the existing room suites to the new timing contract**
+
+Two suites are written against synchronous persistence and will break:
+
+`readStateStorage.test.ts` — its `beforeEach` (line ~20) clears storage and sets
+the scope but knows nothing about throttle windows, so a window left open by one
+test coalesces the next test's first save. Add `_resetForTesting()` to the
+`beforeEach`, and `flush()` in the tests that assert on-disk rows.
+
+`roomStore.test.ts` — roughly fifteen assertions take the form
+`expect(localStorageMock.setItem).toHaveBeenCalledWith('fluux-room-drafts', ...)`
+or read `lastCall?.[0]`, at lines ~3595-3657 (drafts), ~5705-5718 (voted polls)
+and ~5787 (dismissed polls). A first write still lands on the leading edge, so
+some survive; any test making **two** mutations and asserting on the second, or
+asserting a call count, will not. Add `flush()` before those assertions where
+the test means to observe the final state, and `_resetForTesting()` to the
+suite's `beforeEach`.
+
+Run and fix until green. As in Task 2: do not add `flush()` to silence a
+failure without reading what the test intended.
+
+- [ ] **Step 10: Run tests, typecheck, lint**
 
 ```bash
-cd packages/fluux-sdk && npx vitest run src/stores/roomStore && npm run typecheck && npm run lint
+cd packages/fluux-sdk && npx vitest run src/stores/roomStore src/stores/shared/readStateStorage && npm run typecheck && npm run lint
 ```
 
-Expected: PASS, no stderr.
+Expected: PASS, no stderr. `readStateStorage` is included deliberately — it is
+the suite most likely to break, and it is not covered by the `roomStore` path
+filter.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
-git add packages/fluux-sdk/src/stores/roomStore.ts packages/fluux-sdk/src/stores/shared/readStateStorage.ts packages/fluux-sdk/src/stores/roomStore.throttledPersist.test.ts
+git add packages/fluux-sdk/src/stores/roomStore.ts packages/fluux-sdk/src/stores/shared/readStateStorage.ts packages/fluux-sdk/src/stores/roomStore.throttledPersist.test.ts packages/fluux-sdk/src/stores/roomStore.test.ts packages/fluux-sdk/src/stores/shared/readStateStorage.test.ts
 git commit -m "perf(sdk): throttle roomStore localStorage writes"
 ```
 
@@ -1204,26 +1377,47 @@ git commit -m "perf(sdk): throttle roomStore localStorage writes"
 
 In `apps/fluux/src/hooks/useTauriCloseHandler.test.tsx`, mock the SDK export and record whether the flush had happened **by the time disconnect was called** — not merely that it happened. Asserting the latter passes with the flush placed after `disconnect`, which is the exact mistake this guards.
 
+The file uses `renderHook`, not a `Harness` component. Follow its existing
+shape exactly.
+
+Add the flush spy beside the existing `mockDisconnect` declaration:
+
 ```typescript
 const mockFlush = vi.fn()
-let flushedAtDisconnect = false
-// Add to the existing '@fluux/sdk' vi.mock factory:
-//   flushPersistentStorage: mockFlush,
-// and in the mock client's disconnect implementation:
-//   flushedAtDisconnect = mockFlush.mock.calls.length > 0
 
-it('flushes persistent storage before disconnecting', async () => {
-  render(<Harness />)
-  await waitFor(() => expect(shutdownHandler).not.toBeNull())
-
-  await shutdownHandler!()
-
-  expect(mockFlush).toHaveBeenCalled()
-  expect(flushedAtDisconnect).toBe(true)
+// Records whether the flush had already run at the moment disconnect fired.
+let flushedAtDisconnect: boolean | null = null
+const mockDisconnect = vi.fn(async () => {
+  shuttingDownAtDisconnect = isShuttingDown()
+  flushedAtDisconnect = mockFlush.mock.calls.length > 0
 })
 ```
 
-Wire `mockFlush` and `flushedAtDisconnect` into the file's existing mock setup, following how `shuttingDownAtDisconnect` is already captured at [useTauriCloseHandler.test.tsx:46](../../../apps/fluux/src/hooks/useTauriCloseHandler.test.tsx). Reset both in `beforeEach`.
+Extend the existing `@fluux/sdk` mock factory with the new export:
+
+```typescript
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
+  useXMPPContext: () => ({ client: { disconnect: mockDisconnect } }),
+  flushPersistentStorage: mockFlush,
+}))
+```
+
+Reset both in `beforeEach`: `mockFlush.mockClear()` and
+`flushedAtDisconnect = null`. Then the test:
+
+```typescript
+  it('flushes persisted storage before disconnecting', async () => {
+    renderHook(() => useTauriCloseHandler())
+    await waitFor(() => expect(shutdownHandler).not.toBeNull())
+
+    await shutdownHandler!()
+
+    // Not merely "was called" — that passes with the flush placed AFTER
+    // disconnect, where a 2s race and exit_app can beat it.
+    expect(flushedAtDisconnect).toBe(true)
+  })
+```
 
 - [ ] **Step 2: Run to verify it fails**
 
