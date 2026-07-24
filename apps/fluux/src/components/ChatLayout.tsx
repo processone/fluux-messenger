@@ -111,7 +111,7 @@ function GlobalEffects() {
 /** Lightweight skeleton fallback for lazy-loaded views to prevent layout shift */
 function ViewLoadingFallback() {
   return (
-    <div className="h-full flex flex-col bg-fluux-chat">
+    <div className="h-full flex flex-col bg-fluux-chat" data-testid="view-loading-fallback">
       <div className="h-12 px-4 flex items-center border-b border-fluux-bg" />
       <div className="flex-1" />
     </div>
@@ -599,7 +599,16 @@ function ChatLayoutContent() {
   const adminHasMainContent = sidebarView === 'admin' && (adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats')
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid)
+  // A hydrating activation counts as main-pane content: the active id lands only
+  // once the cache read resolves, so without this the mobile single-pane swap
+  // waits on IndexedDB and the tap on a conversation/room row looks dead. Same
+  // flag drives the neutral surface in the render cascade below, so the pane that
+  // opens is the one that holds it. Excluded on the settings/admin tabs: their
+  // branches sit above that surface in the cascade, so a pending activation there
+  // would hand the screen to a category-less view the user never selected — and
+  // those views intentionally let mobile pick from the sidebar first.
+  const activationHoldsMainPane = activationPending && sidebarView !== 'settings' && sidebarView !== 'admin'
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid || activationHoldsMainPane)
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
@@ -947,7 +956,7 @@ function ChatLayoutContent() {
       <div className="flex flex-1 min-h-0">
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
-        <div className={`${hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
+        <div className={`${hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`} data-testid="sidebar-pane">
           <Sidebar
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
@@ -1008,10 +1017,11 @@ function ChatLayoutContent() {
             <Suspense fallback={<ViewLoadingFallback />}>
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
             </Suspense>
-          ) : activationPending ? (
+          ) : activationHoldsMainPane ? (
             // A hydrating activation is in flight (cache load before the active id
             // lands). Hold the neutral loading surface — matching the lazy views
             // above — so switching content tabs doesn't flash the empty-state hero.
+            // This is the surface the mobile pane swap above opens onto.
             <ViewLoadingFallback />
           ) : (
             <EmptyState
