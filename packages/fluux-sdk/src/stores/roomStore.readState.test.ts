@@ -131,7 +131,7 @@ describe('room read state persistence', () => {
     expect(persisted.get(ROOM)?.historyFloor).toBeInstanceOf(Date)
     // …and the pointer itself, not just the creation-time floor: a wiring that
     // only saved at addRoom would pass the floor assertion above on its own.
-    expect(persisted.get(ROOM)?.readPointer).toEqual({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(persisted.get(ROOM)?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
   })
 
   // The one shape that can tell DISK apart from MEMORY, and so the only test
@@ -169,7 +169,7 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM))
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer).toEqual({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(meta?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
   })
 
   // The cross-restart half of the "written once" rule: re-adding the room in a
@@ -190,7 +190,7 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m1', 1000), rmsg('m2', 2000)]))
     roomStore.getState().markReadToNewest(ROOM)
 
-    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({
+    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toMatchObject({
       messageId: 'm2',
       timestamp: new Date(2000),
     })
@@ -222,7 +222,7 @@ describe('room read state persistence', () => {
     roomStore.getState().setBookmark(ROOM, { name: 'Room', nick: 'me', autojoin: true })
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer).toEqual({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(meta?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
     expect(meta?.historyFloor).toEqual(floor)
   })
 

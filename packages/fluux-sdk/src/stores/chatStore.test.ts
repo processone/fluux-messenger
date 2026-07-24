@@ -1676,7 +1676,7 @@ describe('chatStore', () => {
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(0)
       // The whole position moved to msg1 — id and timestamp together.
-      expect(conv?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(conv?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
     })
 
     // Replaces 'should set lastReadAt to current time when no messages exist'
@@ -1719,7 +1719,7 @@ describe('chatStore', () => {
       chatStore.getState().markAsRead('alice@example.com')
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(conv?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
     })
 
     it('should not trigger state update when called twice at the same read position (regression test for infinite loop)', () => {
@@ -1744,7 +1744,7 @@ describe('chatStore', () => {
       chatStore.getState().markAsRead('alice@example.com')
       const convAfterFirst = chatStore.getState().conversations.get('alice@example.com')
       expect(convAfterFirst?.unreadCount).toBe(0)
-      expect(convAfterFirst?.readPointer).toEqual({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(convAfterFirst?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
 
       // Capture conversation reference after first markAsRead
       const conversationsMapAfterFirst = chatStore.getState().conversations

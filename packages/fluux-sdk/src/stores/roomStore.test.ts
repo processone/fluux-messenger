@@ -1605,7 +1605,7 @@ describe('roomStore', () => {
       roomStore.getState().markAsRead('test@conference.example.com')
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
+      expect(room?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: msgTimestamp })
     })
 
     // Replaces 'should set lastReadAt to current time when no messages exist'
@@ -1644,7 +1644,7 @@ describe('roomStore', () => {
       roomStore.getState().markAsRead('test@conference.example.com')
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
+      expect(room?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: msgTimestamp })
     })
 
     it('should not trigger state update when called twice at the same read position (regression test for infinite loop)', () => {
@@ -1665,7 +1665,7 @@ describe('roomStore', () => {
       const roomAfterFirst = roomStore.getState().rooms.get('test@conference.example.com')
       expect(roomAfterFirst?.unreadCount).toBe(0)
       expect(roomAfterFirst?.mentionsCount).toBe(0)
-      expect(roomAfterFirst?.readPointer).toEqual({ messageId: 'msg1', timestamp: msgTimestamp })
+      expect(roomAfterFirst?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: msgTimestamp })
 
       // Capture rooms Map reference after first markAsRead
       const roomsMapAfterFirst = roomStore.getState().rooms

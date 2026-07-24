@@ -24,7 +24,7 @@ describe('compareOrder', () => {
 
 describe('computeFloor', () => {
   it('is pointer-wins, not max (migrated pointer behind historyFloor=now)', () => {
-    const p = makeReadPointer({ id: 'm', timestamp: new Date(1000) })
+    const p = makeReadPointer({ id: 'm', timestamp: new Date(1000) }, 'chat')
     expect(computeFloor(p, new Date(9_999_999))!.getTime()).toBe(1000)
   })
   it('falls back to historyFloor when pointerless', () => {

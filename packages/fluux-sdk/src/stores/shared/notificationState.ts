@@ -74,6 +74,8 @@ export interface NotificationMessage {
   isOutgoing: boolean
   isDelayed?: boolean
   isMention?: boolean
+  /** Sender's JID — feeds the ROOM archive order key's (from, id) tie-break. */
+  from?: string
 }
 
 /** Context about the entity's current visibility and unread state. */
@@ -118,6 +120,7 @@ export function onMessageReceived(
   state: EntityNotificationState,
   msg: NotificationMessage,
   ctx: EntityContext,
+  kind: 'chat' | 'room',
   options?: MessageReceivedOptions
 ): EntityNotificationState {
   const { incrementUnread = true, incrementMentions = false, treatDelayedAsNew = false } = options ?? {}
@@ -128,7 +131,7 @@ export function onMessageReceived(
     return {
       unreadCount: 0,
       mentionsCount: 0,
-      readPointer: makeReadPointer(msg),
+      readPointer: makeReadPointer(msg, kind),
       firstNewMessageId: undefined,
     }
   }
@@ -148,7 +151,7 @@ export function onMessageReceived(
     return {
       unreadCount: 0,
       mentionsCount: 0,
-      readPointer: makeReadPointer(msg),
+      readPointer: makeReadPointer(msg, kind),
       firstNewMessageId: state.firstNewMessageId,
     }
   }
@@ -192,6 +195,7 @@ export function onMessageReceived(
 export function onActivate(
   state: EntityNotificationState,
   messages: NotificationMessage[],
+  kind: 'chat' | 'room',
   options?: { treatDelayedAsNew?: boolean }
 ): EntityNotificationState {
   const { treatDelayedAsNew = false } = options ?? {}
@@ -302,7 +306,7 @@ export function onActivate(
   const pointerMessage = updatedSeenMessageId
     ? messages.find((m) => m.id === updatedSeenMessageId)
     : undefined
-  const updatedPointer = pointerMessage ? makeReadPointer(pointerMessage) : state.readPointer
+  const updatedPointer = pointerMessage ? makeReadPointer(pointerMessage, kind) : state.readPointer
 
   // Mark as read: clear the counts. The read position is the pointer above and
   // nothing else — there is no separate "when I last activated" timestamp to
@@ -354,6 +358,7 @@ export function onDeactivate(
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
+  kind: 'chat' | 'room',
   advanceSeenTo?: PointerSource
 ): EntityNotificationState {
   // Skip update if nothing to change (prevents unnecessary state updates).
@@ -370,7 +375,7 @@ export function onMarkAsRead(
     mentionsCount: 0,
     // No extra forward-only guard: the caller owns the "the user is caught up
     // to this message" call, and the pointer moves whole or not at all.
-    readPointer: advanceSeenTo ? makeReadPointer(advanceSeenTo) : state.readPointer,
+    readPointer: advanceSeenTo ? makeReadPointer(advanceSeenTo, kind) : state.readPointer,
   }
 }
 
@@ -439,6 +444,7 @@ export function onMessageSeen(
   state: EntityNotificationState,
   messageId: string,
   messages: Array<PointerSource>,
+  kind: 'chat' | 'room',
   options?: { atLiveEdge?: boolean }
 ): EntityNotificationState {
   const newIdx = messages.findIndex((m) => m.id === messageId)
@@ -447,7 +453,7 @@ export function onMessageSeen(
   if (newIdx === -1) return state
   const advanced = (): EntityNotificationState => ({
     ...state,
-    readPointer: makeReadPointer(messages[newIdx]),
+    readPointer: makeReadPointer(messages[newIdx], kind),
   })
 
   // No read position yet: any resolvable message is an advancement.
@@ -532,6 +538,7 @@ export interface RecomputeCountsOptions {
 export function recomputeCountsFromPointer(
   state: EntityNotificationState,
   messages: NotificationMessage[],
+  kind: 'chat' | 'room',
   options?: RecomputeCountsOptions
 ): EntityNotificationState {
   const {
@@ -552,7 +559,7 @@ export function recomputeCountsFromPointer(
       ...state,
       unreadCount: 0,
       mentionsCount: 0,
-      readPointer: makeReadPointer(newest),
+      readPointer: makeReadPointer(newest, kind),
     }
   }
 
@@ -575,7 +582,7 @@ export function recomputeCountsFromPointer(
   let newReadPointer = state.readPointer
   for (let i = messages.length - 1; i >= startIdx; i--) {
     if (messages[i].isOutgoing) {
-      newReadPointer = makeReadPointer(messages[i])
+      newReadPointer = makeReadPointer(messages[i], kind)
       startIdx = i + 1
       break
     }

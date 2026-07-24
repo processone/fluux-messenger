@@ -10,61 +10,69 @@ import {
 const at = (ms: number) => new Date(ms)
 
 describe('makeReadPointer', () => {
-  it('captures the id and timestamp of the message it names', () => {
-    expect(makeReadPointer({ id: 'm1', timestamp: at(1000) })).toEqual({
+  it('captures the id and timestamp of the message it names, plus its archive order key', () => {
+    expect(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')).toEqual({
       messageId: 'm1',
       timestamp: at(1000),
+      archiveOrderKey: { kind: 'chat', id: 'm1' },
     })
+  })
+
+  it('round-trips a room pointer with its archiveOrderKey', () => {
+    const p = makeReadPointer({ id: 'm1', from: 'r@c/alice', timestamp: at(1000) }, 'room')
+    expect(p.archiveOrderKey).toEqual({ kind: 'room', from: 'r@c/alice', id: 'm1' })
+    expect(deserializeReadPointer(serializeReadPointer(p))!.archiveOrderKey)
+      .toEqual({ kind: 'room', from: 'r@c/alice', id: 'm1' })
   })
 })
 
 describe('isAhead', () => {
   it('treats any candidate as ahead of no pointer', () => {
-    expect(isAhead(makeReadPointer({ id: 'm1', timestamp: at(1000) }), undefined)).toBe(true)
+    expect(isAhead(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'), undefined)).toBe(true)
   })
 
   it('is ahead when strictly newer', () => {
-    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) })
-    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(2000) }), current)).toBe(true)
+    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(2000) }, 'chat'), current)).toBe(true)
   })
 
   it('is NOT ahead when older', () => {
-    const current = makeReadPointer({ id: 'm2', timestamp: at(2000) })
-    expect(isAhead(makeReadPointer({ id: 'm1', timestamp: at(1000) }), current)).toBe(false)
+    const current = makeReadPointer({ id: 'm2', timestamp: at(2000) }, 'chat')
+    expect(isAhead(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'), current)).toBe(false)
   })
 
   // Control: a `>=` implementation passes every test above and fails this one.
   // Equal timestamps must NOT advance — a same-instant sibling is not progress,
   // and treating it as one makes the MDS publisher re-assert forever.
   it('is NOT ahead when the timestamp is equal but the id differs', () => {
-    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) })
-    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(1000) }), current)).toBe(false)
+    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat'), current)).toBe(false)
   })
 })
 
 describe('advance', () => {
   it('takes the candidate when it is ahead', () => {
-    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) })
-    const next = makeReadPointer({ id: 'm2', timestamp: at(2000) })
+    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    const next = makeReadPointer({ id: 'm2', timestamp: at(2000) }, 'chat')
     expect(advance(current, next)).toBe(next)
   })
 
   it('returns the SAME reference when the candidate is behind', () => {
-    const current = makeReadPointer({ id: 'm2', timestamp: at(2000) })
-    const older = makeReadPointer({ id: 'm1', timestamp: at(1000) })
+    const current = makeReadPointer({ id: 'm2', timestamp: at(2000) }, 'chat')
+    const older = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
     // Reference equality matters: Zustand selectors use it to skip re-renders.
     expect(advance(current, older)).toBe(current)
   })
 
   it('adopts the candidate when there is no current pointer', () => {
-    const next = makeReadPointer({ id: 'm1', timestamp: at(1000) })
+    const next = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
     expect(advance(undefined, next)).toBe(next)
   })
 })
 
 describe('serialization', () => {
   it('round-trips through JSON', () => {
-    const p = makeReadPointer({ id: 'm1', timestamp: at(1000) })
+    const p = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
     const raw = JSON.parse(JSON.stringify(serializeReadPointer(p)))
     expect(deserializeReadPointer(raw)).toEqual(p)
   })
@@ -95,5 +103,20 @@ describe('serialization', () => {
     ['a string timestamp that is not a valid date', { messageId: 'm1', timestamp: 'later' }],
   ])('returns undefined for %s', (_label, raw) => {
     expect(deserializeReadPointer(raw)).toBeUndefined()
+  })
+
+  // The persisted key is untrusted input too: a malformed one must not ride
+  // through into ordering comparisons. Dropping only the key (not the whole
+  // pointer) keeps the id/timestamp that are otherwise fine.
+  it('drops a malformed persisted archiveOrderKey instead of trusting it', () => {
+    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey: { kind: 'room', id: 'x' } })
+    expect(back!.archiveOrderKey).toBeUndefined() // missing `from` → invalid → dropped
+    expect(back!.messageId).toBe('m') // the pointer itself survives
+  })
+
+  // A pointer migrated from the pre-#1081 legacy fields has no message
+  // position to derive a key from — absence here is legitimate, not corrupt.
+  it('a legacy pointer with no key deserializes with archiveOrderKey undefined', () => {
+    expect(deserializeReadPointer({ messageId: 'm', timestamp: 1000 })!.archiveOrderKey).toBeUndefined()
   })
 })

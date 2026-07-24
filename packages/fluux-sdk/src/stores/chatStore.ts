@@ -665,7 +665,7 @@ export async function migrateReadPointer(
 
   if (lastSeenMessageId) {
     const cached = await messageCache.getMessage(lastSeenMessageId)
-    if (cached) return makeReadPointer(cached)
+    if (cached) return makeReadPointer(cached, 'chat')
     return undefined
   }
 
@@ -687,7 +687,7 @@ export async function migrateReadPointer(
       before: new Date(lastReadAt.getTime() + 1),
       limit: 1,
     })
-    return newest ? makeReadPointer(newest) : undefined
+    return newest ? makeReadPointer(newest, 'chat') : undefined
   }
 
   return undefined
@@ -1190,7 +1190,7 @@ export const chatStore = createStore<ChatState>()(
             // 1:1 chats treat delayed messages as new (offline delivery), so the
             // marker may land on a delayed message — unlike rooms, where delayed
             // means MUC history replay.
-            const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
+            const activated = notifState.onActivate(notifInput, messages, 'chat', { treatDelayedAsNew: true })
 
             set((state) => {
               const newMetaEntry = {
@@ -1471,6 +1471,7 @@ export const chatStore = createStore<ChatState>()(
               },
               msg,
               { isActive, windowVisible },
+              'chat',
               // In 1:1 chats, delayed messages are offline delivery (new messages
               // sent while user was offline), so they should increment unread
               { treatDelayedAsNew: true }
@@ -1570,7 +1571,7 @@ export const chatStore = createStore<ChatState>()(
           const advanceSeenTo = atLiveEdge ? lastMessage : undefined
 
           // Delegate to pure function
-          const updated = notifState.onMarkAsRead(notifInput, advanceSeenTo)
+          const updated = notifState.onMarkAsRead(notifInput, 'chat', advanceSeenTo)
 
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
@@ -1613,7 +1614,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           const read = {
-            readPointer: makeReadPointer(newest),
+            readPointer: makeReadPointer(newest, 'chat'),
             unreadCount: 0,
           }
 
@@ -1657,6 +1658,7 @@ export const chatStore = createStore<ChatState>()(
               firstNewMessageId: undefined,
             },
             messages,
+            'chat',
             { treatDelayedAsNew: true }
           ).firstNewMessageId
 
@@ -1693,6 +1695,7 @@ export const chatStore = createStore<ChatState>()(
             },
             messageId,
             messages,
+            'chat',
             { atLiveEdge }
           )
 
@@ -1737,6 +1740,7 @@ export const chatStore = createStore<ChatState>()(
             messages,
             state.firstNewMessageMarkers.get(conversationId),
             stanzaId,
+            'chat',
             // 1:1 chats treat delayed messages as offline delivery.
             { isActive: state.activeConversationId === conversationId, treatDelayedAsNew: true }
           )
@@ -1774,7 +1778,8 @@ export const chatStore = createStore<ChatState>()(
                 readPointer: resolution.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               },
-              messages
+              messages,
+              'chat'
             )
             newMeta.set(conversationId, {
               ...newMeta.get(conversationId)!,
@@ -1835,7 +1840,7 @@ export const chatStore = createStore<ChatState>()(
                   readPointer: meta.readPointer,
                   firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
                 }
-                const exact = notifState.recomputeCountsFromPointer(pointerState, cached, {
+                const exact = notifState.recomputeCountsFromPointer(pointerState, cached, 'chat', {
                   // Same stand-down as the other recount sites: an un-migrated
                   // legacy read position must not be overwritten by a snap.
                   hasUnmigratedLegacyReadState: hasUnmigratedLegacyReadState(conversationId),
@@ -2253,7 +2258,7 @@ export const chatStore = createStore<ChatState>()(
             readPointer: meta.readPointer,
             firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
-          const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice, {
+          const recomputed = notifState.recomputeCountsFromPointer(pointerState, slice, 'chat', {
             // A conversation still waiting on the #1081 migration has a read
             // position we cannot express as a message id yet — snapping the
             // pointer to newest here would destroy it (forward-only).
@@ -2572,7 +2577,7 @@ export const chatStore = createStore<ChatState>()(
                 readPointer: meta.readPointer,
                 firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
               }
-              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker, {
+              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker, 'chat', {
                 // A stashed XEP-0490 marker is resolved after this set(), and that
                 // fold is forward-only — so the guard must not snap the pointer
                 // past it first (issue #1076).

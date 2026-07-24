@@ -27,7 +27,7 @@ describe('room read-state persistence', () => {
   it('round-trips a pointer and a history floor', () => {
     const state = new Map<string, RoomReadState>([
       ['room@conf.example.com', {
-        readPointer: makeReadPointer({ id: 'm7', timestamp: at(7000) }),
+        readPointer: makeReadPointer({ id: 'm7', from: 'room@conf.example.com/alice', timestamp: at(7000) }, 'room'),
         historyFloor: at(100),
       }],
     ])
@@ -35,7 +35,11 @@ describe('room read-state persistence', () => {
 
     const restored = loadRoomReadState(JID)
     expect(restored.get('room@conf.example.com')).toEqual({
-      readPointer: { messageId: 'm7', timestamp: at(7000) },
+      readPointer: {
+        messageId: 'm7',
+        timestamp: at(7000),
+        archiveOrderKey: { kind: 'room', from: 'room@conf.example.com/alice', id: 'm7' },
+      },
       historyFloor: at(100),
     })
   })

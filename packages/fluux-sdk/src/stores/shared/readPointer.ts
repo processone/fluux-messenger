@@ -15,6 +15,8 @@
  * All functions here are pure.
  */
 
+import { makeArchiveOrderKey, isValidArchiveOrderKey, type ArchiveOrderKey } from './readState'
+
 /**
  * Where the user has read to. Written atomically or not at all.
  *
@@ -33,23 +35,46 @@ export interface ReadPointer {
   messageId: string
   /** Timestamp OF that message (see the migration caveat above). */
   timestamp: Date
+  /**
+   * The archive's own tie-break key for `messageId`, for counting unread
+   * strictly-after a POSITION rather than a timestamp alone (two messages can
+   * share a millisecond). OPTIONAL, deliberately: a pointer migrated from the
+   * pre-#1081 legacy `lastSeenMessageId` + `lastReadAt` pair has only a
+   * timestamp and no resolvable message position, so the key is legitimately
+   * absent — counting then falls back to strict-after-timestamp, which
+   * over-counts (the safe direction) rather than under-counts.
+   */
+  archiveOrderKey?: ArchiveOrderKey
 }
 
 /** JSON-safe form for localStorage. */
 export interface SerializedReadPointer {
   messageId: string
   timestamp: number
+  archiveOrderKey?: ArchiveOrderKey
 }
 
 /** The minimal message shape a pointer can be built from. */
 export interface PointerSource {
   id: string
+  /** Sender's JID — needed for the ROOM archive order key's (from, id) tie-break. */
+  from?: string
   timestamp: Date
 }
 
-/** Build a pointer naming `message`. */
-export function makeReadPointer(message: PointerSource): ReadPointer {
-  return { messageId: message.id, timestamp: message.timestamp }
+/**
+ * Build a pointer naming `message`. `kind` is required rather than guessed:
+ * this module has no way to know whether it is serving a chat or a room, and
+ * the two kinds break same-millisecond ties differently (see
+ * {@link ArchiveOrderKey}) — the caller (chat store vs. room store) always
+ * knows which, and must say so.
+ */
+export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): ReadPointer {
+  return {
+    messageId: message.id,
+    timestamp: message.timestamp,
+    archiveOrderKey: makeArchiveOrderKey(message, kind),
+  }
 }
 
 /**
@@ -76,7 +101,11 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
 }
 
 export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointer {
-  return { messageId: pointer.messageId, timestamp: pointer.timestamp.getTime() }
+  return {
+    messageId: pointer.messageId,
+    timestamp: pointer.timestamp.getTime(),
+    archiveOrderKey: pointer.archiveOrderKey,
+  }
 }
 
 /**
@@ -89,18 +118,34 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
  * becomes after a plain `JSON.stringify` turns its `Date` into a string). Both
  * encodings exist on disk today — this is the one place that reads either back.
  * We still only ever WRITE epoch ms; the string branch is read-only tolerance.
+ *
+ * `archiveOrderKey` is validated with {@link isValidArchiveOrderKey} and DROPPED
+ * when malformed — storage is untrusted input, so a corrupt key must not ride
+ * through verbatim into ordering comparisons. Dropping it alone (keeping the
+ * rest of the pointer) is deliberate: it degrades to the strict-after-timestamp
+ * fallback, which over-counts rather than under-counts (safe direction),
+ * without discarding a message id and timestamp that are otherwise fine.
  */
 export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {
   if (!raw || typeof raw !== 'object') return undefined
-  const { messageId, timestamp } = raw as { messageId?: unknown; timestamp?: unknown }
+  const { messageId, timestamp, archiveOrderKey } = raw as {
+    messageId?: unknown
+    timestamp?: unknown
+    archiveOrderKey?: unknown
+  }
   if (typeof messageId !== 'string' || messageId.length === 0) return undefined
+  const validKey = isValidArchiveOrderKey(archiveOrderKey) ? archiveOrderKey : undefined
 
   if (typeof timestamp === 'number') {
-    return Number.isFinite(timestamp) ? { messageId, timestamp: new Date(timestamp) } : undefined
+    return Number.isFinite(timestamp)
+      ? { messageId, timestamp: new Date(timestamp), ...(validKey ? { archiveOrderKey: validKey } : {}) }
+      : undefined
   }
   if (typeof timestamp === 'string') {
     const parsed = new Date(timestamp)
-    return Number.isNaN(parsed.getTime()) ? undefined : { messageId, timestamp: parsed }
+    return Number.isNaN(parsed.getTime())
+      ? undefined
+      : { messageId, timestamp: parsed, ...(validKey ? { archiveOrderKey: validKey } : {}) }
   }
   return undefined
 }

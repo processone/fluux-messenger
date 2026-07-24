@@ -1590,12 +1590,14 @@ export const roomStore = createStore<RoomState>()(
         notifInput,
         {
           id: messageToAdd.id,
+          from: messageToAdd.from,
           timestamp: messageToAdd.timestamp,
           isOutgoing: messageToAdd.isOutgoing ?? false,
           isDelayed: messageToAdd.isDelayed,
           isMention: messageToAdd.isMention,
         },
         { isActive, windowVisible },
+        'room',
         { incrementUnread, incrementMentions }
       )
 
@@ -1898,7 +1900,7 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = runtime?.windowAtLiveEdge !== false
       const advanceSeenTo = atLiveEdge ? lastMessage : undefined
 
-      const updated = notifState.onMarkAsRead(notifInput, advanceSeenTo)
+      const updated = notifState.onMarkAsRead(notifInput, 'room', advanceSeenTo)
 
       // Skip update if no change
       if (updated === notifInput) return {}
@@ -1946,7 +1948,7 @@ export const roomStore = createStore<RoomState>()(
       }
 
       const read = {
-        readPointer: makeReadPointer(newest),
+        readPointer: makeReadPointer(newest, 'room'),
         unreadCount: 0,
         mentionsCount: 0,
       }
@@ -2018,7 +2020,7 @@ export const roomStore = createStore<RoomState>()(
 
         const runtime = get().roomRuntime.get(roomJid)
         const messages = runtime?.messages ?? room.messages
-        const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
+        const activated = notifState.onActivate(notifInput, messages, 'room', { treatDelayedAsNew: true })
 
         // Determine lastInteractedAt for sidebar sorting
         const lastMessage = room.messages?.[room.messages.length - 1]
@@ -2148,6 +2150,7 @@ export const roomStore = createStore<RoomState>()(
       const divider = notifState.onActivate(
         { unreadCount: 0, mentionsCount: 0, readPointer, firstNewMessageId: undefined },
         messages,
+        'room',
         { treatDelayedAsNew: true }
       ).firstNewMessageId
 
@@ -2186,7 +2189,7 @@ export const roomStore = createStore<RoomState>()(
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
       const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
-      const updated = notifState.onMessageSeen(notifInput, messageId, messages, { atLiveEdge })
+      const updated = notifState.onMessageSeen(notifInput, messageId, messages, 'room', { atLiveEdge })
       if (updated === notifInput) return state
 
       const newRooms = new Map(state.rooms)
@@ -2227,6 +2230,7 @@ export const roomStore = createStore<RoomState>()(
         messages,
         state.firstNewMessageMarkers.get(roomJid),
         stanzaId,
+        'room',
         // Rooms treat delayed history the same as chats treat offline delivery
         // (unified divider semantics) — delayed messages after the pointer are new.
         { isActive: state.activeRoomJid === roomJid, treatDelayedAsNew: true }
@@ -2265,6 +2269,7 @@ export const roomStore = createStore<RoomState>()(
             firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
           },
           messages,
+          'room',
           { countMentions: true }
         )
         newMeta.set(roomJid, {
@@ -2334,7 +2339,7 @@ export const roomStore = createStore<RoomState>()(
               readPointer: meta.readPointer,
               firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
             }
-            const exact = notifState.recomputeCountsFromPointer(pointerState, cached, { countMentions: true })
+            const exact = notifState.recomputeCountsFromPointer(pointerState, cached, 'room', { countMentions: true })
             if (exact === pointerState) return state
             const newMeta = new Map(state.roomMeta)
             newMeta.set(roomJid, {
@@ -3274,6 +3279,7 @@ export const roomStore = createStore<RoomState>()(
               firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
             },
             mergedForMarker,
+            'room',
             {
               countMentions: true,
               // A stashed XEP-0490 marker is resolved just below (after this
