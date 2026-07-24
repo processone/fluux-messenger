@@ -183,7 +183,7 @@ function getChatMessageKeys(m: Message): string[] {
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 function chatTimelineConfig(): timeline.TimelineConfig<Message> {
-  return { getKeys: getChatMessageKeys, windowSize: getResidentWindowSize() }
+  return { getKeys: getChatMessageKeys, windowSize: getResidentWindowSize(), kind: 'chat' }
 }
 
 /**

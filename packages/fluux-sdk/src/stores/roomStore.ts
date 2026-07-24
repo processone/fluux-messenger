@@ -448,7 +448,7 @@ function getRoomMessageKeys(m: RoomMessage): string[] {
 
 /** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
 function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
-  return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize() }
+  return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize(), kind: 'room' }
 }
 
 // ============================================================================

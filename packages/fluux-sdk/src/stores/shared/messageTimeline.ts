@@ -37,6 +37,13 @@ export interface TimelineConfig<T> {
   getKeys: (message: T) => string[]
   /** The resident-window bound (getResidentWindowSize() in production). */
   windowSize: number
+  /**
+   * Which same-millisecond tie-break rule applies to this store's messages
+   * (see `messageArrayUtils.ts`'s `sortMessagesByTimestamp`). Explicit per
+   * store rather than inferred, because chat messages also carry `from` and
+   * would otherwise be misclassified as room messages.
+   */
+  kind: 'chat' | 'room'
 }
 
 // ============================================================================
@@ -121,8 +128,8 @@ export function mergeArchive<T extends TimelineMessage>(
   // full sort + keep-NEWEST (the window jumps to live, like jump-to-latest).
   const { merged, newMessages } =
     direction === 'backward' && !isFetchLatest
-      ? prependOlderMessages(existing, incoming, config.getKeys, config.windowSize)
-      : mergeAndProcessMessages(existing, incoming, config.getKeys, config.windowSize)
+      ? prependOlderMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
+      : mergeAndProcessMessages(existing, incoming, config.getKeys, config.kind, config.windowSize)
 
   // Nothing new and nothing patched: hand back the ORIGINAL array reference so
   // callers can cheaply skip a state write (the forward path re-sorts into a
@@ -167,7 +174,7 @@ export function loadOlderSlice<T extends TimelineMessage>(
   if (newFromCache.length === 0) return { merged: messages, newMessages: [], newestEvicted: false }
 
   const merged = trimMessagesKeepOldest(
-    sortMessagesByTimestamp([...newFromCache, ...messages]),
+    sortMessagesByTimestamp([...newFromCache, ...messages], config.kind),
     config.windowSize
   )
   const newestEvicted = merged[merged.length - 1]?.id !== messages[messages.length - 1]?.id
@@ -196,7 +203,7 @@ export function loadNewerSlice<T extends TimelineMessage>(
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
-    merged: trimMessages(sortMessagesByTimestamp([...messages, ...newFromCache]), config.windowSize),
+    merged: trimMessages(sortMessagesByTimestamp([...messages, ...newFromCache], config.kind), config.windowSize),
     newMessages: newFromCache,
   }
 }
@@ -221,7 +228,7 @@ export function latestSlice<T extends TimelineMessage>(
   if (newFromCache.length === 0) return { merged: messages, newMessages: [] }
 
   return {
-    merged: trimMessages(sortMessagesByTimestamp([...newFromCache, ...messages]), config.windowSize),
+    merged: trimMessages(sortMessagesByTimestamp([...newFromCache, ...messages], config.kind), config.windowSize),
     newMessages: newFromCache,
   }
 }

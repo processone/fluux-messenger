@@ -29,7 +29,10 @@ function msg(id: string, iso: string, extra: Partial<TestMsg> = {}): TestMsg {
   return { id, from: 'peer@example.com', timestamp: new Date(iso), ...extra }
 }
 
-const cfg = { getKeys, windowSize: 3 }
+// `kind: 'chat'` is arbitrary here — every fixture below uses distinct
+// timestamps, so the tie-break rule never actually engages. The kind-aware
+// tiebreak itself is specified in messageArrayUtils.test.ts.
+const cfg = { getKeys, windowSize: 3, kind: 'chat' as const }
 
 describe('messageTimeline', () => {
   describe('appendLive', () => {
@@ -214,7 +217,7 @@ describe('messageTimeline', () => {
 })
 
 describe('messageTimeline slice results', () => {
-  const cfgLocal = { getKeys, windowSize: 3 }
+  const cfgLocal = { getKeys, windowSize: 3, kind: 'chat' as const }
 
   it('slice loads report new messages and keep the input reference on all-duplicate batches', () => {
     const current = [msg('m1', '2024-01-15T10:01:00Z')]

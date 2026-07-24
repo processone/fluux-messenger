@@ -5,12 +5,21 @@
  * to reduce code duplication for common message array operations.
  */
 
+import { compareOrder, makeArchiveOrderKey } from './readState'
+
 /**
  * Generic interface for messages with a timestamp.
  * Both Message and RoomMessage satisfy this interface.
+ *
+ * `id` and `from` are required for the timestamp-tiebreak sort below — the
+ * resident array must break same-millisecond ties with the SAME total order
+ * as the archive (`readState.ts`'s `compareOrder`), or the two can disagree
+ * about which message came second.
  */
 export interface TimestampedMessage {
   timestamp: Date
+  id: string
+  from?: string
 }
 
 /**
@@ -177,13 +186,29 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
 /**
  * Sort messages by timestamp in ascending order (oldest first).
  *
+ * Same-millisecond ties break by the archive's own tie-break key
+ * (`readState.ts`'s `compareOrder`), kind-discriminated: chat by `id` only,
+ * room by `from` then `id`. This is deliberately NOT a generic `from`-then-`id`
+ * comparator — chat messages carry `from` too, so inferring the tiebreak from
+ * field presence would silently apply the room rule to chat. The resident
+ * array and the IndexedDB archive must agree on this order, or the read
+ * pointer (positioned in archive order) and the viewport observer (walking
+ * this resident order) can disagree about which message came second.
+ *
  * @param messages - Array of messages to sort
+ * @param kind - Which tie-break rule applies (`'chat'` = id only, `'room'` = from then id)
  * @returns New sorted array (does not mutate input)
  */
 export function sortMessagesByTimestamp<T extends TimestampedMessage>(
-  messages: T[]
+  messages: T[],
+  kind: 'chat' | 'room'
 ): T[] {
-  return [...messages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+  return [...messages].sort((a, b) =>
+    compareOrder(
+      { timestamp: a.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(a, kind) },
+      { timestamp: b.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(b, kind) }
+    )
+  )
 }
 
 /**
@@ -226,6 +251,7 @@ export function trimMessagesKeepOldest<T>(messages: T[], maxCount: number): T[] 
  * @param existing - Existing messages array
  * @param incoming - Incoming messages to merge
  * @param getKeys - Function that returns keys for deduplication
+ * @param kind - Which tie-break rule the sort applies (see {@link sortMessagesByTimestamp})
  * @param maxCount - Maximum messages to keep (optional, no trim if not provided)
  * @returns Merged, deduplicated, sorted, and optionally trimmed array
  */
@@ -233,6 +259,7 @@ export function mergeAndProcessMessages<T extends TimestampedMessage>(
   existing: T[],
   incoming: T[],
   getKeys: (message: T) => string[],
+  kind: 'chat' | 'room',
   maxCount?: number
 ): { merged: T[]; newMessages: T[] } {
   // Build key set from existing messages
@@ -242,7 +269,7 @@ export function mergeAndProcessMessages<T extends TimestampedMessage>(
   const newMessages = incoming.filter((msg) => !isMessageDuplicate(msg, keySet, getKeys))
 
   // Merge and sort
-  let merged = sortMessagesByTimestamp([...newMessages, ...existing])
+  let merged = sortMessagesByTimestamp([...newMessages, ...existing], kind)
 
   // Trim if maxCount provided
   if (maxCount !== undefined) {
@@ -265,6 +292,7 @@ export function mergeAndProcessMessages<T extends TimestampedMessage>(
  * @param existing - Existing messages array (must already be sorted by timestamp)
  * @param older - Older messages to prepend (will be sorted among themselves)
  * @param getKeys - Function that returns keys for deduplication
+ * @param kind - Which tie-break rule the sort applies (see {@link sortMessagesByTimestamp})
  * @param maxCount - Maximum messages to keep (optional, no trim if not provided)
  * @returns Merged array with older messages prepended, and the new messages added
  */
@@ -272,6 +300,7 @@ export function prependOlderMessages<T extends TimestampedMessage>(
   existing: T[],
   older: T[],
   getKeys: (message: T) => string[],
+  kind: 'chat' | 'room',
   maxCount?: number
 ): { merged: T[]; newMessages: T[] } {
   // Build key set from existing messages
@@ -286,7 +315,7 @@ export function prependOlderMessages<T extends TimestampedMessage>(
 
   // Sort only the new messages among themselves
   // (they all go at the front since they're older than existing)
-  const sortedNew = sortMessagesByTimestamp(newMessages)
+  const sortedNew = sortMessagesByTimestamp(newMessages, kind)
 
   // Prepend to existing - no full re-sort needed since new messages are all older
   let merged = [...sortedNew, ...existing]

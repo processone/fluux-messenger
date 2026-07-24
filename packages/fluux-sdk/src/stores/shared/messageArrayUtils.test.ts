@@ -176,7 +176,7 @@ describe('messageArrayUtils', () => {
         createMessage('msg-2', 'Second', new Date('2024-01-15T11:00:00Z')),
       ]
 
-      const sorted = sortMessagesByTimestamp(messages)
+      const sorted = sortMessagesByTimestamp(messages, 'chat')
 
       expect(sorted[0].id).toBe('msg-1')
       expect(sorted[1].id).toBe('msg-2')
@@ -190,21 +190,39 @@ describe('messageArrayUtils', () => {
       ]
       const originalFirst = messages[0]
 
-      sortMessagesByTimestamp(messages)
+      sortMessagesByTimestamp(messages, 'chat')
 
       expect(messages[0]).toBe(originalFirst)
     })
 
     it('should handle empty array', () => {
-      const sorted = sortMessagesByTimestamp([])
+      const sorted = sortMessagesByTimestamp([], 'chat')
       expect(sorted).toHaveLength(0)
     })
 
     it('should handle single message', () => {
       const messages = [createMessage('msg-1', 'Only', new Date())]
-      const sorted = sortMessagesByTimestamp(messages)
+      const sorted = sortMessagesByTimestamp(messages, 'chat')
       expect(sorted).toHaveLength(1)
       expect(sorted[0].id).toBe('msg-1')
+    })
+
+    it('room: same-ms ties break by (from, id)', () => {
+      const t = new Date(5000)
+      const msgs = [
+        createMessage('a', '', t, { from: 'r@c/zed' }),
+        createMessage('b', '', t, { from: 'r@c/amy' }),
+      ]
+      expect(sortMessagesByTimestamp(msgs, 'room').map((m) => m.id)).toEqual(['b', 'a']) // amy < zed
+    })
+
+    it('chat: same-ms ties break by id, ignoring from', () => {
+      const t = new Date(5000)
+      const msgs = [
+        createMessage('b', '', t, { from: 'amy@x' }),
+        createMessage('a', '', t, { from: 'zed@x' }),
+      ]
+      expect(sortMessagesByTimestamp(msgs, 'chat').map((m) => m.id)).toEqual(['a', 'b']) // id only
     })
   })
 
@@ -280,7 +298,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = mergeAndProcessMessages(
         existing,
         incoming,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toHaveLength(3)
@@ -310,7 +329,8 @@ describe('messageArrayUtils', () => {
           const keys = [`id:${m.id}`]
           if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
           return keys
-        }
+        },
+        'chat'
       )
 
       expect(merged).toHaveLength(2)
@@ -331,6 +351,7 @@ describe('messageArrayUtils', () => {
         existing,
         incoming,
         (m) => [m.id],
+        'chat',
         2 // maxCount
       )
 
@@ -348,7 +369,7 @@ describe('messageArrayUtils', () => {
         createMessage('msg-3', 'Third', new Date('2024-01-15T12:00:00Z')),
       ]
 
-      const { merged } = mergeAndProcessMessages(existing, incoming, (m) => [m.id])
+      const { merged } = mergeAndProcessMessages(existing, incoming, (m) => [m.id], 'chat')
 
       expect(merged).toHaveLength(3)
     })
@@ -364,7 +385,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = mergeAndProcessMessages(
         existing,
         incoming,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toHaveLength(1)
@@ -409,7 +431,7 @@ describe('messageArrayUtils', () => {
         return keys
       }
 
-      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys, 'chat')
 
       expect(newMessages).toHaveLength(1)
       expect(newMessages[0].id).toBe('client-id-3')
@@ -438,7 +460,7 @@ describe('messageArrayUtils', () => {
       // Room-style key function
       const getRoomKey = (m: TestMessage): string[] => [m.stanzaId || m.id]
 
-      const { newMessages } = mergeAndProcessMessages(existing, incoming, getRoomKey)
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getRoomKey, 'room')
 
       expect(newMessages).toHaveLength(1)
       expect(newMessages[0].id).toBe('msg-3')
@@ -473,7 +495,7 @@ describe('messageArrayUtils', () => {
         return keys
       }
 
-      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys, 'chat')
 
       // Echo should be deduplicated via originId match
       expect(newMessages).toHaveLength(0)
@@ -505,7 +527,7 @@ describe('messageArrayUtils', () => {
         return keys
       }
 
-      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys, 'chat')
 
       expect(newMessages).toHaveLength(0)
     })
@@ -533,7 +555,7 @@ describe('messageArrayUtils', () => {
         return keys
       }
 
-      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys, 'chat')
 
       expect(newMessages).toHaveLength(1)
       expect(newMessages[0].id).toBe('msg-2')
@@ -557,7 +579,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = prependOlderMessages(
         existing,
         older,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       // Should be in correct order: older messages first, then existing
@@ -580,7 +603,7 @@ describe('messageArrayUtils', () => {
         createMessage('msg-1', 'First', new Date('2024-01-15T10:00:00Z')),
       ]
 
-      const { merged } = prependOlderMessages(existing, older, (m) => [m.id])
+      const { merged } = prependOlderMessages(existing, older, (m) => [m.id], 'chat')
 
       // Should be sorted correctly
       expect(merged[0].id).toBe('msg-1')
@@ -601,7 +624,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = prependOlderMessages(
         existing,
         older,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toHaveLength(2)
@@ -621,7 +645,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = prependOlderMessages(
         existing,
         older,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toBe(existing) // Same reference
@@ -643,6 +668,7 @@ describe('messageArrayUtils', () => {
         existing,
         older,
         (m) => [m.id],
+        'chat',
         2 // maxCount - keep only oldest 2 (sliding window)
       )
 
@@ -660,7 +686,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = prependOlderMessages(
         existing,
         [],
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toBe(existing) // Same reference
@@ -676,7 +703,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = prependOlderMessages(
         [],
         older,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       expect(merged).toHaveLength(2)
@@ -697,7 +725,7 @@ describe('messageArrayUtils', () => {
         createMessage('msg-1', 'First', new Date('2024-01-15T10:00:00Z')),
       ]
 
-      const { merged } = prependOlderMessages(existing, older, (m) => [m.id])
+      const { merged } = prependOlderMessages(existing, older, (m) => [m.id], 'chat')
 
       // Existing messages should maintain their exact order
       expect(merged[1].id).toBe('msg-3')
@@ -722,7 +750,7 @@ describe('messageArrayUtils', () => {
         createMessage('msg-3', 'Sent from Gajim', new Date('2024-01-15T12:00:00Z')),
       ]
 
-      const { merged } = prependOlderMessages(existing, newer, (m) => [m.id])
+      const { merged } = prependOlderMessages(existing, newer, (m) => [m.id], 'chat')
 
       // BUG: msg-3 (newer) is placed BEFORE msg-1 and msg-2 (older)
       // This is why the catch-up cursor fix is essential — it prevents this scenario
@@ -738,7 +766,7 @@ describe('messageArrayUtils', () => {
       it('at the bound, keeps the just-loaded older batch and evicts the newest', () => {
         const existing = [at('c', 3), at('d', 4)]            // resident window (bound 2)
         const older = [at('a', 1), at('b', 2)]               // scroll-up loads these
-        const { merged, newMessages } = prependOlderMessages(existing, older, keys, 2)
+        const { merged, newMessages } = prependOlderMessages(existing, older, keys, 'chat', 2)
         expect(merged.map((m) => m.id)).toEqual(['a', 'b'])  // slid up: oldest 2 kept, c/d evicted
         expect(newMessages.map((m) => m.id)).toEqual(['a', 'b'])
       })
@@ -765,7 +793,8 @@ describe('messageArrayUtils', () => {
       const { merged, newMessages } = mergeAndProcessMessages(
         existing,
         fromMAM,
-        (m) => [m.id]
+        (m) => [m.id],
+        'chat'
       )
 
       // Full sort ensures correct chronological order
