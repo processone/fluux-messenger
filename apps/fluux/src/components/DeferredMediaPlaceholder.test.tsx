@@ -21,6 +21,21 @@ describe('DeferredMediaPlaceholder', () => {
     expect(screen.queryByText(/MB/)).not.toBeInTheDocument()
   })
 
+  it('insets the box variant so a long name never runs flush against the frame', () => {
+    render(
+      <DeferredMediaPlaceholder
+        variant="box"
+        icon={ImageIcon}
+        label="Load image"
+        name="zb2rhYRAjkYZ7qdWwhv7qdz6qVukFezQxwNSYgXHunKWCgaBc"
+        onLoad={() => {}}
+      />,
+    )
+    // The name truncates at the box width, so without horizontal padding the
+    // ellipsised text starts on the border itself.
+    expect(screen.getByRole('button').className).toMatch(/(^|\s)px-3(\s|$)/)
+  })
+
   it('shows the file name as a hint, alongside the label and size, when name is given', () => {
     render(
       <DeferredMediaPlaceholder variant="box" icon={ImageIcon} label="Load image" name="screenshot.png" sizeLabel="12.7 KB" onLoad={() => {}} />,

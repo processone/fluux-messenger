@@ -31,7 +31,7 @@ export function DeferredMediaPlaceholder({
       <button
         type="button"
         onClick={onLoad}
-        className="mt-2 w-full flex flex-col items-center justify-center gap-2 rounded-lg bg-fluux-hover/60 border border-fluux-border hover:bg-fluux-hover transition-colors text-fluux-muted"
+        className="mt-2 w-full flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-hover/60 border border-fluux-border hover:bg-fluux-hover transition-colors text-fluux-muted"
         style={{
           aspectRatio: aspectRatio ?? 4 / 3,
           maxWidth: maxWidthPx ? `${maxWidthPx}px` : '384px',
