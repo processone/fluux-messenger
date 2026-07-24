@@ -5308,6 +5308,43 @@ describe('SequoiaPgpPlugin', () => {
       expect(upgrade?.securityContext.trust).toBe('tofu')
     })
 
+    it('a missing-key refresh that finds the signer already in PEP upgrades the message on its own', async () => {
+      // The signing cert is ALREADY published when the message lands — the
+      // message beat the `+notify` headline, or the headline was missed. The
+      // refresh the missing-key branch fires must ALSO drain, otherwise the
+      // message stays untrusted until an unrelated key change or the stash TTL.
+      // NOTE: unlike the test above, this one never calls onPeerKeysChanged.
+      const { bobPlugin, built, ownFp } = await makeBob()
+      const pep = mountPeerPep(built, PEER)
+      const A = validPeerKey('KEYAAAA0001')
+      const B = validPeerKey('KEYBBBB0002')
+      pep.announce([A])
+      await bobPlugin.probePeer(PEER)
+      pep.announce([A, B]) // B is already announced + fetchable before the message
+
+      const stanza = craftSigncryptStanza({
+        recipientFps: [ownFp],
+        signerFp: B.fingerprint,
+        toJid: OWN,
+        body: 'signer already published',
+      })
+      const handle = await bobPlugin.openConversation({ kind: 'direct', peer: PEER })
+      const decrypted = await bobPlugin.decrypt(handle, bobPlugin.tryClaimInbound(stanza)!, {
+        messageId: 'm-selfheal',
+      })
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+
+      // No external key-change event — the decrypt-triggered refresh+drain alone
+      // must fetch B and upgrade the stashed message.
+      await flushAsync()
+      await flushAsync()
+      expect(bobPlugin.getPeerFingerprints(PEER)).toEqual(
+        expect.arrayContaining([A.fingerprint, B.fingerprint]),
+      )
+      const upgrade = built.securityUpdates.find((u) => u.messageId === 'm-selfheal')
+      expect(upgrade?.securityContext.trust).toBe('tofu')
+    })
+
     it('a deferred message received while B was active becomes TRUSTED after B goes inactive', async () => {
       const { bobPlugin, built, ownFp } = await makeBob()
       const A = validPeerKey('KEYAAAA0001')

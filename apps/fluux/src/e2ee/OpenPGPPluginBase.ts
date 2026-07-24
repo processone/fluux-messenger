@@ -1913,8 +1913,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     if (unresolvedTransient) {
-      // Retain prior certs across the blip; do not commit a pruned set.
+      // Retain prior certs across the blip; do not commit a pruned set. Health
+      // is BOTH incomplete AND whatever we definitively rejected this pass —
+      // a definitive rejection stays definitive even when a sibling key was
+      // only transiently unavailable, so it must not be hidden until that
+      // sibling recovers.
       this.markKeysetIncomplete(peer)
+      this.recordKeysetHealth(peer, { incomplete: true, rejections })
       return { supported: true, ttl: PROBE_TRANSIENT_TTL_SECONDS }
     }
 
@@ -2071,7 +2076,15 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
     }
     // Items present but none parsed to usable armored material (legacy Fluux
-    // Base64-of-armor shape, or junk). Fetched-but-unusable → definitive.
+    // Base64-of-armor shape, or junk). Fetched-but-unusable → definitive, and
+    // it must be RECORDED like every other definitive rejection — an
+    // unrecorded one is invisible to keyset health.
+    rejections.push({
+      fingerprint,
+      code: 'validation_failed',
+      detail: 'published item contains no parseable OpenPGP public key',
+      observedAt: now,
+    })
     return { kind: 'definitively-invalid' }
   }
 
@@ -2442,7 +2455,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // fetched (the security-context bake below returns 'untrusted' because
       // the signer fp is not in the eligible cached set).
       const refreshJid = isSelfOutgoing ? ownBareJid : peer
-      void this.refetchAndCachePeerKey(refreshJid).catch(() => {})
+      // Stash BEFORE refreshing: the refresh below drains, and a drain that
+      // runs before the entry exists would leave the message untrusted.
       if (context?.messageId) {
         this.stashPendingVerification(refreshJid, {
           messageId: context.messageId,
@@ -2453,6 +2467,31 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           isSelfOutgoing,
         })
       }
+      // Refresh the keyset, then drain — but ONLY if the refresh actually
+      // brought in a key we did not already hold. The signing cert is often
+      // already in PEP (the message beat the `+notify` headline, or the
+      // headline was missed), and without a drain the refresh caches it while
+      // nothing re-verifies, leaving the message untrusted until an unrelated
+      // key change or the stash TTL. Draining unconditionally is wrong the
+      // other way: re-verifying while the signer's cert is still absent can
+      // CONSUME the entry we just stashed (the drain drops an entry whose
+      // plaintext no longer matches and rejects one that errors permanently),
+      // destroying the deferral. Gate on "the keyset grew".
+      const knownBefore = new Set(this.getPeerFingerprints(refreshJid))
+      void (async () => {
+        try {
+          await this.refetchAndCachePeerKey(refreshJid)
+        } catch (err) {
+          this.ctx?.logger.debug(
+            `${this.pluginName()}: refetch after missing-key for ${refreshJid} failed: ${formatError(err)}`,
+          )
+          return
+        }
+        const gainedAKey = this.getPeerFingerprints(refreshJid).some(
+          (fp) => !knownBefore.has(fp),
+        )
+        if (gainedAKey) await this.drainPendingVerifications(refreshJid)
+      })()
       // fall through to the untrusted bake below.
     }
     // output.signatureStatus === 'verified' → proceed to the verified bake.
@@ -2467,14 +2506,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // so attribute the message to our bare JID; the signer fingerprint
     // (when present) still identifies the actual signing key.
     const senderJid = isSelfOutgoing ? ownBareJid : peer
-    const fallbackFingerprint = isSelfOutgoing
-      ? this.ownBundle?.fingerprint
-      : this.getPeerFingerprints(peer)[0]
     return {
       plaintext: plaintextBytes,
       senderDevice: {
         jid: senderJid,
-        deviceId: output.signerFingerprint ?? fallbackFingerprint ?? 'unknown',
+        // NEVER fall back to a cached fingerprint. A verified signature always
+        // supplies its signer's primary fingerprint; when it doesn't (missing-key
+        // / bad / none) the signer is genuinely unknown, and naming the first
+        // cached peer key — or our own key — would attribute the message to a
+        // key we know did NOT verify it.
+        deviceId: output.signerFingerprint ?? 'unknown',
       },
       securityContext,
       authoredAt: envelope.timestamp,
@@ -2587,18 +2628,40 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this.pendingVerifications.set(peer, alive)
   }
 
+  /**
+   * Merge entries a drain is putting back with anything stashed while it ran,
+   * newest-wins per messageId, preserving the buffer bound.
+   */
+  private restorePendingVerifications(peer: BareJID, retained: PendingVerification[]): void {
+    const stashedMeanwhile = this.pendingVerifications.get(peer) ?? []
+    const byId = new Map<string, PendingVerification>()
+    for (const e of retained) byId.set(e.messageId, e)
+    // A concurrently-stashed entry for the same id is the fresher one.
+    for (const e of stashedMeanwhile) byId.set(e.messageId, e)
+    const merged = [...byId.values()].slice(-SIGNATURE_BUFFER_SIZE)
+    if (merged.length === 0) this.pendingVerifications.delete(peer)
+    else this.pendingVerifications.set(peer, merged)
+  }
+
   private async drainPendingVerifications(peer: BareJID): Promise<void> {
     const ctx = this.ctx
+    // CLAIM the entries up front. Verification is async, and two drains can
+    // overlap (a decrypt-triggered refresh racing a `+notify` key change).
+    // Without claiming, both would verify the SAME entry and each report an
+    // upgrade — duplicate security-context updates for one message. Taking the
+    // list out of the map makes concurrent drains operate on disjoint sets.
     const entries = this.pendingVerifications.get(peer)
     if (!ctx || !entries || entries.length === 0) return
+    this.pendingVerifications.delete(peer)
 
     // No verifier material at all for this peer → nothing can be re-verified
     // yet. Retain non-expired entries for a future drain rather than rejecting.
     if ((this.peerKeys.get(peer) ?? []).length === 0) {
       const now = this.now()
-      const alive = entries.filter((e) => e.expiresAt > now)
-      if (alive.length === 0) this.pendingVerifications.delete(peer)
-      else this.pendingVerifications.set(peer, alive)
+      this.restorePendingVerifications(
+        peer,
+        entries.filter((e) => e.expiresAt > now),
+      )
       return
     }
 
@@ -2678,8 +2741,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         continue
       }
     }
-    if (remaining.length === 0) this.pendingVerifications.delete(peer)
-    else this.pendingVerifications.set(peer, remaining)
+    this.restorePendingVerifications(peer, remaining)
   }
 
   private buildInboundSecurityContext(
