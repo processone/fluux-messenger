@@ -4,7 +4,11 @@
 
 **Goal:** Stop serializing the whole chat/room store to localStorage on every store mutation, without losing any durable read-state, gap, coverage or retraction data.
 
-**Architecture:** A per-key leading+trailing throttle module (`stores/shared/throttledStorage.ts`) sits between the stores and `localStorage`. It takes a lazy thunk so coalesced writes skip serialization entirely. `chatStore`'s zustand persist adapter and `roomStore`'s five save helpers plus `saveRoomReadState` route through it. Pending retractions are excluded from coalescing via `flushKey`, because they record a durable event rather than a lagging mirror. The duplicated `conversations` compat map is dropped from the persisted chat blob — `deserializeState` already rebuilds it from `conversationEntities` + `conversationMeta`.
+**Architecture:** A per-key leading+trailing throttle module (`stores/shared/throttledStorage.ts`) sits between the stores and `localStorage`. It takes a lazy thunk so coalesced writes skip serialization entirely. `chatStore`'s zustand persist adapter and `roomStore`'s five save helpers plus `saveRoomReadState` route through it. Pending retractions are excluded from coalescing via `flushKey`, because they record a durable event rather than a lagging mirror.
+
+**Deferred to its own cycle:** spec §2 item 5 (dropping the duplicated `conversations` compat map from the persisted blob) is *not* in this plan. It is independent of the throttle — the throttle cuts the write *count* 180→~20, which is the stall; the compat removal only halves each remaining write's *size* — and it is the half carrying a silent-data-loss failure mode, since `deserializeState`'s rebuild drops any conversation whose entity/meta went stale. Proving that safe needs all 22 `conversations` write paths covered, which is a larger piece of work than a test tweak.
+
+**Decided for that PR:** centralize the 22 replacements behind one helper that guarantees the entity/meta write, then test the helper plus its exceptions — rather than a 22-case matrix alone. The guarantee becomes structural, so a future write site cannot quietly opt out of it.
 
 **Tech Stack:** TypeScript, zustand 5 (`persist` middleware with a custom `storage` adapter), vitest with fake timers, `localStorageMock` from `core/sideEffects.testHelpers`.
 
@@ -33,7 +37,8 @@
 - `packages/fluux-sdk/src/stores/roomStore.throttledPersist.test.ts`
 
 **Modified:**
-- `packages/fluux-sdk/src/stores/chatStore.ts` — adapter, `switchAccount`, `recordPendingRetraction`, `partialize`, `serializeState`, `PersistedState`
+- `packages/fluux-sdk/src/stores/chatStore.ts` — adapter, `switchAccount`, `recordPendingRetraction`
+- `packages/fluux-sdk/src/stores/chatStore.test.ts` + `roomStore.test.ts` + `shared/readStateStorage.test.ts` — adapted to the new timing contract
 - `packages/fluux-sdk/src/stores/roomStore.ts` — 5 save helpers, `persistRoomReadState`, `switchAccount`, `reset`, one doc comment
 - `packages/fluux-sdk/src/stores/shared/readStateStorage.ts` — `saveRoomReadState`, `clearRoomReadState`, `_clearAllRoomReadStateForTesting`
 - `packages/fluux-sdk/src/index.ts` — export `flushPersistentStorage`
@@ -559,7 +564,7 @@ At the top of `packages/fluux-sdk/src/stores/chatStore.ts`, beside the other `./
 import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 ```
 
-(`flushKey` is used in Task 4; importing it now avoids a second edit to the import block.)
+(`flushKey` is used in Task 3; importing it now avoids a second edit to the import block.)
 
 - [ ] **Step 4: Replace the adapter's setItem and removeItem**
 
@@ -672,10 +677,11 @@ test whose intent needs re-reading.
 cd packages/fluux-sdk && npx vitest run src/stores/chatStore
 ```
 
-Expected: PASS, no stderr. Two tests at `chatStore.test.ts:2067` and `:2086`
-assert `parsed.state.conversations` and will still fail here — they are Task 3's
-to fix, since Task 3 is what removes that field. If anything *else* fails,
-resolve it before moving on.
+Expected: PASS, no stderr — including the two tests at `chatStore.test.ts:2067`
+and `:2086` that assert `parsed.state.conversations`. This plan no longer
+removes that field, so they must stay green; if either fails, the throttle has
+changed *what* is persisted rather than only *when*, which is a bug in the
+adapter wiring.
 
 - [ ] **Step 9: Commit**
 
@@ -686,185 +692,7 @@ git commit -m "perf(sdk): throttle chatStore localStorage writes"
 
 ---
 
-## Task 3: Drop the `conversations` compat map from the persisted blob
-
-**Files:**
-- Modify: `packages/fluux-sdk/src/stores/chatStore.ts` — `PersistedState` (~580), `serializeState` (~625), `deserializeState` legacy branch (~910), `migrateLegacyConversationListsToScoped` (~1055), `partialize` (~2977)
-- Test: `packages/fluux-sdk/src/stores/chatStore.persist.test.ts` (extend)
-
-**Interfaces:**
-- Consumes: Task 2's wired adapter.
-- Produces: `serializeState` no longer accepts or emits `conversations`. Its parameter type drops `'conversations'` from the `Pick`.
-
-- [ ] **Step 1: Write the failing tests**
-
-Append to `packages/fluux-sdk/src/stores/chatStore.persist.test.ts`:
-
-```typescript
-describe('compat map removal', () => {
-  it('does not write the duplicated conversations array', () => {
-    seedConversation('a@example.com')
-    flush()
-    const onDisk = JSON.parse(localStorage.getItem(KEY)!)
-    expect(onDisk.state.conversations).toBeUndefined()
-    expect(onDisk.state.conversationEntities).toHaveLength(1)
-  })
-
-  it('still restores a legacy blob that has only conversations', () => {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({
-        state: {
-          conversations: [
-            ['legacy@example.com', { id: 'legacy@example.com', name: 'Legacy', unreadCount: 3 }],
-          ],
-        },
-      })
-    )
-    chatStore.getState().switchAccount(null)
-
-    const conv = chatStore.getState().conversations.get('legacy@example.com')
-    expect(conv?.name).toBe('Legacy')
-    expect(conv?.type).toBe('chat')
-    expect(chatStore.getState().conversationEntities.has('legacy@example.com')).toBe(true)
-    expect(chatStore.getState().conversationMeta.has('legacy@example.com')).toBe(true)
-  })
-
-  // What actually licenses dropping the compat blob. Key containment is NOT
-  // sufficient: a field updated in `conversations` but left stale in
-  // `conversationMeta` satisfies containment and still loses data on reload.
-  it('rebuild fidelity: every conversation equals entity + meta merged', () => {
-    const id = 'a@example.com'
-    seedConversation(id)
-
-    // Drive real mutations across the write paths, not a hand-built fixture.
-    // `addMessage` takes ONE argument; the conversation is `msg.conversationId`.
-    chatStore.getState().addMessage({
-      type: 'chat',
-      id: 'm1',
-      conversationId: id,
-      from: id,
-      body: 'hello',
-      timestamp: new Date('2026-07-24T10:00:00Z'),
-      isOutgoing: false,
-    })
-    chatStore.getState().markAsRead(id)
-    chatStore.getState().setMAMLoading(id, true)
-    chatStore.getState().addMessage({
-      type: 'chat',
-      id: 'm2',
-      conversationId: id,
-      from: id,
-      body: 'second',
-      timestamp: new Date('2026-07-24T10:01:00Z'),
-      isOutgoing: false,
-    })
-
-    const state = chatStore.getState()
-    for (const [convId, conv] of state.conversations) {
-      const entity = state.conversationEntities.get(convId)
-      const meta = state.conversationMeta.get(convId)
-      expect(entity, `no entity for ${convId}`).toBeDefined()
-      expect(meta, `no meta for ${convId}`).toBeDefined()
-      expect(JSON.parse(JSON.stringify(conv))).toEqual(
-        JSON.parse(JSON.stringify({ ...entity, ...meta }))
-      )
-    }
-  })
-})
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-```bash
-cd packages/fluux-sdk && npx vitest run src/stores/chatStore.persist.test.ts -t "does not write the duplicated"
-```
-
-Expected: FAIL — `onDisk.state.conversations` is an array, not undefined.
-
-- [ ] **Step 3: Make `PersistedState.conversations` optional**
-
-At ~line 585 in `chatStore.ts`:
-
-```typescript
-  // Legacy combined storage, READ ONLY. No longer written: `deserializeState`
-  // rebuilds the compat map from entities + meta, so persisting it duplicated
-  // every conversation on disk for nothing.
-  conversations?: [string, PersistedConversation][]
-```
-
-- [ ] **Step 4: Stop serializing it**
-
-In `serializeState`, drop `'conversations'` from the `Pick<...>` and delete the emitted field. The signature becomes:
-
-```typescript
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval>; conversationCoverage?: Map<string, CoverageRecord>; pendingRetractions?: Map<string, PendingRetraction[]> }, storageKey: string): PersistedState {
-```
-
-and remove these two lines from the returned object:
-
-```typescript
-    // Also serialize combined map for backward compatibility
-    conversations: withUnmigratedReadState(state.conversations, legacy),
-```
-
-- [ ] **Step 5: Guard the legacy read branch**
-
-At ~line 910, change:
-
-```typescript
-    conversations = new Map(
-      persisted.conversations.map(([id, conv]) => {
-```
-
-to:
-
-```typescript
-    conversations = new Map(
-      (persisted.conversations ?? []).map(([id, conv]) => {
-```
-
-- [ ] **Step 6: Drop the argument from the legacy migration**
-
-In `migrateLegacyConversationListsToScoped`, remove the `conversations` property from the `serializeState({...})` call so it matches the narrowed `Pick`:
-
-```typescript
-    const serialized = serializeState({
-      conversationEntities: migrated.conversationEntities,
-      conversationMeta: migrated.conversationMeta,
-      messages: migrated.messages,
-      archivedConversations: migrated.archivedConversations,
-      drafts: migrated.drafts,
-    }, scopedStorageKey)
-```
-
-- [ ] **Step 7: Drop it from partialize**
-
-In the `persist` options' `partialize`, delete:
-
-```typescript
-        // Also persist combined map for backward compatibility
-        conversations: state.conversations,
-```
-
-- [ ] **Step 8: Run tests and typecheck**
-
-```bash
-cd packages/fluux-sdk && npx vitest run src/stores/chatStore && npm run typecheck
-```
-
-Expected: PASS, no type errors.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add packages/fluux-sdk/src/stores/chatStore.ts packages/fluux-sdk/src/stores/chatStore.persist.test.ts
-git commit -m "perf(sdk): stop persisting the duplicated conversations compat map"
-```
-
----
-
-## Task 4: Pending retractions bypass the throttle
+## Task 3: Pending retractions bypass the throttle
 
 **Files:**
 - Modify: `packages/fluux-sdk/src/stores/chatStore.ts:2137-2156` (`recordPendingRetraction`)
@@ -999,7 +827,7 @@ load-bearing assumption."
 
 ---
 
-## Task 5: Wire roomStore and readStateStorage
+## Task 4: Wire roomStore and readStateStorage
 
 **Files:**
 - Modify: `packages/fluux-sdk/src/stores/roomStore.ts` — `saveDraftsToStorage` (~100), `savePollIdsToStorage` (~143), `saveGapsToStorage` (~193), `saveCoverageToStorage` (~223), `persistRoomReadState` (~260), `resolveRoomReadPosition` doc comment (~300), `switchAccount` (~1628), `reset` (~1640)
@@ -1362,7 +1190,7 @@ git commit -m "perf(sdk): throttle roomStore localStorage writes"
 
 ---
 
-## Task 6: Public flush + Tauri quit
+## Task 5: Public flush + Tauri quit
 
 **Files:**
 - Modify: `packages/fluux-sdk/src/index.ts`
@@ -1509,11 +1337,15 @@ If the count is far below 25, tighten the bound to just above the observed value
 ```bash
 git push -u origin mr/elastic-boyd-df5f4e
 gh pr create --title "perf: throttle localStorage persistence in chatStore and roomStore" --body "$(cat <<'EOF'
-Serializing the whole chat/room blob on every store mutation stalled the main thread during post-connect MAM catch-up — 180 pages produced 180 synchronous writes, and each was O(conversations) because the `conversations` compat map was persisted alongside the entity/meta maps it duplicates.
+Serializing the whole chat/room blob on every store mutation stalled the main thread during post-connect MAM catch-up: 180 MAM pages produced 180 synchronous `localStorage` writes, each O(conversations). On mobile WebKit, where `setItem` is a synchronous disk write, that lands in the launch window.
 
-Adds a per-key leading+trailing throttle taking a lazy thunk, so coalesced writes skip serialization entirely, and drops the duplicated compat map (`deserializeState` already rebuilds it). Pending retractions bypass the throttle: they record a durable event rather than a lagging mirror, and a lost one leaves a message never tombstoned.
+Adds a per-key leading+trailing throttle. It takes a lazy thunk rather than a string, so coalesced writes skip serialization entirely — the CPU cost was the `JSON.stringify`, not the `setItem`. A throttle rather than a debounce, so a sustained burst still writes at ~1/second instead of deferring the whole catch-up and putting all of it at risk on an abrupt close.
 
-Also narrows the SDK's zustand peer range to `^5.0.0` — the custom `storage` adapter was never honoured on the declared v4 lower bound.
+Pending retractions bypass the throttle via `flushKey`: they record a durable event rather than a lagging mirror, and a lost one leaves a message never tombstoned, since the covered range is not re-queried. Read pointers, gaps and coverage are safe to coalesce — losing a window under-advances them, which is the recoverable direction.
+
+Also narrows the SDK's zustand peer range to `^5.0.0`. The custom `storage` adapter was never honoured on the declared v4 lower bound (v4.0.0 took `getStorage`/`serialize`/`deserialize`), so this removes a claim that was already untrue.
+
+Not included: dropping the duplicated `conversations` compat map from the blob. It is independent of the throttle and needs all 22 conversation write paths proven before the rebuild-on-restore can be trusted; it gets its own PR.
 
 Design: `docs/superpowers/specs/2026-07-24-throttled-persist-design.md`
 EOF
@@ -1524,7 +1356,11 @@ EOF
 
 ## Self-Review
 
-**Spec coverage:** §1 module → Task 1. §1.1 error absorption and flush semantics → Task 1 Steps 3 (`write`, `flush`) and tests. §1.2 retraction carve-out → Task 4. §1.3 peer range → Task 4 Step 5. §2 items 1-3 → Task 2; item 4 → Task 4; item 5 → Task 3. §2.1 reset behaviour left unchanged, test asserts no pre-logout data → Task 2 Step 1. §3 items 1-3 → Task 5 Steps 4-5; item 4 → Step 7; items 5-6 → Steps 6-7; item 7 → Step 8. §3.1 reference capture → Task 5 Step 5 comment. §3.2 → Steps 6-7. §3.3 → Step 8. §4.1 Tauri → Task 6. §5.1 → Task 1. §5.2 → Tasks 2-4. §5.3 → Task 5. §5.4 → Task 6. §5.5 controls → Task 1 Step 5.
+**Spec coverage:** §1 module → Task 1. §1.1 error absorption and flush semantics → Task 1 Step 3 (`write` returning success, `flush`, `flushKey`) and its four failure tests. §1.2 retraction carve-out → Task 3. §1.3 peer range → Task 3 Step 5. §2 items 1-3 → Task 2; item 4 → Task 3. §2.1 reset behaviour left unchanged, test asserts no pre-logout data → Task 2 Step 1. §3 items 1-3 → Task 4 Steps 4-5; item 4 → Step 7; items 5-6 → Steps 6-7; item 7 → Step 8. §3.1 reference capture → Task 4 Step 5 comment. §3.2 → Steps 6-7. §3.3 → Step 8. §4.1 Tauri → Task 5. §5.1 → Task 1. §5.2 → Tasks 2-3. §5.3 → Task 4. §5.4 → Task 5. §5.5 controls → Task 1 Step 5.
+
+**Deliberate spec gap:** §2 item 5 and the §5.2 compat/rebuild-fidelity tests are **not** covered — the compat-map removal was split into its own cycle (see the header). Nothing else in the spec is unimplemented.
+
+**Existing-suite fallout is a named step, not an afterthought.** The throttle changes *when* writes land, which breaks suites written against synchronous persistence: `chatStore.test.ts`'s `beforeEach` opens a window via `setState` (Task 2 Step 7), and `roomStore.test.ts` has ~15 `toHaveBeenCalledWith`/`lastCall` assertions on drafts and polls plus `readStateStorage.test.ts`'s window-unaware `beforeEach` (Task 4 Step 9). Both steps warn against adding `flush()` to silence a failure rather than reading the test's intent.
 
 **Known soft spot:** the ≤ 25 bound is calibrated from vitest numbers, not a device trace — the final verification step exists to tighten it against the observed value.
 

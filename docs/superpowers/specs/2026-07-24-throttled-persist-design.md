@@ -1,7 +1,10 @@
 # Throttled localStorage persistence for chatStore and roomStore
 
 **Date:** 2026-07-24
-**Status:** Approved after four review rounds — ready for implementation planning
+**Status:** Approved after four review rounds. **Split during planning:** the throttle
+(§1, §2 items 1-4, §3, §4, §5.1/5.3/5.4) ships first — see
+[the plan](../plans/2026-07-24-throttled-persist.md). The compat-map removal (§2 item 5 and the
+§5.2 compat/rebuild-fidelity tests) is deferred to its own cycle; see §2.2 below.
 
 ## Problem
 
@@ -257,6 +260,37 @@ Reordering to `set` → `cancel` → `removeItem` to make the key truly absent w
 ([chatStore.ts:1074](../../../packages/fluux-sdk/src/stores/chatStore.ts)). A user who still had a
 legacy blob at logout would have it re-migrated on next login. The empty blob suppresses that, so it
 is load-bearing and stays.
+
+### 2.2 The compat-map removal is deferred, and how it must be proven
+
+Item 5 above is **not** in the first PR. Two reasons:
+
+1. **It is independent and much less of the win.** The throttle cuts the write *count* from 180 to
+   ~20 — that is the main-thread stall. Removing the compat map only halves each remaining write's
+   *size*. Coupling them makes the cheap, safe change wait on the expensive, risky one.
+2. **It carries a silent-data-loss mode.** `deserializeState`'s rebuild emits only conversations
+   having *both* an entity and a meta, and it merges `{ ...entity, ...meta }`. Any conversation whose
+   `conversationMeta` drifted from `conversations` — updated in one map, stale in the other — loses
+   the drifted field on the next reload, with no error. Nothing surfaces it.
+
+An audit of the 22 write sites is not sufficient evidence, and neither is a test that drives a
+handful of them: a regression in any single uncovered path (corrections, reactions, retractions,
+receipts, delivery errors, moderation, markers, send state) reintroduces the drift while the test
+stays green.
+
+**Decided approach for that PR: centralize, then test the centre.** Route all 22 `conversations`
+replacements through one helper that writes `conversationEntities` and `conversationMeta`
+alongside, then test that helper plus whatever genuine exceptions remain. This converts an
+obligation that 22 call sites must each remember into a structural guarantee a new write site cannot
+quietly opt out of — and it is the shape CLAUDE.md's "avoid duplicate code, isolate behaviour" rule
+already asks for.
+
+A 22-case matrix was considered and rejected as the *primary* mechanism: it proves today's state
+without constraining tomorrow's, so the 23rd write site added next quarter is not covered by
+anything. A matrix is still worth having over the helper's exceptions.
+
+The §5.2 "equality after flush" test should also deep-compare the persisted projection against the
+expected unthrottled serialization, rather than spot-checking a couple of ids.
 
 ## 3. roomStore
 
