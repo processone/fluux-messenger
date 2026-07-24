@@ -115,6 +115,18 @@ export function clearCertRejections(jid: string): void {
   useCertRejectionStore.getState().clearRejections(jid)
 }
 
+/**
+ * Rejections currently stored for `jid`, or `[]`.
+ *
+ * An *incomplete* keyset refresh needs these: it may not re-observe an earlier
+ * rejection (the rejected key's data node may be the transiently-unavailable
+ * one), so it merges rather than replaces. Only a definitive refresh may
+ * replace or clear the stored set.
+ */
+export function getCertRejections(jid: string): CertRejection[] {
+  return useCertRejectionStore.getState().rejectionsByJid[jid] ?? []
+}
+
 export function rehydrateCertRejections(): void {
   useCertRejectionStore.getState().rehydrate()
 }
