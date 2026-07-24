@@ -38,9 +38,14 @@ gaps, coverage) share the shape.
 
 ## Scope
 
-In scope: a shared throttle module, wired into `chatStore`'s persist adapter and `roomStore`'s six
-storage helpers; removal of the duplicated `conversations` array from the persisted chat blob; an
-explicit flush on Tauri app quit; narrowing the SDK's zustand peer range to `^5.0.0` (§1.3).
+In scope for the **first PR**: a shared throttle module, wired into `chatStore`'s persist adapter
+and `roomStore`'s six storage helpers; an explicit flush on Tauri app quit; narrowing the SDK's
+zustand peer range to `^5.0.0` (§1.3).
+
+In scope for this **design**, but deferred out of the first PR: removal of the duplicated
+`conversations` array from the persisted chat blob (§2 item 5, §2.2, and the compat and
+rebuild-fidelity tests in §5.2). It ships in its own cycle — see §2.2 for why and for the agreed
+approach.
 
 Out of scope: moving the blob to IndexedDB. `deserializeState` is synchronous on the startup path
 and the read-pointer restore ordering (#1081) depends on that, so an async rehydration is a separate

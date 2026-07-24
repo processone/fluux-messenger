@@ -225,6 +225,41 @@ describe('throttledStorage', () => {
     expect(() => flushKey(OTHER)).not.toThrow()
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  // The spec promises absorption of BOTH error kinds on ALL FOUR paths. The
+  // three above cover produce-on-timer, produce-in-flush/flushKey and
+  // setItem-on-leading/timer. These pin the remaining corners.
+  it('a throwing produce on the leading edge leaves no window and no timer', () => {
+    expect(() =>
+      schedule(KEY, () => {
+        throw new Error('serialize failed')
+      })
+    ).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+
+    schedule(KEY, () => 'b')
+    expect(localStorage.getItem(KEY)).toBe('b')
+  })
+
+  it('a failed setItem during flush does not propagate', () => {
+    schedule(KEY, () => 'a')
+    schedule(KEY, () => 'b')
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error('quota')
+    })
+    expect(() => flush()).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('a failed setItem during flushKey does not propagate', () => {
+    schedule(KEY, () => 'a')
+    schedule(KEY, () => 'b')
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error('quota')
+    })
+    expect(() => flushKey(KEY)).not.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+  })
 })
 ```
 
@@ -424,13 +459,16 @@ export function _resetForTesting(): void {
 cd packages/fluux-sdk && npx vitest run src/stores/shared/throttledStorage.test.ts
 ```
 
-Expected: PASS, 13 tests.
+Expected: PASS, 17 tests.
 
 - [ ] **Step 5: Run the control checks**
 
 These prove the tests can fail. Make each edit, confirm the expected failure, then **revert it**.
 
-1. In `onTimer`, replace the `if (!pending)` branch body with an unconditional `entries.delete(key); return`. Re-run.
+1. In `onTimer`, replace the **entire** `if (!pending) { ... }` block *and everything after it* with
+   an unconditional `entries.delete(key); return` — i.e. make the timer always close the window and
+   never perform the trailing write. (Replacing only the branch body with its own contents is a
+   no-op and proves nothing.) Re-run.
    Expected: `coalesces N schedules`, `flush writes the LATEST`, and `sustained burst` FAIL.
 2. In `schedule`, change `write(key, produce)` on the leading edge to a no-op. Re-run.
    Expected: `writes immediately on the leading edge` FAILS.
@@ -854,6 +892,37 @@ import { roomStore } from './roomStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
 import { _clearAllRoomReadStateForTesting } from './shared/readStateStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import type { Room, RoomMessage } from '../core/types'
+
+// Same shape as the helpers in roomStore.test.ts:54 and :84 — copy them rather
+// than importing across suites, matching how the existing suites are written.
+function createRoom(jid: string, options: Partial<Room> = {}): Room {
+  return {
+    jid,
+    name: options.name ?? jid.split('@')[0],
+    nickname: options.nickname ?? 'testuser',
+    joined: options.joined ?? false,
+    isBookmarked: false,
+    occupants: new Map(),
+    messages: options.messages ?? [],
+    unreadCount: 0,
+    mentionsCount: 0,
+    typingUsers: new Set(),
+  }
+}
+
+function createMessage(id: string, roomJid: string, nick: string, body: string): RoomMessage {
+  return {
+    type: 'groupchat',
+    id,
+    roomJid,
+    from: `${roomJid}/${nick}`,
+    nick,
+    body,
+    timestamp: new Date(),
+    isOutgoing: false,
+  }
+}
 
 const ROOM = 'room@conference.example.com'
 
@@ -913,52 +982,132 @@ describe('roomStore throttled persistence', () => {
 
     setStorageScopeJid('a@example.com')
     roomStore.getState().switchAccount('a@example.com')
-    expect(roomStore.getState().roomDrafts.get(ROOM)).toBe('a-pending')
+    // The state field is `drafts`, not `roomDrafts`.
+    expect(roomStore.getState().drafts.get(ROOM)).toBe('a-pending')
   })
 
   // Drafts and polls alone leave the three durable maps untested — and those
   // are the ones the #1081 read-pointer work depends on.
-  it('coalesces gaps and keeps the latest', () => {
-    const gapKey = 'fluux-room-gaps'
-    roomStore.getState().recordRoomGap(ROOM, { startId: 'g1', endTimestamp: new Date(1000) })
-    roomStore.getState().recordRoomGap(ROOM, { startId: 'g2', endTimestamp: new Date(2000) })
+  //
+  // There are no `recordRoomGap` / `recordRoomCoverage` setters. Gaps and
+  // coverage are written from `removeRoom`, `mergeRoomMAMMessages`,
+  // `clearRoomGapAnchor` and `clearRoomCoverage`. The two `clear*` actions are
+  // the only ones with a signature small enough to drive directly, so the
+  // scenarios seed the maps and then clear TWO rooms: the first clear takes the
+  // leading edge, the second is the coalesced one that only lands if the
+  // trailing write works.
+  it('coalesces gap writes across two rooms', () => {
+    const ROOM2 = 'room2@conference.example.com'
+    // GapInterval is { start, end?, startId?, endId? } — epoch ms, not Dates.
+    roomStore.setState({
+      roomGaps: new Map([
+        [ROOM, { start: 1000, startId: 'gap-anchor-1' }],
+        [ROOM2, { start: 2000, startId: 'gap-anchor-2' }],
+      ]),
+    })
+    localStorageMock.setItem.mockClear()
+
+    roomStore.getState().clearRoomGapAnchor(ROOM, 'gap-anchor-1')  // leading edge
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-anchor-2') // coalesced
     flush()
-    expect(localStorage.getItem(gapKey)).toContain('g2')
+
+    const raw = localStorage.getItem('fluux-room-gaps') ?? ''
+    expect(raw).not.toContain('gap-anchor-1')
+    expect(raw).not.toContain('gap-anchor-2')
   })
 
-  it('coalesces coverage and keeps the latest', () => {
-    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'c1', newestId: 'c2' })
-    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'c1', newestId: 'c3' })
+  it('coalesces coverage writes across two rooms', () => {
+    const ROOM2 = 'room2@conference.example.com'
+    // CoverageRecord is { bottomId, topId? }.
+    roomStore.setState({
+      roomCoverage: new Map([
+        [ROOM, { bottomId: 'cov-1' }],
+        [ROOM2, { bottomId: 'cov-2' }],
+      ]),
+    })
+    localStorageMock.setItem.mockClear()
+
+    roomStore.getState().clearRoomCoverage(ROOM)  // leading edge
+    roomStore.getState().clearRoomCoverage(ROOM2) // coalesced
     flush()
-    expect(localStorage.getItem('fluux-room-coverage')).toContain('c3')
+
+    const raw = localStorage.getItem('fluux-room-coverage') ?? ''
+    expect(raw).not.toContain('cov-1')
+    expect(raw).not.toContain('cov-2')
   })
 
+  // `advanceReadPointer` persists only when: connectionStore.windowVisible is
+  // true (it defaults to true, so no setup needed), the room is in `rooms`,
+  // it has a `roomMeta` entry, and the message id is resident. `addRoom` with
+  // a populated `messages` array satisfies the last three.
   it('coalesces room read state and keeps the latest pointer', () => {
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'r1', timestamp: new Date(1000) })
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'r2', timestamp: new Date(2000) })
+    roomStore.getState().addRoom(
+      createRoom(ROOM, {
+        joined: true,
+        messages: [
+          createMessage('r1', ROOM, 'alice', 'first'),
+          createMessage('r2', ROOM, 'alice', 'second'),
+        ],
+      })
+    )
+    localStorageMock.setItem.mockClear()
+
+    roomStore.getState().advanceReadPointer(ROOM, 'r1') // leading edge
+    roomStore.getState().advanceReadPointer(ROOM, 'r2') // coalesced
     flush()
+
     expect(localStorage.getItem('fluux-room-read-state')).toContain('r2')
   })
 
   it('reset cancels pending gap, coverage and read-state writes', () => {
-    roomStore.getState().recordRoomGap(ROOM, { startId: 'g-first', endTimestamp: new Date(1000) })
-    roomStore.getState().recordRoomGap(ROOM, { startId: 'g-pending', endTimestamp: new Date(2000) })
-    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'cov-first', newestId: 'cov-first' })
-    roomStore.getState().recordRoomCoverage(ROOM, { oldestId: 'cov-first', newestId: 'cov-pending' })
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'read-first', timestamp: new Date(1000) })
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'read-pending', timestamp: new Date(2000) })
+    const ROOM2 = 'room2@conference.example.com'
+    roomStore.setState({
+      roomGaps: new Map([
+        [ROOM, { start: 1000, startId: 'gap-first' }],
+        [ROOM2, { start: 2000, startId: 'gap-pending' }],
+      ]),
+      roomCoverage: new Map([
+        [ROOM, { bottomId: 'cov-first' }],
+        [ROOM2, { bottomId: 'cov-pending' }],
+      ]),
+    })
+    roomStore.getState().addRoom(
+      createRoom(ROOM, {
+        joined: true,
+        messages: [
+          createMessage('read-first', ROOM, 'alice', 'a'),
+          createMessage('read-pending', ROOM, 'alice', 'b'),
+        ],
+      })
+    )
+    // Open a window on each of the three keys, leaving a second write pending.
+    roomStore.getState().clearRoomGapAnchor(ROOM, 'gap-first')
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-pending')
+    roomStore.getState().clearRoomCoverage(ROOM)
+    roomStore.getState().clearRoomCoverage(ROOM2)
+    roomStore.getState().advanceReadPointer(ROOM, 'read-first')
+    roomStore.getState().advanceReadPointer(ROOM, 'read-pending')
 
     roomStore.getState().reset()
     vi.advanceTimersByTime(5000)
 
-    expect(localStorage.getItem('fluux-room-gaps') ?? '').not.toContain('g-pending')
+    expect(localStorage.getItem('fluux-room-gaps') ?? '').not.toContain('gap-pending')
     expect(localStorage.getItem('fluux-room-coverage') ?? '').not.toContain('cov-pending')
     expect(localStorage.getItem('fluux-room-read-state') ?? '').not.toContain('read-pending')
   })
 
   it('_clearAllRoomReadStateForTesting leaves no row to resurrect', () => {
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'r-first', timestamp: new Date(1000) })
-    roomStore.getState().markRoomAsRead(ROOM, { id: 'r-pending', timestamp: new Date(2000) })
+    roomStore.getState().addRoom(
+      createRoom(ROOM, {
+        joined: true,
+        messages: [
+          createMessage('r-first', ROOM, 'alice', 'a'),
+          createMessage('r-pending', ROOM, 'alice', 'b'),
+        ],
+      })
+    )
+    roomStore.getState().advanceReadPointer(ROOM, 'r-first')
+    roomStore.getState().advanceReadPointer(ROOM, 'r-pending') // pending
 
     _clearAllRoomReadStateForTesting()
     vi.advanceTimersByTime(5000)
@@ -1364,4 +1513,10 @@ EOF
 
 **Known soft spot:** the ≤ 25 bound is calibrated from vitest numbers, not a device trace — the final verification step exists to tighten it against the observed value.
 
-**Signatures verified against the source** (not written from memory): `chatStore.addConversation(conv: Conversation)` requires `unreadCount`; `chatStore.addMessage(msg: Message)` takes one argument carrying `conversationId`, and `Message` requires `type: 'chat'`, `id`, `conversationId`, `from`, `body`, `timestamp`, `isOutgoing` — there is no `to` or `isOwn` field. roomStore actions are `setDraft`, `recordPollVote`, `recordPendingRetraction`. `setStorageScopeJid` and `_resetStorageScopeForTesting` are exported from `utils/storageScope`.
+**Every identifier used in this plan's test code was checked against the source**, by extracting all `getState().*` references and grepping each one's declaration. This check found seven wrong names across two rounds — `addMessage`'s arity, `Message.isOwn`/`to`, `setRoomDraft`, `markPollVoted`, `recordRoomGap`, `recordRoomCoverage`, `markRoomAsRead`, `roomDrafts` — so re-run it after any edit that adds a store call. Confirmed:
+
+- `chatStore`: `addConversation(conv: Conversation)` — `unreadCount` required; `addMessage(msg: Message)` — one argument, conversation comes from `msg.conversationId`; `Message` requires `type: 'chat'`, `id`, `conversationId`, `from`, `body`, `timestamp`, `isOutgoing` (no `to`, no `isOwn`); `setMAMLoading`, `recordPendingRetraction`, `reset`, `switchAccount`.
+- `roomStore`: `setDraft`, `recordPollVote`, `recordPendingRetraction`, `addRoom`, `advanceReadPointer`, `clearRoomGapAnchor(roomJid, purgedStartId)`, `clearRoomCoverage(roomJid, ifBottomId?)`, `reset`, `switchAccount`. State field is `drafts`, not `roomDrafts`. There is **no** `recordRoomGap`, `recordRoomCoverage` or `markRoomAsRead`.
+- Shapes: `GapInterval` is `{ start: number, end?: number, startId?: string, endId?: string }` — epoch ms, not `Date`. `CoverageRecord` is `{ bottomId: string, topId?: string }`.
+- `advanceReadPointer` persists only when `connectionStore.windowVisible` is true (it defaults true), the room is in `rooms` with a `roomMeta` entry, and the message id is resident — `addRoom` with a populated `messages` array satisfies all three.
+- `setStorageScopeJid` and `_resetStorageScopeForTesting` are exported from `utils/storageScope`.
