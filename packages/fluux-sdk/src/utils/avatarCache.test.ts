@@ -12,6 +12,8 @@ import {
   getBlobUrlPoolSize,
   bumpAvatarResumeCount,
   getAvatarResumeCount,
+  saveRoomOccupantAvatarHash,
+  getRoomOccupantAvatarHashes,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
@@ -212,6 +214,32 @@ describe('avatarCache blob URL pool', () => {
       // Pool is cleared, IndexedDB is cleared — should get null
       const url = await getCachedAvatar('hash-abc')
       expect(url).toBeNull()
+    })
+  })
+
+  describe('room-scoped occupant-id mappings', () => {
+    it('restores a stable occupant mapping only in its own room', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'opaque:id/with separators',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'opaque:id/with separators',
+        'hash-b',
+      )
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'opaque:id/with separators', hash: 'hash-a' },
+      ])
+      await expect(
+        getRoomOccupantAvatarHashes('room-b@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'opaque:id/with separators', hash: 'hash-b' },
+      ])
     })
   })
 

@@ -4,6 +4,8 @@
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
+import { getBareJid } from '../core/jid'
+
 const DB_NAME = 'fluux-avatar-cache'
 const DB_VERSION = 4
 const STORE_NAME = 'avatars'
@@ -31,12 +33,45 @@ interface CachedAvatar {
   timestamp: number // When cached
 }
 
-export type AvatarEntityType = 'contact' | 'room'
+export type AvatarEntityType = 'contact' | 'room' | 'occupant'
 
 export interface AvatarHashMapping {
   jid: string // JID (primary key)
   hash: string // SHA-1 hash
-  type: AvatarEntityType // 'contact' or 'room'
+  type: AvatarEntityType
+}
+
+export interface RoomOccupantAvatarHashMapping {
+  occupantId: string
+  hash: string
+}
+
+const OCCUPANT_HASH_KEY_PREFIX = 'muc-occupant:'
+
+/**
+ * XEP-0421 occupant identifiers are opaque and only stable within one room.
+ * Encode both components so an identifier can never collide with a JID mapping
+ * or with the same opaque value issued by another room.
+ */
+function occupantHashMappingKey(roomJid: string, occupantId: string): string {
+  return `${OCCUPANT_HASH_KEY_PREFIX}${encodeURIComponent(getBareJid(roomJid))}:${encodeURIComponent(occupantId)}`
+}
+
+function parseOccupantHashMappingKey(
+  key: string
+): { roomJid: string; occupantId: string } | null {
+  if (!key.startsWith(OCCUPANT_HASH_KEY_PREFIX)) return null
+  const encoded = key.slice(OCCUPANT_HASH_KEY_PREFIX.length)
+  const separator = encoded.indexOf(':')
+  if (separator < 0) return null
+  try {
+    return {
+      roomJid: decodeURIComponent(encoded.slice(0, separator)),
+      occupantId: decodeURIComponent(encoded.slice(separator + 1)),
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -337,6 +372,42 @@ export async function getAllAvatarHashes(
     }
     return []
   }
+}
+
+/**
+ * Persist the avatar hash advertised for one XEP-0421 identity.
+ *
+ * This deliberately stores a room-scoped opaque key rather than treating the
+ * occupant-id as a JID. The avatar blob itself remains globally deduplicated by
+ * hash in the avatars store.
+ */
+export async function saveRoomOccupantAvatarHash(
+  roomJid: string,
+  occupantId: string,
+  hash: string
+): Promise<void> {
+  await saveAvatarHash(
+    occupantHashMappingKey(roomJid, occupantId),
+    hash,
+    'occupant'
+  )
+}
+
+/** Return every persisted occupant-id→hash binding for one room. */
+export async function getRoomOccupantAvatarHashes(
+  roomJid: string
+): Promise<RoomOccupantAvatarHashMapping[]> {
+  const bareRoomJid = getBareJid(roomJid)
+  const mappings = await getAllAvatarHashes('occupant')
+  const result: RoomOccupantAvatarHashMapping[] = []
+
+  for (const mapping of mappings) {
+    const parsed = parseOccupantHashMappingKey(mapping.jid)
+    if (!parsed || parsed.roomJid !== bareRoomJid) continue
+    result.push({ occupantId: parsed.occupantId, hash: mapping.hash })
+  }
+
+  return result
 }
 
 /**

@@ -1918,6 +1918,45 @@ describe('XMPPClient', () => {
       )
     })
 
+    it('threads the room-scoped occupant-id into avatar persistence', () => {
+      const occupants = new Map()
+      occupants.set('TestUser', {
+        nick: 'TestUser',
+        occupantId: 'opaque-occ-id',
+        affiliation: 'member',
+        role: 'participant',
+      })
+      mockStores.room.getRoom.mockReturnValue(
+        createMockRoom('room@conference.example.com', {
+          name: 'Test Room',
+          joined: true,
+          occupants,
+        })
+      )
+
+      const fetchOccupantAvatarSpy = vi.spyOn(
+        xmppClient.profile,
+        'fetchOccupantAvatar'
+      ).mockResolvedValue()
+
+      ;(xmppClient as any).emit(
+        'occupantAvatarUpdate',
+        'room@conference.example.com',
+        'TestUser',
+        'abc123hash',
+        undefined,
+        'opaque-occ-id',
+      )
+
+      expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'TestUser',
+        'abc123hash',
+        undefined,
+        'opaque-occ-id',
+      )
+    })
+
     it('should NOT call fetchOccupantAvatar if occupant already has same hash and avatar', async () => {
       // Mock room with occupant that already has the avatar
       const occupants = new Map()

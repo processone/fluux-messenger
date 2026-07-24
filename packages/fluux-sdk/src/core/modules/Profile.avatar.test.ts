@@ -64,6 +64,8 @@ vi.mock('../../utils/avatarCache', () => ({
   saveAvatarHash: vi.fn().mockResolvedValue(undefined),
   getAvatarHash: vi.fn().mockResolvedValue(null),
   getAllAvatarHashes: vi.fn().mockResolvedValue([]),
+  saveRoomOccupantAvatarHash: vi.fn().mockResolvedValue(undefined),
+  getRoomOccupantAvatarHashes: vi.fn().mockResolvedValue([]),
   refreshAllBlobUrls: vi.fn().mockResolvedValue(new Map()),
   // Negative cache functions
   hasNoAvatar: vi.fn().mockResolvedValue(false),
@@ -1398,6 +1400,41 @@ describe('XMPPClient Own Avatar', () => {
     })
 
     describe('fetchOccupantAvatar', () => {
+      it('records both stable aliases when cached bytes satisfy an occupant avatar', async () => {
+        const {
+          getCachedAvatar,
+          saveAvatarHash,
+          saveRoomOccupantAvatarHash,
+        } = await import('../../utils/avatarCache')
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:shared-avatar')
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'CurrentNick',
+          'shared-hash',
+          'person@example.com/resource',
+          'opaque-occupant-id',
+        )
+
+        expect(saveAvatarHash).toHaveBeenCalledWith(
+          'person@example.com',
+          'shared-hash',
+          'contact',
+        )
+        expect(saveRoomOccupantAvatarHash).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          'opaque-occupant-id',
+          'shared-hash',
+        )
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          nick: 'CurrentNick',
+          occupantId: 'opaque-occupant-id',
+          avatar: 'blob:shared-avatar',
+          avatarHash: 'shared-hash',
+        })
+      })
+
       it('should clear negative cache and proceed when presence advertises avatar hash', async () => {
         mockXmppClientInstance.iqCaller.request.mockClear()
 
@@ -1626,6 +1663,35 @@ describe('XMPPClient Own Avatar', () => {
     })
 
     describe('restoreOccupantAvatarsFromCache', () => {
+      it('restores an offline anonymous occupant through its room-scoped occupant-id', async () => {
+        emitSDKSpy.mockClear()
+
+        const {
+          getRoomOccupantAvatarHashes,
+          getCachedAvatar,
+        } = await import('../../utils/avatarCache')
+        vi.mocked(getRoomOccupantAvatarHashes).mockResolvedValueOnce([
+          { occupantId: 'offline-opaque-id', hash: 'offline-hash' },
+        ])
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:offline-avatar')
+
+        mockStores.room.getRoom.mockReturnValue({
+          jid: 'room@conference.example.com',
+          occupants: new Map(),
+        } as any)
+
+        await xmppClient.profile.restoreOccupantAvatarsFromCache(
+          'room@conference.example.com'
+        )
+
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          occupantId: 'offline-opaque-id',
+          avatar: 'blob:offline-avatar',
+          avatarHash: 'offline-hash',
+        })
+      })
+
       it('should restore cached avatar for occupant with real JID but no avatar', async () => {
         emitSDKSpy.mockClear()
 

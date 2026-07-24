@@ -3061,14 +3061,14 @@ describe('roomStore', () => {
     it('applies multiple avatar updates in a single state notification', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
       roomStore.getState().batchAddOccupants('test@conference.example.com', [
-        { nick: 'alice', affiliation: 'member', role: 'participant', avatarHash: 'ha' },
+        { nick: 'alice', occupantId: 'occ-alice', affiliation: 'member', role: 'participant', avatarHash: 'ha' },
         { nick: 'bob', affiliation: 'member', role: 'participant', avatarHash: 'hb' },
       ])
 
       let notifications = 0
       const unsub = roomStore.subscribe(() => { notifications++ })
       roomStore.getState().updateOccupantAvatars('test@conference.example.com', [
-        { nick: 'alice', avatar: 'blob:alice', avatarHash: 'ha' },
+        { nick: 'alice', occupantId: 'occ-alice', avatar: 'blob:alice', avatarHash: 'ha' },
         { nick: 'bob', avatar: 'blob:bob', avatarHash: 'hb' },
       ])
       unsub()
@@ -3080,6 +3080,7 @@ describe('roomStore', () => {
       // nick→avatar cache must be updated so message rows keep avatars after occupants leave
       expect(room?.nickToAvatarCache?.get('alice')).toBe('blob:alice')
       expect(room?.nickToAvatarCache?.get('bob')).toBe('blob:bob')
+      expect(room?.occupantIdToAvatarCache?.get('occ-alice')).toBe('blob:alice')
     })
 
     it('skips unknown occupants while applying known ones', () => {
@@ -3096,6 +3097,46 @@ describe('roomStore', () => {
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.occupants.get('alice')?.avatar).toBe('blob:alice')
       expect(room?.occupants.has('ghost')).toBe(false)
+    })
+
+    it('hydrates an offline occupant-id avatar without inventing a live occupant', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+
+      roomStore.getState().updateOccupantAvatars('test@conference.example.com', [
+        {
+          occupantId: 'offline-occ',
+          avatar: 'blob:offline',
+          avatarHash: 'offline-hash',
+        },
+      ])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.occupants.size).toBe(0)
+      expect(room?.occupantIdToAvatarCache?.get('offline-occ')).toBe('blob:offline')
+    })
+
+    it('does not apply a late avatar fetch to a recycled nickname', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'alice',
+        occupantId: 'new-person',
+        affiliation: 'member',
+        role: 'participant',
+      })
+
+      roomStore.getState().updateOccupantAvatars('test@conference.example.com', [
+        {
+          nick: 'alice',
+          occupantId: 'old-person',
+          avatar: 'blob:old-person',
+          avatarHash: 'old-hash',
+        },
+      ])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.occupants.get('alice')?.avatar).toBeUndefined()
+      expect(room?.nickToAvatarCache?.get('alice')).toBeUndefined()
+      expect(room?.occupantIdToAvatarCache?.get('old-person')).toBe('blob:old-person')
     })
 
     it('does nothing for an unknown room', () => {

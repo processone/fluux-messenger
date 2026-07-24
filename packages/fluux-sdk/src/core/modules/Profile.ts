@@ -4,7 +4,22 @@ import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
 import type { VCardInfo } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
-import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes, hasNoAvatar, markNoAvatar, clearNoAvatar, refreshAllBlobUrls, isPepForbiddenDomain, markPepForbiddenDomain, loadPepForbiddenDomains } from '../../utils/avatarCache'
+import {
+  getCachedAvatar,
+  getAvatarHash,
+  cacheAvatar,
+  saveAvatarHash,
+  getAllAvatarHashes,
+  saveRoomOccupantAvatarHash,
+  getRoomOccupantAvatarHashes,
+  hasNoAvatar,
+  markNoAvatar,
+  clearNoAvatar,
+  refreshAllBlobUrls,
+  isPepForbiddenDomain,
+  markPepForbiddenDomain,
+  loadPepForbiddenDomains,
+} from '../../utils/avatarCache'
 import { sniffImageMimeType } from '../../utils/imageType'
 import {
   NS_PUBSUB,
@@ -271,12 +286,14 @@ export class Profile extends BaseModule {
    * @param nick - The occupant's nickname
    * @param avatarHash - The avatar hash from XEP-0153 presence
    * @param realJid - The occupant's real JID (if available in non-anonymous rooms)
+   * @param occupantId - XEP-0421 identity, stable within roomJid
    */
   async fetchOccupantAvatar(
     roomJid: string,
     nick: string,
     avatarHash: string,
-    realJid?: string
+    realJid?: string,
+    occupantId?: string,
   ): Promise<void> {
     // Check privacy options: if avatar fetching is disabled for anonymous rooms
     // and we don't have a real JID (meaning we'd query via room@conf/nick),
@@ -288,9 +305,16 @@ export class Profile extends BaseModule {
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
     if (cachedUrl) {
+      if (realJid) {
+        await saveAvatarHash(getBareJid(realJid), avatarHash, 'contact')
+      }
+      if (occupantId) {
+        await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
+      }
       this.deps.emitSDK('room:occupant-avatar', {
         roomJid,
         nick,
+        ...(occupantId && { occupantId }),
         avatar: cachedUrl,
         avatarHash,
       })
@@ -329,9 +353,13 @@ export class Profile extends BaseModule {
             await clearNoAvatar(bareJid)
             // Persist JID→hash mapping so we can restore from cache on next session
             await saveAvatarHash(bareJid, avatarHash, 'contact')
+            if (occupantId) {
+              await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
+            }
             this.deps.emitSDK('room:occupant-avatar', {
               roomJid,
               nick,
+              ...(occupantId && { occupantId }),
               avatar: blobUrl,
               avatarHash,
             })
@@ -363,9 +391,13 @@ export class Profile extends BaseModule {
           await clearNoAvatar(bareJid)
           // Persist JID→hash mapping so we can restore from cache on next session
           await saveAvatarHash(bareJid, avatarHash, 'contact')
+          if (occupantId) {
+            await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
+          }
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
+            ...(occupantId && { occupantId }),
             avatar: blobUrl,
             avatarHash,
           })
@@ -396,9 +428,13 @@ export class Profile extends BaseModule {
         const mimeType = photo?.getChildText('TYPE') || 'image/png'
         const base64 = binval.replace(/\s/g, '')
         const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
+        if (occupantId) {
+          await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
+        }
         this.deps.emitSDK('room:occupant-avatar', {
           roomJid,
           nick,
+          ...(occupantId && { occupantId }),
           avatar: blobUrl,
           avatarHash,
         })
@@ -1093,8 +1129,29 @@ export class Profile extends BaseModule {
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid: room.jid,
             nick: occupant.nick,
+            ...(occupant.occupantId && { occupantId: occupant.occupantId }),
             avatar: url,
             avatarHash: occupant.avatarHash,
+          })
+        }
+
+        // Re-point offline XEP-0421 identities too. They are absent from the
+        // live occupant map, but their room-scoped hash bindings are durable.
+        if (
+          this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms
+          && !room.isNonAnonymous
+        ) {
+          continue
+        }
+        const stableMappings = await getRoomOccupantAvatarHashes(room.jid)
+        for (const { occupantId, hash } of stableMappings) {
+          const url = freshUrls.get(hash)
+          if (!url) continue
+          this.deps.emitSDK('room:occupant-avatar', {
+            roomJid: room.jid,
+            occupantId,
+            avatar: url,
+            avatarHash: hash,
           })
         }
       }
@@ -1127,6 +1184,26 @@ export class Profile extends BaseModule {
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
+            ...(occupant.occupantId && { occupantId: occupant.occupantId }),
+            avatar: cachedUrl,
+            avatarHash: hash,
+          })
+        }
+      }
+
+      // XEP-0421 is the durable path for anonymous rooms: hydrate every known
+      // room-scoped identity, including occupants who are already offline.
+      const anonymousRestoreDisabled =
+        this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms
+        && !room.isNonAnonymous
+      if (!anonymousRestoreDisabled) {
+        const stableMappings = await getRoomOccupantAvatarHashes(roomJid)
+        for (const { occupantId, hash } of stableMappings) {
+          const cachedUrl = await getCachedAvatar(hash)
+          if (!cachedUrl) continue
+          this.deps.emitSDK('room:occupant-avatar', {
+            roomJid,
+            occupantId,
             avatar: cachedUrl,
             avatarHash: hash,
           })

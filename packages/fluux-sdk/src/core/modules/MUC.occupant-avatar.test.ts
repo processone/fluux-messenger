@@ -124,6 +124,10 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
             { name: 'photo', text: 'def456avatarhash' },
           ],
         },
+        {
+          name: 'occupant-id',
+          attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'opaque-test-user' },
+        },
       ])
 
       mockStores.room.getRoom.mockReturnValue({
@@ -146,7 +150,8 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
         'room@conference.example.org',
         'TestUser',
         'def456avatarhash',
-        'realuser@example.org/resource' // real JID available
+        'realuser@example.org/resource',
+        'opaque-test-user',
       )
     })
 

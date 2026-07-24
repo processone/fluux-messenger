@@ -477,7 +477,8 @@ const ROOM_META_FIELDS = Object.keys({
 } satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
 
 const ROOM_RUNTIME_FIELD_ROUTING = {
-  occupants: 'sync', nickToJidCache: 'sync', nickToAvatarCache: 'sync',
+  occupants: 'sync', nickToJidCache: 'sync', occupantIdToJidCache: 'sync',
+  nickToAvatarCache: 'sync', occupantIdToAvatarCache: 'sync',
   affiliatedMembers: 'sync', selfOccupant: 'sync', messages: 'sync',
   // A plain field update must never silently recenter the window — the
   // live-edge flag only changes through window operations (see
@@ -743,7 +744,7 @@ export interface RoomState {
   removeOccupant: (roomJid: string, nick: string) => void
   updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
   /** Batch variant of updateOccupantAvatar — one state update for N resolved avatars (e.g. after joining a large room) */
-  updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
+  updateOccupantAvatars: (roomJid: string, updates: Array<{ nick?: string; occupantId?: string; avatar: string | null; avatarHash: string | null }>) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   mergeRoomMembers: (roomJid: string, members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>, contactAvatarLookup?: (jid: string) => string | null) => void
   /**
@@ -1031,6 +1032,10 @@ export const roomStore = createStore<RoomState>()(
       const runtime: RoomRuntime = {
         occupants: room.occupants,
         nickToJidCache: room.nickToJidCache,
+        occupantIdToJidCache: room.occupantIdToJidCache,
+        nickToAvatarCache: room.nickToAvatarCache,
+        occupantIdToAvatarCache: room.occupantIdToAvatarCache,
+        affiliatedMembers: room.affiliatedMembers,
         selfOccupant: room.selfOccupant,
         messages: room.messages,
         // A room upsert seeds the newest window → at the live edge by default.
@@ -1205,6 +1210,11 @@ export const roomStore = createStore<RoomState>()(
         nickToJidCache = new Map(nickToJidCache || [])
         nickToJidCache.set(merged.nick, getBareJid(merged.jid))
       }
+      let occupantIdToJidCache = existing.occupantIdToJidCache
+      if (merged.occupantId && merged.jid) {
+        occupantIdToJidCache = new Map(occupantIdToJidCache || [])
+        occupantIdToJidCache.set(merged.occupantId, getBareJid(merged.jid))
+      }
 
       // Update nick→avatar cache if occupant has avatar
       let nickToAvatarCache = existing.nickToAvatarCache
@@ -1212,14 +1222,33 @@ export const roomStore = createStore<RoomState>()(
         nickToAvatarCache = new Map(nickToAvatarCache || [])
         nickToAvatarCache.set(merged.nick, merged.avatar)
       }
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
+      if (merged.occupantId && merged.avatar) {
+        occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+        occupantIdToAvatarCache.set(merged.occupantId, merged.avatar)
+      }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants,
+        nickToJidCache,
+        occupantIdToJidCache,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants,
+          nickToJidCache,
+          occupantIdToJidCache,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -1236,7 +1265,9 @@ export const roomStore = createStore<RoomState>()(
 
       const newOccupants = new Map(existing.occupants)
       let nickToJidCache = existing.nickToJidCache
+      let occupantIdToJidCache = existing.occupantIdToJidCache
       let nickToAvatarCache = existing.nickToAvatarCache
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
 
       // Add all occupants in a single update
       for (const occupant of occupants) {
@@ -1251,6 +1282,12 @@ export const roomStore = createStore<RoomState>()(
           }
           nickToJidCache.set(merged.nick, getBareJid(merged.jid))
         }
+        if (merged.occupantId && merged.jid) {
+          if (!occupantIdToJidCache || occupantIdToJidCache === existing.occupantIdToJidCache) {
+            occupantIdToJidCache = new Map(occupantIdToJidCache || [])
+          }
+          occupantIdToJidCache.set(merged.occupantId, getBareJid(merged.jid))
+        }
 
         // Update nick→avatar cache
         if (merged.avatar) {
@@ -1259,15 +1296,35 @@ export const roomStore = createStore<RoomState>()(
           }
           nickToAvatarCache.set(merged.nick, merged.avatar)
         }
+        if (merged.occupantId && merged.avatar) {
+          if (!occupantIdToAvatarCache || occupantIdToAvatarCache === existing.occupantIdToAvatarCache) {
+            occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+          }
+          occupantIdToAvatarCache.set(merged.occupantId, merged.avatar)
+        }
       }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants,
+        nickToJidCache,
+        occupantIdToJidCache,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants,
+          nickToJidCache,
+          occupantIdToJidCache,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -1317,36 +1374,74 @@ export const roomStore = createStore<RoomState>()(
       let newOccupants: Map<string, RoomOccupant> | null = null
       // Update nick→avatar cache so avatars persist after occupants leave
       let nickToAvatarCache = existing.nickToAvatarCache
+      // Stable XEP-0421 cache survives nick changes and can be hydrated for
+      // occupants who are already offline when the room is joined.
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
+      let cacheChanged = false
 
-      for (const { nick, avatar, avatarHash } of updates) {
-        const occupant = (newOccupants ?? existing.occupants).get(nick)
-        if (!occupant) continue
+      for (const { nick, occupantId, avatar, avatarHash } of updates) {
+        const occupantAtNick = nick
+          ? (newOccupants ?? existing.occupants).get(nick)
+          : undefined
+        // An async avatar fetch may finish after the old occupant left and a
+        // different person recycled the nick. Never write the old avatar into
+        // that new live occupant.
+        const occupant = occupantId && occupantAtNick?.occupantId
+          && occupantAtNick.occupantId !== occupantId
+          ? undefined
+          : occupantAtNick
+        const stableOccupantId = occupantId ?? occupant?.occupantId
 
-        if (!newOccupants) newOccupants = new Map(existing.occupants)
-        newOccupants.set(nick, {
-          ...occupant,
-          avatar: avatar ?? undefined,
-          avatarHash: avatarHash ?? undefined,
-        })
+        if (occupant && nick) {
+          if (!newOccupants) newOccupants = new Map(existing.occupants)
+          newOccupants.set(nick, {
+            ...occupant,
+            avatar: avatar ?? undefined,
+            avatarHash: avatarHash ?? undefined,
+          })
+        }
 
-        if (avatar) {
+        if (avatar && nick && (occupant || !occupantId)) {
           if (!nickToAvatarCache || nickToAvatarCache === existing.nickToAvatarCache) {
             nickToAvatarCache = new Map(nickToAvatarCache || [])
           }
           nickToAvatarCache.set(nick, avatar)
+          cacheChanged = true
+        }
+
+        if (stableOccupantId) {
+          if (!occupantIdToAvatarCache || occupantIdToAvatarCache === existing.occupantIdToAvatarCache) {
+            occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+          }
+          if (avatar) {
+            occupantIdToAvatarCache.set(stableOccupantId, avatar)
+          } else {
+            occupantIdToAvatarCache.delete(stableOccupantId)
+          }
+          cacheChanged = true
         }
       }
 
-      if (!newOccupants) return state
+      if (!newOccupants && !cacheChanged) return state
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants ?? existing.occupants,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime (occupants + avatar cache)
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants ?? existingRuntime.occupants,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }

@@ -322,6 +322,26 @@ describe('createStoreBindings', () => {
         ])
       })
 
+      it('coalesces a restored offline occupant by stable occupant-id without a nick', () => {
+        mockClient.emit('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          occupantId: 'offline-occ',
+          avatar: 'blob:offline',
+          avatarHash: 'offline-hash',
+        })
+
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          [{
+            occupantId: 'offline-occ',
+            avatar: 'blob:offline',
+            avatarHash: 'offline-hash',
+          }],
+        )
+      })
+
       it('drops a pending flush when bindings are unsubscribed', () => {
         mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' })
 

@@ -25,8 +25,9 @@ import {
 } from '@fluux/sdk'
 import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
 import { getSearchClient } from '@fluux/sdk/stores'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
+import { resolveRoomAvatar } from './conversation/roomSenderResolution'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
 import { auroraSenderColor } from '@/utils/senderColor'
@@ -446,6 +447,10 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
+  const roomJid = isRoom
+    ? messages.find((message): message is RoomMessage => message.type === 'groupchat')?.roomJid
+    : undefined
+  const room = useRoomStore((state) => roomJid ? state.rooms.get(roomJid) : undefined)
 
   // Build message lookup for reply context
   const messagesById = createMessageLookup(messages as BaseMessage[])
@@ -467,15 +472,32 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
     if (isRoom && msg.type === 'groupchat') {
       const roomMsg = msg as RoomMessage
-      senderName = roomMsg.nick
-      avatarIdentifier = `${roomMsg.roomJid}/${roomMsg.nick}`
-      senderColor = auroraSenderColor(roomMsg.nick, isDarkMode ?? true)
+      const avatar = room
+        ? resolveRoomAvatar(
+            { nick: roomMsg.nick, occupantId: roomMsg.occupantId, isOwn: roomMsg.isOutgoing },
+            room,
+            contactsByJid,
+            ownAvatar,
+          )
+        : undefined
+      const contact = avatar?.senderBareJid
+        ? contactsByJid.get(avatar.senderBareJid)
+        : undefined
+      senderName = avatar?.matchedNick || contact?.name || roomMsg.nick
+      avatarIdentifier = avatar?.avatarIdentifier
+        || roomMsg.occupantId
+        || `${roomMsg.roomJid}/${roomMsg.nick}`
+      avatarUrl = avatar?.avatarUrl
+      senderColor = auroraSenderColor(
+        roomMsg.occupantId || avatar?.senderBareJid || roomMsg.nick,
+        isDarkMode ?? true,
+      )
+      senderJid = avatar?.senderBareJid
 
       // Check if it's own message
       if (roomMsg.isOutgoing) {
         senderName = ownNickname || roomMsg.nick
         senderColor = 'var(--fluux-text-self)'
-        avatarUrl = ownAvatar || undefined
       }
     } else {
       const senderBareJid = getBareJid(msg.from)
@@ -510,6 +532,23 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         return auroraSenderColor(senderId, dark ?? true)
       },
       (originalMsg, fallbackId) => {
+        if (isRoom && room && originalMsg?.type === 'groupchat') {
+          const roomMessage = originalMsg as RoomMessage
+          const avatar = resolveRoomAvatar(
+            {
+              nick: roomMessage.nick,
+              occupantId: roomMessage.occupantId,
+              isOwn: roomMessage.isOutgoing,
+            },
+            room,
+            contactsByJid,
+            ownAvatar,
+          )
+          return {
+            avatarUrl: avatar.avatarUrl,
+            avatarIdentifier: avatar.avatarIdentifier,
+          }
+        }
         const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
         if (senderId === myBareJid) {
           return { avatarUrl: ownAvatar || undefined, avatarIdentifier: senderId || 'unknown' }

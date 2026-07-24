@@ -349,7 +349,10 @@ export interface RoomEvents {
   /** Occupant avatar updated (XEP-0398) */
   'room:occupant-avatar': {
     roomJid: string
-    nick: string
+    /** Present for a live occupant; omitted when restoring an offline occupant-id binding. */
+    nick?: string
+    /** XEP-0421 identity, scoped to roomJid. */
+    occupantId?: string
     avatar: string | null
     avatarHash: string | null
   }

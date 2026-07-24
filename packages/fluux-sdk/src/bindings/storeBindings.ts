@@ -352,7 +352,12 @@ export function createStoreBindings(
   // resolution individually replaces the occupants Map N times in a burst and
   // re-renders every room subscriber once per avatar (render storm on join).
   const AVATAR_FLUSH_DELAY_MS = 200
-  const pendingOccupantAvatars = new Map<string, Map<string, { nick: string; avatar: string | null; avatarHash: string | null }>>()
+  const pendingOccupantAvatars = new Map<string, Map<string, {
+    nick?: string
+    occupantId?: string
+    avatar: string | null
+    avatarHash: string | null
+  }>>()
   let avatarFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   const flushOccupantAvatars = () => {
@@ -364,13 +369,23 @@ export function createStoreBindings(
     pendingOccupantAvatars.clear()
   }
 
-  on('room:occupant-avatar', ({ roomJid, nick, avatar, avatarHash }) => {
+  on('room:occupant-avatar', ({ roomJid, nick, occupantId, avatar, avatarHash }) => {
     let byNick = pendingOccupantAvatars.get(roomJid)
     if (!byNick) {
       byNick = new Map()
       pendingOccupantAvatars.set(roomJid, byNick)
     }
-    byNick.set(nick, { nick, avatar, avatarHash })
+    // Prefer the stable occupant-id as the coalescing key. Restored offline
+    // identities deliberately have no nick, while live updates carry both.
+    const identityKey = occupantId ? `id:${occupantId}` : `nick:${nick ?? ''}`
+    const previous = byNick.get(identityKey)
+    byNick.set(identityKey, {
+      ...previous,
+      ...(nick !== undefined && { nick }),
+      ...(occupantId !== undefined && { occupantId }),
+      avatar,
+      avatarHash,
+    })
     if (avatarFlushTimer === null) {
       avatarFlushTimer = setTimeout(flushOccupantAvatars, AVATAR_FLUSH_DELAY_MS)
     }
