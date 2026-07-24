@@ -10,6 +10,7 @@ import {
   cacheAvatar,
   saveAvatarHash,
   getAllAvatarHashes,
+  tryGetAllAvatarHashes,
   saveRoomOccupantAvatarHash,
   getRoomOccupantAvatarHashes,
   seedRoomOccupantAvatarHashes,
@@ -1059,10 +1060,10 @@ export class Profile extends BaseModule {
       const currentJid = this.deps.getCurrentJid()
       const ownBareJid = currentJid ? getBareJid(currentJid) : null
 
-      const hashMappings = await getAllAvatarHashes()
+      const hashMappings = await tryGetAllAvatarHashes()
       const occupantMappingsByRoom =
         await seedRoomOccupantAvatarHashes(hashMappings)
-      for (const mapping of hashMappings) {
+      for (const mapping of hashMappings ?? []) {
         const url = freshUrls.get(mapping.hash)
         if (!url) continue
 

@@ -64,6 +64,7 @@ vi.mock('../../utils/avatarCache', () => ({
   saveAvatarHash: vi.fn().mockResolvedValue(undefined),
   getAvatarHash: vi.fn().mockResolvedValue(null),
   getAllAvatarHashes: vi.fn().mockResolvedValue([]),
+  tryGetAllAvatarHashes: vi.fn().mockResolvedValue([]),
   saveRoomOccupantAvatarHash: vi.fn().mockResolvedValue(undefined),
   getRoomOccupantAvatarHashes: vi.fn().mockResolvedValue([]),
   seedRoomOccupantAvatarHashes: vi.fn().mockResolvedValue(new Map()),
@@ -948,12 +949,12 @@ describe('XMPPClient Own Avatar', () => {
     it('should refresh stale blob URLs for contacts and rooms', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([
         ['hash-c1', 'blob:fresh-contact1'],
         ['hash-r1', 'blob:fresh-room1'],
       ]))
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([
         { jid: 'alice@example.com', hash: 'hash-c1', type: 'contact' },
         { jid: 'room@conference.example.com', hash: 'hash-r1', type: 'room' },
       ])
@@ -980,9 +981,9 @@ describe('XMPPClient Own Avatar', () => {
     it('should skip entities not in store', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash1', 'blob:url']]))
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([
         { jid: 'unknown@example.com', hash: 'hash1', type: 'contact' },
       ])
       mockStores.roster.getContact.mockReturnValue(undefined)
@@ -1003,13 +1004,30 @@ describe('XMPPClient Own Avatar', () => {
       expect(emitSDKSpy).not.toHaveBeenCalled()
     })
 
+    it('does not seed a failed hash-store read as an empty snapshot', async () => {
+      const {
+        refreshAllBlobUrls,
+        tryGetAllAvatarHashes,
+        seedRoomOccupantAvatarHashes,
+      } = await import('../../utils/avatarCache')
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(
+        new Map([['hash-other', 'blob:fresh-other']])
+      )
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValueOnce(null)
+      vi.mocked(seedRoomOccupantAvatarHashes).mockClear()
+
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+
+      expect(seedRoomOccupantAvatarHashes).toHaveBeenCalledWith(null)
+    })
+
     it('should refresh stale blob URLs for MUC occupants', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-o1', 'blob:fresh-occupant1']]))
       // Occupant avatars are NOT in the contact/room hash store, so this stays empty.
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([])
 
       // A joined room whose occupant's avatar blob URL went stale after wake.
       // refreshAllBlobUrls revoked the old blobs; occupants must be re-pointed.
@@ -1044,7 +1062,7 @@ describe('XMPPClient Own Avatar', () => {
 
       const {
         refreshAllBlobUrls,
-        getAllAvatarHashes,
+        tryGetAllAvatarHashes,
         getRoomOccupantAvatarHashes,
         seedRoomOccupantAvatarHashes,
       } = await import('../../utils/avatarCache')
@@ -1052,13 +1070,13 @@ describe('XMPPClient Own Avatar', () => {
         { jid: 'encoded-a', hash: 'hash-a', type: 'occupant' as const },
         { jid: 'encoded-b', hash: 'hash-b', type: 'occupant' as const },
       ]
-      vi.mocked(getAllAvatarHashes).mockClear()
+      vi.mocked(tryGetAllAvatarHashes).mockClear()
       vi.mocked(seedRoomOccupantAvatarHashes).mockClear()
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([
         ['hash-a', 'blob:fresh-a'],
         ['hash-b', 'blob:fresh-b'],
       ]))
-      vi.mocked(getAllAvatarHashes).mockResolvedValue(mappings)
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue(mappings)
       vi.mocked(seedRoomOccupantAvatarHashes).mockResolvedValueOnce(new Map([
         ['room-a@conf.example.com', new Map([['occ-a', 'hash-a']])],
         ['room-b@conf.example.com', new Map([['occ-b', 'hash-b']])],
@@ -1079,7 +1097,7 @@ describe('XMPPClient Own Avatar', () => {
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
-      expect(getAllAvatarHashes).toHaveBeenCalledTimes(1)
+      expect(tryGetAllAvatarHashes).toHaveBeenCalledTimes(1)
       expect(seedRoomOccupantAvatarHashes).toHaveBeenCalledTimes(1)
       expect(seedRoomOccupantAvatarHashes).toHaveBeenCalledWith(mappings)
       expect(getRoomOccupantAvatarHashes).not.toHaveBeenCalled()
@@ -1101,13 +1119,13 @@ describe('XMPPClient Own Avatar', () => {
     it('re-points a roster contact whose hash the mapping store missed', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       // A fresh URL exists for the contact's hash, but the IndexedDB mapping
       // store does NOT list this JID (e.g. the avatar arrived via MUC
       // vcard-temp presence, not a PEP/vCard fetch). The mapping loop misses it;
       // the roster-store safety net must still re-point its dead blob.
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-seb', 'blob:fresh-seb']]))
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([])
       mockStores.roster.sortedContacts.mockReturnValue([
         { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
       ])
@@ -1122,12 +1140,12 @@ describe('XMPPClient Own Avatar', () => {
     it('re-fetches a roster contact whose cached avatar bytes are gone', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       // Another contact is cached (so the size-0 short-circuit doesn't fire), but
       // Seb's hash has no fresh URL → his bytes were evicted from IndexedDB.
       // His pointer is a now-dead blob, so the safety net must re-fetch to heal.
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-other', 'blob:other']]))
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([])
       const fetchSpy = vi.spyOn(xmppClient.profile, 'fetchAvatarData').mockResolvedValue()
       mockStores.roster.sortedContacts.mockReturnValue([
         { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
@@ -1141,11 +1159,11 @@ describe('XMPPClient Own Avatar', () => {
     it('should re-point the current user\'s own avatar via connection:own-avatar', async () => {
       emitSDKSpy.mockClear()
 
-      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      const { refreshAllBlobUrls, tryGetAllAvatarHashes } = await import('../../utils/avatarCache')
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-self', 'blob:fresh-self']]))
       // The own avatar is stored in the hash store as a 'contact' under the
       // user's own bare JID (Profile.fetchOwnAvatar → saveAvatarHash(..., 'contact')).
-      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+      vi.mocked(tryGetAllAvatarHashes).mockResolvedValue([
         { jid: 'user@example.com', hash: 'hash-self', type: 'contact' },
       ])
       // The user is not in their own roster, so getContact misses.

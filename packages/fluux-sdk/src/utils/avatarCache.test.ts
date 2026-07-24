@@ -286,6 +286,77 @@ describe('avatarCache blob URL pool', () => {
       getAllSpy.mockRestore()
     })
 
+    it('does not memoize a failed seed as a genuinely empty snapshot', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await seedRoomOccupantAvatarHashes(null)
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+      getAllSpy.mockRestore()
+    })
+
+    it('retries after a transient occupant snapshot read failure', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+        .mockImplementationOnce(() => {
+          throw new Error('transient IndexedDB failure')
+        })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([])
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to get avatar hash mappings:',
+        expect.any(Error)
+      )
+
+      warnSpy.mockRestore()
+      getAllSpy.mockRestore()
+    })
+
+    it('preserves write-through updates when a later seed is ignored', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      const staleMappings = await getAllAvatarHashes()
+      await seedRoomOccupantAvatarHashes(staleMappings)
+
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-patched',
+      )
+      const ignoredMappings = staleMappings.map((mapping) => ({
+        ...mapping,
+        hash: 'hash-from-reseed',
+      }))
+      await seedRoomOccupantAvatarHashes(ignoredMappings)
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'occupant-a', hash: 'hash-patched' },
+      ])
+    })
+
     it('shares one grouped read across room joins and updates it after writes', async () => {
       await saveRoomOccupantAvatarHash(
         'room-a@conference.example.com',

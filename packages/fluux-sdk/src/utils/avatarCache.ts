@@ -368,14 +368,18 @@ export async function getAvatarHash(jid: string): Promise<string | null> {
 }
 
 /**
- * Get all avatar hash mappings, optionally filtered by type
+ * Read all avatar hash mappings, optionally filtered by type.
+ *
+ * Unlike the public compatibility wrapper below, this returns `null` when the
+ * IndexedDB read fails so memoized callers can distinguish a transient failure
+ * from a genuinely empty store.
  */
-export async function getAllAvatarHashes(
+export async function tryGetAllAvatarHashes(
   type?: AvatarEntityType
-): Promise<AvatarHashMapping[]> {
+): Promise<AvatarHashMapping[] | null> {
   try {
     const db = await getDB()
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const transaction = db.transaction(HASH_STORE_NAME, 'readonly')
       const store = transaction.objectStore(HASH_STORE_NAME)
 
@@ -397,8 +401,19 @@ export async function getAllAvatarHashes(
     if (isIndexedDBAvailable()) {
       console.warn('Failed to get avatar hash mappings:', error)
     }
-    return []
+    return null
   }
+}
+
+/**
+ * Get all avatar hash mappings, optionally filtered by type.
+ *
+ * Keep returning an empty array on storage errors for existing callers.
+ */
+export async function getAllAvatarHashes(
+  type?: AvatarEntityType
+): Promise<AvatarHashMapping[]> {
+  return (await tryGetAllAvatarHashes(type)) ?? []
 }
 
 /**
@@ -425,8 +440,18 @@ export async function getRoomOccupantAvatarHashes(
   roomJid: string
 ): Promise<RoomOccupantAvatarHashMapping[]> {
   if (!occupantMappingsByRoomPromise) {
-    occupantMappingsByRoomPromise = getAllAvatarHashes('occupant')
-      .then(groupRoomOccupantAvatarHashes)
+    const snapshotPromise = tryGetAllAvatarHashes('occupant').then((mappings) => {
+      if (mappings === null) {
+        // Do not turn a transient IndexedDB failure into a session-long empty
+        // snapshot. The current caller falls back, while the next join retries.
+        if (occupantMappingsByRoomPromise === snapshotPromise) {
+          occupantMappingsByRoomPromise = null
+        }
+        return new Map()
+      }
+      return groupRoomOccupantAvatarHashes(mappings)
+    })
+    occupantMappingsByRoomPromise = snapshotPromise
   }
   const mappingsByRoom = await occupantMappingsByRoomPromise
   const roomMappings = mappingsByRoom.get(getBareJid(roomJid))
@@ -469,14 +494,16 @@ export function groupRoomOccupantAvatarHashes(
  * a second grouping while preserving a snapshot that another caller loaded.
  */
 export async function seedRoomOccupantAvatarHashes(
-  mappings: readonly AvatarHashMapping[]
+  mappings: readonly AvatarHashMapping[] | null
 ): Promise<RoomOccupantAvatarHashesByRoom> {
-  if (!occupantMappingsByRoomPromise) {
+  if (!occupantMappingsByRoomPromise && mappings !== null) {
     occupantMappingsByRoomPromise = Promise.resolve(
       groupRoomOccupantAvatarHashes(mappings)
     )
   }
-  return occupantMappingsByRoomPromise
+  // `null` denotes a failed read. Reuse an existing good snapshot if present,
+  // but never memoize an empty replacement for the failed read.
+  return occupantMappingsByRoomPromise ?? new Map()
 }
 
 /**
