@@ -250,6 +250,7 @@
         "joinToLoadHistory": "加入即可加载消息",
         "notificationSettings": "通知设置",
         "roomActions": "房间操作",
+        "showRoomInfo": "显示房间信息",
         "mentionsOnly": "仅提及",
         "defaultBehavior": "默认行为",
         "allMessages": "所有消息",

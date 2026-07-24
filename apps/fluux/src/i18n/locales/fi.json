@@ -250,6 +250,7 @@
         "joinToLoadHistory": "Liity ladataksesi viestit",
         "notificationSettings": "Ilmoitusasetukset",
         "roomActions": "Huoneen toiminnot",
+        "showRoomInfo": "Näytä huoneen tiedot",
         "mentionsOnly": "Vain maininnat",
         "defaultBehavior": "Oletuskäyttäytyminen",
         "allMessages": "Kaikki viestit",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RoomHeader } from './RoomHeader'
 import type { Room, RoomOccupant } from '@fluux/sdk'
 
@@ -25,6 +25,7 @@ vi.mock('react-i18next', () => ({
         'rooms.kickBanMembers': 'Kick/ban members',
         'rooms.hideMembers': 'Hide members',
         'rooms.showMembers': 'Show members',
+        'rooms.showRoomInfo': 'Show room info',
         'rooms.avatarClearFailed': 'Failed to clear avatar',
         'rooms.avatarChangeFailed': 'Failed to change avatar',
         'rooms.manageHats': 'Manage Hats',
@@ -178,6 +179,55 @@ describe('RoomHeader', () => {
       )
 
       expect(screen.getByText('My Room')).toBeInTheDocument()
+    })
+
+    it('labels the room name button as the room info trigger', () => {
+      render(
+        <RoomHeader
+          room={createRoom({ name: 'My Room' })}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      expect(screen.getByLabelText('Show room info: My Room')).toBeInTheDocument()
+    })
+
+    it('shows a "Show room info" tooltip when hovering the room name', async () => {
+      vi.useFakeTimers()
+      try {
+        render(
+          <RoomHeader
+            room={createRoom({ name: 'My Room' })}
+            showOccupants={false}
+            onToggleOccupants={mockOnToggleOccupants}
+            setRoomNotifyAll={mockSetRoomNotifyAll}
+            setRoomAvatar={mockSetRoomAvatar}
+            clearRoomAvatar={mockClearRoomAvatar}
+            submitRoomConfig={mockSubmitRoomConfig}
+            setSubject={mockSetSubject}
+            destroyRoom={mockDestroyRoom}
+          />
+        )
+
+        // The tooltip listens on the wrapper around the trigger button
+        const infoButton = screen.getByLabelText('Show room info: My Room')
+        fireEvent.mouseEnter(infoButton.parentElement!)
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000)
+        })
+
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Show room info')
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('carries the aurora horizon hairline', () => {

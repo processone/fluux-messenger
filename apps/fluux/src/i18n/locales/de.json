@@ -252,6 +252,7 @@
         "joinToLoadHistory": "Beitreten um Nachrichten zu laden",
         "notificationSettings": "Benachrichtigungseinstellungen",
         "roomActions": "Raumaktionen",
+        "showRoomInfo": "Rauminformationen anzeigen",
         "mentionsOnly": "Nur Erwähnungen",
         "defaultBehavior": "Standardverhalten",
         "allMessages": "Alle Nachrichten",

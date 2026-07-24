@@ -250,6 +250,7 @@
         "joinToLoadHistory": "Csatlakozzon az üzenetek betöltéséhez",
         "notificationSettings": "Értesítési beállítások",
         "roomActions": "Szoba műveletek",
+        "showRoomInfo": "Szobainformációk megjelenítése",
         "mentionsOnly": "Csak említések",
         "defaultBehavior": "Alapértelmezett viselkedés",
         "allMessages": "Minden üzenet",

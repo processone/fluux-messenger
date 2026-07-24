@@ -252,6 +252,7 @@
         "joinToLoadHistory": "Unete para cargar mensajes",
         "notificationSettings": "Ajustes de notificaciones",
         "roomActions": "Acciones de la sala",
+        "showRoomInfo": "Mostrar información de la sala",
         "mentionsOnly": "Solo menciones",
         "defaultBehavior": "Comportamiento predeterminado",
         "allMessages": "Todos los mensajes",
