@@ -58,6 +58,7 @@ export const changelog: ChangelogEntry[] = [
           'The quoted-message and reply cards stay visually distinct when a message is selected',
           'Your own message group re-fits its width once an image inside it finishes loading',
           'The typing indicator is vertically centered between the last message and the composer',
+          'Group-chat unread dots and mention badges now sit after the timestamp as vertically aligned activity indicators',
           'macOS: the traffic-light window buttons stay centered in the app bar',
           'Web: the notification permission card in Settings uses platform-neutral wording instead of "Desktop Notifications"',
         ],

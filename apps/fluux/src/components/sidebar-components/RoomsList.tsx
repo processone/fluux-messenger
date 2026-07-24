@@ -446,30 +446,36 @@ export const RoomItem = memo(function RoomItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
-            {/* Activity dot for unread (non-mention) activity. Red for a
-                notify-all room — the attention tier, matching the icon-rail
-                indicator and mention badge — grey for plain unread. The count
-                itself lives in the row tooltip; the dot carries no tooltip of
-                its own (nested inside the row's, it popped a second bubble). */}
-            {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
-              <div
-                className={`size-2.5 rounded-full flex-shrink-0 ${
-                  roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
-                }`}
-              />
-            )}
-            {/* Mentions count badge — red, the loud "wants your attention" tier. */}
-            {room.mentionsCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
-                @{room.mentionsCount}
-              </span>
-            )}
-            {/* Timestamp */}
-            {lastMessage && (
-              <span className="text-xs text-fluux-muted flex-shrink-0 ms-auto">
-                {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
-              </span>
-            )}
+            <div className="ms-auto flex flex-shrink-0 items-center gap-2">
+              {/* Timestamp */}
+              {lastMessage && (
+                <span className="text-xs text-fluux-muted">
+                  {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
+                </span>
+              )}
+              {/* Activity dot for unread (non-mention) activity. Red for a
+                  notify-all room — the attention tier, matching the icon-rail
+                  indicator and mention badge — grey for plain unread. Keeping
+                  the fixed-size dot after the timestamp aligns it across rows.
+                  The count itself lives in the row tooltip; the dot carries no
+                  tooltip of its own (nested inside the row's, it popped a
+                  second bubble). */}
+              {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
+                <div
+                  className={`size-3 rounded-full flex-shrink-0 ${
+                    roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
+                  }`}
+                />
+              )}
+              {/* Mentions count badge — red, the loud "wants your attention"
+                  variant of the unread indicator. It uses the same trailing
+                  slot as the plain activity dot. */}
+              {room.mentionsCount > 0 && (
+                <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+                  @{room.mentionsCount}
+                </span>
+              )}
+            </div>
           </div>
           {showTyping ? (
             <TypingIndicator variant="compact" typingUsers={typingNicks} />
