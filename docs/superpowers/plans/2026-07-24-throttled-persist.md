@@ -36,6 +36,7 @@
 - `packages/fluux-sdk/src/stores/shared/throttledStorage.test.ts`
 - `packages/fluux-sdk/src/stores/chatStore.persist.test.ts`
 - `packages/fluux-sdk/src/stores/roomStore.throttledPersist.test.ts`
+- `packages/fluux-sdk/src/stores/roomStore.testHelpers.ts` — createRoom/createMessage, shared by both room suites
 
 **Modified:**
 - `packages/fluux-sdk/src/stores/chatStore.ts` — adapter, `switchAccount`, `recordPendingRetraction`
@@ -879,6 +880,56 @@ load-bearing assumption."
 
 All 13 helper call sites go through 5 functions, so only the function bodies change — no call site edits.
 
+- [ ] **Step 0: Extract the shared room test helpers**
+
+`createRoom` and `createMessage` currently live inside `roomStore.test.ts`
+(lines ~54 and ~84). Both suites need them, so move them to a shared module
+rather than copying — the precedent is `core/sideEffects.testHelpers.ts`, where
+`localStorageMock` already lives. Do **not** import across `.test.ts` files;
+that couples the suites and those helpers are not exported today.
+
+Create `packages/fluux-sdk/src/stores/roomStore.testHelpers.ts` by moving the
+two functions verbatim, with one change: `createMessage`'s `timestamp` becomes
+an optional trailing parameter defaulting to `new Date()`, so every existing
+call site in `roomStore.test.ts` keeps working unchanged.
+
+```typescript
+import type { Room, RoomMessage } from '../core/types'
+
+export function createRoom(jid: string, options: Partial<Room> = {}): Room {
+  // ...moved verbatim from roomStore.test.ts...
+}
+
+/**
+ * `timestamp` defaults to `new Date()` for the existing call sites, but pass it
+ * EXPLICITLY whenever a test advances a read pointer across two messages.
+ * `isAhead` (shared/readPointer.ts:63) treats equal timestamps as NOT an
+ * advance — deliberately, since MAM archives routinely put siblings in one
+ * millisecond — and under fake timers `new Date()` returns the same instant
+ * every call. Two same-instant messages make the second `advanceReadPointer` a
+ * silent no-op that never persists.
+ */
+export function createMessage(
+  id: string,
+  roomJid: string,
+  nick: string,
+  body: string,
+  isOutgoing = false,
+  timestamp: Date = new Date()
+): RoomMessage {
+  // ...moved verbatim, with `timestamp` from the parameter...
+}
+```
+
+Then delete both definitions from `roomStore.test.ts` and import them from the
+new module. Run `npx vitest run src/stores/roomStore` — it must stay green
+before you write any new test.
+
+**Note the parameter order:** `roomStore.test.ts:84`'s `createMessage` already
+takes `isOutgoing` as its fifth parameter. Keep it there and append `timestamp`
+sixth, so existing calls are untouched. The new suite passes
+`createMessage('r1', ROOM, 'alice', 'first', false, new Date(1000))`.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `packages/fluux-sdk/src/stores/roomStore.throttledPersist.test.ts`:
@@ -893,49 +944,7 @@ import { roomStore } from './roomStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
 import { _clearAllRoomReadStateForTesting } from './shared/readStateStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
-import type { Room, RoomMessage } from '../core/types'
-
-// Same shape as the helpers in roomStore.test.ts:54 and :84 — copy them rather
-// than importing across suites, matching how the existing suites are written.
-function createRoom(jid: string, options: Partial<Room> = {}): Room {
-  return {
-    jid,
-    name: options.name ?? jid.split('@')[0],
-    nickname: options.nickname ?? 'testuser',
-    joined: options.joined ?? false,
-    isBookmarked: false,
-    occupants: new Map(),
-    messages: options.messages ?? [],
-    unreadCount: 0,
-    mentionsCount: 0,
-    typingUsers: new Set(),
-  }
-}
-
-// `timestamp` is an explicit parameter, NOT `new Date()`. Under fake timers
-// `new Date()` returns the same instant for every message, and `isAhead`
-// (shared/readPointer.ts:63) treats equal timestamps as NOT an advance — by
-// design, since MAM archives routinely put siblings in one millisecond. Two
-// same-instant messages would make the second `advanceReadPointer` a silent
-// no-op that never writes, so every read-state test below would fail.
-function createMessage(
-  id: string,
-  roomJid: string,
-  nick: string,
-  body: string,
-  timestamp: Date
-): RoomMessage {
-  return {
-    type: 'groupchat',
-    id,
-    roomJid,
-    from: `${roomJid}/${nick}`,
-    nick,
-    body,
-    timestamp,
-    isOutgoing: false,
-  }
-}
+import { createRoom, createMessage } from './roomStore.testHelpers'
 
 const ROOM = 'room@conference.example.com'
 
@@ -1058,8 +1067,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('r1', ROOM, 'alice', 'first', new Date(1000)),
-          createMessage('r2', ROOM, 'alice', 'second', new Date(2000)),
+          createMessage('r1', ROOM, 'alice', 'first', false, new Date(1000)),
+          createMessage('r2', ROOM, 'alice', 'second', false, new Date(2000)),
         ],
       })
     )
@@ -1093,8 +1102,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('read-first', ROOM, 'alice', 'a', new Date(1000)),
-          createMessage('read-pending', ROOM, 'alice', 'b', new Date(2000)),
+          createMessage('read-first', ROOM, 'alice', 'a', false, new Date(1000)),
+          createMessage('read-pending', ROOM, 'alice', 'b', false, new Date(2000)),
         ],
       })
     )
@@ -1132,8 +1141,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('r-first', ROOM, 'alice', 'a', new Date(1000)),
-          createMessage('r-pending', ROOM, 'alice', 'b', new Date(2000)),
+          createMessage('r-first', ROOM, 'alice', 'a', false, new Date(1000)),
+          createMessage('r-pending', ROOM, 'alice', 'b', false, new Date(2000)),
         ],
       })
     )
