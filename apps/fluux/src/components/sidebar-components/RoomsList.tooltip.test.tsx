@@ -136,3 +136,31 @@ describe('RoomItem tooltip', () => {
     expect(screen.getAllByTestId('tooltip-content')).toHaveLength(1)
   })
 })
+
+describe('RoomItem unread activity dot', () => {
+  it('renders a larger dot after the timestamp at the fixed metadata edge', () => {
+    const { container } = renderRoom(makeRoom({
+      unreadCount: 37,
+      mentionsCount: 0,
+      lastMessage: {
+        type: 'groupchat',
+        id: 'm1',
+        roomJid: 'team@conference.fluux.chat',
+        from: 'team@conference.fluux.chat/alice',
+        body: 'hello',
+        timestamp: new Date('2026-07-24T12:00:00Z'),
+        isOutgoing: false,
+        nick: 'alice',
+      },
+    }))
+
+    const metadata = container.querySelector('.ms-auto') as HTMLElement
+    const timestamp = metadata.querySelector('.text-xs') as HTMLElement
+    const dot = metadata.querySelector('.bg-fluux-gray') as HTMLElement
+
+    expect(timestamp).not.toBeNull()
+    expect(dot).not.toBeNull()
+    expect(timestamp.compareDocumentPosition(dot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(dot.className).toContain('size-3')
+  })
+})
