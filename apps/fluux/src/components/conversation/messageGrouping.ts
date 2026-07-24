@@ -272,87 +272,18 @@ export function whisperCounterpartPresent(
 }
 
 /**
- * Scrolls to a message element and highlights it temporarily.
- * Used when clicking on reply context to jump to the original message.
+ * Ask the LIVE conversation list to position and highlight a message.
  *
- * @param messageId - The ID of the message to scroll to (matches data-message-id attribute)
+ * The active list owns target resolution, loading, browser reconciliation, and cancellation. This
+ * helper intentionally performs no DOM lookup or scroll write of its own.
+ *
+ * Only for callers with no enclosing message list that genuinely mean the live conversation
+ * (PollBanner above the list, find-on-page at the layout level). Anything rendered INSIDE a list —
+ * reply quotes, poll cards — must use `useRequestMessageTarget` so the click routes to the list it
+ * happened in; otherwise a click inside a search/activity preview scrolls the live conversation.
+ *
+ * @param messageId - Local, stanza, or origin ID understood by the active list's target resolver.
  */
 export function scrollToMessage(messageId: string): void {
-  // Use CSS.escape to handle special characters in message IDs (e.g., +, /, =)
-  // Some clients use base64-encoded IDs that contain these characters
-  const escapedId = CSS.escape(messageId)
-
-  // A reply/reaction/correction references its target by whichever id tier the
-  // sender chose: XEP-0461 replies in a MUC reference the room-assigned stanza-id,
-  // XEP-0308 corrections reference the sender's origin-id. The DOM keys each row by
-  // the local message id but also exposes data-stanza-id / data-origin-id, so resolve
-  // against every tier — the reference passed here may not have been mapped back to a
-  // local id (e.g. the target wasn't in the lookup when the reply row last rendered).
-  function findElement(): Element | null {
-    return (
-      document.querySelector(`[data-message-id="${escapedId}"]`) ??
-      document.querySelector(`[data-stanza-id="${escapedId}"]`) ??
-      document.querySelector(`[data-origin-id="${escapedId}"]`)
-    )
-  }
-
-  let requestedMount = false
-  let requestedLoad = false
-
-  // A windowed-in row needs a few frames to mount + measure (covers a first-render race and an
-  // in-window re-window). A cache-slice fetch (loadAround) is asynchronous and much slower, so the
-  // retry budget widens to this once a load is requested — otherwise the loop would exhaust and warn
-  // before the slice lands.
-  const LOAD_AROUND_RETRY_FRAMES = 60
-
-  function tryScroll(retriesLeft: number) {
-    const element = findElement()
-    if (element) {
-      // scrollIntoView uses the real measured layout, so it lands precisely even when the row was
-      // just windowed in via an estimate-based scrollToIndex below (which self-corrects here).
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      element.classList.add('message-highlight')
-      setTimeout(() => element.classList.remove('message-highlight'), 1500)
-      return
-    }
-    // Under virtualization the target row may be OUTSIDE the mounted window, so the DOM query above
-    // finds nothing (retrying alone never helps — the row is never rendered). Two cases:
-    //   1. The row IS in the loaded item set (hasMessage) but its virtual row is unmounted — ask the
-    //      active list to window it in once, then keep retrying while it mounts and measures.
-    //   2. The row scrolled so far out that it isn't in the item set at all (issue #955: reply-quote
-    //      and poll jumps) — pull the cache slice around it via loadAround once, widen the retry
-    //      window to cover the async fetch, then case 1 windows it in once hasMessage flips true.
-    // Both are no-ops / absent for non-virtualized lists, where every row is already in the DOM.
-    //
-    // KNOWN EDGE: loadAround anchors on a LOCAL message id (getMessagesAround is keyed by it). A
-    // reply that references an OUT-OF-WINDOW target by its stanza-id / origin-id (XEP-0461/0308) has
-    // no local id to anchor the slice, so case 2 can't fetch it — the load falls through and the
-    // jump warns. In-window stanza/origin targets still resolve via findElement's 3-tier DOM query
-    // above. This covers reply-by-local-id and poll jumps (both carry local ids); a stanza→local map
-    // for out-of-window stanza/origin refs is future work.
-    const controller = getActiveMessageListController()
-    if (controller?.hasMessage(messageId)) {
-      if (!requestedMount) {
-        controller.ensureMessageMounted(messageId)
-        requestedMount = true
-      }
-    } else if (!requestedLoad && controller?.loadAround) {
-      requestedLoad = true
-      void Promise.resolve(controller.loadAround(messageId))
-      retriesLeft = Math.max(retriesLeft, LOAD_AROUND_RETRY_FRAMES)
-    }
-    if (retriesLeft > 0) {
-      // Element may not be in the DOM yet (first render, a row still being windowed in, or a cache
-      // slice still loading). Retry after the next frame.
-      requestAnimationFrame(() => tryScroll(retriesLeft - 1))
-    } else {
-      // Debug: message not found in DOM, log to help diagnose issues
-      console.warn(`[scrollToMessage] Message not found in DOM: id="${messageId}"`)
-      const allMsgEls = document.querySelectorAll('[data-message-id]')
-      const ids = Array.from(allMsgEls).slice(-20).map(el => el.getAttribute('data-message-id'))
-      console.warn(`[scrollToMessage] Last ${ids.length} message IDs in DOM:`, ids)
-    }
-  }
-
-  tryScroll(8)
+  getActiveMessageListController()?.requestMessageTarget(messageId)
 }

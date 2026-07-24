@@ -9,7 +9,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BarChart3, Lock } from 'lucide-react'
 import { generateConsistentColorHexSync, type PollClosedData } from '@fluux/sdk'
-import { scrollToMessage } from './messageGrouping'
+import { useRequestMessageTarget } from './messageTargetContext'
 
 export interface PollClosedCardProps {
   pollClosed: PollClosedData
@@ -22,6 +22,8 @@ function getResultColor(label: string, emoji: string): string {
 
 export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
   const { t } = useTranslation()
+  // Rendered inside a message row, so the jump belongs to the enclosing list (see MessageBubble).
+  const requestMessageTarget = useRequestMessageTarget()
 
   const totalVotes = useMemo(
     () => pollClosed.results.reduce((sum, r) => sum + r.count, 0),
@@ -46,7 +48,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
         <BarChart3 className="size-4 text-fluux-muted flex-shrink-0" />
         <button
           type="button"
-          onClick={() => scrollToMessage(pollClosed.pollMessageId)}
+          onClick={() => requestMessageTarget(pollClosed.pollMessageId)}
           className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-start truncate"
           title={t('poll.scrollToOriginal', 'Scroll to original poll')}
         >

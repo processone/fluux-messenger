@@ -22,6 +22,7 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import { scrollToMessage } from './messageGrouping'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
@@ -166,7 +167,7 @@ describe('MessageList — virtualized scroll integration', () => {
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 
-  it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', () => {
+  it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', async () => {
     // targetMessageId (reply-to jump, search result open) resolves the row through the virtualizer
     // index (works for unmounted rows — no DOM query, no async waits) and centers it via
     // scrollToIndex('center'). Center — not align:'start' — so the row does NOT sit flush against
@@ -176,9 +177,18 @@ describe('MessageList — virtualized scroll integration', () => {
     // used for this path.
     scrollToIndexCalls.length = 0
     renderList({ targetMessageId: 'msg-30' })
-    expect(scrollToIndexCalls).toContain('center')
+    await waitFor(() => expect(scrollToIndexCalls).toContain('center'))
     expect(scrollToIndexCalls).not.toContain('start') // not tucked flush against the top edge
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
+  })
+
+  it('routes reply, poll, and find-on-page jumps through the active list controller', async () => {
+    renderList()
+    scrollToIndexCalls.length = 0
+
+    act(() => scrollToMessage('msg-30'))
+
+    await waitFor(() => expect(scrollToIndexCalls).toContain('center'))
   })
 
   it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', async () => {
@@ -554,6 +564,30 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   }
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+  it('does not highlight a target cancelled before its first position write', () => {
+    const onConsumed = vi.fn()
+    const { container } = render(
+      <MessageList
+        messages={makeMessages(50)}
+        conversationId="conv-target-takeover"
+        targetMessageId="msg-30"
+        onTargetMessageConsumed={onConsumed}
+        {...props}
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+
+    fireEvent.wheel(scroller, { deltaY: -20 })
+
+    expect(onConsumed).toHaveBeenCalledTimes(1)
+    expect(
+      container
+        .querySelector('[data-message-id="msg-30"]')
+        ?.classList.contains('message-highlight'),
+    ).toBe(false)
+    expect(scrollToIndexCalls).not.toContain('center')
+  })
 
   it('reasserts target-message jumps while virtualized rows settle', () => {
     // Reply/search/activity jumps used to call scrollToIndex('center') once. If rows above the
@@ -1196,7 +1230,7 @@ describe('MessageList — target-message highlight survives the target clear (vi
   }
 
   it('applies .message-highlight to the target row even though consuming it clears the target', () => {
-    // Hold scrollTop steady so the reassert loop reaches TARGET_STABLE_FRAMES and consumes.
+    // Hold scrollTop steady so the controller reaches its stable-frame threshold and consumes.
     scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
     const { container } = render(<Harness />)
     const scroller = container.querySelector('[data-message-list]') as HTMLElement

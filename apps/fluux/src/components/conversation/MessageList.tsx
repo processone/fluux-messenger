@@ -42,6 +42,7 @@ import {
   getActiveMessageListController,
   type ActiveMessageListController,
 } from './activeMessageListController'
+import { MessageTargetProvider } from './messageTargetContext'
 import { useRowMetrics, ROW_METRICS_FALLBACK } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
 import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
@@ -516,6 +517,7 @@ export function MessageList<T extends BaseMessage>({
     handleLoadEarlier,
     handleMediaLoad,
     scrollToBottom,
+    requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
     bottomVisibleMessageId,
@@ -552,28 +554,23 @@ export function MessageList<T extends BaseMessage>({
     setScrollContainerRefFromHook(element)
   }
 
-  // Register this list so outside code can reach it without threading a prop through
-  // every caller: scrollToMessage (reply-quote taps, find-on-page, poll and reaction
-  // jumps) windows an off-screen row in before its DOM read, and ChatLayout's Escape
-  // handler (spec §3 step 3, conversation catch-up) triggers the same scroll-to-bottom
-  // as the ⌘/Ctrl+↓ shortcut and FAB. hasMessage/ensureMessageMounted are virtualized-only
-  // (non-virtualized lists keep every row mounted, so scrollToMessage's plain DOM path
-  // works unchanged); scrollToBottom is always available. Identity-checked cleanup so a
-  // fast conversation switch can't clear the newly mounted list's registration.
+  // Register this list so code with no enclosing list (PollBanner above the list, find-on-page at
+  // the layout level) and ChatLayout's Escape handler can reach the LIVE conversation. Previews are
+  // excluded on purpose: several static lists can be mounted at once, and this registry holds only
+  // one, so letting them register would make routing depend on which list rendered most recently.
+  // Callers rendered INSIDE a list route by containment instead (see messageTargetContext).
+  // Identity-checked cleanup ensures a fast conversation switch cannot clear the new registration.
   useEffect(() => {
+    if (staticMode) return
     const controller: ActiveMessageListController = {
-      hasMessage: (id) => activeVirtualizer ? activeVirtualizer.getIndexForMessageId(id) !== null : false,
-      ensureMessageMounted: (id) => { void activeVirtualizer?.ensureMessageMounted(id) },
-      // Reuse the same cache-slice loader as the targetMessageId jump so scrollToMessage can reach a
-      // target that scrolled out of the loaded item set entirely (issue #955: reply-quote / poll).
-      loadAround: onLoadAround,
+      requestMessageTarget,
       scrollToBottom,
     }
     setActiveMessageListController(controller)
     return () => {
       if (getActiveMessageListController() === controller) setActiveMessageListController(null)
     }
-  }, [activeVirtualizer, scrollToBottom, onLoadAround])
+  }, [requestMessageTarget, scrollToBottom, staticMode])
 
   // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
   // so tests can fire it without scrolling to 0, which would change findAnchorElement's
@@ -762,6 +759,7 @@ export function MessageList<T extends BaseMessage>({
   }
 
   return (
+    <MessageTargetProvider value={requestMessageTarget}>
     <MessageWidthProvider containerRef={scrollContainerRef}>
     <OwnGroupWidthProvider>
     <div className="relative flex-1 flex flex-col min-h-0">
@@ -950,5 +948,6 @@ export function MessageList<T extends BaseMessage>({
     </div>
     </OwnGroupWidthProvider>
     </MessageWidthProvider>
+    </MessageTargetProvider>
   )
 }

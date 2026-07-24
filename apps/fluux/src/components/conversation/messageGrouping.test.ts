@@ -1,12 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { groupMessagesByDate, shouldShowAvatar, ownGroupKey, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 import { setActiveMessageListController } from './activeMessageListController'
-
-// Mock CSS.escape since it's not available in JSDOM
-// This implementation matches the browser's CSS.escape behavior
-vi.stubGlobal('CSS', {
-  escape: (str: string) => str.replace(/([/@+=])/g, '\\$1'),
-})
 
 describe('groupMessagesByDate', () => {
   it('should group messages by date', () => {
@@ -483,226 +477,31 @@ describe('whisperCounterpartPresent', () => {
 })
 
 describe('scrollToMessage', () => {
-  let mockElement: {
-    scrollIntoView: ReturnType<typeof vi.fn>
-    classList: {
-      add: ReturnType<typeof vi.fn>
-      remove: ReturnType<typeof vi.fn>
-    }
-  }
-  let querySelectorSpy: ReturnType<typeof vi.spyOn>
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>
-
-  beforeEach(() => {
-    vi.useFakeTimers()
-    mockElement = {
-      scrollIntoView: vi.fn(),
-      classList: {
-        add: vi.fn(),
-        remove: vi.fn(),
-      },
-    }
-    querySelectorSpy = vi.spyOn(document, 'querySelector')
-    vi.spyOn(document, 'querySelectorAll').mockReturnValue([] as unknown as NodeListOf<Element>)
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-
   afterEach(() => {
-    vi.useRealTimers()
+    setActiveMessageListController(null)
     vi.restoreAllMocks()
   })
 
-  it('should scroll to message element and add highlight class', () => {
-    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
+  it('delegates the exact reference to the active list target owner', () => {
+    const requestMessageTarget = vi.fn()
+    const scrollToBottom = vi.fn()
+    setActiveMessageListController({ requestMessageTarget, scrollToBottom })
 
-    scrollToMessage('msg-123')
+    scrollToMessage('stanza+/id=123')
 
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="msg-123"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalledWith({
-      behavior: 'smooth',
-      block: 'center',
-    })
-    expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
+    expect(requestMessageTarget).toHaveBeenCalledTimes(1)
+    expect(requestMessageTarget).toHaveBeenCalledWith('stanza+/id=123')
+    expect(scrollToBottom).not.toHaveBeenCalled()
   })
 
-  it('should remove highlight class after 1.5 seconds', () => {
-    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
+  it('is a safe no-op when there is no active message list', () => {
+    setActiveMessageListController(null)
+    const querySelector = vi.spyOn(document, 'querySelector')
+    const requestFrame = vi.spyOn(globalThis, 'requestAnimationFrame')
 
-    scrollToMessage('msg-123')
-
-    // Highlight should not be removed yet
-    expect(mockElement.classList.remove).not.toHaveBeenCalled()
-
-    // Advance time by 1.5 seconds
-    vi.advanceTimersByTime(1500)
-
-    expect(mockElement.classList.remove).toHaveBeenCalledWith('message-highlight')
-  })
-
-  it('should not throw if message element is not found', () => {
-    querySelectorSpy.mockReturnValue(null)
-
-    // Should not throw
-    expect(() => scrollToMessage('non-existent-id')).not.toThrow()
-
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="non-existent-id"]')
-    expect(mockElement.scrollIntoView).not.toHaveBeenCalled()
-
-    // scrollToMessage retries several times via requestAnimationFrame before warning.
-    // Flush all pending rAF callbacks (jsdom polyfills rAF as setTimeout ~16ms/frame).
-    vi.advanceTimersByTime(300)
-
-    // Should log warning for debugging after retries exhausted
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      '[scrollToMessage] Message not found in DOM: id="non-existent-id"'
-    )
-  })
-
-  it('windows an off-screen (virtualized) target in via the active controller, then scrolls to it', () => {
-    // The target row is NOT in the DOM until the active list mounts it — the failure mode a plain
-    // querySelector retry can never recover from. scrollToMessage must ask the controller to window
-    // it in, then scroll once it mounts.
-    let mounted = false
-    querySelectorSpy.mockImplementation(() => (mounted ? (mockElement as unknown as Element) : null))
-    const ensureMessageMounted = vi.fn(() => { mounted = true })
-    setActiveMessageListController({ hasMessage: () => true, ensureMessageMounted, scrollToBottom: vi.fn() })
-    try {
-      scrollToMessage('windowed-out-id')
-
-      // Not in the DOM on the first pass → controller asked to window it in (exactly once).
-      expect(ensureMessageMounted).toHaveBeenCalledTimes(1)
-      expect(ensureMessageMounted).toHaveBeenCalledWith('windowed-out-id')
-
-      // Next frame: the row is now mounted → scrolled + highlighted, no warning.
-      vi.advanceTimersByTime(50)
-      expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-      expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
-      expect(consoleWarnSpy).not.toHaveBeenCalled()
-    } finally {
-      setActiveMessageListController(null)
-    }
-  })
-
-  it('does not ask the controller to mount an id it does not have (no churn on a truly missing id)', () => {
-    querySelectorSpy.mockReturnValue(null)
-    const ensureMessageMounted = vi.fn()
-    setActiveMessageListController({ hasMessage: () => false, ensureMessageMounted, scrollToBottom: vi.fn() })
-    try {
-      scrollToMessage('unknown-id')
-      vi.advanceTimersByTime(300)
-      expect(ensureMessageMounted).not.toHaveBeenCalled()
-      expect(consoleWarnSpy).toHaveBeenCalled()
-    } finally {
-      setActiveMessageListController(null)
-    }
-  })
-
-  it('requests a cache slice for an out-of-window target, then windows + scrolls once it loads', async () => {
-    // The target scrolled far out of the loaded window, so it is not even in the virtualizer's
-    // item set (hasMessage === false) — ensureMessageMounted alone can never recover it (this is
-    // issue #955: reply-quote and poll jumps silently no-op). scrollToMessage must pull the cache
-    // slice around the id via loadAround, wait past its default retry budget for the async fetch,
-    // then window + scroll as usual once the row enters the item set.
-    let loaded = false
-    let mounted = false
-    querySelectorSpy.mockImplementation(() => (mounted ? (mockElement as unknown as Element) : null))
-    // Resolve well past the default ~130ms retry window so the widened budget is exercised.
-    const loadAround = vi.fn(
-      () => new Promise<void>(resolve => setTimeout(() => { loaded = true; resolve() }, 300)),
-    )
-    const ensureMessageMounted = vi.fn(() => { mounted = true })
-    setActiveMessageListController({
-      hasMessage: () => loaded,
-      ensureMessageMounted,
-      loadAround,
-      scrollToBottom: vi.fn(),
-    })
-    try {
-      scrollToMessage('far-out-id')
-
-      // First pass: not in the item set → cache slice requested exactly once.
-      expect(loadAround).toHaveBeenCalledTimes(1)
-      expect(loadAround).toHaveBeenCalledWith('far-out-id')
-
-      // Slice loads (async) → id enters the item set → row windowed in → scrolled + highlighted.
-      await vi.advanceTimersByTimeAsync(500)
-      expect(ensureMessageMounted).toHaveBeenCalledWith('far-out-id')
-      expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-      expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
-      expect(consoleWarnSpy).not.toHaveBeenCalled()
-
-      // The slice is requested once, not per retry frame.
-      expect(loadAround).toHaveBeenCalledTimes(1)
-    } finally {
-      setActiveMessageListController(null)
-    }
-  })
-
-  it('should handle special characters in message ID by escaping them', () => {
-    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
-
-    scrollToMessage('msg-with-special/chars@123')
-
-    // CSS.escape escapes special characters like / and @ with backslashes
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="msg-with-special\\/chars\\@123"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalled()
-  })
-
-  it('should escape base64 encoded message IDs', () => {
-    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
-
-    // Base64 IDs often contain +, /, and = characters
-    scrollToMessage('abc+def/ghi=jkl')
-
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="abc\\+def\\/ghi\\=jkl"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalled()
-  })
-
-  it('should resolve a message by its stanza-id when the local id does not match', () => {
-    // Regression: MUC replies (XEP-0461) reference the room-assigned stanza-id, but
-    // DOM rows are keyed by local message id. When the reply context froze the raw
-    // stanza-id (target not in the lookup at render time), scrollToMessage must fall
-    // through to data-stanza-id to find the row instead of giving up.
-    querySelectorSpy.mockImplementation((sel: string) =>
-      sel === '[data-stanza-id="2026-06-08-b9469e60caa58b7f"]'
-        ? (mockElement as unknown as Element)
-        : null
-    )
-
-    scrollToMessage('2026-06-08-b9469e60caa58b7f')
-
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="2026-06-08-b9469e60caa58b7f"]')
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-stanza-id="2026-06-08-b9469e60caa58b7f"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalledWith({
-      behavior: 'smooth',
-      block: 'center',
-    })
-    expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
-  })
-
-  it('should resolve a message by its origin-id when neither local id nor stanza-id match', () => {
-    // XEP-0308 corrections reference the sender-assigned origin-id.
-    querySelectorSpy.mockImplementation((sel: string) =>
-      sel === '[data-origin-id="origin-xyz"]' ? (mockElement as unknown as Element) : null
-    )
-
-    scrollToMessage('origin-xyz')
-
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-origin-id="origin-xyz"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalled()
-  })
-
-  it('should prefer the local-id match over stanza-id / origin-id', () => {
-    // The strong local-id tier wins so a sender-controlled origin-id can never shadow
-    // a real id match on a different row.
-    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
-
-    scrollToMessage('local-1')
-
-    // First lookup is by data-message-id; since it matches, the fallbacks are skipped.
-    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="local-1"]')
-    expect(querySelectorSpy).not.toHaveBeenCalledWith('[data-stanza-id="local-1"]')
-    expect(mockElement.scrollIntoView).toHaveBeenCalled()
+    expect(() => scrollToMessage('missing-target')).not.toThrow()
+    expect(querySelector).not.toHaveBeenCalled()
+    expect(requestFrame).not.toHaveBeenCalled()
   })
 })
 
