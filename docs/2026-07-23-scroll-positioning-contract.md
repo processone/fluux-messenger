@@ -52,7 +52,9 @@ remeasurement moves the target makes convergence samples unreliable and recreate
 The live-edge executor retains its bottom-specific browser safeguards: tail-layout flushes for late
 WebKit measurement, the 4px missed-frame correction, repaint-burst coalescing, background-MAM
 repaint suppression, and the `overflowY` stale-paint repair. These remain executor mechanics rather
-than competing lifecycle owners.
+than competing lifecycle owners. A settled or best-effort generation flushes any owed trailing
+repaint; user takeover or supersession deliberately discards that debt so it cannot repaint after
+the reader takes control or leak into unrelated content.
 
 Directional-history preservation still runs the model beside `useMessageListScroll`: fact adapters
 read current virtualizer and DOM geometry, and observed decisions are compared with the model

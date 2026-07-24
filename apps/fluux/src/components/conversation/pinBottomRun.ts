@@ -4,22 +4,13 @@
  * On WebKitGTK the pin's forced layouts (`flushTailLayout`) and forced repaints
  * (`forceRepaint`'s overflow toggle) are the dominant main-thread cost in busy
  * rooms — RenderCostProbe shows layoutPaint 189–359ms with react as low as 2ms.
- * These helpers make the pin loop (a) converge and stop early instead of always
- * burning its full frame budget, (b) skip the full-scroller repaint when the pin
- * did not actually move scrollTop, and (c) attribute the remaining forced work in
- * fluux.log with a single `[PinLoopProbe]` line per costly run.
+ * These helpers (a) skip the full-scroller repaint when the pin did not actually
+ * move scrollTop and (b) attribute the remaining forced work in fluux.log with a
+ * single `[PinLoopProbe]` line per costly run. Convergence belongs exclusively to
+ * the positioning controller; this tracker is timing/probe-only.
  *
  * Pure logic — timestamps and storage are passed in, unit-testable.
  */
-
-/**
- * Consecutive stable (non-write) frames before a pin run is declared settled and
- * its rAF loop stops. Matches the marker/restore stability precedent
- * (MARKER_STABLE_FRAMES / RESTORE_STABLE_FRAMES = 8): flushTailLayout forces
- * WebKit's late row measurements through on every frame, so 8 frames with no
- * height change and the list at the bottom means layout has genuinely settled.
- */
-const PIN_SETTLED_FRAMES = 8
 
 /**
  * When to force the full-scroller repaint (the `overflowY` toggle) after a pin:
@@ -65,12 +56,8 @@ export function shouldForceRepaint(
 export type PinWorkKind = 'flush' | 'scroll' | 'repaint'
 
 export interface PinRunTracker {
-  /**
-   * Record one loop frame. `wrote` is true when the frame re-pinned (height
-   * moved or the list was measurably off the bottom). Returns 'settled' once
-   * the run has been stable for the configured number of consecutive frames.
-   */
-  frame(wrote: boolean): 'continue' | 'settled'
+  /** Record one observed frame and whether it re-pinned. Probe-only; never controls settlement. */
+  frame(wrote: boolean): void
   /** Accumulate forced-work time (ms) of one kind. */
   addMs(kind: PinWorkKind, ms: number): void
   /** Total forced-work ms across all kinds. */
@@ -79,27 +66,16 @@ export interface PinRunTracker {
   summaryLine(trigger: string): string
 }
 
-export function createPinRunTracker(
-  opts: { settledFrames?: number } = {}
-): PinRunTracker {
-  const settledFrames = opts.settledFrames ?? PIN_SETTLED_FRAMES
-
+export function createPinRunTracker(): PinRunTracker {
   let frames = 0
   let writes = 0
-  let stableStreak = 0
   const ms: Record<PinWorkKind, number> = { flush: 0, scroll: 0, repaint: 0 }
   const totalForcedMs = () => ms.flush + ms.scroll + ms.repaint
 
   return {
-    frame(wrote: boolean): 'continue' | 'settled' {
+    frame(wrote: boolean): void {
       frames++
-      if (wrote) {
-        writes++
-        stableStreak = 0
-        return 'continue'
-      }
-      stableStreak++
-      return stableStreak >= settledFrames ? 'settled' : 'continue'
+      if (wrote) writes++
     },
 
     addMs(kind: PinWorkKind, value: number): void {

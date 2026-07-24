@@ -1115,6 +1115,8 @@ export function useMessageListScroll({
           outcome === 'user-takeover' ||
           outcome === 'superseded'
         ) {
+          // Cancellation abandons this executor's paint obligation. Carrying the debt into a newer
+          // generation could repaint after genuine user takeover or charge unrelated content.
           burst.reset()
         } else if (outcome === 'best-effort' && scroller) {
           flushTailLayout()
