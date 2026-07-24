@@ -66,7 +66,7 @@ vi.mock('../../utils/avatarCache', () => ({
   getAllAvatarHashes: vi.fn().mockResolvedValue([]),
   saveRoomOccupantAvatarHash: vi.fn().mockResolvedValue(undefined),
   getRoomOccupantAvatarHashes: vi.fn().mockResolvedValue([]),
-  groupRoomOccupantAvatarHashes: vi.fn().mockReturnValue(new Map()),
+  seedRoomOccupantAvatarHashes: vi.fn().mockResolvedValue(new Map()),
   refreshAllBlobUrls: vi.fn().mockResolvedValue(new Map()),
   // Negative cache functions
   hasNoAvatar: vi.fn().mockResolvedValue(false),
@@ -1046,22 +1046,22 @@ describe('XMPPClient Own Avatar', () => {
         refreshAllBlobUrls,
         getAllAvatarHashes,
         getRoomOccupantAvatarHashes,
-        groupRoomOccupantAvatarHashes,
+        seedRoomOccupantAvatarHashes,
       } = await import('../../utils/avatarCache')
       const mappings = [
         { jid: 'encoded-a', hash: 'hash-a', type: 'occupant' as const },
         { jid: 'encoded-b', hash: 'hash-b', type: 'occupant' as const },
       ]
       vi.mocked(getAllAvatarHashes).mockClear()
-      vi.mocked(groupRoomOccupantAvatarHashes).mockClear()
+      vi.mocked(seedRoomOccupantAvatarHashes).mockClear()
       vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([
         ['hash-a', 'blob:fresh-a'],
         ['hash-b', 'blob:fresh-b'],
       ]))
       vi.mocked(getAllAvatarHashes).mockResolvedValue(mappings)
-      vi.mocked(groupRoomOccupantAvatarHashes).mockReturnValueOnce(new Map([
-        ['room-a@conf.example.com', [{ occupantId: 'occ-a', hash: 'hash-a' }]],
-        ['room-b@conf.example.com', [{ occupantId: 'occ-b', hash: 'hash-b' }]],
+      vi.mocked(seedRoomOccupantAvatarHashes).mockResolvedValueOnce(new Map([
+        ['room-a@conf.example.com', new Map([['occ-a', 'hash-a']])],
+        ['room-b@conf.example.com', new Map([['occ-b', 'hash-b']])],
       ]))
       vi.mocked(getRoomOccupantAvatarHashes).mockClear()
 
@@ -1080,8 +1080,8 @@ describe('XMPPClient Own Avatar', () => {
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
       expect(getAllAvatarHashes).toHaveBeenCalledTimes(1)
-      expect(groupRoomOccupantAvatarHashes).toHaveBeenCalledTimes(1)
-      expect(groupRoomOccupantAvatarHashes).toHaveBeenCalledWith(mappings)
+      expect(seedRoomOccupantAvatarHashes).toHaveBeenCalledTimes(1)
+      expect(seedRoomOccupantAvatarHashes).toHaveBeenCalledWith(mappings)
       expect(getRoomOccupantAvatarHashes).not.toHaveBeenCalled()
       expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
         roomJid: 'room-a@conf.example.com',

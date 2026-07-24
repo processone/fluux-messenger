@@ -12,7 +12,7 @@ import {
   getAllAvatarHashes,
   saveRoomOccupantAvatarHash,
   getRoomOccupantAvatarHashes,
-  groupRoomOccupantAvatarHashes,
+  seedRoomOccupantAvatarHashes,
   hasNoAvatar,
   markNoAvatar,
   clearNoAvatar,
@@ -1060,7 +1060,8 @@ export class Profile extends BaseModule {
       const ownBareJid = currentJid ? getBareJid(currentJid) : null
 
       const hashMappings = await getAllAvatarHashes()
-      const occupantMappingsByRoom = groupRoomOccupantAvatarHashes(hashMappings)
+      const occupantMappingsByRoom =
+        await seedRoomOccupantAvatarHashes(hashMappings)
       for (const mapping of hashMappings) {
         const url = freshUrls.get(mapping.hash)
         if (!url) continue
@@ -1144,8 +1145,9 @@ export class Profile extends BaseModule {
         ) {
           continue
         }
-        const stableMappings = occupantMappingsByRoom.get(getBareJid(room.jid)) ?? []
-        for (const { occupantId, hash } of stableMappings) {
+        const stableMappings = occupantMappingsByRoom.get(getBareJid(room.jid))
+        if (!stableMappings) continue
+        for (const [occupantId, hash] of stableMappings) {
           const url = freshUrls.get(hash)
           if (!url) continue
           const nick = room.occupantIdToNick?.get(occupantId)

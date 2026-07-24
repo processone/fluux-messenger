@@ -47,7 +47,7 @@ export interface RoomOccupantAvatarHashMapping {
 }
 
 export type RoomOccupantAvatarHashesByRoom =
-  Map<string, RoomOccupantAvatarHashMapping[]>
+  Map<string, Map<string, string>>
 
 const OCCUPANT_HASH_KEY_PREFIX = 'muc-occupant:'
 
@@ -326,18 +326,10 @@ export async function saveAvatarHash(
       if (parsed) {
         const byRoom = await occupantMappingsByRoomPromise
         const roomMappings = byRoom.get(parsed.roomJid)
-        const entry = { occupantId: parsed.occupantId, hash }
-        if (!roomMappings) {
-          byRoom.set(parsed.roomJid, [entry])
+        if (roomMappings) {
+          roomMappings.set(parsed.occupantId, hash)
         } else {
-          const existingIndex = roomMappings.findIndex(
-            (mapping) => mapping.occupantId === parsed.occupantId
-          )
-          if (existingIndex >= 0) {
-            roomMappings[existingIndex] = entry
-          } else {
-            roomMappings.push(entry)
-          }
+          byRoom.set(parsed.roomJid, new Map([[parsed.occupantId, hash]]))
         }
       }
     }
@@ -437,7 +429,10 @@ export async function getRoomOccupantAvatarHashes(
       .then(groupRoomOccupantAvatarHashes)
   }
   const mappingsByRoom = await occupantMappingsByRoomPromise
-  return [...(mappingsByRoom.get(getBareJid(roomJid)) ?? [])]
+  const roomMappings = mappingsByRoom.get(getBareJid(roomJid))
+  return roomMappings
+    ? [...roomMappings].map(([occupantId, hash]) => ({ occupantId, hash }))
+    : []
 }
 
 /**
@@ -455,14 +450,33 @@ export function groupRoomOccupantAvatarHashes(
     const parsed = parseOccupantHashMappingKey(mapping.jid)
     if (!parsed) continue
     const roomMappings = byRoom.get(parsed.roomJid)
-    const entry = { occupantId: parsed.occupantId, hash: mapping.hash }
     if (roomMappings) {
-      roomMappings.push(entry)
+      roomMappings.set(parsed.occupantId, mapping.hash)
     } else {
-      byRoom.set(parsed.roomJid, [entry])
+      byRoom.set(
+        parsed.roomJid,
+        new Map([[parsed.occupantId, mapping.hash]])
+      )
     }
   }
   return byRoom
+}
+
+/**
+ * Seed the shared occupant snapshot from a broader hash-store read.
+ *
+ * Blob URL refresh already reads every mapping, so reusing that result avoids
+ * a second grouping while preserving a snapshot that another caller loaded.
+ */
+export async function seedRoomOccupantAvatarHashes(
+  mappings: readonly AvatarHashMapping[]
+): Promise<RoomOccupantAvatarHashesByRoom> {
+  if (!occupantMappingsByRoomPromise) {
+    occupantMappingsByRoomPromise = Promise.resolve(
+      groupRoomOccupantAvatarHashes(mappings)
+    )
+  }
+  return occupantMappingsByRoomPromise
 }
 
 /**
