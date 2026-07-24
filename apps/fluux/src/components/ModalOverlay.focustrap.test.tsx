@@ -38,4 +38,18 @@ describe('ModalOverlay focus trap', () => {
     expect(document.activeElement).toBe(panel)
     expect(document.activeElement).not.toBe(getByText('link'))
   })
+
+  it('opts the panel out of the global focus ring', () => {
+    // The panel is a tabindex=-1 focus target, not a control: focusing it (on
+    // open, or via useRestoreFocus after a window refocus) must not draw the
+    // app-wide `.user-interacted *:focus` outline around the whole dialog.
+    const { getByText, container } = render(
+      <ModalOverlay onClose={vi.fn()} initialFocus="panel">
+        <button type="button">alpha</button>
+      </ModalOverlay>,
+    )
+    expect(container.querySelector('.fluux-glass')?.className).toContain('no-focus-ring')
+    // Content controls keep theirs: the selector excludes only the class holder.
+    expect(getByText('alpha').className).not.toContain('no-focus-ring')
+  })
 })

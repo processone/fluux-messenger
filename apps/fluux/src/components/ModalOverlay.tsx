@@ -158,7 +158,14 @@ export function ModalOverlay({
         ref={panelRef}
         {...panelProps}
         onKeyDown={onPanelKeyDown ? (e) => onPanelKeyDown(e, { close }) : undefined}
-        className={`relative z-10 fluux-glass rounded-lg w-full ${width} mx-4 ${panelClass} ${panelClassName ?? ''}`}
+        // `no-focus-ring` opts the panel out of the global `.user-interacted
+        // *:focus` outline. The panel is a tabindex=-1 focus TARGET, not an
+        // interactive control: `initialFocus='panel'` and useRestoreFocus (after
+        // an OS window blur→refocus) both land focus here, and a 2px ring around
+        // the whole dialog communicates nothing — the scrim and the elevated
+        // glass surface already say where you are. Children keep their rings:
+        // the selector excludes only the element carrying the class.
+        className={`relative z-10 fluux-glass no-focus-ring rounded-lg w-full ${width} mx-4 ${panelClass} ${panelClassName ?? ''}`}
       >
         {typeof children === 'function' ? children({ close }) : children}
       </div>
