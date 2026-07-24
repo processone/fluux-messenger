@@ -2160,6 +2160,30 @@ describe('SequoiaPgpPlugin', () => {
       expect(rejections.some((r) => r.fingerprint === N.fingerprint)).toBe(true)
     })
 
+    it('an incomplete refresh preserves an earlier rejection it could not re-observe', async () => {
+      // N was definitively rejected (no encryption subkey). Later N's OWN data
+      // node goes transiently unavailable, so this pass observes NO rejection —
+      // an incomplete refresh must MERGE, not replace, or it erases the known
+      // rejection. Only a definitive refresh may clear the stored set.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const pep = installPeerPep(built, PEER)
+      const A = validKey('KEYAAAA0001')
+      const N = makeNoEncryptionBundle(fake, 'KEYNOENC0003', PEER)
+      pep.announce([A, N])
+      await plugin.probePeer(PEER)
+      expect((await rejectionsFor(PEER)).some((r) => r.fingerprint === N.fingerprint)).toBe(true)
+
+      // N's data node now fails transiently and we hold no cert for it →
+      // this refresh is incomplete and re-observes nothing definitive.
+      pep.failDataFor(N.fingerprint, true)
+      plugin.onPeerKeysChanged(PEER)
+      await flush()
+
+      const after = await rejectionsFor(PEER)
+      expect(after.some((r) => r.fingerprint === N.fingerprint)).toBe(true)
+    })
+
     it('marks a departed key inactive (retained), not deleted, on a definitive refresh', async () => {
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)

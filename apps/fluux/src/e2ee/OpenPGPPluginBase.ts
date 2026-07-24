@@ -123,6 +123,7 @@ import {
 } from '@/stores/pinnedPrimaryFingerprintsStore'
 import {
   clearCertRejections,
+  getCertRejections,
   recordCertRejections,
   type CertRejection,
 } from '@/stores/certRejectionStore'
@@ -1917,9 +1918,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       // is BOTH incomplete AND whatever we definitively rejected this pass —
       // a definitive rejection stays definitive even when a sibling key was
       // only transiently unavailable, so it must not be hidden until that
-      // sibling recovers.
+      // sibling recovers. MERGE rather than replace: an incomplete pass may not
+      // re-observe an earlier rejection (the rejected key's own data node may be
+      // the transient one this time), and replacing would erase it. Only a
+      // definitive refresh may replace or clear the stored set.
       this.markKeysetIncomplete(peer)
-      this.recordKeysetHealth(peer, { incomplete: true, rejections })
+      this.mergeKeysetRejections(peer, rejections)
       return { supported: true, ttl: PROBE_TRANSIENT_TTL_SECONDS }
     }
 
@@ -2130,6 +2134,25 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     else this.keysetIncomplete.delete(peer)
     if (health.rejections.length > 0) recordCertRejections(peer, health.rejections)
     else clearCertRejections(peer)
+  }
+
+  /**
+   * Merge rejections observed by an INCOMPLETE refresh into the stored set.
+   *
+   * An incomplete pass has not seen the whole keyset, so it must never erase a
+   * rejection it simply did not re-observe — the previously-rejected key may be
+   * precisely the one whose data node was transiently unavailable this time.
+   * Newly observed rejections win per fingerprint; everything else is retained.
+   * (`recordKeysetHealth` keeps its replace-or-clear semantics for the
+   * definitive path, which HAS seen the whole keyset.)
+   */
+  private mergeKeysetRejections(peer: BareJID, observed: CertRejection[]): void {
+    const prior = getCertRejections(peer)
+    if (prior.length === 0 && observed.length === 0) return
+    const byFingerprint = new Map<string, CertRejection>()
+    for (const r of prior) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
+    for (const r of observed) byFingerprint.set(normalizeFingerprint(r.fingerprint), r)
+    recordCertRejections(peer, [...byFingerprint.values()])
   }
 
   private persistPeerKeyCache(): void {
