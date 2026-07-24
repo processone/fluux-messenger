@@ -1065,8 +1065,13 @@ describe('roomStore throttled persistence', () => {
     )
     localStorageMock.setItem.mockClear()
 
-    roomStore.getState().advanceReadPointer(ROOM, 'r1') // leading edge
-    roomStore.getState().advanceReadPointer(ROOM, 'r2') // coalesced
+    // NOTE: `addRoom` itself ends with `persistRoomReadState`, so the
+    // read-state window is ALREADY OPEN here — unlike the gap and coverage
+    // scenarios above, neither call below is a leading edge. Both coalesce,
+    // and the second replaces the first in the pending thunk. (mockClear
+    // resets the write counter; it does not close the window.)
+    roomStore.getState().advanceReadPointer(ROOM, 'r1') // coalesced
+    roomStore.getState().advanceReadPointer(ROOM, 'r2') // replaces the pending thunk
     flush()
 
     expect(localStorage.getItem('fluux-room-read-state')).toContain('r2')
@@ -1093,7 +1098,9 @@ describe('roomStore throttled persistence', () => {
         ],
       })
     )
-    // Open a window on each of the three keys, leaving a second write pending.
+    // Leave a pending write on each of the three keys. Gaps and coverage open
+    // their window on the first clear; read state's is already open, since
+    // `addRoom` above ended with `persistRoomReadState`.
     roomStore.getState().clearRoomGapAnchor(ROOM, 'gap-first')
     roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-pending')
     roomStore.getState().clearRoomCoverage(ROOM)
@@ -1130,8 +1137,10 @@ describe('roomStore throttled persistence', () => {
         ],
       })
     )
+    // `addRoom` already opened the read-state window, so both of these
+    // coalesce and 'r-pending' is left sitting in the pending thunk.
     roomStore.getState().advanceReadPointer(ROOM, 'r-first')
-    roomStore.getState().advanceReadPointer(ROOM, 'r-pending') // pending
+    roomStore.getState().advanceReadPointer(ROOM, 'r-pending')
 
     _clearAllRoomReadStateForTesting()
     vi.advanceTimersByTime(5000)
