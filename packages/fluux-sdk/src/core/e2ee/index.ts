@@ -12,6 +12,7 @@ export type {
   BareJID,
   ConversationHandle,
   ConversationTarget,
+  DecryptFailureReason,
   DecryptResult,
   DecryptStatus,
   DeviceIdentifier,
