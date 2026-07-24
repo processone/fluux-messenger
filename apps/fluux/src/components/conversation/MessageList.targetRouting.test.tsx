@@ -15,6 +15,7 @@
  * clicking, so it fails against the registry-routed implementation instead of passing vacuously.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { memo } from 'react'
 import { render, fireEvent } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import { createTestMessages } from './MessageList.test-utils'
@@ -57,6 +58,19 @@ function JumpRow({ id, to }: { id: string; to: string }) {
 
 const messages = createTestMessages(8)
 const renderMessage = (m: { id: string }) => <JumpRow id={m.id} to="msg-5" />
+
+/** Memoized twin of JumpRow: MessageBubble is memoized too, so rows must survive an append. */
+const rowRenderCounts = new Map<string, number>()
+const CountingJumpRow = memo(function CountingJumpRow({ id }: { id: string }) {
+  rowRenderCounts.set(id, (rowRenderCounts.get(id) ?? 0) + 1)
+  const requestMessageTarget = useRequestMessageTarget()
+  return (
+    <button type="button" data-testid={`count-${id}`} onClick={() => requestMessageTarget('msg-0')}>
+      {id}
+    </button>
+  )
+})
+const renderCountingMessage = (m: { id: string }) => <CountingJumpRow id={m.id} />
 
 describe('MessageList explicit-target routing (containment, not registration order)', () => {
   let scrolled: Element[]
@@ -141,5 +155,83 @@ describe('MessageList explicit-target routing (containment, not registration ord
     )
     // A preview must not occupy the single global slot, or it would displace the live list.
     expect(getActiveMessageListController()).toBeNull()
+  })
+})
+
+describe('MessageList explicit-target provider identity', () => {
+  beforeEach(() => {
+    scrollStateManager.reset()
+    setActiveMessageListController(null)
+    rowRenderCounts.clear()
+    // jsdom has no layout, so the real virtualizer would window this live list down to no rows at
+    // all. Force the non-virtualized path to get mounted rows to count; the callback identity this
+    // test pins is shared by both paths.
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+  })
+
+  afterEach(() => {
+    setActiveMessageListController(null)
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  it('does not rerender memoized target consumers when a message is appended', () => {
+    const all = createTestMessages(6)
+    const resident = all.slice(0, 5)
+
+    const { rerender } = render(
+      <MessageList
+        messages={resident}
+        conversationId="live-conv"
+        renderMessage={renderCountingMessage}
+      />,
+    )
+    const before = new Map(rowRenderCounts)
+    expect(before.size).toBe(resident.length)
+
+    rerender(
+      <MessageList
+        messages={all}
+        conversationId="live-conv"
+        renderMessage={renderCountingMessage}
+      />,
+    )
+
+    // requestMessageTarget closes over messageCount through its executor. Publishing it raw made
+    // the context value change on every append, and a context update bypasses React.memo — so each
+    // arriving message rerendered every mounted row.
+    for (const message of resident) {
+      expect(rowRenderCounts.get(message.id)).toBe(before.get(message.id))
+    }
+    // Control: the appended row really did mount, so the assertion above is not passing because
+    // nothing rendered at all.
+    expect(rowRenderCounts.get('msg-5')).toBe(1)
+  })
+
+  it('does not re-register the active list when a message is appended', () => {
+    const all = createTestMessages(6)
+    const resident = all.slice(0, 5)
+
+    const { rerender } = render(
+      <MessageList
+        messages={resident}
+        conversationId="live-conv"
+        renderMessage={renderCountingMessage}
+      />,
+    )
+    const registered = getActiveMessageListController()
+    expect(registered).not.toBeNull()
+
+    rerender(
+      <MessageList
+        messages={all}
+        conversationId="live-conv"
+        renderMessage={renderCountingMessage}
+      />,
+    )
+
+    // Both published callbacks are identity-stable, so the registration effect must not re-run.
+    // If either tracked messageCount again, this would be a different controller object.
+    expect(getActiveMessageListController()).toBe(registered)
   })
 })

@@ -155,6 +155,25 @@ const CONTENT_ARRIVAL_TRIGGERS: ReadonlySet<string> = new Set([
   'mam-catchup-complete',
 ])
 
+/**
+ * Freeze a callback's identity while always invoking its latest version.
+ *
+ * Positioning callbacks close over `messageCount`, `firstMessageId`, and window state through their
+ * executors, so their identity changes on every append. That is harmless for a direct call, but two
+ * of them are published: `requestMessageTarget` is a context value read by EVERY message row, and
+ * both are dependencies of the active-list registration. An unstable identity there re-renders every
+ * mounted row on each append — context updates bypass `React.memo` — and re-registers the list.
+ * Forwarding through a ref keeps behaviour identical (the newest implementation still runs) while
+ * the published identity stays constant.
+ */
+function useStableCallback<Args extends unknown[]>(
+  callback: (...args: Args) => void,
+): (...args: Args) => void {
+  const latest = useRef(callback)
+  latest.current = callback
+  return useCallback((...args: Args) => latest.current(...args), [])
+}
+
 // ============================================================================
 // KINETIC SCROLL
 // ============================================================================
@@ -1621,7 +1640,7 @@ export function useMessageListScroll({
     windowAtLiveEdge,
   ])
 
-  const requestMessageTarget = useCallback((messageReference: string) => {
+  const requestMessageTargetImpl = useCallback((messageReference: string) => {
     if (staticMode) {
       // Search/activity previews mount their own non-virtualized list beside the live conversation.
       // They own no positioning controller and must never drive one, but their reply/poll rows are
@@ -1650,12 +1669,15 @@ export function useMessageListScroll({
     isAtBottomRef,
     staticMode,
   ])
+  // Published to every message row through MessageTargetProvider and to the active-list registry,
+  // so its identity must not track messageCount/window state (see useStableCallback).
+  const requestMessageTarget = useStableCallback(requestMessageTargetImpl)
 
   // ==========================================================================
   // SCROLL ACTIONS
   // ==========================================================================
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottomImpl = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
@@ -1746,6 +1768,10 @@ export function useMessageListScroll({
     reassertBottom,
     rememberBottomIntent,
   ])
+  // Also published to the active-list registry (ChatLayout's Escape handler reaches it there), so it
+  // is stabilised for the same reason as requestMessageTarget: an unstable identity re-registers the
+  // list — and re-binds the ⌘/Ctrl+↓ listener — on every append.
+  const scrollToBottom = useStableCallback(scrollToBottomImpl)
 
   const scrollToTop = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
