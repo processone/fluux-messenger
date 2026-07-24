@@ -34,9 +34,10 @@ frame scheduling, stale-work cancellation, convergence, and live-edge fallback. 
 message targets it owns supersession, one around-load attempt, mounting and center-position
 convergence, user takeover, and completion. Hook executors translate accepted requests into
 browser/virtualizer writes, and every frame must hold the current controller lease before it can
-write. `pinVirtualizedAnchor` remains the saved-position measurement reconciler; the controller-owned
-unread and explicit-target executors likewise retain their measurement settle behavior without
-retaining independent policy loops.
+write. Saved-position, unread-marker, and explicit-target reconciliation now share the same
+controller-owned `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
+measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
+convergence state, and lifecycle ownership moved out of the hook-local loop.
 
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
@@ -68,9 +69,9 @@ The three previously prose-only fidelity seams are descriptive of current behavi
   only while entry restore is pending or a directional load has not completed its initial restore.
   A replay captured from the media-growth invariant proves that an outgoing live-edge request
   supersedes an active media anchor.
-- **`position-applied` is the current release seam, before measurement settle.** The saved executor
-  returns after its initial anchor/offset write, and the controller marks the lease applied before
-  the longer restore-anchor rAF loop converges. Directional restoration likewise sets
+- **`position-applied` is the current release seam, before measurement settle.** The saved controller
+  applies the initial anchor/offset write synchronously, marks the lease applied, and then schedules
+  the remaining restore-anchor frames through its shared loop. Directional restoration likewise sets
   `saved.restored` after its initial bounded write and before its measurement re-assert loop.
   Recorded restore facts prove an outgoing request is rejected before that signal and accepted
   immediately after it.
