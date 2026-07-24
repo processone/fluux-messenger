@@ -17,17 +17,36 @@ const {
   lastKeyboardShortcutsOptions,
   getMockState,
   setMockState,
+  subscribeMockState,
+  getMockStateVersion,
 } = vi.hoisted(() => {
   const state = {
     activeConversationId: null as string | null,
     activeRoomJid: null as string | null,
-    activationPending: false,
+    // Kept per store: ChatLayout ORs chatStore.activationPending with the
+    // roomStore one, so a single shared field could not tell which store drove
+    // the pane swap — and the room half would stay unfalsifiable.
+    chatActivationPending: false,
+    roomActivationPending: false,
     isArchivedResult: false,
     conversations: new Map<string, { id: string }>(),
     rooms: new Map<string, { jid: string; joined: boolean }>(),
     adminCategory: null as string | null,
     adminSession: null as unknown,
     adminIsAdmin: false,
+  }
+
+  // Minimal reactivity for the store mocks below (they subscribe through
+  // useSyncExternalStore). A store write that happens mid-flow — an effect
+  // flipping activationPending, a hydrating activation resolving — must
+  // re-render ChatLayout the way the real Zustand stores would. Without it an
+  // assertion made after the tap would silently read the pre-tap frame.
+  let version = 0
+  const listeners = new Set<() => void>()
+  const setMockState = (newState: Partial<typeof state>) => {
+    Object.assign(state, newState)
+    version += 1
+    for (const listener of listeners) listener()
   }
 
   const mockContact: Contact = {
@@ -38,20 +57,20 @@ const {
   }
 
   const mockSetActiveConversation = vi.fn((id: string | null) => {
-    state.activeConversationId = id
+    setMockState({ activeConversationId: id })
   })
 
   const mockSetActiveRoom = vi.fn((jid: string | null) => {
-    state.activeRoomJid = jid
+    setMockState({ activeRoomJid: jid })
   })
 
   // Hydrating activation actions (load message cache, then set active)
   const mockActivateConversation = vi.fn(async (id: string | null) => {
-    state.activeConversationId = id
+    setMockState({ activeConversationId: id })
   })
 
   const mockActivateRoom = vi.fn(async (jid: string | null) => {
-    state.activeRoomJid = jid
+    setMockState({ activeRoomJid: jid })
   })
 
   const mockMarkChatReadToNewest = vi.fn()
@@ -72,7 +91,14 @@ const {
     mockMarkRoomReadToNewest,
     lastKeyboardShortcutsOptions,
     getMockState: () => state,
-    setMockState: (newState: Partial<typeof state>) => Object.assign(state, newState),
+    setMockState,
+    subscribeMockState: (listener: () => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    getMockStateVersion: () => version,
   }
 })
 
@@ -270,7 +296,12 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
-vi.mock('@fluux/sdk/react', () => ({
+vi.mock('@fluux/sdk/react', async () => {
+  const { useSyncExternalStore } = await import('react')
+  // Subscribe the mock store hooks to setMockState so a store write commits a
+  // re-render, like the real Zustand subscriptions do.
+  const useMockStoreSubscription = () => useSyncExternalStore(subscribeMockState, getMockStateVersion)
+  return {
   useChatStore: Object.assign(
     (selector: (state: {
       activeConversationId: string | null;
@@ -283,9 +314,10 @@ vi.mock('@fluux/sdk/react', () => ({
       updateConversationName: ReturnType<typeof vi.fn>;
       conversations: Map<string, unknown>;
     }) => unknown) => {
+      useMockStoreSubscription()
       const state = {
         activeConversationId: getMockState().activeConversationId,
-        activationPending: getMockState().activationPending,
+        activationPending: getMockState().chatActivationPending,
         setActiveConversation: mockSetActiveConversation,
         activateConversation: mockActivateConversation,
         addConversation: vi.fn(),
@@ -307,9 +339,11 @@ vi.mock('@fluux/sdk/react', () => ({
     }
   ),
   useRoomStore: Object.assign(
-    (selector: (state: { activeRoomJid: string | null; setActiveRoom: typeof mockSetActiveRoom; activateRoom: typeof mockActivateRoom; rooms: Map<string, unknown> }) => unknown) => {
+    (selector: (state: { activeRoomJid: string | null; activationPending: boolean; setActiveRoom: typeof mockSetActiveRoom; activateRoom: typeof mockActivateRoom; rooms: Map<string, unknown> }) => unknown) => {
+      useMockStoreSubscription()
       const state = {
         activeRoomJid: getMockState().activeRoomJid,
+        activationPending: getMockState().roomActivationPending,
         setActiveRoom: mockSetActiveRoom,
         activateRoom: mockActivateRoom,
         rooms: getMockState().rooms,
@@ -374,7 +408,8 @@ vi.mock('@fluux/sdk/react', () => ({
   useSearchStore: (selector: (state: { previewResult: null }) => unknown) => {
     return selector({ previewResult: null })
   },
-}))
+  }
+})
 
 // Mock app hooks
 vi.mock('@/hooks/useNotificationBadge', () => ({
@@ -1280,13 +1315,14 @@ describe('ChatLayout - activation gap (no empty-state flash)', () => {
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
-      activationPending: false,
+      chatActivationPending: false,
+      roomActivationPending: false,
       isArchivedResult: false,
     })
   })
 
   afterEach(() => {
-    setMockState({ activationPending: false })
+    setMockState({ chatActivationPending: false, roomActivationPending: false })
   })
 
   // Regression for the empty-screen flash on rail tab switch: while a hydrating
@@ -1294,17 +1330,164 @@ describe('ChatLayout - activation gap (no empty-state flash)', () => {
   // ids are null, so the render cascade would otherwise fall through to the
   // empty-state hero. It must hold a neutral surface instead.
   it('does not flash the empty-state hero while an activation is pending', () => {
-    setMockState({ activationPending: true })
+    setMockState({ chatActivationPending: true })
     render(<ChatLayoutWithRouter initialRoute="/messages" />)
 
     expect(screen.queryByText('Start a conversation')).toBeNull()
   })
 
   it('shows the empty-state hero once no activation is pending', () => {
-    setMockState({ activationPending: false })
+    setMockState({ chatActivationPending: false })
     render(<ChatLayoutWithRouter initialRoute="/messages" />)
 
     expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+  })
+})
+
+// The mobile layout is a single pane: the sidebar column and the main pane swap
+// via `hidden md:flex` / `flex`, driven by hasActiveContent. A hydrating
+// activation sets the active id only AFTER the IndexedDB read resolves, so the
+// swap must be gated on the pending flag too — otherwise a tap on a
+// conversation row is dead on screen until the cache answers.
+describe('ChatLayout - mobile pane swap during a hydrating activation', () => {
+  /** The sidebar column and main pane, as the mobile single-pane swap sees them. */
+  const panes = () => ({
+    sidebar: screen.getByTestId('sidebar-pane'),
+    main: screen.getByRole('main'),
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      chatActivationPending: false,
+      roomActivationPending: false,
+      isArchivedResult: false,
+      conversations: new Map(),
+      rooms: new Map(),
+    })
+  })
+
+  afterEach(() => {
+    setMockState({ chatActivationPending: false, roomActivationPending: false })
+  })
+
+  it('hides the sidebar and shows the hydration surface before the tapped conversation resolves', async () => {
+    // Stand in for a slow cache read: flag the hydration window synchronously
+    // (as activateConversation does), then hold the active id back until the
+    // test releases it. This is the window the tap has to feel responsive in.
+    let releaseCacheRead: (() => void) | undefined
+    const cacheRead = new Promise<void>((resolve) => {
+      releaseCacheRead = resolve
+    })
+    mockActivateConversation.mockImplementationOnce(async (id: string | null) => {
+      setMockState({ chatActivationPending: true })
+      await cacheRead
+      setMockState({ activeConversationId: id, chatActivationPending: false })
+    })
+
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    // Sanity: nothing active yet, so mobile is showing the list.
+    expect(panes().sidebar).not.toHaveClass('hidden')
+
+    // Tap a conversation row (URL → store sync activates it).
+    fireEvent.click(screen.getByTestId('deep-conversation-link'))
+
+    await waitFor(() => {
+      expect(mockActivateConversation).toHaveBeenCalledWith('bob@example.com')
+    })
+
+    // Mid-flight: the activation has NOT resolved...
+    expect(getMockState().activeConversationId).toBeNull()
+    expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument()
+    // ...yet the pane has already swapped and holds the neutral surface.
+    expect(panes().sidebar).toHaveClass('hidden')
+    expect(panes().main).not.toHaveClass('hidden')
+    expect(screen.getByTestId('view-loading-fallback')).toBeInTheDocument()
+    expect(screen.queryByText('Start a conversation')).toBeNull()
+
+    // Cache read resolves: straight from the surface to the conversation, and
+    // the pane stays swapped (no frame where the sidebar comes back).
+    releaseCacheRead?.()
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+    expect(panes().sidebar).toHaveClass('hidden')
+  })
+
+  // Control for the assertions above: at the same point in the flow, with
+  // nothing pending, the sidebar keeps the screen. Without this a gate stuck at
+  // `true` would pass the test above.
+  it('keeps the sidebar when the tapped conversation never enters a pending window', async () => {
+    mockActivateConversation.mockImplementationOnce(async () => {
+      // No pending flag, no active id: the activation is a no-op.
+    })
+
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    fireEvent.click(screen.getByTestId('deep-conversation-link'))
+
+    await waitFor(() => {
+      expect(mockActivateConversation).toHaveBeenCalledWith('bob@example.com')
+    })
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+    expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+  })
+
+  // Parity: ChatLayout ORs both stores' pending flags, so a room tap must swap
+  // the pane the same way a conversation tap does.
+  it('hides the sidebar while a room activation is pending', () => {
+    setMockState({ roomActivationPending: true })
+    render(<ChatLayoutWithRouter initialRoute="/rooms" />)
+
+    expect(panes().sidebar).toHaveClass('hidden')
+    expect(panes().main).not.toHaveClass('hidden')
+    expect(screen.getByTestId('view-loading-fallback')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create a room/i })).not.toBeInTheDocument()
+  })
+
+  // Pending state belongs to the tab that owns the store. A chat activation in
+  // flight says nothing about the rooms list, so it must not blank it — the user
+  // tapped the Rooms rail and is owed the rooms list, not a skeleton. Same the
+  // other way round, and on the tabs that own neither store.
+  it.each([
+    ['/rooms', 'chatActivationPending', /create a room/i],
+    ['/messages', 'roomActivationPending', /start a conversation/i],
+  ] as const)('keeps the sidebar on %s while the other store has a pending activation', (route, pendingFlag, visibleAction) => {
+    setMockState({ [pendingFlag]: true })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+    expect(screen.getByText(visibleAction)).toBeInTheDocument()
+  })
+
+  // Contacts and Search own neither activation store: a pending chat read is
+  // unrelated to what those tabs are showing, and neither has main-pane content
+  // of its own until the user picks something.
+  it.each(['/contacts', '/search'] as const)('keeps the sidebar on %s while a chat activation is pending', (route) => {
+    setMockState({ chatActivationPending: true })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+  })
+
+  // The settings branch sits ABOVE the neutral surface in the render cascade,
+  // so counting a pending activation as content there would hand the mobile
+  // screen to a category-less SettingsView — the one view that deliberately
+  // lets the user pick from the sidebar first. Reachable by tapping Settings
+  // while a slow cache read is still in flight.
+  it('leaves the settings sidebar visible while an unrelated activation is pending', () => {
+    setMockState({ chatActivationPending: true })
+    render(<ChatLayoutWithRouter initialRoute="/settings" />)
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
   })
 })
 
@@ -1314,7 +1497,8 @@ describe('ChatLayout - admin back navigation (mobile)', () => {
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
-      activationPending: false,
+      chatActivationPending: false,
+      roomActivationPending: false,
       isArchivedResult: false,
       conversations: new Map(),
       rooms: new Map(),
@@ -1371,7 +1555,8 @@ describe('ChatLayout - Escape marks the active conversation read (spec §3)', ()
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
-      activationPending: false,
+      chatActivationPending: false,
+      roomActivationPending: false,
       isArchivedResult: false,
       conversations: new Map(),
       rooms: new Map(),

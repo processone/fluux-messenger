@@ -111,7 +111,7 @@ function GlobalEffects() {
 /** Lightweight skeleton fallback for lazy-loaded views to prevent layout shift */
 function ViewLoadingFallback() {
   return (
-    <div className="h-full flex flex-col bg-fluux-chat">
+    <div className="h-full flex flex-col bg-fluux-chat" data-testid="view-loading-fallback">
       <div className="h-12 px-4 flex items-center border-b border-fluux-bg" />
       <div className="flex-1" />
     </div>
@@ -202,11 +202,12 @@ function ChatLayoutContent() {
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
   const activateRoom = useRoomStore((s) => s.activateRoom)
   // True while a hydrating activation is in flight (cache read before the active
-  // id lands). During this gap both active ids are null, so without it the main
-  // pane would flash the empty-state hero on every content-tab switch.
+  // id lands). During this gap the store's active id is still null, so without it
+  // the main pane would flash the empty-state hero on every content-tab switch.
+  // Kept per store, never ORed: each flag only describes the tab that owns it
+  // (see activationHoldsMainPane below).
   const chatActivationPending = useChatStore((s) => s.activationPending)
   const roomActivationPending = useRoomStore((s) => s.activationPending)
-  const activationPending = chatActivationPending || roomActivationPending
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
   // Read-only message-request preview (transient; set by the Message-requests banner).
   const previewJid = useMessageRequestPreviewStore((s) => s.previewJid)
@@ -599,7 +600,19 @@ function ChatLayoutContent() {
   const adminHasMainContent = sidebarView === 'admin' && (adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats')
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid)
+  // A hydrating activation counts as main-pane content: the active id lands only
+  // once the cache read resolves, so without this the mobile single-pane swap
+  // waits on IndexedDB and the tap on a conversation/room row looks dead. The same
+  // flag drives the neutral surface in the render cascade below, so the pane that
+  // opens is the one that holds it.
+  // Scoped to the tab that OWNS the pending store: a chat read in flight says
+  // nothing about the rooms list, and counting it anywhere else would blank a
+  // sidebar the user just asked for (Rooms/Contacts/Search), or hand the screen
+  // to a category-less Settings/Admin view they never selected.
+  const activationHoldsMainPane =
+    (sidebarView === 'messages' && chatActivationPending) ||
+    (sidebarView === 'rooms' && roomActivationPending)
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid || activationHoldsMainPane)
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
@@ -947,7 +960,7 @@ function ChatLayoutContent() {
       <div className="flex flex-1 min-h-0">
         {/* Left Sidebar - Conversations */}
         {/* Hidden on mobile when conversation or room is active, full width on mobile */}
-        <div className={`${hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`}>
+        <div className={`${hasActiveContent ? 'hidden md:flex' : 'flex'} w-full md:w-auto`} data-testid="sidebar-pane">
           <Sidebar
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
@@ -1008,10 +1021,11 @@ function ChatLayoutContent() {
             <Suspense fallback={<ViewLoadingFallback />}>
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
             </Suspense>
-          ) : activationPending ? (
+          ) : activationHoldsMainPane ? (
             // A hydrating activation is in flight (cache load before the active id
             // lands). Hold the neutral loading surface — matching the lazy views
             // above — so switching content tabs doesn't flash the empty-state hero.
+            // This is the surface the mobile pane swap above opens onto.
             <ViewLoadingFallback />
           ) : (
             <EmptyState
