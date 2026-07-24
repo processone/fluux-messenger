@@ -1401,3 +1401,234 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(around.some((m) => m.timestamp.getTime() === 1000)).toBe(true)
   })
 })
+
+// =============================================================================
+// Task 4: archive count primitive (countUnreadInArchive / countRoomUnreadInArchive)
+// =============================================================================
+
+describe('countUnreadInArchive (chat)', () => {
+  const CONV = 'alice@example.com'
+  beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
+
+  it('counts renderable incoming messages after the pointer', async () => {
+    await messageCache.saveMessages([
+      createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countUnreadInArchive(CONV, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 2, mentions: 0, mentionsComplete: true })
+  })
+
+  it('excludes outgoing messages', async () => {
+    await messageCache.saveMessages([
+      createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: true }),
+      createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countUnreadInArchive(CONV, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('excludes non-renderable (blank legacy) rows', async () => {
+    await messageCache.saveMessages([
+      createMockMessage(CONV, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm2', timestamp: new Date(2000), isOutgoing: false, body: '' }),
+      createMockMessage(CONV, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countUnreadInArchive(CONV, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('same-ms: pointer at m1@t, unread m2@t later by id, counts exactly 1', async () => {
+    const t = new Date(5000)
+    await messageCache.saveMessages([
+      createMockMessage(CONV, { id: 'm1', timestamp: t, isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm2', timestamp: t, isOutgoing: false }),
+    ])
+    const res = await messageCache.countUnreadInArchive(CONV, {
+      floor: t,
+      pointer: { timestamp: t, archiveOrderKey: { kind: 'chat', id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('saturates unread at unreadCap', async () => {
+    await messageCache.saveMessages(
+      Array.from({ length: 1200 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
+    )
+    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 999 })
+    expect(res!.unread).toBe(999)
+    expect(res!.mentions).toBe(0)
+    expect(res!.mentionsComplete).toBe(true)
+  })
+
+  it('missing archiveOrderKey falls back to strict-after-timestamp (over-counts, safe)', async () => {
+    const t = new Date(5000)
+    await messageCache.saveMessages([
+      createMockMessage(CONV, { id: 'm1', timestamp: t, isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm2', timestamp: t, isOutgoing: false }),
+      createMockMessage(CONV, { id: 'm3', timestamp: new Date(6000), isOutgoing: false }),
+    ])
+    // No archiveOrderKey on the pointer (migrated legacy pointer): per compareOrder,
+    // an unresolved key sorts BEFORE any resolved one at an equal timestamp, so BOTH
+    // m1 (the pointer's own message) and m2 (its same-ms sibling) resolve as "after"
+    // the pointer — the read boundary itself gets re-counted rather than a genuinely
+    // unread sibling being silently dropped. m3 (a later timestamp) counts regardless.
+    const res = await messageCache.countUnreadInArchive(CONV, {
+      floor: t,
+      pointer: { timestamp: t },
+    })
+    expect(res).toEqual({ unread: 3, mentions: 0, mentionsComplete: true })
+  })
+
+  it('returns null on IndexedDB error', async () => {
+    messageCache._resetDBForTesting()
+    const original = globalThis.indexedDB
+    globalThis.indexedDB = { open: () => { throw new Error('boom') } } as unknown as IDBFactory
+    try {
+      const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0) })
+      expect(res).toBeNull()
+    } finally {
+      globalThis.indexedDB = original
+      messageCache._resetDBForTesting()
+    }
+  })
+})
+
+describe('countRoomUnreadInArchive (room)', () => {
+  const ROOM = 'room@conference.example.com'
+  beforeEach(() => { globalThis.indexedDB = new IDBFactory(); messageCache._resetDBForTesting(); _resetStorageScopeForTesting() })
+
+  /**
+   * Bulk-seed rows directly into the store, bypassing the identity-resolving
+   * upsert (`saveRoomMessages` does a per-row multiEntry lookup+merge, which is
+   * the right cost for real writes but far too slow — and pointless here, since
+   * every row is already uniquely keyed — for a large synthetic fixture).
+   */
+  async function seedRoomRowsFast(rows: StoredRoomMessage[]) {
+    await messageCache.getRoomMessages(ROOM, { limit: 1 }) // ensure the v4 schema exists
+    const raw = await openDB('fluux-message-cache', 4)
+    const tx = raw.transaction('room-messages-canonical', 'readwrite')
+    for (const row of rows) await tx.store.put(row as never)
+    await tx.done
+    raw.close()
+  }
+  const fastRoomRow = (over: Partial<StoredRoomMessage> = {}): StoredRoomMessage => {
+    const base = { type: 'groupchat', id: 'x', roomJid: ROOM, from: `${ROOM}/user`, body: 'hi', timestamp: 1000, isOutgoing: false, ...over } as StoredRoomMessage
+    return { ...base, cacheKey: roomCanonicalKey(base), identityKeys: roomIdentityKeys(base), ids: [base.id] } as StoredRoomMessage
+  }
+
+  it('counts renderable incoming messages after the pointer', async () => {
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 2, mentions: 0, mentionsComplete: true })
+  })
+
+  it('excludes outgoing messages', async () => {
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: true }),
+      createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('excludes non-renderable (blank legacy) rows', async () => {
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', timestamp: new Date(1000), isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm2', timestamp: new Date(2000), isOutgoing: false, body: '' }),
+      createMockRoomMessage(ROOM, { id: 'm3', timestamp: new Date(3000), isOutgoing: false }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: new Date(1000),
+      pointer: { timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('same-ms: pointer at m1@t (from alice), unread m2@t (from bob, sorts after) counts exactly 1', async () => {
+    const t = new Date(5000)
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm2', from: `${ROOM}/bob`, timestamp: t, isOutgoing: false }),
+    ])
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, {
+      floor: t,
+      pointer: { timestamp: t, archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
+    })
+    expect(res).toEqual({ unread: 1, mentions: 0, mentionsComplete: true })
+  })
+
+  it('missing archiveOrderKey falls back to strict-after-timestamp (over-counts, safe)', async () => {
+    const t = new Date(5000)
+    await messageCache.saveRoomMessages([
+      createMockRoomMessage(ROOM, { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm2', from: `${ROOM}/bob`, timestamp: t, isOutgoing: false }),
+      createMockRoomMessage(ROOM, { id: 'm3', from: `${ROOM}/bob`, timestamp: new Date(6000), isOutgoing: false }),
+    ])
+    // Same over-count rationale as the chat case: both same-ms rows (m1, m2) resolve
+    // as "after" an unresolved pointer position; m3 counts regardless of the key.
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { timestamp: t } })
+    expect(res).toEqual({ unread: 3, mentions: 0, mentionsComplete: true })
+  })
+
+  it('counts a mention beyond the unread cap and reports completeness', async () => {
+    // 1200 unread room messages, the 1100th is a mention; unreadCap 999, scan cap 5000 (default).
+    // fake-indexeddb's cursor walk over 1200 rows is comfortably under a second in
+    // isolation but can brush the default 5s budget alongside the rest of this
+    // (large) suite — give it explicit headroom rather than a flaky margin.
+    const rows = Array.from({ length: 1200 }, (_, i) =>
+      fastRoomRow({ id: `m${i}`, timestamp: 1000 + i, isOutgoing: false, isMention: i === 1099 })
+    )
+    await seedRoomRowsFast(rows)
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 999 })
+    expect(res!.unread).toBe(999) // saturated
+    expect(res!.mentions).toBe(1) // NOT lost to the early-out
+    expect(res!.mentionsComplete).toBe(true)
+  }, 15000)
+
+  it('reports mentionsComplete: false when the scan cap is hit before the range is exhausted', async () => {
+    const msgs = Array.from({ length: 20 }, (_, i) =>
+      createMockRoomMessage(ROOM, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false, isMention: i === 15 })
+    )
+    await messageCache.saveRoomMessages(msgs)
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 999, mentionScanCap: 10 })
+    expect(res!.mentionsComplete).toBe(false)
+    // The mention at index 15 is beyond the 10-row scan cap — not (yet) counted.
+    expect(res!.mentions).toBe(0)
+  })
+
+  it('returns null on IndexedDB error', async () => {
+    messageCache._resetDBForTesting()
+    const original = globalThis.indexedDB
+    globalThis.indexedDB = { open: () => { throw new Error('boom') } } as unknown as IDBFactory
+    try {
+      const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0) })
+      expect(res).toBeNull()
+    } finally {
+      globalThis.indexedDB = original
+      messageCache._resetDBForTesting()
+    }
+  })
+})
