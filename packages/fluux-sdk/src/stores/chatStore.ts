@@ -24,7 +24,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { schedule, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
