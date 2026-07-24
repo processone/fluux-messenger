@@ -89,11 +89,15 @@ therefore in scope, in PR A.
    second source of truth by becoming a denormalised field of the same fact — which keeps
    ordering comparisons synchronous and O(1), leaving the cache needed only for counting.
 
-4. **A remote marker on the active view advances the pointer but freezes the divider.**
-   The pointer is a fact and should track. The divider is a per-viewing-session affordance
-   (already cleared on deactivate, already deliberately kept alive after a FAB jump);
-   repainting it under someone's eyes yanks the separator off content they are reading. It
-   recomputes on the next activation.
+4. **A remote marker on the active view advances the pointer and live-tracks the divider
+   without moving the reader.** The divider moves or disappears with the effective read boundary
+   so its label stays consistent with the canonical count. Before mutating the divider, capture a
+   stable visible-message anchor and restore the same pixel offset afterward. Semantic state
+   changes immediately; viewport position does not. *(This supersedes the earlier "freeze the
+   divider" decision: once the divider labels the one canonical count, freezing it would show a
+   stale or `0` number — anchor preservation, not freezing, is what keeps the separator from
+   being yanked off content the reader is looking at. See the [single-source acceptance
+   addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md).)*
 
 5. **A fresh entity gets an explicit watermark, not a pointer write.** `historyFloor`
    records when the entity entered our world, once, at creation. Joining a room with 10k
@@ -397,6 +401,15 @@ archive derivation lands. This keeps the two PRs cleanly separable (B = the coun
 changes the count model. PR C then deletes the function; by then only its pointer-writes
 remain to remove.
 
+*One scoped exception, acknowledged.* PR B **tightens the precondition on one existing
+writer** — the on-arrival advance in `onMessageReceived` — gating it on a real
+viewport-at-live-edge signal so an active but scrolled-up conversation no longer marks arrivals
+read. This is required by PR B's own acceptance criteria (an archive-derived count is worthless
+if the pointer it derives from advances on messages the user never saw), and it is safe: it
+makes the forward-only pointer advance *less* often, never more. It does **not** add or relocate
+a writer — PR C still owns writer removal/consolidation. See the
+[single-source acceptance addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md).
+
 **Decision — the floor formula.** `floor = readPointer ? readPointer.timestamp :
 historyFloor`, **not** `max(...)`. A pre-#1081 conversation is stamped `historyFloor = now`
 when it flows through `setConversations` (`chatStore.ts`), so `max(lastReadAt, now)` would
@@ -576,6 +589,55 @@ production caller but *is* exported from `index.ts`, so the wrong version sits o
 public surface. PR B deletes it (and its export) in favour of `computeFloor`, so no reader —
 inside or outside the SDK — can pick it up.
 
+**Decision — one canonical count, FOUR surfaces; the FAB is decomposed.** The unread count
+PR B derives is the *only* unread number in the UI. Today it is computed independently in
+three places: the sidebar reads the store `unreadCount`, the marker pill recounts the resident
+array (`markerUnreadCount = residentLength − dividerIndex`), and the FAB badge runs a third
+resident-array derivation (`countNewBelowViewport` in `unreadBadge.ts`) that ticks down
+relative to the pointer. PR B collapses them onto the single pointer-derived count and
+**deletes** `unreadBadge.ts`/`countNewBelowViewport` and the `markerUnreadCount` memo. The one
+count is rendered by **four** surfaces, all through one shared `formatUnreadCount`: the
+sidebar, the **divider** (`NewMessageMarker`, which takes no count today — PR B adds one and
+tests its text), the **floating marker pill** (`JumpToLastReadPill`), and the **FAB badge**.
+
+The FAB has three *separate* properties and only visibility is viewport-driven:
+
+- **FAB visibility** — viewport / sliding-window driven (away from the bottom). Unchanged.
+- **FAB badge** — the canonical count; `0` ⇒ no badge even while the FAB shows. Not a
+  "messages below the viewport" number — scrolling never redefines unread.
+- **FAB action** — two-step, **marker-geometry driven, not count driven**: the first click
+  goes to the divider only when the divider is still *below* the viewport
+  (`markerOffset > viewportBottom`, as `useMessageListScroll.ts` already implements); when it
+  is on-screen or above, or absent, the click goes straight to the bottom — even with unread
+  present. A non-zero count does not choose the destination.
+
+The divider/marker is *positioned* at the first eligible message after the **effective read
+boundary** — `computeFloor(readPointer, historyFloor)` (the pointer's position when present,
+else `historyFloor`), not the pointer alone — and *labels* the canonical count. It
+**live-tracks** that boundary (superseding decision #4's freeze) and repositions/clears when a
+remote marker advances the pointer, **preserving the reader's pixel offset** via the
+content-anchor mechanism (no visual scroll). **Eligible** = incoming + renderable; delayed
+messages are included (a delayed message after the boundary is unread — the design removes
+`treatDelayedAsNew`). The store caps at `999` and the shared formatter owns the single display
+cap. Two coupled behavior changes follow: (1) the active-conversation force-zero of
+`unreadCount` is removed; and (2) the on-arrival pointer advance in `onMessageReceived` is gated
+on a **real viewport-at-live-edge** signal (unknown/stale ⇒ conservatively not-at-edge) — a
+scoped precondition-tightening on an existing writer, not a new one (see the B/C-boundary note
+above). That signal is held in an **SDK-owned runtime state keyed by entity and activation
+generation** (`unknown | at-edge | away`): activating an entity synchronously creates a new
+generation initialized to `unknown`; the app reports measured viewport state through an explicit
+SDK action carrying that generation, and **late reports from older generations are ignored**. The
+UI's `isAtBottomRef` may remain a boolean internal to scroll mechanics — it is not the semantic
+evidence, and the SDK does not import `apps/fluux`. `onMessageReceived` advances only when the
+current entity's current-generation evidence is explicitly `at-edge`. Together: the count is
+pointer-driven for active conversations, reaching `0` only when
+the reader is genuinely at the live edge, so an active-but-scrolled-up conversation shows the
+real count and a message arriving there stays unread. Coverage-incomplete still `defers` (keeps
+the last canonical count) and never substitutes a viewport/resident count. Full property model
+and the nine
+acceptance tests:
+[2026-07-23-read-state-unread-count-single-source-acceptance.md](2026-07-23-read-state-unread-count-single-source-acceptance.md).
+
 **PR B0 task order** (the precursor). New canonical room key + `room_ts_from_id` index on a
 fresh object store → the upgrade that copies existing rows into it, merging duplicate
 `(roomJid, from, id)` rows into one and picking the canonical timestamp → route every room
@@ -592,7 +654,19 @@ and round-trip tests) → resident-sort tiebreak in `messageArrayUtils` (isolate
 (count-after-position, coverage-gated) → chat `recomputeUnread` rewrite + coverage gate +
 triggers → room `recomputeUnreadForRoom` + triggers → `+1` renderability guard → delete the
 now-dead slice-limited recount internals (and `MAM_POINTER_RECOUNT_CACHE_LIMIT` if nothing
-else uses it).
+else uses it) → **single-source the UI count**: remove the active-conversation force-zero **and
+gate the on-arrival pointer advance (`onMessageReceived`) on an SDK-owned, entity+activation-generation
+viewport-evidence state (`unknown | at-edge | away`)** — activation synchronously starts a new
+generation at `unknown`, the app reports via an explicit SDK action carrying its generation, late
+reports from older generations are ignored, and the advance fires only on current-generation
+`at-edge` (the UI `isAtBottomRef` stays a boolean internal to scroll mechanics; scoped
+precondition-tightening, not a new writer), thread the canonical `unreadCount` into `MessageList` as one prop, render all four
+surfaces — sidebar, divider (`NewMessageMarker`, add a `count` prop, **live-track the boundary
+with content-anchor preservation**), floating pill (`JumpToLastReadPill`), FAB badge — through one
+shared `formatUnreadCount`, delete `unreadBadge.ts`/`countNewBelowViewport` and the
+`markerUnreadCount` memo (leave the geometry-driven two-step action in `useMessageListScroll.ts`
+untouched), and rewrite `MessageList.fab.test.tsx` + add the nine acceptance tests, `test:scroll`
+gate for the anchor-preservation and divider-move cases (see [the acceptance spec](2026-07-23-read-state-unread-count-single-source-acceptance.md)).
 
 ## Risks
 
