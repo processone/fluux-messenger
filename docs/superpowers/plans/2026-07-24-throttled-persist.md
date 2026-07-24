@@ -22,6 +22,7 @@
 - Storage keys are resolved **eagerly, at schedule time** — never inside a thunk. Resolving inside the thunk would write one account's data under another account's key.
 - The SDK's public export name is **`flushPersistentStorage`**, not `flush`.
 - No test may assert something that passes with the feature removed. Where a test targets an escape hatch, it must first put the system — **on the exact key under test** — into the state where the ordinary path would not have persisted.
+- **To assert a clear worked, assert the key is gone (`toBeNull`), not that a marker substring is absent.** A pending thunk that resurrects a key often carries content from which the marker has already been removed, so `not.toContain` passes on exactly the resurrection it was written to catch. The one place a key legitimately survives a clear is `chatStore.reset`, where the trailing `set(empty)` rewrites it (§2.1) — there, and only there, assert on the content.
 - Tests count writes via `localStorageMock.setItem.mock.calls.length`. Do not add a dependency-injected sink; the production write path must be the one under test.
 - Never include a Claude footer in commit messages.
 - Commits are SSH-signed. If signing fails, use `--no-gpg-sign` (pre-approved for this repo).
@@ -911,7 +912,19 @@ function createRoom(jid: string, options: Partial<Room> = {}): Room {
   }
 }
 
-function createMessage(id: string, roomJid: string, nick: string, body: string): RoomMessage {
+// `timestamp` is an explicit parameter, NOT `new Date()`. Under fake timers
+// `new Date()` returns the same instant for every message, and `isAhead`
+// (shared/readPointer.ts:63) treats equal timestamps as NOT an advance — by
+// design, since MAM archives routinely put siblings in one millisecond. Two
+// same-instant messages would make the second `advanceReadPointer` a silent
+// no-op that never writes, so every read-state test below would fail.
+function createMessage(
+  id: string,
+  roomJid: string,
+  nick: string,
+  body: string,
+  timestamp: Date
+): RoomMessage {
   return {
     type: 'groupchat',
     id,
@@ -919,7 +932,7 @@ function createMessage(id: string, roomJid: string, nick: string, body: string):
     from: `${roomJid}/${nick}`,
     nick,
     body,
-    timestamp: new Date(),
+    timestamp,
     isOutgoing: false,
   }
 }
@@ -1045,8 +1058,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('r1', ROOM, 'alice', 'first'),
-          createMessage('r2', ROOM, 'alice', 'second'),
+          createMessage('r1', ROOM, 'alice', 'first', new Date(1000)),
+          createMessage('r2', ROOM, 'alice', 'second', new Date(2000)),
         ],
       })
     )
@@ -1075,8 +1088,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('read-first', ROOM, 'alice', 'a'),
-          createMessage('read-pending', ROOM, 'alice', 'b'),
+          createMessage('read-first', ROOM, 'alice', 'a', new Date(1000)),
+          createMessage('read-pending', ROOM, 'alice', 'b', new Date(2000)),
         ],
       })
     )
@@ -1091,9 +1104,20 @@ describe('roomStore throttled persistence', () => {
     roomStore.getState().reset()
     vi.advanceTimersByTime(5000)
 
-    expect(localStorage.getItem('fluux-room-gaps') ?? '').not.toContain('gap-pending')
-    expect(localStorage.getItem('fluux-room-coverage') ?? '').not.toContain('cov-pending')
-    expect(localStorage.getItem('fluux-room-read-state') ?? '').not.toContain('read-pending')
+    // Assert the KEYS ARE GONE, not that a marker string is absent.
+    //
+    // A `not.toContain` here is non-discriminating: the pending gap thunk holds
+    // a map with BOTH anchors already stripped, and the pending coverage thunk
+    // holds `[]`. With `cancel` missing, those thunks fire after `removeItem`
+    // and recreate the keys — while still containing neither 'gap-pending' nor
+    // 'cov-pending'. The substring assertions would pass on a resurrection.
+    //
+    // Nothing legitimately rewrites these keys after reset: unlike chatStore,
+    // roomStore's `set(createEmptyRoomState())` does not re-trigger the save
+    // helpers, so absence is the correct expectation.
+    expect(localStorage.getItem('fluux-room-gaps')).toBeNull()
+    expect(localStorage.getItem('fluux-room-coverage')).toBeNull()
+    expect(localStorage.getItem('fluux-room-read-state')).toBeNull()
   })
 
   it('_clearAllRoomReadStateForTesting leaves no row to resurrect', () => {
@@ -1101,8 +1125,8 @@ describe('roomStore throttled persistence', () => {
       createRoom(ROOM, {
         joined: true,
         messages: [
-          createMessage('r-first', ROOM, 'alice', 'a'),
-          createMessage('r-pending', ROOM, 'alice', 'b'),
+          createMessage('r-first', ROOM, 'alice', 'a', new Date(1000)),
+          createMessage('r-pending', ROOM, 'alice', 'b', new Date(2000)),
         ],
       })
     )
@@ -1112,7 +1136,10 @@ describe('roomStore throttled persistence', () => {
     _clearAllRoomReadStateForTesting()
     vi.advanceTimersByTime(5000)
 
-    expect(localStorage.getItem('fluux-room-read-state') ?? '').not.toContain('r-pending')
+    // Key absence, for the same reason as the reset test: a pending thunk that
+    // fires after the clear recreates the row, and a substring assertion would
+    // not notice.
+    expect(localStorage.getItem('fluux-room-read-state')).toBeNull()
   })
 
   it('reset does not let a pending write resurrect room data', () => {
@@ -1120,7 +1147,11 @@ describe('roomStore throttled persistence', () => {
     roomStore.getState().setDraft(ROOM, 'secret-pending')
     roomStore.getState().reset()
     vi.advanceTimersByTime(5000)
-    expect(localStorage.getItem('fluux-room-drafts') ?? '').not.toContain('secret-pending')
+    // Key absence, consistent with the gap/coverage/read-state reset test.
+    // A substring assertion happens to discriminate here — the pending drafts
+    // thunk still contains 'secret-pending' — but absence is what `reset` is
+    // actually promising, and it does not depend on that coincidence.
+    expect(localStorage.getItem('fluux-room-drafts')).toBeNull()
   })
 
   // The throttle is PER KEY, so opening a window on room-read-state proves
@@ -1505,7 +1536,7 @@ EOF
 
 ## Self-Review
 
-**Spec coverage:** §1 module → Task 1. §1.1 error absorption and flush semantics → Task 1 Step 3 (`write` returning success, `flush`, `flushKey`) and its four failure tests. §1.2 retraction carve-out → Task 3. §1.3 peer range → Task 3 Step 5. §2 items 1-3 → Task 2; item 4 → Task 3. §2.1 reset behaviour left unchanged, test asserts no pre-logout data → Task 2 Step 1. §3 items 1-3 → Task 4 Steps 4-5; item 4 → Step 7; items 5-6 → Steps 6-7; item 7 → Step 8. §3.1 reference capture → Task 4 Step 5 comment. §3.2 → Steps 6-7. §3.3 → Step 8. §4.1 Tauri → Task 5. §5.1 → Task 1. §5.2 → Tasks 2-3. §5.3 → Task 4. §5.4 → Task 5. §5.5 controls → Task 1 Step 5.
+**Spec coverage:** §1 module → Task 1. §1.1 error absorption and flush semantics → Task 1 Step 3 (`write` returning success, `flush`, `flushKey`) and its seven failure tests, covering both error kinds across all four write paths. §1.2 retraction carve-out → Task 3. §1.3 peer range → Task 3 Step 5. §2 items 1-3 → Task 2; item 4 → Task 3. §2.1 reset behaviour left unchanged, test asserts no pre-logout data → Task 2 Step 1. §3 items 1-3 → Task 4 Steps 4-5; item 4 → Step 7; items 5-6 → Steps 6-7; item 7 → Step 8. §3.1 reference capture → Task 4 Step 5 comment. §3.2 → Steps 6-7. §3.3 → Step 8. §4.1 Tauri → Task 5. §5.1 → Task 1. §5.2 → Tasks 2-3. §5.3 → Task 4. §5.4 → Task 5. §5.5 controls → Task 1 Step 5.
 
 **Deliberate spec gap:** §2 item 5 and the §5.2 compat/rebuild-fidelity tests are **not** covered — the compat-map removal was split into its own cycle (see the header). Nothing else in the spec is unimplemented.
 
