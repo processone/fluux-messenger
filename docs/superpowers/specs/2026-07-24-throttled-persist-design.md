@@ -1,7 +1,7 @@
 # Throttled localStorage persistence for chatStore and roomStore
 
 **Date:** 2026-07-24
-**Status:** Revised after review — ready for implementation planning
+**Status:** Approved after four review rounds — ready for implementation planning
 
 ## Problem
 
@@ -37,7 +37,7 @@ gaps, coverage) share the shape.
 
 In scope: a shared throttle module, wired into `chatStore`'s persist adapter and `roomStore`'s six
 storage helpers; removal of the duplicated `conversations` array from the persisted chat blob; an
-explicit flush on Tauri app quit.
+explicit flush on Tauri app quit; narrowing the SDK's zustand peer range to `^5.0.0` (§1.3).
 
 Out of scope: moving the blob to IndexedDB. `deserializeState` is synchronous on the startup path
 and the read-pointer restore ordering (#1081) depends on that, so an async rehydration is a separate
@@ -159,18 +159,50 @@ and the eventual `schedule` would write on its own leading edge *at that later t
 deferred, still lost to a hard kill in between.
 
 Verified against the installed build (zustand 5.0.13,
-`node_modules/zustand/esm/middleware.mjs:365-368`): the `set` override is
-`savedSetState(state, replace); return setItem()`. `setItem` runs synchronously before `set()`
-returns, so by the time `recordPendingRetraction` calls `flushKey`, the thunk is registered.
+`node_modules/zustand/esm/middleware.mjs:370-374`). `recordPendingRetraction` is defined in the
+store initializer, so its `set` is the wrapper `persist` passes to `config`:
+
+```js
+const configResult = config(
+  (...args) => {
+    set(...args);
+    return setItem();
+  },
+```
+
+`setItem` runs synchronously before the action returns, so by the time `recordPendingRetraction`
+calls `flushKey`, the thunk is registered. (The `api.setState` override at 366-368 has the same
+shape and covers callers that reach the store directly, such as `applyMigratedReadPointer`; the
+retraction path is the `config` wrapper.)
 
 Because this is an assumption rather than a guarantee, §5.2 pins it with a test that asserts
 `recordPendingRetraction()` has persisted *before it returns*. If a zustand upgrade ever defers the
 adapter, that test fails rather than the retraction silently becoming losable.
 
-**Open item for the plan:** `packages/fluux-sdk/package.json` declares zustand as a peer at
-`^4.0.0 || ^5.0.0`. The synchronous-`setItem` behaviour is verified for 5.0.13 only. Since the SDK
-is published for reuse, either v4's `persist` must be verified to behave the same way, or the peer
-range narrowed to `^5.0.0`. This is not a blocker for the app, which pins `^5.0.0`.
+### 1.3 Narrow the zustand peer range to `^5.0.0`
+
+`packages/fluux-sdk/package.json` declares zustand as a peer at `^4.0.0 || ^5.0.0`. That lower
+bound is already unsound, independently of this change: v4.0.0's `persist` took
+`getStorage`/`serialize`/`deserialize`, not a `storage` object. On 4.0.0 the custom adapter in
+`chatStore` would be an unrecognized option and silently ignored — falling back to plain
+`localStorage` with default JSON serialization, which turns every persisted `Map` into `{}`. The
+store has never worked on the declared lower bound.
+
+This design adds a second dependency on v5 (synchronous `setItem`, §1.2), so the range is corrected
+here rather than left as an open question:
+
+```json
+"zustand": "^5.0.0"
+```
+
+This is not dropping working support — it is removing a claim that was never true. Genuinely
+supporting 4.x would need an alternative adapter shape and a minimum-version test matrix, far
+outside the scope of a persistence optimization. The app already pins `^5.0.0`, so nothing in this
+repo changes behaviour.
+
+Not verified empirically: v4.0.0 was not installed to reproduce the fallback. The reasoning is from
+the v4.0.0 `persist` source. Since the outcome is narrowing a range rather than relying on v4
+behaviour, an incorrect reading costs nothing.
 
 Rejected alternative: splitting `pendingRetractions` into its own key, matching roomStore's layout.
 That is the cleaner long-term shape, but it changes the persisted blob format and needs its own
@@ -237,8 +269,11 @@ Changes, as an explicit list:
 2. `savePendingRetractionsToStorage` is deliberately **excluded** and stays synchronous, per §1.2.
 3. `persistRoomReadState` captures the map into a local before scheduling (§3.1).
 4. **`roomStore.switchAccount` calls `flush()` before reassigning `persistedRoomReadState` and
-   before `set(createEmptyRoomState(...))`.** Without it the outgoing account's pending writes are
-   left to fire on their own, against a module binding that has already been reassigned.
+   before `set(createEmptyRoomState(...))`.** The reason is freshness on an immediate return to the
+   outgoing account: without the flush, A's last mutations sit in a pending thunk while
+   `switchAccount` back to A runs `loadRoomReadState(A)` against a blob that predates them, and the
+   stale load then becomes the live state. (It is *not* needed to keep a delayed write off the
+   reassigned binding — the local capture in §3.1 already handles that.)
 5. `roomStore.reset` cancels all seven keys before clearing them (§3.2).
 6. `clearRoomReadState` and `_clearAllRoomReadStateForTesting` cancel before removing (§3.2).
 7. The `resolveRoomReadPosition` doc comment is corrected (§3.3).
@@ -519,4 +554,4 @@ fails. A break check is necessary but not sufficient (#1064).
 | 1 s of lagging-mirror state lost on hard kill | Bounded and analysed as safe-direction only (§4) |
 | `resolveRoomReadPosition` rationale silently goes stale | Comment updated in the same change (§3.3) |
 | A zustand upgrade defers `setItem`, silently making retractions losable | §5.2 asserts the retraction is on disk before `recordPendingRetraction` returns |
-| SDK peer range admits zustand v4, where sync `setItem` is unverified | Verify v4 or narrow the peer range to `^5.0.0` (§1.2 open item) |
+| SDK peer range admits zustand v4, where the `storage` adapter is silently ignored | Peer range narrowed to `^5.0.0` (§1.3) — correcting a claim that was already untrue |
