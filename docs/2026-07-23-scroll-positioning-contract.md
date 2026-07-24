@@ -304,7 +304,13 @@ Two visually similar scroll operations are explicitly outside this migration:
 
 - `SearchContextView` is a static preview with its own scroller and no live-conversation persistence,
   follow-live, unread, or history-window ownership. Its persistent-highlight positioning loop remains
-  isolated from the live message-list controller.
+  isolated from the live message-list controller. Its rows are still interactive, so a reply/poll
+  click inside a preview resolves within that preview's own scroller — never the document, and never
+  the live conversation. Because several previews can be mounted beside the live list while the
+  active-list registry holds only one entry, requests from inside any list route by **containment**
+  (`messageTargetContext`), not by registration order; previews therefore do not register at all.
+  The registry remains for callers with no enclosing list that mean the live conversation
+  (`PollBanner`, find-on-page).
 - Keyboard selection in `useMessageSelection` uses
   `scrollIntoView({ block: 'nearest' })` only to keep the selected row visible. It is viewport
   maintenance, not a semantic message-position request, and remains intentionally direct.

@@ -12,6 +12,11 @@
  * There is a single active conversation list at a time (ChatView / RoomView render one), so a
  * module-level singleton is sufficient. The list clears its registration on unmount (identity-
  * checked, so a fast conversation switch can't clobber the newly mounted list's registration).
+ *
+ * Static previews (SearchContextView, StrangerRequestPreviewView) deliberately do NOT register:
+ * several of them can be mounted at once beside the live list, and this registry holds only one,
+ * so registering them would make routing depend on render order. Callers rendered inside any list
+ * route by containment through `messageTargetContext` instead.
  */
 export interface ActiveMessageListController {
   /** Submit an explicit message target to the active list's positioning controller. */

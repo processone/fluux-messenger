@@ -272,10 +272,15 @@ export function whisperCounterpartPresent(
 }
 
 /**
- * Ask the active message list to position and highlight a message.
+ * Ask the LIVE conversation list to position and highlight a message.
  *
  * The active list owns target resolution, loading, browser reconciliation, and cancellation. This
  * helper intentionally performs no DOM lookup or scroll write of its own.
+ *
+ * Only for callers with no enclosing message list that genuinely mean the live conversation
+ * (PollBanner above the list, find-on-page at the layout level). Anything rendered INSIDE a list —
+ * reply quotes, poll cards — must use `useRequestMessageTarget` so the click routes to the list it
+ * happened in; otherwise a click inside a search/activity preview scrolls the live conversation.
  *
  * @param messageId - Local, stanza, or origin ID understood by the active list's target resolver.
  */

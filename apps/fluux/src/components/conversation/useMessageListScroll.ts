@@ -112,6 +112,9 @@ const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-loa
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
+// How long a jumped-to message keeps its highlight tint, for both the controller-owned live path
+// and the scoped static-preview path (they must flash identically).
+const TARGET_HIGHLIGHT_MS = 1500
 // Frames to keep re-pinning a virtualized list to the bottom after a scroll-to-bottom. Rows
 // start at the fixed estimateSize and re-measure asynchronously over several frames (taller →
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
@@ -1598,7 +1601,7 @@ export function useMessageListScroll({
         : null
       if (element && applied) {
         element.classList.add('message-highlight')
-        setTimeout(() => element.classList.remove('message-highlight'), 1500)
+        setTimeout(() => element.classList.remove('message-highlight'), TARGET_HIGHLIGHT_MS)
       }
       debugLog('TARGET MESSAGE: controller completed', {
         conversationId: request.conversationId,
@@ -1619,7 +1622,22 @@ export function useMessageListScroll({
   ])
 
   const requestMessageTarget = useCallback((messageReference: string) => {
-    if (staticMode) return
+    if (staticMode) {
+      // Search/activity previews mount their own non-virtualized list beside the live conversation.
+      // They own no positioning controller and must never drive one, but their reply/poll rows are
+      // still clickable — so resolve inside THIS scroller only. Never the document: a preview must
+      // not steal (or be stolen by) another list's copy of the same message id. Every row is in the
+      // DOM here (staticMode forces the non-virtualized path), so one measured write is enough and
+      // no generation, frame loop, or around-load is involved.
+      const scroller = scrollerRef.current
+      if (!scroller) return
+      const element = findMessageTargetElement(scroller, messageReference)
+      if (!element) return
+      element.scrollIntoView({ block: 'center' })
+      element.classList.add('message-highlight')
+      setTimeout(() => element.classList.remove('message-highlight'), TARGET_HIGHLIGHT_MS)
+      return
+    }
     isAtBottomRef.current = false
     positioningControllerRef.current?.beginExplicitTarget({
       conversationId,

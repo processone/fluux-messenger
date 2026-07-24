@@ -19,7 +19,8 @@ import { renderQuotePreview } from '@/utils/messageStyles'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
-import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { useRequestMessageTarget } from './messageTargetContext'
 import { useOwnGroupWidth } from './messageGroupWidth'
 import { resolveDisplayTrust } from './messageTrust'
 import { trustVisual } from '@/e2ee/trustVisual'
@@ -340,6 +341,9 @@ export const MessageBubble = memo(function MessageBubble({
   ownGroupKey,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
+  // Route jumps to the list this row is rendered in, so a click inside a search/activity preview
+  // positions that preview instead of no-opping or scrolling the live conversation.
+  const requestMessageTarget = useRequestMessageTarget()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
@@ -679,7 +683,7 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             type="button"
-            onClick={() => scrollToMessage(replyContext.messageId)}
+            onClick={() => requestMessageTarget(replyContext.messageId)}
             className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             // When the row is selected the selection tint melts into the card fill
             // (light themes); a full frame in the sender's colour keeps the card
