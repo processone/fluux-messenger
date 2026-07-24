@@ -1,8 +1,8 @@
 # Message-list scroll positioning contract
 
-Status: migration in progress. Saved-position restoration, unread-marker positioning, and explicit
-message targets are authoritative controller slices. Live-edge pinning and directional history
-preservation remain shadow-observed.
+Status: migration in progress. Saved-position restoration, unread-marker positioning, explicit
+message targets, live-edge pinning, and media remeasurement preservation are authoritative
+controller slices. Directional history preservation remains shadow-observed.
 
 ## Purpose
 
@@ -32,10 +32,13 @@ generation/operation cancellation, reachability, one around-load attempt, and ex
 legacy-offset/live-edge fallback. For unread markers it owns entry and jump-to-last-read requests,
 frame scheduling, stale-work cancellation, convergence, and live-edge fallback. For explicit
 message targets it owns supersession, one around-load attempt, mounting and center-position
-convergence, user takeover, and completion. Hook executors translate accepted requests into
-browser/virtualizer writes, and every frame must hold the current controller lease before it can
-write. Saved-position, unread-marker, and explicit-target reconciliation now share the same
-controller-owned `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
+convergence, user takeover, and completion. For live edge it owns entry/FAB/outgoing generations,
+same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-frame convergence
+budget, and user cancellation. Media growth while reading history is a separate fixed-anchor
+request with the former 90-frame/8-stable-frame/8px contract. Hook executors translate accepted
+requests into browser/virtualizer writes, and every frame must hold the current controller lease
+before it can write. All five authoritative slices share the same controller-owned
+`PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
 convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
 and explicit-target loops, saved-position restoration deliberately has no fixed geometry-drift
@@ -46,18 +49,24 @@ Explicit target convergence uses immediate center writes. The former reply/poll/
 native smooth animation is intentionally not retained: restarting a smooth animation while
 remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
 
-The remaining live-edge and directional-history mechanisms run the model beside
-`useMessageListScroll`: fact adapters read current virtualizer and DOM geometry, and every observed
-live decision is compared with the model decision. The instrumentation runs in production so real
-traces can exercise it. A shared error boundary catches and counts adapter, validator,
+The live-edge executor retains its bottom-specific browser safeguards: tail-layout flushes for late
+WebKit measurement, the 4px missed-frame correction, repaint-burst coalescing, background-MAM
+repaint suppression, and the `overflowY` stale-paint repair. These remain executor mechanics rather
+than competing lifecycle owners.
+
+Directional-history preservation still runs the model beside `useMessageListScroll`: fact adapters
+read current virtualizer and DOM geometry, and observed decisions are compared with the model
+decision. The instrumentation runs in production so real traces can exercise it. A shared error
+boundary catches and counts adapter, validator,
 controller-driver, and executor errors; failure must degrade according to the active request's
 source-specific policy and must never escape into the scroll effect or event handler. The demo
 scroll-invariant suite fails if either `divergenceCount` or `instrumentationErrorCount` is non-zero.
 Retained diagnostic samples are capped, not the pass criterion.
 
-Zero divergences means the model agrees with the hand-authored semantic `actual` label at each
-observation site: desired position plus the coarse waiting/positioning/applied/paused/fallback/idle
-phase. It does **not** compare rendered pixels and must not be read as proof that the browser landed
+For the remaining shadow-observed slice, zero divergences means the model agrees with the
+hand-authored semantic `actual` label at each observation site: desired position plus the coarse
+waiting/positioning/applied/paused/fallback/idle phase. It does **not** compare rendered pixels and
+must not be read as proof that the browser landed
 or painted at the requested position, nor does it prove that every ownership site was observed.
 Pixel geometry, measurement convergence, and WebKit repaint remain covered by the scroll-invariant
 scenarios and the leased imperative reconcilers.
@@ -244,9 +253,8 @@ measurement, or MDS completion cannot revive cancelled work.
 
 ## Reconciler responsibilities
 
-The eventual single positioning reconciler owns the difficult runtime work below. None belongs in
-the pure model; the saved-position slice currently splits this work between controller lifecycle
-ownership and a leased hook executor:
+The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
+model; browser-specific geometry remains in leased hook executors:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -264,6 +272,11 @@ ownership and a leased hook executor:
 
 In particular, the model describes **what position is wanted**. It does not make measurement settle
 or stale-paint reconciliation disappear.
+
+Live-edge reconciliation deliberately has no fixed geometry-drift takeover threshold. Large
+geometry changes are the content-growth condition it must absorb, so genuine user input or a newer
+generation is its takeover signal. Adding the 300px explicit-target/unread threshold here would
+abort valid deep growth and media-settle runs.
 
 ## Current behavior inventory
 
@@ -291,13 +304,10 @@ is already visible or above the viewport, the same activation goes directly to l
 ## Current owners to migrate
 
 The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
-and explicit center-aligned message targets. These reconcilers implement measurement convergence;
-they are not separate positioning authorities. The remaining independent implementations inside
-`useMessageListScroll` are:
-
-- `pinVirtualizedBottom`;
-- media-preservation reconciliation while reading history;
-- directional-load measurement reassertion.
+explicit center-aligned targets, live edge, and media preservation. These reconcilers implement
+measurement convergence; they are not separate positioning authorities. The only remaining
+independent frame-loop implementation inside `useMessageListScroll` is directional-load measurement
+reassertion.
 
 There are also positioning owners outside their shared single-flight ref:
 
@@ -372,7 +382,8 @@ kinetic scrolling and stale-paint behavior.
 3. [x] Migrate unread and explicit message targets: the controller owns their generations,
    supersession, reachability, frame convergence, and cancellation; their private loops and target
    around-load ref are deleted.
-4. Migrate live-edge pinning while retaining bottom-specific measurement/repaint safeguards.
+4. [x] Migrate live-edge pinning and media/content-growth preservation while retaining
+   bottom-specific measurement/repaint safeguards; delete both private hook-owned loops.
 5. Migrate directional history preservation last, retaining kinetic cancellation and clamp recovery.
 6. Route or isolate the remaining owners outside `useMessageListScroll`.
 7. Split persistence, user-intent tracking, history windowing, and reconciliation out of the

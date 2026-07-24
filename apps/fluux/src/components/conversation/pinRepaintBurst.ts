@@ -1,5 +1,5 @@
 /**
- * Cross-run burst coalescing for `pinVirtualizedBottom`'s forced repaint.
+ * Cross-run burst coalescing for the live-edge executor's forced repaint.
  *
  * WHY THIS EXISTS
  * ---------------
@@ -52,7 +52,7 @@ export interface PinBurstSummary {
 export interface PinRepaintBurst {
   /**
    * Record a content-arrival pin (new-message / content-growth / media-load /
-   * reaction / mam-catchup-complete). Call at the top of `pinVirtualizedBottom`
+   * reaction / mam-catchup-complete). Call when the live-edge executor begins
    * for those triggers — BEFORE it supersedes the running loop — so every arrival
    * is counted even though its run may be immediately replaced.
    */

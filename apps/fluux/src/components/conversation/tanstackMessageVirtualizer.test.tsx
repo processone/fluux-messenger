@@ -158,7 +158,7 @@ describe('useTanstackMessageVirtualizer', () => {
 
   it('scrollToIndex re-windows via @tanstack\'s offset callback with isScrolling=false (bottom-stick on WebKit)', () => {
     // Same scrollOffset-desync as scrollToOffset, on the stick-to-bottom path. @tanstack's
-    // scrollToIndex (used by pinVirtualizedBottom for both send and receive, the FAB, and
+    // scrollToIndex (used by the live-edge executor for both send and receive, the FAB, and
     // ensureMessageMounted) sets the DOM scrollTop via _scrollToOffset but leaves its reactive
     // scrollOffset stale until the native 'scroll' event fires. On Tauri WebKit that event is
     // withheld/coalesced for a programmatic scroll, so the mounted window never re-syncs and a

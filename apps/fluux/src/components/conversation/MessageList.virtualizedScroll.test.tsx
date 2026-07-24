@@ -409,12 +409,14 @@ describe('MessageList — virtualized scroll integration', () => {
       set: (v: number) => { scrollTopVal = v },
       configurable: true,
     })
+    // The authoritative live-edge entry first requests the global tail from this slid-up window.
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
     // Near the bottom (distFromBottom = 800-600-200 = 0): a scroll fires triggerLoadNewer, which
     // captures the top-visible anchor and calls onLoadNewer.
     scrollTopVal = 600
     fireEvent.scroll(scroller)
-    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
 
     scrollToOffsetCalls.length = 0
     getOffsetForMessageId.mockClear()
@@ -445,11 +447,13 @@ describe('MessageList — virtualized scroll integration', () => {
     Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
+    // Entry owns global-live-edge reachability and asks for a newer slice before user scrolling.
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
     // Load-newer fires near the bottom → stashes an anchor (no message change here = tail no-op).
     scrollTopVal = 600
     fireEvent.scroll(scroller)
-    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
 
     // Tail reached: windowAtLiveEdge flips false→true → the stale anchor must be dropped.
     rerender(<MessageList messages={makeMessages(20)} windowAtLiveEdge={true} {...base} />)
@@ -933,7 +937,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // row is NOT in the DOM, so the DOM anchor lookup (restoreToAnchor) fails. The restore must then
     // resolve the anchor through the virtualizer INDEX (getIndexForMessageId → scrollToIndex),
     // re-deriving its position from measurements — it must NOT go blank or fall back to
-    // pinVirtualizedBottom() (which would clear the saved state and stick the convo at the bottom).
+    // live-edge fallback (which would clear the saved state and stick the convo at the bottom).
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />,
     )

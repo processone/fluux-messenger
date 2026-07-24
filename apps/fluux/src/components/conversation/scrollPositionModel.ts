@@ -176,7 +176,14 @@ export type PositionRequest =
         kind: 'fallback'
         reason: 'saved-position-unavailable'
       },
-      LiveEdgePosition | LegacyOffsetPosition
+      LiveEdgePosition
+    >
+  | Request<
+      {
+        kind: 'fallback'
+        reason: 'saved-position-unavailable'
+      },
+      LegacyOffsetPosition
     >
   | Request<
       {
@@ -215,6 +222,16 @@ export type UnreadMarkerFallbackRequest = Extract<
         | 'unread-marker-resolved-at-live-edge'
     }
   }
+>
+
+export type LiveEdgeRequest = Extract<
+  PositionRequest,
+  { desired: LiveEdgePosition }
+>
+
+export type MediaPreservationRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'media-preservation'; reason: 'remeasure' } }
 >
 
 export type PositionRequestSource = PositionRequest['source']

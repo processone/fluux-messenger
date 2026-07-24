@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * pinVirtualizedBottom cost-control behavior (the WebKitGTK freeze fixes):
+ * Live-edge executor cost-control behavior (the WebKitGTK freeze fixes):
  *
  * 1. CONVERGENCE EARLY-EXIT — the ~60-frame re-assert loop must stop once the
  *    geometry has been stable for a few consecutive frames instead of always
@@ -59,7 +59,7 @@ function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
   }))
 }
 
-describe('MessageList — pinVirtualizedBottom cost control', () => {
+describe('MessageList — live-edge executor cost control', () => {
   let realRaf: typeof requestAnimationFrame
   let rafQueue: FrameRequestCallback[]
   const flush = (frames: number) => { for (let i = 0; i < frames; i++) rafQueue.splice(0).forEach((cb) => cb(0)) }
@@ -211,8 +211,8 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
     const scroller = document.querySelector('[data-message-list]') as HTMLElement
 
     // Reproduce the reported state faithfully: the user has scrolled UP into history, but the
-    // follow flag is still latched `true`. That latch is the real bug — pinVirtualizedBottom's
-    // user-intent bail calls finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
+    // follow flag is still latched `true`. That latch was the real bug — the former pin loop's
+    // user-intent bail called finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
     // wheel-up mid-pin the flag stays true. With the old code (typing indicator inside the scroll
     // content, typingUsersCount driving the re-pin effect) each XEP-0085 composing/paused toggle
     // then re-pinned and hauled the viewport back to the bottom. The typing indicator now floats

@@ -1,5 +1,5 @@
 /**
- * Per-run helpers for `pinVirtualizedBottom` (useMessageListScroll).
+ * Per-run browser-work helpers for the controller-owned live-edge executor.
  *
  * On WebKitGTK the pin's forced layouts (`flushTailLayout`) and forced repaints
  * (`forceRepaint`'s overflow toggle) are the dominant main-thread cost in busy
