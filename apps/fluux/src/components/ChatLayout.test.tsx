@@ -1448,6 +1448,35 @@ describe('ChatLayout - mobile pane swap during a hydrating activation', () => {
     expect(screen.queryByRole('button', { name: /create a room/i })).not.toBeInTheDocument()
   })
 
+  // Pending state belongs to the tab that owns the store. A chat activation in
+  // flight says nothing about the rooms list, so it must not blank it — the user
+  // tapped the Rooms rail and is owed the rooms list, not a skeleton. Same the
+  // other way round, and on the tabs that own neither store.
+  it.each([
+    ['/rooms', 'chatActivationPending', /create a room/i],
+    ['/messages', 'roomActivationPending', /start a conversation/i],
+  ] as const)('keeps the sidebar on %s while the other store has a pending activation', (route, pendingFlag, visibleAction) => {
+    setMockState({ [pendingFlag]: true })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+    expect(screen.getByText(visibleAction)).toBeInTheDocument()
+  })
+
+  // Contacts and Search own neither activation store: a pending chat read is
+  // unrelated to what those tabs are showing, and neither has main-pane content
+  // of its own until the user picks something.
+  it.each(['/contacts', '/search'] as const)('keeps the sidebar on %s while a chat activation is pending', (route) => {
+    setMockState({ chatActivationPending: true })
+    render(<ChatLayoutWithRouter initialRoute={route} />)
+
+    expect(panes().sidebar).not.toHaveClass('hidden')
+    expect(panes().main).toHaveClass('hidden')
+    expect(screen.queryByTestId('view-loading-fallback')).not.toBeInTheDocument()
+  })
+
   // The settings branch sits ABOVE the neutral surface in the render cascade,
   // so counting a pending activation as content there would hand the mobile
   // screen to a category-less SettingsView — the one view that deliberately
