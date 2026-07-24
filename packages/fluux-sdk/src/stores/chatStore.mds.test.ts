@@ -176,9 +176,17 @@ describe('chatStore.applyRemoteDisplayed', () => {
   })
 
   // Inbound read-state sync (spec §4): a marker published by another client
-  // clears a backgrounded conversation's badge immediately, not on the next
-  // activation (mirrors the roomStore behavior; conversations have no mentions).
-  it('applyRemoteDisplayed on a non-active conversation recomputes the unread badge', () => {
+  // advances a backgrounded conversation's read POSITION immediately (the
+  // pointer is unconditional, forward-only). PR B (archive-derived unread)
+  // no longer derives the COUNT from the page-scoped slice this method was
+  // handed — that undercounts a multi-page pointer-stitch walk (see the next
+  // test's comment) and can never be trusted as "exact". The count is instead
+  // re-derived from the durable archive via recomputeUnreadForConversation,
+  // triggered fire-and-forget; see chatStore.archiveUnread.test.ts for its
+  // exact/deferred/unavailable outcomes. Nothing here seeds
+  // mamQueryStates/conversationCoverage, so that derivation defers — the
+  // stale count (3) survives rather than snapping to this page's own tally.
+  it('applyRemoteDisplayed on a non-active conversation advances the pointer; the count is archive-derived and defers without proven coverage', async () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
 
@@ -196,18 +204,25 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.readPointer?.messageId).toBe('m4')
-    expect(meta?.unreadCount).toBe(0)
+
+    // Let the fire-and-forget archive recount run to completion.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(3)
     // The combined conversations mirror is kept coherent with conversationMeta.
-    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(3)
   })
 
-  // Exact badge recount (Phase B pointer resolution, non-resident conversation):
-  // the sync recount inside applyRemoteDisplayed only sees the page it was handed
-  // (mergedForMarker = the final backward page for a non-resident conversation).
-  // The unread messages downloaded by EARLIER pages of the same walk (the
-  // fetch-latest page, previous backward pages) live only in IndexedDB — the
-  // final count must come from the cache, not the page.
-  it('recounts the badge from the full cached set when the pointer resolves during a multi-page background walk', async () => {
+  // Multi-page background walk: the pointer resolves against only the FINAL
+  // page (mergedForMarker), which undercounts a walk spanning several pages
+  // (the fetch-latest page, earlier backward pages) — the badge would read
+  // ~9 instead of the true 19. PR B fixes this architecturally rather than by
+  // re-reading a wider cache window: the archive-derived recount
+  // (recomputeUnreadForConversation) cursors the DURABLE ARCHIVE from the
+  // floor forward, so it has no page-boundary undercount to begin with. It
+  // still defers here (no mamQueryStates/conversationCoverage seeded), which
+  // is the correct conservative behavior — the exact-count path (real
+  // coverage + archive rows) is exercised in chatStore.archiveUnread.test.ts.
+  it('the pointer resolves at the true position across a multi-page background walk; the count defers without proven coverage', async () => {
     const cid = 'juliet@capulet.example'
     const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))
     function timedMsg(id: string, stanzaId: string, ts: Date): Message {
@@ -238,26 +253,23 @@ describe('chatStore.applyRemoteDisplayed', () => {
       timedMsg('p0', 's-ptr', t(41)),
       ...Array.from({ length: 9 }, (_, i) => timedMsg(`p${i + 1}`, `sp${i + 1}`, t(42 + i))),
     ]
-    // The async exact recount reads the newest cached window — the union of
-    // everything the walk downloaded (both pages, chronological).
-    vi.mocked(messageCache.getMessages).mockResolvedValueOnce([...backwardPage, ...latestPage])
     chatStore.getState().mergeMAMMessages(cid, backwardPage, { first: 's-ptr' }, false, 'backward')
 
-    // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
-    // backward page) + 10 (fetch-latest page) = 19, NOT just the 9 visible in
-    // the final page.
+    // Pointer resolved at p0 (forward-only sync is unconditional and
+    // unaffected by PR B).
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('p0')
-    await vi.waitFor(() => {
-      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(19)
-    })
-    // Combined conversations mirror kept coherent.
-    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(19)
 
-    // Restore the factory default so a stale one-shot can't leak into later tests.
-    vi.mocked(messageCache.getMessages).mockReset().mockResolvedValue([])
+    // The archive-derived recount runs (fire-and-forget) but defers: no
+    // mamQueryStates/conversationCoverage were seeded, so coverage down to
+    // the new floor is not proven. The count stays at its last trusted value
+    // (0) rather than either the old page-scoped undercount (9) or a snap to
+    // the true total (19) it cannot yet prove.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
   })
 
-  it('skips the async cache recount when the conversation became active meanwhile', async () => {
+  it('skips the archive recount commit when the conversation became active meanwhile', async () => {
     const cid = 'juliet@capulet.example'
     const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))
     function timedMsg(id: string, stanzaId: string, ts: Date): Message {
@@ -280,7 +292,11 @@ describe('chatStore.applyRemoteDisplayed', () => {
       new Promise<Message[]>((resolve) => { releaseCache = resolve })
     )
     chatStore.getState().mergeMAMMessages(cid, page, { first: 's-ptr' }, false, 'backward')
-    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
+    // PR B: the pointer resolves synchronously, but the count is no longer
+    // written synchronously from this page — the archive-derived recount is
+    // still pending on the gated cache read below, so the count is untouched.
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('p0')
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
 
     // User opens the conversation before the cache read lands; activation owns
     // the recount now — the stale async result must NOT clobber it.
@@ -853,13 +869,22 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
-  it('counts the messages after the marker as unread', () => {
+  // PR B: the count is no longer written synchronously from this page — it is
+  // archive-derived (recomputeUnreadForConversation, triggered fire-and-forget
+  // by both the forward-merge and the marker-resolution paths). With no
+  // mamQueryStates/conversationCoverage seeded, that derivation defers, so the
+  // count stays at its initial value (0) rather than snapping to this page's
+  // own tally (7). The exact-outcome equivalent (real coverage + archive rows)
+  // lives in chatStore.archiveUnread.test.ts.
+  it('the marker resolves the pointer; the count defers without proven coverage', async () => {
     seedFreshConversation()
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
     chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(7)
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
   })
 
   // Control: no remote marker ⇒ a fresh conversation is still caught up.

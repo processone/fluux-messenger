@@ -26,6 +26,11 @@ vi.mock('../utils/messageCache', () => ({
   getMessagesWithEncryptedPayload: vi.fn().mockResolvedValue([]),
   getMessage: vi.fn().mockResolvedValue(null),
   getMessageByStanzaId: vi.fn().mockResolvedValue(null),
+  // PR B (archive-derived unread): recomputeUnreadForConversation's coverage
+  // gate resolves the coverage bottom and counts through these — tests that
+  // exercise the phantom-badge fix past the gate override them.
+  countUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
+  resolveArchivePosition: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
   updateMessageReactions: vi.fn().mockResolvedValue(false),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
@@ -613,21 +618,54 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       })
       // Model the catch-up state: read pointer at 'read-msg', with the two later
       // incoming messages (the real one + the phantom reaction) counted as unread.
+      //
+      // PR B (archive-derived unread): recomputeUnreadForConversation now
+      // derives the corrected count from the durable archive instead of the
+      // resident window, gated on proven MAM coverage — so this also models a
+      // conversation whose catch-up already completed (isCaughtUpToLive, a
+      // coverage record whose bottom resolves at-or-before the floor), which
+      // is the realistic state by the time a deferred decrypt runs. Without
+      // this the derivation would correctly DEFER (see chatStore.test.ts's
+      // "phantom-badge cleanup" describe for that control) and the badge
+      // fix below would not apply — this test proves the fix survives PR B.
+      const readPointer = {
+        messageId: 'read-msg',
+        timestamp: new Date('2026-06-10T00:00:00Z'),
+        archiveOrderKey: { kind: 'chat' as const, id: 'read-msg' },
+      }
       chatStore.setState((s) => {
         const conversationMeta = new Map(s.conversationMeta)
         conversationMeta.set('bob@example.com', {
           ...conversationMeta.get('bob@example.com')!,
           unreadCount: 2,
-          readPointer: { messageId: 'read-msg', timestamp: new Date('2026-06-10T00:00:00Z') },
+          readPointer,
         })
         const conversations = new Map(s.conversations)
         conversations.set('bob@example.com', {
           ...conversations.get('bob@example.com')!,
           unreadCount: 2,
-          readPointer: { messageId: 'read-msg', timestamp: new Date('2026-06-10T00:00:00Z') },
+          readPointer,
         })
-        return { conversationMeta, conversations, activeConversationId: null }
+        const mamQueryStates = new Map(s.mamQueryStates)
+        mamQueryStates.set('bob@example.com', {
+          isLoading: false,
+          error: null,
+          hasQueried: true,
+          isHistoryComplete: true,
+          isCaughtUpToLive: true,
+        })
+        const conversationCoverage = new Map(s.conversationCoverage)
+        conversationCoverage.set('bob@example.com', { bottomId: 'archive-anchor' })
+        return { conversationMeta, conversations, mamQueryStates, conversationCoverage, activeConversationId: null }
       })
+      // The coverage record's bottom resolves to a position strictly before
+      // the floor (proving coverage reaches at least that far back).
+      vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({
+        timestamp: new Date('2026-06-09T23:00:00Z').getTime(),
+        archiveOrderKey: { kind: 'chat', id: 'archive-anchor' },
+      })
+      // Only the genuinely-unread message remains once the reaction ghost drops.
+      vi.mocked(messageCache.countUnreadInArchive).mockResolvedValueOnce({ unread: 1 })
 
       await xmppClient.retryPendingDecrypts()
 

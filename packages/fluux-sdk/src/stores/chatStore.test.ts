@@ -166,16 +166,27 @@ describe('chatStore', () => {
     // Regression: an encrypted reaction/retraction that arrives undecryptable
     // during catch-up is stored as a bodiless placeholder and counted as unread.
     // When a later deferred-decrypt reveals it was a signal and drops it, the
-    // unread badge must drop too. This method reconciles the count against the
-    // read pointer using the resident window (or the durable cache when the
-    // conversation was never opened).
+    // unread badge must drop too.
+    //
+    // PR B (archive-derived unread): this method no longer recomputes from a
+    // resident-window/cache SLICE — it derives the count from the durable
+    // archive, gated on proven MAM coverage down to the read floor (see
+    // chatStore.archiveUnread.test.ts for the full derivation matrix:
+    // exact/deferred/unavailable outcomes, latest-wins, mentionsCount
+    // preservation). Neither test below seeds `mamQueryStates`/
+    // `conversationCoverage`, so the entity is NOT proven caught-up — the
+    // derivation correctly DEFERS and the stale count survives untouched.
+    // That is deliberate: it demonstrates requirement 1 (discard the legacy
+    // count — deferred means "leave the last TRUSTED value alone", not "leave
+    // the last provisional slice-scan result alone") using this exact
+    // regression scenario.
     const cid = 'carol@example.com'
 
     function withId(m: Message, id: string, ts: string): Message {
       return { ...m, id, timestamp: new Date(ts) }
     }
 
-    it('recomputes the count from the resident window after a counted placeholder is dropped', async () => {
+    it('defers (leaves the stale count untouched) when coverage is not yet proven, even with the fix resident', async () => {
       const read = withId(createMessage(cid, 'read'), 'm-read', '2026-06-10T00:00:00Z')
       const realUnread = withId(createMessage(cid, 'still unread'), 'm-real', '2026-06-10T00:02:00Z')
       chatStore.getState().addConversation(createConversation(cid))
@@ -201,11 +212,14 @@ describe('chatStore', () => {
 
       await chatStore.getState().recomputeUnreadForConversation(cid)
 
-      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
-      expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(1)
+      // No mamQueryStates/conversationCoverage seeded → not caught-up → deferred.
+      // The stale trusted value (2) survives; it is NOT recomputed to 1 from
+      // the resident array (that would be the OLD, now-removed, slice-scan).
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(2)
+      expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(2)
     })
 
-    it('recomputes from the durable cache when the conversation is not resident', async () => {
+    it('defers (leaves the stale count untouched) when the conversation is not resident and coverage is not proven', async () => {
       const read = withId(createMessage(cid, 'read'), 'm-read', '2026-06-10T00:00:00Z')
       const realUnread = withId(createMessage(cid, 'still unread'), 'm-real', '2026-06-10T00:02:00Z')
       vi.mocked(messageCache.getMessages).mockResolvedValueOnce([read, realUnread])
@@ -229,7 +243,7 @@ describe('chatStore', () => {
 
       await chatStore.getState().recomputeUnreadForConversation(cid)
 
-      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(1)
+      expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(2)
     })
 
     it('does not touch the active conversation (activation owns its counts)', async () => {
@@ -3482,7 +3496,14 @@ describe('chatStore', () => {
       chatStore.setState({ activeConversationId: 'other@example.com' })
     })
 
-    it('forward merge into a non-active conversation recomputes unread count from the pointer', () => {
+    // PR B: a forward merge into a non-active conversation no longer writes a
+    // page-scoped count synchronously — it schedules recomputeUnreadForConversation
+    // (fire-and-forget), which derives the badge from the durable archive instead
+    // (see chatStore.archiveUnread.test.ts for the exact-outcome path). With no
+    // mamQueryStates/conversationCoverage seeded here, that derivation defers,
+    // so the count stays at its initial value rather than snapping to this
+    // page's own tally (2) — proving the page-scoped write is really gone.
+    it('forward merge into a non-active conversation defers the count until coverage is proven (no page-scoped write)', async () => {
       chatStore.setState((state) => {
         const meta = new Map(state.conversationMeta)
         meta.set(conversationId, {
@@ -3527,11 +3548,14 @@ describe('chatStore', () => {
 
       chatStore.getState().mergeMAMMessages(conversationId, mamMessages, {}, true, 'forward')
 
+      // Let the fire-and-forget archive recount run to completion.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
       const meta = chatStore.getState().conversationMeta.get(conversationId)
-      expect(meta?.unreadCount).toBe(2)
+      expect(meta?.unreadCount).toBe(0)
       // Combined map mirrors meta.
       const conv = chatStore.getState().conversations.get(conversationId)
-      expect(conv?.unreadCount).toBe(2)
+      expect(conv?.unreadCount).toBe(0)
     })
 
     it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
