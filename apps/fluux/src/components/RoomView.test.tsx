@@ -48,7 +48,11 @@ const createRoom = (overrides: Partial<Room> & { occupantsList?: RoomOccupant[] 
   const { occupantsList = [], ...rest } = overrides
   // Convert occupants array to Map keyed by nick
   const occupantsMap = new Map<string, RoomOccupant>()
+  const occupantIdToNick = new Map<string, string>()
   occupantsList.forEach(occ => occupantsMap.set(occ.nick, occ))
+  occupantsList.forEach(occ => {
+    if (occ.occupantId) occupantIdToNick.set(occ.occupantId, occ.nick)
+  })
 
   return {
     jid: 'room@conference.example.com',
@@ -57,6 +61,7 @@ const createRoom = (overrides: Partial<Room> & { occupantsList?: RoomOccupant[] 
     nickname: 'Me', // Our nick in the room
     messages: [],
     occupants: occupantsMap,
+    ...(occupantIdToNick.size > 0 && { occupantIdToNick }),
     typingUsers: new Set<string>(),
     unreadCount: 0,
     mentionsCount: 0,

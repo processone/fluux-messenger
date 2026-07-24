@@ -19,19 +19,143 @@ export interface ResolvedRoomSender {
   counterpartPresent: boolean
 }
 
+export interface ResolvedRoomAvatar {
+  occupant: RoomOccupant | undefined
+  matchedNick: string | undefined
+  avatarUrl: string | undefined
+  avatarIdentifier: string
+  senderBareJid: string | undefined
+  source: 'own' | 'live' | 'occupant-id' | 'jid' | 'nick' | 'fallback'
+}
+
+/**
+ * Resolve one room actor through stable identity first.
+ *
+ * A nickname is only trusted when the message has no XEP-0421 identity, or
+ * when the live occupant under that nick proves the same occupant-id. This
+ * prevents historical messages from inheriting the avatar/JID of a different
+ * person who later recycled the nickname.
+ */
+export function resolveRoomAvatar(
+  subject: { nick: string; occupantId?: string; isOwn?: boolean },
+  room: Room,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  ownAvatar?: string | null,
+): ResolvedRoomAvatar {
+  let occupant: RoomOccupant | undefined
+  let matchedNick: string | undefined
+
+  if (subject.occupantId) {
+    const indexedNick = room.occupantIdToNick?.get(subject.occupantId)
+    const indexedOccupant = indexedNick
+      ? room.occupants.get(indexedNick)
+      : undefined
+    const sameNickOccupant = room.occupants.get(subject.nick)
+    const candidate = indexedOccupant?.occupantId === subject.occupantId
+      ? indexedOccupant
+      : sameNickOccupant?.occupantId === subject.occupantId
+        ? sameNickOccupant
+        : undefined
+    if (candidate) {
+      occupant = candidate
+      matchedNick = candidate.nick
+    }
+  } else {
+    occupant = room.occupants.get(subject.nick)
+    matchedNick = occupant?.nick
+  }
+
+  const senderBareJid = occupant?.jid
+    ? getBareJid(occupant.jid)
+    : subject.occupantId
+      ? room.occupantIdToJidCache?.get(subject.occupantId)
+        || (occupant ? room.nickToJidCache?.get(occupant.nick) : undefined)
+      : room.nickToJidCache?.get(subject.nick)
+  const contactAvatar = senderBareJid
+    ? contactsByJid.get(senderBareJid)?.avatar
+    : undefined
+
+  if (subject.isOwn) {
+    return {
+      occupant,
+      matchedNick,
+      avatarUrl: ownAvatar || undefined,
+      avatarIdentifier: subject.occupantId || senderBareJid || subject.nick,
+      senderBareJid,
+      source: ownAvatar ? 'own' : 'fallback',
+    }
+  }
+
+  if (occupant?.avatar) {
+    return {
+      occupant,
+      matchedNick,
+      avatarUrl: occupant.avatar,
+      avatarIdentifier: subject.occupantId || senderBareJid || subject.nick,
+      senderBareJid,
+      source: 'live',
+    }
+  }
+
+  const stableAvatar = subject.occupantId
+    ? room.occupantIdToAvatarCache?.get(subject.occupantId)
+    : undefined
+  if (stableAvatar) {
+    return {
+      occupant,
+      matchedNick,
+      avatarUrl: stableAvatar,
+      avatarIdentifier: subject.occupantId!,
+      senderBareJid,
+      source: 'occupant-id',
+    }
+  }
+
+  if (contactAvatar) {
+    return {
+      occupant,
+      matchedNick,
+      avatarUrl: contactAvatar,
+      avatarIdentifier: senderBareJid || subject.occupantId || subject.nick,
+      senderBareJid,
+      source: 'jid',
+    }
+  }
+
+  // The nick cache is deliberately session-only. With XEP-0421 it is safe
+  // only when a live occupant proves that this nick still belongs to the same
+  // stable identity.
+  const nickCacheIsSafe = !subject.occupantId
+    || occupant?.occupantId === subject.occupantId
+  const nickAvatar = nickCacheIsSafe
+    ? room.nickToAvatarCache?.get(matchedNick || subject.nick)
+    : undefined
+
+  return {
+    occupant,
+    matchedNick,
+    avatarUrl: nickAvatar,
+    avatarIdentifier: subject.occupantId || senderBareJid || subject.nick,
+    senderBareJid,
+    source: nickAvatar ? 'nick' : 'fallback',
+  }
+}
+
 export function resolveRoomSender(
   message: RoomMessage,
   room: Room,
   contactsByJid: ReadonlyMap<string, ContactIdentity>,
   selfOccupant: RoomOccupant | undefined,
 ): ResolvedRoomSender {
-  let occupant = room.occupants.get(message.nick)
-  let occupantIdMatchNick: string | undefined
-  if (!occupant && message.occupantId) {
-    for (const occ of room.occupants.values()) {
-      if (occ.occupantId === message.occupantId) { occupant = occ; occupantIdMatchNick = occ.nick; break }
-    }
-  }
+  const avatar = resolveRoomAvatar(
+    { nick: message.nick, occupantId: message.occupantId, isOwn: message.isOutgoing },
+    room,
+    contactsByJid,
+  )
+  const occupant = avatar.occupant
+  const occupantIdMatchNick = avatar.matchedNick !== message.nick
+    ? avatar.matchedNick
+    : undefined
   // XEP-0425 §2: only offer moderation when the room advertises message-moderate:1
   // on its own disco#info. `room.supportsModeration` is tri-state — `false` means
   // disco confirmed it's unsupported (hide); `undefined` (disco unresolved) stays
@@ -39,27 +163,26 @@ export function resolveRoomSender(
   const canModerateMsg = !message.isOutgoing && selfOccupant && room.supportsModeration !== false
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
-  // senderBareJidForBan intentionally has NO occupant-id fallback — matches pre-refactor ban-permission behavior
+  // Ban only through an identity alias that cannot be captured by nickname
+  // recycling. XEP-0421 gives departed occupants a stable room-scoped alias;
+  // legacy messages retain the historical nick cache fallback.
   const senderBareJidForBan = occupant?.jid
     ? getBareJid(occupant.jid)
-    : room.nickToJidCache?.get(message.nick)
+    : message.occupantId
+      ? room.occupantIdToJidCache?.get(message.occupantId)
+      : room.nickToJidCache?.get(message.nick)
   const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
     ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
-  // reuse senderBareJidForBan, adding only the occupant-id fallback that the ban path intentionally excludes
-  const senderBareJid = senderBareJidForBan
-    || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
+  const senderBareJid = avatar.senderBareJid
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
-  const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
-    || room.nickToAvatarCache?.get(occupantIdMatchNick ?? '')
-  const senderAvatar = occupant?.avatar || cachedAvatar || contact?.avatar
   const resolvedSenderName = occupantIdMatchNick
     || (contact?.name && !occupant ? contact.name : null)
     || message.nick
   return {
     occupant,
     avatarPresence: room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined,
-    senderAvatar, resolvedSenderName,
+    senderAvatar: avatar.avatarUrl, resolvedSenderName,
     senderRole: occupant?.role,
     senderAffiliation: occupant?.affiliation,
     senderBareJid,
@@ -76,20 +199,21 @@ export function resolveReplyAvatar(
   contactsByJid: ReadonlyMap<string, ContactIdentity>,
   myNick: string | undefined,
   ownAvatar: string | null | undefined,
+  occupantId?: string,
 ): { avatarUrl: string | undefined; avatarIdentifier: string; senderBareJid: string | undefined } {
-  if (nick === myNick && nick) {
-    return { avatarUrl: ownAvatar || undefined, avatarIdentifier: nick, senderBareJid: undefined }
+  if (!nick) {
+    return { avatarUrl: undefined, avatarIdentifier: occupantId || 'unknown', senderBareJid: undefined }
   }
-  const occupantForReply = nick ? room.occupants.get(nick) : undefined
-  const senderBareJid = occupantForReply?.jid
-    ? getBareJid(occupantForReply.jid)
-    : (nick ? room.nickToJidCache?.get(nick) : undefined)
-  const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
-  const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
+  const avatar = resolveRoomAvatar(
+    { nick, occupantId, isOwn: nick === myNick },
+    room,
+    contactsByJid,
+    ownAvatar,
+  )
   return {
-    avatarUrl: occupantForReply?.avatar || cachedReplyAvatar || contactAvatar,
-    avatarIdentifier: nick || 'unknown',
-    senderBareJid,
+    avatarUrl: avatar.avatarUrl,
+    avatarIdentifier: avatar.avatarIdentifier,
+    senderBareJid: avatar.senderBareJid,
   }
 }
 

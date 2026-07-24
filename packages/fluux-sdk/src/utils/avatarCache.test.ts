@@ -12,6 +12,11 @@ import {
   getBlobUrlPoolSize,
   bumpAvatarResumeCount,
   getAvatarResumeCount,
+  saveRoomOccupantAvatarHash,
+  getRoomOccupantAvatarHashes,
+  getAllAvatarHashes,
+  groupRoomOccupantAvatarHashes,
+  seedRoomOccupantAvatarHashes,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
@@ -212,6 +217,197 @@ describe('avatarCache blob URL pool', () => {
       // Pool is cleared, IndexedDB is cleared — should get null
       const url = await getCachedAvatar('hash-abc')
       expect(url).toBeNull()
+    })
+  })
+
+  describe('room-scoped occupant-id mappings', () => {
+    it('restores a stable occupant mapping only in its own room', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'opaque:id/with separators',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'opaque:id/with separators',
+        'hash-b',
+      )
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'opaque:id/with separators', hash: 'hash-a' },
+      ])
+      await expect(
+        getRoomOccupantAvatarHashes('room-b@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'opaque:id/with separators', hash: 'hash-b' },
+      ])
+    })
+
+    it('groups every room from one occupant-mapping snapshot', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'occupant-b',
+        'hash-b',
+      )
+
+      const mappings = await getAllAvatarHashes('occupant')
+      expect(groupRoomOccupantAvatarHashes(mappings)).toEqual(new Map([
+        ['room-a@conference.example.com', new Map([
+          ['occupant-a', 'hash-a'],
+        ])],
+        ['room-b@conference.example.com', new Map([
+          ['occupant-b', 'hash-b'],
+        ])],
+      ]))
+    })
+
+    it('seeds room lookups from an existing full hash-store read', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      const mappings = await getAllAvatarHashes()
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+
+      await seedRoomOccupantAvatarHashes(mappings)
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      expect(getAllSpy).not.toHaveBeenCalled()
+      getAllSpy.mockRestore()
+    })
+
+    it('does not memoize a failed seed as a genuinely empty snapshot', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await seedRoomOccupantAvatarHashes(null)
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+      getAllSpy.mockRestore()
+    })
+
+    it('retries after a transient occupant snapshot read failure', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+        .mockImplementationOnce(() => {
+          throw new Error('transient IndexedDB failure')
+        })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([])
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(2)
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to get avatar hash mappings:',
+        expect.any(Error)
+      )
+
+      warnSpy.mockRestore()
+      getAllSpy.mockRestore()
+    })
+
+    it('preserves write-through updates when a later seed is ignored', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      const staleMappings = await getAllAvatarHashes()
+      await seedRoomOccupantAvatarHashes(staleMappings)
+
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-patched',
+      )
+      const ignoredMappings = staleMappings.map((mapping) => ({
+        ...mapping,
+        hash: 'hash-from-reseed',
+      }))
+      await seedRoomOccupantAvatarHashes(ignoredMappings)
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'occupant-a', hash: 'hash-patched' },
+      ])
+    })
+
+    it('shares one grouped read across room joins and updates it after writes', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'occupant-b',
+        'hash-b',
+      )
+      const getAllSpy = vi.spyOn(IDBIndex.prototype, 'getAll')
+
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-a', hash: 'hash-a' }])
+      await expect(
+        getRoomOccupantAvatarHashes('room-b@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-b', hash: 'hash-b' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+      // Writes after the first join update the loaded snapshot in place, so a
+      // later manual/autojoined room is visible without another full read.
+      await saveRoomOccupantAvatarHash(
+        'room-c@conference.example.com',
+        'occupant-c',
+        'hash-c',
+      )
+      await expect(
+        getRoomOccupantAvatarHashes('room-c@conference.example.com')
+      ).resolves.toEqual([{ occupantId: 'occupant-c', hash: 'hash-c' }])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+      await saveRoomOccupantAvatarHash(
+        'room-c@conference.example.com',
+        'occupant-c',
+        'hash-c-updated',
+      )
+      await expect(
+        getRoomOccupantAvatarHashes('room-c@conference.example.com')
+      ).resolves.toEqual([
+        { occupantId: 'occupant-c', hash: 'hash-c-updated' },
+      ])
+      expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+      await clearAllAvatarData()
+      await expect(
+        getRoomOccupantAvatarHashes('room-a@conference.example.com')
+      ).resolves.toEqual([])
+      expect(getAllSpy).toHaveBeenCalledTimes(2)
+      getAllSpy.mockRestore()
     })
   })
 

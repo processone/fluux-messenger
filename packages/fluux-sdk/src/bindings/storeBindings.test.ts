@@ -322,6 +322,34 @@ describe('createStoreBindings', () => {
         ])
       })
 
+      it('coalesces live and restored updates by stable occupant-id while retaining the nick', () => {
+        mockClient.emit('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          nick: 'Alice',
+          occupantId: 'offline-occ',
+          avatar: 'blob:live',
+          avatarHash: 'live-hash',
+        })
+        mockClient.emit('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          occupantId: 'offline-occ',
+          avatar: 'blob:offline',
+          avatarHash: 'offline-hash',
+        })
+
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          [{
+            nick: 'Alice',
+            occupantId: 'offline-occ',
+            avatar: 'blob:offline',
+            avatarHash: 'offline-hash',
+          }],
+        )
+      })
+
       it('drops a pending flush when bindings are unsubscribed', () => {
         mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' })
 

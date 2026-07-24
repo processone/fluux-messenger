@@ -4,6 +4,8 @@
  * JID → hash mappings are also stored to enable restoration on app restart
  */
 
+import { getBareJid } from '../core/jid'
+
 const DB_NAME = 'fluux-avatar-cache'
 const DB_VERSION = 4
 const STORE_NAME = 'avatars'
@@ -31,12 +33,48 @@ interface CachedAvatar {
   timestamp: number // When cached
 }
 
-export type AvatarEntityType = 'contact' | 'room'
+export type AvatarEntityType = 'contact' | 'room' | 'occupant'
 
 export interface AvatarHashMapping {
   jid: string // JID (primary key)
   hash: string // SHA-1 hash
-  type: AvatarEntityType // 'contact' or 'room'
+  type: AvatarEntityType
+}
+
+export interface RoomOccupantAvatarHashMapping {
+  occupantId: string
+  hash: string
+}
+
+export type RoomOccupantAvatarHashesByRoom =
+  Map<string, Map<string, string>>
+
+const OCCUPANT_HASH_KEY_PREFIX = 'muc-occupant:'
+
+/**
+ * XEP-0421 occupant identifiers are opaque and only stable within one room.
+ * Encode both components so an identifier can never collide with a JID mapping
+ * or with the same opaque value issued by another room.
+ */
+function occupantHashMappingKey(roomJid: string, occupantId: string): string {
+  return `${OCCUPANT_HASH_KEY_PREFIX}${encodeURIComponent(getBareJid(roomJid))}:${encodeURIComponent(occupantId)}`
+}
+
+function parseOccupantHashMappingKey(
+  key: string
+): { roomJid: string; occupantId: string } | null {
+  if (!key.startsWith(OCCUPANT_HASH_KEY_PREFIX)) return null
+  const encoded = key.slice(OCCUPANT_HASH_KEY_PREFIX.length)
+  const separator = encoded.indexOf(':')
+  if (separator < 0) return null
+  try {
+    return {
+      roomJid: decodeURIComponent(encoded.slice(0, separator)),
+      occupantId: decodeURIComponent(encoded.slice(separator + 1)),
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -66,6 +104,17 @@ let dbPromise: Promise<IDBDatabase> | null = null
  * proper cleanup via URL.revokeObjectURL().
  */
 const blobUrlPool = new Map<string, string>()
+
+/**
+ * Lazily shared snapshot of durable XEP-0421 bindings.
+ *
+ * Room joins complete independently, so each `mucJoined` callback asks for one
+ * room. Sharing the grouped snapshot here turns an autojoin burst into one
+ * IndexedDB read without coupling the cache layer to join ordering. Successful
+ * writes update the loaded snapshot below; clearing avatar data drops it.
+ */
+let occupantMappingsByRoomPromise:
+  Promise<RoomOccupantAvatarHashesByRoom> | null = null
 
 /**
  * In-memory set of domains known to block PEP avatar access.
@@ -271,6 +320,19 @@ export async function saveAvatarHash(
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve()
     })
+
+    if (type === 'occupant' && occupantMappingsByRoomPromise) {
+      const parsed = parseOccupantHashMappingKey(jid)
+      if (parsed) {
+        const byRoom = await occupantMappingsByRoomPromise
+        const roomMappings = byRoom.get(parsed.roomJid)
+        if (roomMappings) {
+          roomMappings.set(parsed.occupantId, hash)
+        } else {
+          byRoom.set(parsed.roomJid, new Map([[parsed.occupantId, hash]]))
+        }
+      }
+    }
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -306,14 +368,18 @@ export async function getAvatarHash(jid: string): Promise<string | null> {
 }
 
 /**
- * Get all avatar hash mappings, optionally filtered by type
+ * Read all avatar hash mappings, optionally filtered by type.
+ *
+ * Unlike the public compatibility wrapper below, this returns `null` when the
+ * IndexedDB read fails so memoized callers can distinguish a transient failure
+ * from a genuinely empty store.
  */
-export async function getAllAvatarHashes(
+export async function tryGetAllAvatarHashes(
   type?: AvatarEntityType
-): Promise<AvatarHashMapping[]> {
+): Promise<AvatarHashMapping[] | null> {
   try {
     const db = await getDB()
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const transaction = db.transaction(HASH_STORE_NAME, 'readonly')
       const store = transaction.objectStore(HASH_STORE_NAME)
 
@@ -335,8 +401,109 @@ export async function getAllAvatarHashes(
     if (isIndexedDBAvailable()) {
       console.warn('Failed to get avatar hash mappings:', error)
     }
-    return []
+    return null
   }
+}
+
+/**
+ * Get all avatar hash mappings, optionally filtered by type.
+ *
+ * Keep returning an empty array on storage errors for existing callers.
+ */
+export async function getAllAvatarHashes(
+  type?: AvatarEntityType
+): Promise<AvatarHashMapping[]> {
+  return (await tryGetAllAvatarHashes(type)) ?? []
+}
+
+/**
+ * Persist the avatar hash advertised for one XEP-0421 identity.
+ *
+ * This deliberately stores a room-scoped opaque key rather than treating the
+ * occupant-id as a JID. The avatar blob itself remains globally deduplicated by
+ * hash in the avatars store.
+ */
+export async function saveRoomOccupantAvatarHash(
+  roomJid: string,
+  occupantId: string,
+  hash: string
+): Promise<void> {
+  await saveAvatarHash(
+    occupantHashMappingKey(roomJid, occupantId),
+    hash,
+    'occupant'
+  )
+}
+
+/** Return every persisted occupant-id→hash binding for one room. */
+export async function getRoomOccupantAvatarHashes(
+  roomJid: string
+): Promise<RoomOccupantAvatarHashMapping[]> {
+  if (!occupantMappingsByRoomPromise) {
+    const snapshotPromise = tryGetAllAvatarHashes('occupant').then((mappings) => {
+      if (mappings === null) {
+        // Do not turn a transient IndexedDB failure into a session-long empty
+        // snapshot. The current caller falls back, while the next join retries.
+        if (occupantMappingsByRoomPromise === snapshotPromise) {
+          occupantMappingsByRoomPromise = null
+        }
+        return new Map()
+      }
+      return groupRoomOccupantAvatarHashes(mappings)
+    })
+    occupantMappingsByRoomPromise = snapshotPromise
+  }
+  const mappingsByRoom = await occupantMappingsByRoomPromise
+  const roomMappings = mappingsByRoom.get(getBareJid(roomJid))
+  return roomMappings
+    ? [...roomMappings].map(([occupantId, hash]) => ({ occupantId, hash }))
+    : []
+}
+
+/**
+ * Group persisted XEP-0421 avatar aliases from one hash-store read.
+ *
+ * Blob URL refresh runs across every joined room, so grouping once avoids one
+ * full IndexedDB index read and one full scan per room.
+ */
+export function groupRoomOccupantAvatarHashes(
+  mappings: readonly AvatarHashMapping[]
+): RoomOccupantAvatarHashesByRoom {
+  const byRoom: RoomOccupantAvatarHashesByRoom = new Map()
+  for (const mapping of mappings) {
+    if (mapping.type !== 'occupant') continue
+    const parsed = parseOccupantHashMappingKey(mapping.jid)
+    if (!parsed) continue
+    const roomMappings = byRoom.get(parsed.roomJid)
+    if (roomMappings) {
+      roomMappings.set(parsed.occupantId, mapping.hash)
+    } else {
+      byRoom.set(
+        parsed.roomJid,
+        new Map([[parsed.occupantId, mapping.hash]])
+      )
+    }
+  }
+  return byRoom
+}
+
+/**
+ * Seed the shared occupant snapshot from a broader hash-store read.
+ *
+ * Blob URL refresh already reads every mapping, so reusing that result avoids
+ * a second grouping while preserving a snapshot that another caller loaded.
+ */
+export async function seedRoomOccupantAvatarHashes(
+  mappings: readonly AvatarHashMapping[] | null
+): Promise<RoomOccupantAvatarHashesByRoom> {
+  if (!occupantMappingsByRoomPromise && mappings !== null) {
+    occupantMappingsByRoomPromise = Promise.resolve(
+      groupRoomOccupantAvatarHashes(mappings)
+    )
+  }
+  // `null` denotes a failed read. Reuse an existing good snapshot if present,
+  // but never memoize an empty replacement for the failed read.
+  return occupantMappingsByRoomPromise ?? new Map()
 }
 
 /**
@@ -353,6 +520,7 @@ export async function clearAllAvatarHashes(): Promise<void> {
       request.onerror = () => reject(request.error)
       request.onsuccess = () => resolve()
     })
+    occupantMappingsByRoomPromise = null
   } catch (error) {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
@@ -672,6 +840,7 @@ export function _resetPepForbiddenDomainsForTesting(): void {
  */
 export function _resetDBForTesting(): void {
   dbPromise = null
+  occupantMappingsByRoomPromise = null
 }
 
 /**

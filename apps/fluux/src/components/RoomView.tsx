@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
@@ -994,6 +994,10 @@ export const RoomMessageList = memo(function RoomMessageList({
     return ids
   }, [messages])
 
+  // Resolve reply identities once per resident message window. The lookup
+  // includes stanza/origin aliases, matching reply resolution elsewhere.
+  const messagesById = useMemo(() => createMessageLookup(messages), [messages])
+
   // Set of known occupant nicknames for IRC-style mention highlighting.
   // Ref-stable across presence (show/status) churn — only changes when the nick
   // SET changes — so it does not bust every memoized row on each presence stanza.
@@ -1107,7 +1111,15 @@ export const RoomMessageList = memo(function RoomMessageList({
       // avatar is resolved here so it can be passed down as a memo-safe primitive.
       // replyNick may be undefined (no `to`); resolveReplyAvatar handles that safely.
       const replyNick = msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined
-      const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
+      const replyOccupantId = messagesById.get(msg.replyTo.id)?.occupantId
+      const ra = resolveReplyAvatar(
+        replyNick,
+        room,
+        contactsByJid,
+        room.nickname,
+        ownAvatar,
+        replyOccupantId,
+      )
       replyAvatarUrl = ra.avatarUrl
       replyAvatarIdentifier = ra.avatarIdentifier
       replyBareJid = ra.senderBareJid

@@ -313,8 +313,25 @@ export interface RoomRuntime {
   occupants: Map<string, RoomOccupant>
   /** Cache of nick→bareJid for users who have left (non-anonymous rooms only) */
   nickToJidCache?: Map<string, string>
+  /**
+   * Session cache of XEP-0421 occupant-id→bareJid aliases.
+   * Unlike nickToJidCache, this remains safe when a nickname is recycled.
+   */
+  occupantIdToJidCache?: Map<string, string>
+  /**
+   * Live XEP-0421 occupant-id→nick index.
+   * This only contains current occupants and makes stable-identity resolution
+   * an O(1) lookup on message render paths.
+   */
+  occupantIdToNick?: Map<string, string>
   /** Cache of nick→avatar blob URL for users who have left (preserves avatars across leave/join) */
   nickToAvatarCache?: Map<string, string>
+  /**
+   * Cache of room-scoped XEP-0421 occupant-id→avatar blob URL.
+   * Hydrated from IndexedDB on join so anonymous occupants keep their avatars
+   * across reconnects, nick changes, and application restarts.
+   */
+  occupantIdToAvatarCache?: Map<string, string>
   /** Affiliated members discovered via XEP-0045 admin query (includes offline members) */
   affiliatedMembers?: RoomMember[]
   /** Our own occupant info (when joined) */

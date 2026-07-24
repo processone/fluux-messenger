@@ -324,7 +324,7 @@ export class MUC extends BaseModule {
         this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
         if (avatarHash) {
-          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+          this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
         }
         return
       }
@@ -390,7 +390,7 @@ export class MUC extends BaseModule {
 
       // XEP-0398: Trigger avatar fetch if occupant has avatar hash (skip self - we use own avatar)
       if (avatarHash) {
-        this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+        this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
       }
     } else {
       // Check if room is in joining state - buffer occupants to reduce re-renders
@@ -410,7 +410,7 @@ export class MUC extends BaseModule {
         if (avatarHash) {
           const existing = room?.occupants.get(nick)
           if (existing?.avatarHash !== avatarHash || !existing?.avatar) {
-            this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+            this.emitOccupantAvatarUpdate(roomJid, nick, avatarHash, realJid, occupantId)
           }
         }
       }
@@ -427,6 +427,16 @@ export class MUC extends BaseModule {
       clearTimeout(pending.timeoutId)
       this.pendingJoins.delete(roomJid)
     }
+  }
+
+  private emitOccupantAvatarUpdate(
+    roomJid: string,
+    nick: string,
+    avatarHash: string,
+    realJid?: string,
+    occupantId?: string,
+  ): void {
+    this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId)
   }
 
   /**
@@ -556,7 +566,13 @@ export class MUC extends BaseModule {
       // XEP-0398: Trigger avatar fetch for all occupants with avatar hashes
       for (const occupant of occupants) {
         if (occupant.avatarHash) {
-          this.deps.emit('occupantAvatarUpdate', roomJid, occupant.nick, occupant.avatarHash, occupant.jid)
+          this.emitOccupantAvatarUpdate(
+            roomJid,
+            occupant.nick,
+            occupant.avatarHash,
+            occupant.jid,
+            occupant.occupantId,
+          )
         }
       }
     }
