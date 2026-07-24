@@ -94,7 +94,8 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
         'room@conference.example.org',
         'TestUser',
         'abc123avatarhash',
-        undefined // no real JID in semi-anonymous room
+        undefined, // no real JID in semi-anonymous room
+        undefined, // no occupant-id advertised
       )
     })
 
@@ -413,7 +414,8 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
         'room@conference.example.org',
         'TestUser',
         'abc123avatarhash',
-        undefined
+        undefined,
+        undefined,
       )
     })
 
@@ -471,7 +473,8 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
         'room@conference.example.org',
         'TestUser',
         'new-hash',
-        undefined
+        undefined,
+        undefined,
       )
     })
   })

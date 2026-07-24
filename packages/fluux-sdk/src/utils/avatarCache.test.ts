@@ -14,6 +14,8 @@ import {
   getAvatarResumeCount,
   saveRoomOccupantAvatarHash,
   getRoomOccupantAvatarHashes,
+  getAllAvatarHashes,
+  groupRoomOccupantAvatarHashes,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
@@ -240,6 +242,29 @@ describe('avatarCache blob URL pool', () => {
       ).resolves.toEqual([
         { occupantId: 'opaque:id/with separators', hash: 'hash-b' },
       ])
+    })
+
+    it('groups every room from one occupant-mapping snapshot', async () => {
+      await saveRoomOccupantAvatarHash(
+        'room-a@conference.example.com',
+        'occupant-a',
+        'hash-a',
+      )
+      await saveRoomOccupantAvatarHash(
+        'room-b@conference.example.com',
+        'occupant-b',
+        'hash-b',
+      )
+
+      const mappings = await getAllAvatarHashes('occupant')
+      expect(groupRoomOccupantAvatarHashes(mappings)).toEqual(new Map([
+        ['room-a@conference.example.com', [
+          { occupantId: 'occupant-a', hash: 'hash-a' },
+        ]],
+        ['room-b@conference.example.com', [
+          { occupantId: 'occupant-b', hash: 'hash-b' },
+        ]],
+      ]))
     })
   })
 

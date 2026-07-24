@@ -46,12 +46,19 @@ export function resolveRoomAvatar(
   let matchedNick: string | undefined
 
   if (subject.occupantId) {
-    for (const candidate of room.occupants.values()) {
-      if (candidate.occupantId === subject.occupantId) {
-        occupant = candidate
-        matchedNick = candidate.nick
-        break
-      }
+    const indexedNick = room.occupantIdToNick?.get(subject.occupantId)
+    const indexedOccupant = indexedNick
+      ? room.occupants.get(indexedNick)
+      : undefined
+    const sameNickOccupant = room.occupants.get(subject.nick)
+    const candidate = indexedOccupant?.occupantId === subject.occupantId
+      ? indexedOccupant
+      : sameNickOccupant?.occupantId === subject.occupantId
+        ? sameNickOccupant
+        : undefined
+    if (candidate) {
+      occupant = candidate
+      matchedNick = candidate.nick
     }
   } else {
     occupant = room.occupants.get(subject.nick)
@@ -156,10 +163,14 @@ export function resolveRoomSender(
   const canModerateMsg = !message.isOutgoing && selfOccupant && room.supportsModeration !== false
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
-  // senderBareJidForBan intentionally has NO occupant-id fallback — matches pre-refactor ban-permission behavior
+  // Ban only through an identity alias that cannot be captured by nickname
+  // recycling. XEP-0421 gives departed occupants a stable room-scoped alias;
+  // legacy messages retain the historical nick cache fallback.
   const senderBareJidForBan = occupant?.jid
     ? getBareJid(occupant.jid)
-    : (!message.occupantId ? room.nickToJidCache?.get(message.nick) : undefined)
+    : message.occupantId
+      ? room.occupantIdToJidCache?.get(message.occupantId)
+      : room.nickToJidCache?.get(message.nick)
   const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
     ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false

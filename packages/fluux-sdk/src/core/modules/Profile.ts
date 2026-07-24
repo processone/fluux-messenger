@@ -12,6 +12,7 @@ import {
   getAllAvatarHashes,
   saveRoomOccupantAvatarHash,
   getRoomOccupantAvatarHashes,
+  groupRoomOccupantAvatarHashes,
   hasNoAvatar,
   markNoAvatar,
   clearNoAvatar,
@@ -305,9 +306,6 @@ export class Profile extends BaseModule {
     // Check cache first using the hash
     const cachedUrl = await getCachedAvatar(avatarHash)
     if (cachedUrl) {
-      if (realJid) {
-        await saveAvatarHash(getBareJid(realJid), avatarHash, 'contact')
-      }
       if (occupantId) {
         await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
       }
@@ -1060,6 +1058,7 @@ export class Profile extends BaseModule {
       const ownBareJid = currentJid ? getBareJid(currentJid) : null
 
       const hashMappings = await getAllAvatarHashes()
+      const occupantMappingsByRoom = groupRoomOccupantAvatarHashes(hashMappings)
       for (const mapping of hashMappings) {
         const url = freshUrls.get(mapping.hash)
         if (!url) continue
@@ -1139,16 +1138,18 @@ export class Profile extends BaseModule {
         // live occupant map, but their room-scoped hash bindings are durable.
         if (
           this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms
-          && !room.isNonAnonymous
+          && room.isNonAnonymous === false
         ) {
           continue
         }
-        const stableMappings = await getRoomOccupantAvatarHashes(room.jid)
+        const stableMappings = occupantMappingsByRoom.get(getBareJid(room.jid)) ?? []
         for (const { occupantId, hash } of stableMappings) {
           const url = freshUrls.get(hash)
           if (!url) continue
+          const nick = room.occupantIdToNick?.get(occupantId)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid: room.jid,
+            ...(nick && { nick }),
             occupantId,
             avatar: url,
             avatarHash: hash,
@@ -1195,14 +1196,16 @@ export class Profile extends BaseModule {
       // room-scoped identity, including occupants who are already offline.
       const anonymousRestoreDisabled =
         this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms
-        && !room.isNonAnonymous
+        && room.isNonAnonymous === false
       if (!anonymousRestoreDisabled) {
         const stableMappings = await getRoomOccupantAvatarHashes(roomJid)
         for (const { occupantId, hash } of stableMappings) {
           const cachedUrl = await getCachedAvatar(hash)
           if (!cachedUrl) continue
+          const nick = room.occupantIdToNick?.get(occupantId)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
+            ...(nick && { nick }),
             occupantId,
             avatar: cachedUrl,
             avatarHash: hash,

@@ -30,7 +30,7 @@ import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from 
 import { resolveRoomAvatar } from './conversation/roomSenderResolution'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
-import { auroraSenderColor } from '@/utils/senderColor'
+import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { ArrowLeft, ExternalLink, Search } from 'lucide-react'
 
 /** Number of messages to load on each side of the target */
@@ -487,9 +487,13 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       avatarIdentifier = avatar?.avatarIdentifier
         || roomMsg.occupantId
         || `${roomMsg.roomJid}/${roomMsg.nick}`
-      avatarUrl = avatar?.avatarUrl
+      avatarUrl = roomMsg.isOutgoing ? (ownAvatar || undefined) : avatar?.avatarUrl
       senderColor = auroraSenderColor(
-        roomMsg.occupantId || avatar?.senderBareJid || roomMsg.nick,
+        nickColorSeed({
+          occupantId: roomMsg.occupantId,
+          bareJid: avatar?.senderBareJid,
+          nick: roomMsg.nick,
+        }),
         isDarkMode ?? true,
       )
       senderJid = avatar?.senderBareJid

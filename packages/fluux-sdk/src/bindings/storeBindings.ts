@@ -363,23 +363,23 @@ export function createStoreBindings(
   const flushOccupantAvatars = () => {
     avatarFlushTimer = null
     const stores = getStores()
-    for (const [roomJid, byNick] of pendingOccupantAvatars) {
-      stores.room.updateOccupantAvatars(roomJid, [...byNick.values()])
+    for (const [roomJid, byIdentity] of pendingOccupantAvatars) {
+      stores.room.updateOccupantAvatars(roomJid, [...byIdentity.values()])
     }
     pendingOccupantAvatars.clear()
   }
 
   on('room:occupant-avatar', ({ roomJid, nick, occupantId, avatar, avatarHash }) => {
-    let byNick = pendingOccupantAvatars.get(roomJid)
-    if (!byNick) {
-      byNick = new Map()
-      pendingOccupantAvatars.set(roomJid, byNick)
+    let byIdentity = pendingOccupantAvatars.get(roomJid)
+    if (!byIdentity) {
+      byIdentity = new Map()
+      pendingOccupantAvatars.set(roomJid, byIdentity)
     }
     // Prefer the stable occupant-id as the coalescing key. Restored offline
     // identities deliberately have no nick, while live updates carry both.
     const identityKey = occupantId ? `id:${occupantId}` : `nick:${nick ?? ''}`
-    const previous = byNick.get(identityKey)
-    byNick.set(identityKey, {
+    const previous = byIdentity.get(identityKey)
+    byIdentity.set(identityKey, {
       ...previous,
       ...(nick !== undefined && { nick }),
       ...(occupantId !== undefined && { occupantId }),

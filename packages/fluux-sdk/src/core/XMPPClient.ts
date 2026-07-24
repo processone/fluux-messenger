@@ -768,10 +768,13 @@ export class XMPPClient {
           // Same hash and already have avatar blob - skip fetch
           return
         }
-        const fetch = occupantId
-          ? this.profile.fetchOccupantAvatar(roomJid, nick, hash, realJid, occupantId)
-          : this.profile.fetchOccupantAvatar(roomJid, nick, hash, realJid)
-        fetch.catch(() => {})
+        this.profile.fetchOccupantAvatar(
+          roomJid,
+          nick,
+          hash,
+          realJid,
+          occupantId,
+        ).catch(() => {})
       })
 
       // Listen for avatar metadata updates (XEP-0084)

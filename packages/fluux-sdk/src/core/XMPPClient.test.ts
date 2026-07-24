@@ -1914,7 +1914,8 @@ describe('XMPPClient', () => {
         'room@conference.example.com',
         'TestUser',
         'abc123hash',
-        'realuser@example.com'
+        'realuser@example.com',
+        undefined,
       )
     })
 
@@ -2012,7 +2013,8 @@ describe('XMPPClient', () => {
         'room@conference.example.com',
         'TestUser',
         'newhash456',
-        'realuser@example.com'
+        'realuser@example.com',
+        undefined,
       )
     })
   })

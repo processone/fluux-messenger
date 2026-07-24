@@ -436,13 +436,7 @@ export class MUC extends BaseModule {
     realJid?: string,
     occupantId?: string,
   ): void {
-    // Preserve the historical four-argument event shape for servers without
-    // XEP-0421 while threading the stable identity when it is advertised.
-    if (occupantId) {
-      this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId)
-    } else {
-      this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
-    }
+    this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid, occupantId)
   }
 
   /**

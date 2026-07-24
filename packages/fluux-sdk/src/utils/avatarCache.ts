@@ -46,6 +46,9 @@ export interface RoomOccupantAvatarHashMapping {
   hash: string
 }
 
+export type RoomOccupantAvatarHashesByRoom =
+  Map<string, RoomOccupantAvatarHashMapping[]>
+
 const OCCUPANT_HASH_KEY_PREFIX = 'muc-occupant:'
 
 /**
@@ -397,17 +400,33 @@ export async function saveRoomOccupantAvatarHash(
 export async function getRoomOccupantAvatarHashes(
   roomJid: string
 ): Promise<RoomOccupantAvatarHashMapping[]> {
-  const bareRoomJid = getBareJid(roomJid)
   const mappings = await getAllAvatarHashes('occupant')
-  const result: RoomOccupantAvatarHashMapping[] = []
+  return groupRoomOccupantAvatarHashes(mappings).get(getBareJid(roomJid)) ?? []
+}
 
+/**
+ * Group persisted XEP-0421 avatar aliases from one hash-store read.
+ *
+ * Blob URL refresh runs across every joined room, so grouping once avoids one
+ * full IndexedDB index read and one full scan per room.
+ */
+export function groupRoomOccupantAvatarHashes(
+  mappings: readonly AvatarHashMapping[]
+): RoomOccupantAvatarHashesByRoom {
+  const byRoom: RoomOccupantAvatarHashesByRoom = new Map()
   for (const mapping of mappings) {
+    if (mapping.type !== 'occupant') continue
     const parsed = parseOccupantHashMappingKey(mapping.jid)
-    if (!parsed || parsed.roomJid !== bareRoomJid) continue
-    result.push({ occupantId: parsed.occupantId, hash: mapping.hash })
+    if (!parsed) continue
+    const roomMappings = byRoom.get(parsed.roomJid)
+    const entry = { occupantId: parsed.occupantId, hash: mapping.hash }
+    if (roomMappings) {
+      roomMappings.push(entry)
+    } else {
+      byRoom.set(parsed.roomJid, [entry])
+    }
   }
-
-  return result
+  return byRoom
 }
 
 /**

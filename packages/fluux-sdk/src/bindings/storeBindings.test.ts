@@ -322,7 +322,14 @@ describe('createStoreBindings', () => {
         ])
       })
 
-      it('coalesces a restored offline occupant by stable occupant-id without a nick', () => {
+      it('coalesces live and restored updates by stable occupant-id while retaining the nick', () => {
+        mockClient.emit('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          nick: 'Alice',
+          occupantId: 'offline-occ',
+          avatar: 'blob:live',
+          avatarHash: 'live-hash',
+        })
         mockClient.emit('room:occupant-avatar', {
           roomJid: 'room@conference.example.com',
           occupantId: 'offline-occ',
@@ -335,6 +342,7 @@ describe('createStoreBindings', () => {
         expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith(
           'room@conference.example.com',
           [{
+            nick: 'Alice',
             occupantId: 'offline-occ',
             avatar: 'blob:offline',
             avatarHash: 'offline-hash',

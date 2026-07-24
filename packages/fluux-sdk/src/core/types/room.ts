@@ -318,6 +318,12 @@ export interface RoomRuntime {
    * Unlike nickToJidCache, this remains safe when a nickname is recycled.
    */
   occupantIdToJidCache?: Map<string, string>
+  /**
+   * Live XEP-0421 occupant-id→nick index.
+   * This only contains current occupants and makes stable-identity resolution
+   * an O(1) lookup on message render paths.
+   */
+  occupantIdToNick?: Map<string, string>
   /** Cache of nick→avatar blob URL for users who have left (preserves avatars across leave/join) */
   nickToAvatarCache?: Map<string, string>
   /**

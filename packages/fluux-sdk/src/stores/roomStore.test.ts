@@ -3055,6 +3055,72 @@ describe('roomStore', () => {
       expect(occ?.avatar).toBeUndefined()
       expect(occ?.avatarHash).toBe('hash999')
     })
+
+    it('maintains an O(1) live occupant-id index across nick changes and leaves', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'alice-old',
+        occupantId: 'occ-alice',
+        affiliation: 'member',
+        role: 'participant',
+      })
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'alice-new',
+        occupantId: 'occ-alice',
+        affiliation: 'member',
+        role: 'participant',
+      })
+
+      expect(
+        roomStore.getState().rooms
+          .get('test@conference.example.com')
+          ?.occupantIdToNick?.get('occ-alice')
+      ).toBe('alice-new')
+
+      // A delayed unavailable presence for the old nick must not erase the
+      // current alias established by the nick-change presence.
+      roomStore.getState().removeOccupant(
+        'test@conference.example.com',
+        'alice-old',
+      )
+      expect(
+        roomStore.getState().rooms
+          .get('test@conference.example.com')
+          ?.occupantIdToNick?.get('occ-alice')
+      ).toBe('alice-new')
+
+      roomStore.getState().removeOccupant(
+        'test@conference.example.com',
+        'alice-new',
+      )
+      expect(
+        roomStore.getState().rooms
+          .get('test@conference.example.com')
+          ?.occupantIdToNick?.has('occ-alice')
+      ).toBe(false)
+    })
+
+    it('indexes occupants already present when a room is added', () => {
+      roomStore.getState().addRoom(createRoom(
+        'test@conference.example.com',
+        {
+          occupants: new Map([
+            ['Alice', {
+              nick: 'Alice',
+              occupantId: 'occ-alice',
+              affiliation: 'member',
+              role: 'participant',
+            }],
+          ]),
+        },
+      ))
+
+      expect(
+        roomStore.getState().rooms
+          .get('test@conference.example.com')
+          ?.occupantIdToNick?.get('occ-alice')
+      ).toBe('Alice')
+    })
   })
 
   describe('updateOccupantAvatars (batch)', () => {
@@ -3137,6 +3203,28 @@ describe('roomStore', () => {
       expect(room?.occupants.get('alice')?.avatar).toBeUndefined()
       expect(room?.nickToAvatarCache?.get('alice')).toBeUndefined()
       expect(room?.occupantIdToAvatarCache?.get('old-person')).toBe('blob:old-person')
+    })
+
+    it('threads occupant-id through the singular avatar update helper', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'alice',
+        occupantId: 'occ-alice',
+        affiliation: 'member',
+        role: 'participant',
+      })
+
+      roomStore.getState().updateOccupantAvatar(
+        'test@conference.example.com',
+        'alice',
+        'blob:alice',
+        'hash-alice',
+        'occ-alice',
+      )
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.occupants.get('alice')?.avatar).toBe('blob:alice')
+      expect(room?.occupantIdToAvatarCache?.get('occ-alice')).toBe('blob:alice')
     })
 
     it('does nothing for an unknown room', () => {
