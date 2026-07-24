@@ -36,10 +36,16 @@ class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
     return this.ensureKeyMaterial(jid)
   }
   callEncryptToRecipient(jid: string, recipientPub: string, plaintext: string) {
-    return this.encryptToRecipient(jid, recipientPub, plaintext)
+    return this.encryptToRecipients(jid, [recipientPub], plaintext)
+  }
+  callEncryptToRecipients(jid: string, recipientPubs: string[], plaintext: string) {
+    return this.encryptToRecipients(jid, recipientPubs, plaintext)
   }
   callDecryptWithOwnKey(jid: string, ciphertext: string, senderPub: string | null) {
-    return this.decryptWithOwnKey(jid, ciphertext, senderPub)
+    return this.decryptWithOwnKey(jid, ciphertext, senderPub ? [senderPub] : [])
+  }
+  callDecryptWithSenders(jid: string, ciphertext: string, senderPubs: string[]) {
+    return this.decryptWithOwnKey(jid, ciphertext, senderPubs)
   }
   callValidateCert(armored: string) {
     return this.validateCert(armored)
@@ -1186,9 +1192,10 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.securityContext.notes).toBeUndefined()
       // Attribution: the carbon doesn't reveal which sibling device
       // originated the send, so the message is attributed to our bare
-      // JID with our own signing fingerprint.
+      // JID with our own signing fingerprint (upper-cased XEP-0373 wire form,
+      // matching Sequoia — see toXep0373Fingerprint).
       expect(decrypted.senderDevice.jid).toBe('alice@example.com')
-      expect(decrypted.senderDevice.deviceId).toBe(aliceBundle.fingerprint)
+      expect(decrypted.senderDevice.deviceId).toBe(aliceBundle.fingerprint.toUpperCase())
     })
 
     it('rejects a self-outgoing decrypt when the envelope <to/> does not name the conversation peer', async () => {
@@ -1355,10 +1362,138 @@ describe('WebOpenPGPPlugin', () => {
 
       expect(decrypted.signatureVerified).toBe(true)
       // Must be the full 40-char v4 fingerprint, matching Alice's primary FP.
-      expect(decrypted.signerFingerprint).toMatch(/^[a-f0-9]{40}$/)
+      // Upper-cased to the XEP-0373 wire form (toXep0373Fingerprint), matching
+      // Sequoia's UPPERCASE hex so cross-backend trust lookups agree.
+      expect(decrypted.signerFingerprint).toMatch(/^[A-F0-9]{40}$/)
       expect(decrypted.signerFingerprint!.toLowerCase()).toBe(
         aliceBundle.fingerprint.toLowerCase(),
       )
+    })
+  })
+
+  describe('multi-key crypto (OX #1059)', () => {
+    it('encrypts to two recipients and each decrypts', async () => {
+      // OX may advertise several public keys for one JID. encryptToRecipients
+      // must encrypt to EVERY supplied recipient key so each holder can read
+      // the message — not just the first.
+      const alice = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('alice-strong-pp')
+      await alice.init(ctx)
+      await alice.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, readMessage, decrypt } = await import('openpgp')
+      const { privateKey: privA, publicKey: pubA } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+      const { privateKey: privB, publicKey: pubB } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:carol@example.com' }],
+        format: 'object',
+      })
+
+      const ciphertext = await alice.callEncryptToRecipients(
+        'alice@example.com',
+        [pubA.armor(), pubB.armor()],
+        'multi-recipient hello',
+      )
+
+      for (const priv of [privA, privB]) {
+        const { data } = await decrypt({
+          message: await readMessage({ armoredMessage: ciphertext }),
+          decryptionKeys: priv,
+        })
+        expect(data).toBe('multi-recipient hello')
+      }
+    })
+
+    it('verifies a signature from any of several sender keys and returns the PRIMARY fingerprint', async () => {
+      const alice = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('alice-strong-pp')
+      await alice.init(ctx)
+      const ownBundle = await alice.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: decoy } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:decoy@example.com' }],
+        format: 'object',
+      })
+      const { privateKey: signer } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'signed by one of several' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: signer,
+        format: 'armored',
+      })
+
+      // The signer is the SECOND key supplied — verification must find it
+      // among the candidates, not assume the first.
+      const decrypted = await alice.callDecryptWithSenders('alice@example.com', ciphertext, [
+        decoy.toPublic().armor(),
+        signer.toPublic().armor(),
+      ])
+
+      expect(decrypted.plaintext).toBe('signed by one of several')
+      expect(decrypted.signatureStatus).toBe('verified')
+      expect(decrypted.signatureVerified).toBe(true)
+      expect(decrypted.signaturePresent).toBe(true)
+      // The PRIMARY certificate fingerprint of the signer, upper-cased — NOT
+      // the signature's short key ID (which would break trust lookups).
+      expect(decrypted.signerFingerprint).toBe(signer.getFingerprint().toUpperCase())
+    })
+
+    it('reports missing-key with null fingerprint when the signing key is absent', async () => {
+      const alice = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('alice-strong-pp')
+      await alice.init(ctx)
+      const ownBundle = await alice.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: decoy } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:decoy@example.com' }],
+        format: 'object',
+      })
+      const { privateKey: signer } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'signed but signer not supplied' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: signer,
+        format: 'armored',
+      })
+
+      // Only a decoy sender key is supplied — the real signer is absent, so
+      // verification cannot be attempted: missing-key, not a bad signature.
+      const decrypted = await alice.callDecryptWithSenders('alice@example.com', ciphertext, [
+        decoy.toPublic().armor(),
+      ])
+
+      expect(decrypted.plaintext).toBe('signed but signer not supplied')
+      expect(decrypted.signatureStatus).toBe('missing-key')
+      expect(decrypted.signatureVerified).toBe(false)
+      expect(decrypted.signaturePresent).toBe(true)
+      expect(decrypted.signerFingerprint).toBeNull()
     })
   })
 
@@ -2225,7 +2360,7 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/not cached/)
     })
 
-    it('rejects when the signature does not match the cached sender cert (Case A)', async () => {
+    it('bakes untrusted (defers) when the cached cert is a different key than the signer', async () => {
       const { shared, alice, bob } = await buildCrossPublishedPair()
 
       await alice.plugin.probePeer('bob@example.com')
@@ -2251,7 +2386,12 @@ describe('WebOpenPGPPlugin', () => {
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
 
-      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toThrow(/signature did not verify/)
+      // The real-alice signature verifies against none of the certs we hold
+      // (only eve's) → `missing-key`, not a forgery. The message is delivered
+      // untrusted and deferred, not permanently rejected. (A genuine forgery
+      // from a cached signer — status 'bad' — is what gets rejected.)
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-subst' })
+      expect(decrypted.securityContext.trust).toBe('untrusted')
     })
 
     it('rejects an envelope whose <time/> is more than 7 days skewed', async () => {
@@ -2308,6 +2448,10 @@ describe('WebOpenPGPPlugin', () => {
         .mockImplementation(async (...args) => ({
           ...(await real(...args)),
           signatureVerified: false,
+          // A clock-skew failure means the issuer cert WAS identified but the
+          // signature did not verify (creation time ahead) → status 'bad' with
+          // the not-yet-valid flag, which the decrypt path treats as transient.
+          signatureStatus: 'bad',
           signatureNotYetValid: true,
           signerFingerprint: null,
         }))
@@ -2368,27 +2512,35 @@ describe('WebOpenPGPPlugin', () => {
         expect(bob.securityUpdates).toHaveLength(0)
       })
 
-      it('stash-then-verify-fails rejects the entry when key arrives (Case D)', async () => {
+      it('does not falsely reject a genuine message when a decoy key of a different identity later appears', async () => {
         const { shared, alice, bob } = await buildCrossPublishedPair()
 
         await alice.plugin.probePeer('bob@example.com')
         const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
         const payload = await alice.plugin.encrypt(handle, encodeBody('from real alice'))
 
-        // Bob decrypts without alice's key → stashed
+        // Bob decrypts before caching alice's key → stashed (missing-key). The
+        // missing-key branch fetches alice's real, currently-announced key.
         clearSessionPassphrase()
         setSessionPassphrase('bob-strong-pp')
         const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
         const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
         await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-mismatch' })
+        // Wait for the missing-key refetch to cache alice's real key (the only
+        // key in shared PEP right now) BEFORE eve overwrites it.
+        await vi.waitFor(
+          () =>
+            expect(bob.plugin.getPeerFingerprints('alice@example.com').length).toBeGreaterThan(0),
+          { timeout: 5000 },
+        )
 
-        // Bob later sees eve's key advertised as alice (server misbehavior).
-        // Eve's key carries UID xmpp:alice@example.com so probePeer accepts it.
+        // Eve substitutes her key as alice's (server misbehavior). Alice's real
+        // key departs the announced set → retained INACTIVE, still eligible for
+        // the already-received message (receivedAt < its inactiveAt).
         clearSessionPassphrase()
         setSessionPassphrase('eve-strong-pp')
         const eve = new TestableWebOpenPGPPlugin()
-        const eveCtx = makeCtx('alice@example.com').ctx
-        await eve.init(eveCtx)
+        await eve.init(makeCtx('alice@example.com').ctx)
         const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
         publishKeyToSharedPep(shared, 'alice@example.com', eveBundle)
 
@@ -2396,9 +2548,21 @@ describe('WebOpenPGPPlugin', () => {
         setSessionPassphrase('bob-strong-pp')
         bob.plugin.onPeerKeysChanged('alice@example.com')
 
-        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
-        expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
-        expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
+        // The genuine message — signed by alice while her key was current —
+        // still verifies against the receivedAt-eligible retained key → tofu,
+        // NEVER a false rejection just because a decoy key later appeared.
+        await vi.waitFor(
+          () =>
+            expect(
+              bob.securityUpdates.some(
+                (u) => u.messageId === 'm-mismatch' && u.securityContext.trust === 'tofu',
+              ),
+            ).toBe(true),
+          { timeout: 5000 },
+        )
+        expect(
+          bob.securityUpdates.filter((u) => u.securityContext.trust === 'rejected'),
+        ).toHaveLength(0)
       })
 
       it('preserves the entry on a transient re-verify error instead of falsely rejecting', async () => {

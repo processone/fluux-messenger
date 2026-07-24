@@ -90,14 +90,14 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     return !(await this.hasPersistedKey())
   }
 
-  protected async encryptToRecipient(
-    senderAccountJid: string,
-    recipientPublicArmored: string,
+  protected async encryptToRecipients(
+    accountJid: string,
+    recipientPublics: string[],
     plaintext: string,
   ): Promise<string> {
     return this.invoke<string>('openpgp_encrypt', {
-      senderAccountJid,
-      recipientPublicArmored,
+      senderAccountJid: accountJid,
+      recipientPublicArmored: recipientPublics,
       plaintext,
     })
   }
@@ -105,19 +105,13 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   protected async decryptWithOwnKey(
     accountJid: string,
     ciphertext: string,
-    senderPublicArmored: string | null,
+    senderPublics: string[],
   ): Promise<DecryptOutput> {
-    const rust = await this.invoke<{
-      plaintext: string
-      signatureVerified: boolean
-      signerFingerprint: string | null
-      signaturePresent: boolean
-    }>('openpgp_decrypt', {
+    return this.invoke<DecryptOutput>('openpgp_decrypt', {
       accountJid,
       ciphertext,
-      senderPublicArmored,
+      senderPublicArmored: senderPublics,
     })
-    return rust
   }
 
   protected async validateCert(

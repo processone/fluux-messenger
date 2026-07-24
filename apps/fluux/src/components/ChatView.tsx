@@ -8,7 +8,6 @@ import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
-import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
@@ -442,16 +441,14 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         }
       />
 
-      {/* Key-change alert banner — only shown for 1:1 chats where a
-          previously-verified peer has rotated to a new fingerprint.
-          Self-renders nothing when there is no active alert, so the
-          unconditional mount is fine for the UI tree's stability. */}
-      {activeConversation.type === 'chat' && (
-        <KeyChangeBanner
-          peerJid={activeConversation.id}
-          peerName={activeConversation.name}
-        />
-      )}
+      {/* Key-change alert banner — UNMOUNTED in Stage 1. The single-primary
+          TOFU pin and its key-change alert are retired for OpenPGP (an extra
+          announced key is normal under multi-key, and `encrypt()` no longer
+          gates on an alert), so a persisted alert from ≤0.17.2 would otherwise
+          render a "blocked / re-verify" banner — and offer an accept action
+          that re-pins off the retired model — while sending works fine. The
+          component and the sealed alert store are left intact; Stage 2 remounts
+          a reworded banner driven by the derived `unverified-keyset` state. */}
 
       {/* Verify-peer dialog — opened from the encryption icon in the header */}
       {verifyDialogState.open && jid && (
