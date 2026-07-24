@@ -471,7 +471,14 @@ These prove the tests can fail. Make each edit, confirm the expected failure, th
    an unconditional `entries.delete(key); return` — i.e. make the timer always close the window and
    never perform the trailing write. (Replacing only the branch body with its own contents is a
    no-op and proves nothing.) Re-run.
-   Expected: `coalesces N schedules`, `flush writes the LATEST`, and `sustained burst` FAIL.
+   Expected: `coalesces N schedules`, `sustained burst`, and `a failed trailing write closes the
+   window instead of rearming` FAIL.
+
+   Note `flush writes the LATEST` does **not** fail under this mutation: `flush()` iterates
+   `entries` directly and is structurally separate from the timer callback, so breaking `onTimer`
+   has no blast radius there. That also means the staleness control does not, on its own, guard the
+   trailing *timer* write — `coalesces N schedules` and `sustained burst` are what do. The
+   staleness control guards `flush`'s own latest-value behaviour, which is a different claim.
 2. In `schedule`, change `write(key, produce)` on the leading edge to a no-op. Re-run.
    Expected: `writes immediately on the leading edge` FAILS.
 
