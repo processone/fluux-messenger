@@ -138,16 +138,18 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('discards an off-slice marker the local position is provably past', () => {
-    // Local pointer far ahead (m200) and an older remote marker (m20). A slice
-    // holding m20 cannot hold m200, and a load-around m200 cannot reach back to
-    // m20, so no retry will ever contain both — stashing here would leave the
-    // marker pending forever, re-folding on every activation. The timestamps
-    // decide it outright: the marker is behind, so there is nothing to apply.
+  it('keeps an older-timestamped off-slice marker pending (a migrated pointer may lead its message)', () => {
+    // A pointer whose timestamp is LATER than the marker still proves nothing.
+    // `migrateReadPointer` copies the pre-#1081 pair through unchanged, and that
+    // `lastReadAt` meant "timestamp of the newest LOADED message when I last
+    // activated" — so it can sit AHEAD of the message it names. This pointer may
+    // really be at m2 while carrying m5's timestamp, in which case the marker at
+    // m4 is a valid forward advance and retiring it would discard a genuine
+    // cross-device read.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'newer-than-slice', timestamp: new Date('2024-01-15T11:00:00Z') },
+        readPointer: { messageId: 'may-lag-its-timestamp', timestamp: new Date('2024-01-15T11:00:00Z') },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -156,7 +158,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('clear-pending')
+    expect(result.kind).toBe('stash-pending')
   })
 
   it('keeps the marker pending when the off-slice position carries the epoch sentinel', () => {
@@ -212,15 +214,13 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('retires a provably-past off-slice marker on the ACTIVE entity too', () => {
-    // The retire direction is the one timestamps CAN settle: `lastReadAt` is at
-    // or behind the message the pointer names, so a marker older than it is
-    // older than the true position as well. Nothing is derived from the
-    // timestamp here — the pointer is left exactly where it was.
+  it('keeps an off-slice marker pending on the ACTIVE entity too', () => {
+    // Being active changes nothing: the slice still cannot order the two ends,
+    // so the marker survives here exactly as it does on an inactive entity.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'newer-than-slice', timestamp: new Date('2024-01-15T11:00:00Z') },
+        readPointer: { messageId: 'may-lag-its-timestamp', timestamp: new Date('2024-01-15T11:00:00Z') },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -229,7 +229,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: true }
     )
 
-    expect(result.kind).toBe('clear-pending')
+    expect(result.kind).toBe('stash-pending')
   })
 
   it('survives an off-slice catch-up and resolves on the later activation fold', () => {

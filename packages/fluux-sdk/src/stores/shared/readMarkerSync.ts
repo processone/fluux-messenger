@@ -76,18 +76,25 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
     localPointerId === undefined || messages.some((m) => m.id === localPointerId)
 
   if (!pointerInSlice) {
-    if (meta.readPointer && match.timestamp < meta.readPointer.timestamp) {
-      // Timestamps settle THIS direction only. A pointer built by the #1081
-      // migration carries a timestamp at or behind the message it names, so a
-      // strictly older marker is also older than the true local position.
-      return meta.pendingRemoteDisplayedStanzaId === undefined
-        ? { kind: 'unchanged' }
-        : { kind: 'clear-pending' }
-    }
-
-    // Equal or newer timestamps remain undecidable. Advancing from that
-    // comparison could regress a migrated forward-only pointer, so leave the
-    // marker pending until the activation fold can order both ends by index.
+    // Timestamps settle NEITHER direction, so nothing is decided here.
+    //
+    // `migrateReadPointer` copies the pre-#1081 `lastSeenMessageId` +
+    // `lastReadAt` pair through unchanged, and that `lastReadAt` meant
+    // "timestamp of the newest LOADED message when I last activated" — not the
+    // timestamp of the message actually read up to. A migrated pointer's
+    // timestamp can therefore sit on EITHER side of the message it names, which
+    // breaks both comparisons: a strictly-older marker may still be a valid
+    // forward advance (discarding it loses a real cross-device read), and a
+    // strictly-newer one may sit behind the true position (advancing to it
+    // regresses a forward-only pointer, unrecoverably).
+    //
+    // Note that the `ReadPointer` doc comment claiming `lastReadAt` "is at or
+    // behind the named message" contradicts `migrateReadPointer`'s own comment.
+    // Do not build ordering on either statement until one is proven.
+    //
+    // Accepted cost: a marker the pointer is already past stays pending and
+    // re-folds on each activation. That is churn, not data loss — the safe
+    // direction to err in, given the alternative is dropping a read position.
     return { kind: 'stash-pending' }
   }
 
