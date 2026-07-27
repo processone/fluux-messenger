@@ -133,9 +133,12 @@ describe('MessageList — live-edge executor cost control', () => {
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
     flush(70) // settle the entry pin completely
-    // Seed the geometry baseline the way a real browser does — scroll events fire constantly, and
-    // the growth correction in the row-growth gate reads the last one. Without this the harness
-    // leaves a pre-instrumentation baseline the real app never has.
+    // Put the list in the state these tests are about: pinned at the bottom, with the geometry
+    // baseline seeded the way a real browser seeds it (scroll events fire constantly, and the
+    // growth correction reads the last one). The entry pin runs before instrumentScroller replaces
+    // the scrollTop accessor, so without this the harness starts at scrollTop=0 with a baseline the
+    // real app never has — and every gate downstream reads nonsense.
+    scroller.scrollTop = geo.scrollHeight
     act(() => { scroller.dispatchEvent(new Event('scroll')) })
     scrollToEndCalls.count = 0
     return { view, scroller }

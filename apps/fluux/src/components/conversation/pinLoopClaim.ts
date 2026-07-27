@@ -29,6 +29,13 @@ export interface PinLoopClaim {
   release: () => void
   /** Whether a loop currently owns the bottom. */
   isHeld: () => boolean
+  /**
+   * Milliseconds until the claim lapses if nothing renews it (0 when not held). A caller that had
+   * to defer because the claim was held uses this to schedule its retry: the claim cannot outlive
+   * this window without a live loop renewing it, so the retry either finds it released or finds a
+   * loop that is genuinely still pinning.
+   */
+  msUntilExpiry: () => number
 }
 
 export function createPinLoopClaim(now: () => number = Date.now): PinLoopClaim {
@@ -41,5 +48,6 @@ export function createPinLoopClaim(now: () => number = Date.now): PinLoopClaim {
       heldUntil = 0
     },
     isHeld: () => heldUntil > now(),
+    msUntilExpiry: () => Math.max(0, heldUntil - now()),
   }
 }

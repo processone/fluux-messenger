@@ -25,6 +25,7 @@ import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
+import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
@@ -133,6 +134,11 @@ const TARGET_HIGHLIGHT_MS = 1500
 // no-op once truly pinned, so this converges and cannot oscillate. Sub-row tolerance keeps it from
 // firing on harmless subpixel rounding.
 const BOTTOM_PIN_TOLERANCE = 4
+// A row-growth re-pin deferred behind a running pin loop re-checks this many times before giving
+// up. Each retry waits out the loop's remaining claim, so a genuinely long-running loop is what
+// consumes the attempts — an abandoned one lapses on the first.
+const ROW_GROWTH_RETRY_ATTEMPTS = 3
+const ROW_GROWTH_RETRY_MARGIN_MS = 32 // ~2 frames past the claim's expiry, so it has truly lapsed
 // A pin run whose cumulative forced work (layout flushes + scroll writes + repaints) reaches this
 // is worth one rate-limited [PinLoopProbe] line in fluux.log — it attributes the layoutPaint cost
 // RenderCostProbe can only measure in aggregate. ~3 frame budgets; healthy runs stay far below.
@@ -3388,48 +3394,92 @@ export function useMessageListScroll({
   // spacer) reports a comfortable distance. Both engines reproduce this; see the fastening tests in
   // scripts/scroll-invariants.ts. lastScrollDataRef is refreshed on every scroll event and by every
   // bottom pin, so it is the last geometry the reader actually saw.
+  //
+  // A signature change is consumed EXACTLY ONCE, so a bail must be a real decision — not a silent
+  // drop. Two of the guards are terminal (the reader is not at the bottom; a navigation owns the
+  // position — in both cases pinning later would be wrong), but "a pin loop already owns the bottom"
+  // is only a DEFERRAL: it assumes that loop absorbs the growth. If that loop was abandoned, its
+  // claim lingers until it lapses and the growth would never be pinned at all, because nothing
+  // re-runs this effect once the signature has been consumed. Deferrals therefore schedule a retry
+  // at the claim's own expiry.
   const prevRowGrowthKeyRef = useRef(rowGrowthSignature)
   const rowGrowthConvRef = useRef(conversationId)
-  useLayoutEffect(() => {
-    const sameConversation = rowGrowthConvRef.current === conversationId
-    rowGrowthConvRef.current = conversationId
-    const prevKey = prevRowGrowthKeyRef.current
-    prevRowGrowthKeyRef.current = rowGrowthSignature
-    if (!sameConversation) return // conversation switch → rebaseline, never re-pin
-    if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
+  const rowGrowthRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  /**
+   * Try to absorb a row-growth change. Returns false when the attempt was DEFERRED and must be
+   * retried; true when it was handled or deliberately declined.
+   *
+   * `deferredAt` is the timestamp of the original stimulus: a retry is abandoned if the reader has
+   * genuinely scrolled since, so a deferred pin can never yank someone who moved away in between.
+   */
+  const tryRowGrowthRepin = useCallback((deferredAt: number, isRetry: boolean): boolean => {
     const scroller = scrollerRef.current
-    if (!scroller || staticMode) return
+    if (!scroller || staticMode) return true
+
     // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
     // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
     // and make a scrolled-up reader look as if they had been at the bottom — a yank, the harmful
     // direction. With no usable baseline we fall back to the raw distance, whose worst case is a
     // MISSED re-pin that the next stimulus corrects.
     const baseline = lastScrollDataRef.current?.height ?? 0
-    const growth =
-      baseline >= scroller.clientHeight
-        ? Math.max(0, scroller.scrollHeight - baseline)
-        : 0
-    if (getDistanceFromBottom(scroller) - growth >= AT_BOTTOM_THRESHOLD) return
-    // A running pin loop already keeps the bottom pinned — don't stack a second one.
-    if (pinBottomClaim().isHeld()) return
-    // Never override an explicit navigation. A row growing is ambient: the reader did not ask for
-    // it, so it must not supersede a position the reader DID ask for — Home/resident-top, a
-    // jump-to-message, a saved-position restore. Without this, a fastening or reaction landing while
-    // a navigation is still converging turns into a live-edge request that cancels it and pins to
-    // the bottom, so the reader is dumped back at the newest message mid-keypress.
     const active = positioningControllerRef.current?.snapshot().active
-    if (
-      active &&
-      active.request.conversationId === conversationId &&
-      active.request.desired.kind !== 'live-edge' &&
-      active.phase.kind !== 'settled'
-    ) {
-      return
-    }
+    const decision = decideRowGrowth({
+      distanceFromBottom: getDistanceFromBottom(scroller),
+      growth:
+        baseline >= scroller.clientHeight
+          ? Math.max(0, scroller.scrollHeight - baseline)
+          : 0,
+      atBottomThreshold: AT_BOTTOM_THRESHOLD,
+      pinnedTolerance: BOTTOM_PIN_TOLERANCE,
+      pinClaimHeld: pinBottomClaim().isHeld(),
+      navigationInFlight: Boolean(
+        active &&
+        active.request.conversationId === activeConversationIdRef.current &&
+        active.request.desired.kind !== 'live-edge' &&
+        active.phase.kind !== 'settled',
+      ),
+      readerTookOver: userScrollIntentAtRef.current > deferredAt,
+      isRetry,
+    })
+    if (decision === 'defer') return false
+    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
+    return true
+  }, [staticMode])
 
-    reconcileLiveEdge('row-growth')
-  }, [rowGrowthSignature, conversationId, reconcileLiveEdge, staticMode])
+  useLayoutEffect(() => {
+    const sameConversation = rowGrowthConvRef.current === conversationId
+    rowGrowthConvRef.current = conversationId
+    const prevKey = prevRowGrowthKeyRef.current
+    prevRowGrowthKeyRef.current = rowGrowthSignature
+    if (rowGrowthRetryRef.current !== null) {
+      clearTimeout(rowGrowthRetryRef.current)
+      rowGrowthRetryRef.current = null
+    }
+    if (!sameConversation) return // conversation switch → rebaseline, never re-pin
+    if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
+
+    const deferredAt = Date.now()
+    if (tryRowGrowthRepin(deferredAt, false)) return
+
+    // Deferred. Re-check when the claim can no longer be held without a live loop renewing it, so a
+    // lingering claim from an abandoned loop cannot swallow this growth. Bounded: each retry either
+    // resolves or reschedules against a strictly-lapsing claim, and a conversation switch, a newer
+    // signature, or unmount clears it.
+    const scheduleRetry = (attempt: number) => {
+      if (attempt > ROW_GROWTH_RETRY_ATTEMPTS) return
+      rowGrowthRetryRef.current = setTimeout(() => {
+        rowGrowthRetryRef.current = null
+        if (activeConversationIdRef.current !== conversationId) return
+        if (!tryRowGrowthRepin(deferredAt, true)) scheduleRetry(attempt + 1)
+      }, pinBottomClaim().msUntilExpiry() + ROW_GROWTH_RETRY_MARGIN_MS)
+    }
+    scheduleRetry(1)
+  }, [rowGrowthSignature, conversationId, tryRowGrowthRepin])
+
+  useEffect(() => () => {
+    if (rowGrowthRetryRef.current !== null) clearTimeout(rowGrowthRetryRef.current)
+  }, [])
 
   // ==========================================================================
   // EFFECT: Typing indicator appears — reveal its footer clearance while sticked
