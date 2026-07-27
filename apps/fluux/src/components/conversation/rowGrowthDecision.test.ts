@@ -11,6 +11,7 @@ const atBottomAfterCard = (over: Partial<RowGrowthFacts> = {}): RowGrowthFacts =
   navigationInFlight: false,
   readerTookOver: false,
   isRetry: false,
+  eligibilityEstablished: false,
   ...over,
 })
 
@@ -59,6 +60,37 @@ describe('decideRowGrowth', () => {
       atBottomAfterCard({ pinClaimHeld: true, navigationInFlight: true }),
     )
     expect(decision).toBe('defer')
+  })
+
+  // THE RETRY REGRESSION. By the time a deferred growth is retried, the growth has fired its own
+  // scroll event and the baseline has moved forward to the GROWN height — so a freshly derived
+  // growth is 0 and the card's own 260px reads as "the reader is scrolled up". Re-deriving
+  // eligibility there skips the growth forever and the deferral buys nothing.
+  it('pins a retry whose baseline has caught up, so growth now derives as 0', () => {
+    const decision = decideRowGrowth(
+      atBottomAfterCard({ isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260 }),
+    )
+    expect(decision).toBe('pin')
+  })
+
+  it('still refuses that retry if the reader took over in the meantime', () => {
+    const decision = decideRowGrowth(
+      atBottomAfterCard({
+        isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
+        readerTookOver: true,
+      }),
+    )
+    expect(decision).toBe('skip')
+  })
+
+  it('still refuses that retry if a navigation started in the meantime', () => {
+    const decision = decideRowGrowth(
+      atBottomAfterCard({
+        isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
+        navigationInFlight: true,
+      }),
+    )
+    expect(decision).toBe('skip')
   })
 
   // Ordering guard: a reader who has moved, or who was never at the bottom, must lose to nothing —

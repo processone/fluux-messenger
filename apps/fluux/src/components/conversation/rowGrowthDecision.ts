@@ -28,6 +28,14 @@ export interface RowGrowthFacts {
   readerTookOver: boolean
   /** Whether this is a retry of a previously deferred growth rather than the first attempt. */
   isRetry: boolean
+  /**
+   * Whether "the reader was at the bottom before the row grew" is ALREADY established and must not
+   * be re-derived. Set on a retry: the deferral proved it, and by the time the retry runs the growth
+   * has fired its own scroll event, which moves the baseline forward to the grown height. Re-deriving
+   * then yields growth=0 and reads the card's own height as "the reader is scrolled up", so the
+   * deferred growth is skipped forever — the deferral would have bought nothing.
+   */
+  eligibilityEstablished: boolean
 }
 
 export function decideRowGrowth(facts: RowGrowthFacts): RowGrowthDecision {
@@ -36,8 +44,14 @@ export function decideRowGrowth(facts: RowGrowthFacts): RowGrowthDecision {
 
   // Was the reader at the bottom BEFORE the row grew? The growth lands in the measured distance, so
   // it has to come back out; otherwise a card taller than the threshold reads as "scrolled away"
-  // and the re-pin is refused in exactly the case it exists for.
-  if (facts.distanceFromBottom - facts.growth >= facts.atBottomThreshold) return 'skip'
+  // and the re-pin is refused in exactly the case it exists for. Skipped once established — see
+  // eligibilityEstablished.
+  if (
+    !facts.eligibilityEstablished &&
+    facts.distanceFromBottom - facts.growth >= facts.atBottomThreshold
+  ) {
+    return 'skip'
+  }
 
   // A running loop re-reads the height every frame and absorbs this itself. DEFER, never skip: the
   // claim lapses on its own if that loop was abandoned, and the caller retries then.

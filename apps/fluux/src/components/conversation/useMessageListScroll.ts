@@ -356,6 +356,14 @@ export interface UseMessageListScrollResult {
   scrollToMarker: () => void
 }
 
+/** What a deferred row-growth remembers so its retry judges the SAME situation, not a later one. */
+interface DeferredRowGrowth {
+  /** When the growth was first seen — deliberate scroll intent after this means the reader moved. */
+  at: number
+  /** scrollTop at that moment; a smaller value on retry means the reader scrolled up since. */
+  scrollTop: number
+}
+
 interface DirectionalHistorySnapshot {
   anchorMessageId: string
   anchorOffsetFromTop: number
@@ -572,6 +580,11 @@ export function useMessageListScroll({
   // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The controller receives the
   // same input directly; this timestamp also supports marker clearing and resize heuristics.
   const userScrollIntentAtRef = useRef(0)
+  // Timestamp of the last GENUINE user scroll of any kind, including a scrollbar drag (which fires
+  // no input event and is recognised only by the height-unchanged discriminator in handleScroll).
+  // Separate from userScrollIntentAtRef on purpose: this one answers "did the reader move?", not
+  // "did the reader press something", and only takeover checks may read it.
+  const lastGenuineScrollAtRef = useRef(0)
 
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
@@ -2471,6 +2484,11 @@ export function useMessageListScroll({
       ) && prevScrollHeightRef.current === scrollHeight
     if (genuineUserScroll) {
       userHasScrolledSinceEntryRef.current = true
+      // This branch is the ONLY place a scrollbar drag is recognised — it fires no wheel, touch or
+      // keydown. Stamp a dedicated timestamp for it rather than userScrollIntentAtRef: that ref
+      // means "deliberate INPUT", and marker clearing relies on it to tell a programmatic
+      // scroll-to-bottom from a user one, so widening it clears the unread marker on re-entry.
+      lastGenuineScrollAtRef.current = Date.now()
       positioningControllerRef.current?.observeUserInput(conversationId)
       runScrollShadowSafely({
         event: 'settled-user-geometry',
@@ -3413,9 +3431,10 @@ export function useMessageListScroll({
    * `deferredAt` is the timestamp of the original stimulus: a retry is abandoned if the reader has
    * genuinely scrolled since, so a deferred pin can never yank someone who moved away in between.
    */
-  const tryRowGrowthRepin = useCallback((deferredAt: number, isRetry: boolean): boolean => {
+  const tryRowGrowthRepin = useCallback((deferred: DeferredRowGrowth | null): boolean => {
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return true
+    const isRetry = deferred !== null
 
     // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
     // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
@@ -3439,8 +3458,21 @@ export function useMessageListScroll({
         active.request.desired.kind !== 'live-edge' &&
         active.phase.kind !== 'settled',
       ),
-      readerTookOver: userScrollIntentAtRef.current > deferredAt,
+      // Two independent takeover signals, because neither covers everything on its own: the
+      // timestamp misses nothing now that scrollbar drags stamp it, but a scrollTop that has moved
+      // UP since the deferral is proof regardless of which input produced it (growth never moves
+      // scrollTop, and a pin only moves it down toward the bottom).
+      // Three independent takeover signals, because none covers everything alone: deliberate input
+      // (wheel/touch/key), a genuine scroll of any kind (this is what catches a scrollbar drag), and
+      // a scrollTop that has moved UP since the deferral — proof regardless of input, since growth
+      // never moves scrollTop and a pin only moves it down toward the bottom.
+      readerTookOver: isRetry && (
+        userScrollIntentAtRef.current > deferred.at ||
+        lastGenuineScrollAtRef.current > deferred.at ||
+        scroller.scrollTop < deferred.scrollTop - BOTTOM_PIN_TOLERANCE
+      ),
       isRetry,
+      eligibilityEstablished: isRetry,
     })
     if (decision === 'defer') return false
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
@@ -3459,8 +3491,11 @@ export function useMessageListScroll({
     if (!sameConversation) return // conversation switch → rebaseline, never re-pin
     if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
 
-    const deferredAt = Date.now()
-    if (tryRowGrowthRepin(deferredAt, false)) return
+    if (tryRowGrowthRepin(null)) return
+    const deferred: DeferredRowGrowth = {
+      at: Date.now(),
+      scrollTop: scrollerRef.current?.scrollTop ?? 0,
+    }
 
     // Deferred. Re-check when the claim can no longer be held without a live loop renewing it, so a
     // lingering claim from an abandoned loop cannot swallow this growth. Bounded: each retry either
@@ -3471,7 +3506,7 @@ export function useMessageListScroll({
       rowGrowthRetryRef.current = setTimeout(() => {
         rowGrowthRetryRef.current = null
         if (activeConversationIdRef.current !== conversationId) return
-        if (!tryRowGrowthRepin(deferredAt, true)) scheduleRetry(attempt + 1)
+        if (!tryRowGrowthRepin(deferred)) scheduleRetry(attempt + 1)
       }, pinBottomClaim().msUntilExpiry() + ROW_GROWTH_RETRY_MARGIN_MS)
     }
     scheduleRetry(1)
