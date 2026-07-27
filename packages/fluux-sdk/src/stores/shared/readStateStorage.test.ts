@@ -7,6 +7,7 @@ import {
   type RoomReadState,
 } from './readStateStorage'
 import { makeReadPointer } from './readPointer'
+import { _resetForTesting, flush } from './throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../../utils/storageScope'
 import { localStorageMock } from '../../core/sideEffects.testHelpers'
 
@@ -18,6 +19,11 @@ const JID = 'me@example.com'
 const at = (ms: number) => new Date(ms)
 
 beforeEach(() => {
+  // Saves are throttled per key, so a window left open by the previous test
+  // would coalesce this one's first save and leave the row unwritten. With the
+  // windows dropped, each test's FIRST save lands on its own leading edge; only
+  // the test that deliberately leaves a second save pending needs a `flush()`.
+  _resetForTesting()
   localStorage.clear()
   _resetStorageScopeForTesting()
   setStorageScopeJid(JID)
@@ -68,6 +74,25 @@ describe('room read-state persistence', () => {
     _clearAllRoomReadStateForTesting()
 
     expect(loadRoomReadState(JID).size).toBe(0)
+  })
+
+  // The clear-all loop cancels each remembered key's pending write; the
+  // trailing `clearRoomReadState()` only reaches the AMBIENT key, which by then
+  // is the unscoped one. Two saves are required: the first takes the leading
+  // edge, the second is left pending, and without the loop's `cancel` it fires
+  // afterwards and puts the scoped row straight back.
+  it('cancels a pending write for a scoped row rather than letting it resurrect', () => {
+    const key = getRoomReadStateStorageKey(JID)
+    saveRoomReadState(new Map([['r@c', { historyFloor: at(1) }]]), JID)
+    saveRoomReadState(new Map([['r@c', { historyFloor: at(2) }]]), JID) // pending
+    _resetStorageScopeForTesting()
+
+    _clearAllRoomReadStateForTesting()
+    // Real timers here, so drive the trailing write by flushing rather than
+    // waiting out the window.
+    flush()
+
+    expect(localStorage.getItem(key)).toBeNull()
   })
 
   it("keeps one account's read state out of another's", () => {

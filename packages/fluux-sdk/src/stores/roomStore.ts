@@ -41,6 +41,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
+import { schedule, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -99,13 +100,9 @@ function loadDraftsFromStorage(jid?: string | null): Map<string, string> {
  * Save room drafts to localStorage.
  */
 function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): void {
-  const storageKey = getRoomDraftsStorageKey(jid)
-  try {
-    const entries = Array.from(drafts.entries())
-    localStorage.setItem(storageKey, JSON.stringify(entries))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  // Lazy: a coalesced write never pays for the stringify. Error absorption
+  // lives in the throttle.
+  schedule(getRoomDraftsStorageKey(jid), () => JSON.stringify(Array.from(drafts.entries())))
 }
 
 /**
@@ -142,14 +139,11 @@ function loadPollIdsFromStorage(storageKey: string): Map<string, Set<string>> {
 }
 
 function savePollIdsToStorage(pollIds: Map<string, Set<string>>, storageKey: string): void {
-  try {
-    const entries = Array.from(pollIds.entries()).map(
-      ([k, v]) => [k, Array.from(v)] as [string, string[]]
+  schedule(storageKey, () =>
+    JSON.stringify(
+      Array.from(pollIds.entries()).map(([k, v]) => [k, Array.from(v)] as [string, string[]])
     )
-    localStorage.setItem(storageKey, JSON.stringify(entries))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  )
 }
 
 function loadVotedPollsFromStorage(jid?: string | null): Map<string, Set<string>> {
@@ -191,11 +185,7 @@ function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
 }
 
 function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
-  try {
-    localStorage.setItem(getRoomGapsStorageKey(jid), serializeGaps(gaps))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  schedule(getRoomGapsStorageKey(jid), () => serializeGaps(gaps))
 }
 
 /**
@@ -221,11 +211,7 @@ function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecor
 }
 
 function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
-  try {
-    localStorage.setItem(getRoomCoverageStorageKey(jid), serializeCoverage(coverage))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  schedule(getRoomCoverageStorageKey(jid), () => serializeCoverage(coverage))
 }
 
 /**
@@ -284,11 +270,13 @@ function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
  *
  * Between the other two, neither can be ahead of the user's true position, so
  * the later one is right. They are two mirrors of the same store and either can
- * be the stale one: the SDK state snapshot is debounced by 500 ms, while the
- * durable `readStateStorage` row is written synchronously on every advance — so
- * a snapshot restored after a crash is routinely BEHIND the row it shadows, and
- * taking it at face value would then have `persistRoomReadState` write that
- * older position back over the row.
+ * be the stale one: the SDK state snapshot is debounced by 500 ms and the
+ * durable `readStateStorage` row is throttled by 1000 ms, so after a crash
+ * EITHER can be the older. Taking one at face value would then have
+ * `persistRoomReadState` write an older position back over the row.
+ *
+ * The rule holds because both are LAGGING mirrors — throttling the row makes it
+ * lag more, never lead — so "later" only ever recovers the freshest one.
  *
  * INVARIANT this "take the later" rule depends on: both `room` (from the state
  * snapshot) and `restored` (the durable row) are lagging MIRRORS of one store
@@ -1626,6 +1614,10 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
+    // Freshness on an immediate return: without this, a fast A -> B -> A runs
+    // loadRoomReadState(A) against a blob predating A's last mutations, and
+    // that stale load becomes the live state.
+    flushThrottledStorage()
     // In-flight archive-save gates belong to the previous account; their
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
@@ -1647,13 +1639,21 @@ export const roomStore = createStore<RoomState>()(
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
     // New session → the XEP-0490 synced read marker may be folded again on first open.
     mdsGate.reset()
-    // Clear persisted room drafts and poll state on logout
-    localStorage.removeItem(getRoomDraftsStorageKey())
-    localStorage.removeItem(getRoomVotedPollsStorageKey())
-    localStorage.removeItem(getRoomDismissedPollsStorageKey())
-    localStorage.removeItem(getRoomGapsStorageKey())
-    localStorage.removeItem(getRoomCoverageStorageKey())
-    localStorage.removeItem(getRoomNonAnonAckStorageKey())
+    // Clear persisted room drafts and poll state on logout.
+    //
+    // Cancel BEFORE removing. Unlike chatStore, nothing after this re-triggers
+    // these helper writes, so a pending thunk would resurrect logged-out data.
+    for (const key of [
+      getRoomDraftsStorageKey(),
+      getRoomVotedPollsStorageKey(),
+      getRoomDismissedPollsStorageKey(),
+      getRoomGapsStorageKey(),
+      getRoomCoverageStorageKey(),
+      getRoomNonAnonAckStorageKey(),
+    ]) {
+      cancel(key)
+      localStorage.removeItem(key)
+    }
     // Logout forgets read positions for rooms exactly as chatStore.reset()
     // forgets them for 1:1 conversations (it drops the whole chat storage key,
     // pointers included) — one kind of conversation must not outlive the other.

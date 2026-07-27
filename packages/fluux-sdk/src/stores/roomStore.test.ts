@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
-import { getLocalPart } from '../core/jid'
+import { createRoom, createMessage } from './roomStore.testHelpers'
+import {
+  flush as flushThrottledStorage,
+  _resetForTesting as _resetThrottledStorageForTesting,
+} from './shared/throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
 import { ignoreStore } from './ignoreStore'
@@ -50,59 +54,13 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 // Import the mocked module for assertions
 import * as messageCache from '../utils/messageCache'
 
-// Helper to create test rooms
-function createRoom(
-  jid: string,
-  options: Partial<Room> = {}
-): Room {
-  return {
-    jid,
-    name: options.name || getLocalPart(jid),
-    nickname: options.nickname || 'testuser',
-    joined: options.joined ?? false,
-    isBookmarked: options.isBookmarked ?? false,
-    isQuickChat: options.isQuickChat,
-    autojoin: options.autojoin,
-    password: options.password,
-    occupants: options.occupants || new Map(),
-    messages: options.messages || [],
-    unreadCount: options.unreadCount || 0,
-    mentionsCount: options.mentionsCount || 0,
-    subject: options.subject,
-    selfOccupant: options.selfOccupant,
-    typingUsers: options.typingUsers || new Set(),
-    readPointer: options.readPointer,
-    notifyAll: options.notifyAll,
-    notifyAllPersistent: options.notifyAllPersistent,
-    lastInteractedAt: options.lastInteractedAt,
-    lastMessage: options.lastMessage,
-    muted: options.muted,
-  }
-}
-
-// Helper to create test messages
-function createMessage(
-  id: string,
-  roomJid: string,
-  nick: string,
-  body: string,
-  isOutgoing = false
-): RoomMessage {
-  return {
-    type: 'groupchat',
-    id,
-    roomJid,
-    from: `${roomJid}/${nick}`,
-    nick,
-    body,
-    timestamp: new Date(),
-    isOutgoing,
-  }
-}
-
 describe('roomStore', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    // Persisted room maps are throttled per key (leading + trailing, 1000 ms).
+    // A window left open by the previous test would coalesce this test's FIRST
+    // write and leave the assertions reading a stale row.
+    _resetThrottledStorageForTesting()
     // Room read state is durable (#1081): wiping roomMeta below is not enough,
     // or the next addRoom restores the previous test's pointer from storage.
     _resetRoomReadStateForTesting()
@@ -2944,7 +2902,13 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start })
       // Persisted immediately: the heal must survive a reload, otherwise the
       // next session re-anchors on the purged id and re-degrades.
-      const persisted = Object.entries(localStorageMock._store).find(([k]) => k.startsWith('fluux-room-gaps'))?.[1]
+      //
+      // Address the unscoped row this test writes rather than the first key
+      // that happens to match the prefix: the mock store still holds
+      // `fluux-room-gaps:alice@example.com` from an earlier test, that key was
+      // inserted first, and it never contained 'purged' — so the `find` made
+      // the assertion below pass without reading this test's row at all.
+      const persisted = localStorageMock._store['fluux-room-gaps']
       expect(persisted).toBeDefined()
       expect(persisted).not.toContain('purged')
     })
@@ -2970,11 +2934,18 @@ describe('roomStore', () => {
       roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
 
       // Formation defers until the page is durably cached (Codex r4 #1).
+      //
+      // Address the exact row this test writes. Scanning every value in the
+      // mock store made this hollow: an earlier test in this describe merges
+      // the SAME fetched message under `fluux-room-gaps:alice@example.com`, and
+      // the mock store is never cleared between tests, so `.some()` was
+      // satisfied by that stale row whether or not this test persisted anything.
       await vi.waitFor(() => {
-        const persisted = Object.values(localStorageMock._store).some(
-          (v) => typeof v === 'string' && v.includes('2026-05-14') === false && v.includes(String(new Date('2026-05-14T09:00:00Z').getTime())),
-        )
-        expect(persisted).toBe(true)
+        const persisted = localStorageMock._store['fluux-room-gaps']
+        expect(persisted).toBeDefined()
+        // Serialized as epoch ms, not as an ISO string.
+        expect(persisted).not.toContain('2026-05-14')
+        expect(persisted).toContain(String(new Date('2026-05-14T09:00:00Z').getTime()))
       })
     })
   })
@@ -3601,6 +3572,9 @@ describe('roomStore', () => {
         roomStore.getState().setDraft('room1@conference.example.com', 'Draft 1')
         roomStore.getState().setDraft('room2@conference.example.com', 'Draft 2')
 
+        // The second setDraft coalesced behind the first; without this the last
+        // call is the leading-edge blob holding only 'Draft 1'.
+        flushThrottledStorage()
         // Last call should contain both drafts
         const lastCall = localStorageMock.setItem.mock.calls.at(-1)
         expect(lastCall?.[0]).toBe('fluux-room-drafts')
@@ -3619,6 +3593,9 @@ describe('roomStore', () => {
         // Clear one draft
         roomStore.getState().clearDraft('room1@conference.example.com')
 
+        // The clear is the mutation under test and it coalesced behind the two
+        // setDraft calls above, so force its trailing write out.
+        flushThrottledStorage()
         // localStorage should be updated with only the remaining draft
         expect(localStorageMock.setItem).toHaveBeenCalledWith(
           'fluux-room-drafts',
@@ -3632,6 +3609,8 @@ describe('roomStore', () => {
 
         roomStore.getState().setDraft('room1@conference.example.com', '')
 
+        // Coalesced behind the initial setDraft's leading edge.
+        flushThrottledStorage()
         expect(localStorageMock.setItem).toHaveBeenCalledWith(
           'fluux-room-drafts',
           JSON.stringify([])
@@ -5714,6 +5693,9 @@ describe('roomStore', () => {
 
         roomStore.getState().removePollVote('room1@conf', 'poll-1')
 
+        // The removal is the mutation under test; the two recordPollVote calls
+        // above already opened this key's window.
+        flushThrottledStorage()
         expect(localStorageMock.setItem).toHaveBeenCalledWith(
           'fluux-room-voted-polls',
           JSON.stringify([['room1@conf', ['poll-2']]])

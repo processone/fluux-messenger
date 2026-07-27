@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
 import { loadRoomReadState, getRoomReadStateStorageKey } from './shared/readStateStorage'
+// The durable row is throttled (leading + trailing, 1000 ms). A test that
+// mutates and then reads the row back has to flush, or it inspects the blob the
+// LEADING edge wrote — i.e. the state before the mutation under test.
+import { flush as flushThrottledStorage } from './shared/throttledStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import type { Room, RoomMessage } from '../core/types/room'
@@ -127,6 +131,8 @@ describe('room read state persistence', () => {
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     // Whatever the in-memory state, the durable copy is what matters here.
+    // `addRoom` took the leading edge, so the advance above is still pending.
+    flushThrottledStorage()
     const persisted = loadRoomReadState(JID)
     expect(persisted.get(ROOM)?.historyFloor).toBeInstanceOf(Date)
     // …and the pointer itself, not just the creation-time floor: a wiring that
@@ -190,6 +196,9 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m1', 1000), rmsg('m2', 2000)]))
     roomStore.getState().markReadToNewest(ROOM)
 
+    // The markReadToNewest save is the one under test, and it coalesced behind
+    // addRoom's leading edge.
+    flushThrottledStorage()
     expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({
       messageId: 'm2',
       timestamp: new Date(2000),
@@ -207,6 +216,8 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
+    // Observe the row the ADVANCE wrote, not the one addRoom wrote before it.
+    flushThrottledStorage()
     expect(loadRoomReadState(JID).has(OTHER_ROOM)).toBe(true)
   })
 
@@ -263,9 +274,13 @@ describe('room read state persistence', () => {
 
   it('drops a removed room from the durable copy', () => {
     roomStore.getState().addRoom(makeRoom(ROOM))
+    flushThrottledStorage()
     expect(loadRoomReadState(JID).has(ROOM)).toBe(true)
 
     roomStore.getState().removeRoom(ROOM)
+    // The removal's save coalesced behind addRoom's leading edge; without this
+    // the assertion below re-reads the row addRoom wrote.
+    flushThrottledStorage()
     expect(loadRoomReadState(JID).has(ROOM)).toBe(false)
   })
 
@@ -275,6 +290,10 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
+    // The blob under test is the one the ADVANCE produced — a pointer save is
+    // where an `unreadCount` would leak in. Without the flush this inspects
+    // addRoom's leading-edge blob, which has no pointer in it at all.
+    flushThrottledStorage()
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
     expect(localStorage.getItem(STORAGE_KEY)).not.toContain('unreadCount')
   })
