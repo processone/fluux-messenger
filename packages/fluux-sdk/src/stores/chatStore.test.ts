@@ -2029,6 +2029,9 @@ describe('chatStore', () => {
       // The localStorage persistence only stores conversations metadata
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().addMessage(createMessage('alice@example.com', 'Hello'))
+      // This test means to observe the final persisted blob, not a mid-burst
+      // write coalesced away by the throttle.
+      flushThrottledStorage()
 
       const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
       const stored = JSON.parse(lastCall[1])
@@ -2161,6 +2164,9 @@ describe('chatStore', () => {
       // See: ChatLayout manages activeConversationId via ViewStateData.
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')
+      // This test means to observe the final persisted blob, not a mid-burst
+      // write coalesced away by the throttle.
+      flushThrottledStorage()
 
       // Verify the store has the active conversation set
       expect(chatStore.getState().activeConversationId).toBe('alice@example.com')

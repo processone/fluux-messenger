@@ -70,6 +70,17 @@ describe('chatStore persistence throttling', () => {
     expect(ids).toContain('b@example.com')
   })
 
+  // The one test in this area that can actually fail. `reset` cannot carry it:
+  // its trailing `set(empty)` overwrites the pending thunk, so the reset test
+  // below passes with `cancel` removed AND with the throttle removed.
+  it('a cancelled write never lands after the key is cleared', () => {
+    seedConversation('a@example.com')
+    seedConversation('b@example.com') // coalesced into the pending thunk
+    chatStore.persist.clearStorage()
+    vi.advanceTimersByTime(5000)
+    expect(localStorage.getItem(KEY)).toBeNull()
+  })
+
   it('reset leaves no pre-logout data behind', () => {
     seedConversation('secret@example.com')
     seedConversation('secret2@example.com') // pending, not yet written

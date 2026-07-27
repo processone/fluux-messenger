@@ -37,9 +37,10 @@ beforeEach(async () => {
   // This file exercises the persist adapter directly with real timers, so an
   // open throttle window from one test would otherwise coalesce the next
   // test's leading write. Several assertions here read localStorage
-  // synchronously right after a persisting call, on the strength of the
-  // adapter's write landing immediately — see scheduleReadPointerBackfill's
-  // "that set persists immediately" comment.
+  // synchronously right after a persisting call, on the strength of that call
+  // being the throttle's LEADING edge (no window already open) — a schedule()
+  // with no open window still writes synchronously. Assertions that instead
+  // land inside a burst call `flushThrottledStorage()` before reading.
   _resetForTesting()
   await messageCache.saveMessages([
     { type: 'chat', id: 'm1', conversationId: CONV, from: CONV, body: 'a', timestamp: at(1000), isOutgoing: false },

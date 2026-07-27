@@ -757,7 +757,9 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  * `storageKey`, so `serializeState` keeps writing the legacy values back until
  * this pass (or the user's own reading) produces a pointer. Registration happens
  * synchronously, BEFORE the pass yields: `switchAccount` calls `set()` inside the
- * same call that reaches here, and that `set` persists immediately.
+ * same call that reaches here, and that write is now scheduled through the
+ * throttle rather than landing immediately — it's `switchAccount`'s own
+ * `flush()` that forces it out before the incoming account loads.
  */
 function scheduleReadPointerBackfill(
   conversationMeta: Map<string, ConversationMetadata>,
@@ -814,12 +816,13 @@ function scheduleReadPointerBackfill(
         // snapping to newest is the forward-only over-advance #1081 exists to kill.
         if (!migrated) continue
         applyMigratedReadPointer(conversationId, migrated)
-        // Deliberately AFTER the apply. The apply persists synchronously, and
-        // that write already omits the legacy pair — `serializeState` skips any
-        // conversation holding a pointer — so nothing is gained by dropping the
-        // entry first, while a throw in between would leave the conversation
-        // pointerless AND legacy-less, which is the state this whole mechanism
-        // exists to prevent.
+        // Deliberately AFTER the apply. The apply's `setState` replaces the
+        // pending thunk with a newer snapshot, so whichever thunk eventually
+        // runs already carries the pointer and already omits the legacy pair
+        // — `serializeState` skips any conversation holding a pointer — so
+        // nothing is gained by dropping the entry first, while a throw in
+        // between would leave the conversation pointerless AND legacy-less,
+        // which is the state this whole mechanism exists to prevent.
         pending.delete(conversationId)
       } catch (error) {
         // Left in `pending`, so the values survive this launch's writes and the
@@ -2935,6 +2938,12 @@ export const chatStore = createStore<ChatState>()(
         // Logout discards the blob, so there is nothing left to carry legacy
         // read state forward into.
         unmigratedLegacyReadState.delete(getScopedStorageKey())
+        // The throttle's contract: cancel BEFORE any raw removeItem. Today the
+        // trailing `set(createEmptyChatState())` below happens to replace any
+        // pending thunk with an empty-state one, so nothing leaks — but that is
+        // coincidence, not design. Without this, moving or dropping that `set`
+        // turns logout into silent data resurrection.
+        cancel(getScopedStorageKey())
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())
