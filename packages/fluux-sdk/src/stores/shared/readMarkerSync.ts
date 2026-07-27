@@ -22,8 +22,9 @@ export interface ReadMarkerMeta {
 
 export type RemoteDisplayedResolution =
   /**
-   * The referenced message is not loaded — remember the stanza-id as a
-   * pending high-water mark, to be resolved when messages arrive.
+   * The loaded slice cannot yet order the remote marker against the local read
+   * pointer — remember the stanza-id as a pending high-water mark for a later
+   * merge or activation fold.
    */
   | { kind: 'stash-pending' }
   /** No advance and nothing stale to clean up — state untouched. */
@@ -159,10 +160,11 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
  *
  * Only RESOLVED folds are recorded (via `markFolded`, called by
  * {@link foldPendingRemoteDisplayed} when the apply actually advanced or cleared
- * the marker). A fold that stashed — the marker's message wasn't in the loaded
- * slice — never took effect, so recording it would strand the marker: the next
- * activation would skip the fold as "already consumed" while no merge may ever
- * retry it. Each store owns one gate instance; `reset()` on account switch.
+ * the marker). A fold that stashed — the loaded slice could not order the marker
+ * against the local pointer — never took effect, so recording it would strand
+ * the marker: the next activation would skip the fold as "already consumed"
+ * while no merge may ever retry it. Each store owns one gate instance; `reset()`
+ * on account switch.
  */
 export interface MdsSessionGate {
   /**
@@ -207,7 +209,7 @@ export interface ActivationFoldResult {
  * actually resolved. Shared by chatStore.activateConversation and
  * roomStore.activateRoom, which call it twice per activation:
  * once against the freshly loaded latest slice, and again after a load-around
- * of a deep stale pointer may have brought the marker's message into the slice.
+ * may have brought the marker and local pointer into one orderable slice.
  */
 export function foldPendingRemoteDisplayed(
   gate: MdsSessionGate,

@@ -815,8 +815,8 @@ export interface RoomState {
   advanceReadPointer: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
-   * the read pointer forward-only by resolving the stanza-id to a local
-   * message id; stores a pending high-water mark if not yet loaded.
+   * the read pointer forward-only. Pending and ordering semantics are owned by
+   * the shared `readMarkerSync` resolver.
    */
   applyRemoteDisplayed: (roomJid: string, stanzaId: string, messagesOverride?: RoomMessage[]) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
@@ -2236,9 +2236,10 @@ export const roomStore = createStore<RoomState>()(
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded
       // messages, and applied only once per distinct RESOLVED marker this
-      // session — a fold that stashed (message not loaded) stays retryable, a
-      // resolved one is never re-folded (that would reposition the divider on
-      // every return). Gate + retry policy live in shared/readMarkerSync.
+      // session — a fold that could not order the marker against the local
+      // pointer stays retryable, while a resolved one is never re-folded (that
+      // would reposition the divider on every return). Gate + retry policy live
+      // in shared/readMarkerSync.
       const foldOnce = (stage: string) => {
         const lastSeenBefore = get().roomMeta.get(roomJid)?.readPointer?.messageId
         const fold = foldPendingRemoteDisplayed(
@@ -2277,9 +2278,8 @@ export const roomStore = createStore<RoomState>()(
         if (!loaded.some((m) => m.id === pointer)) {
           await get().loadMessagesAroundFromCache(roomJid, pointer)
           if (token !== activationToken) return
-          // The around-slice sits just past the stale pointer — exactly where a
-          // marker too deep for the latest-100 window lives. Retry a fold that
-          // stashed above so the divider derives from the synced position.
+          // Retry against the post-load slice: it may now contain both the
+          // local pointer and remote marker needed for archive-index ordering.
           foldOnce('around slice')
         }
       }
@@ -2412,14 +2412,15 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       newMeta.set(roomJid, { ...meta, ...metaPatch })
 
-      // Inbound read-state sync (spec §4): a marker published by another client
-      // clears this room's badge now, not on the next activation. 'advanced' is
-      // exactly the non-active pointer-advance kind (the active room's counts
-      // are already zero and resolves as 'advanced-with-divider'). Only the
-      // counts are folded — the pointer keeps the forward-only position
-      // resolved above (the helper's outgoing-boundary rule never regresses
-      // it: the pointer resolves inside `messages`, so its internal scan only
-      // ever looks past it).
+      // Resolved inbound read-state sync (spec §4): 'advanced' is exactly the
+      // non-active pointer-advance kind, so it clears the badge now. An
+      // off-slice 'stash-pending' deliberately leaves the badge alone until a
+      // later slice can order the marker against the local pointer. The active
+      // room resolves as 'advanced-with-divider' and its counts are already
+      // zero. Only the counts are folded — the pointer keeps the forward-only
+      // position resolved above (the helper's outgoing-boundary rule never
+      // regresses it: the pointer resolves inside `messages`, so its internal
+      // scan only ever looks past it).
       let recomputed: notifState.EntityNotificationState | undefined
       if (resolution.kind === 'advanced') {
         advancedNonActive = true
@@ -3498,8 +3499,9 @@ export const roomStore = createStore<RoomState>()(
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    // XEP-0490: a remote room marker may have arrived before its message.
-    // Now that messages are merged, try to resolve it forward-only.
+    // XEP-0490: a pending marker was not orderable in an earlier slice.
+    // Retry against the merged messages; the shared resolver clears it only
+    // when the comparison resolves.
     const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
     if (pending) {
       get().applyRemoteDisplayed(roomJid, pending, mergedForMarker)

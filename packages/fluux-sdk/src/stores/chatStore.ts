@@ -342,8 +342,8 @@ interface ChatState {
   advanceReadPointer: (conversationId: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
-   * the read pointer forward-only by resolving the stanza-id to a local
-   * message id; stores a pending high-water mark if not yet loaded.
+   * the read pointer forward-only. Pending and ordering semantics are owned by
+   * the shared `readMarkerSync` resolver.
    */
   applyRemoteDisplayed: (conversationId: string, stanzaId: string, messagesOverride?: Message[]) => void
   hasConversation: (id: string) => boolean
@@ -1239,10 +1239,10 @@ export const chatStore = createStore<ChatState>()(
           // pendingRemoteDisplayedStanzaId; resolve it now (forward-only, against the
           // just-loaded messages) so the divider reflects reads synced from other
           // devices instead of the stale local position. Applied only once per
-          // distinct RESOLVED marker this session — a fold that stashed (message
-          // not loaded) stays retryable, a resolved one is never re-folded (that
-          // would reposition the divider on every return). Gate + retry policy
-          // live in shared/readMarkerSync.
+          // distinct RESOLVED marker this session — a fold that could not order
+          // the marker against the local pointer stays retryable, while a resolved
+          // one is never re-folded (that would reposition the divider on every
+          // return). Gate + retry policy live in shared/readMarkerSync.
           const foldOnce = (stage: string) => {
             const lastSeenBefore = get().conversationMeta.get(id)?.readPointer?.messageId
             const fold = foldPendingRemoteDisplayed(
@@ -1281,9 +1281,8 @@ export const chatStore = createStore<ChatState>()(
             if (!loaded.some((m) => m.id === pointer)) {
               await get().loadMessagesAroundFromCache(id, pointer)
               if (token !== activationToken) return
-              // The around-slice sits just past the stale pointer — exactly where
-              // a marker too deep for the latest-100 window lives. Retry a fold
-              // that stashed above so the divider derives from the synced position.
+              // Retry against the post-load slice: it may now contain both the
+              // local pointer and remote marker needed for archive-index ordering.
               foldOnce('around slice')
             }
           }
@@ -1699,12 +1698,13 @@ export const chatStore = createStore<ChatState>()(
           const draft = draftConversationMaps(state)
           draft.patchMeta(conversationId, metaPatch)
 
-          // Inbound read-state sync (spec §4): a marker published by another
-          // client clears this conversation's badge now, not on the next
-          // activation. 'advanced' is exactly the non-active pointer-advance
-          // kind (the active conversation resolves as 'advanced-with-divider'
-          // and its counts are already zero). Only the count is folded — the
-          // pointer keeps the forward-only position resolved above.
+          // Resolved inbound read-state sync (spec §4): 'advanced' is exactly
+          // the non-active pointer-advance kind, so it clears the badge now.
+          // An off-slice 'stash-pending' deliberately leaves the badge alone
+          // until a later slice can order the marker against the local pointer.
+          // The active conversation resolves as 'advanced-with-divider' and its
+          // counts are already zero. Only the count is folded — the pointer
+          // keeps the forward-only position resolved above.
           // countMentions is omitted (default false) and mentionsCount is an
           // inert 0: conversations don't track mentions the way rooms do
           // (parity with the hydration path in mergeMAMMessages).
@@ -2532,10 +2532,9 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
-        // XEP-0490: a remote displayed marker may have arrived before its message.
-        // Now that messages are merged into state, try to resolve the pending marker
-        // forward-only. applyRemoteDisplayed re-reads the merged messages, resolves
-        // the read pointer, and clears pendingRemoteDisplayedStanzaId on success.
+        // XEP-0490: a pending marker was not orderable in an earlier slice.
+        // Retry against the merged messages; applyRemoteDisplayed clears
+        // pendingRemoteDisplayedStanzaId only when the comparison resolves.
         const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
         if (pending) {
           get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)

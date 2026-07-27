@@ -178,8 +178,8 @@ describe('resolveRemoteDisplayed', () => {
   })
 
   it('keeps a newer-timestamped off-slice marker pending', () => {
-    // A migrated pointer can carry a timestamp from before or after the message
-    // it names, so a newer marker timestamp is not proof of a forward advance.
+    // A migrated pointer can carry a timestamp from well before the message it
+    // names, so a newer marker timestamp is not proof of a forward advance.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
@@ -230,6 +230,75 @@ describe('resolveRemoteDisplayed', () => {
     )
 
     expect(result.kind).toBe('clear-pending')
+  })
+
+  it('survives an off-slice catch-up and resolves on the later activation fold', () => {
+    const gate = createMdsSessionGate()
+    const fullHistory = [
+      msg('m1', '2024-01-15T10:01:00Z'),
+      msg('m2', '2024-01-15T10:02:00Z'),
+      msg('m3', '2024-01-15T10:03:00Z'),
+      msg('m4', '2024-01-15T10:04:00Z'),
+    ]
+    const latestPage = fullHistory.slice(2)
+    let readPointer = {
+      messageId: 'm1',
+      timestamp: new Date('2024-01-15T10:01:00Z'),
+    }
+    let pending: string | undefined = 'arch-m3'
+    let firstNewMessageId: string | undefined = 'm2'
+
+    // Fresh-session forward catch-up only has the newest page. It contains the
+    // remote marker (m3), but not the local pointer (m1), so the comparison is
+    // deliberately postponed instead of destroying the pending marker.
+    const catchUp = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        unreadCount: 26,
+        readPointer,
+        pendingRemoteDisplayedStanzaId: pending,
+      },
+      latestPage,
+      firstNewMessageId,
+      pending,
+      { isActive: false }
+    )
+    expect(catchUp).toEqual({ kind: 'stash-pending' })
+    expect(pending).toBe('arch-m3')
+
+    // Opening the entity loads a wide enough slice to order both ends by
+    // index. The normal activation fold can now advance to the remote position
+    // and move the stale divider from m2 to the first truly unread message, m4.
+    const fold = foldPendingRemoteDisplayed(
+      gate,
+      'xsf@muc.xmpp.org',
+      () => pending,
+      (stanzaId) => {
+        const activated = resolveRemoteDisplayed(
+          {
+            ...baseMeta,
+            unreadCount: 0,
+            readPointer,
+            pendingRemoteDisplayedStanzaId: pending,
+          },
+          fullHistory,
+          firstNewMessageId,
+          stanzaId,
+          { isActive: true }
+        )
+        expect(activated.kind).toBe('advanced-with-divider')
+        if (activated.kind === 'advanced-with-divider') {
+          readPointer = activated.readPointer
+          firstNewMessageId = activated.firstNewMessageId
+          pending = undefined
+        }
+      }
+    )
+
+    expect(fold).toEqual({ pending: 'arch-m3', attempted: true, resolved: true })
+    expect(readPointer.messageId).toBe('m3')
+    expect(firstNewMessageId).toBe('m4')
+    expect(pending).toBeUndefined()
   })
 })
 
