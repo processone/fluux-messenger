@@ -1,8 +1,8 @@
 # Message-list scroll positioning contract
 
 Status: core migration complete. Saved-position restoration, unread-marker positioning, explicit
-message targets, live-edge pinning, media remeasurement preservation, and directional history
-preservation are authoritative controller slices.
+message targets, live-edge pinning, media remeasurement preservation, directional history
+preservation, and resident-top navigation are authoritative controller slices.
 
 ## Purpose
 
@@ -44,7 +44,7 @@ cancellation, 2px target-shift correction, 5px clamp recovery, and bounded dista
 fallback. Boundary input while the load is still pending retains the captured anchor because no
 pixel owner exists yet; takeover becomes cancellable after the initial positioning write, matching
 the former loop's timing. Explicit competing requests still supersede pending directional history.
-All six authoritative slices share the same controller-owned
+All seven authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
 convergence state, and lifecycle ownership moved out of the hook-local loop. Unlike unread-marker
@@ -63,12 +63,18 @@ than competing lifecycle owners. A settled or best-effort generation flushes any
 repaint; user takeover or supersession deliberately discards that debt so it cannot repaint after
 the reader takes control or leak into unrelated content.
 
-Residual shadow observations cover the still-direct resident-top command and entry staging before
-an explicit target. A shared error boundary catches and counts adapter, validator,
-controller-driver, and executor errors; failure must degrade according to the active request's
-source-specific policy and must never escape into the scroll effect or event handler. The demo
-scroll-invariant suite fails if either `divergenceCount` or `instrumentationErrorCount` is non-zero.
-Retained diagnostic samples are capped, not the pass criterion.
+Resident-top navigation starts one native smooth write from its leased executor, then observes
+`scrollTop` without reissuing the target. It settles after two frames within 1px of the resident
+top, or releases best-effort after 120 observation frames without snapping. Home resets the prior
+top-boundary travel latch, and its controller-owned progress cannot recreate user pagination
+evidence; a later genuine user move away from the top can still re-arm ordinary load-older.
+
+Residual shadow observations cover entry staging before an explicit target. A shared error boundary
+catches and counts adapter, validator, controller-driver, and executor errors; failure must degrade
+according to the active request's source-specific policy and must never escape into the scroll
+effect or event handler. The demo scroll-invariant suite fails if either `divergenceCount` or
+`instrumentationErrorCount` is non-zero. Retained diagnostic samples are capped, not the pass
+criterion.
 
 For residual shadow observations, zero divergences means the model agrees with the hand-authored
 semantic `actual` label at each observation site: desired position plus the coarse
@@ -302,16 +308,17 @@ abort valid deep growth and media-settle runs.
 | Media at live edge | Existing live edge | Debounced measurement stimulus |
 | Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement |
 | Load older/newer | Fixed top-relative offset anchor | Wait for the directional window change; if the anchor disappears, preserve captured distance from bottom and clamp |
-| Home / resident-top command | Resident top | May subsequently trigger ordinary load-older |
+| Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Current live edge, when active | Geometry stimulus, not a new position request |
 
 The FAB/End choice is made from current geometry, not a remembered click state. If the unread marker
 is already visible or above the viewport, the same activation goes directly to live edge.
 
-## Current owners to migrate
+## Ownership boundary
 
 The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
-explicit center-aligned targets, live edge, media preservation, and directional history. These
+explicit center-aligned targets, live edge, media preservation, directional history, and resident
+top. These
 reconcilers implement measurement convergence; they are not separate positioning authorities.
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
 
@@ -320,10 +327,6 @@ already create a controller-owned live-edge request, scroller resize is observed
 list's controller-backed correction path, and room media now receives the same list-owned callback
 as 1:1 media. That callback is published through a stable shell so current executor/window changes
 do not invalidate every memoized row. These stimuli no longer add a second pixel writer.
-
-One positioning owner remains outside the shared single-flight ref:
-
-- resident-top's direct writer.
 
 Two visually similar scroll operations are explicitly outside this migration:
 
@@ -398,7 +401,8 @@ kinetic scrolling and stale-paint behavior.
 5. [x] Migrate directional history preservation last, retaining kinetic cancellation, full-budget
    late-measurement tracking, distance-from-bottom fallback, and clamp recovery; delete the private
    prepend/window-shift loop.
-6. Route or isolate the remaining owners outside `useMessageListScroll`.
+6. [x] Route resident-top through the controller and document the two isolated, non-competing
+   preview/selection scroll contexts.
 7. Split persistence, user-intent tracking, history windowing, and reconciliation out of the
    orchestration hook.
 

@@ -4,22 +4,26 @@
 
 Complete scroll-positioning migration step 6 by making the generation-aware
 positioning controller the sole owner of the live message list's Home /
-resident-top navigation. Preserve the current smooth animation and history-load
-timing while deleting the hook's direct positioning owner and its shadow-only
-observation.
+resident-top navigation. Preserve the current smooth animation and intended
+history-load guard while deleting the hook's direct positioning owner and its
+shadow-only observation.
 
 ## Current behavior
 
 `useMessageListScroll.scrollToTop` currently:
 
-1. sets `lastLoadTimeRef.current` to prevent the Home action itself from being
-   mistaken for an ordinary load-older trigger;
+1. sets `lastLoadTimeRef.current` intending to prevent the Home action itself
+   from being mistaken for an ordinary load-older trigger;
 2. records a shadow `resident-top` request;
 3. directly calls `scroller.scrollTo({ top: 0, behavior: 'smooth' })`.
 
 The semantic request already exists in `scrollPositionModel`, but the controller
 does not execute it. This is the last live-list position outside the controller's
-shared generation and single-flight lifecycle.
+shared generation and single-flight lifecycle. The old history guard is also
+incomplete: `scrolledAwayFromTopRef` bypasses the cooldown, and native smooth
+scroll progress re-arms it before Home reaches zero. A deep Home jump can
+therefore be mistaken for a load-older gesture and immediately repositioned by
+directional-history preservation.
 
 ## Chosen approach
 
@@ -81,9 +85,12 @@ write.
   the controller-owned executor;
 - reports `scroller.scrollTop` without mutating it during observation.
 
-`lastLoadTimeRef.current = Date.now()` remains before the controller request, so
-the existing load-older guard is unchanged. Ordinary later top-boundary
-navigation can still trigger the existing history-loading path.
+`lastLoadTimeRef.current = Date.now()` remains before the controller request.
+Home also clears the prior `scrolledAwayFromTopRef` evidence, and
+controller-owned scroll events cannot re-arm that user-intent latch. This makes
+the existing guard effective for Home itself. A later genuine user move away
+from the top re-arms the latch, so ordinary later top-boundary navigation can
+still trigger the existing history-loading path.
 
 The published `scrollToTop` command will use a stable callback shell. The
 executor legitimately closes over current conversation/window facts, but those
@@ -118,9 +125,10 @@ animation in the frame loop.
 
 Hook tests must prove through runtime behavior that Home and Mod+ArrowUp route
 through the controller, preserve `behavior: 'smooth'`, issue exactly one write,
-and keep the published callback stable across message/window updates. These
-tests must fail if the deleted shadow-plus-direct-write path is restored; they
-must not merely grep implementation text.
+keep the published callback stable across message/window updates, and do not
+reinterpret smooth-scroll progress as load-older intent. These tests must fail
+if the deleted shadow-plus-direct-write path is restored; they must not merely
+grep implementation text.
 
 The Playwright scroll-invariant suite will add a real-engine Home scenario for
 Chromium and WebKit: start away from resident top, invoke Home, observe smooth

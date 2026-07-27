@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // fully-mounted DOM — still shipping until the old path is removed). Force the flag OFF;
 // virtualized scroll is verified via the scroll-hook unit tests + the real-engine pass.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 
@@ -137,6 +137,155 @@ describe('MessageList scroll behavior', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     window.requestAnimationFrame = originalRAF
+  })
+
+  describe('resident-top navigation', () => {
+    it.each([
+      {
+        label: 'Home',
+        key: 'Home',
+        modifiers: {},
+      },
+      {
+        label: 'Mod+ArrowUp',
+        key: 'ArrowUp',
+        modifiers: navigator.platform.includes('Mac')
+          ? { metaKey: true }
+          : { ctrlKey: true },
+      },
+    ])('starts one smooth $label navigation and only observes its progress afterward', ({
+      key,
+      modifiers,
+    }) => {
+      const callbacks: FrameRequestCallback[] = []
+      window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+        callbacks.push(callback)
+        return callbacks.length
+      }
+      render(
+        <MessageList
+          messages={createTestMessages(10)}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />,
+      )
+
+      const container = document.querySelector(
+        '[data-message-list]',
+      ) as HTMLDivElement
+      let scrollTop = 500
+      Object.defineProperties(container, {
+        scrollHeight: { value: 1000, configurable: true },
+        clientHeight: { value: 500, configurable: true },
+        scrollTop: {
+          get: () => scrollTop,
+          set: (value: number) => {
+            scrollTop = value
+          },
+          configurable: true,
+        },
+      })
+      const scrollTo = vi.fn()
+      container.scrollTo = scrollTo
+      const callbacksBeforeHome = callbacks.length
+
+      act(() => {
+        fireEvent.keyDown(window, { key, ...modifiers })
+      })
+
+      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 0,
+        behavior: 'smooth',
+      })
+      expect(callbacks).toHaveLength(callbacksBeforeHome + 1)
+
+      for (const nextScrollTop of [500, 20, 1, 0]) {
+        scrollTop = nextScrollTop
+        const callback = callbacks.pop()
+        expect(callback).toBeDefined()
+        act(() => {
+          callback!(0)
+        })
+      }
+
+      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(callbacks).toHaveLength(callbacksBeforeHome)
+    })
+
+    it('does not rebind the global shortcut listener when messages append', () => {
+      const addEventListener = vi.spyOn(window, 'addEventListener')
+      const removeEventListener = vi.spyOn(window, 'removeEventListener')
+      const props = {
+        conversationId: 'conv-1',
+        clearFirstNewMessageId: vi.fn(),
+        renderMessage: (msg: BaseMessage) => <div key={msg.id}>{msg.body}</div>,
+      }
+      const { rerender } = render(
+        <MessageList messages={createTestMessages(10)} {...props} />,
+      )
+      const keydownAdds = addEventListener.mock.calls.filter(
+        ([eventName]) => eventName === 'keydown',
+      ).length
+      const keydownRemoves = removeEventListener.mock.calls.filter(
+        ([eventName]) => eventName === 'keydown',
+      ).length
+
+      rerender(<MessageList messages={createTestMessages(11)} {...props} />)
+
+      expect(addEventListener.mock.calls.filter(
+        ([eventName]) => eventName === 'keydown',
+      )).toHaveLength(keydownAdds)
+      expect(removeEventListener.mock.calls.filter(
+        ([eventName]) => eventName === 'keydown',
+      )).toHaveLength(keydownRemoves)
+    })
+
+    it('does not reinterpret Home reaching resident top as a load-older gesture', () => {
+      const callbacks: FrameRequestCallback[] = []
+      window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+        callbacks.push(callback)
+        return callbacks.length
+      }
+      const onScrollToTop = vi.fn()
+      render(
+        <MessageList
+          messages={createTestMessages(10)}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          onScrollToTop={onScrollToTop}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />,
+      )
+      const container = document.querySelector(
+        '[data-message-list]',
+      ) as HTMLDivElement
+      let scrollTop = 500
+      Object.defineProperties(container, {
+        scrollHeight: { value: 1000, configurable: true },
+        clientHeight: { value: 500, configurable: true },
+        scrollTop: {
+          get: () => scrollTop,
+          set: (value: number) => {
+            scrollTop = value
+          },
+          configurable: true,
+        },
+      })
+      container.scrollTo = vi.fn()
+
+      fireEvent.scroll(container)
+      fireEvent.keyDown(window, { key: 'Home' })
+      // Native smooth scrolling emits intermediate scroll events. They remain controller-owned
+      // and must not re-arm the "user travelled away from top" pagination latch.
+      scrollTop = 200
+      fireEvent.scroll(container)
+      scrollTop = 0
+      fireEvent.scroll(container)
+
+      expect(onScrollToTop).not.toHaveBeenCalled()
+    })
   })
 
   describe('typing indicator scroll', () => {
