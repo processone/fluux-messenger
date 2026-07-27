@@ -50,6 +50,13 @@ describe('setupRoomSideEffects', () => {
   let mockClient: ReturnType<typeof createMockClient>
   let cleanup: () => void
 
+  const ROOM = 'room@conference.example.com'
+
+  function confirmRoomJoin(roomJid = ROOM) {
+    roomStore.getState().setRoomJoined(roomJid, true)
+    mockClient._emitSDK('room:joined', { roomJid, joined: true })
+  }
+
   beforeEach(() => {
     roomStore.getState().reset()
     connectionStore.getState().reset()
@@ -80,9 +87,11 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       await vi.waitFor(() => {
-        // Fresh session triggers MAM for active room, but supportsMAM is false so it's skipped
+        // Confirmed join sees MAM is unsupported, so it is skipped.
         expect((mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
       })
 
@@ -118,7 +127,9 @@ describe('setupRoomSideEffects', () => {
       cleanup = setupRoomSideEffects(mockClient)
       simulateFreshSession(mockClient)
 
+      roomStore.getState().markAllRoomsNotJoined()
       roomStore.getState().setActiveRoom('room@conference.example.com')
+      confirmRoomJoin()
 
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
@@ -339,6 +350,42 @@ describe('setupRoomSideEffects', () => {
   })
 
   describe('reconnection', () => {
+    it('waits for a fresh-session room:joined before catching up a hydrated active room', async () => {
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true, // hydrated SM snapshot, not confirmed in the new stream
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        ROOM,
+        expect.any(Array),
+        expect.objectContaining({ sessionStartTime: expect.any(Number) }),
+      )
+    })
+
     it('should trigger MAM catchup on reconnection for active room', async () => {
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',
@@ -360,6 +407,8 @@ describe('setupRoomSideEffects', () => {
       cleanup = setupRoomSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
@@ -415,6 +464,8 @@ describe('setupRoomSideEffects', () => {
       cleanup = setupRoomSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       // Cursor-policy specifics (start vs after) are covered by the orchestrator
       // and mamCatchUpUtils tests; this asserts delegation with the cached message.
@@ -467,6 +518,8 @@ describe('setupRoomSideEffects', () => {
       cleanup = setupRoomSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       // Ignoring the this-session live message is now the orchestrator's job
       // (selectCatchUpQuery's sessionStartTime handling, covered in
@@ -507,6 +560,8 @@ describe('setupRoomSideEffects', () => {
       cleanup = setupRoomSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       // Empty cache → delegates with an empty messages array; the orchestrator
       // resolves the fetch-latest fallback (covered by orchestrator tests).
@@ -591,16 +646,17 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin('active-room@conference.example.com')
 
-      // Wait for initial MAM fetch for the active room
+      // Wait for confirmed active-room MAM fetch.
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
       ;(mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mockClear()
 
       // Non-active room joins — should not trigger MAM
-      roomStore.getState().setRoomJoined('other-room@conference.example.com', true)
-      mockClient._emitSDK('room:joined', { roomJid: 'other-room@conference.example.com', joined: true })
+      confirmRoomJoin('other-room@conference.example.com')
 
       await new Promise(resolve => setTimeout(resolve, 50))
       expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
@@ -625,6 +681,8 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
       simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
@@ -856,9 +914,15 @@ describe('setupRoomSideEffects', () => {
       await new Promise(resolve => setTimeout(resolve, 50))
       expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
-      // Then: disconnect and fresh session — should trigger MAM
+      // Then: disconnect and fresh session — wait for a confirmed room join.
       connectionStore.getState().setStatus('reconnecting')
       simulateFreshSession(mockClient)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
 
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(

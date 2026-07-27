@@ -43,6 +43,15 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+  const freshSessionJoinedRooms = new Set<string>()
+  let freshSessionRequiresJoinConfirmation = false
+
+  function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
+    return (
+      !freshSessionRequiresJoinConfirmation ||
+      freshSessionJoinedRooms.has(roomJid)
+    )
+  }
 
   // Epoch ms of the current fresh session's connection (set on 'online'). Used as
   // the forward catch-up cursor boundary so a live message arriving during catch-up
@@ -70,6 +79,16 @@ export function setupRoomSideEffects(
     // Skip if not fully joined yet (wait for self-presence)
     if (!room.joined) {
       if (debug) console.log('[SideEffects] Room: Skipping MAM - not joined yet', roomJid)
+      return
+    }
+
+    if (!hasConfirmedJoinForCurrentSession(roomJid)) {
+      if (debug) {
+        console.log(
+          '[SideEffects] Room: Skipping MAM - fresh-session join not confirmed',
+          roomJid,
+        )
+      }
       return
     }
 
@@ -198,22 +217,21 @@ export function setupRoomSideEffects(
     { fireImmediately: false }
   )
 
-  // Fresh session: catch up MAM for the active room.
+  // Fresh sessions require a self-presence confirmation before room MAM starts.
   // 'online' fires only on fresh sessions (not SM resumption).
   const unsubscribeOnline = client.on('online', () => {
     // Record the session start before any catch-up so the forward cursor excludes
     // live messages that arrive after reconnect (silent-gap fix).
     sessionStartTime = Date.now()
 
-    const activeRoomJid = roomStore.getState().activeRoomJid
-    if (activeRoomJid) {
-      if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)
+    freshSessionRequiresJoinConfirmation = true
+    freshSessionJoinedRooms.clear()
+    fetchInitiated.clear()
 
-      // Clear all fetch tracking so every room gets re-fetched after reconnect
-      fetchInitiated.clear()
-
-      // Trigger MAM catch-up for the active room
-      void fetchMAMForRoom(activeRoomJid)
+    if (debug) {
+      console.log(
+        '[SideEffects] Room: Fresh session — waiting for confirmed room joins before MAM',
+      )
     }
   })
 
@@ -232,6 +250,9 @@ export function setupRoomSideEffects(
   // empty result) is the durable signal; it's separate from "has resident
   // messages" so a room caught up via live delivery is still covered.
   const unsubscribeResumed = client.on('resumed', () => {
+    freshSessionRequiresJoinConfirmation = false
+    freshSessionJoinedRooms.clear()
+
     if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
 
     const state = roomStore.getState()
@@ -291,18 +312,25 @@ export function setupRoomSideEffects(
   )
 
   // Listen to room:joined SDK event to trigger MAM fetch after self-presence.
-  // This is more direct and reliable than watching store state transitions,
-  // and doesn't need isFreshSession guards — fetchInitiated already prevents
-  // duplicate queries for rooms caught up via SM resumption.
   const unsubscribeRoomJoined = client.subscribe('room:joined', ({ roomJid, joined }) => {
-    if (!joined) return // Only handle successful joins
+    if (!joined) {
+      freshSessionJoinedRooms.delete(roomJid)
+      return
+    }
+
+    freshSessionJoinedRooms.add(roomJid)
 
     const activeRoomJid = roomStore.getState().activeRoomJid
-    if (roomJid !== activeRoomJid) return // Only fetch for the active room
+    if (roomJid !== activeRoomJid) return
 
-    if (fetchInitiated.has(roomJid)) return // Already fetched this session
+    if (fetchInitiated.has(roomJid)) return
 
-    if (debug) console.log('[SideEffects] Room: Self-presence received, triggering MAM fetch', roomJid)
+    if (debug) {
+      console.log(
+        '[SideEffects] Room: Self-presence received, triggering MAM fetch',
+        roomJid,
+      )
+    }
     void fetchMAMForRoom(roomJid)
   })
 
