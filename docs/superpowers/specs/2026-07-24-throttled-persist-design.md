@@ -396,13 +396,56 @@ mutations. Per persisted map, the *direction* of that loss:
 | Data | Loss on hard kill | Class |
 |---|---|---|
 | Read pointers | Under-advances: a few messages re-shown as unread. Forward-only, so the throttle cannot over-advance — the unrecoverable direction stays unreachable (#1081). | Lagging mirror |
-| Gaps / coverage | Gap re-detected or coverage re-walked next session. | Lagging mirror |
+| Gaps / coverage — **monotone** advances (gap shrink/close, coverage deepening) | Gap re-healed or coverage re-walked next session. | Lagging mirror |
+| Gaps / coverage — **structural** transitions (new gap formation, coverage replacement/removal) | **A newly formed gap is silently lost and NOT re-detected; an invalidated coverage record survives and Phase B seeds from it, skipping the disconnected interval.** | **Durable event** |
 | Drafts / poll state | Up to 1 s of typing, or one vote flag. | Lagging mirror |
 | **Pending retractions** | **A retraction is forgotten and the message is never tombstoned. Not recoverable — the covered range is not re-queried.** | **Durable event** |
 
-The first three are bounded-redundancy losses in the safe direction. The fourth is not, which is why
-it is excluded from the throttle via `flushKey` (§1.2). With that carve-out, no unsafe loss mode
-remains.
+Read pointers, drafts/polls, and the *monotone* gap/coverage moves are bounded-redundancy losses in
+the safe direction. Pending retractions and the *structural* gap/coverage transitions are not — both
+are excluded from coalescing (§1.2, §4.2).
+
+### 4.2 Gaps and coverage are only half lagging mirrors
+
+The first draft of this design classified the whole gap and coverage maps as lagging mirrors, on the
+reasoning that a lost write costs a re-detection or a re-walk. That is true for monotone moves and
+**false for the transitions that create or invalidate structure.** Both modules say so themselves:
+
+- `mamGap.ts`'s module doc: gaps are persisted *"so the 'Load missing messages' marker survives a
+  reload — otherwise the next session's catch-up cursor (which sits above the gap after the
+  session-start fix) would never re-detect it, leaving the gap silent again."* A lost **gap
+  formation** is not re-detected. The cursor has already moved above the hole.
+- `mamCoverage.ts` calls a `CoverageRecord` *"POSITIVE, DURABLE data"* that *"must never point past
+  data that was never stored."* `syncCoverageAfterArchiveMerge`'s `isFetchLatest` branch, when
+  `sawCoverageTop` is false — contiguity with the existing record actively **disproven** — replaces
+  the record wholesale with `{ bottomId: rsmFirst }`. A lost **replacement** leaves the stale deeper
+  record on disk asserting contiguity that was just disproven; Phase B seeds its backward walk from
+  it and skips the disconnected interval.
+
+Note these two compound: the gap that would have flagged the hole is lost by the same crash that
+preserves the coverage claiming there is no hole.
+
+**Ordering is not available as a discriminator.** `mamGap.ts` states archive ids are non-sequential,
+so a store-level helper cannot compare two `bottomId`s and decide which is deeper. Any rule that
+depends on ordering ids is unimplementable here.
+
+**Resolution.** Force these transitions out of the window, keeping the throttle for ordinary
+monotone advances:
+
+| Map | Transition | Treatment |
+|---|---|---|
+| gaps | key **added** (formation) | force-flush |
+| gaps | shrink / close / removal | throttle — a stale gap costs a redundant re-heal |
+| coverage | key **added**, `bottomId` **changed**, key **removed** | force-flush |
+| coverage | `topId`-only change (re-entry marker) | throttle |
+
+`bottomId`-changed is deliberately conservative: it force-flushes the provable deepening in
+`syncCoverageAfterArchiveMerge`'s plain-backward branch too, which is safe to throttle in principle.
+Since ids cannot be ordered at this layer, distinguishing it would mean threading a
+"was this monotone" signal out of the sync functions. Not worth the coupling: a coverage record is
+one small entry per entity, so its serialized form is orders of magnitude smaller than the chat blob
+whose 180-writes-per-catch-up motivated this work in the first place. The expensive coalescing is
+preserved where it matters.
 
 Ordinary termination — tab close, app quit, mobile backgrounding — loses nothing, provided §4.1
 lands.
