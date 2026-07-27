@@ -677,6 +677,10 @@ export {
 export { sessionStorageAdapter } from './utils/sessionStorageAdapter'
 export type { StorageAdapter, SessionState, StoredCredentials, JoinedRoomInfo } from './core/types'
 
+// Flush throttled localStorage writes. Call synchronously on app quit — the
+// generic `flush` name is meaningless at the package boundary.
+export { flush as flushPersistentStorage } from './stores/shared/throttledStorage'
+
 // Proxy adapter for WebSocket-to-TCP bridging (desktop apps)
 export type { ProxyAdapter, ProxyStartResult } from './core/types'
 
