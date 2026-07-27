@@ -87,9 +87,12 @@ function onTimer(key: string): void {
 
 function registerLifecycleHandlers(): void {
   if (lifecycleRegistered) return
-  lifecycleRegistered = true
   // Guarded so importing the SDK in Node (bots, tests, SSR) has no side effect.
+  // Deliberately checked BEFORE latching the flag: a windowless environment
+  // (e.g. a bot process that later attaches a `window` shim) must be able to
+  // register on a later call rather than being permanently locked out here.
   if (typeof window === 'undefined') return
+  lifecycleRegistered = true
   // `pagehide` and `visibilitychange` are the pair that fires reliably on
   // mobile WebKit; `beforeunload` is desktop belt-and-braces.
   window.addEventListener('pagehide', flush)

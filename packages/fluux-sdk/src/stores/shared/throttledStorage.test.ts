@@ -213,4 +213,27 @@ describe('throttledStorage', () => {
     expect(() => flushKey(KEY)).not.toThrow()
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  // `lifecycleRegistered` is module-level and NOT cleared by `_resetForTesting`,
+  // so this needs a genuinely fresh module instance (via resetModules) to start
+  // from an unlatched flag — otherwise every earlier test in this file has
+  // already registered the listeners and the bug this guards would be invisible.
+  it('a windowless schedule call does not permanently disable lifecycle registration', async () => {
+    vi.resetModules()
+    vi.stubGlobal('window', undefined)
+    const fresh = await import('./throttledStorage')
+
+    // Leading-edge write with no `window`: must not latch the "registered" flag.
+    fresh.schedule(KEY, () => 'a')
+
+    vi.unstubAllGlobals()
+    localStorageMock.setItem.mockClear()
+
+    // Now `window` exists again. If the flag latched while windowless, this
+    // call is a no-op and `pagehide` never gets wired up.
+    fresh.schedule(OTHER, () => 'x')
+    fresh.schedule(OTHER, () => 'y') // pending trailing write
+    window.dispatchEvent(new Event('pagehide'))
+    expect(localStorage.getItem(OTHER)).toBe('y')
+  })
 })
