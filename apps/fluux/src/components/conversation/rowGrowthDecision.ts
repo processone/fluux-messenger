@@ -51,8 +51,16 @@ export interface RowGrowthFacts {
   navigationInFlight: boolean
   /** The reader has scrolled of their own accord since this growth was first seen. */
   readerTookOver: boolean
-  /** Whether this is a retry of a previously deferred growth rather than the first attempt. */
-  isRetry: boolean
+  /**
+   * Whether this attempt comes from the RETRY TIMER, as opposed to a signature change.
+   *
+   * It gates the already-pinned shortcut and nothing else, so it must be false for a
+   * signature-triggered attempt even when that attempt carries an earlier deferral. A newly arrived
+   * growth is typically not measured yet — distance reads ~0 — and treating it as a timer retry
+   * makes the shortcut conclude "already pinned" and skip. If the deferring loop has since released
+   * its claim, nothing is left to absorb that growth and the list is stranded.
+   */
+  isTimerRetry: boolean
   /**
    * Whether "the reader was at the bottom before the row grew" is ALREADY established and must not
    * be re-derived. Set on a retry: the deferral proved it, and by the time the retry runs the growth
@@ -86,11 +94,11 @@ export function decideRowGrowth(facts: RowGrowthFacts): RowGrowthDecision {
   // did ask for (Home, jump-to-message, saved-position restore).
   if (facts.navigationInFlight) return 'skip'
 
-  // On a RETRY only: the loop we deferred behind may have pinned the bottom already, so re-pinning
-  // would buy nothing but a forced layout. This must not apply to the first attempt — the spacer
-  // often has not taken the growth yet at that point, so a distance of ~0 there means "not measured
-  // yet", not "already pinned", and skipping would drop the growth the loop never absorbed.
-  if (facts.isRetry && facts.distanceFromBottom <= facts.pinnedTolerance) return 'skip'
+  // Timer retries ONLY: the loop we deferred behind may have pinned the bottom already, so
+  // re-pinning would buy nothing but a forced layout. Never for an attempt triggered by a signature
+  // change — the spacer usually has not taken that growth yet, so a distance of ~0 means "not
+  // measured yet", not "already pinned", and skipping would drop a growth nothing else will absorb.
+  if (facts.isTimerRetry && facts.distanceFromBottom <= facts.pinnedTolerance) return 'skip'
 
   return 'pin'
 }

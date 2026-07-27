@@ -3425,10 +3425,18 @@ export function useMessageListScroll({
    * `deferredAt` is the timestamp of the original stimulus: a retry is abandoned if the reader has
    * genuinely scrolled since, so a deferred pin can never yank someone who moved away in between.
    */
-  const tryRowGrowthRepin = useCallback((deferred: DeferredRowGrowth | null): boolean => {
+  /**
+   * `deferred` carries an earlier growth's established eligibility and takeover anchors.
+   * `isTimerRetry` says the retry TIMER fired, which is a separate question — a signature-triggered
+   * attempt can carry a deferral and still be a first attempt at the newly arrived growth.
+   */
+  const tryRowGrowthRepin = useCallback((
+    deferred: DeferredRowGrowth | null,
+    isTimerRetry: boolean,
+  ): boolean => {
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return true
-    const isRetry = deferred !== null
+    const carried = deferred !== null
 
     // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
     // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
@@ -3460,13 +3468,13 @@ export function useMessageListScroll({
       // (wheel/touch/key), a genuine scroll of any kind (this is what catches a scrollbar drag), and
       // a scrollTop that has moved UP since the deferral — proof regardless of input, since growth
       // never moves scrollTop and a pin only moves it down toward the bottom.
-      readerTookOver: isRetry && (
+      readerTookOver: carried && (
         userScrollIntentAtRef.current > deferred.at ||
         lastGenuineScrollAtRef.current > deferred.at ||
         scroller.scrollTop < deferred.scrollTop - BOTTOM_PIN_TOLERANCE
       ),
-      isRetry,
-      eligibilityEstablished: isRetry,
+      isTimerRetry,
+      eligibilityEstablished: carried,
     })
     if (decision === 'defer') return false
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
@@ -3495,7 +3503,7 @@ export function useMessageListScroll({
       at: Date.now(),
       scrollTop: scrollerRef.current?.scrollTop ?? 0,
     })
-    if (tryRowGrowthRepin(pendingRowGrowthRef.current)) {
+    if (tryRowGrowthRepin(pendingRowGrowthRef.current, false)) {
       pendingRowGrowthRef.current = null
       return
     }
@@ -3510,7 +3518,7 @@ export function useMessageListScroll({
       rowGrowthRetryRef.current = setTimeout(() => {
         rowGrowthRetryRef.current = null
         if (activeConversationIdRef.current !== conversationId) return
-        if (tryRowGrowthRepin(deferred)) {
+        if (tryRowGrowthRepin(deferred, true)) {
           pendingRowGrowthRef.current = null
           return
         }

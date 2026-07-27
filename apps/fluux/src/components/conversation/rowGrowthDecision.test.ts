@@ -10,7 +10,7 @@ const atBottomAfterCard = (over: Partial<RowGrowthFacts> = {}): RowGrowthFacts =
   pinClaimHeld: false,
   navigationInFlight: false,
   readerTookOver: false,
-  isRetry: false,
+  isTimerRetry: false,
   eligibilityEstablished: false,
   ...over,
 })
@@ -38,14 +38,32 @@ describe('decideRowGrowth', () => {
     expect(decideRowGrowth(atBottomAfterCard({ navigationInFlight: true }))).toBe('skip')
   })
 
-  it('skips a RETRY whose bottom the deferring loop already pinned', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ isRetry: true, distanceFromBottom: 2, growth: 2 }))).toBe('skip')
+  it('skips a TIMER RETRY whose bottom the deferring loop already pinned', () => {
+    expect(decideRowGrowth(atBottomAfterCard({ isTimerRetry: true, distanceFromBottom: 2, growth: 2 }))).toBe('skip')
   })
 
-  // On the first attempt a distance of ~0 means the spacer has not taken the growth yet, not that
+  // On a first attempt a distance of ~0 means the spacer has not taken the growth yet, not that
   // the bottom is pinned. Skipping there would drop a growth no loop is going to absorb.
   it('still pins a FIRST attempt measuring ~0 distance (spacer has not caught up)', () => {
     expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 0, growth: 0 }))).toBe('pin')
+  })
+
+  // THE CONFLATION REGRESSION. A newer signature can carry an earlier deferral — that establishes
+  // eligibility, but it is still a FIRST attempt at the newly arrived growth, which is typically not
+  // measured yet (distance ~0). Treating it as a timer retry lets the already-pinned shortcut skip
+  // it; if the deferring loop has since released its claim, nothing remains to absorb that growth
+  // and the list is stranded.
+  it('pins a signature-triggered attempt that carries a deferral but is not yet measured', () => {
+    const decision = decideRowGrowth(
+      atBottomAfterCard({
+        eligibilityEstablished: true, // carried from the pending deferral
+        isTimerRetry: false,          // …but this is a fresh signature, not the timer
+        distanceFromBottom: 0,
+        growth: 0,
+        pinClaimHeld: false,          // the old loop already released
+      }),
+    )
+    expect(decision).toBe('pin')
   })
 
   // THE REGRESSION. A held claim is a BET that the running loop absorbs the growth. If that loop was
@@ -68,7 +86,7 @@ describe('decideRowGrowth', () => {
   // eligibility there skips the growth forever and the deferral buys nothing.
   it('pins a retry whose baseline has caught up, so growth now derives as 0', () => {
     const decision = decideRowGrowth(
-      atBottomAfterCard({ isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260 }),
+      atBottomAfterCard({ isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260 }),
     )
     expect(decision).toBe('pin')
   })
@@ -76,7 +94,7 @@ describe('decideRowGrowth', () => {
   it('still refuses that retry if the reader took over in the meantime', () => {
     const decision = decideRowGrowth(
       atBottomAfterCard({
-        isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
+        isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
         readerTookOver: true,
       }),
     )
@@ -86,7 +104,7 @@ describe('decideRowGrowth', () => {
   it('still refuses that retry if a navigation started in the meantime', () => {
     const decision = decideRowGrowth(
       atBottomAfterCard({
-        isRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
+        isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
         navigationInFlight: true,
       }),
     )
