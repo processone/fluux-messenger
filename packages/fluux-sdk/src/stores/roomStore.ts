@@ -33,8 +33,24 @@ import {
   type CoverageRecord,
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
-import { computeFloor, pointerlessDefers, compareOrder, type OrderPosition } from './shared/readState'
-import { transientCounts, type ScopeKey as TransientScopeKey } from './shared/transientUnread'
+import {
+  computeFloor,
+  pointerlessDefers,
+  compareOrder,
+  makeArchiveOrderKey,
+  isRenderableStoredMessage,
+  type OrderPosition,
+} from './shared/readState'
+import {
+  transientCounts,
+  noteTransient,
+  pruneTransient,
+  removeTransient,
+  clearTransientScope,
+  transientIdentity,
+  transientAliases,
+  type ScopeKey as TransientScopeKey,
+} from './shared/transientUnread'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
@@ -357,6 +373,16 @@ const roomArchiveSaves = createArchiveSaveChain()
 // capture the epoch at merge time and no-op when it moved — a gate that was
 // already in flight when the state was torn down must not resurrect entries.
 let roomCacheEpoch = 0
+
+/**
+ * Task 9: the account scope this store last saw its OWN transient-overlay
+ * entries filed under. Tracked separately from `getStorageScopeJid()` because
+ * by the time `switchAccount` runs, the global scope has ALREADY flipped to
+ * the incoming account (XMPPClient calls `setStorageScopeJid` before
+ * `switchAccount`) — `getStorageScopeJid()` there would name the NEW account,
+ * not the one being torn down.
+ */
+let lastRoomTransientScope: string | null = null
 
 /** Test-only: drop all per-room archive-save chain entries. */
 export function _resetRoomArchiveSavesForTesting(): void {
@@ -1535,6 +1561,11 @@ export const roomStore = createStore<RoomState>()(
     roomArchiveSaves.clear()
     roomCacheEpoch++
     roomRecountVersion.clear()
+    // Task 9: tear down the OUTGOING account's transient overlay entries
+    // before adopting the new scope — see lastRoomTransientScope's doc for
+    // why this can't just read getStorageScopeJid() here.
+    if (lastRoomTransientScope !== null) clearTransientScope(lastRoomTransientScope)
+    lastRoomTransientScope = getStorageScopeJid()
     // Read state is folded into roomMeta by addRoom, not held in the state
     // object — reload the account's rows so the rooms this account is about to
     // add find theirs.
@@ -1548,6 +1579,13 @@ export const roomStore = createStore<RoomState>()(
     roomArchiveSaves.clear()
     roomCacheEpoch++
     roomRecountVersion.clear()
+    // Task 9: logout tears down this account's transient overlay too.
+    // Unlike switchAccount, nothing flips the global scope before reset()
+    // runs (clearLocalData calls it directly), so getStorageScopeJid() here
+    // is still the account being logged out — read it directly rather than
+    // through lastRoomTransientScope.
+    clearTransientScope(getStorageScopeJid() ?? '')
+    lastRoomTransientScope = null
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
@@ -1591,6 +1629,60 @@ export const roomStore = createStore<RoomState>()(
     if (!isNoLocalStore(messageToAdd)) {
       void messageCache.saveRoomMessage(messageToAdd)
       searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
+    }
+
+    // Task 9: `noLocalStore` messages (Quick Chat rooms, MUC ephemera) are
+    // never archived, so the transient overlay is their ONLY source of
+    // unread truth — computed once, here, before the state update below, so
+    // `noteTransient` (a side-effecting Map mutation) runs exactly once per
+    // arrival. Gated on `isUnseenIncomingMessage` so we never note an
+    // outgoing/seen/historical arrival that `onMessageReceived` would not
+    // have incremented for anyway — mirrors that pure function's own
+    // branching exactly (see its doc). Also respects the caller's own
+    // `incrementUnread: false` (e.g. MUC.ts's nick-change system message).
+    const priorMeta = get().roomMeta.get(roomJid)
+    const unseen = notifState.isUnseenIncomingMessage(messageToAdd, {
+      isActive: get().activeRoomJid === roomJid,
+      windowVisible: connectionStore.getState().windowVisible,
+    })
+    const noteAsTransient = incrementUnread && unseen && isNoLocalStore(messageToAdd) && isRenderableStoredMessage(messageToAdd)
+    let overlayUnreadDelta = 0
+    let overlayRequiresRecount = false
+    if (noteAsTransient && priorMeta) {
+      const scopeKey = roomTransientScopeKey(roomJid)
+      // No boundary here: `isUnseenIncomingMessage` above already establishes
+      // this is a genuine new arrival relative to the read state, so only the
+      // BEFORE/AFTER *delta* matters — adding one brand-new logical entry
+      // always changes the raw (unbounded) count by exactly 1. (The real
+      // floor would be redundant AND riskier: a fresh room's historyFloor is
+      // stamped "now" at creation, so a message arriving within the same
+      // millisecond would tie rather than compare strictly-after it,
+      // undercounting the very message this branch exists to count.)
+      const before = transientCounts(scopeKey, undefined).unread
+      const identityFields = {
+        roomJid,
+        from: messageToAdd.from,
+        id: messageToAdd.id,
+        stanzaId: messageToAdd.stanzaId,
+        originId: messageToAdd.originId,
+      }
+      const result = noteTransient(
+        scopeKey,
+        { position: { timestamp: messageToAdd.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(messageToAdd, 'room') } },
+        transientIdentity(identityFields, 'room'),
+        transientAliases(identityFields, 'room')
+      )
+      // `added` drives the +1 (case 1: brand-new logical entry). Re-reading
+      // transientCounts rather than hardcoding +1 keeps this delta honest
+      // against the SAME primitive the async recount uses.
+      if (result.added) {
+        overlayUnreadDelta = Math.max(0, transientCounts(scopeKey, undefined).unread - before)
+      }
+      // A coalesce or moved-earlier position (added: false) changes the
+      // overlay's contribution WITHOUT a synchronous +1 — only the
+      // archive-derived recompute (scheduled after the set() below) can fold
+      // that back into the stored count correctly.
+      overlayRequiresRecount = result.requiresRecount
     }
 
     set((state) => {
@@ -1640,6 +1732,10 @@ export const roomStore = createStore<RoomState>()(
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
 
+      // When this arrival is being noted in the transient overlay above,
+      // `incrementUnread: false` suppresses this branch's OWN +1 — its
+      // contribution is `overlayUnreadDelta` (applied to `unreadCount`
+      // below), so the two paths can never double-count the same message.
       const updated = notifState.onMessageReceived(
         notifInput,
         {
@@ -1649,11 +1745,19 @@ export const roomStore = createStore<RoomState>()(
           isOutgoing: messageToAdd.isOutgoing ?? false,
           isDelayed: messageToAdd.isDelayed,
           isMention: messageToAdd.isMention,
+          body: messageToAdd.body,
+          attachment: messageToAdd.attachment,
+          poll: messageToAdd.poll,
+          pollClosed: messageToAdd.pollClosed,
+          isRetracted: messageToAdd.isRetracted,
+          encryptedPayload: messageToAdd.encryptedPayload,
+          unsupportedEncryption: messageToAdd.unsupportedEncryption,
         },
         { isActive, windowVisible },
         'room',
-        { incrementUnread, incrementMentions }
+        { incrementUnread: incrementUnread && !noteAsTransient, incrementMentions }
       )
+      const unreadCount = Math.min(999, updated.unreadCount + overlayUnreadDelta)
 
       // Get the last non-ignored message for sidebar preview. Use the appended set
       // (not the possibly-gated resident array) so the preview still advances to the
@@ -1694,7 +1798,7 @@ export const roomStore = createStore<RoomState>()(
       newRooms.set(roomJid, {
         ...existing,
         messages: newMessages,
-        unreadCount: updated.unreadCount,
+        unreadCount,
         mentionsCount: updated.mentionsCount,
         lastMessage,
         lastInteractedAt: newLastInteractedAt,
@@ -1712,7 +1816,7 @@ export const roomStore = createStore<RoomState>()(
       if (existingMeta) {
         newMeta.set(roomJid, {
           ...existingMeta,
-          unreadCount: updated.unreadCount,
+          unreadCount,
           mentionsCount: updated.mentionsCount,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
@@ -1726,6 +1830,14 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
+
+    // Task 9: a coalesce/moved-earlier overlay change doesn't get a
+    // synchronous count update above — only the archive-derived recompute
+    // can fold it back into the stored count correctly (see `noteTransient`'s
+    // doc on `requiresRecount`). No-ops for the active room.
+    if (overlayRequiresRecount) {
+      void get().recomputeUnreadForRoom(roomJid)
+    }
   },
 
   updateReactions: (roomJid, messageId, reactorNick, emojis) => {
@@ -1794,6 +1906,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateMessage: (roomJid, messageId, updates) => {
+    let recountNeeded = false
     set((state) => {
       const newRooms = new Map(state.rooms)
       const existing = newRooms.get(roomJid)
@@ -1820,6 +1933,23 @@ export const roomStore = createStore<RoomState>()(
         } else if (updates.body) {
           void searchIndex.updateMessage(updatedMessage)
         }
+
+        // Task 9: a retraction may target a `noLocalStore` message noted in
+        // the transient overlay (e.g. a Quick Chat message) — drop it so it
+        // stops contributing, and schedule a recount if it actually left
+        // (safe to call for every retraction: removeTransient is a no-op
+        // when the alias was never noted).
+        if (updates.isRetracted) {
+          const identityFields = {
+            roomJid,
+            from: updatedMessage.from,
+            id: updatedMessage.id,
+            stanzaId: updatedMessage.stanzaId,
+            originId: updatedMessage.originId,
+          }
+          const removal = removeTransient(roomTransientScopeKey(roomJid), transientIdentity(identityFields, 'room'))
+          if (removal.removed) recountNeeded = true
+        }
       }
 
       newRooms.set(roomJid, { ...existing, messages: newMessages })
@@ -1845,6 +1975,8 @@ export const roomStore = createStore<RoomState>()(
 
       return result
     })
+
+    if (recountNeeded) void get().recomputeUnreadForRoom(roomJid)
   },
 
   clearMessageStanzaId: (roomJid, stanzaId) => {
@@ -2035,6 +2167,12 @@ export const roomStore = createStore<RoomState>()(
     const floorPos: OrderPosition = afterGuard.readPointer
       ? { timestamp: afterGuard.readPointer.timestamp.getTime(), archiveOrderKey: afterGuard.readPointer.archiveOrderKey }
       : { timestamp: floor.getTime() }
+
+    // Task 9 safety net: this recompute is one of the "pointer advance /
+    // content settled" triggers — bound the transient overlay's memory here
+    // too, since not every trigger path calls pruneTransient directly.
+    pruneTransient(roomTransientScopeKey(roomJid), floorPos)
+
     if (compareOrder(bottom, floorPos) > 0) return // coverage doesn't reach the floor
 
     const res = await messageCache.countRoomUnreadInArchive(roomJid, {
@@ -2125,6 +2263,17 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if no change
       if (updated === notifInput) return {}
 
+      // Task 9: the read pointer just moved (or the counts were cleared) —
+      // bound the transient overlay's memory now rather than waiting for a
+      // later recompute trigger. Pruning is a memory bound only:
+      // transientCounts already excludes entries at/behind the boundary.
+      if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
+        pruneTransient(roomTransientScopeKey(roomJid), {
+          timestamp: updated.readPointer.timestamp.getTime(),
+          archiveOrderKey: updated.readPointer.archiveOrderKey,
+        })
+      }
+
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, readPointer: updated.readPointer })
 
@@ -2172,6 +2321,15 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: 0,
         mentionsCount: 0,
       }
+
+      // Task 9: mark-all-read jumps the pointer straight to the newest
+      // message — prune the overlay now rather than leaving every noted
+      // entry to a later recompute trigger.
+      pruneTransient(roomTransientScopeKey(roomJid), {
+        timestamp: read.readPointer.timestamp.getTime(),
+        archiveOrderKey: read.readPointer.archiveOrderKey,
+      })
+
       const committed = commitRoomUpdate(state, roomJid, read)
       if (!committed) return state
 
@@ -2411,6 +2569,17 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
       const updated = notifState.onMessageSeen(notifInput, messageId, messages, 'room', { atLiveEdge })
       if (updated === notifInput) return state
+
+      // Task 9: the viewport-driven pointer just advanced — bound the
+      // transient overlay's memory. Safe to call unconditionally: a
+      // pruned-away entry was already excluded from transientCounts by the
+      // boundary comparison, this just reclaims the memory.
+      if (updated.readPointer) {
+        pruneTransient(roomTransientScopeKey(roomJid), {
+          timestamp: updated.readPointer.timestamp.getTime(),
+          archiveOrderKey: updated.readPointer.archiveOrderKey,
+        })
+      }
 
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...existing, readPointer: updated.readPointer })

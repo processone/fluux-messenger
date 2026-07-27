@@ -17,8 +17,24 @@ import {
   type CoverageRecord,
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
-import { computeFloor, pointerlessDefers, compareOrder, type OrderPosition } from './shared/readState'
-import { transientCounts, type ScopeKey as TransientScopeKey } from './shared/transientUnread'
+import {
+  computeFloor,
+  pointerlessDefers,
+  compareOrder,
+  makeArchiveOrderKey,
+  isRenderableStoredMessage,
+  type OrderPosition,
+} from './shared/readState'
+import {
+  transientCounts,
+  noteTransient,
+  pruneTransient,
+  removeTransient,
+  clearTransientScope,
+  transientIdentity,
+  transientAliases,
+  type ScopeKey as TransientScopeKey,
+} from './shared/transientUnread'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
@@ -524,6 +540,16 @@ function bumpChatRecountVersion(conversationId: string): number {
 // moved — a gate already in flight when the state was torn down must not
 // resurrect entries.
 let chatCacheEpoch = 0
+
+/**
+ * Task 9: the account scope this store last saw its OWN transient-overlay
+ * entries filed under. Tracked separately from `getStorageScopeJid()` because
+ * by the time `switchAccount` runs, the global scope has ALREADY flipped to
+ * the incoming account (XMPPClient calls `setStorageScopeJid` before
+ * `switchAccount`) — `getStorageScopeJid()` there would name the NEW account,
+ * not the one being torn down.
+ */
+let lastChatTransientScope: string | null = null
 
 /** Test-only: drop all per-conversation archive-save chain entries. */
 export function _resetChatArchiveSavesForTesting(): void {
@@ -1494,6 +1520,59 @@ export const chatStore = createStore<ChatState>()(
         const msg = arrival.messages[0]
         if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
+        // Task 9: `noLocalStore` messages (Quick Chat) are never archived, so
+        // the transient overlay is their ONLY source of unread truth —
+        // computed once, here, before the state update below, so
+        // `noteTransient` (a side-effecting Map mutation) runs exactly once
+        // per arrival. Gated on `isUnseenIncomingMessage` so we never note an
+        // outgoing/seen/historical arrival that `onMessageReceived` would not
+        // have incremented for anyway — mirrors that pure function's own
+        // branching exactly (see its doc).
+        const priorMeta = get().conversationMeta.get(msg.conversationId)
+        const unseen = notifState.isUnseenIncomingMessage(
+          msg,
+          {
+            isActive: get().activeConversationId === msg.conversationId,
+            windowVisible: connectionStore.getState().windowVisible,
+          },
+          { treatDelayedAsNew: true }
+        )
+        const noteAsTransient = unseen && isNoLocalStore(msg) && isRenderableStoredMessage(msg)
+        let overlayUnreadDelta = 0
+        let overlayRequiresRecount = false
+        if (noteAsTransient && priorMeta) {
+          const scopeKey = chatTransientScopeKey(msg.conversationId)
+          // No boundary here: `isUnseenIncomingMessage` above already
+          // establishes this is a genuine new arrival relative to the read
+          // state, so only the BEFORE/AFTER *delta* matters — adding one
+          // brand-new logical entry always changes the raw (unbounded) count
+          // by exactly 1. (The real floor would be redundant AND riskier: a
+          // fresh conversation's historyFloor is stamped "now" at creation, so
+          // a message arriving within the same millisecond would tie rather
+          // than compare strictly-after it, undercounting the very message
+          // this branch exists to count.)
+          const before = transientCounts(scopeKey, undefined).unread
+          const result = noteTransient(
+            scopeKey,
+            { position: { timestamp: msg.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(msg, 'chat') } },
+            transientIdentity({ id: msg.id }, 'chat'),
+            transientAliases({ id: msg.id }, 'chat')
+          )
+          // `added` drives the +1 (case 1: brand-new logical entry). Re-reading
+          // transientCounts rather than hardcoding +1 keeps this delta honest
+          // against the SAME primitive the async recount uses — see
+          // `transientUnread.ts`'s module doc on why the overlay must never be
+          // approximated ad hoc.
+          if (result.added) {
+            overlayUnreadDelta = Math.max(0, transientCounts(scopeKey, undefined).unread - before)
+          }
+          // A coalesce or moved-earlier position (added: false) changes the
+          // overlay's contribution WITHOUT a synchronous +1 — only the
+          // archive-derived recompute (scheduled after the set() below) can
+          // fold that back into the stored count correctly.
+          overlayRequiresRecount = result.requiresRecount
+        }
+
         set((state) => {
           const convMessages = state.messages.get(msg.conversationId) || []
 
@@ -1545,7 +1624,12 @@ export const chatStore = createStore<ChatState>()(
             const isActive = state.activeConversationId === msg.conversationId
             const windowVisible = connectionStore.getState().windowVisible
 
-            // Delegate notification state transition to pure function
+            // Delegate notification state transition to pure function. When
+            // this arrival is being noted in the transient overlay above,
+            // `incrementUnread: false` suppresses this branch's OWN +1 — its
+            // contribution is `overlayUnreadDelta` (applied to `unreadCount`
+            // below), so the two paths can never double-count the same
+            // message.
             const notif = notifState.onMessageReceived(
               {
                 unreadCount: meta.unreadCount,
@@ -1558,8 +1642,9 @@ export const chatStore = createStore<ChatState>()(
               'chat',
               // In 1:1 chats, delayed messages are offline delivery (new messages
               // sent while user was offline), so they should increment unread
-              { treatDelayedAsNew: true }
+              { treatDelayedAsNew: true, incrementUnread: !noteAsTransient }
             )
+            const unreadCount = Math.min(999, notif.unreadCount + overlayUnreadDelta)
 
             // Sidebar preview policy, shared with every bulk-merge path so the
             // four call sites can't drift again. Falls back to the existing
@@ -1583,7 +1668,7 @@ export const chatStore = createStore<ChatState>()(
             const newMeta = new Map(state.conversationMeta)
             newMeta.set(msg.conversationId, {
               ...meta,
-              unreadCount: notif.unreadCount,
+              unreadCount,
               lastMessage: previewMessage,
               readPointer: notif.readPointer,
             })
@@ -1592,7 +1677,7 @@ export const chatStore = createStore<ChatState>()(
             const newConversations = new Map(state.conversations)
             newConversations.set(msg.conversationId, {
               ...conv,
-              unreadCount: notif.unreadCount,
+              unreadCount,
               lastMessage: previewMessage,
               readPointer: notif.readPointer,
             })
@@ -1625,6 +1710,14 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessages, lastArrivedMessage: newArrived }
         })
+
+        // Task 9: a coalesce/moved-earlier overlay change doesn't get a
+        // synchronous count update above — only the archive-derived recompute
+        // can fold it back into the stored count correctly (see `noteTransient`'s
+        // doc on `requiresRecount`). No-ops for the active conversation.
+        if (overlayRequiresRecount) {
+          void get().recomputeUnreadForConversation(msg.conversationId)
+        }
       },
 
       markAsRead: (conversationId) => {
@@ -1659,6 +1752,17 @@ export const chatStore = createStore<ChatState>()(
 
           // Pure function returns the same reference when nothing changed.
           if (updated === notifInput) return {}
+
+          // Task 9: the read pointer just moved (or the counts were cleared) —
+          // bound the transient overlay's memory now rather than waiting for a
+          // later recompute trigger. Pruning is a memory bound only:
+          // transientCounts already excludes entries at/behind the boundary.
+          if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
+            pruneTransient(chatTransientScopeKey(conversationId), {
+              timestamp: updated.readPointer.timestamp.getTime(),
+              archiveOrderKey: updated.readPointer.archiveOrderKey,
+            })
+          }
 
           const newMetaEntry = {
             ...(meta ?? { unreadCount: 0, readPointer: undefined }),
@@ -1701,6 +1805,14 @@ export const chatStore = createStore<ChatState>()(
             readPointer: makeReadPointer(newest, 'chat'),
             unreadCount: 0,
           }
+
+          // Task 9: mark-all-read jumps the pointer straight to the newest
+          // message — prune the overlay now rather than leaving every noted
+          // entry to a later recompute trigger.
+          pruneTransient(chatTransientScopeKey(conversationId), {
+            timestamp: read.readPointer.timestamp.getTime(),
+            archiveOrderKey: read.readPointer.archiveOrderKey,
+          })
 
           const newMeta = new Map(state.conversationMeta)
           if (meta) newMeta.set(conversationId, { ...meta, ...read })
@@ -1786,6 +1898,17 @@ export const chatStore = createStore<ChatState>()(
           // No change: onMessageSeen hands back the pointer it was given (by
           // reference) whenever it did not advance, and a fresh object when it did.
           if (updated.readPointer === meta.readPointer) return state
+
+          // Task 9: the viewport-driven pointer just advanced — bound the
+          // transient overlay's memory. Safe to call unconditionally: a
+          // pruned-away entry was already excluded from transientCounts by
+          // the boundary comparison, this just reclaims the memory.
+          if (updated.readPointer) {
+            pruneTransient(chatTransientScopeKey(conversationId), {
+              timestamp: updated.readPointer.timestamp.getTime(),
+              archiveOrderKey: updated.readPointer.archiveOrderKey,
+            })
+          }
 
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, { ...meta, readPointer: updated.readPointer })
@@ -2060,6 +2183,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       updateMessage: (conversationId, messageId, updates) => {
+        let recountNeeded = false
         set((state) => {
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) return state
@@ -2087,6 +2211,16 @@ export const chatStore = createStore<ChatState>()(
             void searchIndex.removeMessage(updatedMessage)
           } else if (updates.body) {
             void searchIndex.updateMessage(updatedMessage)
+          }
+
+          // Task 9: a retraction may target a `noLocalStore` message noted in
+          // the transient overlay (e.g. a Quick Chat message) — drop it so it
+          // stops contributing, and schedule a recount if it actually left
+          // (safe to call for every retraction: removeTransient is a no-op
+          // when the alias was never noted).
+          if (updates.isRetracted) {
+            const removal = removeTransient(chatTransientScopeKey(conversationId), transientIdentity({ id: updatedMessage.id }, 'chat'))
+            if (removal.removed) recountNeeded = true
           }
 
           // Refresh the lastMessage preview when this update touches it. Match
@@ -2119,6 +2253,8 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessages }
         })
+
+        if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
       },
 
       clearMessageStanzaId: (conversationId, stanzaId) => {
@@ -2196,6 +2332,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       removeMessage: (conversationId, messageId) => {
+        let recountNeeded = false
         set((state) => {
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) return state
@@ -2212,6 +2349,13 @@ export const chatStore = createStore<ChatState>()(
           // sync, using the message's real id (not the lookup id).
           void searchIndex.removeMessage(removed)
           void messageCache.deleteMessage(removed.id)
+
+          // Task 9: this may be dropping a noted `noLocalStore` message (a
+          // bodiless placeholder never resolves to noLocalStore in practice,
+          // but removeTransient is a harmless no-op when the alias was never
+          // noted, so it is safe to call unconditionally here too).
+          const removal = removeTransient(chatTransientScopeKey(conversationId), transientIdentity({ id: removed.id }, 'chat'))
+          if (removal.removed) recountNeeded = true
 
           // If the removed message was the conversation preview, recompute it.
           // This is the cleanup path for a deferred-decrypt that resolved an
@@ -2237,6 +2381,8 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessages }
         })
+
+        if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
       },
 
       recomputeUnreadForConversation: async (conversationId) => {
@@ -2356,6 +2502,12 @@ export const chatStore = createStore<ChatState>()(
         const floorPos: OrderPosition = afterGuard.readPointer
           ? { timestamp: afterGuard.readPointer.timestamp.getTime(), archiveOrderKey: afterGuard.readPointer.archiveOrderKey }
           : { timestamp: floor.getTime() }
+
+        // Task 9 safety net: this recompute is one of the "pointer advance /
+        // content settled" triggers — bound the transient overlay's memory
+        // here too, since not every trigger path calls pruneTransient directly.
+        pruneTransient(chatTransientScopeKey(conversationId), floorPos)
+
         if (compareOrder(bottom, floorPos) > 0) return // coverage doesn't reach the floor
 
         const res = await messageCache.countUnreadInArchive(conversationId, {
@@ -3054,6 +3206,11 @@ export const chatStore = createStore<ChatState>()(
         conversationArchiveSaves.clear()
         chatCacheEpoch++
         chatRecountVersion.clear()
+        // Task 9: tear down the OUTGOING account's transient overlay entries
+        // before adopting the new scope — see lastChatTransientScope's doc for
+        // why this can't just read getStorageScopeJid() here.
+        if (lastChatTransientScope !== null) clearTransientScope(lastChatTransientScope)
+        lastChatTransientScope = getStorageScopeJid()
         set(loadScopedChatState(jid))
       },
 
@@ -3062,6 +3219,13 @@ export const chatStore = createStore<ChatState>()(
         conversationArchiveSaves.clear()
         chatCacheEpoch++
         chatRecountVersion.clear()
+        // Task 9: logout tears down this account's transient overlay too.
+        // Unlike switchAccount, nothing flips the global scope before reset()
+        // runs (clearLocalData calls it directly), so getStorageScopeJid()
+        // here is still the account being logged out — read it directly
+        // rather than through lastChatTransientScope.
+        clearTransientScope(getStorageScopeJid() ?? '')
+        lastChatTransientScope = null
         // New session → the XEP-0490 synced read marker may be folded again on first open.
         mdsGate.reset()
         // Logout discards the blob, so there is nothing left to carry legacy

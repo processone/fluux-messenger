@@ -21,6 +21,7 @@
  */
 
 import { makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
+import { isRenderableStoredMessage, type RenderabilityCheckFields } from './readState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,8 +68,17 @@ export interface EntityNotificationState {
   firstNewMessageId?: string
 }
 
-/** Minimal message shape needed for notification decisions. */
-export interface NotificationMessage {
+/**
+ * Minimal message shape needed for notification decisions.
+ *
+ * Extends {@link RenderabilityCheckFields} (content fields, all optional) so
+ * the increment branch of {@link onMessageReceived} can gate on
+ * `isRenderableStoredMessage` directly — every existing caller already
+ * constructs these objects from a real `Message`/`RoomMessage`, or omits the
+ * content fields entirely (falling back to "not renderable", which is only
+ * consulted by the one branch that needs it).
+ */
+export interface NotificationMessage extends RenderabilityCheckFields {
   id: string
   timestamp: Date
   isOutgoing: boolean
@@ -114,7 +124,8 @@ export interface MessageReceivedOptions {
  * - Delayed/historical: no changes (preserve existing state)
  * - Incoming + user sees message: no unread increment, advance the pointer
  * - Incoming + user doesn't see + entity active + window hidden: set marker if not set
- * - Incoming + user doesn't see + entity not active: increment unread, don't set marker
+ * - Incoming + user doesn't see + entity not active: increment unread (only when
+ *   the message is renderable — see `isRenderableStoredMessage`), don't set marker
  */
 export function onMessageReceived(
   state: EntityNotificationState,
@@ -156,8 +167,16 @@ export function onMessageReceived(
     }
   }
 
-  // User doesn't see the message
-  const newUnreadCount = incrementUnread ? state.unreadCount + 1 : state.unreadCount
+  // User doesn't see the message. A message with nothing to display (a stray
+  // XEP-0333 marker, a XEP-0428-fallback-only body — see
+  // `isRenderableStoredMessage`) never becomes a visible bubble, so it must
+  // never inflate the badge either: that phantom `+1` is exactly the class of
+  // bug this guard closes. `noLocalStore` messages (never archived) are
+  // EXCLUDED from this ad hoc `+1` by the caller passing `incrementUnread:
+  // false` for them — their contribution comes entirely from the transient
+  // overlay (`stores/shared/transientUnread.ts`), wired at the chatStore/
+  // roomStore call sites, so it is never double-counted here.
+  const newUnreadCount = incrementUnread && isRenderableStoredMessage(msg) ? state.unreadCount + 1 : state.unreadCount
   const newMentionsCount = incrementMentions ? state.mentionsCount + 1 : state.mentionsCount
 
   // Set marker if: entity is active AND window hidden AND no existing marker
@@ -174,6 +193,28 @@ export function onMessageReceived(
     readPointer: state.readPointer,
     firstNewMessageId: newFirstNewMessageId,
   }
+}
+
+/**
+ * Whether {@link onMessageReceived} would reach its final "user doesn't see
+ * the message" branch — i.e. treat `msg` as a genuine unseen arrival rather
+ * than short-circuiting on outgoing, delayed-historical, or seen-live.
+ *
+ * Exported so a caller that needs to gate a SIDE EFFECT on that exact same
+ * condition (the transient overlay's `noteTransient`, in chatStore/roomStore —
+ * see `stores/shared/transientUnread.ts`) mirrors this pure transition's own
+ * branching instead of re-deriving a similar-but-possibly-different check
+ * inline, which is exactly the kind of drift this module exists to prevent.
+ */
+export function isUnseenIncomingMessage(
+  msg: Pick<NotificationMessage, 'isOutgoing' | 'isDelayed'>,
+  ctx: Pick<EntityContext, 'isActive' | 'windowVisible'>,
+  options?: { treatDelayedAsNew?: boolean }
+): boolean {
+  if (msg.isOutgoing) return false
+  if (msg.isDelayed && !(options?.treatDelayedAsNew ?? false)) return false
+  if (ctx.isActive && ctx.windowVisible) return false
+  return true
 }
 
 /**

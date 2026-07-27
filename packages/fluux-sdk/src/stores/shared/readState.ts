@@ -11,6 +11,14 @@
 import type { ReadPointer } from './readPointer'
 
 /**
+ * Re-exported so the live `+1` fast path (`notificationState.ts`) and the
+ * archive cursor walk (`messageCache.ts`) import the SAME function from the
+ * SAME module — both literally call `isRenderableStoredMessage`, so the two
+ * can never independently drift into checking slightly different things.
+ */
+export { isRenderableStoredMessage, type RenderabilityCheckFields } from '../../utils/messageRenderability'
+
+/**
  * The archive's own tie-break key for a message, kind-discriminated because
  * chat and room break same-millisecond ties differently:
  *

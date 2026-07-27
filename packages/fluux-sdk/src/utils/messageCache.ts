@@ -10,9 +10,14 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
-import { isRenderableStoredMessage } from './messageRenderability'
 import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
-import { makeArchiveOrderKey, compareOrder, type ArchiveOrderKey, type OrderPosition } from '../stores/shared/readState'
+import {
+  makeArchiveOrderKey,
+  compareOrder,
+  isRenderableStoredMessage,
+  type ArchiveOrderKey,
+  type OrderPosition,
+} from '../stores/shared/readState'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list

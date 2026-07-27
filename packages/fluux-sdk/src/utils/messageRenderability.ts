@@ -1,4 +1,21 @@
-import type { Message, RoomMessage } from '../core/types'
+/**
+ * The fields {@link isRenderableStoredMessage} inspects — deliberately a
+ * structural subset (not `Message | RoomMessage`) so the live `+1` fast path
+ * (`notificationState.ts`'s `NotificationMessage`, re-exported via
+ * `stores/shared/readState.ts`) can satisfy it without carrying every field
+ * of a full stored message. `Message` and `RoomMessage` both satisfy this
+ * shape already (their `body` is required, everything else optional), so
+ * every existing call site keeps working unchanged.
+ */
+export interface RenderabilityCheckFields {
+  body?: string
+  attachment?: unknown
+  poll?: unknown
+  pollClosed?: unknown
+  isRetracted?: boolean
+  encryptedPayload?: unknown
+  unsupportedEncryption?: unknown
+}
 
 /**
  * Whether a persisted message has anything to display.
@@ -14,8 +31,13 @@ import type { Message, RoomMessage } from '../core/types'
  * A message still renders with an empty body when it is a retraction tombstone,
  * carries an attachment or poll, or holds encrypted content shown as a
  * placeholder — those are all kept.
+ *
+ * Also the live `+1` fast path's renderability guard (`notificationState.ts`):
+ * imported there via `readState.ts`'s re-export so the archive cursor walk
+ * (this module's original caller) and the live path can never drift apart —
+ * see that re-export's doc for why.
  */
-export function isRenderableStoredMessage(message: Message | RoomMessage): boolean {
+export function isRenderableStoredMessage(message: RenderabilityCheckFields): boolean {
   return (
     (typeof message.body === 'string' && message.body.trim().length > 0) ||
     message.attachment != null ||

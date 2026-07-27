@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { chatStore, _resetChatArchiveSavesForTesting } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
-import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
 import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
+import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -101,6 +102,10 @@ describe('chatStore', () => {
     vi.mocked(messageCache.saveMessages).mockResolvedValue(true)
     // A failed save poisons the per-conversation chain by design — drop it between tests.
     _resetChatArchiveSavesForTesting()
+    // The transient overlay is a module-level Map outside any store — guard
+    // against it leaking noted entries across `it()` blocks (roomStore's twin
+    // suite hit exactly this with fixed message ids reused across tests).
+    _clearAllTransientForTesting()
   })
 
   afterEach(() => {
@@ -1422,6 +1427,112 @@ describe('chatStore', () => {
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(1)
+    })
+
+    describe('Task 9 — transient overlay wiring', () => {
+      it('registers a renderable noLocalStore message in the transient overlay, not just the badge', () => {
+        const CONV = 'overlay@example.com'
+        chatStore.getState().addConversation(createConversation(CONV))
+        const msg = { ...createMessage(CONV, 'Ephemeral', false), noLocalStore: true }
+
+        chatStore.getState().addMessage(msg)
+
+        expect(chatStore.getState().conversations.get(CONV)?.unreadCount).toBe(1)
+        // Proves the entry actually landed in the overlay — not merely a bare
+        // `+1` somewhere else — by querying the overlay's own primitive
+        // directly, the same one the archive-derived recompute reads.
+        expect(
+          transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: CONV }, undefined).unread
+        ).toBe(1)
+      })
+
+      it('does not increment unreadCount again when the identical noLocalStore message is re-delivered', () => {
+        const CONV = 'overlay2@example.com'
+        chatStore.getState().addConversation(createConversation(CONV))
+        const msg = { ...createMessage(CONV, 'Ephemeral', false), noLocalStore: true }
+
+        chatStore.getState().addMessage(msg)
+        expect(chatStore.getState().conversations.get(CONV)?.unreadCount).toBe(1)
+
+        // Simulate the resident window having evicted the first copy (memory
+        // windowing / a backgrounded conversation) — the overlay itself is
+        // NEVER cleared on deactivation, so it is the only thing standing
+        // between this redelivery and a double count. Without this eviction,
+        // the TIMELINE's own dedupe (appendLive, keyed off the same bare id)
+        // would already catch the duplicate before the overlay's `added` gate
+        // is ever consulted — making the control hollow.
+        chatStore.setState((state) => {
+          const messages = new Map(state.messages)
+          messages.set(CONV, [])
+          return { messages }
+        })
+
+        // Re-deliver the EXACT same message (e.g. a duplicate carbon/echo).
+        // Chat identity has no tiers (unlike rooms) — it is the bare id — so
+        // this is the chat-side twin of the room's alias-re-delivery control:
+        // `noteTransient` resolves it to the SAME entry (`added: false`), so
+        // the badge must not double-count it.
+        chatStore.getState().addMessage({ ...msg })
+        expect(chatStore.getState().conversations.get(CONV)?.unreadCount).toBe(1)
+      })
+
+      it('prunes the overlay entry once markReadToNewest passes it (memory bound, not correctness)', () => {
+        const CONV = 'overlay3@example.com'
+        chatStore.getState().addConversation(createConversation(CONV))
+        const msg = { ...createMessage(CONV, 'Ephemeral', false), noLocalStore: true }
+        chatStore.getState().addMessage(msg)
+        const key = { accountScope: getStorageScopeJid() ?? '', kind: 'chat' as const, entityId: CONV }
+        expect(transientCounts(key, undefined).unread).toBe(1)
+
+        chatStore.getState().markReadToNewest(CONV)
+
+        expect(transientCounts(key, undefined).unread).toBe(0)
+      })
+
+      it('removes the overlay entry when the message is retracted, and schedules a recount', () => {
+        const CONV = 'overlay4@example.com'
+        chatStore.getState().addConversation(createConversation(CONV))
+        const msg = { ...createMessage(CONV, 'Ephemeral', false), noLocalStore: true }
+        chatStore.getState().addMessage(msg)
+        const key = { accountScope: getStorageScopeJid() ?? '', kind: 'chat' as const, entityId: CONV }
+        expect(transientCounts(key, undefined).unread).toBe(1)
+
+        const recomputeSpy = vi.spyOn(chatStore.getState(), 'recomputeUnreadForConversation').mockResolvedValue(undefined)
+
+        chatStore.getState().updateMessage(CONV, msg.id, { isRetracted: true, retractedAt: new Date() })
+
+        expect(transientCounts(key, undefined).unread).toBe(0)
+        expect(recomputeSpy).toHaveBeenCalledWith(CONV)
+
+        recomputeSpy.mockRestore()
+      })
+
+      it('clears the outgoing account transient overlay on switchAccount, and the current account on reset', () => {
+        setStorageScopeJid('alice@example.com')
+        chatStore.getState().switchAccount('alice@example.com')
+        chatStore.getState().addConversation(createConversation('overlay5@example.com'))
+        const aliceMsg = { ...createMessage('overlay5@example.com', 'Ephemeral', false), noLocalStore: true }
+        chatStore.getState().addMessage(aliceMsg)
+        const aliceKey = { accountScope: 'alice@example.com', kind: 'chat' as const, entityId: 'overlay5@example.com' }
+        expect(transientCounts(aliceKey, undefined).unread).toBe(1)
+
+        setStorageScopeJid('carol@example.com')
+        chatStore.getState().switchAccount('carol@example.com')
+
+        expect(transientCounts(aliceKey, undefined).unread).toBe(0)
+
+        chatStore.getState().addConversation(createConversation('overlay5@example.com'))
+        const carolMsg = { ...createMessage('overlay5@example.com', 'Ephemeral', false), noLocalStore: true }
+        chatStore.getState().addMessage(carolMsg)
+        const carolKey = { accountScope: 'carol@example.com', kind: 'chat' as const, entityId: 'overlay5@example.com' }
+        expect(transientCounts(carolKey, undefined).unread).toBe(1)
+
+        chatStore.getState().reset()
+
+        expect(transientCounts(carolKey, undefined).unread).toBe(0)
+
+        _resetStorageScopeForTesting()
+      })
     })
   })
 

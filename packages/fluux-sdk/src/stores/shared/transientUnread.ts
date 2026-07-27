@@ -249,3 +249,16 @@ export function clearTransientScope(accountScope: string): void {
     if (k.startsWith(prefix)) scopes.delete(k)
   }
 }
+
+/**
+ * Test-only: drop every scope, across every account. This module's state is a
+ * plain top-level `Map` — it is not part of any Zustand store, so resetting a
+ * store's state between tests does not touch it. Now that chatStore/roomStore
+ * genuinely wire `noteTransient` into the live message path (Task 9), a test
+ * fixture reusing the same message id/room across `it()` blocks would
+ * otherwise find it already noted from an earlier test and see `added: false`
+ * where the test expects `true`.
+ */
+export function _clearAllTransientForTesting(): void {
+  scopes.clear()
+}

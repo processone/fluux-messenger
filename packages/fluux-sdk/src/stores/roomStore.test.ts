@@ -3,9 +3,10 @@ import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTest
 import type { Room, RoomMessage } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { getLocalPart } from '../core/jid'
-import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
 import { ignoreStore } from './ignoreStore'
+import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -125,6 +126,10 @@ describe('roomStore', () => {
     vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
     _resetRoomArchiveSavesForTesting()
+    // The transient overlay is a module-level Map outside any store — several
+    // fixtures below reuse the same room jid + message id across `it()`
+    // blocks, which would otherwise resolve to an already-noted entry.
+    _clearAllTransientForTesting()
   })
 
   describe('message eviction on deactivation (memory windowing)', () => {
@@ -1413,6 +1418,150 @@ describe('roomStore', () => {
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.unreadCount).toBe(1)
+    })
+
+    describe('Task 9 — transient overlay wiring', () => {
+      const ROOM = 'overlay@conference.example.com'
+
+      it('registers a renderable noLocalStore message in the transient overlay, not just the badge', () => {
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const message = { ...createMessage('m1', ROOM, 'alice', 'Ephemeral'), noLocalStore: true, originId: 'orig-1' }
+
+        roomStore.getState().addMessage(ROOM, message)
+
+        expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
+        // Proves the entry actually landed in the overlay — not merely a bare
+        // `+1` somewhere else — by querying the overlay's own primitive
+        // directly, the same one the archive-derived recompute reads.
+        expect(
+          transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: ROOM }, undefined).unread
+        ).toBe(1)
+      })
+
+      it('does not increment unreadCount again when the same logical message is re-delivered under a higher identity tier', () => {
+        roomStore.getState().addRoom(createRoom(ROOM))
+        // The local echo: only an origin-id (client-assigned, XEP-0359).
+        const local = { ...createMessage('m1', ROOM, 'alice', 'Ephemeral'), noLocalStore: true, originId: 'orig-1' }
+        roomStore.getState().addMessage(ROOM, local)
+        expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
+
+        // Simulate the resident window having evicted the local echo (memory
+        // windowing / a backgrounded room) — the overlay itself is NEVER
+        // cleared on deactivation, so it is the only thing standing between
+        // this redelivery and a double count. Without this eviction, the
+        // TIMELINE's own dedupe (appendLive, keyed off the SAME tiered
+        // identity) would already catch the duplicate before the overlay's
+        // `added` gate is ever consulted — making the control hollow.
+        roomStore.setState((state) => {
+          const rooms = new Map(state.rooms)
+          const existing = rooms.get(ROOM)
+          if (existing) rooms.set(ROOM, { ...existing, messages: [] })
+          return { rooms }
+        })
+
+        // The MUC's real-time reflection of the SAME message: shares the
+        // origin-id alias with the local echo, but now ALSO carries a
+        // server-assigned stanza-id — a HIGHER identity tier. `noteTransient`
+        // resolves this to the SAME logical entry (`added: false`), so the
+        // badge must not double-count it.
+        const reflected = { ...local, stanzaId: 'stanza-1' }
+        roomStore.getState().addMessage(ROOM, reflected)
+
+        expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(1)
+      })
+
+      it('schedules an archive recount when noteTransient reports a coalesce (requiresRecount)', () => {
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const from = `${ROOM}/alice`
+        // Two DISTINCT noLocalStore entries, each known under only ONE tier.
+        const first = { ...createMessage('a', ROOM, 'alice', 'Ephemeral'), noLocalStore: true, originId: 'O' }
+        const second = { ...createMessage('b', ROOM, 'alice', 'Ephemeral'), noLocalStore: true, stanzaId: 'S' }
+        roomStore.getState().addMessage(ROOM, first)
+        roomStore.getState().addMessage(ROOM, second)
+        expect(
+          transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: ROOM }, undefined).unread
+        ).toBe(2)
+
+        const recomputeSpy = vi.spyOn(roomStore.getState(), 'recomputeUnreadForRoom').mockResolvedValue(undefined)
+
+        // A THIRD delivery carrying BOTH the origin-id and the stanza-id
+        // bridges the two previously-separate entries into one — a coalesce
+        // (`added: false, requiresRecount: true`). The live path cannot
+        // safely apply a synchronous delta for this case (see noteTransient's
+        // doc) — only the archive-derived recompute can fold it back in.
+        const bridge = { ...createMessage('c', ROOM, 'alice', 'Ephemeral'), noLocalStore: true, originId: 'O', stanzaId: 'S', from }
+        roomStore.getState().addMessage(ROOM, bridge)
+
+        expect(recomputeSpy).toHaveBeenCalledWith(ROOM)
+        // The two entries are now one — the overlay's own count reflects it
+        // even before any recompute resolves.
+        expect(
+          transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: ROOM }, undefined).unread
+        ).toBe(1)
+
+        recomputeSpy.mockRestore()
+      })
+
+      it('prunes the overlay entry once markReadToNewest passes it (memory bound, not correctness)', () => {
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const message = { ...createMessage('m1', ROOM, 'alice', 'Ephemeral'), noLocalStore: true }
+        roomStore.getState().addMessage(ROOM, message)
+        const key = { accountScope: getStorageScopeJid() ?? '', kind: 'room' as const, entityId: ROOM }
+        expect(transientCounts(key, undefined).unread).toBe(1)
+
+        roomStore.getState().markReadToNewest(ROOM)
+
+        expect(transientCounts(key, undefined).unread).toBe(0)
+      })
+
+      it('removes the overlay entry when the message is retracted, and schedules a recount', () => {
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const message = { ...createMessage('m1', ROOM, 'alice', 'Ephemeral'), noLocalStore: true }
+        roomStore.getState().addMessage(ROOM, message)
+        const key = { accountScope: getStorageScopeJid() ?? '', kind: 'room' as const, entityId: ROOM }
+        expect(transientCounts(key, undefined).unread).toBe(1)
+
+        const recomputeSpy = vi.spyOn(roomStore.getState(), 'recomputeUnreadForRoom').mockResolvedValue(undefined)
+
+        roomStore.getState().updateMessage(ROOM, 'm1', { isRetracted: true, retractedAt: new Date() })
+
+        expect(transientCounts(key, undefined).unread).toBe(0)
+        expect(recomputeSpy).toHaveBeenCalledWith(ROOM)
+
+        recomputeSpy.mockRestore()
+      })
+
+      it('clears the outgoing account transient overlay on switchAccount, and the current account on reset', () => {
+        // Prime lastRoomTransientScope: the very first switchAccount call in a
+        // session has nothing prior to clear (see its doc) — this establishes
+        // 'alice' as the tracked scope before the transition under test.
+        setStorageScopeJid('alice@example.com')
+        roomStore.getState().switchAccount('alice@example.com')
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const aliceMsg = { ...createMessage('m1', ROOM, 'bob', 'Ephemeral'), noLocalStore: true }
+        roomStore.getState().addMessage(ROOM, aliceMsg)
+        const aliceKey = { accountScope: 'alice@example.com', kind: 'room' as const, entityId: ROOM }
+        expect(transientCounts(aliceKey, undefined).unread).toBe(1)
+
+        setStorageScopeJid('carol@example.com')
+        roomStore.getState().switchAccount('carol@example.com')
+
+        expect(transientCounts(aliceKey, undefined).unread).toBe(0)
+
+        // reset() (logout): nothing flips the scope beforehand, so it tears
+        // down whatever getStorageScopeJid() currently names (carol).
+        roomStore.getState().addRoom(createRoom(ROOM))
+        const carolMsg = { ...createMessage('m2', ROOM, 'dave', 'Ephemeral'), noLocalStore: true }
+        roomStore.getState().addMessage(ROOM, carolMsg)
+        const carolKey = { accountScope: 'carol@example.com', kind: 'room' as const, entityId: ROOM }
+        expect(transientCounts(carolKey, undefined).unread).toBe(1)
+
+        roomStore.getState().reset()
+
+        expect(transientCounts(carolKey, undefined).unread).toBe(0)
+
+        _resetStorageScopeForTesting()
+      })
     })
 
     describe('lastMessage preview — delayed arrivals must not regress the sidebar', () => {
@@ -5793,6 +5942,10 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     vi.mocked(messageCache.saveRoomMessages).mockResolvedValue(true)
     // A failed save poisons the per-room chain by design — drop it between tests.
     _resetRoomArchiveSavesForTesting()
+    // The transient overlay is a module-level Map outside any store — several
+    // fixtures below reuse the same room jid + message id across `it()`
+    // blocks, which would otherwise resolve to an already-noted entry.
+    _clearAllTransientForTesting()
   })
 
   function delayedMsg(id: string, nick: string, ts: string): RoomMessage {

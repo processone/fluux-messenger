@@ -23,13 +23,19 @@ import type { ReadPointer } from './readPointer'
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Default timestamp is "now" so freshness checks pass in shouldNotify tests. */
+/**
+ * Default timestamp is "now" so freshness checks pass in shouldNotify tests.
+ * Default `body` is non-empty so every test using this helper represents an
+ * ordinary renderable message unless it deliberately overrides `body` (or
+ * another renderability field) to exercise the Task 9 guard itself.
+ */
 function makeMsg(overrides: Partial<NotificationMessage> = {}): NotificationMessage {
   return {
     id: 'msg-1',
     timestamp: new Date(),
     isOutgoing: false,
     isDelayed: false,
+    body: 'hello',
     ...overrides,
   }
 }
@@ -185,6 +191,32 @@ describe('onMessageReceived', () => {
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN, 'chat')
       expect(result.readPointer).toBe(existing)
+    })
+  })
+
+  describe('renderability guard (Task 9)', () => {
+    // Seeded at a distinguishing nonzero value (4) so a broken guard that
+    // increments unconditionally is caught by the FIRST assertion (5 !== 4),
+    // not masked by a 0 -> 0 tautology.
+    it('does NOT increment unreadCount for a non-renderable message (empty body, nothing else)', () => {
+      const state = makeState({ unreadCount: 4 })
+      const msg = makeMsg({ body: '' })
+      const result = onMessageReceived(state, msg, INACTIVE_VISIBLE, 'chat')
+      expect(result.unreadCount).toBe(4)
+    })
+
+    it('increments unreadCount for an ordinary renderable message', () => {
+      const state = makeState({ unreadCount: 4 })
+      const msg = makeMsg({ body: 'hello there' })
+      const result = onMessageReceived(state, msg, INACTIVE_VISIBLE, 'chat')
+      expect(result.unreadCount).toBe(5)
+    })
+
+    it('still increments for a body-less retraction tombstone (isRenderableStoredMessage keeps those)', () => {
+      const state = makeState({ unreadCount: 4 })
+      const msg = makeMsg({ body: '', isRetracted: true })
+      const result = onMessageReceived(state, msg, INACTIVE_VISIBLE, 'chat')
+      expect(result.unreadCount).toBe(5)
     })
   })
 
