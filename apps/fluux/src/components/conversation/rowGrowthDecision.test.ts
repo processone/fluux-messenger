@@ -1,17 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { carryDeferral, decideRowGrowth, type RowGrowthFacts } from './rowGrowthDecision'
+import { decideRowGrowth, type RowGrowthFacts } from './rowGrowthDecision'
 
 /** At the bottom, with a 260px card just mounted — the canonical fastening case. */
 const atBottomAfterCard = (over: Partial<RowGrowthFacts> = {}): RowGrowthFacts => ({
   distanceFromBottom: 260,
   growth: 260,
   atBottomThreshold: 150,
-  pinnedTolerance: 4,
   pinClaimHeld: false,
   navigationInFlight: false,
-  readerTookOver: false,
-  isTimerRetry: false,
-  eligibilityEstablished: false,
   ...over,
 })
 
@@ -26,123 +22,30 @@ describe('decideRowGrowth', () => {
     expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 900, growth: 900 }))).toBe('pin')
   })
 
-  it('skips when the reader was genuinely scrolled up before the growth', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 1360, growth: 260 }))).toBe('skip')
+  // A distance of ~0 means the spacer has not taken the growth yet, not that the bottom is pinned.
+  it('pins when the growth is not measured yet', () => {
+    expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 0, growth: 0 }))).toBe('pin')
   })
 
-  it('skips when the reader has scrolled since the growth was queued', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ readerTookOver: true }))).toBe('skip')
+  it('skips when the reader was genuinely scrolled up before the growth', () => {
+    expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 1360, growth: 260 }))).toBe('skip')
   })
 
   it('skips rather than cancel a navigation the reader asked for', () => {
     expect(decideRowGrowth(atBottomAfterCard({ navigationInFlight: true }))).toBe('skip')
   })
 
-  it('skips a TIMER RETRY whose bottom the deferring loop already pinned', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ isTimerRetry: true, distanceFromBottom: 2, growth: 2 }))).toBe('skip')
+  // ACCEPTED GAP, pinned here so it is a decision and not a surprise: a held claim skips, betting
+  // the running loop absorbs the growth. If that loop was abandoned the bet is wrong and THIS growth
+  // is never pinned — the claim's expiry bounds how long further growths stay suppressed, but it
+  // does not replay one already consumed. See the module doc.
+  it('skips while a pin loop holds the claim, betting that loop absorbs the growth', () => {
+    expect(decideRowGrowth(atBottomAfterCard({ pinClaimHeld: true }))).toBe('skip')
   })
 
-  // On a first attempt a distance of ~0 means the spacer has not taken the growth yet, not that
-  // the bottom is pinned. Skipping there would drop a growth no loop is going to absorb.
-  it('still pins a FIRST attempt measuring ~0 distance (spacer has not caught up)', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 0, growth: 0 }))).toBe('pin')
-  })
-
-  // THE CONFLATION REGRESSION. A newer signature can carry an earlier deferral — that establishes
-  // eligibility, but it is still a FIRST attempt at the newly arrived growth, which is typically not
-  // measured yet (distance ~0). Treating it as a timer retry lets the already-pinned shortcut skip
-  // it; if the deferring loop has since released its claim, nothing remains to absorb that growth
-  // and the list is stranded.
-  it('pins a signature-triggered attempt that carries a deferral but is not yet measured', () => {
-    const decision = decideRowGrowth(
-      atBottomAfterCard({
-        eligibilityEstablished: true, // carried from the pending deferral
-        isTimerRetry: false,          // …but this is a fresh signature, not the timer
-        distanceFromBottom: 0,
-        growth: 0,
-        pinClaimHeld: false,          // the old loop already released
-      }),
-    )
-    expect(decision).toBe('pin')
-  })
-
-  // THE REGRESSION. A held claim is a BET that the running loop absorbs the growth. If that loop was
-  // abandoned its claim lingers until it lapses, and because a signature change is consumed exactly
-  // once, `skip` here would drop the fastening for good — it would never be pinned at all.
-  it('DEFERS (never skips) while a pin loop holds the claim, so the caller can retry', () => {
-    expect(decideRowGrowth(atBottomAfterCard({ pinClaimHeld: true }))).toBe('defer')
-  })
-
-  it('defers ahead of the navigation guard — a lapsed claim must still get its retry', () => {
-    const decision = decideRowGrowth(
-      atBottomAfterCard({ pinClaimHeld: true, navigationInFlight: true }),
-    )
-    expect(decision).toBe('defer')
-  })
-
-  // THE RETRY REGRESSION. By the time a deferred growth is retried, the growth has fired its own
-  // scroll event and the baseline has moved forward to the GROWN height — so a freshly derived
-  // growth is 0 and the card's own 260px reads as "the reader is scrolled up". Re-deriving
-  // eligibility there skips the growth forever and the deferral buys nothing.
-  it('pins a retry whose baseline has caught up, so growth now derives as 0', () => {
-    const decision = decideRowGrowth(
-      atBottomAfterCard({ isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260 }),
-    )
-    expect(decision).toBe('pin')
-  })
-
-  it('still refuses that retry if the reader took over in the meantime', () => {
-    const decision = decideRowGrowth(
-      atBottomAfterCard({
-        isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
-        readerTookOver: true,
-      }),
-    )
-    expect(decision).toBe('skip')
-  })
-
-  it('still refuses that retry if a navigation started in the meantime', () => {
-    const decision = decideRowGrowth(
-      atBottomAfterCard({
-        isTimerRetry: true, eligibilityEstablished: true, growth: 0, distanceFromBottom: 260,
-        navigationInFlight: true,
-      }),
-    )
-    expect(decision).toBe('skip')
-  })
-
-  // Ordering guard: a reader who has moved, or who was never at the bottom, must lose to nothing —
-  // not even a held claim should turn those into a retry that could later yank them.
-  it.each([
-    ['the reader took over', { readerTookOver: true }],
-    ['the reader was scrolled up', { distanceFromBottom: 1360, growth: 260 }],
-  ])('skips outright when %s, even with the claim held', (_label, over) => {
-    expect(decideRowGrowth(atBottomAfterCard({ ...over, pinClaimHeld: true }))).toBe('skip')
-  })
-})
-
-describe('carryDeferral', () => {
-  const fresh = { at: 2000, scrollTop: 1500 }
-
-  it('uses the fresh deferral when nothing is pending', () => {
-    expect(carryDeferral(null, fresh)).toBe(fresh)
-  })
-
-  // THE REGRESSION. A preview card defers behind a pin loop; its own scroll event advances the
-  // geometry baseline to the grown height. A reaction arriving before the claim lapses must NOT
-  // restart from that baseline — it would see only the reaction's few pixels, read the card's height
-  // as "the reader is scrolled up", and terminally skip a growth that was eligible and still
-  // pending, leaving the list unpinned for good.
-  it('keeps the EARLIEST pending deferral when a newer growth arrives', () => {
-    const pending = { at: 1000, scrollTop: 1200 }
-    expect(carryDeferral(pending, fresh)).toBe(pending)
-  })
-
-  // The earliest deferral is also what the takeover checks compare against, so preserving it keeps
-  // "did the reader move since we started waiting?" anchored to the original moment.
-  it('preserves the original timestamp and scrollTop, not the newer ones', () => {
-    const pending = { at: 1000, scrollTop: 1200 }
-    const carried = carryDeferral(pending, fresh)
-    expect(carried).toEqual({ at: 1000, scrollTop: 1200 })
+  it('lets the reader-scrolled-up check win over a held claim', () => {
+    expect(
+      decideRowGrowth(atBottomAfterCard({ distanceFromBottom: 1360, growth: 260, pinClaimHeld: true })),
+    ).toBe('skip')
   })
 })

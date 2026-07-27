@@ -25,7 +25,7 @@ import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
-import { carryDeferral, decideRowGrowth, type DeferredRowGrowth } from './rowGrowthDecision'
+import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
@@ -134,11 +134,6 @@ const TARGET_HIGHLIGHT_MS = 1500
 // no-op once truly pinned, so this converges and cannot oscillate. Sub-row tolerance keeps it from
 // firing on harmless subpixel rounding.
 const BOTTOM_PIN_TOLERANCE = 4
-// A row-growth re-pin deferred behind a running pin loop re-checks this many times before giving
-// up. Each retry waits out the loop's remaining claim, so a genuinely long-running loop is what
-// consumes the attempts — an abandoned one lapses on the first.
-const ROW_GROWTH_RETRY_ATTEMPTS = 3
-const ROW_GROWTH_RETRY_MARGIN_MS = 32 // ~2 frames past the claim's expiry, so it has truly lapsed
 // A pin run whose cumulative forced work (layout flushes + scroll writes + repaints) reaches this
 // is worth one rate-limited [PinLoopProbe] line in fluux.log — it attributes the layoutPaint cost
 // RenderCostProbe can only measure in aggregate. ~3 frame budgets; healthy runs stay far below.
@@ -572,11 +567,6 @@ export function useMessageListScroll({
   // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The controller receives the
   // same input directly; this timestamp also supports marker clearing and resize heuristics.
   const userScrollIntentAtRef = useRef(0)
-  // Timestamp of the last GENUINE user scroll of any kind, including a scrollbar drag (which fires
-  // no input event and is recognised only by the height-unchanged discriminator in handleScroll).
-  // Separate from userScrollIntentAtRef on purpose: this one answers "did the reader move?", not
-  // "did the reader press something", and only takeover checks may read it.
-  const lastGenuineScrollAtRef = useRef(0)
 
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
@@ -2476,11 +2466,6 @@ export function useMessageListScroll({
       ) && prevScrollHeightRef.current === scrollHeight
     if (genuineUserScroll) {
       userHasScrolledSinceEntryRef.current = true
-      // This branch is the ONLY place a scrollbar drag is recognised — it fires no wheel, touch or
-      // keydown. Stamp a dedicated timestamp for it rather than userScrollIntentAtRef: that ref
-      // means "deliberate INPUT", and marker clearing relies on it to tell a programmatic
-      // scroll-to-bottom from a user one, so widening it clears the unread marker on re-entry.
-      lastGenuineScrollAtRef.current = Date.now()
       positioningControllerRef.current?.observeUserInput(conversationId)
       runScrollShadowSafely({
         event: 'settled-user-geometry',
@@ -3414,9 +3399,6 @@ export function useMessageListScroll({
   // at the claim's own expiry.
   const prevRowGrowthKeyRef = useRef(rowGrowthSignature)
   const rowGrowthConvRef = useRef(conversationId)
-  const rowGrowthRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The earliest unresolved deferral. Survives newer signatures — see carryDeferral.
-  const pendingRowGrowthRef = useRef<DeferredRowGrowth | null>(null)
 
   /**
    * Try to absorb a row-growth change. Returns false when the attempt was DEFERRED and must be
@@ -3425,18 +3407,16 @@ export function useMessageListScroll({
    * `deferredAt` is the timestamp of the original stimulus: a retry is abandoned if the reader has
    * genuinely scrolled since, so a deferred pin can never yank someone who moved away in between.
    */
-  /**
-   * `deferred` carries an earlier growth's established eligibility and takeover anchors.
-   * `isTimerRetry` says the retry TIMER fired, which is a separate question — a signature-triggered
-   * attempt can carry a deferral and still be a first attempt at the newly arrived growth.
-   */
-  const tryRowGrowthRepin = useCallback((
-    deferred: DeferredRowGrowth | null,
-    isTimerRetry: boolean,
-  ): boolean => {
+  useLayoutEffect(() => {
+    const sameConversation = rowGrowthConvRef.current === conversationId
+    rowGrowthConvRef.current = conversationId
+    const prevKey = prevRowGrowthKeyRef.current
+    prevRowGrowthKeyRef.current = rowGrowthSignature
+    if (!sameConversation) return // conversation switch → rebaseline, never re-pin
+    if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
+
     const scroller = scrollerRef.current
-    if (!scroller || staticMode) return true
-    const carried = deferred !== null
+    if (!scroller || staticMode) return
 
     // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
     // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
@@ -3452,7 +3432,6 @@ export function useMessageListScroll({
           ? Math.max(0, scroller.scrollHeight - baseline)
           : 0,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
-      pinnedTolerance: BOTTOM_PIN_TOLERANCE,
       pinClaimHeld: pinBottomClaim().isHeld(),
       navigationInFlight: Boolean(
         active &&
@@ -3460,78 +3439,9 @@ export function useMessageListScroll({
         active.request.desired.kind !== 'live-edge' &&
         active.phase.kind !== 'settled',
       ),
-      // Two independent takeover signals, because neither covers everything on its own: the
-      // timestamp misses nothing now that scrollbar drags stamp it, but a scrollTop that has moved
-      // UP since the deferral is proof regardless of which input produced it (growth never moves
-      // scrollTop, and a pin only moves it down toward the bottom).
-      // Three independent takeover signals, because none covers everything alone: deliberate input
-      // (wheel/touch/key), a genuine scroll of any kind (this is what catches a scrollbar drag), and
-      // a scrollTop that has moved UP since the deferral — proof regardless of input, since growth
-      // never moves scrollTop and a pin only moves it down toward the bottom.
-      readerTookOver: carried && (
-        userScrollIntentAtRef.current > deferred.at ||
-        lastGenuineScrollAtRef.current > deferred.at ||
-        scroller.scrollTop < deferred.scrollTop - BOTTOM_PIN_TOLERANCE
-      ),
-      isTimerRetry,
-      eligibilityEstablished: carried,
     })
-    if (decision === 'defer') return false
     if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
-    return true
-  }, [staticMode])
-
-  useLayoutEffect(() => {
-    const sameConversation = rowGrowthConvRef.current === conversationId
-    rowGrowthConvRef.current = conversationId
-    const prevKey = prevRowGrowthKeyRef.current
-    prevRowGrowthKeyRef.current = rowGrowthSignature
-    if (rowGrowthRetryRef.current !== null) {
-      clearTimeout(rowGrowthRetryRef.current)
-      rowGrowthRetryRef.current = null
-    }
-    if (!sameConversation) {
-      pendingRowGrowthRef.current = null // conversation switch → rebaseline, never re-pin
-      return
-    }
-    if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
-
-    // Judge against the EARLIEST unresolved deferral, never from current geometry: the pending
-    // growth's own scroll event has already advanced the baseline, so a fresh derivation would see
-    // only this newer delta and terminally skip the growth still waiting.
-    const deferred = carryDeferral(pendingRowGrowthRef.current, {
-      at: Date.now(),
-      scrollTop: scrollerRef.current?.scrollTop ?? 0,
-    })
-    if (tryRowGrowthRepin(pendingRowGrowthRef.current, false)) {
-      pendingRowGrowthRef.current = null
-      return
-    }
-    pendingRowGrowthRef.current = deferred
-
-    // Deferred. Re-check when the claim can no longer be held without a live loop renewing it, so a
-    // lingering claim from an abandoned loop cannot swallow this growth. Bounded: each retry either
-    // resolves or reschedules against a strictly-lapsing claim, and a conversation switch, a newer
-    // signature, or unmount clears it.
-    const scheduleRetry = (attempt: number) => {
-      if (attempt > ROW_GROWTH_RETRY_ATTEMPTS) return
-      rowGrowthRetryRef.current = setTimeout(() => {
-        rowGrowthRetryRef.current = null
-        if (activeConversationIdRef.current !== conversationId) return
-        if (tryRowGrowthRepin(deferred, true)) {
-          pendingRowGrowthRef.current = null
-          return
-        }
-        if (attempt + 1 > ROW_GROWTH_RETRY_ATTEMPTS) pendingRowGrowthRef.current = null
-        scheduleRetry(attempt + 1)
-      }, pinBottomClaim().msUntilExpiry() + ROW_GROWTH_RETRY_MARGIN_MS)
-    }
-    scheduleRetry(1)
-  }, [rowGrowthSignature, conversationId, tryRowGrowthRepin])
-
-  useEffect(() => () => {
-    if (rowGrowthRetryRef.current !== null) clearTimeout(rowGrowthRetryRef.current)
-  }, [])
+  }, [rowGrowthSignature, conversationId, staticMode])
 
   // ==========================================================================
   // EFFECT: Typing indicator appears — reveal its footer clearance while sticked
