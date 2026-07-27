@@ -580,6 +580,17 @@ describe('chatStore persistence throttling', () => {
     expect(ids).toContain('b@example.com')
   })
 
+  // The one test in this area that can actually fail. `reset` cannot carry it:
+  // its trailing `set(empty)` overwrites the pending thunk, so the reset test
+  // below passes with `cancel` removed AND with the throttle removed.
+  it('a cancelled write never lands after the key is cleared', () => {
+    seedConversation('a@example.com')
+    seedConversation('b@example.com') // coalesced into the pending thunk
+    chatStore.persist.clearStorage()
+    vi.advanceTimersByTime(5000)
+    expect(localStorage.getItem(KEY)).toBeNull()
+  })
+
   it('reset leaves no pre-logout data behind', () => {
     seedConversation('secret@example.com')
     seedConversation('secret2@example.com') // pending, not yet written
@@ -608,10 +619,12 @@ Expected: FAIL — write count is 180, exceeding 25.
 At the top of `packages/fluux-sdk/src/stores/chatStore.ts`, beside the other `./shared/...` imports:
 
 ```typescript
-import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { schedule, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 ```
 
-(`flushKey` is used in Task 3; importing it now avoids a second edit to the import block.)
+Import **only** what this task uses. An earlier draft told you to pull in `flushKey` here to save an
+edit in Task 3 — that fails `@typescript-eslint/no-unused-vars`, which is an ESLint *error* in this
+repo, and CLAUDE.md gates commits on a clean lint. Task 3 adds it to this line.
 
 - [ ] **Step 4: Replace the adapter's setItem and removeItem**
 
@@ -663,6 +676,26 @@ with:
             // Ignore storage errors
           }
         },
+```
+
+- [ ] **Step 4b: Cancel in `reset()` — the live clear path**
+
+The adapter's `removeItem` above is **dead code**: nothing in the SDK or the app calls
+`chatStore.persist.clearStorage()`. The clear path that actually runs on logout is `reset()`, which
+does a raw `localStorage.removeItem(getScopedStorageKey())` at ~line 2939. Cancelling only in the
+adapter protects nothing.
+
+Add the cancel to `reset()` too, immediately before its `try`:
+
+```typescript
+        // The throttle's contract: cancel BEFORE any raw removeItem. Today the
+        // trailing `set(createEmptyChatState())` below happens to replace any
+        // pending thunk with an empty-state one, so nothing leaks — but that is
+        // coincidence, not design. Without this, moving or dropping that `set`
+        // turns logout into silent data resurrection.
+        cancel(getScopedStorageKey())
+        try {
+          localStorage.removeItem(getScopedStorageKey())
 ```
 
 - [ ] **Step 5: Flush on switchAccount**
@@ -717,6 +750,16 @@ state, add an explicit `flush()` before the assertion — **only** where the tes
 genuinely means to observe the final persisted blob. Do not sprinkle `flush()`
 to make failures disappear: a test that was asserting on a mid-burst write is a
 test whose intent needs re-reading.
+
+**A green suite is not sufficient here.** The dangerous failure mode is the test that keeps passing
+while proving nothing. Any test that performs **two or more mutations** and then reads
+`setItem.mock.calls[last]` now inspects a blob written *before* the later mutations — the second
+write was coalesced and never ran. Such a test silently stops guarding whatever the later mutation
+was about, and nothing fails to tell you.
+
+Grep the suite for `mock.calls[` and audit **every** hit against that pattern, whether or not it is
+currently green. Known instances: `should NOT persist activeConversationId` (~:2157) and `should NOT
+serialize messages to localStorage` (~:2027). Each needs `flushThrottledStorage()` before the read.
 
 - [ ] **Step 8: Run the full chat store suite for regressions**
 
@@ -793,6 +836,15 @@ cd packages/fluux-sdk && npx vitest run src/stores/chatStore.persist.test.ts -t 
 Expected: FAIL — the retraction sits in the pending thunk, so the on-disk blob does not contain `target-msg-1`.
 
 - [ ] **Step 3: Add the flushKey**
+
+First extend Task 2's import in `chatStore.ts` — `flushKey` was deliberately left out there,
+because an unused import is an ESLint error in this repo:
+
+```typescript
+import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+```
+
+Then wire it up.
 
 In `recordPendingRetraction`, after the `set(...)` block and before the closing brace:
 
