@@ -71,6 +71,7 @@ interface Geometry {
   scrollTop: number
   textareaContentWidth: number
   mirrorContentWidth: number
+  mirrorScrollHeight: number
   paddingTop: number
 }
 
@@ -107,7 +108,12 @@ async function setDraft(textarea: Locator, value: string): Promise<void> {
     setter.call(el, v)
     el.dispatchEvent(new Event('input', { bubbles: true }))
   }, value)
-  await textarea.evaluate((el) => el.offsetHeight) // flush layout
+  // React commits the mirror's new content asynchronously. Two frames put us
+  // past the commit and the layout effect that re-syncs the mirror, so the
+  // measurements below compare settled boxes instead of racing the render.
+  await textarea.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+  )
 }
 
 async function measure(textarea: Locator): Promise<Geometry> {
@@ -124,6 +130,7 @@ async function measure(textarea: Locator): Promise<Geometry> {
       // whole point: this is the width the text actually wraps inside.
       textareaContentWidth: ta.clientWidth,
       mirrorContentWidth: mirror ? mirror.clientWidth : -1,
+      mirrorScrollHeight: mirror ? mirror.scrollHeight : -1,
       paddingTop: parseFloat(getComputedStyle(ta).paddingTop) || 0,
     }
   })
@@ -244,6 +251,83 @@ test.describe('composer geometry', () => {
         `${n} lines (overflow-y:${g.overflowY}): mirror wraps at ${g.mirrorContentWidth}px but the caret wraps at ${g.textareaContentWidth}px — the visible text drifts away from the caret`
       ).toBe(g.textareaContentWidth)
     }
+  })
+
+  /**
+   * A draft ending in a newline is the case a `pre-wrap` mirror gets wrong: it
+   * lays out no line box for the terminal break, where the textarea does. The
+   * mirror is then a line shorter, which at the overflow boundary means it does
+   * not become a scroll container at all — so it reserves no scrollbar gutter
+   * (a 6px wrap mismatch in WebKit) and cannot follow the textarea's scrollTop.
+   * Pressing Enter for a new line is the single most ordinary way to reach this.
+   */
+  test('mention mirror tracks the textarea when the draft ends with a newline', async ({ page }) => {
+    const textarea = await openRoomComposer(page)
+
+    // Just under the cap, at it, and past it — the boundary is where a missing
+    // final line box flips the mirror out of being scrollable.
+    for (const n of [2, MAX_LINES, MAX_LINES + 4]) {
+      const draft = `${linesOf(n)}\n`
+      await setDraft(textarea, draft)
+
+      const g = await measure(textarea)
+      expect(
+        g.mirrorContentWidth,
+        `${n} lines + trailing newline (overflow-y:${g.overflowY}): mirror wraps at ${g.mirrorContentWidth}px but the caret wraps at ${g.textareaContentWidth}px`
+      ).toBe(g.textareaContentWidth)
+      expect(
+        g.mirrorScrollHeight,
+        `${n} lines + trailing newline: mirror lays out ${g.mirrorScrollHeight}px of content but the textarea lays out ${g.scrollHeight}px — the mirror is missing the final line box`
+      ).toBe(g.scrollHeight)
+
+      // The mirror must be able to follow the textarea's scroll offset. It can
+      // only do that if it has the same scrollable height.
+      const offsets = await textarea.evaluate((el) => {
+        const ta = el as HTMLTextAreaElement
+        const mirror = ta.previousElementSibling as HTMLElement
+        ta.scrollTop = ta.scrollHeight
+        ta.dispatchEvent(new Event('scroll', { bubbles: true }))
+        return { textarea: ta.scrollTop, mirror: mirror.scrollTop }
+      })
+      expect(
+        offsets.mirror,
+        `${n} lines + trailing newline: textarea scrolled to ${offsets.textarea} but the mirror stayed at ${offsets.mirror} — highlighted text drifts vertically from the caret`
+      ).toBe(offsets.textarea)
+    }
+
+    // The same thing the way a user reaches it: fill the composer, then press
+    // Enter for one more line. Real keystrokes, so the browser's own
+    // caret-into-view scroll runs and the mirror has to follow it.
+    await setDraft(textarea, '')
+    await textarea.click()
+    for (let n = 1; n <= MAX_LINES; n++) {
+      await textarea.type(`line ${n}`)
+      await page.keyboard.press('Shift+Enter') // plain Enter sends
+    }
+
+    expect(
+      await textarea.evaluate((el) => (el as HTMLTextAreaElement).value.endsWith('\n')),
+      'the draft should end on the newline just typed'
+    ).toBe(true)
+
+    // Polled rather than sampled once: the browser's caret scroll and React's
+    // re-sync land on separate frames, so a single read can catch the gap
+    // between them. It still fails loudly — with the real numbers — if the
+    // mirror never catches up.
+    await expect
+      .poll(
+        async () =>
+          textarea.evaluate((el) => {
+            const ta = el as HTMLTextAreaElement
+            const mirror = ta.previousElementSibling as HTMLElement
+            const synced = mirror.scrollTop === ta.scrollTop && mirror.clientWidth === ta.clientWidth
+            return synced
+              ? 'synced'
+              : `mirror scrollTop ${mirror.scrollTop} vs textarea ${ta.scrollTop}, width ${mirror.clientWidth} vs ${ta.clientWidth}`
+          }),
+        { timeout: 5_000 }
+      )
+      .toBe('synced')
   })
 
   /**
