@@ -70,67 +70,50 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   // Letting it fall through to the index comparator would report
   // `unchanged`/`clear-pending` and drop the remote position for good.
   //
-  // So that case is decided separately below, where only ONE of the two
-  // directions can be settled without the slice. See each branch for why.
   const localPointerId = meta.readPointer?.messageId
   const pointerInSlice =
     localPointerId === undefined || messages.some((m) => m.id === localPointerId)
 
-  let readPointer: ReadPointer | undefined
-
-  if (pointerInSlice) {
-    // Forward-only advance using the shared comparator (compares by index).
-    const updated = notifState.onMessageSeen(
-      {
-        unreadCount: meta.unreadCount,
-        mentionsCount: meta.mentionsCount,
-        readPointer: meta.readPointer,
-        firstNewMessageId: currentFirstNewMessageId,
-      },
-      match.id,
-      messages
-    )
-
-    // An advance always lands on `match` — `onMessageSeen` only ever moves to
-    // the id it was given, and only when that id is present in `messages`,
-    // which `match` is by construction (it came from `messages.find(...)`).
-    readPointer = updated.readPointer
-    if (!readPointer || readPointer.messageId === meta.readPointer?.messageId) {
-      return meta.pendingRemoteDisplayedStanzaId === undefined
-        ? { kind: 'unchanged' }
-        : { kind: 'clear-pending' }
-    }
-  } else if (meta.readPointer && match.timestamp < meta.readPointer.timestamp) {
-    // Strictly older than the local position, so there is nothing to apply.
+  if (!pointerInSlice) {
+    // Timestamps cannot order these positions in either direction.
+    // `migrateReadPointer` copies the legacy `lastSeenMessageId` + `lastReadAt`
+    // pair unchanged, while `lastReadAt` means "timestamp of the newest LOADED
+    // message when I last activated." It can therefore sit either ahead of or
+    // behind the message the pointer names. Retiring a strictly older marker can
+    // discard a real forward advance (pointer names m2, timestamp comes from m5,
+    // marker names m4); advancing a strictly newer one can regress a
+    // forward-only pointer. The claim in readPointer.ts that `lastReadAt` "is at
+    // or behind the named message" contradicts migrateReadPointer's own
+    // documentation and cannot be relied on here.
     //
-    // Timestamps settle THIS direction and only this one. `lastReadAt` on a
-    // pointer built by the #1081 migration is guaranteed to be at or BEHIND the
-    // message it names, so a marker older than the pointer's timestamp is older
-    // than the true position too — the guarantee runs the right way here.
-    //
-    // Retiring it matters because this is the one shape no wider slice can ever
-    // resolve: a slice holding the marker cannot also hold a pointer hundreds of
-    // messages later, and a load-around the pointer cannot reach back to the
-    // marker. Left pending it would re-fold on every activation forever, keeping
-    // the divider provisional.
+    // The activation fold, which loads a slice containing both ends and orders
+    // them by index, remains the only resolver. A marker the pointer is already
+    // past consequently stays pending and re-folds on each activation. That is
+    // churn, not data loss, and is the deliberate tradeoff against discarding a
+    // real read position.
+    return { kind: 'stash-pending' }
+  }
+
+  // Forward-only advance using the shared comparator (compares by index).
+  const updated = notifState.onMessageSeen(
+    {
+      unreadCount: meta.unreadCount,
+      mentionsCount: meta.mentionsCount,
+      readPointer: meta.readPointer,
+      firstNewMessageId: currentFirstNewMessageId,
+    },
+    match.id,
+    messages
+  )
+
+  // An advance always lands on `match` — `onMessageSeen` only ever moves to the
+  // id it was given, and only when that id is present in `messages`, which
+  // `match` is by construction (it came from `messages.find(...)` above).
+  const readPointer = updated.readPointer
+  if (!readPointer || readPointer.messageId === meta.readPointer?.messageId) {
     return meta.pendingRemoteDisplayedStanzaId === undefined
       ? { kind: 'unchanged' }
       : { kind: 'clear-pending' }
-  } else {
-    // Undecidable: the marker is at or after the pointer's timestamp, and that
-    // proves nothing about ordering. The same migration caveat runs the WRONG
-    // way here — a migrated pointer can name a message far newer than its own
-    // timestamp, so a "newer" marker may still sit behind the true position.
-    // Advancing would derive a messageId from a timestamp comparison, which
-    // `ReadPointer` forbids outright ("Only `timestamp` is used for ordering;
-    // nothing derives a message from it"), and the pointer is forward-only, so
-    // the position lost that way would be unrecoverable. Equal timestamps are
-    // undecidable in their own right — MAM archives routinely put two messages
-    // in the same millisecond.
-    //
-    // Stay pending. The activation fold loads a slice wide enough to order both
-    // ends by index, which is the proof this branch lacks.
-    return { kind: 'stash-pending' }
   }
 
   if (!options.isActive) {
