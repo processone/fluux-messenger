@@ -51,6 +51,12 @@ import {
   transientAliases,
   type ScopeKey as TransientScopeKey,
 } from './shared/transientUnread'
+import {
+  beginViewportGeneration,
+  currentViewportEvidence,
+  clearViewportEvidence,
+  type EvidenceKey as ViewportEvidenceKey,
+} from './shared/viewportEvidence'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
@@ -410,6 +416,14 @@ function bumpRoomRecountVersion(roomJid: string): number {
  * accounts, so the overlay is scoped by the account JID, never a bare room JID.
  */
 function roomTransientScopeKey(roomJid: string): TransientScopeKey {
+  return { accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: roomJid }
+}
+
+/**
+ * The viewport-evidence key for a room (Task 11). Same shape/rationale as
+ * {@link roomTransientScopeKey}: scoped by account JID.
+ */
+function roomViewportEvidenceKey(roomJid: string): ViewportEvidenceKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: roomJid }
 }
 
@@ -1564,7 +1578,11 @@ export const roomStore = createStore<RoomState>()(
     // Task 9: tear down the OUTGOING account's transient overlay entries
     // before adopting the new scope — see lastRoomTransientScope's doc for
     // why this can't just read getStorageScopeJid() here.
-    if (lastRoomTransientScope !== null) clearTransientScope(lastRoomTransientScope)
+    if (lastRoomTransientScope !== null) {
+      clearTransientScope(lastRoomTransientScope)
+      // Task 11: viewport evidence is scoped the same way — same teardown timing.
+      clearViewportEvidence(lastRoomTransientScope)
+    }
     lastRoomTransientScope = getStorageScopeJid()
     // Read state is folded into roomMeta by addRoom, not held in the state
     // object — reload the account's rows so the rooms this account is about to
@@ -1585,6 +1603,8 @@ export const roomStore = createStore<RoomState>()(
     // is still the account being logged out — read it directly rather than
     // through lastRoomTransientScope.
     clearTransientScope(getStorageScopeJid() ?? '')
+    // Task 11: viewport evidence, same account-scoped teardown.
+    clearViewportEvidence(getStorageScopeJid() ?? '')
     lastRoomTransientScope = null
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
@@ -1723,6 +1743,9 @@ export const roomStore = createStore<RoomState>()(
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
       const windowVisible = connectionStore.getState().windowVisible
+      // Task 11: see chatStore's addMessage twin — missing/stale/unknown evidence
+      // conservatively resolves to false, never authorizing the pointer advance.
+      const viewportAtLiveEdge = currentViewportEvidence(roomViewportEvidenceKey(roomJid)) === 'at-edge'
       const existingMeta = state.roomMeta.get(roomJid)
 
       const notifInput: notifState.EntityNotificationState = {
@@ -1753,7 +1776,7 @@ export const roomStore = createStore<RoomState>()(
           encryptedPayload: messageToAdd.encryptedPayload,
           unsupportedEncryption: messageToAdd.unsupportedEncryption,
         },
-        { isActive, windowVisible },
+        { isActive, windowVisible, viewportAtLiveEdge },
         'room',
         { incrementUnread: incrementUnread && !noteAsTransient, incrementMentions }
       )
@@ -2386,6 +2409,12 @@ export const roomStore = createStore<RoomState>()(
     }
 
     if (roomJid) {
+      // Task 11: begin a fresh viewport-evidence generation SYNCHRONOUSLY, before the
+      // `set()` calls below make this activation visible to subscribers/renders — the
+      // SOLE call site for `beginViewportGeneration` (mirrors chatStore's
+      // setActiveConversation). Runs whether or not `room` resolves below.
+      beginViewportGeneration(roomViewportEvidenceKey(roomJid))
+
       const room = get().rooms.get(roomJid)
       if (room) {
         const meta = get().roomMeta.get(roomJid)

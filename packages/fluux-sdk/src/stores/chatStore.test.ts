@@ -6,6 +6,12 @@ import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } 
 import { setResidentWindowSize } from './shared/residentWindow'
 import { selectCatchUpQuery } from '../utils/mamCatchUpUtils'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
+import {
+  reportViewport,
+  currentViewportGeneration,
+  _clearAllViewportEvidenceForTesting,
+  type EvidenceKey,
+} from './shared/viewportEvidence'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -106,7 +112,23 @@ describe('chatStore', () => {
     // against it leaking noted entries across `it()` blocks (roomStore's twin
     // suite hit exactly this with fixed message ids reused across tests).
     _clearAllTransientForTesting()
+    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // same leakage risk across `it()` blocks reusing the same conversation id.
+    _clearAllViewportEvidenceForTesting()
   })
+
+  /**
+   * Task 11: simulate the view reporting "genuinely at the live edge" for the
+   * CURRENT activation generation — mirrors what `ChatView`'s `reportLiveEdge`
+   * callback does in the real app after `setActiveConversation` runs. Tests
+   * that pre-date Task 11 assumed `isActive && windowVisible` alone meant
+   * "seen"; they now need this explicit report to keep that behavior, exactly
+   * as a real conversation genuinely parked at the bottom would produce it.
+   */
+  function reportAtLiveEdge(conversationId: string): void {
+    const key: EvidenceKey = { kind: 'chat', entityId: conversationId, accountScope: getStorageScopeJid() ?? '' }
+    reportViewport(key, currentViewportGeneration(key), 'at-edge')
+  }
 
   afterEach(() => {
     vi.clearAllMocks()
@@ -1205,7 +1227,24 @@ describe('chatStore', () => {
       expect(conv?.unreadCount).toBe(1)
     })
 
-    it('should not increment unreadCount when conversation is active', () => {
+    it('should not increment unreadCount when conversation is active AND at the live edge', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().setActiveConversation('alice@example.com')
+      // Task 11: "active" alone is no longer sufficient — the view must also have
+      // reported the viewport as genuinely at the live edge for THIS activation.
+      reportAtLiveEdge('alice@example.com')
+
+      chatStore.getState().addMessage(createMessage('alice@example.com', 'Hi', false))
+      chatStore.getState().addMessage(createMessage('alice@example.com', 'Hello', false))
+
+      const conv = chatStore.getState().conversations.get('alice@example.com')
+      expect(conv?.unreadCount).toBe(0)
+    })
+
+    it('increments unreadCount when conversation is active but the viewport has never reported (Task 11 regression control)', () => {
+      // The negative control this task exists for: active is NOT enough on its own
+      // anymore. Without a live-edge report, an active conversation must behave
+      // like any other unseen arrival.
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')
 
@@ -1213,7 +1252,7 @@ describe('chatStore', () => {
       chatStore.getState().addMessage(createMessage('alice@example.com', 'Hello', false))
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.unreadCount).toBe(0)
+      expect(conv?.unreadCount).toBe(2)
     })
 
     it('should return messages for active conversation via activeMessages', () => {
@@ -2735,14 +2774,15 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().addConversation(createConversation('bob@example.com'))
 
-      // View Alice's conversation
+      // View Alice's conversation, genuinely at the live edge (Task 11).
       chatStore.getState().setActiveConversation('alice@example.com')
+      reportAtLiveEdge('alice@example.com')
 
       // Messages to inactive conversation should increment unread
       chatStore.getState().addMessage(createMessage('bob@example.com', 'Hi from Bob'))
       chatStore.getState().addMessage(createMessage('bob@example.com', 'Another message'))
 
-      // Messages to active conversation should not increment unread
+      // Messages to active conversation (at the live edge) should not increment unread
       chatStore.getState().addMessage(createMessage('alice@example.com', 'Hi Alice'))
 
       expect(chatStore.getState().conversations.get('bob@example.com')?.unreadCount).toBe(2)

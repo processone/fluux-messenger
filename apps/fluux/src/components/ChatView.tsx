@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
-import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
@@ -306,6 +306,41 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     }
   }
 
+  // Read-state PR B, Task 11: gate the on-arrival read-pointer advance on a
+  // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
+  // alone (which wrongly treated a scrolled-up-but-focused conversation as
+  // "seen"). The SDK's `setActiveConversation` is the SOLE caller of
+  // `beginViewportGeneration` — this view only ever READS the current
+  // generation and reports measured geometry against it.
+  //
+  // The generation is an ACTIVATION value, so it is read on EVERY render (not
+  // memoized on conversationId alone): a same-entity reactivation bumps the
+  // generation without changing conversationId, and a stale useMemo would
+  // keep echoing the OLD token, causing every later report to be rejected as
+  // stale forever. Reactivity comes for free here: `activeConversation`
+  // itself is what changes when the SDK activates, so this component already
+  // re-renders exactly when the generation moves.
+  // Memoized on conversationId only — the KEY itself (kind/entityId/accountScope)
+  // has no time-varying data, so it is safe (and desirable, for the memoized
+  // ChatMessageList below) to keep its identity stable across renders. This is
+  // NOT the value the brief warns against memoizing: `viewportGeneration`
+  // (below) is read fresh every render, never folded into this useMemo.
+  const viewportEvidenceKey: ViewportEvidenceKey | null = useMemo(
+    () => (conversationId ? { kind: 'chat', entityId: conversationId, accountScope: getStorageScopeJid() ?? '' } : null),
+    [conversationId],
+  )
+  const viewportGeneration = viewportEvidenceKey ? currentViewportGeneration(viewportEvidenceKey) : 0
+  // Never call `currentViewportGeneration` INSIDE this callback — closing over
+  // the token captured for THIS render is what makes a delayed callback from a
+  // previous activation carry the OLD (and thus correctly-rejected) token.
+  const reportLiveEdge = useCallback(
+    (atEdge: boolean) => {
+      if (!viewportEvidenceKey) return
+      reportViewport(viewportEvidenceKey, viewportGeneration, atEdge ? 'at-edge' : 'away')
+    },
+    [viewportEvidenceKey, viewportGeneration],
+  )
+
   const handleResyncDivider = useCallback(
     (conversationId: string) => resyncDividerToReadPointer(conversationId),
     [resyncDividerToReadPointer],
@@ -509,6 +544,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             typingUsers={activeTypingUsers}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
+            onLiveEdgeMeasured={reportLiveEdge}
             conversationId={activeConversation.id}
             conversationType={activeConversation.type}
             sendReaction={sendReaction}
@@ -618,6 +654,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   typingUsers,
   scrollerRef,
   isAtBottomRef,
+  onLiveEdgeMeasured,
   conversationId,
   conversationType,
   sendReaction,
@@ -664,6 +701,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
+  onLiveEdgeMeasured?: (atEdge: boolean) => void
   conversationId: string
   conversationType: 'chat' | 'groupchat'
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
@@ -797,6 +835,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
+      onLiveEdgeMeasured={onLiveEdgeMeasured}
       typingUsers={typingUsers}
       formatTypingUser={formatTypingUser}
       renderMessage={renderMessage}

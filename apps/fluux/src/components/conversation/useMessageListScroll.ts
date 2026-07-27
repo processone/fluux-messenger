@@ -306,6 +306,22 @@ export interface UseMessageListScrollOptions {
    *  of reading the DOM directly — so it works for unmounted rows. Absent → unchanged
    *  DOM-based behavior. Wired in Task 7. */
   virtualizer?: MessageVirtualizer
+  /**
+   * Read-state PR B, Task 11: reports whether the viewport is genuinely at the
+   * live edge, invoked EVERY time `isAtBottomRef.current` is assigned from a
+   * REAL measured geometry read (a `scrollHeight - scrollTop - clientHeight`
+   * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it
+   * describes has already landed) — never from an assumed/decided default.
+   *
+   * Deliberately NOT invoked from `rememberBottomIntent` (which sets
+   * `isAtBottomRef.current = true` unconditionally on a deliberate
+   * scroll-to-bottom action) or from the conversation-switch entry effect's
+   * pre-measurement guesses (`isAtBottomRef.current = true/false` before the
+   * positioning executor has actually run) — those are exactly the unsafe
+   * stale defaults this option exists to avoid feeding to the SDK: evidence
+   * must stay `unknown` until the geometry has actually been read.
+   */
+  onLiveEdgeMeasured?: (atEdge: boolean) => void
 }
 
 export interface UseMessageListScrollResult {
@@ -361,6 +377,7 @@ export function useMessageListScroll({
   lastMessageId,
   staticMode = false,
   virtualizer,
+  onLiveEdgeMeasured,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
 
   // ==========================================================================
@@ -412,6 +429,26 @@ export function useMessageListScroll({
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
   const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
+
+  // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
+  // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
+  // fresh inline function each render still reaches the CURRENT one).
+  const onLiveEdgeMeasuredRef = useRef(onLiveEdgeMeasured)
+  onLiveEdgeMeasuredRef.current = onLiveEdgeMeasured
+
+  // Set `isAtBottomRef` from a REAL measured geometry read, AND report that same
+  // measurement to the SDK's viewport-evidence channel (Task 11). Every call site
+  // below has just read `scrollHeight - scrollTop - clientHeight` (or an equivalent
+  // virtualizer-aware distance) against `AT_BOTTOM_THRESHOLD` — never an
+  // assumed/decided default. Must NOT be used for: `rememberBottomIntent` (sets
+  // `true` unconditionally on a deliberate scroll-to-bottom action) or the
+  // conversation-switch entry effect's pre-measurement guesses — see
+  // `UseMessageListScrollOptions.onLiveEdgeMeasured`'s doc for why those stay raw
+  // `isAtBottomRef.current = ...` assignments.
+  const setMeasuredAtBottom = useCallback((atEdge: boolean) => {
+    isAtBottomRef.current = atEdge
+    onLiveEdgeMeasuredRef.current?.(atEdge)
+  }, [isAtBottomRef])
 
   // Virtualizer ref updated synchronously in the render body (before any effects).
   // This ensures useLayoutEffect sees the CURRENT render's virtualizer (with updated
@@ -1021,7 +1058,7 @@ export function useMessageListScroll({
         if (s) {
           flushTailLayout()
           const dist = s.scrollHeight - s.scrollTop - s.clientHeight
-          isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+          setMeasuredAtBottom(dist < AT_BOTTOM_THRESHOLD)
           // One final repaint draws the settled position. A burst debt takes precedence (it forces the
           // repaint AND logs the coalesced count) and subsumes the normal on-write repaint, so at most
           // one overflow toggle fires here.
@@ -1070,7 +1107,7 @@ export function useMessageListScroll({
       // measurement settle is over — running out the remaining budget would only burn one forced
       // layout per frame (the WebKitGTK freeze pattern). Late media loads re-pin via their own site.
       if (run.frame(wrote) === 'settled') {
-        isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+        setMeasuredAtBottom(dist < AT_BOTTOM_THRESHOLD)
         // Arrival has quiesced (8 stable frames): flush any repaint the burst coalescer deferred, so
         // the final bottom position is drawn exactly once. Non-burst runs already painted per-frame,
         // so owed() is false and this is a no-op.
@@ -1085,7 +1122,7 @@ export function useMessageListScroll({
       reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
     }
     reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
-  }, [isAtBottomRef])
+  }, [setMeasuredAtBottom])
 
   // Re-pin the list to the bottom after a layout change that grows the content or shrinks the
   // scroller while the user is following along: typing indicator, reactions on the last message,
@@ -1194,7 +1231,7 @@ export function useMessageListScroll({
       // not a mid-settle transient.
       const s = scrollerRef.current
       if (s) {
-        isAtBottomRef.current = (s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD
+        setMeasuredAtBottom((s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD)
         rememberCurrentScrollSnapshot()
       }
       lease?.settle()
@@ -1235,7 +1272,7 @@ export function useMessageListScroll({
     }
     register(step)
     return true
-  }, [isAtBottomRef, rememberCurrentScrollSnapshot])
+  }, [rememberCurrentScrollSnapshot, setMeasuredAtBottom])
 
   const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
     reachability: (desired, loadAround) => {
@@ -1325,7 +1362,7 @@ export function useMessageListScroll({
       }
 
       if (!restored || !lease.isCurrent()) return false
-      isAtBottomRef.current = getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
+      setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
       rememberCurrentScrollSnapshot()
       lastProgrammaticScrollAtRef.current = Date.now()
       debugLog('RESTORE: controller applied position', {
@@ -1346,6 +1383,7 @@ export function useMessageListScroll({
     pinVirtualizedAnchor,
     reassertBottom,
     rememberCurrentScrollSnapshot,
+    setMeasuredAtBottom,
     windowAtLiveEdge,
   ])
 
@@ -1445,7 +1483,7 @@ export function useMessageListScroll({
       const distanceFromBottom =
         scroller.scrollHeight - scrollTop - scroller.clientHeight
       const atLiveEdge = distanceFromBottom < AT_BOTTOM_THRESHOLD
-      isAtBottomRef.current = atLiveEdge
+      setMeasuredAtBottom(atLiveEdge)
       debugLog('UNREAD MARKER: controller positioned frame', {
         conversationId: request.conversationId,
         generation: request.generation,
@@ -1471,6 +1509,7 @@ export function useMessageListScroll({
     isAtBottomRef,
     messageCount,
     reassertBottom,
+    setMeasuredAtBottom,
     windowAtLiveEdge,
   ])
 
@@ -1993,7 +2032,7 @@ export function useMessageListScroll({
     const growthDrivenDuringLoop =
       programmaticScroll && prevScrollHeightRef.current !== null && scrollHeight > prevScrollHeightRef.current
     if (!growthDrivenDuringLoop) {
-      isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+      setMeasuredAtBottom(distFromBottom < AT_BOTTOM_THRESHOLD)
     }
 
     // Track user scroll during a media load batch — but ONLY a GENUINE user scroll, not the
@@ -2781,7 +2820,7 @@ export function useMessageListScroll({
         v.scrollToIndex(currentIdx, { align: 'center' })
         const st = s.scrollTop
         const distFromBottom = s.scrollHeight - st - s.clientHeight
-        isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+        setMeasuredAtBottom(distFromBottom < AT_BOTTOM_THRESHOLD)
 
         let wrote = false
         if (landedTarget >= 0 && Math.abs(st - landedTarget) <= TARGET_DRIFT_PX) {
@@ -2846,7 +2885,7 @@ export function useMessageListScroll({
         reachability: shadowReachabilityRef.current(shadowTargetDesired),
         actual: { desired: shadowTargetDesired, phase: 'positioning' },
       })
-      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+      setMeasuredAtBottom((scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD)
       highlight(el)
       debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
       onTargetMessageConsumed?.()
@@ -2854,7 +2893,7 @@ export function useMessageListScroll({
 
     // messageCount is in deps so this re-fires when messages load from async sources
     // (e.g., IndexedDB in search context view)
-  }, [targetMessageId, messageCount, conversationId, isAtBottomRef, onTargetMessageConsumed, staticMode])
+  }, [targetMessageId, messageCount, conversationId, isAtBottomRef, onTargetMessageConsumed, staticMode, setMeasuredAtBottom])
 
   // ==========================================================================
   // EFFECT: Cleanup on unmount

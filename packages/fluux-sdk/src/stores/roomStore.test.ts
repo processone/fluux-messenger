@@ -7,6 +7,12 @@ import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } 
 import { setResidentWindowSize } from './shared/residentWindow'
 import { ignoreStore } from './ignoreStore'
 import { _clearAllTransientForTesting, transientCounts } from './shared/transientUnread'
+import {
+  reportViewport,
+  currentViewportGeneration,
+  _clearAllViewportEvidenceForTesting,
+  type EvidenceKey,
+} from './shared/viewportEvidence'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -101,6 +107,20 @@ function createMessage(
   }
 }
 
+/**
+ * Task 11: simulate the view reporting "genuinely at the live edge" for the
+ * CURRENT activation generation — mirrors what `RoomView`'s `reportLiveEdge`
+ * callback does in the real app after `setActiveRoom` runs. Requires the REAL
+ * `setActiveRoom` to have run first (it is the sole caller of
+ * `beginViewportGeneration`) — a raw `roomStore.setState({ activeRoomJid })`
+ * bypass never begins a generation, so a report against it is (correctly)
+ * rejected as stale/unknown.
+ */
+function reportAtLiveEdge(roomJid: string): void {
+  const key: EvidenceKey = { kind: 'room', entityId: roomJid, accountScope: getStorageScopeJid() ?? '' }
+  reportViewport(key, currentViewportGeneration(key), 'at-edge')
+}
+
 describe('roomStore', () => {
   beforeEach(() => {
     _resetStorageScopeForTesting()
@@ -130,6 +150,9 @@ describe('roomStore', () => {
     // fixtures below reuse the same room jid + message id across `it()`
     // blocks, which would otherwise resolve to an already-noted entry.
     _clearAllTransientForTesting()
+    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // same leakage risk across `it()` blocks reusing the same room jid.
+    _clearAllViewportEvidenceForTesting()
   })
 
   describe('message eviction on deactivation (memory windowing)', () => {
@@ -1079,14 +1102,30 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(1)
     })
 
-    it('should not increment unread count for active room', () => {
+    it('should not increment unread count for active room AND at the live edge', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
+      // Task 11: use the REAL setActiveRoom (not a raw activeRoomJid setState) so it
+      // actually begins a viewport-evidence generation, then report the live edge for it.
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
 
       const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello!')
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
+    })
+
+    it('increments unread count when room is active but the viewport has never reported (Task 11 regression control)', () => {
+      // The negative control this task exists for: active is NOT enough on its own
+      // anymore. Without a live-edge report, an active room must behave like any
+      // other unseen arrival.
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+
+      const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello!')
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(1)
     })
 
     it('should not increment unread count for outgoing messages', () => {
@@ -1966,9 +2005,12 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.mentionsCount).toBe(1)
     })
 
-    it('should not increment mentions count for active room', () => {
+    it('should not increment mentions count for active room AND at the live edge', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
+      // Task 11: use the REAL setActiveRoom so a viewport-evidence generation
+      // actually begins, then report the live edge for it.
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
 
       const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hey @testuser!')
       roomStore.getState().addMessage('test@conference.example.com', message, { incrementMentions: true })
@@ -3743,8 +3785,9 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('room1@conference.example.com'))
       roomStore.getState().addRoom(createRoom('room2@conference.example.com'))
 
-      // View Room 1
+      // View Room 1, genuinely at the live edge (Task 11).
       roomStore.getState().setActiveRoom('room1@conference.example.com')
+      reportAtLiveEdge('room1@conference.example.com')
 
       // Messages to inactive room should increment unread
       roomStore.getState().addMessage(
@@ -5946,6 +5989,9 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     // fixtures below reuse the same room jid + message id across `it()`
     // blocks, which would otherwise resolve to an already-noted entry.
     _clearAllTransientForTesting()
+    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // same leakage risk across `it()` blocks reusing the same room jid.
+    _clearAllViewportEvidenceForTesting()
   })
 
   function delayedMsg(id: string, nick: string, ts: string): RoomMessage {

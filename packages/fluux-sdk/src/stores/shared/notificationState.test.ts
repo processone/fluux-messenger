@@ -71,10 +71,25 @@ function seenIn(msgs: NotificationMessage[], id: string): ReadPointer {
  */
 const NO_READ_TIME = new Date(0)
 
-const ACTIVE_VISIBLE: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1 }
+// `viewportAtLiveEdge: true` on ACTIVE_VISIBLE (Task 11): every existing usage
+// below represents the user genuinely watching the live edge (either directly
+// testing the "sees it" branch, or an outgoing-message context where the
+// viewport precondition doesn't matter since `isOutgoing` short-circuits
+// before it's consulted) — never the new "active + focused but scrolled up"
+// case, which has its own fixture below.
+const ACTIVE_VISIBLE: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1, viewportAtLiveEdge: true }
 const ACTIVE_HIDDEN: EntityContext = { isActive: true, windowVisible: false, unreadCount: 1 }
 const INACTIVE_VISIBLE: EntityContext = { isActive: false, windowVisible: true, unreadCount: 1 }
 const INACTIVE_HIDDEN: EntityContext = { isActive: false, windowVisible: false, unreadCount: 1 }
+// Active + focused, but the viewport is scrolled up (not at the live edge) —
+// the Task 11 negative control: `onMessageReceived` must NOT advance the
+// pointer here, unlike the pre-Task-11 code (which treated ACTIVE_VISIBLE's
+// isActive+windowVisible alone as "seen").
+const ACTIVE_VISIBLE_SCROLLED_UP: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1, viewportAtLiveEdge: false }
+// Same isActive/windowVisible as ACTIVE_VISIBLE_SCROLLED_UP, but the viewport
+// evidence is simply absent (never reported / stale / unknown generation) —
+// must be treated exactly as conservatively as an explicit `false`.
+const ACTIVE_VISIBLE_UNKNOWN_VIEWPORT: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1 }
 
 // ---------------------------------------------------------------------------
 // onMessageReceived
@@ -191,6 +206,58 @@ describe('onMessageReceived', () => {
       const msg = makeMsg()
       const result = onMessageReceived(state, msg, INACTIVE_HIDDEN, 'chat')
       expect(result.readPointer).toBe(existing)
+    })
+  })
+
+  // Acceptance scenario 8 (see docs/superpowers/specs/2026-07-23-read-state-unread-count-single-source-acceptance.md):
+  // the on-arrival pointer-advance precondition. Pre-Task-11 code advanced the
+  // pointer on `isActive && windowVisible` alone; the negative control below
+  // ("scrolled up") is the one that must FAIL under that old gate — it is the
+  // whole reason this precondition exists. Seeded at a distinguishing nonzero
+  // read pointer / unreadCount so a broken gate is caught by an inequality, not
+  // masked by a 0 -> 0 / undefined -> undefined tautology.
+  describe('viewport-at-live-edge precondition (Task 11, acceptance scenario 8)', () => {
+    const priorPointer = seen('prior-msg', new Date('2025-01-15T08:00:00Z'))
+
+    it('active + focused + SCROLLED UP (not at live edge): pointer unchanged, unread increases', () => {
+      const state = makeState({ readPointer: priorPointer, unreadCount: 4 })
+      const msg = makeMsg({ id: 'new-msg', timestamp: new Date('2025-01-15T09:00:00Z') })
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE_SCROLLED_UP, 'chat')
+      // Break check (a): gating on `isActive && windowVisible` only would take
+      // the "sees it" branch here and wrongly report unreadCount 4 / pointer
+      // advanced to 'new-msg' — this assertion is what catches that regression.
+      expect(result.readPointer).toBe(priorPointer)
+      expect(result.unreadCount).toBe(5)
+    })
+
+    it('active + focused + AT THE LIVE EDGE: pointer advances, count converges to 0', () => {
+      const state = makeState({ readPointer: priorPointer, unreadCount: 4 })
+      const msg = makeMsg({ id: 'new-msg', timestamp: new Date('2025-01-15T09:00:00Z') })
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
+      expect(result.readPointer).toMatchObject({ messageId: 'new-msg', timestamp: msg.timestamp })
+      expect(result.unreadCount).toBe(0)
+    })
+
+    it('active + focused + UNKNOWN viewport evidence (never reported): treated as not-at-edge, pointer unchanged', () => {
+      const state = makeState({ readPointer: priorPointer, unreadCount: 4 })
+      const msg = makeMsg({ id: 'new-msg', timestamp: new Date('2025-01-15T09:00:00Z') })
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE_UNKNOWN_VIEWPORT, 'chat')
+      expect(result.readPointer).toBe(priorPointer)
+      expect(result.unreadCount).toBe(5)
+    })
+
+    it('window hidden (existing gate, unaffected by Task 11): pointer unchanged regardless of viewport evidence', () => {
+      const state = makeState({ readPointer: priorPointer, unreadCount: 4 })
+      const msg = makeMsg({ id: 'new-msg', timestamp: new Date('2025-01-15T09:00:00Z') })
+      // Even an explicit at-edge report must not matter while the window itself is hidden.
+      const result = onMessageReceived(
+        state,
+        msg,
+        { isActive: true, windowVisible: false, unreadCount: 4, viewportAtLiveEdge: true },
+        'chat'
+      )
+      expect(result.readPointer).toBe(priorPointer)
+      expect(result.unreadCount).toBe(5)
     })
   })
 
@@ -1338,7 +1405,7 @@ describe('readPointer is the whole read position (#1081)', () => {
     const out = notifState.onMessageReceived(
       base(),
       msg('m2', 2000),
-      { isActive: true, windowVisible: true },
+      { isActive: true, windowVisible: true, viewportAtLiveEdge: true },
       'chat'
     )
     expect(out.readPointer).toMatchObject({ messageId: 'm2', timestamp: new Date(2000) })
@@ -1449,7 +1516,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     let s: EntityNotificationState = base()
     s = notifState.onMessageReceived(s, messages[0], { isActive: false, windowVisible: false }, 'chat')
     coherent(s, 'onMessageReceived (unseen)')
-    s = notifState.onMessageReceived(s, messages[1], { isActive: true, windowVisible: true }, 'chat')
+    s = notifState.onMessageReceived(s, messages[1], { isActive: true, windowVisible: true, viewportAtLiveEdge: true }, 'chat')
     coherent(s, 'onMessageReceived (seen)')
     s = notifState.onMessageReceived(s, messages[2], { isActive: false, windowVisible: false }, 'chat')
     coherent(s, 'onMessageReceived (outgoing)')

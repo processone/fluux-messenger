@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
@@ -478,6 +478,30 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [roomJid, advanceReadPointer])
 
+  // Read-state PR B, Task 11: gate the on-arrival read-pointer advance on a
+  // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
+  // alone — see ChatView's twin for the full rationale. `setActiveRoom` is the
+  // SOLE caller of `beginViewportGeneration`; this view only reads the current
+  // generation and reports measured geometry against it.
+  //
+  // Memoized on roomJid only — the KEY itself has no time-varying data, unlike
+  // `viewportGeneration` below, which is read fresh on EVERY render (never
+  // folded into this memo) so a same-entity reactivation (new generation,
+  // unchanged roomJid) is picked up instead of echoing a stale token forever.
+  const viewportEvidenceKey: ViewportEvidenceKey | null = useMemo(
+    () => (roomJid ? { kind: 'room', entityId: roomJid, accountScope: getStorageScopeJid() ?? '' } : null),
+    [roomJid],
+  )
+  const viewportGeneration = viewportEvidenceKey ? currentViewportGeneration(viewportEvidenceKey) : 0
+  // Never call `currentViewportGeneration` INSIDE this callback — see ChatView's twin.
+  const reportLiveEdge = useCallback(
+    (atEdge: boolean) => {
+      if (!viewportEvidenceKey) return
+      reportViewport(viewportEvidenceKey, viewportGeneration, atEdge ? 'at-edge' : 'away')
+    },
+    [viewportEvidenceKey, viewportGeneration],
+  )
+
   // Find on page: browser-style search within this room
   const find = useFindOnPage(activeMessages, activeRoom?.jid)
 
@@ -584,6 +608,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               messages={displayMessages}
               scrollerRef={scrollRef}
               isAtBottomRef={isAtBottomRef}
+              onLiveEdgeMeasured={reportLiveEdge}
               room={stableRoom ?? activeRoom}
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
@@ -873,6 +898,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   messages,
   scrollerRef,
   isAtBottomRef,
+  onLiveEdgeMeasured,
   room,
   contactsByJid,
   ownAvatar,
@@ -923,6 +949,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   messages: RoomMessage[]
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
+  onLiveEdgeMeasured?: (atEdge: boolean) => void
   room: Room
   contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
@@ -1192,6 +1219,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
+      onLiveEdgeMeasured={onLiveEdgeMeasured}
       typingUsers={typingUsers}
       isLoading={isInitialLoading}
       loadingState={loadingState}

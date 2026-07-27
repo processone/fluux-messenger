@@ -35,6 +35,12 @@ import {
   transientAliases,
   type ScopeKey as TransientScopeKey,
 } from './shared/transientUnread'
+import {
+  beginViewportGeneration,
+  currentViewportEvidence,
+  clearViewportEvidence,
+  type EvidenceKey as ViewportEvidenceKey,
+} from './shared/viewportEvidence'
 import { createArchiveSaveChain } from './shared/archiveSaveChain'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
@@ -641,6 +647,15 @@ function hasUnmigratedLegacyReadState(conversationId: string): boolean {
  * by the account JID, never a bare entity id.
  */
 function chatTransientScopeKey(conversationId: string): TransientScopeKey {
+  return { accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: conversationId }
+}
+
+/**
+ * The viewport-evidence key for a conversation (Task 11). Same shape/rationale
+ * as {@link chatTransientScopeKey}: scoped by account JID so a bare
+ * conversation id can't collide across accounts.
+ */
+function chatViewportEvidenceKey(conversationId: string): ViewportEvidenceKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: conversationId }
 }
 
@@ -1284,6 +1299,15 @@ export const chatStore = createStore<ChatState>()(
         }
 
         if (id) {
+          // Task 11: begin a fresh viewport-evidence generation SYNCHRONOUSLY, before
+          // the `set()` calls below make this activation visible to subscribers/renders.
+          // This is the SOLE call site for `beginViewportGeneration` — the view only
+          // ever reads the generation it produces (`currentViewportGeneration`) and
+          // reports against it (`reportViewport`); it never begins one itself. Runs
+          // whether or not `conv` resolves below, so every real activation of a
+          // non-null id gets a fresh generation.
+          beginViewportGeneration(chatViewportEvidenceKey(id))
+
           const conv = get().conversations.get(id)
           if (conv) {
             // Use conversationMeta if available, otherwise derive from conversations map
@@ -1623,6 +1647,12 @@ export const chatStore = createStore<ChatState>()(
           if (conv && meta) {
             const isActive = state.activeConversationId === msg.conversationId
             const windowVisible = connectionStore.getState().windowVisible
+            // Task 11: the on-arrival pointer advance requires DEMONSTRABLY being at
+            // the live edge for the CURRENT activation generation — missing/stale/
+            // unknown evidence (a conversation that has never reported, or whose only
+            // reports were rejected as stale) reads 'unknown' here, which is NOT
+            // 'at-edge', so this conservatively resolves to false.
+            const viewportAtLiveEdge = currentViewportEvidence(chatViewportEvidenceKey(msg.conversationId)) === 'at-edge'
 
             // Delegate notification state transition to pure function. When
             // this arrival is being noted in the transient overlay above,
@@ -1638,7 +1668,7 @@ export const chatStore = createStore<ChatState>()(
                 firstNewMessageId: state.firstNewMessageMarkers.get(msg.conversationId),
               },
               msg,
-              { isActive, windowVisible },
+              { isActive, windowVisible, viewportAtLiveEdge },
               'chat',
               // In 1:1 chats, delayed messages are offline delivery (new messages
               // sent while user was offline), so they should increment unread
@@ -3209,7 +3239,11 @@ export const chatStore = createStore<ChatState>()(
         // Task 9: tear down the OUTGOING account's transient overlay entries
         // before adopting the new scope — see lastChatTransientScope's doc for
         // why this can't just read getStorageScopeJid() here.
-        if (lastChatTransientScope !== null) clearTransientScope(lastChatTransientScope)
+        if (lastChatTransientScope !== null) {
+          clearTransientScope(lastChatTransientScope)
+          // Task 11: viewport evidence is scoped the same way — same teardown timing.
+          clearViewportEvidence(lastChatTransientScope)
+        }
         lastChatTransientScope = getStorageScopeJid()
         set(loadScopedChatState(jid))
       },
@@ -3225,6 +3259,8 @@ export const chatStore = createStore<ChatState>()(
         // here is still the account being logged out — read it directly
         // rather than through lastChatTransientScope.
         clearTransientScope(getStorageScopeJid() ?? '')
+        // Task 11: viewport evidence, same account-scoped teardown.
+        clearViewportEvidence(getStorageScopeJid() ?? '')
         lastChatTransientScope = null
         // New session → the XEP-0490 synced read marker may be folded again on first open.
         mdsGate.reset()

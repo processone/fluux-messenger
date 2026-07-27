@@ -105,6 +105,15 @@ export interface MessageListProps<T extends BaseMessage> {
   scrollerRef?: React.RefObject<HTMLElement | null>
   /** Ref to track if scroll is at bottom (shared with keyboard navigation) */
   isAtBottomRef?: React.MutableRefObject<boolean>
+  /**
+   * Read-state PR B, Task 11: reports whether the viewport is genuinely at the
+   * live edge, from REAL measured geometry only (never a stale/assumed
+   * default) — see `useMessageListScroll`'s `onLiveEdgeMeasured` doc. The
+   * caller (ChatView/RoomView) forwards this straight to
+   * `reportViewport(key, generation, ...)`, closing over the activation
+   * generation captured for that render.
+   */
+  onLiveEdgeMeasured?: (atEdge: boolean) => void
   /** Callback when user scrolls to top (for lazy loading older messages) */
   onScrollToTop?: () => void
   /**
@@ -174,6 +183,7 @@ export function MessageList<T extends BaseMessage>({
   loadingState,
   scrollerRef: externalScrollerRef,
   isAtBottomRef: externalIsAtBottomRef,
+  onLiveEdgeMeasured,
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
@@ -531,6 +541,7 @@ export function MessageList<T extends BaseMessage>({
     onTargetMessageConsumed,
     externalScrollerRef,
     externalIsAtBottomRef,
+    onLiveEdgeMeasured,
     onScrollToTop,
     onLoadAround,
     isLoadingOlder,

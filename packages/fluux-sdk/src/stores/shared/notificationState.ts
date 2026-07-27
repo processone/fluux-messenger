@@ -96,6 +96,19 @@ export interface EntityContext {
   unreadCount?: number
   /** The entity's read position; suppresses re-notify of already-seen content. */
   readPointer?: ReadPointer
+  /**
+   * Whether the viewport is DEMONSTRABLY at the live edge, for the CURRENT
+   * activation generation — derived by the store as
+   * `currentViewportEvidence(key) === 'at-edge'` (see `viewportEvidence.ts`).
+   *
+   * `undefined` (and any non-`true` value) is the safe default and means "not
+   * at the edge": missing / stale / unknown viewport evidence must never
+   * authorize {@link onMessageReceived} to advance the read pointer — an
+   * active, focused conversation scrolled up into history is exactly the case
+   * this field exists to distinguish from one genuinely parked at the bottom
+   * (read-state PR B, Task 11).
+   */
+  viewportAtLiveEdge?: boolean
 }
 
 /** Options for message-received notification handling. */
@@ -126,6 +139,16 @@ export interface MessageReceivedOptions {
  * - Incoming + user doesn't see + entity active + window hidden: set marker if not set
  * - Incoming + user doesn't see + entity not active: increment unread (only when
  *   the message is renderable — see `isRenderableStoredMessage`), don't set marker
+ *
+ * "User sees message" (Task 11) requires all three of: the entity is active,
+ * the window is visible/focused, AND the viewport is demonstrably at the live
+ * edge for the CURRENT activation generation (`ctx.viewportAtLiveEdge ===
+ * true`). An active, focused conversation the user has scrolled UP in is
+ * exactly the case this precondition exists to catch: `isActive &&
+ * windowVisible` alone used to advance the pointer there, silently marking
+ * unseen history as read. Missing/stale/unknown viewport evidence (the
+ * `undefined` default) is treated conservatively as NOT at the edge — see
+ * `EntityContext.viewportAtLiveEdge` and `viewportEvidence.ts`.
  */
 export function onMessageReceived(
   state: EntityNotificationState,
@@ -135,7 +158,7 @@ export function onMessageReceived(
   options?: MessageReceivedOptions
 ): EntityNotificationState {
   const { incrementUnread = true, incrementMentions = false, treatDelayedAsNew = false } = options ?? {}
-  const userSeesMessage = ctx.isActive && ctx.windowVisible
+  const userSeesMessage = ctx.isActive && ctx.windowVisible && ctx.viewportAtLiveEdge === true
 
   // Outgoing message: user is actively engaging, clear notification state
   if (msg.isOutgoing) {
