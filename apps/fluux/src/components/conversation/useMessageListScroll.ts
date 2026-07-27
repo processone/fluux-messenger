@@ -2182,11 +2182,7 @@ export function useMessageListScroll({
   //
   // This prevents jitter from multiple images loading in sequence.
 
-  // Stable identity (deps are all refs/constants) so it can be passed to every
-  // memoized message row without breaking their `memo` bailout. React Compiler
-  // does NOT memoize this (it's returned from a hook and used only in parent
-  // JSX), so the manual useCallback is required — see RENDER_PERF_TESTS.md.
-  const handleMediaLoad = useCallback(() => {
+  const handleMediaLoadImpl = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
@@ -2280,6 +2276,12 @@ export function useMessageListScroll({
     isAtBottomRef,
     reconcileLiveEdge,
   ])
+  // The implementation above must close over the current conversation and executors, so its
+  // identity legitimately changes on appends/window updates. Message rows must not observe that
+  // churn: a changed onMediaLoad prop bypasses their memo bailout and re-renders the whole mounted
+  // window. Publish a stable shell that always invokes the latest implementation, matching the
+  // requestMessageTarget/scrollToBottom contract.
+  const handleMediaLoad = useStableCallback(handleMediaLoadImpl)
 
   // ==========================================================================
   // SCROLL EVENT HANDLER

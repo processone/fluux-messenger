@@ -315,10 +315,15 @@ explicit center-aligned targets, live edge, media preservation, and directional 
 reconcilers implement measurement convergence; they are not separate positioning authorities.
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
 
-There are also positioning owners outside their shared single-flight ref:
+The former send/composer/media writers in `ChatView` and `RoomView` have been removed. Outgoing rows
+already create a controller-owned live-edge request, scroller resize is observed by the message
+list's controller-backed correction path, and room media now receives the same list-owned callback
+as 1:1 media. That callback is published through a stable shell so current executor/window changes
+do not invalidate every memoized row. These stimuli no longer add a second pixel writer.
 
-- send/composer resize writes in `ChatView` and `RoomView`;
-- resident-top's direct writer;
+One positioning owner remains outside the shared single-flight ref:
+
+- resident-top's direct writer.
 
 Two visually similar scroll operations are explicitly outside this migration:
 
