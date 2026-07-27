@@ -3413,6 +3413,20 @@ export function useMessageListScroll({
     if (getDistanceFromBottom(scroller) - growth >= AT_BOTTOM_THRESHOLD) return
     // A running pin loop already keeps the bottom pinned — don't stack a second one.
     if (pinBottomClaim().isHeld()) return
+    // Never override an explicit navigation. A row growing is ambient: the reader did not ask for
+    // it, so it must not supersede a position the reader DID ask for — Home/resident-top, a
+    // jump-to-message, a saved-position restore. Without this, a fastening or reaction landing while
+    // a navigation is still converging turns into a live-edge request that cancels it and pins to
+    // the bottom, so the reader is dumped back at the newest message mid-keypress.
+    const active = positioningControllerRef.current?.snapshot().active
+    if (
+      active &&
+      active.request.conversationId === conversationId &&
+      active.request.desired.kind !== 'live-edge' &&
+      active.phase.kind !== 'settled'
+    ) {
+      return
+    }
 
     reconcileLiveEdge('row-growth')
   }, [rowGrowthSignature, conversationId, reconcileLiveEdge, staticMode])
