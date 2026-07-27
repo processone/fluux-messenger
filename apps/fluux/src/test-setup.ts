@@ -106,9 +106,12 @@ void i18n.use(initReactI18next).init({
             three: '{{name1}}, {{name2}}, and {{name3}} are typing...',
             many: '{{name1}}, {{name2}}, and {{count}} others are typing...',
           },
-          // Jump-to-last-read pill (JumpToLastReadPill component tests)
-          newMessagesCount: '{{count}} new message',
-          newMessagesCount_other: '{{count}} new messages',
+          // Jump-to-last-read pill (JumpToLastReadPill component tests) / "New messages" divider.
+          // `count` (numeric) drives i18next plural selection; `displayCount` (through
+          // formatUnreadCount) is what actually gets interpolated — see Task 12's i18n sweep.
+          newMessages: 'New messages',
+          newMessagesCount: '{{displayCount}} new message',
+          newMessagesCount_other: '{{displayCount}} new messages',
           youWereAway: 'You were away',
           copyLink: 'Copy link',
           copyLinkChoose: 'Copy which link?',

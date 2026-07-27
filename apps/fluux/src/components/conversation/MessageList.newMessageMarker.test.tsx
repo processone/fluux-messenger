@@ -42,7 +42,7 @@ describe('MessageList — new-message divider plumbing', () => {
   const messages = createTestMessages(10)
   const renderMessage = (m: { id: string }) => <div>{m.id}</div>
 
-  function renderList(props: { firstNewMessageId?: string; firstNewMessageIsProvisional?: boolean }) {
+  function renderList(props: { firstNewMessageId?: string; firstNewMessageIsProvisional?: boolean; unreadCount?: number }) {
     return render(
       <MessageList
         messages={messages}
@@ -55,26 +55,39 @@ describe('MessageList — new-message divider plumbing', () => {
   }
 
   it('renders the divider exactly once, inside the firstNewMessageId row', () => {
-    const { container } = renderList({ firstNewMessageId: 'msg-5' })
+    const { container } = renderList({ firstNewMessageId: 'msg-5', unreadCount: 3 })
     const markers = container.querySelectorAll('[data-new-message-marker]')
     expect(markers).toHaveLength(1)
     expect(container.querySelector('[data-message-id="msg-5"] [data-new-message-marker]')).not.toBeNull()
   })
 
   it('renders no divider without firstNewMessageId', () => {
-    const { container } = renderList({})
+    const { container } = renderList({ unreadCount: 3 })
     expect(container.querySelectorAll('[data-new-message-marker]')).toHaveLength(0)
   })
 
+  // Read-state PR B, Task 12: the divider's PRESENCE stays governed solely by firstNewMessageId
+  // (unchanged) — unreadCount only supplies its label. firstNewMessageMarkers and unreadCount can
+  // be transiently out of step (reactivation's synchronous marker vs. an async archive recount),
+  // so the divider must still render — with the generic label, not a misleading "0 new messages"
+  // — while the count catches up, rather than flickering away. (This is a real, evidenced
+  // constraint, not a hypothetical: gating existence on the count broke `npm run test:scroll`'s
+  // marker-on-reentry invariants during development.)
+  it('still renders the divider (generic label) when the canonical count is momentarily 0', () => {
+    const { container } = renderList({ firstNewMessageId: 'msg-5', unreadCount: 0 })
+    const marker = container.querySelector('[data-new-message-marker]')
+    expect(marker).not.toBeNull()
+  })
+
   it('passes the provisional flag through to the marker (muted rendering)', () => {
-    const { container } = renderList({ firstNewMessageId: 'msg-5', firstNewMessageIsProvisional: true })
+    const { container } = renderList({ firstNewMessageId: 'msg-5', firstNewMessageIsProvisional: true, unreadCount: 3 })
     const marker = container.querySelector('[data-new-message-marker]') as HTMLElement
     expect(marker.dataset.provisional).toBe('true')
     expect(marker.querySelector('span')?.style.color).toBe('var(--fluux-text-muted)')
   })
 
   it('renders the definitive (accent) divider when the flag is omitted', () => {
-    const { container } = renderList({ firstNewMessageId: 'msg-5' })
+    const { container } = renderList({ firstNewMessageId: 'msg-5', unreadCount: 3 })
     const marker = container.querySelector('[data-new-message-marker]') as HTMLElement
     expect(marker.dataset.provisional).toBeUndefined()
     expect(marker.querySelector('span')?.style.color).toBe('var(--fluux-text-self)')

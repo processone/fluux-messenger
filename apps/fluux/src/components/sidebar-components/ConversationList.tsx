@@ -17,6 +17,7 @@ import { RoomAvatar } from '../RoomAvatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
@@ -303,7 +304,7 @@ export const ConversationItem = memo(function ConversationItem({
           )}
           {conversation.unreadCount > 0 && (
             <span className="absolute -top-1 -end-1 z-10 min-w-4 h-4 px-1 bg-fluux-badge-strong text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-              {conversation.unreadCount}
+              {formatUnreadCount(conversation.unreadCount)}
             </span>
           )}
         </div>

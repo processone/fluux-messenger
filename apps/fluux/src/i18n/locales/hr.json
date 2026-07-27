@@ -431,9 +431,9 @@
         "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
         "nickHiddenChars": "Ime sadrži skrivene znakove",
         "mentionSuggestions": "Prijedlozi spominjanja",
-        "unreadMessages": "{{count}} nepročitana poruka",
-        "unreadMessages_few": "{{count}} nepročitane poruke",
-        "unreadMessages_other": "{{count}} nepročitanih poruka"
+        "unreadMessages": "{{displayCount}} nepročitana poruka",
+        "unreadMessages_few": "{{displayCount}} nepročitane poruke",
+        "unreadMessages_other": "{{displayCount}} nepročitanih poruka"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",
@@ -466,9 +466,9 @@
         "noMessages": "Još nema poruka. Reci bok!",
         "loadingMessages": "Učitavanje poruka...",
         "newMessages": "Nove poruke",
-        "newMessagesCount": "{{count}} nova poruka",
-        "newMessagesCount_few": "{{count}} nove poruke",
-        "newMessagesCount_other": "{{count}} novih poruka",
+        "newMessagesCount": "{{displayCount}} nova poruka",
+        "newMessagesCount_few": "{{displayCount}} nove poruke",
+        "newMessagesCount_other": "{{displayCount}} novih poruka",
         "youWereAway": "Bili ste odsutni",
         "jumpToLastRead": "Idi na zadnju pročitanu",
         "historyStart": "Početak razgovora",

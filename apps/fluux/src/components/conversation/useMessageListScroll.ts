@@ -347,6 +347,31 @@ export interface UseMessageListScrollResult {
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
    *  there is no current marker. */
   scrollToMarker: () => void
+  /**
+   * Read-state PR B, Task 12: capture a CONTENT anchor (the bottom-most visible message plus the
+   * fraction of its height at the viewport bottom) from the CURRENT scroller geometry. Exposes the
+   * module-private `findBottomAnchor` so callers (MessageList's divider live-tracking) can snapshot
+   * a pre-mutation anchor themselves, on their own cadence — see `restoreAnchor`'s doc for why the
+   * capture point has to be genuinely pre-mutation. Returns null when there's no scroller or no
+   * rendered message row (nothing to anchor to).
+   */
+  captureAnchor: () => ScrollAnchor | null
+  /**
+   * Read-state PR B, Task 12: restore the scroll position so the anchor message sits at the same
+   * fractional offset it was captured at, using the CURRENT scroller and the message's CURRENT
+   * measured height. Exposes the module-private `restoreToAnchor`.
+   *
+   * Why this needs to be a caller-driven pair rather than an effect keyed on the divider id: a
+   * `useLayoutEffect` keyed on `firstNewMessageId` runs after React has already committed the new
+   * divider into the DOM — reading geometry there is *post*-mutation, so there is nothing left to
+   * capture (the anchor message may already have shifted). The fix is a continuously-maintained
+   * anchor (`captureAnchor`, refreshed by the caller every render while the divider is unchanged)
+   * paired with a restore call in that same post-mutation, pre-paint layout effect — `restoreAnchor`
+   * writes `scrollTop` synchronously, so it still lands before the browser paints the mutated layout,
+   * even though the capture had to happen earlier. Returns false when the anchor message isn't
+   * currently mounted (so the caller can decide whether to fall back).
+   */
+  restoreAnchor: (anchor: ScrollAnchor) => boolean
 }
 
 // ============================================================================
@@ -3656,6 +3681,20 @@ export function useMessageListScroll({
     })
   }, [firstNewMessageId, conversationId, createUnreadMarkerExecutor])
 
+  // Read-state PR B, Task 12: caller-driven anchor capture/restore — see the return type's doc
+  // for why the capture point can't just be a layout effect keyed on the divider id.
+  const captureAnchor = useCallback((): ScrollAnchor | null => {
+    const scroller = scrollerRef.current
+    if (!scroller) return null
+    return findBottomAnchor(scroller)
+  }, [])
+
+  const restoreAnchor = useCallback((anchor: ScrollAnchor): boolean => {
+    const scroller = scrollerRef.current
+    if (!scroller) return false
+    return restoreToAnchor(scroller, anchor)
+  }, [])
+
   // ==========================================================================
   // RETURN
   // ==========================================================================
@@ -3673,5 +3712,7 @@ export function useMessageListScroll({
     markerAboveViewport,
     bottomVisibleMessageId,
     scrollToMarker,
+    captureAnchor,
+    restoreAnchor,
   }
 }

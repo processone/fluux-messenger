@@ -1212,6 +1212,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
       readPointerId={readPointerId}
+      unreadCount={room.unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

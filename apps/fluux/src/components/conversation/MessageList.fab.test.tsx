@@ -2,8 +2,16 @@
  * @vitest-environment jsdom
  *
  * Tests for the scroll-to-bottom FAB (floating action button):
- * - Badge count derived from firstNewMessageId marker position
- * - Two-step scroll behavior (marker first, then bottom)
+ * - Badge shows the ONE canonical `unreadCount` prop (Read-state PR B, Task 12) — never a
+ *   recount of the resident/below-viewport message array. Scrolling is navigation, not read
+ *   state: the badge must not react to scroll position at all.
+ * - Two-step scroll behavior (marker first, then bottom) — geometry-driven, unchanged by the
+ *   count model switch.
+ *
+ * This file previously tested `countNewBelowViewport` (`unreadBadge.ts`), which recomputed the
+ * badge from the resident array + scroll position. Both the helper and that model are deleted;
+ * the badge now reads `unreadCount` directly and is asserted to be scroll- and
+ * resident-array-independent.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
@@ -190,8 +198,8 @@ describe('MessageList FAB badge and scroll behavior', () => {
     })
   }
 
-  describe('unread badge derived from marker', () => {
-    it('should not show badge when no firstNewMessageId is set', () => {
+  describe('FAB badge reflects the canonical unreadCount prop', () => {
+    it('should not show badge when unreadCount is omitted (0)', () => {
       const messages = createTestMessages(10)
 
       render(
@@ -218,158 +226,191 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge).toBeNull()
     })
 
-    it('should show badge count matching messages from marker to end', () => {
-      const messages = createTestMessages(10) // msg-0 through msg-9
-      // Place marker at msg-7 → 3 messages (msg-7, msg-8, msg-9)
-      const firstNewMessageId = 'msg-7'
-
-      render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      const scrollCtx = setupScrollContainer()
-      if (!scrollCtx) return
-
-      // Scrolled to the top: bottom-most visible row (msg-4) is above the divider → full count of 3.
-      simulateScrollTo(scrollCtx.container, 0)
-
-      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
-      expect(fab).toBeTruthy()
-
-      // Badge should show 3 (new messages still below the fold: msg-7, msg-8, msg-9)
-      const badge = fab?.querySelector('span')
-      expect(badge).toBeTruthy()
-      expect(badge?.textContent).toBe('3')
-    })
-
-    it('should not show badge when firstNewMessageId is not found in messages', () => {
+    it('shows the unreadCount prop verbatim as the badge text', () => {
       const messages = createTestMessages(10)
 
       render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="nonexistent-id"
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      const scrollCtx = setupScrollContainer()
-      if (!scrollCtx) return
-
-      simulateScrollUp(scrollCtx.container)
-
-      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
-      const badge = fab?.querySelector('span')
-      expect(badge).toBeNull()
-    })
-
-    it('should cap badge at 99+ for large counts', () => {
-      const messages = createTestMessages(150)
-      // Place marker at msg-0 → 150 messages
-      const firstNewMessageId = 'msg-0'
-
-      render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId={firstNewMessageId}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      const scrollCtx = setupScrollContainer()
-      if (!scrollCtx) return
-
-      // Scrolled to the top with the divider at msg-0: ~145 new messages remain below → capped 99+.
-      simulateScrollTo(scrollCtx.container, 0)
-
-      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
-      const badge = fab?.querySelector('span')
-      expect(badge?.textContent).toBe('99+')
-    })
-
-    it('should update badge when firstNewMessageId changes', () => {
-      const messages = createTestMessages(10)
-
-      const { rerender } = render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-7"
+          unreadCount={3}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
 
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
+      simulateScrollUp(scrollCtx.container)
 
-      // Scrolled to the top: bottom-most visible row (msg-4) is above both markers used below, so the
-      // badge equals the full new-message count in each case.
-      simulateScrollTo(scrollCtx.container, 0)
-
-      // Verify initial badge: msg-7 through msg-9 = 3
-      let fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
-      let badge = fab?.querySelector('span')
+      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
+      const badge = fab?.querySelector('span')
       expect(badge?.textContent).toBe('3')
-
-      // Move marker earlier: msg-5 through msg-9 = 5
-      rerender(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-5"
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-
-      fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
-      badge = fab?.querySelector('span')
-      expect(badge?.textContent).toBe('5')
     })
 
-    it('badge counts unread below the read pointer', () => {
-      const messages = createTestMessages(10) // msg-0 .. msg-9
-      const { rerender } = render(
+    it('shows the badge even when there is no divider (firstNewMessageId absent) — the badge does not depend on the divider', () => {
+      const messages = createTestMessages(10)
+
+      render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
-          readPointerId="msg-2" // read up to msg-2 → unread = msg-3..msg-9 = 7
+          unreadCount={5}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
+
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
-      simulateScrollUp(scrollCtx.container) // just to show the FAB
+      simulateScrollUp(scrollCtx.container)
 
-      const badge = () => scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
-      expect(badge()?.textContent).toBe('7')
+      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
+      expect(fab?.querySelector('span')?.textContent).toBe('5')
+    })
 
-      // Pointer advances to msg-6 (read further) → unread = msg-7..msg-9 = 3
-      rerender(
+    // Break check for the deleted `countNewBelowViewport`/`markerUnreadCount` resident-array
+    // derivation: with the OLD code, this exact setup — firstNewMessageId='msg-3',
+    // readPointerId='msg-6' — computed a badge of 3 (msg-7..msg-9 below the read pointer, see the
+    // deleted unreadBadge.test.ts fixture this is adapted from). Passing a canonical `unreadCount`
+    // that DISAGREES with that resident-array math (11, not 3) proves the badge no longer
+    // recomputes from messages/readPointerId at all — if it still did, this would show '3'.
+    it('ignores the resident array and read pointer entirely — only unreadCount drives the badge', () => {
+      const messages = createTestMessages(10) // msg-0 .. msg-9
+      render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId="msg-3"
           readPointerId="msg-6"
+          unreadCount={11}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+      simulateScrollUp(scrollCtx.container)
+
+      const badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
+      expect(badge?.textContent).toBe('11')
+    })
+
+    // Acceptance scenario 3 ("scroll down and back up without advancing the read pointer"):
+    // the canonical count must not react to scroll position at all.
+    // Break check: drive scroll events only (no prop change) and assert the count is unchanged —
+    // a viewport-derived badge (the deleted model) would have ticked down as the reader scrolled.
+    it('does not change when the viewport/scroll position changes (scenario 3)', () => {
+      const messages = createTestMessages(10)
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-3"
+          unreadCount={4}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+      const badge = () => scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
+
+      simulateScrollTo(scrollCtx.container, 0)
+      expect(badge()?.textContent).toBe('4')
+
+      // Scroll toward the bottom (past the divider) — a below-viewport recount would drop this.
+      simulateScrollTo(scrollCtx.container, 900)
+      expect(badge()?.textContent).toBe('4')
+
+      // ...and back up — a resident-array count would restore a possibly-different number here too.
+      simulateScrollTo(scrollCtx.container, 0)
+      expect(badge()?.textContent).toBe('4')
+    })
+
+    it('updates when the unreadCount prop changes (e.g. the pointer advances)', () => {
+      const messages = createTestMessages(10)
+
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-3"
+          unreadCount={7}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+      simulateScrollUp(scrollCtx.container)
+
+      const badge = () => scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
+      expect(badge()?.textContent).toBe('7')
+
+      rerender(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-3"
+          unreadCount={3}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
       expect(badge()?.textContent).toBe('3')
+    })
+
+    // Each numeric surface needs a 998/999/1000 test (Read-state PR B, Task 12): the store
+    // saturates at 999 and never reaches 1000, so `formatUnreadCount` must render 999 as "999+",
+    // not the exact "999".
+    it('caps the badge at 999+ for a saturated canonical count (998/999/1000)', () => {
+      const messages = createTestMessages(10)
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-0"
+          unreadCount={998}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+      simulateScrollUp(scrollCtx.container)
+      const badge = () => scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
+      expect(badge()?.textContent).toBe('998')
+
+      rerender(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-0"
+          unreadCount={999}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      expect(badge()?.textContent).toBe('999+')
+
+      rerender(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-0"
+          unreadCount={1000}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      expect(badge()?.textContent).toBe('999+')
     })
   })
 

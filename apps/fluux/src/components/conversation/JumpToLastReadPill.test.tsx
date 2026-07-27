@@ -21,4 +21,18 @@ describe('JumpToLastReadPill', () => {
     const { container } = render(<JumpToLastReadPill visible={false} count={3} onJump={() => {}} />)
     expect(container.querySelector('[data-jump-to-last-read]')).toBeNull()
   })
+
+  // Read-state PR B, Task 12: the pill is one of the five numeric surfaces routed through the
+  // shared formatUnreadCount — the store saturates at 999 (never reaching 1000), so 999 must
+  // render as "999+", not the exact "999".
+  it('caps the count at 999+ for a saturated value (998/999/1000)', () => {
+    const { rerender } = render(<JumpToLastReadPill visible count={998} onJump={() => {}} />)
+    expect(screen.getByText('998 new messages')).toBeInTheDocument()
+
+    rerender(<JumpToLastReadPill visible count={999} onJump={() => {}} />)
+    expect(screen.getByText('999+ new messages')).toBeInTheDocument()
+
+    rerender(<JumpToLastReadPill visible count={1000} onJump={() => {}} />)
+    expect(screen.getByText('999+ new messages')).toBeInTheDocument()
+  })
 })

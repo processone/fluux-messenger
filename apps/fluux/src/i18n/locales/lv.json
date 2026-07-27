@@ -432,9 +432,9 @@
         "nickEdgeWhitespace": "Vārdam ir papildu atstarpes malās",
         "nickHiddenChars": "Vārds satur slēptas rakstzīmes",
         "mentionSuggestions": "Pieminējumu ieteikumi",
-        "unreadMessages_zero": "{{count}} neizlasītu ziņojumu",
-        "unreadMessages": "{{count}} neizlasīts ziņojums",
-        "unreadMessages_other": "{{count}} neizlasīti ziņojumi"
+        "unreadMessages_zero": "{{displayCount}} neizlasītu ziņojumu",
+        "unreadMessages": "{{displayCount}} neizlasīts ziņojums",
+        "unreadMessages_other": "{{displayCount}} neizlasīti ziņojumi"
     },
     "events": {
         "invitedBy": "Uzaicināja {{name}}",
@@ -467,9 +467,9 @@
         "noMessages": "Vēl nav ziņojumu. Pasaki sveiki!",
         "loadingMessages": "Ielādē ziņojumus...",
         "newMessages": "Jauni ziņojumi",
-        "newMessagesCount_zero": "{{count}} jaunu ziņojumu",
-        "newMessagesCount": "{{count}} jauns ziņojums",
-        "newMessagesCount_other": "{{count}} jauni ziņojumi",
+        "newMessagesCount_zero": "{{displayCount}} jaunu ziņojumu",
+        "newMessagesCount": "{{displayCount}} jauns ziņojums",
+        "newMessagesCount_other": "{{displayCount}} jauni ziņojumi",
         "youWereAway": "Jūs nebijāt klāt",
         "jumpToLastRead": "Pāriet uz pēdējo izlasīto",
         "historyStart": "Sarunas sākums",

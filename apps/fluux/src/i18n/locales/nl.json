@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
         "nickHiddenChars": "De naam bevat verborgen tekens",
         "mentionSuggestions": "Vermeldingssuggesties",
-        "unreadMessages": "{{count}} ongelezen bericht",
-        "unreadMessages_other": "{{count}} ongelezen berichten"
+        "unreadMessages": "{{displayCount}} ongelezen bericht",
+        "unreadMessages_other": "{{displayCount}} ongelezen berichten"
     },
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Nog geen berichten. Zeg hallo!",
         "loadingMessages": "Berichten laden...",
         "newMessages": "Nieuwe berichten",
-        "newMessagesCount": "{{count}} nieuw bericht",
-        "newMessagesCount_other": "{{count}} nieuwe berichten",
+        "newMessagesCount": "{{displayCount}} nieuw bericht",
+        "newMessagesCount_other": "{{displayCount}} nieuwe berichten",
         "youWereAway": "Je was afwezig",
         "jumpToLastRead": "Ga naar laatst gelezen",
         "historyStart": "Begin van gesprek",

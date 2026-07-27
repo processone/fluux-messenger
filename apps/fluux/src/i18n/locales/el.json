@@ -432,8 +432,8 @@
         "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
         "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες",
         "mentionSuggestions": "Προτάσεις αναφορών",
-        "unreadMessages": "{{count}} μη αναγνωσμένο μήνυμα",
-        "unreadMessages_other": "{{count}} μη αναγνωσμένα μηνύματα"
+        "unreadMessages": "{{displayCount}} μη αναγνωσμένο μήνυμα",
+        "unreadMessages_other": "{{displayCount}} μη αναγνωσμένα μηνύματα"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",
@@ -466,8 +466,8 @@
         "noMessages": "Δεν υπάρχουν μηνύματα ακόμα. Πείτε γεια!",
         "loadingMessages": "Φόρτωση μηνυμάτων...",
         "newMessages": "Νέα μηνύματα",
-        "newMessagesCount": "{{count}} νέο μήνυμα",
-        "newMessagesCount_other": "{{count}} νέα μηνύματα",
+        "newMessagesCount": "{{displayCount}} νέο μήνυμα",
+        "newMessagesCount_other": "{{displayCount}} νέα μηνύματα",
         "youWereAway": "Ήσασταν απών",
         "jumpToLastRead": "Μετάβαση στο τελευταίο διαβασμένο",
         "historyStart": "Αρχή συνομιλίας",

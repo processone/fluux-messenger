@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "Nafnið er með auka bil á endunum",
         "nickHiddenChars": "Nafnið inniheldur falda stafi",
         "mentionSuggestions": "Tillögur að tilvísunum",
-        "unreadMessages": "{{count}} ólesið skilaboð",
-        "unreadMessages_other": "{{count}} ólesin skilaboð"
+        "unreadMessages": "{{displayCount}} ólesið skilaboð",
+        "unreadMessages_other": "{{displayCount}} ólesin skilaboð"
     },
     "events": {
         "invitedBy": "Boðið af {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Engin skilaboð enn. Segðu halló!",
         "loadingMessages": "Hleð skilaboðum...",
         "newMessages": "Ný skilaboð",
-        "newMessagesCount": "{{count}} nýtt skilaboð",
-        "newMessagesCount_other": "{{count}} ný skilaboð",
+        "newMessagesCount": "{{displayCount}} nýtt skilaboð",
+        "newMessagesCount_other": "{{displayCount}} ný skilaboð",
         "youWereAway": "Þú varst fjarverandi",
         "jumpToLastRead": "Fara á síðast lesið",
         "historyStart": "Upphaf samtals",

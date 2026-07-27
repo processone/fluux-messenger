@@ -433,9 +433,9 @@
         "nickEdgeWhitespace": "El nom té espais addicionals als extrems",
         "nickHiddenChars": "El nom conté caràcters ocults",
         "mentionSuggestions": "Suggeriments de mencions",
-        "unreadMessages": "{{count}} missatge sense llegir",
-        "unreadMessages_many": "{{count}} de missatges sense llegir",
-        "unreadMessages_other": "{{count}} missatges sense llegir"
+        "unreadMessages": "{{displayCount}} missatge sense llegir",
+        "unreadMessages_many": "{{displayCount}} de missatges sense llegir",
+        "unreadMessages_other": "{{displayCount}} missatges sense llegir"
     },
     "events": {
         "invitedBy": "Convidat per {{name}}",
@@ -468,9 +468,9 @@
         "noMessages": "Encara no hi ha missatges. Digues hola!",
         "loadingMessages": "Carregant missatges...",
         "newMessages": "Missatges nous",
-        "newMessagesCount": "{{count}} missatge nou",
-        "newMessagesCount_many": "{{count}} de missatges nous",
-        "newMessagesCount_other": "{{count}} missatges nous",
+        "newMessagesCount": "{{displayCount}} missatge nou",
+        "newMessagesCount_many": "{{displayCount}} de missatges nous",
+        "newMessagesCount_other": "{{displayCount}} missatges nous",
         "youWereAway": "Havies estat absent",
         "jumpToLastRead": "Anar a l’últim llegit",
         "historyStart": "Inici de la conversa",

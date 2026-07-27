@@ -25,7 +25,8 @@ import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
-import { countNewBelowViewport } from './unreadBadge'
+import type { ScrollAnchor } from '@/utils/scrollStateManager'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
 import { isFeatureEnabled } from '@/utils/featureFlags'
@@ -83,6 +84,16 @@ export interface MessageListProps<T extends BaseMessage> {
   readPointerId?: string
   /** Recompute the divider from the read pointer (called when the reader scrolls back up). */
   onResyncDivider?: (conversationId: string) => void
+  /**
+   * Read-state PR B, Task 12: the ONE canonical unread count (the store's pointer-derived
+   * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), fed to every numeric surface this
+   * component renders (the "New messages" divider, the floating jump-to-last-read pill, and the
+   * FAB badge) through the shared `formatUnreadCount`. No surface recomputes its own count from
+   * the resident message array or the viewport — scrolling is navigation, not read state.
+   * Undefined behaves like 0 (no badge, generic un-counted divider label) for callers that don't
+   * track unread (e.g. read-only preview lists).
+   */
+  unreadCount?: number
   /** Users currently typing */
   typingUsers?: string[]
   /** Format function for typing user display */
@@ -172,6 +183,7 @@ export function MessageList<T extends BaseMessage>({
   clearFirstNewMessageId,
   readPointerId,
   onResyncDivider,
+  unreadCount,
   targetMessageId,
   onTargetMessageConsumed,
   typingUsers = [],
@@ -236,15 +248,6 @@ export function MessageList<T extends BaseMessage>({
       return true
     })
   }, [messages])
-
-  // Derive badge count from the marker position so FAB badge and marker are
-  // always consistent. The store's unreadCount is 0 for active conversations.
-  const markerUnreadCount = useMemo(() => {
-    if (!firstNewMessageId) return 0
-    const idx = deduplicatedMessages.findIndex((m) => m.id === firstNewMessageId)
-    if (idx === -1) return 0
-    return deduplicatedMessages.length - idx
-  }, [firstNewMessageId, deduplicatedMessages])
 
   // Group messages by date for rendering with separators. Memoized so the virtualizer
   // (and the legacy map) receive a stable array when messages are unchanged — an unstable
@@ -530,6 +533,8 @@ export function MessageList<T extends BaseMessage>({
     markerAboveViewport,
     bottomVisibleMessageId,
     scrollToMarker,
+    captureAnchor,
+    restoreAnchor,
   } = useMessageListScroll({
     conversationId,
     messageCount: messages.length,
@@ -556,6 +561,65 @@ export function MessageList<T extends BaseMessage>({
     staticMode,
     virtualizer: activeVirtualizer,
   })
+
+  // --------------------------------------------------------------------------
+  // DIVIDER ANCHOR PRESERVATION (Read-state PR B, Task 12 / acceptance scenario 7)
+  // --------------------------------------------------------------------------
+  //
+  // The divider now live-tracks the read boundary — it can reposition or disappear when the
+  // effective boundary moves (e.g. a remote XEP-0490 marker advancing the pointer while the
+  // conversation is open) — but that reposition must never visually scroll the reader: only the
+  // divider's row should move; the message the reader is actually looking at must stay at the
+  // same pixel offset.
+  //
+  // A `useLayoutEffect` keyed on `firstNewMessageId` is too late to CAPTURE the anchor: by the
+  // time it runs, React has already committed the new divider into the DOM, so any geometry read
+  // there is post-mutation — there is nothing left to capture. Instead this keeps a
+  // CONTINUOUSLY-MAINTAINED anchor, refreshed every render while the divider id is unchanged (so a
+  // valid PRE-mutation snapshot always exists heading into the next change), and restores it in a
+  // layout effect keyed on the id change — that effect runs after the DOM mutation but before
+  // paint, so the corrected offset is what the user sees and there is no visible scroll.
+  const dividerAnchorRef = useRef<ScrollAnchor | null>(null)
+  const prevDividerIdRef = useRef(firstNewMessageId)
+
+  // Refresh from CURRENT (pre-mutation) geometry — but only while the divider id is unchanged
+  // from the previous render. Declared BEFORE the restore effect below, so React runs it first
+  // within the same commit: on the render where the id changes, `prevDividerIdRef.current` still
+  // holds the OLD id here (the restore effect hasn't updated it yet), so the mismatch correctly
+  // skips the refresh and leaves the last-known pre-mutation snapshot intact for that restore.
+  //
+  // Only while scrolled away from the bottom (`showScrollToBottom`): a reader glued to the live
+  // edge is already handled by the separate bottom-pin mechanism and has no "anchor" to protect —
+  // the whole point of this feature is preserving a SCROLLED-UP reader's position, so there is
+  // nothing to do at the bottom. This also sidesteps a real perf/timing hazard found while
+  // developing this: an at-bottom room streaming in a MAM catch-up keeps `bottomVisibleMessageId`
+  // advancing to the newest row on every batch, so a version of this effect that ran on every
+  // such change forced a DOM querySelectorAll + getBoundingClientRect scan on every catch-up
+  // commit — enough extra synchronous layout work to shift `npm run test:scroll`'s
+  // invariant-4 reassert timing and flip its scroll-shadow phase assertion. Skipping entirely
+  // while at the bottom removes the hazard at its most common trigger (the live-following case)
+  // without weakening the scrolled-up guarantee scenario 7 requires.
+  useLayoutEffect(() => {
+    if (showScrollToBottom && prevDividerIdRef.current === firstNewMessageId) {
+      dividerAnchorRef.current = captureAnchor()
+    }
+    // firstNewMessageId/captureAnchor are listed for exhaustive-deps; including firstNewMessageId
+    // does not reintroduce the perf hazard above (divider changes are rare — nothing like the
+    // catch-up burst) and the id-changed render just no-ops via the guard, same as before.
+  }, [bottomVisibleMessageId, showScrollToBottom, firstNewMessageId, captureAnchor])
+
+  // Restore the anchor exactly when the divider id changes. React guarantees this runs after the
+  // refresh effect above within the same commit, so it always sees the pre-mutation anchor before
+  // advancing prevDividerIdRef to the new id. Also gated on `showScrollToBottom`: a reader who has
+  // since scrolled to the bottom must never be yanked back to a now-irrelevant anchor captured
+  // from an earlier scrolled-up moment — the anchor is only ever restored while it's still the
+  // thing protecting the reader's current position.
+  useLayoutEffect(() => {
+    if (prevDividerIdRef.current !== firstNewMessageId) {
+      if (showScrollToBottom && dividerAnchorRef.current) restoreAnchor(dividerAnchorRef.current)
+      prevDividerIdRef.current = firstNewMessageId
+    }
+  }, [firstNewMessageId, restoreAnchor, showScrollToBottom])
 
   // Combined ref setter for scroll container
   const setScrollContainerRef = (element: HTMLDivElement | null) => {
@@ -706,7 +770,9 @@ export function MessageList<T extends BaseMessage>({
             {msg.id === gapMarkerMessageId && onCatchUpHistory && (
               <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />
             )}
-            {item.isFirstNew && <NewMessageMarker provisional={firstNewMessageIsProvisional} />}
+            {item.isFirstNew && (
+              <NewMessageMarker count={dividerCount} provisional={firstNewMessageIsProvisional} />
+            )}
             {renderMessage(msg, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)}
           </div>
         )
@@ -732,15 +798,18 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
-  // FAB badge: counts the new messages (from the divider) still below the persisted read pointer
-  // (readPointerId), which only advances forward (see chatStore/roomStore's
-  // advanceReadPointer) — so the count ticks DOWN as the reader scrolls toward the present and
-  // never climbs back up when they scroll into history. The marker pill keeps the full
-  // markerUnreadCount ("jump back to N unread").
-  const fabBadgeCount = useMemo(
-    () => countNewBelowViewport(deduplicatedMessages, firstNewMessageId, readPointerId ?? null),
-    [deduplicatedMessages, firstNewMessageId, readPointerId],
-  )
+  // Read-state PR B, Task 12: the FAB badge is the ONE canonical count (never a resident-array or
+  // below-viewport recount) — scrolling is navigation, not read state. Visibility (fabVisible,
+  // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
+  // has scrolled up in shows a visible FAB with NO badge.
+  const canonicalUnreadCount = unreadCount ?? 0
+  // The divider's and pill's PRESENCE stays governed solely by firstNewMessageId (unchanged) —
+  // unreadCount only supplies their LABEL. The two are not always perfectly synchronized: on
+  // reactivation / recount, firstNewMessageMarkers can be (re)computed slightly ahead of an async
+  // archive recount settling unreadCount, so gating existence on the count too would transiently
+  // hide a divider the store already positioned. `undefined` here falls back to the marker's
+  // generic "New messages" label instead of a misleading "0 new messages".
+  const dividerCount = canonicalUnreadCount > 0 ? canonicalUnreadCount : undefined
   // When the reader scrolls back ABOVE the read pointer, snap the "New messages" divider to the
   // first unread after the pointer ("here's how far I got"). Forward-only + idempotent in the store,
   // so a slightly noisy trigger is harmless. Compares the bottom-most-visible row (from the scroll
@@ -886,7 +955,9 @@ export function MessageList<T extends BaseMessage>({
                     style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}
-                    {showNewMarker && <NewMessageMarker provisional={firstNewMessageIsProvisional} />}
+                    {showNewMarker && (
+                      <NewMessageMarker count={dividerCount} provisional={firstNewMessageIsProvisional} />
+                    )}
                     {renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}
                   </div>
                 )
@@ -911,10 +982,13 @@ export function MessageList<T extends BaseMessage>({
         <FloatingDateHeader scrollerRef={scrollContainerRef} getTopDate={getTopDate} />
       )}
 
-      {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport */}
+      {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport.
+          Presence stays governed by firstNewMessageId (matching the divider); the pill's own
+          count>0 ternary already degrades to "You were away" when the count isn't (yet) known
+          (Read-state PR B, Task 12 — same rationale as dividerCount above). */}
       <JumpToLastReadPill
         visible={!!firstNewMessageId && markerAboveViewport}
-        count={markerUnreadCount}
+        count={canonicalUnreadCount}
         onJump={scrollToMarker}
       />
 
@@ -948,9 +1022,9 @@ export function MessageList<T extends BaseMessage>({
             aria-label={t('chat.scrollToBottom')}
             tabIndex={fabVisible ? 0 : -1}
           >
-            {fabBadgeCount > 0 && (
+            {canonicalUnreadCount > 0 && (
               <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-badge text-fluux-badge-text text-xs font-semibold flex items-center justify-center">
-                {fabBadgeCount > 99 ? '99+' : fabBadgeCount}
+                {formatUnreadCount(canonicalUnreadCount)}
               </span>
             )}
             <ChevronDown className="size-5" />

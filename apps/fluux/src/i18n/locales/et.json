@@ -433,8 +433,8 @@
         "nickEdgeWhitespace": "Nimel on servades lisatühikud",
         "nickHiddenChars": "Nimi sisaldab peidetud märke",
         "mentionSuggestions": "Mainimiste soovitused",
-        "unreadMessages": "{{count}} lugemata sõnum",
-        "unreadMessages_other": "{{count}} lugemata sõnumit"
+        "unreadMessages": "{{displayCount}} lugemata sõnum",
+        "unreadMessages_other": "{{displayCount}} lugemata sõnumit"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",
@@ -467,8 +467,8 @@
         "noMessages": "Sõnumeid veel pole. Ütle tere!",
         "loadingMessages": "Sõnumite laadimine...",
         "newMessages": "Uued sõnumid",
-        "newMessagesCount": "{{count}} uus sõnum",
-        "newMessagesCount_other": "{{count}} uut sõnumit",
+        "newMessagesCount": "{{displayCount}} uus sõnum",
+        "newMessagesCount_other": "{{displayCount}} uut sõnumit",
         "youWereAway": "Sa olid eemal",
         "jumpToLastRead": "Mine viimati loetu juurde",
         "historyStart": "Vestluse algus",

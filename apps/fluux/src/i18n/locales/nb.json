@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
         "nickHiddenChars": "Navnet inneholder skjulte tegn",
         "mentionSuggestions": "Omtaleforslag",
-        "unreadMessages": "{{count}} ulest melding",
-        "unreadMessages_other": "{{count}} uleste meldinger"
+        "unreadMessages": "{{displayCount}} ulest melding",
+        "unreadMessages_other": "{{displayCount}} uleste meldinger"
     },
     "events": {
         "invitedBy": "Invitert av {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Ingen meldinger ennå. Si hei!",
         "loadingMessages": "Laster meldinger...",
         "newMessages": "Nye meldinger",
-        "newMessagesCount": "{{count}} ny melding",
-        "newMessagesCount_other": "{{count}} nye meldinger",
+        "newMessagesCount": "{{displayCount}} ny melding",
+        "newMessagesCount_other": "{{displayCount}} nye meldinger",
         "youWereAway": "Du var borte",
         "jumpToLastRead": "Gå til sist lest",
         "historyStart": "Begynnelsen av samtalen",

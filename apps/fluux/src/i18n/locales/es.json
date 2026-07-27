@@ -433,9 +433,9 @@
         "nickEdgeWhitespace": "El nombre tiene espacios adicionales en los extremos",
         "nickHiddenChars": "El nombre contiene caracteres ocultos",
         "mentionSuggestions": "Sugerencias de menciones",
-        "unreadMessages": "{{count}} mensaje sin leer",
-        "unreadMessages_many": "{{count}} de mensajes sin leer",
-        "unreadMessages_other": "{{count}} mensajes sin leer"
+        "unreadMessages": "{{displayCount}} mensaje sin leer",
+        "unreadMessages_many": "{{displayCount}} de mensajes sin leer",
+        "unreadMessages_other": "{{displayCount}} mensajes sin leer"
     },
     "events": {
         "invitedBy": "Invitado por {{name}}",
@@ -468,9 +468,9 @@
         "noMessages": "Sin mensajes aun. Di hola!",
         "loadingMessages": "Cargando mensajes...",
         "newMessages": "Mensajes nuevos",
-        "newMessagesCount": "{{count}} mensaje nuevo",
-        "newMessagesCount_many": "{{count}} de mensajes nuevos",
-        "newMessagesCount_other": "{{count}} mensajes nuevos",
+        "newMessagesCount": "{{displayCount}} mensaje nuevo",
+        "newMessagesCount_many": "{{displayCount}} de mensajes nuevos",
+        "newMessagesCount_other": "{{displayCount}} mensajes nuevos",
         "youWereAway": "Estuviste ausente",
         "jumpToLastRead": "Ir al último leído",
         "historyStart": "Inicio de la conversacion",

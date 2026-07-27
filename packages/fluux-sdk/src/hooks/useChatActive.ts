@@ -103,22 +103,32 @@ export function useChatActive() {
     if (!s.activeConversationId) return false
     return chatSelectors.firstNewMessageIsProvisionalFor(s.activeConversationId)(s)
   })
+  // Read-state PR B, Task 12: the canonical, pointer-derived unread count for the active
+  // conversation — used to feed the ONE shared count into every UI surface (sidebar,
+  // divider, floating pill, FAB badge) via ChatView. Previously hardcoded to 0 here
+  // ("not used by active view components"); that force-zero is exactly what the single
+  // canonical count model removes — active conversations are no longer force-zeroed, the
+  // pointer/derivation already produces the right number (see chatStore's recount +
+  // on-arrival paths).
+  const activeConvUnreadCount = useChatStore((s) => {
+    if (!s.activeConversationId) return 0
+    return s.conversationMeta.get(s.activeConversationId)?.unreadCount ?? 0
+  })
 
   // Reconstruct a stable activeConversation object from individual primitive fields.
-  // Only changes when the specific fields change, not when lastMessage/unreadCount
-  // change on background sync of other conversations.
+  // Only changes when the specific fields change, not when lastMessage change on
+  // background sync of other conversations.
   const activeConversation = useMemo((): Conversation | null => {
     if (!activeConversationId || activeConvName === null || !activeConvType) return null
     return {
       id: activeConversationId,
       name: activeConvName,
       type: activeConvType,
-      // Not used by active view components — sidebar uses useChat() for these
-      unreadCount: 0,
+      unreadCount: activeConvUnreadCount,
       lastMessage: undefined,
       readPointer: undefined,
     }
-  }, [activeConversationId, activeConvName, activeConvType])
+  }, [activeConversationId, activeConvName, activeConvType, activeConvUnreadCount])
 
   // Don't use useShallow for messages - when messages are prepended, we need React to re-render
   const activeMessages = useChatStore((s) => {

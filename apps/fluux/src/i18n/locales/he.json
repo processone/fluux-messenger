@@ -433,7 +433,7 @@
         "mentionSuggestions": "הצעות אזכור",
         "unreadMessages": "הודעה אחת שלא נקראה",
         "unreadMessages_two": "2 הודעות שלא נקראו",
-        "unreadMessages_other": "{{count}} הודעות שלא נקראו"
+        "unreadMessages_other": "{{displayCount}} הודעות שלא נקראו"
     },
     "events": {
         "invitedBy": "הוזמן על ידי {{name}}",
@@ -468,7 +468,7 @@
         "newMessages": "הודעות חדשות",
         "newMessagesCount": "הודעה חדשה אחת",
         "newMessagesCount_two": "2 הודעות חדשות",
-        "newMessagesCount_other": "{{count}} הודעות חדשות",
+        "newMessagesCount_other": "{{displayCount}} הודעות חדשות",
         "youWereAway": "לא היית כאן",
         "jumpToLastRead": "עבור להודעה האחרונה שנקראה",
         "historyStart": "תחילת השיחה",

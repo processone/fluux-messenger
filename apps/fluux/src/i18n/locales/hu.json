@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
         "nickHiddenChars": "A név rejtett karaktereket tartalmaz",
         "mentionSuggestions": "Említésjavaslatok",
-        "unreadMessages": "{{count}} olvasatlan üzenet",
-        "unreadMessages_other": "{{count}} olvasatlan üzenet"
+        "unreadMessages": "{{displayCount}} olvasatlan üzenet",
+        "unreadMessages_other": "{{displayCount}} olvasatlan üzenet"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Még nincsenek üzenetek. Köszönjön!",
         "loadingMessages": "Üzenetek betöltése...",
         "newMessages": "Új üzenetek",
-        "newMessagesCount": "{{count}} új üzenet",
-        "newMessagesCount_other": "{{count}} új üzenet",
+        "newMessagesCount": "{{displayCount}} új üzenet",
+        "newMessagesCount_other": "{{displayCount}} új üzenet",
         "youWereAway": "Távol voltál",
         "jumpToLastRead": "Ugrás az utoljára olvasotthoz",
         "historyStart": "A beszélgetés eleje",

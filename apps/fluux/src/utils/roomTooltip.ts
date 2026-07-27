@@ -1,4 +1,5 @@
 import type { Room } from '@fluux/sdk'
+import { formatUnreadCount } from './formatUnreadCount'
 
 // Matches the TranslateFn convention in messagePreviewText.ts / roomJoinError.ts.
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
@@ -41,7 +42,9 @@ export function roomTooltipParts(room: RoomTooltipRoom, t: TranslateFn): RoomToo
   const detail = room.nickname ? `${userText} • ${room.nickname}` : userText
 
   const headline =
-    room.unreadCount > 0 ? t('rooms.unreadMessages', { count: room.unreadCount }) : null
+    room.unreadCount > 0
+      ? t('rooms.unreadMessages', { count: room.unreadCount, displayCount: formatUnreadCount(room.unreadCount) })
+      : null
 
   return { headline, detail }
 }

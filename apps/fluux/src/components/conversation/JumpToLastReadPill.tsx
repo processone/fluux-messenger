@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
 
 interface JumpToLastReadPillProps {
   visible: boolean
@@ -23,7 +24,9 @@ export function JumpToLastReadPill({ visible, count, onJump }: JumpToLastReadPil
         title={t('chat.jumpToLastRead')}
         className="pointer-events-auto px-3 py-1 rounded-full bg-fluux-float border border-fluux-border shadow-lg text-xs font-medium text-fluux-muted whitespace-nowrap hover:text-fluux-text"
       >
-        {count > 0 ? t('chat.newMessagesCount', { count }) : t('chat.youWereAway')}
+        {count > 0
+          ? t('chat.newMessagesCount', { count, displayCount: formatUnreadCount(count) })
+          : t('chat.youWereAway')}
       </button>
     </div>
   )

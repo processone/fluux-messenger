@@ -115,4 +115,23 @@ describe('ConversationItem unread badge placement', () => {
     renderItem(makeConversation({ unreadCount: 0 }))
     expect(screen.queryByText('0')).toBeNull()
   })
+
+  // Read-state PR B, Task 12: the sidebar counter is one of the five numeric surfaces
+  // routed through the shared formatUnreadCount — the store saturates at 999 (never
+  // reaching 1000), so 999 must render as "999+", not the exact "999".
+  it('renders 998 verbatim', () => {
+    const { getByText } = renderItem(makeConversation({ unreadCount: 998 }))
+    expect(getByText('998')).toBeInTheDocument()
+  })
+
+  it('caps a count of 999 at "999+", not the exact "999"', () => {
+    const { getByText, queryByText } = renderItem(makeConversation({ unreadCount: 999 }))
+    expect(getByText('999+')).toBeInTheDocument()
+    expect(queryByText('999')).toBeNull()
+  })
+
+  it('caps a count past the store cap (1000) at "999+" too', () => {
+    const { getByText } = renderItem(makeConversation({ unreadCount: 1000 }))
+    expect(getByText('999+')).toBeInTheDocument()
+  })
 })

@@ -433,9 +433,9 @@
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
         "nickHiddenChars": "Numele conține caractere ascunse",
         "mentionSuggestions": "Sugestii de mențiuni",
-        "unreadMessages": "{{count}} mesaj necitit",
-        "unreadMessages_few": "{{count}} mesaje necitite",
-        "unreadMessages_other": "{{count}} de mesaje necitite"
+        "unreadMessages": "{{displayCount}} mesaj necitit",
+        "unreadMessages_few": "{{displayCount}} mesaje necitite",
+        "unreadMessages_other": "{{displayCount}} de mesaje necitite"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",
@@ -468,9 +468,9 @@
         "noMessages": "Niciun mesaj încă. Spune bună!",
         "loadingMessages": "Se încarcă mesajele...",
         "newMessages": "Mesaje noi",
-        "newMessagesCount": "{{count}} mesaj nou",
-        "newMessagesCount_few": "{{count}} mesaje noi",
-        "newMessagesCount_other": "{{count}} de mesaje noi",
+        "newMessagesCount": "{{displayCount}} mesaj nou",
+        "newMessagesCount_few": "{{displayCount}} mesaje noi",
+        "newMessagesCount_other": "{{displayCount}} de mesaje noi",
         "youWereAway": "Ai fost plecat",
         "jumpToLastRead": "Mergi la ultimul citit",
         "historyStart": "Începutul conversației",

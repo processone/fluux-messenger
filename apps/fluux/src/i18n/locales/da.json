@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "Navnet har ekstra mellemrum i kanterne",
         "nickHiddenChars": "Navnet indeholder skjulte tegn",
         "mentionSuggestions": "Omtaleforslag",
-        "unreadMessages": "{{count}} ulæst besked",
-        "unreadMessages_other": "{{count}} ulæste beskeder"
+        "unreadMessages": "{{displayCount}} ulæst besked",
+        "unreadMessages_other": "{{displayCount}} ulæste beskeder"
     },
     "events": {
         "invitedBy": "Inviteret af {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Ingen beskeder endnu. Sig hej!",
         "loadingMessages": "Indlæser beskeder...",
         "newMessages": "Nye beskeder",
-        "newMessagesCount": "{{count}} ny besked",
-        "newMessagesCount_other": "{{count}} nye beskeder",
+        "newMessagesCount": "{{displayCount}} ny besked",
+        "newMessagesCount_other": "{{displayCount}} nye beskeder",
         "youWereAway": "Du var væk",
         "jumpToLastRead": "Gå til sidst læste",
         "historyStart": "Begyndelsen af samtalen",

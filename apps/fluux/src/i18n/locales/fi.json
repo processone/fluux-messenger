@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
         "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä",
         "mentionSuggestions": "Mainintaehdotukset",
-        "unreadMessages": "{{count}} lukematon viesti",
-        "unreadMessages_other": "{{count}} lukematonta viestiä"
+        "unreadMessages": "{{displayCount}} lukematon viesti",
+        "unreadMessages_other": "{{displayCount}} lukematonta viestiä"
     },
     "events": {
         "invitedBy": "Kutsuja: {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "Ei viestejä vielä. Sano hei!",
         "loadingMessages": "Ladataan viestejä...",
         "newMessages": "Uudet viestit",
-        "newMessagesCount": "{{count}} uusi viesti",
-        "newMessagesCount_other": "{{count}} uutta viestiä",
+        "newMessagesCount": "{{displayCount}} uusi viesti",
+        "newMessagesCount_other": "{{displayCount}} uutta viestiä",
         "youWereAway": "Olit poissa",
         "jumpToLastRead": "Siirry viimeksi luettuun",
         "historyStart": "Keskustelun alku",

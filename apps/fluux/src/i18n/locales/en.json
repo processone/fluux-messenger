@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "Name has extra spaces at the edges",
         "nickHiddenChars": "Name contains hidden characters",
         "mentionSuggestions": "Mention suggestions",
-        "unreadMessages": "{{count}} unread message",
-        "unreadMessages_other": "{{count}} unread messages"
+        "unreadMessages": "{{displayCount}} unread message",
+        "unreadMessages_other": "{{displayCount}} unread messages"
     },
     "events": {
         "invitedBy": "Invited by {{name}}",
@@ -465,8 +465,8 @@
         "noMessages": "No messages yet. Say hello!",
         "loadingMessages": "Loading messages...",
         "newMessages": "New messages",
-        "newMessagesCount": "{{count}} new message",
-        "newMessagesCount_other": "{{count}} new messages",
+        "newMessagesCount": "{{displayCount}} new message",
+        "newMessagesCount_other": "{{displayCount}} new messages",
         "youWereAway": "You were away",
         "jumpToLastRead": "Jump to last read",
         "historyStart": "Beginning of conversation",

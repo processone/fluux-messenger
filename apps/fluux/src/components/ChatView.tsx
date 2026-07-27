@@ -565,6 +565,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
             readPointerId={readPointerId}
+            unreadCount={activeConversation.unreadCount}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -675,6 +676,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   firstNewMessageId,
   firstNewMessageIsProvisional,
   readPointerId,
+  unreadCount,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -722,6 +724,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
   readPointerId?: string
+  /** Read-state PR B, Task 12: the canonical unread count fed to every numeric surface
+   *  MessageList renders (divider, floating pill, FAB badge) via the shared formatUnreadCount. */
+  unreadCount?: number
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -828,6 +833,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
       readPointerId={readPointerId}
+      unreadCount={unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

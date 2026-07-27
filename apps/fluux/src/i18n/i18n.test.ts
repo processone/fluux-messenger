@@ -164,23 +164,35 @@ describe('i18n', () => {
       expect(testI18n.t('presence.yearsAgo', { count: 3 })).toBe('3y ago')
     })
 
+    // `count` (numeric) drives i18next's plural-form selection; `displayCount` (Read-state PR B,
+    // Task 12's formatUnreadCount) is what actually gets interpolated into the template — real
+    // call sites (roomTooltip.ts, JumpToLastReadPill, NewMessageMarker) always pass both.
     it('should use English singular and plural for unread messages', async () => {
       await testI18n.changeLanguage('en')
-      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 unread message')
-      expect(testI18n.t('rooms.unreadMessages', { count: 37 })).toBe('37 unread messages')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1, displayCount: '1' })).toBe('1 unread message')
+      expect(testI18n.t('rooms.unreadMessages', { count: 37, displayCount: '37' })).toBe('37 unread messages')
     })
 
     it('should use French singular and plural for unread messages', async () => {
       await testI18n.changeLanguage('fr')
-      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 message non lu')
-      expect(testI18n.t('rooms.unreadMessages', { count: 4 })).toBe('4 messages non lus')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1, displayCount: '1' })).toBe('1 message non lu')
+      expect(testI18n.t('rooms.unreadMessages', { count: 4, displayCount: '4' })).toBe('4 messages non lus')
     })
 
     it('should use correct Polish plural forms for unread messages', async () => {
       await testI18n.changeLanguage('pl')
-      expect(testI18n.t('rooms.unreadMessages', { count: 1 })).toBe('1 nieprzeczytana wiadomość')
-      expect(testI18n.t('rooms.unreadMessages', { count: 3 })).toBe('3 nieprzeczytane wiadomości')
-      expect(testI18n.t('rooms.unreadMessages', { count: 12 })).toBe('12 nieprzeczytanych wiadomości')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1, displayCount: '1' })).toBe('1 nieprzeczytana wiadomość')
+      expect(testI18n.t('rooms.unreadMessages', { count: 3, displayCount: '3' })).toBe('3 nieprzeczytane wiadomości')
+      expect(testI18n.t('rooms.unreadMessages', { count: 12, displayCount: '12' })).toBe('12 nieprzeczytanych wiadomości')
+    })
+
+    // Read-state PR B, Task 12: the store saturates at 999, and formatUnreadCount renders that
+    // (and anything past it) as "999+" while `count` keeps driving plural selection.
+    it('renders the capped displayCount for a saturated unread count (998/999/1000)', async () => {
+      await testI18n.changeLanguage('en')
+      expect(testI18n.t('rooms.unreadMessages', { count: 998, displayCount: '998' })).toBe('998 unread messages')
+      expect(testI18n.t('rooms.unreadMessages', { count: 999, displayCount: '999+' })).toBe('999+ unread messages')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1000, displayCount: '999+' })).toBe('999+ unread messages')
     })
   })
 

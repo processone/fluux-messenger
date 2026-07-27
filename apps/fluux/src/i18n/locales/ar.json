@@ -434,9 +434,9 @@
         "unreadMessages_zero": "لا رسائل غير مقروءة",
         "unreadMessages": "رسالة واحدة غير مقروءة",
         "unreadMessages_two": "رسالتان غير مقروءتين",
-        "unreadMessages_few": "{{count}} رسائل غير مقروءة",
-        "unreadMessages_many": "{{count}} رسالة غير مقروءة",
-        "unreadMessages_other": "{{count}} رسالة غير مقروءة"
+        "unreadMessages_few": "{{displayCount}} رسائل غير مقروءة",
+        "unreadMessages_many": "{{displayCount}} رسالة غير مقروءة",
+        "unreadMessages_other": "{{displayCount}} رسالة غير مقروءة"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",
@@ -472,9 +472,9 @@
         "newMessagesCount_zero": "لا رسائل جديدة",
         "newMessagesCount": "رسالة جديدة واحدة",
         "newMessagesCount_two": "رسالتان جديدتان",
-        "newMessagesCount_few": "{{count}} رسائل جديدة",
-        "newMessagesCount_many": "{{count}} رسالة جديدة",
-        "newMessagesCount_other": "{{count}} رسالة جديدة",
+        "newMessagesCount_few": "{{displayCount}} رسائل جديدة",
+        "newMessagesCount_many": "{{displayCount}} رسالة جديدة",
+        "newMessagesCount_other": "{{displayCount}} رسالة جديدة",
         "youWereAway": "كنت غائبًا",
         "jumpToLastRead": "الانتقال إلى آخر رسالة مقروءة",
         "historyStart": "بداية المحادثة",
