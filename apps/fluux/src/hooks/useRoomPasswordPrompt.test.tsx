@@ -64,7 +64,7 @@ describe('useRoomPasswordPrompt', () => {
 
     await waitFor(() => expect(onResult).toHaveBeenCalledWith('joined'))
     expect(screen.queryByLabelText('rooms.roomPassword')).not.toBeInTheDocument()
-    expect(mockJoinRoom).toHaveBeenCalledWith(ROOM, 'mynick', undefined)
+    expect(mockJoinRoom).toHaveBeenCalledWith(ROOM, 'mynick')
   })
 
   it('prompts on a 401 and retries with the password', async () => {

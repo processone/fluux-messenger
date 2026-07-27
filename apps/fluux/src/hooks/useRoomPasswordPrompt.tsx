@@ -99,8 +99,11 @@ export function useRoomPasswordPrompt() {
   const joinRoomWithPassword = useCallback(
     (roomJid: string, nickname: string) =>
       withPasswordPrompt(async (password) => {
-        // Room passwords are opaque XMPP strings - never trim them.
-        await joinRoom(roomJid, nickname, password !== undefined ? { password } : undefined)
+        // Room passwords are opaque XMPP strings - never trim them. The
+        // unprompted attempt passes no options at all, so joinRoom() falls back
+        // to whatever password it already knows for the room.
+        if (password === undefined) await joinRoom(roomJid, nickname)
+        else await joinRoom(roomJid, nickname, { password })
         await joinResult(roomJid)
       }),
     [withPasswordPrompt, joinRoom, joinResult]
