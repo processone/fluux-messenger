@@ -11,6 +11,31 @@
  */
 export type RowGrowthDecision = 'pin' | 'skip' | 'defer'
 
+/** What a deferred row-growth remembers so its retry judges the SAME situation, not a later one. */
+export interface DeferredRowGrowth {
+  /** When the growth was first seen — deliberate scroll intent after this means the reader moved. */
+  at: number
+  /** scrollTop at that moment; a smaller value later means the reader scrolled up since. */
+  scrollTop: number
+}
+
+/**
+ * Which deferral a newly-arrived growth should be judged against.
+ *
+ * The EARLIEST unresolved one wins. A growth that deferred has already had its eligibility proven,
+ * and its own scroll event has since advanced the geometry baseline to the grown height — so
+ * restarting from current geometry sees only the newer (typically much smaller) delta, reads the
+ * earlier card's height as "the reader is scrolled up", and terminally skips. That loses a growth
+ * that was eligible and still pending: a preview card deferred behind a pin loop, followed by a
+ * reaction before the claim lapsed, left the list unpinned for good.
+ */
+export function carryDeferral(
+  pending: DeferredRowGrowth | null,
+  fresh: DeferredRowGrowth,
+): DeferredRowGrowth {
+  return pending ?? fresh
+}
+
 export interface RowGrowthFacts {
   /** Live distance from the bottom, measured AFTER the row grew. */
   distanceFromBottom: number

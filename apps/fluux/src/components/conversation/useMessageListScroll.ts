@@ -25,7 +25,7 @@ import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
-import { decideRowGrowth } from './rowGrowthDecision'
+import { carryDeferral, decideRowGrowth, type DeferredRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
@@ -354,14 +354,6 @@ export interface UseMessageListScrollResult {
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
    *  there is no current marker. */
   scrollToMarker: () => void
-}
-
-/** What a deferred row-growth remembers so its retry judges the SAME situation, not a later one. */
-interface DeferredRowGrowth {
-  /** When the growth was first seen — deliberate scroll intent after this means the reader moved. */
-  at: number
-  /** scrollTop at that moment; a smaller value on retry means the reader scrolled up since. */
-  scrollTop: number
 }
 
 interface DirectionalHistorySnapshot {
@@ -3423,6 +3415,8 @@ export function useMessageListScroll({
   const prevRowGrowthKeyRef = useRef(rowGrowthSignature)
   const rowGrowthConvRef = useRef(conversationId)
   const rowGrowthRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The earliest unresolved deferral. Survives newer signatures — see carryDeferral.
+  const pendingRowGrowthRef = useRef<DeferredRowGrowth | null>(null)
 
   /**
    * Try to absorb a row-growth change. Returns false when the attempt was DEFERRED and must be
@@ -3488,14 +3482,24 @@ export function useMessageListScroll({
       clearTimeout(rowGrowthRetryRef.current)
       rowGrowthRetryRef.current = null
     }
-    if (!sameConversation) return // conversation switch → rebaseline, never re-pin
+    if (!sameConversation) {
+      pendingRowGrowthRef.current = null // conversation switch → rebaseline, never re-pin
+      return
+    }
     if (prevKey === rowGrowthSignature) return // no actual row change (unrelated re-render)
 
-    if (tryRowGrowthRepin(null)) return
-    const deferred: DeferredRowGrowth = {
+    // Judge against the EARLIEST unresolved deferral, never from current geometry: the pending
+    // growth's own scroll event has already advanced the baseline, so a fresh derivation would see
+    // only this newer delta and terminally skip the growth still waiting.
+    const deferred = carryDeferral(pendingRowGrowthRef.current, {
       at: Date.now(),
       scrollTop: scrollerRef.current?.scrollTop ?? 0,
+    })
+    if (tryRowGrowthRepin(pendingRowGrowthRef.current)) {
+      pendingRowGrowthRef.current = null
+      return
     }
+    pendingRowGrowthRef.current = deferred
 
     // Deferred. Re-check when the claim can no longer be held without a live loop renewing it, so a
     // lingering claim from an abandoned loop cannot swallow this growth. Bounded: each retry either
@@ -3506,7 +3510,12 @@ export function useMessageListScroll({
       rowGrowthRetryRef.current = setTimeout(() => {
         rowGrowthRetryRef.current = null
         if (activeConversationIdRef.current !== conversationId) return
-        if (!tryRowGrowthRepin(deferred)) scheduleRetry(attempt + 1)
+        if (tryRowGrowthRepin(deferred)) {
+          pendingRowGrowthRef.current = null
+          return
+        }
+        if (attempt + 1 > ROW_GROWTH_RETRY_ATTEMPTS) pendingRowGrowthRef.current = null
+        scheduleRetry(attempt + 1)
       }, pinBottomClaim().msUntilExpiry() + ROW_GROWTH_RETRY_MARGIN_MS)
     }
     scheduleRetry(1)

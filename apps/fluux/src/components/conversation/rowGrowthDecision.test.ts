@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decideRowGrowth, type RowGrowthFacts } from './rowGrowthDecision'
+import { carryDeferral, decideRowGrowth, type RowGrowthFacts } from './rowGrowthDecision'
 
 /** At the bottom, with a 260px card just mounted — the canonical fastening case. */
 const atBottomAfterCard = (over: Partial<RowGrowthFacts> = {}): RowGrowthFacts => ({
@@ -100,5 +100,31 @@ describe('decideRowGrowth', () => {
     ['the reader was scrolled up', { distanceFromBottom: 1360, growth: 260 }],
   ])('skips outright when %s, even with the claim held', (_label, over) => {
     expect(decideRowGrowth(atBottomAfterCard({ ...over, pinClaimHeld: true }))).toBe('skip')
+  })
+})
+
+describe('carryDeferral', () => {
+  const fresh = { at: 2000, scrollTop: 1500 }
+
+  it('uses the fresh deferral when nothing is pending', () => {
+    expect(carryDeferral(null, fresh)).toBe(fresh)
+  })
+
+  // THE REGRESSION. A preview card defers behind a pin loop; its own scroll event advances the
+  // geometry baseline to the grown height. A reaction arriving before the claim lapses must NOT
+  // restart from that baseline — it would see only the reaction's few pixels, read the card's height
+  // as "the reader is scrolled up", and terminally skip a growth that was eligible and still
+  // pending, leaving the list unpinned for good.
+  it('keeps the EARLIEST pending deferral when a newer growth arrives', () => {
+    const pending = { at: 1000, scrollTop: 1200 }
+    expect(carryDeferral(pending, fresh)).toBe(pending)
+  })
+
+  // The earliest deferral is also what the takeover checks compare against, so preserving it keeps
+  // "did the reader move since we started waiting?" anchored to the original moment.
+  it('preserves the original timestamp and scrollTop, not the newer ones', () => {
+    const pending = { at: 1000, scrollTop: 1200 }
+    const carried = carryDeferral(pending, fresh)
+    expect(carried).toEqual({ at: 1000, scrollTop: 1200 })
   })
 })

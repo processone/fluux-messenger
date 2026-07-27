@@ -2306,3 +2306,83 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
     ).toBeLessThan(AT_BOTTOM_OK_PX)
   })
 })
+
+test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
+  const AVA = 'ava@fluux.chat'
+
+  // End-to-end sanity for the reported sequence: an incoming message, its preview card, and a
+  // reaction landing in quick succession must leave the list stuck to the bottom, with no user
+  // movement anywhere.
+  //
+  // NOTE ON SCOPE: this does NOT guard the deferral path specifically. Staging that needs the
+  // preview to commit while the message's pin loop still holds its claim, and the loop converges
+  // faster than emits can be interleaved from here — the test passes with and without the
+  // carry-the-earliest-deferral fix. The invariant itself is pinned by carryDeferral's unit test,
+  // which does break-check. Do not treat a green run here as covering that path.
+  test('an incoming message, its preview and a reaction in quick succession leave the list pinned', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `pending-${Date.now()}`
+    const url = `https://example.invalid/${id}`
+
+    // The whole sequence runs INSIDE the page: a Playwright round-trip is far longer than the pin
+    // loop's convergence, so emitting these from separate evaluate() calls lets the loop finish and
+    // release its claim, and nothing is ever deferred. Emitted together, the preview lands while the
+    // incoming message's pin loop still holds the claim — the deferral this test is about — and the
+    // reaction follows as a NEWER row-growth signature before that claim lapses.
+    await page.evaluate(async ([j, i, u]) => {
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: 'look at this https://example.invalid/article',
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+      // Separate ticks, or React batches all three into ONE signature change and the
+      // newer-signature-cancels-pending-retry sequence never happens.
+      await wait(30)
+      c.emitSDK('chat:message-updated', {
+        conversationId: j, messageId: i,
+        updates: {
+          linkPreview: {
+            url: u, title: 'A fastened link preview card',
+            description: 'Fastened after the fact, tall enough to push the newest message below the fold.',
+            siteName: 'example.invalid',
+            image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+          },
+        },
+      })
+      await wait(60)
+      c.emitSDK('chat:message-updated', {
+        conversationId: j, messageId: i,
+        updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
+      })
+    }, [AVA, id, url] as const)
+    await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+
+    // Well past the pin claim's stale window, so any deferred retry has had its chance.
+    await page.waitForTimeout(2_500)
+
+    const state = await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { visible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      return {
+        visible: !!el && el.getBoundingClientRect().bottom <= sRect.bottom + 8,
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+
+    expect(
+      state.distFromBottom,
+      `list stranded after preview+reaction — distFromBottom=${state.distFromBottom}`,
+    ).toBeLessThan(AT_BOTTOM_OK_PX)
+    expect(state.visible, 'the fastened message was left below the fold').toBe(true)
+  })
+})
