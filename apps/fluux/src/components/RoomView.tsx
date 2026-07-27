@@ -2189,9 +2189,19 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     return (
       <>
         {/* Background layer with styled mentions - positioned absolutely within parent wrapper */}
+        {/* The mirror must wrap at exactly the textarea's content width, or the
+            glyphs the user reads drift away from the caret they sit under. The
+            styled scrollbar takes layout, so the width depends on whether a
+            scrollbar is reserved — and `scrollbar-gutter: stable` (index.css)
+            only reserves one on an overflow:hidden box in Blink, not WebKit,
+            which is the engine the desktop app runs. Matching the textarea's
+            `overflow-y: auto` makes the reservation track it in every engine:
+            both boxes hold the same content at the same height, so they cross
+            the overflow boundary together. `composer-mirror` then hides this
+            layer's own scrollbar without giving back the width it reserves. */}
         <div
-          className="message-input absolute inset-0 px-2 py-3 pointer-events-none whitespace-pre-wrap
-                     overflow-hidden"
+          className="message-input composer-mirror absolute inset-0 px-2 pointer-events-none
+                     whitespace-pre-wrap overflow-y-auto overflow-x-hidden"
           aria-hidden="true"
           ref={(el) => {
             // Sync scroll position with textarea

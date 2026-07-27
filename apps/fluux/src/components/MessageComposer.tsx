@@ -59,10 +59,29 @@ function restoreTextareaCursor(
 // height. Starting at `auto` makes Blink (mobile Brave) paint a scrollbar track
 // for even a single line, since the integer height we write can round below the
 // fractional content height. Desktop WebKit hides this behind overlay scrollbars.
-export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px-2 py-3 bg-transparent resize-none overflow-y-hidden'
+//
+// Deliberately NO block padding: the composer's block padding lives on the frame
+// around the input (MESSAGE_INPUT_FRAME_CLASSES), never on the textarea itself.
+// Padding on a scroll container offsets the line grid inside the scrollport by a
+// fraction of a line, so every scroll position shows a half-clipped line at one
+// edge. Padding-free, the scrollport is an exact multiple of the line height and
+// the offsets the browser scrolls to are exact multiples of it, so lines are
+// always whole. Inline padding is fine — it does not affect the line grid.
+export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px-2 bg-transparent resize-none overflow-y-hidden'
+/**
+ * The frame that wraps the input and carries the block padding the textarea must
+ * not have. Applied by MessageComposer around both the default textarea and any
+ * `renderInput`, so custom inputs inherit the spacing without re-adding it.
+ */
+export const MESSAGE_INPUT_FRAME_CLASSES = 'min-w-0 flex items-center py-3'
 export const MESSAGE_INPUT_TEXT_CLASSES = 'text-fluux-text placeholder:text-fluux-muted'
 // For overlay-based inputs (e.g., mention highlighting) - text is transparent, caret visible via style
 export const MESSAGE_INPUT_OVERLAY_CLASSES = 'text-transparent placeholder:text-fluux-muted'
+
+/** Composer line box, in px. Must match the `.message-input` line-height (index.css). */
+const COMPOSER_LINE_HEIGHT = 24
+/** Text lines the composer grows to before it starts scrolling. */
+const COMPOSER_MAX_LINES = 8
 
 export interface ReplyInfo {
   id: string
@@ -430,6 +449,12 @@ export function MessageComposer({
   // MessageComposer.autosize.test.tsx for the regression guard.
   const prevValueRef = useRef('')
   const lastSetHeightRef = useRef(0)
+  const lastOverflowRef = useRef('')
+  // Block padding participates in every bound below. Cached because reading it
+  // per keystroke would force the style recalc the fast path exists to avoid;
+  // a width change re-reads it, which is also the only moment a responsive
+  // padding utility could have changed it.
+  const paddingBlockRef = useRef(-1)
   const countLines = (s: string) => {
     let n = 1
     for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
@@ -439,10 +464,21 @@ export function MessageComposer({
     const textarea = inputRef.current
     if (!textarea) return
 
-    // This value must match the CSS line-height in .message-input (index.css)
-    const lineHeight = 24
-    const minHeight = lineHeight
-    const maxHeight = lineHeight * 8
+    if (paddingBlockRef.current < 0 || forceRemeasure) {
+      const cs = getComputedStyle(textarea)
+      paddingBlockRef.current =
+        (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+    }
+    // The bounds are compared against `scrollHeight`, which is padding-inclusive,
+    // and written to `height` on a border-box element — so they have to carry the
+    // block padding too. A bare `lineHeight * MAX_LINES` cap is short by exactly
+    // that padding: the height saturates one line early, so the last line is
+    // clipped, and because `newHeight` then stops changing, the overflow flip
+    // below is skipped as well — leaving content clipped inside an
+    // overflow:hidden box with no scrollbar to explain it.
+    const paddingBlock = paddingBlockRef.current
+    const minHeight = COMPOSER_LINE_HEIGHT + paddingBlock
+    const maxHeight = COMPOSER_LINE_HEIGHT * COMPOSER_MAX_LINES + paddingBlock
 
     const value = textarea.value
     const prev = prevValueRef.current
@@ -463,25 +499,33 @@ export function MessageComposer({
     const scrollHeight = textarea.scrollHeight
     const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight)
 
-    // Fast path: a non-shrinking edit that leaves the height unchanged touched
-    // nothing, so there is no height to write, no scroll to restore, and no
-    // listener to notify. This is what keeps continuous typing off the
-    // message-list reflow path. Overflow only flips at the max-height boundary,
-    // which always changes newHeight, so it never needs updating on this path.
-    if (!mayShrink && newHeight === lastSetHeightRef.current) return
-
     // Only allow scrolling once content reaches the cap. Below the cap the
     // textarea grows to fit, so a scrollbar is spurious (and Blink/mobile Brave
     // paints one for a single line when the integer height rounds under the real
     // content height). At the cap the content genuinely overflows → auto.
-    textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden'
+    const nextOverflow = scrollHeight > maxHeight ? 'auto' : 'hidden'
+    const wasOverflowing = lastOverflowRef.current === 'auto'
+
+    // Fast path: a non-shrinking edit that leaves the height unchanged touched
+    // nothing, so there is no height to write, no scroll to restore, and no
+    // listener to notify. This is what keeps continuous typing off the
+    // message-list reflow path. The overflow state is part of the check: a draft
+    // that is already at the cap crosses the overflow boundary without changing
+    // newHeight, and skipping that write is what left the last line clipped with
+    // no scrollbar.
+    if (!mayShrink && newHeight === lastSetHeightRef.current && nextOverflow === lastOverflowRef.current) return
+
+    textarea.style.overflowY = nextOverflow
     textarea.style.height = `${newHeight}px`
     lastSetHeightRef.current = newHeight
+    lastOverflowRef.current = nextOverflow
 
-    // Restore scroll position after height change. The browser keeps the cursor
-    // visible during typing, but resizing can reset scroll. Only restore if
-    // we're at max height.
-    if (scrollHeight > maxHeight) {
+    // Restore the scroll offset that a height change can reset — but only when
+    // the textarea was ALREADY scrollable. At the moment overflow first appears
+    // there is no prior offset to preserve, and writing the pre-overflow 0 back
+    // would undo the browser's caret-into-view scroll and leave the caret parked
+    // off-screen until the next keystroke.
+    if (nextOverflow === 'auto' && wasOverflowing) {
       textarea.scrollTop = savedScrollTop
     }
 
@@ -816,7 +860,7 @@ export function MessageComposer({
       autoCorrect="on"
       autoCapitalize="sentences"
       {...autocompleteAriaProps}
-      className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES} [grid-area:input]`}
+      className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES}`}
     />
   )
 
@@ -1112,24 +1156,32 @@ export function MessageComposer({
           )
         )}
 
-        {/* Text input - either custom or default */}
-        {renderInput ? (
-          <div className="[grid-area:input] min-w-0 flex items-center relative">
-            {renderInput({
-              inputRef,
-              mergedRef: mergedInputRef,
-              value: text,
-              onChange: handleTextChange,
-              onKeyDown: handleKeyDown,
-              onSelect: handleSelect,
-              onPaste: handlePaste,
-              placeholder: effectivePlaceholder,
-              ariaProps: autocompleteAriaProps,
-            })}
-          </div>
-        ) : (
-          defaultRenderInput()
-        )}
+        {/* Text input — either custom or default. The frame owns the block
+            padding so the textarea stays padding-free and its scrollport is a
+            whole number of lines (see MESSAGE_INPUT_BASE_CLASSES). */}
+        <div className={`[grid-area:input] ${MESSAGE_INPUT_FRAME_CLASSES}`}>
+          {renderInput ? (
+            // An inner box that hugs the textarea exactly. A `renderInput` that
+            // stacks an overlay on the textarea positions it against this box,
+            // so `inset-0` lands on the textarea's edges rather than on the
+            // frame's padded box a half-line taller.
+            <div className="relative flex min-w-0 flex-1">
+              {renderInput({
+                inputRef,
+                mergedRef: mergedInputRef,
+                value: text,
+                onChange: handleTextChange,
+                onKeyDown: handleKeyDown,
+                onSelect: handleSelect,
+                onPaste: handlePaste,
+                placeholder: effectivePlaceholder,
+                ariaProps: autocompleteAriaProps,
+              })}
+            </div>
+          ) : (
+            defaultRenderInput()
+          )}
+        </div>
 
         {/* Emoji button */}
         <div className="relative [grid-area:emoji] composer-drawer-item" ref={emojiPickerRef}>

@@ -22,6 +22,7 @@
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "test:scroll": "npx playwright test --config playwright.scroll.config.ts",
+    "test:composer": "npx playwright test --config playwright.composer.config.ts",
     "pretypecheck": "npm run guard:sdk-link",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",

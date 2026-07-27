@@ -177,6 +177,15 @@ jobs:
       - name: Run scroll invariants (chromium + webkit)
         run: npm run test:scroll
 
+      # Composer box-model invariants. These cannot be unit tested: jsdom has no
+      # layout, so the autosize unit tests mock scrollHeight — and a mocked
+      # measurement can never contradict the real box model, which is where both
+      # shipped composer bugs lived. WebKit matters specifically here: it reserves
+      # scrollbar gutters differently from Blink, and it is the engine the desktop
+      # app runs.
+      - name: Run composer geometry invariants (chromium + webkit)
+        run: npm run test:composer
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7

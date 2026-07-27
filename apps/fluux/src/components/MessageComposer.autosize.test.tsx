@@ -170,6 +170,101 @@ describe('MessageComposer autosize', () => {
     expect(textarea.style.overflowY).toBe('hidden')
   })
 
+  // The reported "half-line" bug. `scrollHeight` is padding-inclusive and the
+  // textarea is border-box, so a draft that exactly fills the cap reaches the
+  // max height while still fitting. The next line overflows without changing
+  // newHeight — and the fast path used to return before writing overflow-y,
+  // leaving content clipped inside an overflow:hidden box with no scrollbar.
+  // Measured in the app: 8 lines => scrollHeight 216 in a 192px box, overflow
+  // still 'hidden', so the 8th line rendered as a clipped sliver.
+  it('flips overflow-y to auto when content overflows a box already at the cap', () => {
+    mockScrollHeight = 192 // fills the cap exactly — fits, no scrollbar needed
+    const { container, rerender } = renderComposer('1\n2\n3\n4\n5\n6\n7')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.height).toBe('192px')
+    expect(textarea.style.overflowY).toBe('hidden')
+
+    mockScrollHeight = 216 // one more line: genuinely overflows the 192px box
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value={'1\n2\n3\n4\n5\n6\n7\n8'}
+        onValueChange={() => {}}
+      />
+    )
+
+    expect(textarea.style.overflowY).toBe('auto')
+  })
+
+  // The cap has to be expressed in the same coordinate system as the value it
+  // is compared against. `scrollHeight` includes the block padding (py-3 = 24px
+  // in the app), so a bare lineHeight*8 cap is short by exactly that padding:
+  // the height saturates one line early and the composer shows 7 lines, not 8.
+  it('accounts for block padding in the 8-line cap', () => {
+    const realGetComputedStyle = globalThis.getComputedStyle
+    const gcsSpy = vi
+      .spyOn(globalThis, 'getComputedStyle')
+      .mockImplementation((el: Element, pseudo?: string | null) => {
+        const style = realGetComputedStyle(el, pseudo)
+        if ((el as HTMLElement).tagName === 'TEXTAREA') {
+          return { ...style, paddingTop: '12px', paddingBottom: '12px' } as CSSStyleDeclaration
+        }
+        return style
+      })
+
+    // Eight 24px lines plus 24px of padding: the tallest draft that must be
+    // shown in full. A padding-blind cap clamps this to 192px and clips a line.
+    mockScrollHeight = 24 + 8 * 24 // 216
+    const { container } = renderComposer('1\n2\n3\n4\n5\n6\n7\n8')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+
+    expect(textarea.style.height).toBe('216px')
+    expect(textarea.style.overflowY).toBe('hidden') // fits exactly — no scrollbar
+
+    gcsSpy.mockRestore()
+  })
+
+  // When overflow first appears there is no prior scroll offset to preserve.
+  // Writing the pre-overflow value back (0) undoes the browser's caret-into-view
+  // scroll, dropping the caret out of sight — the reported caret inaccuracy.
+  it('does not write a stale scroll offset when overflow first appears', () => {
+    mockScrollHeight = 192
+    const { container, rerender } = renderComposer('1\n2\n3\n4\n5\n6\n7')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+
+    const writes: number[] = []
+    let scrollTop = 0
+    Object.defineProperty(textarea, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (v: number) => {
+        writes.push(v)
+        scrollTop = v
+      },
+    })
+
+    mockScrollHeight = 216 // crosses into overflow for the first time
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value={'1\n2\n3\n4\n5\n6\n7\n8'}
+        onValueChange={() => {}}
+      />
+    )
+
+    expect(writes).toEqual([])
+
+    // Control: once the textarea IS scrollable, a re-measure must still restore
+    // the offset — otherwise the assertion above would pass simply because the
+    // restore is dead code rather than because it is correctly gated.
+    scrollTop = 48
+    mockScrollHeight = 240
+    fireResize(300)
+    expect(writes).toEqual([48])
+  })
+
   // --- Per-keystroke forced-layout avoidance --------------------------------
   // resizeToContent ran on every keystroke and unconditionally (a) reset the
   // textarea to height:auto and (b) called onInputResize. The auto-reset
