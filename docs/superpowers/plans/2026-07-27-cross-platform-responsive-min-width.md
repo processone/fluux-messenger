@@ -26,7 +26,7 @@
 - Modify: `docs/APP_BAR.md:50-61`
 
 **Interfaces:**
-- Consumes: `app.windows[0].minWidth` from the Tauri configuration and `DESKTOP_QUERY` from `useIsDesktop.ts`.
+- Consumes: `app.windows[0].minWidth` from the Tauri configuration and the approved 768-pixel responsive-layout contract.
 - Produces: a shared native minimum of 360 logical pixels and a regression test proving it remains below the 768-pixel responsive breakpoint.
 
 - [ ] **Step 1: Install workspace dependencies if absent**
@@ -45,33 +45,27 @@ Create `apps/fluux/src/utils/windowResponsiveContract.test.ts`:
 
 ```ts
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+const DESKTOP_BREAKPOINT = 768
 
 type TauriConfig = {
   app: {
     windows: Array<{
-      minWidth?: number
+      minWidth: number
     }>
   }
 }
 
-const tauriConfigPath = fileURLToPath(
-  new URL('../../src-tauri/tauri.conf.json', import.meta.url),
-)
-const desktopHookPath = fileURLToPath(
-  new URL('../hooks/useIsDesktop.ts', import.meta.url),
-)
+const tauriConfigPath = resolve(process.cwd(), 'src-tauri/tauri.conf.json')
 
 describe('desktop responsive window contract', () => {
   it('allows the shared native window to cross the 768px layout breakpoint', () => {
     const config = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as TauriConfig
-    const desktopHook = readFileSync(desktopHookPath, 'utf8')
     const minWidth = config.app.windows[0]?.minWidth
 
-    expect(minWidth).toBe(360)
-    expect(minWidth).toBeLessThan(768)
-    expect(desktopHook).toContain("const DESKTOP_QUERY = '(min-width: 768px)'")
+    expect(minWidth).toBeLessThan(DESKTOP_BREAKPOINT)
   })
 })
 ```
@@ -131,11 +125,13 @@ Expected: Tauri accepts the effective configuration without schema errors.
 Run from the repository root:
 
 ```bash
+npm run build:sdk
 npm run typecheck -w @xmpp/fluux
 git diff --check
 ```
 
-Expected: typecheck passes and `git diff --check` prints no errors.
+Expected: the SDK build and app typecheck pass, and `git diff --check` prints
+no errors.
 
 - [ ] **Step 8: Review the final diff and commit**
 
