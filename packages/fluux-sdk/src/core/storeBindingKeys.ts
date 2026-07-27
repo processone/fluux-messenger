@@ -133,6 +133,7 @@ export const roomBindingMethodKeys = [
   'updateMessage',
   'recordPendingRetraction',
   'getMessage',
+  'recomputeUnreadForRoom',
   'markAsRead',
   'getActiveRoomJid',
   'setTyping',

@@ -205,6 +205,39 @@ function deserializeRoom(r: SerializedRoom): Room {
   } as Room
 }
 
+/**
+ * Cold-start recount trigger (PR B): a room restored from the snapshot may
+ * carry a stale `unreadCount` — trusted at the moment this device wrote it,
+ * but potentially stale by however much arrived while the app was closed.
+ * Schedule an archive-derived recompute for every restored room so the badge
+ * reconciles once this session's MAM catch-up establishes coverage; until
+ * then `recomputeUnreadForRoom` defers (coverage isn't proven yet at this
+ * point), which is exactly why the restored value paints immediately instead
+ * of flashing to zero. Mirrors chatStore's `scheduleColdStartRecounts`.
+ *
+ * Fire-and-forget: `hydrate()` must not block the caller (it runs before the
+ * socket is started) on an archive read. Yields a task first so the restored
+ * rooms have actually landed in the store; re-checks the target jid against
+ * `getJid()` before each recompute so an account switch mid-pass cannot
+ * recompute into the new account's rooms.
+ */
+function scheduleRoomColdStartRecounts(roomJids: string[], jid: string, getJid: () => string | null): void {
+  if (roomJids.length === 0) return
+  void (async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    for (const roomJid of roomJids) {
+      if (getJid() !== jid) return
+      try {
+        await roomStore.getState().recomputeUnreadForRoom(roomJid)
+      } catch (error) {
+        // Isolated per room: one failure must not cancel the recount for
+        // every room still queued.
+        logInfo(`StateSnapshot: cold-start unread recount failed for a room: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  })()
+}
+
 // ── Module ─────────────────────────────────────────────────────────────────
 
 export interface StateSnapshotDeps {
@@ -253,6 +286,7 @@ export class StateSnapshot {
             addRoom(deserializeRoom(s))
           }
           logInfo(`StateSnapshot: hydrated ${saved.length} room(s)`)
+          scheduleRoomColdStartRecounts(saved.map((s) => s.jid), jid, this.deps.getJid)
         }
       }
 

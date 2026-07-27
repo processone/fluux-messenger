@@ -202,8 +202,17 @@ describe('roomStore.applyRemoteDisplayed', () => {
   })
 
   // Inbound read-state sync (spec §4): a marker published by another client
-  // clears a backgrounded room's badge immediately, not on the next activation.
-  it('applyRemoteDisplayed on a non-active room recomputes badge counts', () => {
+  // advances a backgrounded room's read POSITION immediately (the pointer is
+  // unconditional, forward-only). PR B (Task 8, archive-derived unread) no
+  // longer derives the COUNT from the page-scoped slice this method was
+  // handed — that undercounts a multi-page pointer-stitch walk (see the next
+  // test's comment) and can never be trusted as "exact". The count is instead
+  // re-derived from the durable archive via recomputeUnreadForRoom, triggered
+  // fire-and-forget; see roomStore.archiveUnread.test.ts for its
+  // exact/deferred/unavailable outcomes. Nothing here seeds
+  // mamQueryStates/roomCoverage, so that derivation defers — the stale count
+  // (3/1) survives rather than snapping to this page's own tally (0/0).
+  it('applyRemoteDisplayed on a non-active room advances the pointer; the count is archive-derived and defers without proven coverage', async () => {
     const messages = [
       rmsg('m1', 's1', 1),
       rmsg('m2', 's2', 2),
@@ -225,15 +234,24 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer?.messageId).toBe('m4')
-    expect(meta?.unreadCount).toBe(0)
-    expect(meta?.mentionsCount).toBe(0)
+
+    // Let the fire-and-forget archive recount run to completion.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
     // The combined rooms mirror is kept coherent with roomMeta.
     const room = roomStore.getState().rooms.get(ROOM)
-    expect(room?.unreadCount).toBe(0)
-    expect(room?.mentionsCount).toBe(0)
+    expect(room?.unreadCount).toBe(3)
+    expect(room?.mentionsCount).toBe(1)
   })
 
-  it('applyRemoteDisplayed to a mid-history position leaves the honest remainder', () => {
+  // PR B: the count is no longer written synchronously from this page-scoped
+  // slice — it is archive-derived (recomputeUnreadForRoom, fire-and-forget).
+  // With no mamQueryStates/roomCoverage seeded, that derivation defers, so the
+  // count stays at its seeded stale value (3/1) rather than snapping to this
+  // page's own honest-remainder tally (2/1). The exact-outcome equivalent
+  // (real coverage + archive rows) lives in roomStore.archiveUnread.test.ts.
+  it('applyRemoteDisplayed to a mid-history position advances the pointer; the count defers without proven coverage', async () => {
     const messages = [
       rmsg('m1', 's1', 1),
       rmsg('m2', 's2', 2),
@@ -252,8 +270,10 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer?.messageId).toBe('m2')
-    expect(meta?.unreadCount).toBe(2)
-    expect(meta?.mentionsCount).toBe(1)
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
   })
 
   it('resolves a pending room marker once the message arrives via room MAM merge', () => {
@@ -273,15 +293,29 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
-  // Exact badge recount (Phase B pointer resolution, non-resident room): the
-  // sync recount inside applyRemoteDisplayed only sees the page it was handed
-  // (mergedForMarker = the final backward page for a non-resident room). The
-  // unread/mention messages downloaded by EARLIER pages of the same walk live
-  // only in IndexedDB — the final counts must come from the cache, not the page.
-  it('recounts the badge from the full cached set when the pointer resolves during a multi-page background walk', async () => {
+  // Multi-page background walk: the pointer resolves against only the FINAL
+  // page (mergedForMarker), which undercounts a walk spanning several pages
+  // (the fetch-latest page, earlier backward pages) — the badge would read
+  // ~9 instead of the true 19. PR B (Task 8) fixes this architecturally
+  // rather than by re-reading a wider cache window: the archive-derived
+  // recount (recomputeUnreadForRoom) cursors the DURABLE ARCHIVE from the
+  // floor forward, so it has no page-boundary undercount to begin with. It
+  // still defers here (no mamQueryStates/roomCoverage seeded), which is the
+  // correct conservative behavior — the exact-count path (real coverage +
+  // archive rows) is exercised in roomStore.archiveUnread.test.ts.
+  it('the pointer resolves at the true position across a multi-page background walk; the count defers without proven coverage', async () => {
     // Non-active, non-resident room with a pending deep pointer (new-device
     // sync: no local read state yet).
     seedRoom(ROOM, [])
+    // A nonzero, distinguishing stale seed (not the tautological 0 -> 0) —
+    // distinct from both the old page-scoped undercount (9) and the true
+    // full-walk total (19) below, so the assertion actually proves the
+    // deferred value survives rather than coincidentally landing on 0.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 8, mentionsCount: 3 })
+      return { roomMeta: meta }
+    })
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')
     expect(roomStore.getState().roomMeta.get(ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
 
@@ -298,28 +332,23 @@ describe('roomStore.applyRemoteDisplayed', () => {
       rmsg('p0', 's-ptr', 4100),
       ...Array.from({ length: 9 }, (_, i) => rmsg(`p${i + 1}`, `sp${i + 1}`, 4200 + i * 100)),
     ]
-    // The async exact recount reads the newest cached window — the union of
-    // everything the walk downloaded (both pages, chronological).
-    vi.mocked(messageCache.getRoomMessages).mockResolvedValueOnce([...backwardPage, ...latestPage])
     roomStore.getState().mergeRoomMAMMessages(ROOM, backwardPage, { first: 's-ptr' }, false, 'backward')
 
-    // Pointer resolved at p0 → everything after it is unread: 9 (rest of the
-    // backward page) + 10 (fetch-latest page, incl. 1 mention) = 19, NOT just
-    // the 9 visible in the final page.
+    // Pointer resolved at p0 (forward-only sync is unconditional and
+    // unaffected by PR B).
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
-    await vi.waitFor(() => {
-      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(19)
-    })
-    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(1)
-    // Combined rooms mirror kept coherent.
-    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(19)
-    expect(roomStore.getState().rooms.get(ROOM)?.mentionsCount).toBe(1)
 
-    // Restore the factory default so a stale one-shot can't leak into later tests.
-    vi.mocked(messageCache.getRoomMessages).mockReset().mockResolvedValue([])
+    // The archive-derived recount runs (fire-and-forget) but defers: no
+    // mamQueryStates/roomCoverage were seeded, so coverage down to the new
+    // floor is not proven. The count stays at its last trusted value (8)
+    // rather than either the old page-scoped undercount (9) or a snap to the
+    // true total (19) it cannot yet prove.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(8)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(3)
   })
 
-  it('skips the async cache recount when the room became active meanwhile', async () => {
+  it('skips the archive recount commit when the room became active meanwhile', async () => {
     seedRoom(ROOM, [])
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')
 
@@ -330,7 +359,11 @@ describe('roomStore.applyRemoteDisplayed', () => {
       new Promise<RoomMessage[]>((resolve) => { releaseCache = resolve })
     )
     roomStore.getState().mergeRoomMAMMessages(ROOM, page, { first: 's-ptr' }, false, 'backward')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    // PR B: the pointer resolves synchronously, but the count is no longer
+    // written synchronously from this page — the archive-derived recount is
+    // still pending on the gated cache read below, so the count is untouched.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
 
     // User opens the room before the cache read lands; activation owns the
     // recount now — the stale async result must NOT clobber it.
@@ -841,13 +874,30 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
-  it('counts the messages after the marker as unread', () => {
+  // PR B (Task 8): the count is no longer written synchronously from this
+  // page — it is archive-derived (recomputeUnreadForRoom, triggered
+  // fire-and-forget by both the forward-merge and the marker-resolution
+  // paths). With no mamQueryStates/roomCoverage seeded, that derivation
+  // defers, so the count stays at its seeded stale value (4) rather than
+  // snapping to this page's own tally (7) or the tautological 0. The
+  // exact-outcome equivalent (real coverage + archive rows) lives in
+  // roomStore.archiveUnread.test.ts.
+  it('the marker resolves the pointer; the count defers without proven coverage', async () => {
     seedRoom(ROOM, [])
+    // Nonzero, distinguishing stale seed — distinct from both 0 and the
+    // page's own tally (7) below.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 4 })
+      return { roomMeta: meta }
+    })
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
 
     roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
   })
 
   // Control: a genuinely fresh room with NO remote marker must still be treated as
@@ -921,9 +971,19 @@ describe('roomStore pending-marker guard edges', () => {
   })
 
   // The guard is scoped to the fresh-entity branch — a room that already has a
-  // local pointer must keep counting from it, pending marker or not.
-  it('counts from the existing local pointer when one is already set', () => {
+  // local pointer must keep its pointer, pending marker or not. PR B: the
+  // count is archive-derived (recomputeUnreadForRoom) rather than written
+  // synchronously from this page, and defers without proven coverage — see
+  // roomStore.archiveUnread.test.ts for the exact-outcome path.
+  it('keeps counting from the existing local pointer when one is already set; the count defers without proven coverage', async () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    // Nonzero, distinguishing stale seed — distinct from both 0 and the
+    // page's own tally (2) below.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 6 })
+      return { roomMeta: meta }
+    })
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-future')
 
     roomStore.getState().mergeRoomMAMMessages(
@@ -932,11 +992,25 @@ describe('roomStore pending-marker guard edges', () => {
       {}, true, 'forward'
     )
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
   })
 
-  it('counts mentions after the resolved marker, not from the start of the page', () => {
+  // PR B: the count is archive-derived rather than written synchronously from
+  // this page; it defers without proven coverage. The exact-outcome
+  // equivalent (real coverage + archive rows, proving mentions are counted
+  // from the resolved marker rather than the start of the page) lives in
+  // roomStore.archiveUnread.test.ts.
+  it('resolves the marker to the mention-adjacent position; the count defers without proven coverage', async () => {
     seedRoom(ROOM, [])
+    // Nonzero, distinguishing stale seed — distinct from both 0 and the
+    // page's own tally (2 unread / 1 mention after m2) below.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 6, mentionsCount: 4 })
+      return { roomMeta: meta }
+    })
     roomStore.getState().applyRemoteDisplayed(ROOM, 's2')
 
     const page = [
@@ -949,8 +1023,8 @@ describe('roomStore pending-marker guard edges', () => {
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.readPointer?.messageId).toBe('m2')
-    expect(meta?.unreadCount).toBe(2)
-    // m2's mention is at/behind the read position — only m3's counts.
-    expect(meta?.mentionsCount).toBe(1)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
   })
 })

@@ -172,6 +172,9 @@ export class DeferredDecryptEngine {
       }
 
       // --- Room messages ---
+      // Rooms whose encrypted-payload badge may need reconciling once their
+      // stashed messages settle this pass — see the recount loop below.
+      const roomsToRecount = new Set<string>()
       for (const { jid: roomJid, messages } of roomBindings.getAllRoomMessages()) {
         for (const msg of messages) {
           if (!msg.encryptedPayload) continue
@@ -186,6 +189,7 @@ export class DeferredDecryptEngine {
               encryptedPayload: undefined,
             })
             decryptedCount++
+            roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'rejected') {
             // MUC carries no encrypted bodiless signals, so a rejected room
             // message always has real content — warn the user and clear the stash.
@@ -194,13 +198,27 @@ export class DeferredDecryptEngine {
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
             })
+            roomsToRecount.add(roomJid)
           } else if (outcome.kind === 'unsupported') {
             roomBindings.updateMessage(roomJid, msg.id, {
               encryptedPayload: undefined,
               unsupportedEncryption: outcome.info,
             })
+            roomsToRecount.add(roomJid)
           }
         }
+      }
+
+      // A stashed room message resolving here (decrypted / rejected /
+      // unsupported) is exactly the class of event that can leave a room's
+      // badge stale — the live path counted it while its true renderability
+      // was unknown. Room recount has no equivalent of the durable-cache pass
+      // below (there is no room analogue of `getMessagesWithEncryptedPayload`),
+      // so this is the ONLY place a room's deferred-decrypt badge reconciles.
+      // recomputeUnreadForRoom's own defer/coverage gates make this safe to
+      // call unconditionally — an entity not yet caught up simply defers.
+      for (const roomJid of roomsToRecount) {
+        await roomBindings.recomputeUnreadForRoom?.(roomJid)
       }
 
       // --- Durable cache (web fresh-session reload) ---

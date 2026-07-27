@@ -4080,14 +4080,27 @@ describe('roomStore', () => {
       roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
     })
 
-    it('forward merge into a non-active room recomputes unread and mention counts from the pointer', () => {
+    // PR B (Task 8): a forward merge into a non-active room no longer writes a
+    // page-scoped count synchronously — it schedules recomputeUnreadForRoom
+    // (fire-and-forget), which derives the badge from the durable archive
+    // instead (see roomStore.archiveUnread.test.ts for the exact-outcome
+    // path). With no mamQueryStates/roomCoverage seeded here, that derivation
+    // defers, so the count stays at its seeded stale value (5) rather than
+    // snapping to this page's own tally (2 unread / 1 mention) — a nonzero,
+    // distinguishing seed (not the tautological 0 -> 0) proves the
+    // page-scoped write is really gone, not merely absent by coincidence.
+    it('forward merge into a non-active room defers the count until coverage is proven (no page-scoped write)', async () => {
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
         meta.set(roomJid, {
           ...meta.get(roomJid)!,
+          unreadCount: 5,
+          mentionsCount: 2,
           readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T09:30:00Z') },
         })
-        return { roomMeta: meta }
+        const rooms = new Map(state.rooms)
+        rooms.set(roomJid, { ...rooms.get(roomJid)!, unreadCount: 5, mentionsCount: 2 })
+        return { roomMeta: meta, rooms }
       })
 
       const mamMessages: RoomMessage[] = [
@@ -4129,13 +4142,16 @@ describe('roomStore', () => {
 
       roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
 
+      // Let the fire-and-forget archive recount run to completion.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
       const meta = roomStore.getState().roomMeta.get(roomJid)
-      expect(meta?.unreadCount).toBe(2)
-      expect(meta?.mentionsCount).toBe(1)
+      expect(meta?.unreadCount).toBe(5)
+      expect(meta?.mentionsCount).toBe(2)
       // Combined map mirrors meta.
       const room = roomStore.getState().rooms.get(roomJid)
-      expect(room?.unreadCount).toBe(2)
-      expect(room?.mentionsCount).toBe(1)
+      expect(room?.unreadCount).toBe(5)
+      expect(room?.mentionsCount).toBe(2)
     })
 
     it('forward merge into a room with NO read state snaps the pointer (fresh-join guard)', () => {

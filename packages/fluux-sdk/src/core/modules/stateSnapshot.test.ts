@@ -175,6 +175,30 @@ describe('StateSnapshot', () => {
         .toEqual({ messageId: 'msg-42', timestamp: readAt })
     })
 
+    // PR B (Task 8, cold-start rehydrate trigger): a room restored here may
+    // carry a stale `unreadCount` (the value this device last wrote, before
+    // whatever arrived while the app was closed). `hydrate()` schedules an
+    // archive-derived recompute for every restored room, mirroring
+    // chatStore's own cold-start recount for conversations (see
+    // roomStore.archiveUnread.test.ts for recomputeUnreadForRoom's full
+    // derivation matrix). Fire-and-forget — yields a task first — so this
+    // awaits a tick before asserting the spy was called.
+    it('cold-start rehydrate schedules a recount for every restored room', async () => {
+      adapterData.store.set('user@example.com', {
+        rooms: [makeRoom('room@conf.example.com', { unreadCount: 3 })],
+      })
+      const original = roomStore.getState().recomputeUnreadForRoom
+      const spy = vi.fn(original)
+      roomStore.setState({ recomputeUnreadForRoom: spy })
+
+      await snapshot.hydrate('user@example.com')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(spy).toHaveBeenCalledWith('room@conf.example.com')
+      // Restore the un-wrapped action so later tests aren't left with a spy.
+      roomStore.setState({ recomputeUnreadForRoom: original })
+    })
+
     // The write half. Without it, hydrate could pass forever against a snapshot
     // nothing ever writes a pointer into.
     it('persists the room read pointer so it can be hydrated back', async () => {
