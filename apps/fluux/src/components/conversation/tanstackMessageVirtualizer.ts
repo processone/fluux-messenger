@@ -251,6 +251,14 @@ export function useTanstackMessageVirtualizer({
       // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
       offsetCbRef.current?.(offset, false)
     },
+    // Deliberately WITHOUT the offsetCb push its two neighbours perform: during an animation
+    // the scroller has not arrived yet, so claiming the destination offset would re-window to it
+    // before paint and retire @tanstack's pending-scroll reconciler on its next frame — losing
+    // exactly the ownership this call is taken out to hold. The rAF-polled observeElementOffset
+    // tracks the animation frame by frame instead, so there is no scrollOffset desync to guard.
+    beginAnimatedScrollToOffset: (offset) => {
+      virtualizer.scrollToOffset(offset, { behavior: 'smooth' })
+    },
     scrollToIndex: (index, opts) => {
       virtualizer.scrollToIndex(index, opts)
       // Same scrollOffset-desync guard as scrollToOffset above, on the stick-to-bottom path.

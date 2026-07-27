@@ -78,6 +78,11 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
     },
+    // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
+    beginAnimatedScrollToOffset: (offset: number) => {
+      const el = args.scrollRef.current
+      if (el) el.scrollTop = offset
+    },
     scrollToIndex: (index: number, opts?: { align?: string }) => {
       const el = args.scrollRef.current
       if (!el) return

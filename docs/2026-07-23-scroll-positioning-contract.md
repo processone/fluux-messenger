@@ -348,6 +348,26 @@ A later migration is incomplete until each in-scope owner either routes through 
 explicitly documented as an isolated, non-competing context. New controller code must replace and
 delete old owners rather than wrap them indefinitely.
 
+### The virtualizer is a position owner the generations cannot see
+
+`@tanstack/virtual-core` keeps its own pending-scroll reconciler: every `scrollToIndex` /
+`scrollToOffset` arms a `scrollState` that survives for up to five seconds and re-applies **its**
+target on each frame that measurement moves it. That reconciler is invisible to this contract's
+generations — cancelling a controller execution retires the lease and the frame loop, but the
+virtualizer keeps re-asserting the position the superseded owner asked for.
+
+Consequently, on the virtualized path an animated command must be issued **through** the virtualizer
+(`beginAnimatedScrollToOffset`), never as a raw `scroller.scrollTo({ behavior: 'smooth' })`. Doing so
+retargets the reconciler onto the new position instead of racing it, and additionally suppresses the
+virtualizer's own size-change scroll adjustments for the animation's duration. A raw smooth write
+loses to the previous owner whenever rows are still measuring — reliably so on a slow engine, where
+each layout pass costs long enough for the reconciler to re-fire several times mid-animation
+(observed as Home snapping back to the live edge on the WebKitGTK CI runner).
+
+An instant write may continue to use `scrollToOffset`/`scrollToIndex`, which additionally push the
+landed offset into the virtualizer's offset callback so the window re-renders before paint. That
+push is wrong for an animation: it claims the scroller has already arrived.
+
 ## Test standard
 
 Pure-model tests use paired controls that differ by one semantic fact. Every test must identify a

@@ -40,6 +40,16 @@ The observation budget is 120 frames. If the browser does not reach resident
 top within that budget, the controller completes best-effort and does not snap.
 This preserves the current one-shot behavior and avoids a late visible jump.
 
+Budget exhaustion bounds how long the controller *watches*; it is not a licence
+for the list to come to rest somewhere else. An unopposed native smooth scroll
+always reaches resident top, so `best-effort` and "the list arrived" are not
+alternatives — a slow engine can simply stop being observed before it arrives.
+The real-engine test therefore asserts the two separately: its completion
+assertion is outcome-agnostic, and its position assertion carries a generous
+ceiling but fails fast on the one outcome that is always wrong — the list moving
+*away* from resident top after Home, which means a superseded owner re-asserted
+mid-animation.
+
 Instant per-frame convergence is rejected because it would remove the existing
 Home animation. A controller method that merely wraps the current direct call
 is also rejected because it would not own cancellation, supersession, or
@@ -81,8 +91,14 @@ write.
 
 - derives reachability from the current first resident row;
 - uses `beginControllerFrameLoop('resident-top', lease)`;
-- calls `scroller.scrollTo({ top: 0, behavior: 'smooth' })` exactly once from
-  the controller-owned executor;
+- starts the animation exactly once from the controller-owned executor, through
+  the virtualizer (`beginAnimatedScrollToOffset(0)`) on the virtualized path and
+  `scroller.scrollTo({ top: 0, behavior: 'smooth' })` otherwise — both emit the
+  same single DOM write. Routing through the virtualizer is not cosmetic:
+  `@tanstack` keeps a pending-scroll reconciler armed for seconds after the
+  live-edge pin's `scrollToIndex(last, 'end')` and re-applies that target
+  whenever late measurement moves it, which cancelling the pin's execution does
+  not retire. A raw smooth write races it and loses on a slow engine;
 - reports `scroller.scrollTop` without mutating it during observation.
 
 `lastLoadTimeRef.current = Date.now()` remains before the controller request.

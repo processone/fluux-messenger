@@ -1915,7 +1915,15 @@ export function useMessageListScroll({
     start: (_request, lease) => {
       const scroller = scrollerRef.current
       if (!lease.isCurrent() || !scroller) return { kind: 'unavailable' }
-      scroller.scrollTo({ top: 0, behavior: 'smooth' })
+      const virtualizer = virtualizerRef.current
+      // One smooth write either way — but on the virtualized path it must be issued THROUGH the
+      // virtualizer. Cancelling the superseded live-edge execution only retires our own lease and
+      // frame loop; @tanstack's pending-scroll reconciler stays armed on the live edge for
+      // several more seconds and re-applies it whenever late row measurement moves its target,
+      // overriding this animation with no controller event to observe. Issuing the write through
+      // the virtualizer retargets that reconciler onto resident top instead of racing it.
+      if (virtualizer) virtualizer.beginAnimatedScrollToOffset(0)
+      else scroller.scrollTo({ top: 0, behavior: 'smooth' })
       return { kind: 'started' }
     },
     readScrollTop: () => scrollerRef.current?.scrollTop ?? null,

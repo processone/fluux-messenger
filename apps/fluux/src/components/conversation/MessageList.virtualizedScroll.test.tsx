@@ -30,6 +30,10 @@ const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
 // path). A direct scrollTop write does NOT go through here, so this distinguishes a
 // virtualizer-aware restore (re-windows before paint) from a raw scrollTop write (blank).
 const scrollToOffsetCalls: number[] = []
+// Records every offset pushed through beginAnimatedScrollToOffset — the animated commands the
+// app owns (Home / resident top). Kept apart from scrollToOffsetCalls so a test can prove an
+// animated navigation retargets the virtualizer rather than writing the scroller behind its back.
+const animatedScrollToOffsetCalls: number[] = []
 // Records the align of every scrollToIndex. A bottom re-pin goes through
 // scrollToIndex(last,'end') (re-windows the virtualizer); a raw scrollTop write does not.
 // Lets a test prove the composer-resize correction routes through the virtualizer.
@@ -81,6 +85,13 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     // scrollTop = scrollHeight, matching the test expectations for bottom-stick behavior.
     scrollToOffset: (offset: number) => {
       scrollToOffsetCalls.push(offset)
+      const el = args.scrollRef.current
+      if (el) el.scrollTop = offset
+    },
+    // jsdom has no smooth-scroll animation, so an animated scroll lands immediately. Recorded
+    // separately from scrollToOffset so tests can tell an animated command from a re-window write.
+    beginAnimatedScrollToOffset: (offset: number) => {
+      animatedScrollToOffsetCalls.push(offset)
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
     },
@@ -155,6 +166,7 @@ describe('MessageList — virtualized scroll integration', () => {
     scrollToIndexCalls.length = 0
     scrollToIndexBehaviors.length = 0
     scrollToOffsetCalls.length = 0
+    animatedScrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
     windowedOutKeys.clear()
   })
@@ -165,6 +177,26 @@ describe('MessageList — virtualized scroll integration', () => {
     renderList({ firstNewMessageId: 'msg-40' })
     await waitFor(() => expect(scrollToIndexCalls).toContain('start'))
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
+  })
+
+  it('routes Home through the virtualizer so a superseded live-edge pin cannot re-assert over it', async () => {
+    // @tanstack keeps a pending-scroll reconciler armed for several seconds after the live-edge
+    // pin's scrollToIndex(last,'end'), and re-applies THAT target on every frame late measurement
+    // moves it. Cancelling the pin's controller execution does not retire it, so a Home animation
+    // written straight to the scroller gets snapped back to the bottom mid-flight (observed on the
+    // WebKitGTK CI runner, where rows are still measuring seconds after entry). Issuing the write
+    // through the virtualizer retargets that reconciler instead of racing it.
+    //
+    // The wrong implementation this must fail against is the previous one: a direct
+    // `scroller.scrollTo({ top: 0, behavior: 'smooth' })`, which leaves animatedScrollToOffsetCalls
+    // empty. Asserting scrollTop alone would NOT catch it — the mock scroller lands at 0 either way.
+    renderList()
+    await waitFor(() => expect(scrollToIndexCalls.length).toBeGreaterThan(0))
+    animatedScrollToOffsetCalls.length = 0
+
+    act(() => { fireEvent.keyDown(window, { key: 'Home' }) })
+
+    await waitFor(() => expect(animatedScrollToOffsetCalls).toEqual([0]))
   })
 
   it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', async () => {

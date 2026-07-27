@@ -462,45 +462,108 @@ test.describe('Controller-owned resident-top navigation', () => {
     await setScrollTop(page, 800)
     await page.waitForTimeout(300)
 
+    // The entry position must actually BE where this test put it. `> 1` used to pass vacuously at
+    // the live edge, so a run whose entry pin had already dragged the list back to the bottom
+    // still entered the body and then failed 5s later on the real assertion with no clue why
+    // (run 30267369388). Bracketing the start pins the failure to the setup instead.
     const initialScrollTop = await getScrollTop(page)
-    expect(initialScrollTop, 'precondition: resident window must start below its top').toBeGreaterThan(1)
+    expect(
+      initialScrollTop,
+      'precondition: resident window must start at the offset this test set, not at the live edge',
+    ).toBeGreaterThan(600)
+    expect(
+      initialScrollTop,
+      'precondition: entry positioning must have settled before Home is pressed',
+    ).toBeLessThan(1200)
 
-    await page.evaluate(() => {
+    // Record every scroll write AND watch, frame by frame, for the list moving AWAY from resident
+    // top after Home. A superseded live-edge owner re-asserting mid-animation is the regression
+    // this guards: it shows up as backward motion long before the position poll would time out,
+    // and it is visible even on an engine too slow to finish the animation inside the poll window.
+    await page.evaluate((startedAt) => {
       const scroller = document.querySelector('[data-message-list]') as HTMLDivElement | null
       if (!scroller) return
       const nativeScrollTo = scroller.scrollTo.bind(scroller)
       const writes: ScrollToOptions[] = []
-      ;(
-        window as Window & {
-          __fluuxResidentTopWrites?: ScrollToOptions[]
-        }
-      ).__fluuxResidentTopWrites = writes
+      const probe = window as Window & {
+        __fluuxResidentTopWrites?: ScrollToOptions[]
+        __fluuxResidentTopMaxBacktrack?: number
+      }
+      probe.__fluuxResidentTopWrites = writes
+      probe.__fluuxResidentTopMaxBacktrack = 0
       scroller.scrollTo = ((...args: Parameters<HTMLDivElement['scrollTo']>) => {
         const first = args[0]
         if (typeof first === 'object') writes.push({ ...first })
         return nativeScrollTo(...args)
       }) as HTMLDivElement['scrollTo']
-    })
+      let closestToTop = startedAt
+      const sample = () => {
+        closestToTop = Math.min(closestToTop, scroller.scrollTop)
+        probe.__fluuxResidentTopMaxBacktrack = Math.max(
+          probe.__fluuxResidentTopMaxBacktrack ?? 0,
+          scroller.scrollTop - closestToTop,
+        )
+        requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    }, initialScrollTop)
 
     const scroller = page.locator('[data-message-list]').first()
     await scroller.focus()
     await page.keyboard.press('Home')
 
-    await expect.poll(() => getScrollTop(page), {
-      timeout: 5000,
+    const readProbe = () => page.evaluate(() => {
+      const probe = window as Window & {
+        __fluuxResidentTopWrites?: ScrollToOptions[]
+        __fluuxResidentTopMaxBacktrack?: number
+      }
+      return {
+        writes: probe.__fluuxResidentTopWrites ?? [],
+        backtrack: probe.__fluuxResidentTopMaxBacktrack ?? 0,
+      }
+    })
+
+    // Generous ceiling, not a relaxed contract: a green run reaches the top in well under a second,
+    // but the WebKitGTK CI runner has been measured at ~1.8s per MessageList layout+paint, and the
+    // per-test budget is 180s. The assertions below are what make a regression fail fast.
+    await expect.poll(async () => {
+      const top = await getScrollTop(page)
+      const { writes, backtrack } = await readProbe()
+      // Fail immediately, with the culprit named, rather than waiting out the timeout.
+      expect(
+        backtrack,
+        `Home navigation moved AWAY from resident top — a superseded position owner re-asserted mid-animation. Writes: ${JSON.stringify(writes)}`,
+      ).toBeLessThanOrEqual(1)
+      return top
+    }, {
+      timeout: 30_000,
       message: 'Home navigation must reach the resident-window top',
     }).toBeLessThanOrEqual(1)
+
     await expect.poll(() => trace.length, {
-      timeout: 5000,
+      timeout: 30_000,
       message: `resident-top controller did not settle: ${JSON.stringify(trace)}`,
     }).toBe(1)
 
-    const writes = await page.evaluate(() => (
-      window as Window & {
-        __fluuxResidentTopWrites?: ScrollToOptions[]
-      }
-    ).__fluuxResidentTopWrites ?? [])
-    expect(writes).toEqual([{ top: 0, behavior: 'smooth' }])
+    // The single-write contract, split into the two things it actually guarantees. Both are
+    // engine-speed independent, so this is what holds the line on a slow runner.
+    const { writes } = await readProbe()
+    // 1. The controller starts the animation once and never restarts it. A frame loop that
+    //    reissued the smooth write — the failure the original assertion was built to catch —
+    //    produces repeated smooth writes and fails here.
+    expect(
+      writes.filter((write) => write.behavior === 'smooth'),
+      `Home must issue exactly one smooth write: ${JSON.stringify(writes)}`,
+    ).toEqual([{ top: 0, behavior: 'smooth' }])
+    // 2. Nothing writes the scroller anywhere else for the duration. The virtualizer may add one
+    //    instant convergence write to the SAME offset when it retires the animated command
+    //    sub-pixel short of 0 (seen on Chromium, not WebKit) — that is the owner we handed the
+    //    navigation to finishing it. A competing owner re-asserting the live edge targets a
+    //    completely different offset and fails here.
+    expect(
+      writes.filter((write) => write.top !== 0),
+      `only resident top may be written during a Home navigation — another position owner wrote elsewhere: ${JSON.stringify(writes)}`,
+    ).toEqual([])
   })
 })
 
