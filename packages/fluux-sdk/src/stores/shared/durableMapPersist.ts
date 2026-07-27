@@ -37,9 +37,14 @@
  * (`mamGap`), so this layer cannot compare two `bottomId`s to tell a deepening
  * from a replacement, and distinguishing them would mean threading a
  * "was this monotone" signal out of the pure sync functions. Not worth the
- * coupling: the expensive coalescing (the chat blob's ~180 writes per catch-up)
- * is preserved, because a post-connect catch-up is FORWARD and that branch
- * bootstraps a record at most once per entity.
+ * coupling — but the cost is flush FREQUENCY, not record size, and it is not
+ * zero: the coverage bootstrap fires once per entity that has no record, so the
+ * FIRST session after this ships pays one forced chat-blob serialization per
+ * conversation, and Phase B's read-pointer stitch advances `bottomId` on up to
+ * 10 backward pages per entity per session. Both are launch-window costs on a
+ * path that previously wrote unconditionally on every mutation, and the steady
+ * state is free (`if (coverage.get(id)) return coverage`). Design §4.2 has the
+ * full accounting.
  *
  * ## How the transition is detected
  *
@@ -91,7 +96,50 @@ interface Baseline {
 
 const baselines = new Map<string, Baseline>()
 
-/** A gap for an id that had none is a FORMATION. Shrink/close/removal is not. */
+/**
+ * A gap for an id that had none is a FORMATION. Shrink/close/removal is not.
+ *
+ * ## The invariant key-presence rests on
+ *
+ * Key-ADDED does not catch an in-place interval REPLACEMENT: the same id's gap
+ * moving from `{ start: 1000 }` to `{ start: 99000 }` is invisible here, and a
+ * hard kill in that window leaves memory at 99000 and disk at 1000. That is the
+ * normal shape of a multi-page forward catch-up — each incomplete page rewrites
+ * the same key with a higher hole (`syncGapAfterArchiveMerge`'s forward branch
+ * mirrors `forwardGapTimestamp`, which is the page's newest fetched timestamp).
+ *
+ * It is survivable, and this is the reason — without it, key-presence looks
+ * arbitrary:
+ *
+ * - A gap's `start` / `startId` for an EXISTING key only ever move UPWARD. The
+ *   forward branch sets `start` from the marker (`mamState`: the newest fetched
+ *   timestamp of an incomplete forward page, and each page resumes above the
+ *   last), and `startId` from that merge's `rsm.last`. The backward branch never
+ *   moves `start` at all — `closeGapWithBackwardPage` only lowers `end`.
+ * - So a stale record's anchor always sits BELOW the true hole, never above it.
+ * - And `selectCatchUpQuery` gives a recorded gap boundary PRIORITY over the
+ *   cached edge ("a recorded forward gap wins", `mamCatchUpUtils.ts`), consumed
+ *   via `io.getGapStart()` / `io.getGapStartId()` in `MAM.ts`. So the next
+ *   session resumes at the stale, lower anchor — BELOW the lost hole — and
+ *   re-detects it.
+ *
+ * That is exactly the property a lost FORMATION does not have: with nothing
+ * recorded, `selectCatchUpQuery` falls through to the cached edge, which sits
+ * ABOVE the hole, and the gap is never re-detected. Hence "key added" is
+ * sufficient rather than arbitrary.
+ *
+ * Adding `start` to the signature was considered and REJECTED: it would
+ * force-flush every intermediate page of a forward catch-up, which is precisely
+ * the burst the throttle exists to collapse.
+ *
+ * **Accepted residual risk.** The re-detection depends on the stale gap still
+ * being there next session. If a backward "load older" page CLOSES it first —
+ * `closeGapWithBackwardPage` returns `undefined` on `complete`, or when the page
+ * reaches below `gap.start` — before any forward catch-up runs, the true hole
+ * above the stale anchor is silent forever. It needs a crash inside the window
+ * plus a scroll-up before the next catch-up; judged acceptable rather than
+ * unnoticed.
+ */
 function hasGapFormation(previous: Set<string> | undefined, gaps: ReadonlyMap<string, GapInterval>): boolean {
   for (const id of gaps.keys()) {
     if (!previous?.has(id)) return true

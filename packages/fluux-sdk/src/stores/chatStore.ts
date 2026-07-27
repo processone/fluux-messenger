@@ -1102,6 +1102,14 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
     }
   } catch {
     try {
+      // No `cancelDurableMaps` here, against §3.2's rule, and it is safe only
+      // because of WHERE this runs: both callers are LOAD paths (store creation,
+      // and `switchAccount` — which flushes and calls
+      // `forgetAllDurableMapBaselines` before it gets here), so this key has
+      // neither an open window nor a structural baseline to invalidate. A future
+      // caller that reaches this after any write to `scopedStorageKey` must use
+      // `cancelDurableMaps` instead, or a pending thunk resurrects the blob this
+      // line just removed.
       localStorage.removeItem(scopedStorageKey)
     } catch {
       // Ignore storage errors

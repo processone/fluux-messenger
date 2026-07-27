@@ -439,13 +439,67 @@ monotone advances:
 | coverage | key **added**, `bottomId` **changed**, key **removed** | force-flush |
 | coverage | `topId`-only change (re-entry marker) | throttle |
 
-`bottomId`-changed is deliberately conservative: it force-flushes the provable deepening in
-`syncCoverageAfterArchiveMerge`'s plain-backward branch too, which is safe to throttle in principle.
-Since ids cannot be ordered at this layer, distinguishing it would mean threading a
-"was this monotone" signal out of the sync functions. Not worth the coupling: a coverage record is
-one small entry per entity, so its serialized form is orders of magnitude smaller than the chat blob
-whose 180-writes-per-catch-up motivated this work in the first place. The expensive coalescing is
-preserved where it matters.
+**Why "key added" is sufficient for gaps, and not arbitrary.** The gap rule keys on the id being
+ADDED, so it does *not* catch an in-place interval **replacement** — the same id's gap moving from
+`{ start: 1000 }` to `{ start: 99000 }`. Measured: zero additional writes, memory at 99000 while disk
+still holds 1000. And that is the *normal* shape of a multi-page forward catch-up, where each
+incomplete page rewrites the same key with a higher hole. It is survivable for a reason that has to be
+written down, because otherwise key-presence looks like an accident:
+
+- A gap's `start` / `startId` for an **existing** key only ever move **upward**.
+  `syncGapAfterArchiveMerge`'s forward branch takes `start` from `forwardGapTimestamp`, which
+  `mamState` sets to the incomplete page's newest fetched timestamp — and each page resumes above the
+  last — and `startId` from that merge's `rsm.last`. The backward branch never moves `start` at all:
+  `closeGapWithBackwardPage` only lowers `end`.
+- So a stale record's anchor always sits **below** the true hole, never above it.
+- And `selectCatchUpQuery` gives a recorded gap boundary **priority** over the cached edge ("a
+  recorded forward gap wins", [mamCatchUpUtils.ts:217-222](../../../packages/fluux-sdk/src/utils/mamCatchUpUtils.ts)),
+  consumed via `io.getGapStart()` / `io.getGapStartId()` in
+  [MAM.ts:1478-1480](../../../packages/fluux-sdk/src/core/modules/MAM.ts).
+
+So the next session resumes *below* the lost hole and re-detects it. That is exactly the property this
+section says is **absent** for a lost formation: with nothing recorded, `selectCatchUpQuery` falls
+through to the cached edge, which sits above the hole. Adding `start` to the signature was considered
+and rejected — it would force-flush every intermediate page of a forward catch-up, i.e. the burst the
+throttle exists to collapse.
+
+**Accepted residual risk.** The re-detection depends on the stale gap still being on disk next
+session. If a backward "load older" page **closes** it first — `closeGapWithBackwardPage` returns
+`undefined` on `complete` or on reaching held history below `gap.start`
+([mamGap.ts:241-242](../../../packages/fluux-sdk/src/stores/shared/mamGap.ts)) — before any forward
+catch-up runs, the true hole above the stale anchor is silent forever. It takes a crash inside the
+window *plus* a scroll-up before the next catch-up. Accepted, not unnoticed.
+
+**`bottomId`-changed is deliberately conservative, and the cost is flush FREQUENCY.** It force-flushes
+the provable deepening in `syncCoverageAfterArchiveMerge`'s plain-backward branch too, which is safe to
+throttle in principle. Since ids cannot be ordered at this layer, distinguishing it would mean
+threading a "was this monotone" signal out of the sync functions. The decision stands — but the
+justification is *not* that a coverage record is small. Size is the wrong axis: the record rides in the
+chat blob, so what a force-flush costs is one whole-blob serialization, and the question is how OFTEN.
+Three sources, counted honestly:
+
+1. **Coverage bootstrap** ([mamCoverage.ts:136-140](../../../packages/fluux-sdk/src/stores/shared/mamCoverage.ts))
+   fires once for every entity that has no record and completes a forward catch-up. On the first
+   session after this ships that is essentially *every* conversation: at the 400-conversation profile,
+   ~400 O(conversations) blob serializations — the same order as the ~180 writes this work exists to
+   remove. Steady state is free (`if (coverage.get(id)) return coverage`).
+2. **Phase B read-pointer stitch** loops up to `MAM_POINTER_STITCH_MAX_PAGES` = 10 backward queries
+   per entity per session ([MAM.ts:1561-1577](../../../packages/fluux-sdk/src/core/modules/MAM.ts)),
+   each advancing `bottomId` and so force-flushing.
+3. **A multiplier on top of both:** `flushKey` **closes** the window
+   ([throttledStorage.ts:141-142](../../../packages/fluux-sdk/src/stores/shared/throttledStorage.ts)),
+   so the *next* mutation is a fresh leading edge instead of being coalesced. Measured on the room
+   gap-formation scenario: 3 writes where a pure throttle produces 1.
+
+All three are first-session / launch-window costs, and all three are still strictly better than the
+pre-branch baseline, which serialized the blob on **every** mutation unconditionally. The burst test
+cannot see any of it — `collapses a long burst…` drives only `setMAMLoading`, so gaps and coverage stay
+empty and this path never runs. That is a limitation of the test, not evidence of no cost.
+
+**Measured follow-up, deliberately out of scope here.** A `flushKey` variant that writes the pending
+thunk but leaves the timer ARMED would remove multiplier (3) for free. It is a semantic change to a
+shared primitive — `recordPendingRetraction` uses `flushKey` too, and it wants the window closed — so
+it needs its own change with its own tests, not a rider on this one.
 
 Ordinary termination — tab close, app quit, mobile backgrounding — loses nothing, provided §4.1
 lands.
@@ -559,6 +613,31 @@ are wired to it. A helper left calling `localStorage.setItem` directly passes ev
   The second retraction is the assertion that matters: it is the one that would be sitting in a
   pending thunk if this key were ever routed through `schedule`.
 
+- **Both sides of the §4.2 bound, per map.** The force-flush tests are one-directional: an
+  implementation that flushed on *every* gap or coverage write would pass all of them, and the whole
+  suite besides. Each map therefore needs a coalescing guard for the transition §4.2 still throttles —
+  a gap shrink, and a coverage `topId` refresh. Both take **three** writes, for the reason in §5.5:
+  one to establish the baseline (the first write of a session force-flushes on the unknown baseline and
+  *closes* the window), one to re-open it, and the one that must be coalesced.
+
+### 5.6 `stores/shared/durableMapPersist.test.ts`
+
+The store suites prove the funnels are wired and the end-to-end durability property holds; they cannot
+cheaply reach every row of §4.2's table, and they do not reach the module's two documented baseline
+invariants at all. Direct tests over `scheduleDurableMaps`:
+
+- the full decision table — gap added → flush; gap shrink/close/removal → throttle; coverage
+  added / `bottomId` changed / removed → flush; `topId`-only → throttle;
+- **A → B → A:** the baseline advances on *throttled* writes too, so a there-and-back gap still
+  force-flushes. Frozen-baseline mutant → red;
+- `cancelDurableMaps` drops the baseline (observed through whether the following write was coalesced,
+  since the write right after the cancel is a leading edge either way);
+- **omitting a map disables detection for it** — `DurableMaps`' fields are all optional, so a typo
+  (`{ gap: … }` for `{ gaps: … }`) type-checks and silently turns detection off. The test states the
+  consequence rather than leaving it as folklore;
+- the in-place gap interval replacement is **not** flushed — stating the §4.2 invariant as behaviour, so
+  a change to the rule has to change this test and the doc together.
+
 ### 5.4 Tauri quit ordering
 
 `useTauriCloseHandler.test.tsx` already pins ordering by recording `shuttingDownAtDisconnect` at
@@ -587,7 +666,18 @@ a *different key*, and the throttle is per-key, so the system was never actually
 that discriminates. **Corollary: "put the system into that state" means on the exact key under
 test.** Both of these passed a reading that only checked whether a window was open somewhere.
 
-A third variant is worth naming because it is not about ordering at all: §5.3's A → B → A case was
+A third variant appeared once the force-flush landed, and it is the subtlest yet: **a preparatory step
+that a neighbouring force-flush silently undoes.** Two tests were written as "one throttled write opens
+the window, then the transition under test is coalesced into it" — and measurement showed the
+*preparatory* write force-flushed on its own unknown baseline and CLOSED the window, so the transition
+under test landed on a fresh leading edge. One of the two (`coalesces gap writes across two rooms`) was
+left with a comment describing a mechanism that no longer ran at all; the other still failed under
+control mutation, but for the wrong reason — it could not distinguish "flush on formation" from "flush
+on any write". **Corollary: when the fix itself closes windows, "open the window first" needs a
+baseline-establishing write before it, and the write count at each step has to be asserted rather than
+reasoned about.** Both were caught by counting writes, not by re-reading the comments.
+
+A fourth variant is worth naming because it is not about ordering at all: §5.3's A → B → A case was
 labelled as covering the §3.1 reference capture, which it cannot, because the flush that runs first
 makes the capture unobservable. **A test cannot cover a guard that a preceding guard renders
 unreachable** — mislabelling one as covering the other manufactures false confidence in exactly the

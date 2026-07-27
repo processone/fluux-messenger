@@ -15,6 +15,7 @@ import type { CoverageRecord } from './shared/mamCoverage'
 
 const ROOM = 'room@conference.example.com'
 const ROOM2 = 'room2@conference.example.com'
+const ROOM3 = 'room3@conference.example.com'
 const GAPS_KEY = 'fluux-room-gaps'
 const COVERAGE_KEY = 'fluux-room-coverage'
 
@@ -92,10 +93,18 @@ describe('roomStore throttled persistence', () => {
   // coverage are written from `removeRoom`, `mergeRoomMAMMessages`,
   // `clearRoomGapAnchor` and `clearRoomCoverage`. The two `clear*` actions are
   // the only ones with a signature small enough to drive directly, so the
-  // scenarios seed the maps and then clear TWO rooms: the first clear takes the
-  // leading edge, the second is the coalesced one that only lands if the
-  // trailing write works.
-  it('coalesces gap writes across two rooms', () => {
+  // scenarios seed the maps and then clear TWO rooms.
+  //
+  // NOTE: this pair no longer coalesces anything, and the name says so. With no
+  // baseline for this key yet, the FIRST write sees every present gap as an
+  // addition and force-flushes, which CLOSES the window; the second clear is
+  // therefore not coalesced behind it but takes a fresh leading edge of its own.
+  // Measured: 1 write after the first clear, 2 after the second, still 2 after
+  // `flush()` — the trailing flush writes nothing, because nothing is pending.
+  // What survives is that both clears reach disk. The gap-side COALESCING half
+  // lives in `still coalesces a gap shrink once the baseline is established`
+  // below, which establishes the baseline first so the window can stay open.
+  it('persists both gap-anchor clears across two rooms', () => {
     // GapInterval is { start, end?, startId?, endId? } — epoch ms, not Dates.
     roomStore.setState({
       roomGaps: new Map([
@@ -105,9 +114,9 @@ describe('roomStore throttled persistence', () => {
     })
     localStorageMock.setItem.mockClear()
 
-    roomStore.getState().clearRoomGapAnchor(ROOM, 'gap-anchor-1') // leading edge
-    roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-anchor-2') // coalesced
-    flush()
+    roomStore.getState().clearRoomGapAnchor(ROOM, 'gap-anchor-1') // leading edge, force-flushed
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'gap-anchor-2') // fresh leading edge
+    flush() // writes nothing — kept only so the assertions read as end-state
 
     const raw = localStorage.getItem('fluux-room-gaps') ?? ''
     expect(raw).not.toContain('gap-anchor-1')
@@ -115,11 +124,13 @@ describe('roomStore throttled persistence', () => {
   })
 
   // NOTE: a coverage REMOVAL is now force-flushed (design §4.2), so what this
-  // test still pins is that both removals reach disk — not coalescing. The
-  // coalescing half moved to the `topId` refresh test in the structural-
-  // durability suite below, which drives the one coverage transition that is
-  // still throttled.
-  it('coalesces coverage writes across two rooms', () => {
+  // test still pins is that both removals reach disk — not coalescing, and the
+  // name says so. As with its gap twin above, the first write also force-flushes
+  // on the unknown baseline and closes the window, so the second removal takes a
+  // fresh leading edge rather than being coalesced. The coalescing half lives in
+  // the `topId` refresh test in the structural-durability suite below, which
+  // drives the one coverage transition that is still throttled.
+  it('persists both coverage removals across two rooms', () => {
     // CoverageRecord is { bottomId, topId? }.
     roomStore.setState({
       roomCoverage: new Map([
@@ -129,9 +140,9 @@ describe('roomStore throttled persistence', () => {
     })
     localStorageMock.setItem.mockClear()
 
-    roomStore.getState().clearRoomCoverage(ROOM) // leading edge
-    roomStore.getState().clearRoomCoverage(ROOM2) // coalesced
-    flush()
+    roomStore.getState().clearRoomCoverage(ROOM) // leading edge, force-flushed
+    roomStore.getState().clearRoomCoverage(ROOM2) // fresh leading edge
+    flush() // writes nothing — kept only so the assertions read as end-state
 
     const raw = localStorage.getItem('fluux-room-coverage') ?? ''
     expect(raw).not.toContain('cov-1')
@@ -324,10 +335,26 @@ describe('roomStore gap/coverage structural durability', () => {
   }
 
   it('persists a gap FORMATION that was coalesced into an open window', () => {
-    // A gap SHRINK is monotone and stays throttled, so it is what opens the
-    // gaps window and leaves it open.
-    roomStore.setState({ roomGaps: new Map([[ROOM2, { start: 1000, startId: 'anchor-2' }]]) })
-    roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // leading edge → window OPEN
+    // TWO throttled writes are needed before the formation, and the order is
+    // load-bearing (§5.5).
+    //
+    // The FIRST gaps write of a session has no baseline, so every gap present
+    // reads as an addition and it force-flushes — which CLOSES the window.
+    // (Measured: with only one preparatory write, the formation landed on a
+    // fresh leading edge and would have been persisted by a plain `schedule`
+    // too, so the test could not tell "flush on formation" from "flush on any
+    // gaps write".) So: write #1 establishes the baseline and closes the window,
+    // write #2 — a monotone shrink against that baseline, hence throttled —
+    // takes the leading edge and leaves the window OPEN, and only then is the
+    // formation genuinely the coalesced-but-forced case.
+    roomStore.setState({
+      roomGaps: new Map([
+        [ROOM2, { start: 1000, startId: 'anchor-2' }],
+        [ROOM3, { start: 2000, startId: 'anchor-3' }],
+      ]),
+    })
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // baseline established, window CLOSED
+    roomStore.getState().clearRoomGapAnchor(ROOM3, 'anchor-3') // shrink → leading edge → window OPEN
     expect(gapsOnDisk().has(ROOM2)).toBe(true)
 
     roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
@@ -339,6 +366,35 @@ describe('roomStore gap/coverage structural durability', () => {
     expect(roomStore.getState().roomGaps.has(ROOM)).toBe(true) // the transition happened
 
     expect(gapsOnDisk().has(ROOM)).toBe(true)
+  })
+
+  // The gap-side twin of the `topId` refresh guard below: §4.2's "gaps: shrink /
+  // close / removal → throttle" row. Without it a mutant that force-flushes on
+  // EVERY gaps write passes the whole suite — every durability test still goes
+  // green, because flushing more is never less durable.
+  //
+  // Same shape as the formation test: write #1 establishes the baseline and
+  // closes the window (the unknown-baseline force-flush), write #2 opens it, and
+  // write #3 is the one that must be coalesced.
+  it('still coalesces a gap shrink once the baseline is established', () => {
+    roomStore.setState({
+      roomGaps: new Map([
+        [ROOM, { start: 500, startId: 'anchor-1' }],
+        [ROOM2, { start: 1000, startId: 'anchor-2' }],
+        [ROOM3, { start: 2000, startId: 'anchor-3' }],
+      ]),
+    })
+    roomStore.getState().clearRoomGapAnchor(ROOM, 'anchor-1') // baseline established, window CLOSED
+    localStorageMock.setItem.mockClear()
+
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // shrink → leading edge → window OPEN
+    roomStore.getState().clearRoomGapAnchor(ROOM3, 'anchor-3') // shrink → coalesced, NOT force-flushed
+    expect(writeCount()).toBe(1)
+    expect(gapsOnDisk().get(ROOM2)?.startId).toBeUndefined()
+    expect(gapsOnDisk().get(ROOM3)?.startId).toBe('anchor-3') // still pending
+
+    flush()
+    expect(gapsOnDisk().get(ROOM3)?.startId).toBeUndefined()
   })
 
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {
