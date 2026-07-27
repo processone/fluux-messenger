@@ -177,15 +177,17 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('advances an off-slice position when the marker is provably newer', () => {
-    // Index ordering is undecidable here, but the pointer carries its own
-    // timestamp: a strictly newer marker is unambiguously ahead. Resolving it
-    // now clears the entity's badge at catch-up instead of making the user
-    // open it first.
+  it('never advances an off-slice position on timestamp alone', () => {
+    // A newer timestamp is NOT proof the marker is ahead. Pointers built by the
+    // #1081 migration carry `lastReadAt`, which is only guaranteed to be at or
+    // BEHIND the message they name — so this pointer could name a message far
+    // newer than m3 while dating from before it. Advancing would derive a
+    // messageId from a timestamp comparison, which `ReadPointer` forbids
+    // outright, and would regress a forward-only position unrecoverably.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
+        readPointer: { messageId: 'may-name-a-newer-message', timestamp: new Date('2024-01-15T09:00:00Z') },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -194,10 +196,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result).toEqual({
-      kind: 'advanced',
-      readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
-    })
+    expect(result.kind).toBe('stash-pending')
   })
 
   it('stashes rather than reporting unchanged for an undecidable position with nothing pending', () => {
@@ -217,26 +216,24 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('recomputes the divider when an off-slice position advances in the ACTIVE entity', () => {
-    // The timestamp-decided advance must feed the same divider recompute as the
-    // index-decided one, so entering the entity does not show a stale marker.
+  it('retires a provably-past off-slice marker on the ACTIVE entity too', () => {
+    // The retire direction is the one timestamps CAN settle: `lastReadAt` is at
+    // or behind the message the pointer names, so a marker older than it is
+    // older than the true position as well. Nothing is derived from the
+    // timestamp here — the pointer is left exactly where it was.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
-        pendingRemoteDisplayedStanzaId: 'arch-m1',
+        readPointer: { messageId: 'newer-than-slice', timestamp: new Date('2024-01-15T11:00:00Z') },
+        pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
-      'm1',
-      'arch-m1',
+      'm2',
+      'arch-m3',
       { isActive: true }
     )
 
-    expect(result).toEqual({
-      kind: 'advanced-with-divider',
-      readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T10:01:00Z') },
-      firstNewMessageId: 'm2',
-    })
+    expect(result.kind).toBe('clear-pending')
   })
 })
 

@@ -9,7 +9,7 @@
 
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
-import { isAhead, makeReadPointer, type ReadPointer } from './readPointer'
+import type { ReadPointer } from './readPointer'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
 export interface ReadMarkerMeta {
@@ -63,12 +63,15 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
 
   // `onMessageSeen` orders positions BY INDEX, so it needs BOTH ends in this
   // slice. When the message the local pointer names is absent it refuses to
-  // advance — it cannot prove the marker is ahead rather than behind. That is
-  // an undecided comparison, not an "already read" verdict, and it is reachable
-  // on every fresh session: the forward catch-up merges only the newest MAM
-  // page, so the marker's message is in it while the pointer's is still on disk.
-  // Reporting `unchanged`/`clear-pending` there would drop the remote position
-  // for good, so this case never falls through to the index comparator.
+  // advance — it cannot prove the marker is ahead rather than behind. That is an
+  // undecided comparison, not an "already read" verdict, and it is reachable on
+  // every fresh session: the forward catch-up merges only the newest MAM page,
+  // so the marker's message is in it while the pointer's is still on disk.
+  // Letting it fall through to the index comparator would report
+  // `unchanged`/`clear-pending` and drop the remote position for good.
+  //
+  // So that case is decided separately below, where only ONE of the two
+  // directions can be settled without the slice. See each branch for why.
   const localPointerId = meta.readPointer?.messageId
   const pointerInSlice =
     localPointerId === undefined || messages.some((m) => m.id === localPointerId)
@@ -97,40 +100,37 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
         ? { kind: 'unchanged' }
         : { kind: 'clear-pending' }
     }
+  } else if (meta.readPointer && match.timestamp < meta.readPointer.timestamp) {
+    // Strictly older than the local position, so there is nothing to apply.
+    //
+    // Timestamps settle THIS direction and only this one. `lastReadAt` on a
+    // pointer built by the #1081 migration is guaranteed to be at or BEHIND the
+    // message it names, so a marker older than the pointer's timestamp is older
+    // than the true position too — the guarantee runs the right way here.
+    //
+    // Retiring it matters because this is the one shape no wider slice can ever
+    // resolve: a slice holding the marker cannot also hold a pointer hundreds of
+    // messages later, and a load-around the pointer cannot reach back to the
+    // marker. Left pending it would re-fold on every activation forever, keeping
+    // the divider provisional.
+    return meta.pendingRemoteDisplayedStanzaId === undefined
+      ? { kind: 'unchanged' }
+      : { kind: 'clear-pending' }
   } else {
-    // Index ordering is undecidable, but the pointer denormalises the timestamp
-    // OF the message it names, so the same question is answerable in O(1)
-    // without the slice — the reason `readPointer` carries one at all.
-    const candidate = makeReadPointer(match)
-    const pointerTimestamp = meta.readPointer?.timestamp.getTime() ?? 0
-
-    // Epoch is the legacy "no read time recorded" sentinel. Every real message
-    // beats it, so it decides nothing and must not be trusted to — the same
-    // guard `onActivate` applies to its own timestamp fallback.
-    if (pointerTimestamp <= 0) return { kind: 'stash-pending' }
-
-    if (isAhead(candidate, meta.readPointer)) {
-      // Strictly newer, so unambiguously ahead. Resolving it here is what lets
-      // an entity's badge clear at catch-up rather than waiting for the user to
-      // open it.
-      readPointer = candidate
-    } else if (candidate.timestamp.getTime() < pointerTimestamp) {
-      // Strictly older, so the local position is already past it and there is
-      // nothing to apply. Retiring it matters because this is the one shape no
-      // wider slice can ever resolve: a slice holding the marker cannot also
-      // hold a pointer hundreds of messages later, and a load-around the pointer
-      // cannot reach back to the marker. Left pending it would re-fold on every
-      // activation forever, keeping the divider provisional.
-      return meta.pendingRemoteDisplayedStanzaId === undefined
-        ? { kind: 'unchanged' }
-        : { kind: 'clear-pending' }
-    } else {
-      // Equal timestamps — genuinely undecidable, since MAM archives routinely
-      // put two messages in the same millisecond. Stay pending for a slice that
-      // can order them by index. `isAhead` owns this rule; the explicit branch
-      // is here so the three outcomes read as one decision.
-      return { kind: 'stash-pending' }
-    }
+    // Undecidable: the marker is at or after the pointer's timestamp, and that
+    // proves nothing about ordering. The same migration caveat runs the WRONG
+    // way here — a migrated pointer can name a message far newer than its own
+    // timestamp, so a "newer" marker may still sit behind the true position.
+    // Advancing would derive a messageId from a timestamp comparison, which
+    // `ReadPointer` forbids outright ("Only `timestamp` is used for ordering;
+    // nothing derives a message from it"), and the pointer is forward-only, so
+    // the position lost that way would be unrecoverable. Equal timestamps are
+    // undecidable in their own right — MAM archives routinely put two messages
+    // in the same millisecond.
+    //
+    // Stay pending. The activation fold loads a slice wide enough to order both
+    // ends by index, which is the proof this branch lacks.
+    return { kind: 'stash-pending' }
   }
 
   if (!options.isActive) {
