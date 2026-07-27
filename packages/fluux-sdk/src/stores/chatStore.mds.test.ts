@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import { connectionStore } from './connectionStore'
 import { chatSelectors } from './chatSelectors'
-import type { Message } from '../core/types/chat'
+import type { Message, ConversationEntity, ConversationMetadata } from '../core/types/chat'
 
 // Mock messageCache: the deep-pointer activation tests need getMessagesAround to
 // return a controlled around-slice; everything else is a harmless stub.
@@ -79,6 +79,26 @@ function seedMessages(cid: string, messages: Message[]): void {
   })
 }
 
+/**
+ * Seed a conversation across all three maps, with the compat entry DERIVED from
+ * the entity and the metadata — the same rule the store itself now follows (see
+ * shared/conversationMaps) and the same one `deserializeState` applies on
+ * reload.
+ *
+ * Written out here rather than delegating to the production draft, so a bug in
+ * that module cannot quietly make these fixtures agree with it. Fixtures that
+ * set `conversations` without `conversationEntities` build a state the store can
+ * no longer reach, and assertions over the compat map then prove nothing.
+ */
+function seedConversation(cid: string, meta: ConversationMetadata): void {
+  const entity: ConversationEntity = { id: cid, name: cid, type: 'chat' }
+  chatStore.setState((state) => ({
+    conversationEntities: new Map(state.conversationEntities).set(cid, entity),
+    conversationMeta: new Map(state.conversationMeta).set(cid, meta),
+    conversations: new Map(state.conversations).set(cid, { ...entity, ...meta }),
+  }))
+}
+
 describe('chatStore.applyRemoteDisplayed', () => {
   beforeEach(() => chatStore.getState().reset())
 
@@ -88,13 +108,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     seedMessages(cid, messages)
 
     // Simulate conversation present in conversationMeta with m1 as last seen.
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
@@ -109,13 +123,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
     seedMessages(cid, messages)
 
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m3') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m3') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m3') })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's1') // behind → must be ignored
 
@@ -127,13 +135,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1')])
 
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0 })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0 })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's-future')
 
@@ -150,19 +152,10 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // Local position is already at m3 (past s2), yet a stale pending marker for
     // s2 lingers — e.g. set before the message loaded, then resolved by a local
     // advance that didn't go through applyRemoteDisplayed.
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m3'), pendingRemoteDisplayedStanzaId: 's2' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, {
-        id: cid,
-        name: cid,
-        type: 'chat',
-        unreadCount: 0,
-        readPointer: pointerAt('m3'),
-        pendingRemoteDisplayedStanzaId: 's2',
-      })
-      return { conversationMeta: newMeta, conversations: newConvs }
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerAt('m3'),
+      pendingRemoteDisplayedStanzaId: 's2',
     })
 
     // s2's message IS present but the read pointer is already ahead → no advance.
@@ -184,13 +177,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
     // Backgrounded conversation: NO resident messages (evicted); the marker
     // arrives with the just-merged messages (the mergeMAMMessages override path).
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 3, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 3, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 3, readPointer: pointerAt('m1') })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's4', messages)
 
@@ -216,13 +203,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
     // Non-active, non-resident conversation with a pending deep pointer
     // (new-device sync: no local read state yet).
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0 })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0 })
     chatStore.getState().applyRemoteDisplayed(cid, 's-ptr')
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s-ptr')
 
@@ -264,13 +245,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
       return { ...msg(id, stanzaId), timestamp: ts }
     }
 
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0 })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0 })
     chatStore.getState().applyRemoteDisplayed(cid, 's-ptr')
 
     const page = [timedMsg('p0', 's-ptr', t(41)), timedMsg('p1', 'sp1', t(42))]
@@ -313,13 +288,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
     // Seed initial message m1/s1 and set up conversation meta with the read pointer at m1
     seedMessages(cid, [timedMsg('m1', 's1', t0)])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
 
     // Remote marker for s5 arrives before m5 is loaded → stored as pending
     chatStore.getState().applyRemoteDisplayed(cid, 's5')
@@ -349,13 +318,7 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
   it('advances the read pointer to the newest loaded message when at the live edge', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
 
     chatStore.getState().markAsRead(cid)
 
@@ -370,14 +333,11 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
   it('does NOT advance the read pointer when the window is slid up into history', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
     chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
       const newEdge = new Map(state.windowAtLiveEdge)
       newEdge.set(cid, false)
-      return { conversationMeta: newMeta, conversations: newConvs, windowAtLiveEdge: newEdge }
+      return { windowAtLiveEdge: newEdge }
     })
 
     chatStore.getState().markAsRead(cid)
@@ -395,13 +355,7 @@ describe('chatStore — new-message divider is session-only', () => {
     // m1 outgoing-read baseline, then two incoming unread messages.
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
     seedMessages(cid, messages)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
 
     chatStore.getState().setActiveConversation(cid)
 
@@ -418,16 +372,9 @@ describe('chatStore — new-message divider is session-only', () => {
 
     // Seed conversation A with one read message and one unread message.
     seedMessages(cidA, [msg('a1', 'sa1'), msg('a2', 'sa2')])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cidA, { unreadCount: 1, readPointer: pointerAt('a1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cidA, { id: cidA, name: cidA, type: 'chat', unreadCount: 1, readPointer: pointerAt('a1') })
-      // Seed conversation B with no unread so its activation sets no marker.
-      newMeta.set(cidB, { unreadCount: 0 })
-      newConvs.set(cidB, { id: cidB, name: cidB, type: 'chat', unreadCount: 0 })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cidA, { unreadCount: 1, readPointer: pointerAt('a1') })
+    // Seed conversation B with no unread so its activation sets no marker.
+    seedConversation(cidB, { unreadCount: 0 })
     seedMessages(cidB, [msg('b1', 'sb1')])
 
     // Activate A — should park the divider at a2.
@@ -444,13 +391,7 @@ describe('chatStore — new-message divider is session-only', () => {
   it('never writes the divider to persisted storage', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 1, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 1, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 1, readPointer: pointerAt('m1') })
     chatStore.getState().setActiveConversation(cid)
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
 
@@ -477,14 +418,11 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
 
     // Post-activation state: local read stale at m2, divider parked at m3 (first unread),
     // conversation is the active one. No pending marker yet (seed hasn't landed).
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
     chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2') })
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.set(cid, 'm3')
-      return { conversationMeta: newMeta, conversations: newConvs, firstNewMessageMarkers: newMarkers, activeConversationId: cid }
+      return { firstNewMessageMarkers: newMarkers, activeConversationId: cid }
     })
 
     // The MDS seed lands late: the other device had read to s4 (the last message).
@@ -502,15 +440,12 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
     seedMessages(cid, messages)
 
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
     chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2') })
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.set(cid, 'm3')
       // Some OTHER conversation is active, not cid.
-      return { conversationMeta: newMeta, conversations: newConvs, firstNewMessageMarkers: newMarkers, activeConversationId: 'romeo@montague.example' }
+      return { firstNewMessageMarkers: newMarkers, activeConversationId: 'romeo@montague.example' }
     })
 
     chatStore.getState().applyRemoteDisplayed(cid, 's4')
@@ -533,13 +468,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
 
     // Local read is stale at m2; a remote device read up to s4, seeded as pending
     // before the messages were loaded (the fresh-session MDS seed ordering).
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
 
     await chatStore.getState().activateConversation(cid)
 
@@ -560,13 +489,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, messages)
 
     // First open: local read stale at m2, a remote device read up to s3 (pending) → folds to m3.
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
 
     await chatStore.getState().activateConversation(cid)
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
@@ -600,13 +523,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     seedMessages(cid, messages)
 
     // First open: local read stale at m2, a remote device read up to s3 (pending) → folds to m3.
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's3' })
 
     await chatStore.getState().activateConversation(cid)
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
@@ -635,13 +552,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     const early = [timed('m1', 's1', 1), timed('m2', 's2', 2)]
     seedMessages(cid, early)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
 
     await chatStore.getState().activateConversation(cid)
     // Unresolvable → stash survives, pointer untouched.
@@ -670,13 +581,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const latest = [timed('m10', 's10', 10), timed('m11', 's11', 11), timed('m12', 's12', 12)]
     // Resident window = latest slice; the read pointer (m2) is deeper than it.
     seedMessages(cid, latest)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's5' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's5' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's5' })
     // The IndexedDB slice around the stale pointer contains the marker's message (m5).
     const aroundSlice = [
       timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3),
@@ -702,13 +607,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     const messages = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4)]
     seedMessages(cid, messages)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
 
     await chatStore.getState().activateConversation(cid)
 
@@ -728,13 +627,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     seedMessages(cid, [timed('m1', 's1', 1), timed('m2', 's2', 2)])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1') })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
 
     await chatStore.getState().activateConversation(cid)
 
@@ -763,13 +656,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
     const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m5', 's5', 5)]
     seedMessages(cid, loaded)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
 
     await chatStore.getState().activateConversation(cid)
     // Provisional divider from the stale local pointer (m2 → m3).
@@ -792,13 +679,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3)]
     seedMessages(cid, loaded)
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
 
     await chatStore.getState().activateConversation(cid)
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
@@ -830,13 +711,7 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
 
   /** Register the conversation with NO read state at all (fresh instance). */
   function seedFreshConversation(): void {
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0 })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0 })
   }
 
   const archive = () => Array.from({ length: 10 }, (_, i) => msg(`m${i + 1}`, `s${i + 1}`))
@@ -888,13 +763,7 @@ describe('chatStore.advanceReadPointer presence gate', () => {
 
   function seedWithPointer(seenMessageId: string): void {
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
-    chatStore.setState((state) => {
-      const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0, readPointer: pointerAt(seenMessageId) })
-      const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer: pointerAt(seenMessageId) })
-      return { conversationMeta: newMeta, conversations: newConvs }
-    })
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt(seenMessageId) })
   }
 
   it('advances the read pointer when the window is focused', () => {

@@ -722,7 +722,7 @@ export const MessageBubble = memo(function MessageBubble({
               an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
               protocol no registered plugin handles (e.g. OMEMO). */}
           {message.encryptedPayload ? (
-            <EncryptedPlaceholder />
+            <EncryptedPlaceholder reason={message.securityContext?.failureReason} />
           ) : message.unsupportedEncryption ? (
             <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
           ) : (

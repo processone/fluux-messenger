@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Това съобщение не можа да бъде дешифрирано",
             "encryptedDecrypting": "Шифровано съобщение, дешифриране…",
             "encryptedDisabled": "Криптирането е изключено. Активирайте го в настройките",
-            "couldNotDecryptTooltip": "Съобщението е криптирано с ключ, който не е достъпен на това устройство",
             "unsupportedMethodTooltip": "Шифровано с {{method}}, метод, който това устройство все още не поддържа",
             "unsupportedMessage": "Шифровано съобщение: {{method}} не се поддържа",
             "unsupportedMessageGeneric": "Шифровано съобщение: методът не се поддържа",
@@ -559,7 +558,10 @@
                     "untrusted": "непроверено",
                     "rejected": "ОТХВЪРЛЕНО: невалиден подпис"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Шифровано с ключ, който това устройство няма",
+            "couldNotDecryptSignature": "Съобщението не беше показано, защото подписът му не можа да бъде доверен",
+            "couldNotDecryptUnreadable": "Съобщението не можа да бъде прочетено"
         },
         "verifyPeer": {
             "chipAriaLabel": "Шифровано до {{name}}. Щракнете, за да проверите отпечатъка",

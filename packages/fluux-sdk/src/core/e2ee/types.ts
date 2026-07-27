@@ -116,6 +116,26 @@ export interface EncryptedPayload {
 }
 
 /** Per-message security context surfaced in the UI. */
+/**
+ * Why a message could not be shown, bucketed for display.
+ *
+ * Deliberately coarse: the user needs to know whether this is about a key they
+ * do not have, a message that failed authentication, or a message that could
+ * not be parsed. The precise `E2EEPluginError.code` goes to the diagnostic log
+ * instead of the bubble.
+ *
+ * See #1059, where one fixed "encrypted to a key not available on this device"
+ * string was rendered for every rejection and sent triage down the wrong path
+ * for three rounds by asserting a cause it had not established.
+ */
+export type DecryptFailureReason =
+  /** No session key for us. The only case that is really about a missing key. */
+  | 'key-unavailable'
+  /** Decrypted, but the signature was absent or did not hold up. */
+  | 'signature-invalid'
+  /** Malformed, reflected, stale envelope, or a session needing repair. */
+  | 'unreadable'
+
 export interface SecurityContext {
   protocolId: string
   /**
@@ -129,6 +149,12 @@ export interface SecurityContext {
   trust: 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'rejected'
   /** Optional free-form notes (e.g. "subkey 3 days old"). */
   notes?: string[]
+  /**
+   * Set only when the message could not be shown. Lets the host render a
+   * reason that is true rather than one fixed string.
+   * See {@link DecryptFailureReason}.
+   */
+  failureReason?: DecryptFailureReason
   /**
    * Fingerprint of the key that signed this message, when the protocol exposes
    * one (OpenPGP). The host stashes it onto the message's

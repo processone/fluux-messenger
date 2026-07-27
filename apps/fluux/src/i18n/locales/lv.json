@@ -536,7 +536,6 @@
             "encryptedCouldNotDecrypt": "Šo ziņojumu nevarēja atšifrēt",
             "encryptedDecrypting": "Šifrēta ziņa, atšifrēšana…",
             "encryptedDisabled": "Šifrēšana ir izslēgta. Ieslēdziet to iestatījumos",
-            "couldNotDecryptTooltip": "Ziņojums šifrēts ar atslēgu, kas šajā ierīcē nav pieejama",
             "unsupportedMethodTooltip": "Šifrēts ar {{method}}, šī metode šajā ierīcē vēl netiek atbalstīta",
             "unsupportedMessage": "Šifrēts ziņojums: {{method}} netiek atbalstīts",
             "unsupportedMessageGeneric": "Šifrēts ziņojums: metode netiek atbalstīta",
@@ -562,7 +561,10 @@
                     "untrusted": "nepārbaudīts",
                     "rejected": "NORAIDĪTS: nederīgs paraksts"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Šifrēts ar atslēgu, kuras šai ierīcei nav",
+            "couldNotDecryptSignature": "Šis ziņojums netika parādīts, jo tā parakstam nevarēja uzticēties",
+            "couldNotDecryptUnreadable": "Šo ziņojumu neizdevās izlasīt"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrēts {{name}}. Noklikšķiniet, lai pārbaudītu pirkstu nospiedumu",

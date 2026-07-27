@@ -538,7 +538,6 @@
             "encryptedCouldNotDecrypt": "Túto správu sa nepodarilo dešifrovať",
             "encryptedDecrypting": "Šifrovaná správa, dešifrovanie…",
             "encryptedDisabled": "Šifrovanie je vypnuté. Zapnite ho v nastaveniach",
-            "couldNotDecryptTooltip": "Správa je zašifrovaná pre kľúč, ktorý nie je v tomto zariadení k dispozícii",
             "unsupportedMethodTooltip": "Šifrované pomocou {{method}}, metóda, ktorú toto zariadenie zatiaľ nepodporuje",
             "unsupportedMessage": "Šifrovaná správa: {{method}} nie je podporovaný",
             "unsupportedMessageGeneric": "Šifrovaná správa: metóda nie je podporovaná",
@@ -564,7 +563,10 @@
                     "untrusted": "neoverené",
                     "rejected": "ZAMIETNUTÉ: neplatný podpis"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Zašifrované kľúčom, ktorý toto zariadenie nemá",
+            "couldNotDecryptSignature": "Táto správa sa nezobrazila, pretože jej podpisu nebolo možné dôverovať",
+            "couldNotDecryptUnreadable": "Túto správu sa nepodarilo prečítať"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrované pre {{name}}. Kliknutím overíte odtlačok",

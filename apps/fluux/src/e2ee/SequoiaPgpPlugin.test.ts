@@ -493,6 +493,29 @@ function findChild(parent: XMLElementData, name: string): XMLElementData | undef
   )
 }
 
+/** Fingerprint standing in for another client of the SAME account. */
+const SIBLING_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
+
+/** Build one `<pubkey-metadata/>` entry for a `<public-keys-list/>`. */
+function pubkeyMetadata(fingerprint: string, date: string): XMLElementData {
+  return { name: 'pubkey-metadata', attrs: { 'v4-fingerprint': fingerprint, date }, children: [] }
+}
+
+/**
+ * Fingerprints advertised by the LAST metadata publish in `published`.
+ * Returns `null` when no metadata publish happened at all, so a test can
+ * tell "published nothing" apart from "published an empty list".
+ */
+function advertisedFingerprintsIn(
+  published: Array<{ node: string; item: PEPItem }>,
+): string[] | null {
+  const last = published.filter((p) => p.node === METADATA_NODE).at(-1)
+  if (!last) return null
+  return last.item.payload.children
+    .filter((c): c is XMLElementData => typeof c !== 'string' && c.name === 'pubkey-metadata')
+    .map((c) => c.attrs['v4-fingerprint'] ?? c.attrs['v6-fingerprint'])
+}
+
 /**
  * Mock-XMPP factory. The returned `peerPublish(peer, node, item)` stores
  * a PEPItem under a specific (jid, node) pair, letting tests simulate the
@@ -695,6 +718,41 @@ describe('SequoiaPgpPlugin', () => {
       // Only the metadata node would be reached if we hadn't short-
       // circuited; with the ordering guard, published stays empty.
       expect(published).toHaveLength(0)
+    })
+
+    it('keeps a sibling device\'s key in the shared public-keys-list (#1059)', async () => {
+      // XEP-0373 §4.2: `<public-keys-list>` enumerates EVERY key the account
+      // advertises, across all its clients. Replacing the whole item with our
+      // single entry deletes sibling clients' keys, and a spec-compliant peer
+      // (Gajim) then marks the missing fingerprint inactive and stops
+      // encrypting to it — so that device can no longer read its own account's
+      // messages. Republish must merge, not clobber.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const ownFp = plugin.getOwnFingerprint()!
+
+      // A sibling client republishes the list with BOTH keys, as the spec
+      // intends. Written through publishPEP because that is what replaces the
+      // single `id: 'current'` item — `peerPublish` appends a second item,
+      // which no real server would hold under `maxItems: 1`.
+      await ctx.xmpp.publishPEP(METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            pubkeyMetadata(ownFp, '2024-01-01T00:00:00Z'),
+            pubkeyMetadata(SIBLING_FP, '2024-01-02T00:00:00Z'),
+          ],
+        },
+      })
+
+      published.length = 0
+      await plugin.ensureIdentity()
+
+      expect(advertisedFingerprintsIn(published)).toEqual(
+        expect.arrayContaining([ownFp, SIBLING_FP]),
+      )
     })
 
     it('is idempotent across calls for the same account', async () => {
@@ -2689,6 +2747,54 @@ describe('SequoiaPgpPlugin', () => {
       // Unused to silence "published is declared but never read" from the
       // device A context.
       void publishedA
+    })
+
+    it('restore keeps a sibling key but retires the key it replaced (#1059)', async () => {
+      // The two halves of the merge, in one flow: restoring an identity must
+      // drop the ephemeral key this device just generated (peers must stop
+      // encrypting to a secret we discarded) WITHOUT taking the sibling
+      // client's entry down with it.
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      const restoredFp = plugin.getOwnFingerprint()!
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      const ephemeralFp = pluginB.getOwnFingerprint()!
+      expect(ephemeralFp).not.toBe(restoredFp)
+
+      await ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: OX_NS },
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
+        },
+      })
+      // A sibling client is listed alongside device B's ephemeral key.
+      await ctxB.xmpp.publishPEP(METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            pubkeyMetadata(ephemeralFp, '2024-01-01T00:00:00Z'),
+            pubkeyMetadata(SIBLING_FP, '2024-01-02T00:00:00Z'),
+          ],
+        },
+      })
+
+      publishedB.length = 0
+      await pluginB.restoreSecretKey('shared-pp')
+
+      const advertised = advertisedFingerprintsIn(publishedB)
+      expect(advertised).toContain(restoredFp)
+      expect(advertised).toContain(SIBLING_FP)
+      expect(advertised).not.toContain(ephemeralFp)
     })
 
     it('opens a legacy-normalized backup with the displayed code and heals it (#1021)', async () => {

@@ -1,9 +1,9 @@
 /**
  * @vitest-environment jsdom
  *
- * Sliding window: the load-newer scroll trigger. When the resident window is slid up
- * (windowAtLiveEdge === false), scrolling back down to the resident bottom must fetch the
- * next-newer cache slice; at the live edge the trigger is inert (bottom-stick unchanged).
+ * Sliding window: authoritative live-edge entry recenters immediately when the resident window is
+ * slid up. The older scroll trigger still fetches the next-newer cache slice after a reader moves
+ * back down to the resident bottom; at the global live edge it remains inert.
  */
 import React from 'react'
 import { render, act } from '@testing-library/react'
@@ -89,8 +89,9 @@ describe('useMessageListScroll load-newer trigger', () => {
   it('fires onLoadNewer when scrolled to the resident bottom of a slid-up window', () => {
     const onLoadNewer = vi.fn()
     const h = mount({ onLoadNewer, windowAtLiveEdge: false, initialScrollTop: 0 })
+    expect(onLoadNewer).toHaveBeenCalledTimes(1) // live-edge entry recenter
     scrollAt(h, 500) // distFromBottom 0
-    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
   })
 
   it('does NOT fire at the live edge (windowAtLiveEdge true) — bottom-stick territory', () => {
@@ -117,7 +118,8 @@ describe('useMessageListScroll load-newer trigger', () => {
   it('does NOT fire when the reader is not near the resident bottom', () => {
     const onLoadNewer = vi.fn()
     const h = mount({ onLoadNewer, windowAtLiveEdge: false, initialScrollTop: 0 })
+    expect(onLoadNewer).toHaveBeenCalledTimes(1) // live-edge entry recenter
     scrollAt(h, 100) // distFromBottom 400
-    expect(onLoadNewer).not.toHaveBeenCalled()
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
   })
 })

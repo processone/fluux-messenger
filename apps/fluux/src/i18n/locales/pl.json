@@ -539,7 +539,6 @@
             "encryptedCouldNotDecrypt": "Nie udało się odszyfrować tej wiadomości",
             "encryptedDecrypting": "Wiadomość zaszyfrowana, odszyfrowywanie…",
             "encryptedDisabled": "Szyfrowanie wyłączone. Włącz je w ustawieniach",
-            "couldNotDecryptTooltip": "Wiadomość zaszyfrowana kluczem niedostępnym na tym urządzeniu",
             "unsupportedMethodTooltip": "Zaszyfrowano metodą {{method}}, ta metoda nie jest jeszcze obsługiwana na tym urządzeniu",
             "unsupportedMessage": "Wiadomość zaszyfrowana: {{method}} nie jest obsługiwane",
             "unsupportedMessageGeneric": "Wiadomość zaszyfrowana: metoda nie jest obsługiwana",
@@ -565,7 +564,10 @@
                     "untrusted": "niezweryfikowane",
                     "rejected": "ODRZUCONO: nieprawidłowy podpis"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Zaszyfrowano kluczem, którego to urządzenie nie posiada",
+            "couldNotDecryptSignature": "Ta wiadomość nie została wyświetlona, ponieważ nie można było zaufać jej podpisowi",
+            "couldNotDecryptUnreadable": "Nie udało się odczytać tej wiadomości"
         },
         "verifyPeer": {
             "chipAriaLabel": "Szyfrowane do {{name}}. Kliknij, aby zweryfikować odcisk klucza",

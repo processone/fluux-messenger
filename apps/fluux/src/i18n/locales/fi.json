@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Tämän viestin salausta ei voitu purkaa",
             "encryptedDecrypting": "Salattu viesti, puretaan salausta…",
             "encryptedDisabled": "Salaus poistettu käytöstä. Ota se käyttöön asetuksissa",
-            "couldNotDecryptTooltip": "Viesti on salattu avaimelle, jota ei ole saatavilla tässä laitteessa",
             "unsupportedMethodTooltip": "Salattu menetelmällä {{method}}, tätä menetelmää tämä laite ei vielä tue",
             "unsupportedMessage": "Salattu viesti: {{method}} ei tueta",
             "unsupportedMessageGeneric": "Salattu viesti: menetelmää ei tueta",
@@ -559,7 +558,10 @@
                     "untrusted": "vahvistamaton",
                     "rejected": "HYLÄTTY: virheellinen allekirjoitus"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Salattu avaimella, jota tällä laitteella ei ole",
+            "couldNotDecryptSignature": "Viestiä ei näytetty, koska sen allekirjoitukseen ei voitu luottaa",
+            "couldNotDecryptUnreadable": "Viestiä ei voitu lukea"
         },
         "verifyPeer": {
             "chipAriaLabel": "Salattu vastaanottajalle {{name}}. Napsauta vahvistaaksesi sormenjäljen",

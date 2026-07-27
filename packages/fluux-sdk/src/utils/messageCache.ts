@@ -643,6 +643,35 @@ export interface GetMessagesOptions {
 }
 
 /**
+ * Key range over a `[entityId, timestamp]` compound index, pinned to one entity.
+ *
+ * BOTH ends must name the entity. A half-open range (`upperBound([id, t])` /
+ * `lowerBound([id, t])`) bounds only the timestamp: everything belonging to
+ * entities sorting before (resp. after) `id` is still inside it. The read loops
+ * skip foreign rows but cannot STOP on them — `results.length < limit` never
+ * trips once the walk has left the entity, and an unlimited read has no stop
+ * condition at all — so the cursor walks the rest of the store, one awaited
+ * `continue()` per row. On the activation path (`getMessagesAround` issues one
+ * range of each shape) that turns a ~150-row read into a full-archive scan.
+ *
+ * Bounds carry the caller's exclusivity: `before` is an exclusive upper bound,
+ * `after` an exclusive lower bound. The open end takes the same 0 /
+ * MAX_SAFE_INTEGER sentinels the unfiltered range already uses.
+ */
+function entityTimestampRange(
+  entityId: string,
+  before?: Date,
+  after?: Date
+): IDBKeyRange {
+  return IDBKeyRange.bound(
+    [entityId, after ? after.getTime() : 0],
+    [entityId, before ? before.getTime() : Number.MAX_SAFE_INTEGER],
+    !!after, // exclude the lower bound only when the caller gave one
+    !!before // ...same for the upper
+  )
+}
+
+/**
  * Get messages for a conversation with optional pagination.
  * Messages are returned in chronological order (oldest first).
  */
@@ -658,26 +687,9 @@ export async function getMessages(
     const tx = db.transaction(MESSAGES_STORE, 'readonly')
     const index = tx.store.index('conv_timestamp')
 
-    // Build key range based on options
-    let range: IDBKeyRange | undefined
-    if (before && after) {
-      range = IDBKeyRange.bound(
-        [conversationId, after.getTime()],
-        [conversationId, before.getTime()],
-        true, // exclude lower bound
-        true // exclude upper bound
-      )
-    } else if (before) {
-      range = IDBKeyRange.upperBound([conversationId, before.getTime()], true)
-    } else if (after) {
-      range = IDBKeyRange.lowerBound([conversationId, after.getTime()], true)
-    } else {
-      // All messages for this conversation
-      range = IDBKeyRange.bound(
-        [conversationId, 0],
-        [conversationId, Number.MAX_SAFE_INTEGER]
-      )
-    }
+    // Key range: always pinned to this conversation at BOTH ends, whichever
+    // subset of before/after the caller gave (see entityTimestampRange).
+    const range = entityTimestampRange(conversationId, before, after)
 
     const results: Message[] = []
 
@@ -1068,22 +1080,8 @@ export async function getRoomMessages(
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
     const index = tx.store.index('room_timestamp')
 
-    // Build key range
-    let range: IDBKeyRange | undefined
-    if (before && after) {
-      range = IDBKeyRange.bound(
-        [roomJid, after.getTime()],
-        [roomJid, before.getTime()],
-        true,
-        true
-      )
-    } else if (before) {
-      range = IDBKeyRange.upperBound([roomJid, before.getTime()], true)
-    } else if (after) {
-      range = IDBKeyRange.lowerBound([roomJid, after.getTime()], true)
-    } else {
-      range = IDBKeyRange.bound([roomJid, 0], [roomJid, Number.MAX_SAFE_INTEGER])
-    }
+    // Key range: pinned to this room at both ends (see entityTimestampRange).
+    const range = entityTimestampRange(roomJid, before, after)
 
     const results: RoomMessage[] = []
 

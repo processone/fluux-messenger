@@ -176,7 +176,14 @@ export type PositionRequest =
         kind: 'fallback'
         reason: 'saved-position-unavailable'
       },
-      LiveEdgePosition | LegacyOffsetPosition
+      LiveEdgePosition
+    >
+  | Request<
+      {
+        kind: 'fallback'
+        reason: 'saved-position-unavailable'
+      },
+      LegacyOffsetPosition
     >
   | Request<
       {
@@ -217,6 +224,21 @@ export type UnreadMarkerFallbackRequest = Extract<
   }
 >
 
+export type LiveEdgeRequest = Extract<
+  PositionRequest,
+  { desired: LiveEdgePosition }
+>
+
+export type MediaPreservationRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'media-preservation'; reason: 'remeasure' } }
+>
+
+export type DirectionalHistoryRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'history-preservation'; reason: 'window-shift' } }
+>
+
 export type PositionRequestSource = PositionRequest['source']
 
 /**
@@ -230,7 +252,12 @@ export type PositioningPhase =
   | { kind: 'resolving' }
   | {
       kind: 'pending'
-      reason: 'empty-window' | 'around-load' | 'live-edge-recenter' | 'target-not-indexed'
+      reason:
+        | 'empty-window'
+        | 'around-load'
+        | 'live-edge-recenter'
+        | 'target-not-indexed'
+        | 'window-shift'
     }
   | { kind: 'loading-around'; messageId: string }
   | { kind: 'recentering-live-edge' }

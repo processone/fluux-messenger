@@ -1401,3 +1401,169 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
     expect(around.some((m) => m.timestamp.getTime() === 1000)).toBe(true)
   })
 })
+
+/**
+ * Cursor-range scoping.
+ *
+ * `conv_timestamp` / `room_timestamp` are COMPOUND indexes keyed
+ * `[entityId, timestamp]`. A half-open range over a compound key is only
+ * half-scoped: `upperBound([id, t])` admits every row of every entity sorting
+ * BEFORE `id`, and `lowerBound([id, t])` admits every row of every entity
+ * sorting AFTER it. The read loop skips foreign rows but cannot stop on them —
+ * `results.length < limit` never trips once the walk has left the entity — so
+ * the cursor walks the rest of the store, one awaited `continue()` per row.
+ * That is the conversation-activation stall: `getMessagesAround` issues exactly
+ * these two shapes, and returning ~150 rows costs a scan of the whole archive.
+ *
+ * The returned ROWS are correct either way (the loop skips foreign rows), so
+ * asserting on them cannot catch this. These tests assert on the key range
+ * handed to `openCursor`: an unscoped range is one missing a bound, or one
+ * whose bounds straddle two different entity ids.
+ */
+describe('cursor ranges stay scoped to one entity', () => {
+  const FIRST = 'aaa@example.com'
+  const MIDDLE = 'mmm@example.com'
+  const LAST = 'zzz@example.com'
+  const PER = 200
+  const BASE = Date.UTC(2026, 0, 1)
+  const ANCHOR = 100
+
+  let ranges: IDBKeyRange[] = []
+  let realOpenCursor: typeof IDBIndex.prototype.openCursor
+  let scope = 0
+
+  beforeEach(() => {
+    // A distinct account scope per test = a distinct database name, so no test
+    // can read another's rows however the shared connection cache behaves.
+    _resetStorageScopeForTesting()
+    globalThis.indexedDB = new IDBFactory()
+    ;(messageCache as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
+    setStorageScopeJid(`scope${scope++}@example.com`)
+
+    ranges = []
+    realOpenCursor = IDBIndex.prototype.openCursor
+    IDBIndex.prototype.openCursor = function (
+      this: IDBIndex,
+      query?: IDBValidKey | IDBKeyRange | null,
+      direction?: IDBCursorDirection,
+    ) {
+      if (query && typeof query === 'object' && 'lower' in query) ranges.push(query as IDBKeyRange)
+      else ranges.push({ lower: undefined, upper: undefined } as unknown as IDBKeyRange)
+      return realOpenCursor.call(this, query, direction)
+    }
+  })
+
+  afterEach(() => {
+    IDBIndex.prototype.openCursor = realOpenCursor
+  })
+
+  /**
+   * The range must pin BOTH ends to `entityId`. A bound that is absent, or that
+   * names a different entity, lets the cursor walk out of the entity's rows.
+   */
+  function expectScopedTo(range: IDBKeyRange | undefined, entityId: string): void {
+    expect(range).toBeDefined()
+    expect(Array.isArray(range!.lower)).toBe(true)
+    expect(Array.isArray(range!.upper)).toBe(true)
+    expect((range!.lower as unknown[])[0]).toBe(entityId)
+    expect((range!.upper as unknown[])[0]).toBe(entityId)
+  }
+
+  /** Seed and CONFIRM the rows landed — a silent seeding failure would make
+   *  the assertions below pass vacuously. */
+  async function seedChats(): Promise<void> {
+    for (const id of [FIRST, MIDDLE, LAST]) {
+      await messageCache.saveMessages(
+        Array.from({ length: PER }, (_, i) =>
+          createMockMessage(id, { id: `${id}-${i}`, timestamp: new Date(BASE + i * 60_000) })
+        )
+      )
+    }
+    for (const id of [FIRST, MIDDLE, LAST]) {
+      expect(await messageCache.getMessageCount(id)).toBe(PER)
+    }
+  }
+
+  async function seedRooms(): Promise<void> {
+    for (const jid of [FIRST, MIDDLE, LAST]) {
+      await messageCache.saveRoomMessages(
+        Array.from({ length: PER }, (_, i) =>
+          createMockRoomMessage(jid, { id: `${jid}-${i}`, timestamp: new Date(BASE + i * 60_000) })
+        )
+      )
+    }
+    for (const jid of [FIRST, MIDDLE, LAST]) {
+      expect(await messageCache.getRoomMessageCount(jid)).toBe(PER)
+    }
+  }
+
+  it('scopes an `after`-only read to the conversation', async () => {
+    await seedChats()
+
+    // The uncapped tail read `getMessagesAround` issues — so the read
+    // `activateConversation` issues whenever the read pointer sits below the
+    // latest-100 slice. FIRST sorts before every other conversation, so an
+    // unscoped lowerBound walk crosses all 400 of their rows.
+    ranges = []
+    const tail = await messageCache.getMessages(FIRST, {
+      after: new Date(BASE + ANCHOR * 60_000),
+    })
+
+    expect(tail).toHaveLength(PER - ANCHOR - 1)
+    expect(tail.every((m) => m.conversationId === FIRST)).toBe(true)
+    expectScopedTo(ranges[0], FIRST)
+  })
+
+  it('scopes a `before`-limited read to the conversation', async () => {
+    await seedChats()
+
+    // A limit the conversation cannot fill: only 10 rows sit at or before the
+    // cutoff, so the walk never satisfies `results.length < limit` and — with an
+    // unscoped upperBound — keeps descending through the 400 earlier-sorting rows.
+    ranges = []
+    const head = await messageCache.getMessages(LAST, {
+      before: new Date(BASE + 10 * 60_000),
+      limit: 51,
+    })
+
+    expect(head).toHaveLength(10)
+    expect(head.every((m) => m.conversationId === LAST)).toBe(true)
+    expectScopedTo(ranges[0], LAST)
+  })
+
+  it('scopes room reads the same way (room_timestamp is compound too)', async () => {
+    await seedRooms()
+
+    ranges = []
+    const tail = await messageCache.getRoomMessages(FIRST, {
+      after: new Date(BASE + ANCHOR * 60_000),
+    })
+    expect(tail).toHaveLength(PER - ANCHOR - 1)
+    expect(tail.every((m) => m.roomJid === FIRST)).toBe(true)
+    expectScopedTo(ranges[0], FIRST)
+
+    ranges = []
+    const head = await messageCache.getRoomMessages(LAST, {
+      before: new Date(BASE + 10 * 60_000),
+      limit: 51,
+    })
+    expect(head).toHaveLength(10)
+    expect(head.every((m) => m.roomJid === LAST)).toBe(true)
+    expectScopedTo(ranges[0], LAST)
+  })
+
+  it('leaves the already-scoped read shapes alone', async () => {
+    await seedChats()
+
+    ranges = []
+    await messageCache.getMessages(FIRST, { limit: 100, latest: true })
+    expectScopedTo(ranges[0], FIRST)
+
+    ranges = []
+    await messageCache.getMessages(FIRST, {
+      after: new Date(BASE),
+      before: new Date(BASE + 10 * 60_000),
+    })
+    expectScopedTo(ranges[0], FIRST)
+  })
+})

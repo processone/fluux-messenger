@@ -269,33 +269,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Composer handle ref for focusing after staging attachment
   const composerHandleRef = useRef<MessageComposerHandle>(null)
 
-  // Scroll to bottom (used after sending a message)
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
-    }
-  }, [])
-
-  // Scroll to bottom when media loads (images, videos, link previews)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      // Use instant scroll to avoid jarring animation when content expands
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
-
-  // Scroll to bottom when composer resizes (typing long message)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
-
   // Keyboard navigation for message selection
   const {
     selectedMessageId,
@@ -613,7 +586,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
-            onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
             onLoadAround={loadMessagesAround}
             isLoadingOlder={activeMAMState?.isLoading}
@@ -653,8 +625,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             sendWhisperChatState={sendWhisperChatState}
             sendEasterEgg={sendEasterEgg}
             sendPoll={sendPoll}
-            onMessageSent={scrollToBottom}
-            onInputResize={handleInputResize}
             replyingTo={replyingTo}
             onCancelReply={handleCancelReply}
             editingMessage={editingMessage}
@@ -901,7 +871,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   onMessageSeen,
   isJoined,
   isDarkMode,
-  onMediaLoad,
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
@@ -951,7 +920,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
-  onMediaLoad?: () => void
   onScrollToTop?: () => void
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
@@ -1091,7 +1059,16 @@ export const RoomMessageList = memo(function RoomMessageList({
     date: format(msg.timestamp, 'yyyy-MM-dd'),
   })
 
-  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
+  // Use the media callback supplied by MessageList. It owns the controller-backed choice between
+  // live-edge re-pin and fixed-anchor preservation; the former RoomView callback bypassed that
+  // arbitration with a raw scrollTop write.
+  const renderMessage = (
+    msg: RoomMessage,
+    idx: number,
+    groupMessages: RoomMessage[],
+    _showNewMarker: boolean,
+    onMediaLoad: () => void,
+  ) => {
     // System notices (e.g. nick changes) render as a centered line, not a bubble.
     if (msg.systemEvent) {
       return <RoomSystemLine event={msg.systemEvent} />
@@ -1715,8 +1692,6 @@ interface RoomMessageInputProps {
   sendWhisperChatState: (roomJid: string, nick: string, state: ChatStateNotification) => Promise<void>
   sendEasterEgg: (roomJid: string, animation: string) => Promise<void>
   sendPoll: (roomJid: string, title: string, options: string[], settings?: Partial<import('@fluux/sdk').PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => Promise<string>
-  onMessageSent?: () => void
-  onInputResize?: () => void
   replyingTo: RoomMessage | null
   onCancelReply: () => void
   editingMessage: RoomMessage | null
@@ -1749,8 +1724,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   sendWhisperChatState,
   sendEasterEgg,
   sendPoll,
-  onMessageSent,
-  onInputResize,
   replyingTo,
   onCancelReply,
   editingMessage,
@@ -1975,7 +1948,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       const messageId = await sendWhisper(roomJid, decision.nick, decision.body)
       onMessageIdSent?.(messageId)
       clearDraft(roomJid)
-      onMessageSent?.()
       setTimeout(() => clearFirstNewMessageId(roomJid), 500)
       return true
     }
@@ -2027,9 +1999,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     if (shouldSendTypingNotifications) {
       void sendChatState(roomJid, 'active')
     }
-
-    // Scroll to bottom to show the sent message
-    onMessageSent?.()
 
     // Clear the "new messages" marker after a short delay (user is actively engaged)
     setTimeout(() => clearFirstNewMessageId(roomJid), 500)
@@ -2315,7 +2284,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
-        onInputResize={onInputResize}
         onSend={handleSend}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}
