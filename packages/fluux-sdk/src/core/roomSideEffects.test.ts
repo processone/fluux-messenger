@@ -46,6 +46,12 @@ import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
 import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => { resolve = r })
+  return { promise, resolve }
+}
+
 describe('setupRoomSideEffects', () => {
   let mockClient: ReturnType<typeof createMockClient>
   let cleanup: () => void
@@ -345,6 +351,147 @@ describe('setupRoomSideEffects', () => {
         expect.anything(),
         expect.anything(),
       )
+      loadSpy.mockRestore()
+    })
+  })
+
+  describe('post-cache eligibility', () => {
+    it('aborts before MAM when the room leaves during cache hydration', async () => {
+      const cache = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockReturnValue(cache.promise)
+
+      confirmRoomJoin()
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+
+      roomStore.getState().setRoomJoined(ROOM, false)
+      cache.resolve([])
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      loadSpy.mockResolvedValue([])
+      roomStore.getState().setRoomJoined(ROOM, true)
+      mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+
+      loadSpy.mockRestore()
+    })
+
+    it('aborts before MAM when the connection drops during cache hydration', async () => {
+      const cache = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockReturnValue(cache.promise)
+
+      confirmRoomJoin()
+
+      connectionStore.getState().setStatus('reconnecting')
+      cache.resolve([])
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      loadSpy.mockRestore()
+    })
+
+    it('aborts before MAM when another room becomes active during cache hydration', async () => {
+      const cache = deferred<[]>()
+      const OTHER = 'other@conference.example.com'
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().addRoom({
+        jid: OTHER,
+        name: 'Other Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockImplementation((roomJid) => {
+        return roomJid === ROOM ? cache.promise : Promise.resolve([])
+      })
+
+      confirmRoomJoin()
+      roomStore.getState().setActiveRoom(OTHER)
+      cache.resolve([])
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalledWith(
+        ROOM,
+        expect.anything(),
+        expect.anything(),
+      )
+
       loadSpy.mockRestore()
     })
   })

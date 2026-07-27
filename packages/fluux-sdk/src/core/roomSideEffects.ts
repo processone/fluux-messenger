@@ -53,6 +53,21 @@ export function setupRoomSideEffects(
     )
   }
 
+  function isRoomFetchStillEligible(roomJid: string): boolean {
+    const state = roomStore.getState()
+    const room = state.rooms.get(roomJid)
+    return !!(
+      room &&
+      state.activeRoomJid === roomJid &&
+      room.joined &&
+      room.supportsMAM &&
+      !room.isQuickChat &&
+      hasConfirmedJoinForCurrentSession(roomJid) &&
+      connectionStore.getState().status === 'online' &&
+      client.isConnected()
+    )
+  }
+
   // Epoch ms of the current fresh session's connection (set on 'online'). Used as
   // the forward catch-up cursor boundary so a live message arriving during catch-up
   // can't poison the cursor and silently skip the offline gap.
@@ -129,6 +144,18 @@ export function setupRoomSideEffects(
       // room.messages may be empty — causing a backward "before:''" query
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+
+      if (!isRoomFetchStillEligible(roomJid)) {
+        fetchInitiated.delete(roomJid)
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+        if (debug) {
+          console.log(
+            '[SideEffects] Room: MAM aborted after cache hydration - room no longer eligible',
+            roomJid,
+          )
+        }
+        return
+      }
 
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
