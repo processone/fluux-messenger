@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 
-**Status:** Design approved; written spec pending review
+**Status:** Approved
 
 **Scope:** `@fluux/sdk` room side effects and focused network-scenario tests
 
@@ -34,17 +34,29 @@ Make confirmed `joined=true` state a hard precondition for the initial MAM
 catch-up of the active room during a fresh session. The successful
 `room:joined` event becomes the primary trigger.
 
+Because the hydrated snapshot also carries `joined=true`, the store flag alone
+cannot distinguish preserved SM state from a join confirmed in the new stream.
+`setupRoomSideEffects` will therefore keep a session-local set of room JIDs
+whose successful `room:joined` event has been observed. A fresh `online` event
+enables this confirmation gate and clears the set. A `resumed` event disables
+the gate because SM preserves membership without new joins.
+
 The `online` handler in `setupRoomSideEffects` will continue to:
 
 - record `sessionStartTime`, preserving the catch-up boundary used to avoid
   skipping an offline gap when live messages arrive during synchronization;
-- clear `fetchInitiated`, so every fresh session can catch up rooms again.
+- clear `fetchInitiated`, so every fresh session can catch up rooms again;
+- clear the session-local confirmed-room set and require a new successful
+  `room:joined` event before room MAM can start.
 
 It will no longer call `fetchMAMForRoom` for the active room.
 
 The existing `room:joined` listener will start the foreground catch-up after
 the MUC module has received self-presence and the store binding has committed
-`joined=true`. Existing guards remain authoritative:
+`joined=true`. Before applying the active-room filter it records the successful
+join in the session-local set, so a room joined in the background remains
+eligible when opened later. A `joined=false` event removes the room from the
+set. Existing guards remain authoritative:
 
 - only the active room is fetched by this listener;
 - Quick Chat rooms are skipped;
@@ -54,8 +66,9 @@ the MUC module has received self-presence and the store binding has committed
 
 The existing `supportsMAM` watcher remains a fallback trigger when room
 capability discovery resolves only after self-presence. It routes through the
-same `fetchMAMForRoom` preconditions and therefore cannot start a query before
-the room is confirmed joined.
+same `fetchMAMForRoom` preconditions, including the session-local confirmation
+gate, and therefore cannot start a query from hydrated `joined=true` state
+before the new stream confirms membership.
 
 After the IndexedDB cache load and immediately before calling
 `catchUpRoomHistory`, `fetchMAMForRoom` will re-read the room and connection
@@ -83,6 +96,9 @@ online
 
 - A successful SM resume continues to trust hydrated MUC membership and does
   not issue a foreground room MAM query for an archive already held locally.
+- The `resumed` handler disables the fresh-session confirmation gate; rooms
+  that genuinely need their first archive after resume retain the existing
+  first-open and late-capability fallback paths.
 - A room first opened after SM resume still fetches its archive when it has
   never been queried and has no resident history.
 - The delayed background room catch-up remains responsible for inactive joined
