@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import type { Message, Conversation } from '../core/types/chat'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import { flush as flushThrottledStorage, _resetForTesting } from './shared/throttledStorage'
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
@@ -99,6 +100,10 @@ function expectRebuildFidelity(label: string): void {
 async function expectSurvivesReload(label: string): Promise<void> {
   const before = new Map(chatStore.getState().conversations)
 
+  // Persisted writes are throttled, so the matrix's last mutations may still be
+  // sitting in a pending thunk. This helper's whole purpose is to observe the
+  // FINAL persisted blob, so force it out before reading.
+  flushThrottledStorage()
   const persisted = localStorageMock._store['xmpp-chat-storage']
   expect(persisted, `nothing persisted at: ${label}`).toBeDefined()
   chatStore.setState({
@@ -123,6 +128,10 @@ describe('conversations compat map stays a pure rebuild of entities + meta', () 
     _resetStorageScopeForTesting()
     localStorageMock.clear()
     chatStore.getState().reset()
+    // `reset()`'s trailing `set(empty)` schedules a write, opening a throttle
+    // window that would coalesce this test's first mutation. Drop it so each
+    // test starts closed and its first write takes the leading edge.
+    _resetForTesting()
     clock = 0
   })
 
