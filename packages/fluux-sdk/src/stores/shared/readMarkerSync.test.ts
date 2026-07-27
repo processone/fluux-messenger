@@ -113,17 +113,18 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('clear-pending')
   })
 
-  it('keeps the marker pending when the local position is outside the slice', () => {
+  it('keeps the marker pending when an off-slice position ties the marker', () => {
     // The fresh-session forward catch-up merges only the newest MAM page: the
     // marker's message is in it, but the message the local pointer names is
     // still on disk. `onMessageSeen` refuses to advance against a pointer it
-    // cannot locate, so nothing was resolved — reading that as "already read"
-    // and clearing the pending mark loses the remote position for good, since
-    // the activation fold (which loads a wide enough slice) then has nothing
-    // left to apply.
+    // cannot locate, and a tied timestamp cannot break it either — MAM archives
+    // routinely put two messages in the same millisecond. Nothing was resolved,
+    // and reading that as "already read" would lose the remote position for
+    // good, since the activation fold (which loads a wide enough slice) would
+    // then have nothing left to apply.
     const offSlicePointer = {
-      messageId: 'older-than-slice',
-      timestamp: new Date('2024-01-15T09:00:00Z'),
+      messageId: 'ties-m3',
+      timestamp: new Date('2024-01-15T10:03:00Z'),
     }
 
     const result = resolveRemoteDisplayed(
@@ -137,13 +138,35 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('stashes rather than reporting unchanged for an off-slice position with nothing pending', () => {
-    // Same unresolvable case reached from a live notify (no pending mark yet):
-    // it must still record the high-water mark so the activation fold retries.
+  it('discards an off-slice marker the local position is provably past', () => {
+    // Local pointer far ahead (m200) and an older remote marker (m20). A slice
+    // holding m20 cannot hold m200, and a load-around m200 cannot reach back to
+    // m20, so no retry will ever contain both — stashing here would leave the
+    // marker pending forever, re-folding on every activation. The timestamps
+    // decide it outright: the marker is behind, so there is nothing to apply.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
+        readPointer: { messageId: 'newer-than-slice', timestamp: new Date('2024-01-15T11:00:00Z') },
+        pendingRemoteDisplayedStanzaId: 'arch-m3',
+      },
+      messages,
+      undefined,
+      'arch-m3',
+      { isActive: false }
+    )
+
+    expect(result.kind).toBe('clear-pending')
+  })
+
+  it('keeps the marker pending when the off-slice position carries the epoch sentinel', () => {
+    // Epoch is the legacy "no read time recorded" value: every real message
+    // beats it, so it cannot decide the comparison and must not be trusted to.
+    const result = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        readPointer: { messageId: 'older-than-slice', timestamp: new Date(0) },
+        pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
       undefined,
@@ -152,6 +175,68 @@ describe('resolveRemoteDisplayed', () => {
     )
 
     expect(result.kind).toBe('stash-pending')
+  })
+
+  it('advances an off-slice position when the marker is provably newer', () => {
+    // Index ordering is undecidable here, but the pointer carries its own
+    // timestamp: a strictly newer marker is unambiguously ahead. Resolving it
+    // now clears the entity's badge at catch-up instead of making the user
+    // open it first.
+    const result = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
+        pendingRemoteDisplayedStanzaId: 'arch-m3',
+      },
+      messages,
+      undefined,
+      'arch-m3',
+      { isActive: false }
+    )
+
+    expect(result).toEqual({
+      kind: 'advanced',
+      readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
+    })
+  })
+
+  it('stashes rather than reporting unchanged for an undecidable position with nothing pending', () => {
+    // Same unresolvable case reached from a live notify (no pending mark yet):
+    // it must still record the high-water mark so the activation fold retries.
+    const result = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        readPointer: { messageId: 'ties-m3', timestamp: new Date('2024-01-15T10:03:00Z') },
+      },
+      messages,
+      undefined,
+      'arch-m3',
+      { isActive: false }
+    )
+
+    expect(result.kind).toBe('stash-pending')
+  })
+
+  it('recomputes the divider when an off-slice position advances in the ACTIVE entity', () => {
+    // The timestamp-decided advance must feed the same divider recompute as the
+    // index-decided one, so entering the entity does not show a stale marker.
+    const result = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
+        pendingRemoteDisplayedStanzaId: 'arch-m1',
+      },
+      messages,
+      'm1',
+      'arch-m1',
+      { isActive: true }
+    )
+
+    expect(result).toEqual({
+      kind: 'advanced-with-divider',
+      readPointer: { messageId: 'm1', timestamp: new Date('2024-01-15T10:01:00Z') },
+      firstNewMessageId: 'm2',
+    })
   })
 })
 
