@@ -61,6 +61,20 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   const match = messages.find((m) => m.stanzaId === stanzaId)
   if (!match) return { kind: 'stash-pending' }
 
+  // `onMessageSeen` orders positions BY INDEX, so it needs BOTH ends in this
+  // slice: it refuses to advance when the message the local pointer names is
+  // absent, because it cannot prove the marker is ahead rather than behind.
+  // That is an undecided comparison, not an "already read" verdict — falling
+  // through would report `unchanged`/`clear-pending` and, on the clear, drop
+  // the remote position for good. It is reachable on every fresh session: the
+  // forward catch-up merges only the newest MAM page, so the marker's message
+  // is in it while the pointer's is still on disk. Stay pending and let a wider
+  // slice (the activation fold) decide.
+  const localPointerId = meta.readPointer?.messageId
+  if (localPointerId !== undefined && !messages.some((m) => m.id === localPointerId)) {
+    return { kind: 'stash-pending' }
+  }
+
   // Forward-only advance using the shared comparator (compares by index).
   const updated = notifState.onMessageSeen(
     {

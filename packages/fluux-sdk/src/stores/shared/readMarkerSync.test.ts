@@ -112,6 +112,47 @@ describe('resolveRemoteDisplayed', () => {
 
     expect(result.kind).toBe('clear-pending')
   })
+
+  it('keeps the marker pending when the local position is outside the slice', () => {
+    // The fresh-session forward catch-up merges only the newest MAM page: the
+    // marker's message is in it, but the message the local pointer names is
+    // still on disk. `onMessageSeen` refuses to advance against a pointer it
+    // cannot locate, so nothing was resolved — reading that as "already read"
+    // and clearing the pending mark loses the remote position for good, since
+    // the activation fold (which loads a wide enough slice) then has nothing
+    // left to apply.
+    const offSlicePointer = {
+      messageId: 'older-than-slice',
+      timestamp: new Date('2024-01-15T09:00:00Z'),
+    }
+
+    const result = resolveRemoteDisplayed(
+      { ...baseMeta, readPointer: offSlicePointer, pendingRemoteDisplayedStanzaId: 'arch-m3' },
+      messages,
+      undefined,
+      'arch-m3',
+      { isActive: false }
+    )
+
+    expect(result.kind).toBe('stash-pending')
+  })
+
+  it('stashes rather than reporting unchanged for an off-slice position with nothing pending', () => {
+    // Same unresolvable case reached from a live notify (no pending mark yet):
+    // it must still record the high-water mark so the activation fold retries.
+    const result = resolveRemoteDisplayed(
+      {
+        ...baseMeta,
+        readPointer: { messageId: 'older-than-slice', timestamp: new Date('2024-01-15T09:00:00Z') },
+      },
+      messages,
+      undefined,
+      'arch-m3',
+      { isActive: false }
+    )
+
+    expect(result.kind).toBe('stash-pending')
+  })
 })
 
 describe('createMdsSessionGate', () => {
