@@ -100,3 +100,29 @@ describe('chatStore persistence throttling', () => {
     expect(raw ?? '').not.toContain('secret2@example.com')
   })
 })
+
+describe('pending retraction durability', () => {
+  // The window MUST be opened first, on this same key. Recording a retraction
+  // into an idle store is hollow: with no window open, the leading edge writes
+  // it anyway and the test passes with flushKey removed.
+  it('persists a retraction that was coalesced into an open window', () => {
+    const id = 'a@example.com'
+    seedConversation(id) // leading edge writes a blob with NO retraction, opens the window
+    localStorageMock.setItem.mockClear()
+
+    chatStore.getState().recordPendingRetraction(id, 'target-msg-1', 'someone@example.com')
+
+    // The hard kill: no timer, no flush, no lifecycle event.
+    const raw = localStorage.getItem(KEY)!
+    expect(raw).toContain('target-msg-1')
+  })
+
+  // Pins the synchronous-setItem assumption. If a zustand upgrade ever defers
+  // the adapter, this fails loudly instead of retractions quietly becoming losable.
+  it('has persisted before recordPendingRetraction returns', () => {
+    const id = 'b@example.com'
+    seedConversation(id)
+    chatStore.getState().recordPendingRetraction(id, 'target-msg-2', 'someone@example.com')
+    expect(localStorage.getItem(KEY)!).toContain('target-msg-2')
+  })
+})

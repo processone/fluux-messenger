@@ -24,7 +24,7 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import { schedule, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -2158,6 +2158,18 @@ export const chatStore = createStore<ChatState>()(
           nextPending.set(conversationId, next)
           return { pendingRetractions: nextPending }
         })
+
+        // A pending retraction is a durable EVENT, not a lagging mirror: it
+        // records a retraction whose target was not resident. Lose it and the
+        // message is never tombstoned — once coverage marks the range covered,
+        // MAM will not re-query it and the retraction never arrives again.
+        //
+        // `flushKey` rather than a re-serialize: the `set` above already drove
+        // the persist adapter (zustand calls `setItem` synchronously inside
+        // `set`), so the blob is either already on disk via the leading edge
+        // or sitting in the pending thunk. This lands the second case and
+        // costs nothing in the first.
+        flushKey(getScopedStorageKey())
       },
 
       getMessage: (conversationId, messageId) => {
