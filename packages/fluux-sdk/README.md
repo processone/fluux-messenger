@@ -168,7 +168,7 @@ The SDK requires the following peer dependencies:
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `react` | ≥18.0.0 | React hooks and provider |
-| `zustand` | ≥4.0.0 | State management |
+| `zustand` | ≥5.0.0 | State management |
 | `xstate` | ≥5.0.0 | Presence state machine |
 | `@xstate/react` | ≥6.0.0 | React bindings for XState |
 
