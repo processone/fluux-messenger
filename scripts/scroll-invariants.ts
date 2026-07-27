@@ -439,6 +439,71 @@ async function activateChat(page: Page, jid: string): Promise<void> {
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
+test.describe('Controller-owned resident-top navigation', () => {
+  test('Home issues one smooth write, then the controller observes it to settlement', async ({
+    page,
+  }) => {
+    const trace: string[] = []
+    page.on('console', (message) => {
+      const text = message.text()
+      if (text.includes('RESIDENT TOP: controller completed')) trace.push(text)
+    })
+
+    await loadDemo(page)
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__fluuxScrollDebug?.(true)
+    })
+    await navigateToStressRoom(page)
+    // Start materially away from resident top without turning this into a deep virtualized-list
+    // animation test. The approved contract deliberately allows a native smooth scroll that a
+    // browser interrupts during deep re-windowing to time out best-effort without a corrective
+    // snap; the controller unit test covers that 120-frame path.
+    await setScrollTop(page, 800)
+    await page.waitForTimeout(300)
+
+    const initialScrollTop = await getScrollTop(page)
+    expect(initialScrollTop, 'precondition: resident window must start below its top').toBeGreaterThan(1)
+
+    await page.evaluate(() => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLDivElement | null
+      if (!scroller) return
+      const nativeScrollTo = scroller.scrollTo.bind(scroller)
+      const writes: ScrollToOptions[] = []
+      ;(
+        window as Window & {
+          __fluuxResidentTopWrites?: ScrollToOptions[]
+        }
+      ).__fluuxResidentTopWrites = writes
+      scroller.scrollTo = ((...args: Parameters<HTMLDivElement['scrollTo']>) => {
+        const first = args[0]
+        if (typeof first === 'object') writes.push({ ...first })
+        return nativeScrollTo(...args)
+      }) as HTMLDivElement['scrollTo']
+    })
+
+    const scroller = page.locator('[data-message-list]').first()
+    await scroller.focus()
+    await page.keyboard.press('Home')
+
+    await expect.poll(() => getScrollTop(page), {
+      timeout: 5000,
+      message: 'Home navigation must reach the resident-window top',
+    }).toBeLessThanOrEqual(1)
+    await expect.poll(() => trace.length, {
+      timeout: 5000,
+      message: `resident-top controller did not settle: ${JSON.stringify(trace)}`,
+    }).toBe(1)
+
+    const writes = await page.evaluate(() => (
+      window as Window & {
+        __fluuxResidentTopWrites?: ScrollToOptions[]
+      }
+    ).__fluuxResidentTopWrites ?? [])
+    expect(writes).toEqual([{ top: 0, behavior: 'smooth' }])
+  })
+})
+
 test.describe('Virtualization scroll invariants', () => {
 
   // ── 1: Prepend holds position ──────────────────────────────────────────────

@@ -56,8 +56,11 @@ Gating is `useIsDesktop()` (≥768px, the `md` breakpoint) **and** `useHasHover(
 keeps the bar hidden on touch devices even when they're wide: a phone in
 landscape (>768px) or a tablet stays bar-less, since its mouse-sized controls
 would be hard to tap and the single-pane touch affordances own navigation
-there. The macOS window can't go below its 800px minimum width and always has a
-fine pointer, so the bar is always present on macOS desktop.
+there. Native desktop windows share a 360px minimum width, so they can cross
+below the 768px breakpoint and use the single-pane layout. The app bar still
+remains present at every width inside Tauri: macOS needs it as the surface
+behind the overlaid traffic lights, while Windows and Linux retain its desktop
+navigation and drag region.
 
 ## Path 2 (future, not implemented)
 

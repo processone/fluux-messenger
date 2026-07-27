@@ -8,6 +8,7 @@ import { useEvents } from './useEvents'
 import { eventsStore, connectionStore, chatStore } from '../stores'
 import { XMPPProvider } from '../provider'
 import { createMockXMPPClientForHooks } from '../core/test-utils'
+import { RoomJoinError } from '../core/errors'
 
 // Mock localStorage for chatStore.reset()
 const localStorageMock = {
@@ -256,6 +257,61 @@ describe('useEvents hook', () => {
         'myuser',
         { password: 'secret123', isQuickChat: false }
       )
+    })
+
+    // Issue #1126: joinRoom() resolves once the presence is SENT. Accepting used
+    // to drop the invitation right there, so a refused join (password-protected
+    // room, members-only, nickname taken) failed silently AND stranded the user
+    // with no invitation left to retry from.
+    it('keeps the invitation and rethrows when the server refuses the join', async () => {
+      const { result } = renderHook(() => useEvents(), { wrapper })
+
+      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      // ...Once: the mock client is shared across tests and vi.clearAllMocks()
+      // keeps implementations, so a persistent rejection would leak into them.
+      mockClient.muc.joinResult.mockRejectedValueOnce(
+        new RoomJoinError('room@conference.example.com', 'not-authorized')
+      )
+
+      act(() => {
+        connectionStore.getState().setJid('myuser@example.com/resource')
+        eventsStore.getState().addMucInvitation('room@conference.example.com', 'alice@example.com')
+      })
+
+      await act(async () => {
+        await expect(
+          result.current.acceptInvitation('room@conference.example.com')
+        ).rejects.toMatchObject({ condition: 'not-authorized' })
+      })
+
+      expect(result.current.mucInvitations).toHaveLength(1)
+    })
+
+    it('retries with a password supplied by the caller, overriding the invitation one', async () => {
+      const { result } = renderHook(() => useEvents(), { wrapper })
+
+      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+
+      act(() => {
+        connectionStore.getState().setJid('myuser@example.com/resource')
+        eventsStore.getState().addMucInvitation(
+          'room@conference.example.com',
+          'alice@example.com',
+          'Private room',
+          'stale-from-invite'
+        )
+      })
+
+      await act(async () => {
+        await result.current.acceptInvitation('room@conference.example.com', 'typed-by-user')
+      })
+
+      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'myuser',
+        { password: 'typed-by-user', isQuickChat: false }
+      )
+      expect(result.current.mucInvitations).toHaveLength(0)
     })
 
     it('should join room with isQuickChat flag from invitation', async () => {

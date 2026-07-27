@@ -13,6 +13,7 @@ import {
   type MediaPreservationFrameResult,
   type PositionExecutionLease,
   type PositionRequestDraft,
+  type ResidentTopExecutor,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
   type SavedPositionFrameResult,
@@ -347,6 +348,203 @@ describe('positioning controller shadow mode', () => {
 
     controller.deactivate(conversationId, current!.generation)
     expect(controller.snapshot().currentConversationId).toBeNull()
+  })
+})
+
+describe('positioning controller resident-top ownership', () => {
+  function residentTopHarness(
+    initialReachability: ReachabilityFacts = {
+      kind: 'available',
+      index: 0,
+      mounted: true,
+      placement: 'viable',
+    },
+  ) {
+    const callbacks: Array<() => void> = []
+    const leases: PositionExecutionLease[] = []
+    const start = vi.fn(() => ({ kind: 'started' as const }))
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const complete = vi.fn()
+    let scrollTop = 640
+    const executor: ResidentTopExecutor = {
+      reachability: () => initialReachability,
+      beginLoop: (lease) => {
+        leases.push(lease)
+        return {
+          schedule: (callback) => callbacks.push(callback),
+          recordFrame,
+          finish,
+        }
+      },
+      start,
+      readScrollTop: () => scrollTop,
+      complete,
+    }
+    return {
+      executor,
+      callbacks,
+      leases,
+      start,
+      finish,
+      recordFrame,
+      complete,
+      setScrollTop: (value: number) => {
+        scrollTop = value
+      },
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback).toBeDefined()
+        callback!()
+      },
+    }
+  }
+
+  it('starts one smooth navigation and only observes until resident top settles', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+
+    expect(request).not.toBeNull()
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().active?.phase).toEqual({
+      kind: 'position-applied',
+    })
+
+    for (const scrollTop of [640, 100, 1, 0]) {
+      harness.setScrollTop(scrollTop)
+      harness.runFrame()
+    }
+
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ desired: { kind: 'resident-top' } }),
+      'settled',
+    )
+    expect(harness.recordFrame).toHaveBeenCalledWith(true)
+    expect(harness.recordFrame).toHaveBeenLastCalledWith(false)
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('cancels resident-top observation on genuine user input', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    controller.observeUserInput(conversationId)
+    staleFrame()
+
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: request!.generation }),
+      'user-takeover',
+    )
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+    expect(controller.snapshot().active).toBeNull()
+    expect(controller.snapshot().watermark).toBe(request!.generation)
+  })
+
+  it('deactivates resident-top before its queued frame can observe the old conversation', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    controller.deactivate(conversationId, request!.generation)
+    staleFrame()
+
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: request!.generation }),
+      'superseded',
+    )
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+    expect(controller.snapshot()).toEqual(
+      expect.objectContaining({
+        currentConversationId: null,
+        active: null,
+        watermark: request!.generation,
+      }),
+    )
+  })
+
+  it('finishes resident-top as superseded before a queued frame can settle it', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    const newer = controller.beginLiveEdgeRequest({
+      conversationId,
+      source: { kind: 'user-navigation', reason: 'live-edge' },
+      executor: inertLiveEdgeExecutor(),
+    })
+    staleFrame()
+
+    expect(newer!.generation).toBeGreaterThan(request!.generation)
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: request!.generation }),
+      'superseded',
+    )
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+    expect(controller.snapshot().watermark).toBe(newer!.generation)
+  })
+
+  it('ends best-effort after 120 observations without restarting the smooth write', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+
+    for (let frame = 0; frame < 120; frame += 1) {
+      harness.setScrollTop(500)
+      harness.runFrame()
+    }
+
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: request!.generation }),
+      'best-effort',
+    )
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('does not retain a resident-top owner for an empty window', () => {
+    const harness = residentTopHarness({ kind: 'empty-window' })
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+
+    expect(request).toBeNull()
+    expect(harness.start).not.toHaveBeenCalled()
+    expect(controller.snapshot().active?.request.desired).toEqual(liveEdge)
   })
 })
 

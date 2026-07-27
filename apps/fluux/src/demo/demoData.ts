@@ -6,7 +6,7 @@
  */
 
 import type { DemoData, DemoAnimationStep } from '@fluux/sdk/demo'
-import { SELF, DOMAIN, CONFERENCE } from './constants'
+import { SELF, DOMAIN, CONFERENCE, BOARD_ROOM_PASSWORD } from './constants'
 import { DEMO_CONTACTS, DEMO_PRESENCES } from './contacts'
 import { getDemoConversations, getDemoMessages } from './conversations'
 import { getDemoRooms } from './rooms'
@@ -23,7 +23,9 @@ export function buildDemoData(): DemoData {
     rooms: getDemoRooms(),
     subscriptionRequests: [`olivia@${DOMAIN}`, `alex@${DOMAIN}`],
     mucInvitations: [
-      { roomJid: `design-team@${CONFERENCE}`, from: `ava@${DOMAIN}`, reason: 'Join us for the redesign kickoff' },
+      // Password-protected, and the invitation carries no password: accepting it
+      // has to ask for one (issue #1126). Same password as the Board room.
+      { roomJid: `design-team@${CONFERENCE}`, from: `ava@${DOMAIN}`, reason: 'Join us for the redesign kickoff', requiredPassword: BOARD_ROOM_PASSWORD },
     ],
     strangerMessages: [
       { from: `recruiter@${DOMAIN}`, body: 'Hi! Are you open to new roles?' },

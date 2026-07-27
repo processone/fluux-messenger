@@ -45,4 +45,55 @@ describe('ModalOverlay Escape handling', () => {
       window.removeEventListener('keydown', windowKeydown)
     }
   })
+
+  // Issue #1126: the room-password prompt opens OVER Browse Rooms, and the
+  // real-JID warning opens over the join modals. Each overlay listens on
+  // document, and stopPropagation does not stop a sibling listener on the same
+  // node — so one Escape used to collapse the whole stack.
+  describe('stacked modals', () => {
+    it('dismisses only the topmost modal', () => {
+      const closeOuter = vi.fn()
+      const closeInner = vi.fn()
+      render(
+        <>
+          <ModalOverlay onClose={closeOuter}>
+            <button type="button">outer</button>
+          </ModalOverlay>
+          <ModalOverlay onClose={closeInner}>
+            <button type="button">inner</button>
+          </ModalOverlay>
+        </>,
+      )
+
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+
+      expect(closeInner).toHaveBeenCalledTimes(1)
+      expect(closeOuter).not.toHaveBeenCalled()
+    })
+
+    it('dismisses the remaining modal once the top one is gone', () => {
+      const closeOuter = vi.fn()
+      const { rerender } = render(
+        <>
+          <ModalOverlay onClose={closeOuter}>
+            <button type="button">outer</button>
+          </ModalOverlay>
+          <ModalOverlay onClose={vi.fn()}>
+            <button type="button">inner</button>
+          </ModalOverlay>
+        </>,
+      )
+
+      rerender(
+        <>
+          <ModalOverlay onClose={closeOuter}>
+            <button type="button">outer</button>
+          </ModalOverlay>
+        </>,
+      )
+      fireEvent.keyDown(document.body, { key: 'Escape' })
+
+      expect(closeOuter).toHaveBeenCalledTimes(1)
+    })
+  })
 })
