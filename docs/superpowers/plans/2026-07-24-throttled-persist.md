@@ -1472,8 +1472,12 @@ shape exactly.
 
 Add the flush spy beside the existing `mockDisconnect` declaration:
 
+`vi.mock` factories are hoisted above `const` declarations, so referencing a plain `const mockFlush`
+inside one throws a TDZ `ReferenceError`. Declare it with `vi.hoisted`, which is what ~15 other test
+files in this repo already do:
+
 ```typescript
-const mockFlush = vi.fn()
+const { mockFlush } = vi.hoisted(() => ({ mockFlush: vi.fn() }))
 
 // Records whether the flush had already run at the moment disconnect fired.
 let flushedAtDisconnect: boolean | null = null
