@@ -38,7 +38,7 @@ function Harness({
     conversationId: 'room@conf.example.com',
     messageCount: 20,
     firstMessageId: 'm-0',
-    reactionsSignature: '',
+    rowGrowthSignature: '',
     lastMessageId: 'm-19',
     onLoadNewer,
     isLoadingNewer,

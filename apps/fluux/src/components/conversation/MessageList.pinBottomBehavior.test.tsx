@@ -116,6 +116,64 @@ describe('MessageList — live-edge executor cost control', () => {
     return { ...view, isAtBottomRef }
   }
 
+  // A link-preview (OGP) fastening lands SECONDS after its message, as an in-place update: same
+  // message id, same message count, no reactions change, and LinkPreviewCard deliberately never
+  // calls onMediaLoad. Under virtualization the content ResizeObserver is disabled too, so nothing
+  // else can notice the growth — the card used to render below the fold and stay there.
+  const linked: BaseMessage = {
+    id: 'linked-1', from: 'me@example.com', body: 'look at https://example.com',
+    timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
+  }
+  const preview = { url: 'https://example.com', title: 'Example', description: 'An example page' }
+
+  function renderWithLinkMessage(isAtBottomRef: { current: boolean }) {
+    const view = render(
+      <MessageList messages={[...makeMessages(50), linked]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70) // settle the entry pin completely
+    scrollToEndCalls.count = 0
+    return { view, scroller }
+  }
+
+  const fastenPreview = (view: { rerender: (ui: React.ReactElement) => void }, isAtBottomRef: { current: boolean }) =>
+    view.rerender(
+      <MessageList messages={[...makeMessages(50), { ...linked, linkPreview: preview }]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+
+  // The card's height reaches the scroller a frame or two AFTER the commit that mounts it: under
+  // virtualization scrollHeight is the @tanstack spacer (getTotalSize()), which only grows once the
+  // row's ResizeObserver has re-measured. So the commit and the growth are two separate steps.
+  const PREVIEW_CARD_PX = 260
+
+  it('re-pins the bottom when a late link-preview fastening grows a resident row', () => {
+    const isAtBottomRef = { current: true }
+    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+
+    fastenPreview(view, isAtBottomRef) // the fastening commits — spacer not grown yet
+    flush(1)
+    geo.scrollHeight += PREVIEW_CARD_PX // the row re-measures; the spacer catches up
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBeGreaterThan(0)
+    expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
+  })
+
+  it('does not yank a scrolled-up reader down when a link-preview fastening lands', () => {
+    const isAtBottomRef = { current: true } // deliberately left latched true — geometry must decide
+    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+
+    scroller.scrollTop = 400 // the reader scrolled up into history
+    fastenPreview(view, isAtBottomRef)
+    flush(1)
+    geo.scrollHeight += PREVIEW_CARD_PX
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBe(0)
+    expect(scroller.scrollTop).toBe(400)
+  })
+
   it('stops the re-assert loop early once geometry is stable (convergence exit)', () => {
     const { rerender, isAtBottomRef } = renderPinned()
 

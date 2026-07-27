@@ -45,6 +45,7 @@ import {
 import { MessageTargetProvider } from './messageTargetContext'
 import { useRowMetrics, ROW_METRICS_FALLBACK } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
+import { computeRowGrowthSignature } from './rowGrowthSignature'
 import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
 import {
   getCachedHeights,
@@ -245,20 +246,15 @@ export function MessageList<T extends BaseMessage>({
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id
   const lastMessage = messages[messages.length - 1]
-  // Signature of every resident message's reactions — changes when a reaction is added/removed
-  // anywhere in the window, which grows/shrinks that row. Cheap: only messages that actually carry
-  // reactions contribute, so the common no-reaction rows cost a bare iteration. Drives an instant
-  // bottom re-pin while the reader is sticked to the bottom, so reaction growth is absorbed above
-  // (previous messages scroll up) instead of shoving the newest message down (see the reactions
-  // effect in useMessageListScroll).
-  const reactionsSignature = useMemo(() => {
-    let sig = ''
-    for (const m of deduplicatedMessages) {
-      const r = m.reactions
-      if (r && Object.keys(r).length > 0) sig += `${m.id}:${JSON.stringify(r)};`
-    }
-    return sig
-  }, [deduplicatedMessages])
+  // Signature of every in-place row-height change across the window — a reaction, a link-preview or
+  // attachment fastening, a correction, a retraction. Drives an instant bottom re-pin while the
+  // reader is sticked to the bottom, so the growth is absorbed above (previous messages scroll up)
+  // instead of shoving the newest message below the fold (see the row-growth effect in
+  // useMessageListScroll).
+  const rowGrowthSignature = useMemo(
+    () => computeRowGrowthSignature(deduplicatedMessages),
+    [deduplicatedMessages],
+  )
 
   // --------------------------------------------------------------------------
   // SCROLL BEHAVIOR (delegated to hook)
@@ -540,7 +536,7 @@ export function MessageList<T extends BaseMessage>({
     isLoadingNewer,
     windowAtLiveEdge,
     isHistoryComplete,
-    reactionsSignature,
+    rowGrowthSignature,
     hasTypingIndicator: typingUsers.length > 0,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId: lastMessage?.id,
