@@ -116,10 +116,11 @@ Each behavior test must have a plausible wrong implementation that would make it
 fail. The single-write test is the control against restarting the smooth
 animation in the frame loop.
 
-Hook tests must prove that Home and Mod+ArrowUp route through the controller,
-preserve `behavior: 'smooth'`, and keep the published callback stable across
-message/window updates. A source-level ownership test must fail against the
-deleted shadow-plus-direct-write shape.
+Hook tests must prove through runtime behavior that Home and Mod+ArrowUp route
+through the controller, preserve `behavior: 'smooth'`, issue exactly one write,
+and keep the published callback stable across message/window updates. These
+tests must fail if the deleted shadow-plus-direct-write path is restored; they
+must not merely grep implementation text.
 
 The Playwright scroll-invariant suite will add a real-engine Home scenario for
 Chromium and WebKit: start away from resident top, invoke Home, observe smooth
