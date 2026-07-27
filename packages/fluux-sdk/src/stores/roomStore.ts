@@ -41,7 +41,8 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
-import { schedule, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -185,7 +186,10 @@ function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
 }
 
 function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
-  schedule(getRoomGapsStorageKey(jid), () => serializeGaps(gaps))
+  // A gap FORMATION must not sit in the throttle window — nothing re-detects
+  // it next session. Shrink/close/removal stays throttled. See durableMapPersist.
+  const key = getRoomGapsStorageKey(jid)
+  scheduleDurableMaps(key, { gaps }, () => serializeGaps(gaps))
 }
 
 /**
@@ -211,7 +215,11 @@ function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecor
 }
 
 function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
-  schedule(getRoomCoverageStorageKey(jid), () => serializeCoverage(coverage))
+  // A record appearing, its `bottomId` changing or the record being dropped
+  // must not sit in the throttle window: the stale one on disk asserts a
+  // contiguity that was just disproven. A `topId`-only refresh stays throttled.
+  const key = getRoomCoverageStorageKey(jid)
+  scheduleDurableMaps(key, { coverage }, () => serializeCoverage(coverage))
 }
 
 /**
@@ -1618,6 +1626,11 @@ export const roomStore = createStore<RoomState>()(
     // loadRoomReadState(A) against a blob predating A's last mutations, and
     // that stale load becomes the live state.
     flushThrottledStorage()
+    // Structural baselines are keyed by resolved storage key, so they cannot be
+    // read across accounts — but they are dropped anyway, and it is free to do
+    // so: the flush above closed every window, so the next write's force-flush
+    // finds no pending thunk and writes nothing extra.
+    forgetAllDurableMapBaselines()
     // In-flight archive-save gates belong to the previous account; their
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
@@ -1651,7 +1664,12 @@ export const roomStore = createStore<RoomState>()(
       getRoomCoverageStorageKey(),
       getRoomNonAnonAckStorageKey(),
     ]) {
-      cancel(key)
+      // `cancelDurableMaps` for every key: it is `cancel` plus the structural
+      // baseline, and the gap/coverage baselines describe exactly the write
+      // being cancelled here. Keeping one would let a formation after a
+      // re-login compare equal to a state that was never persisted and skip
+      // its flush (durableMapPersist). A no-op for the keys that have none.
+      cancelDurableMaps(key)
       localStorage.removeItem(key)
     }
     // Logout forgets read positions for rooms exactly as chatStore.reset()

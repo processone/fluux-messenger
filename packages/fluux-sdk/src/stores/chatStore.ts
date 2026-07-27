@@ -25,7 +25,8 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
-import { schedule, flushKey, cancel, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -2787,6 +2788,11 @@ export const chatStore = createStore<ChatState>()(
         // blob that predates its last mutations, and that stale load becomes
         // the live state.
         flushThrottledStorage()
+        // Structural baselines are keyed by resolved storage key, so they cannot
+        // be read across accounts — but they are dropped anyway, and it is free
+        // to do so: the flush above closed every window, so the next write's
+        // force-flush finds no pending thunk and writes nothing extra.
+        forgetAllDurableMapBaselines()
         clearAllTypingTimeouts()
         // In-flight archive-save gates belong to the previous account; their
         // deferred commits must not land in the new account's maps.
@@ -2809,7 +2815,7 @@ export const chatStore = createStore<ChatState>()(
         // pending thunk with an empty-state one, so nothing leaks — but that is
         // coincidence, not design. Without this, moving or dropping that `set`
         // turns logout into silent data resurrection.
-        cancel(getScopedStorageKey())
+        cancelDurableMaps(getScopedStorageKey())
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())
@@ -2845,15 +2851,26 @@ export const chatStore = createStore<ChatState>()(
           const state = value.state as ChatState
           // Lazy — a coalesced write never pays for serializeState at all.
           // Error absorption lives in the throttle's `write`.
-          schedule(scopedStorageKey, () =>
-            JSON.stringify({ state: serializeState(state, scopedStorageKey) })
+          //
+          // `conversationGaps` and `conversationCoverage` ride in this one blob,
+          // so their structural transitions (a gap FORMED, a coverage record
+          // added/replaced/dropped) force the WHOLE blob out of the window —
+          // acceptable because those transitions are rare, while the merge churn
+          // that motivated the throttle is not one. Detection lives here, at the
+          // single funnel every chat mutation passes through, rather than at the
+          // ~8 gap/coverage mutation sites. See durableMapPersist.
+          scheduleDurableMaps(
+            scopedStorageKey,
+            { gaps: state.conversationGaps, coverage: state.conversationCoverage },
+            () => JSON.stringify({ state: serializeState(state, scopedStorageKey) })
           )
         },
         removeItem: () => {
           const scopedStorageKey = getScopedStorageKey()
           // Before the removal: a write scheduled moments ago would otherwise
-          // fire afterwards and resurrect the blob.
-          cancel(scopedStorageKey)
+          // fire afterwards and resurrect the blob. The structural baseline
+          // describes that cancelled write, so it goes with it.
+          cancelDurableMaps(scopedStorageKey)
           try {
             localStorage.removeItem(scopedStorageKey)
           } catch {

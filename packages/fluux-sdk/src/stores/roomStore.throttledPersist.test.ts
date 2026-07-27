@@ -5,11 +5,18 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 
 import { roomStore } from './roomStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
+import { forgetAllDurableMapBaselines } from './shared/durableMapPersist'
 import { _clearAllRoomReadStateForTesting } from './shared/readStateStorage'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { createRoom, createMessage } from './roomStore.testHelpers'
+import type { RoomMessage } from '../core/types'
+import type { GapInterval } from './shared/mamGap'
+import type { CoverageRecord } from './shared/mamCoverage'
 
 const ROOM = 'room@conference.example.com'
+const ROOM2 = 'room2@conference.example.com'
+const GAPS_KEY = 'fluux-room-gaps'
+const COVERAGE_KEY = 'fluux-room-coverage'
 
 function writeCount(): number {
   return localStorageMock.setItem.mock.calls.length
@@ -22,6 +29,9 @@ beforeEach(() => {
   _resetStorageScopeForTesting()
   roomStore.getState().reset()
   _resetForTesting()
+  // The structural baselines outlive a throttle reset, and a leaked one would
+  // silently turn a later formation into a no-op transition.
+  forgetAllDurableMapBaselines()
   localStorageMock.setItem.mockClear()
 })
 
@@ -86,7 +96,6 @@ describe('roomStore throttled persistence', () => {
   // leading edge, the second is the coalesced one that only lands if the
   // trailing write works.
   it('coalesces gap writes across two rooms', () => {
-    const ROOM2 = 'room2@conference.example.com'
     // GapInterval is { start, end?, startId?, endId? } — epoch ms, not Dates.
     roomStore.setState({
       roomGaps: new Map([
@@ -105,8 +114,12 @@ describe('roomStore throttled persistence', () => {
     expect(raw).not.toContain('gap-anchor-2')
   })
 
+  // NOTE: a coverage REMOVAL is now force-flushed (design §4.2), so what this
+  // test still pins is that both removals reach disk — not coalescing. The
+  // coalescing half moved to the `topId` refresh test in the structural-
+  // durability suite below, which drives the one coverage transition that is
+  // still throttled.
   it('coalesces coverage writes across two rooms', () => {
-    const ROOM2 = 'room2@conference.example.com'
     // CoverageRecord is { bottomId, topId? }.
     roomStore.setState({
       roomCoverage: new Map([
@@ -154,7 +167,6 @@ describe('roomStore throttled persistence', () => {
   })
 
   it('reset cancels pending gap, coverage and read-state writes', () => {
-    const ROOM2 = 'room2@conference.example.com'
     roomStore.setState({
       roomGaps: new Map([
         [ROOM, { start: 1000, startId: 'gap-first' }],
@@ -250,5 +262,148 @@ describe('roomStore throttled persistence', () => {
     const raw = localStorage.getItem('fluux-room-pending-retractions') ?? ''
     expect(raw).toContain('target-1')
     expect(raw).toContain('target-2')
+  })
+})
+
+/**
+ * Gaps and coverage are only HALF lagging mirrors (design §4.2).
+ *
+ * The monotone moves are mirrors: a lost gap shrink costs a redundant re-heal,
+ * a lost coverage re-entry marker costs a re-walk. The STRUCTURAL transitions
+ * are not:
+ *
+ * - a lost gap FORMATION is never re-detected — the next session's catch-up
+ *   cursor already sits above the hole, so the marker stays silent forever;
+ * - a lost coverage REPLACEMENT/REMOVAL leaves the stale, deeper record on disk
+ *   asserting a contiguity this merge actively disproved, and Phase B seeds its
+ *   backward walk from it, skipping the disconnected interval.
+ *
+ * Every scenario below is a HARD KILL: no timer advance, no `flush()`, no
+ * lifecycle event. And every one first puts THIS KEY's window into the state
+ * where the ordinary throttled path would NOT have persisted (§5.5) — using a
+ * transition that is still throttled after the fix, so the assertion keeps
+ * discriminating instead of riding a neighbouring force-flush that closed the
+ * window for it.
+ */
+describe('roomStore gap/coverage structural durability', () => {
+  /**
+   * A page the merge will NOT write to IndexedDB, so the gap/coverage
+   * transition applies synchronously instead of deferring behind the durable
+   * commit (`mustGateOnChain` in mergeRoomMAMMessages). A deferred transition
+   * would need the promise chain to settle, which is a different test.
+   */
+  function unstoredPage(id: string, timestamp: Date): RoomMessage[] {
+    return [{ ...createMessage(id, ROOM, 'a', id, false, timestamp), noLocalStore: true } as RoomMessage]
+  }
+
+  function gapsOnDisk(): Map<string, GapInterval> {
+    return new Map(JSON.parse(localStorage.getItem(GAPS_KEY) ?? '[]') as [string, GapInterval][])
+  }
+
+  function coverageOnDisk(): Map<string, CoverageRecord> {
+    return new Map(JSON.parse(localStorage.getItem(COVERAGE_KEY) ?? '[]') as [string, CoverageRecord][])
+  }
+
+  /** Establish a coverage record: a `before:''` fetch-latest with contiguity
+   *  unproven writes the walk extent as a brand-new record. */
+  function createCoverage(room: string, bottomId: string, topId: string): void {
+    roomStore.getState().mergeRoomMAMMessages(
+      room, [], { first: bottomId }, true, 'backward', false, true,
+      { sawCoverageTop: false, fetchLatestTopId: topId }
+    )
+  }
+
+  /** The re-entry marker: contiguity PROVEN, so only `topId` refreshes. The
+   *  one coverage transition that stays throttled after the fix — and hence
+   *  the only thing that can legitimately leave this key's window open. */
+  function refreshCoverageTop(room: string, bottomId: string, topId: string): void {
+    roomStore.getState().mergeRoomMAMMessages(
+      room, [], { first: bottomId }, true, 'backward', false, true,
+      { sawCoverageTop: true, fetchLatestTopId: topId }
+    )
+  }
+
+  it('persists a gap FORMATION that was coalesced into an open window', () => {
+    // A gap SHRINK is monotone and stays throttled, so it is what opens the
+    // gaps window and leaves it open.
+    roomStore.setState({ roomGaps: new Map([[ROOM2, { start: 1000, startId: 'anchor-2' }]]) })
+    roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // leading edge → window OPEN
+    expect(gapsOnDisk().has(ROOM2)).toBe(true)
+
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+    // A forward catch-up that came back incomplete plants a gap at the newest
+    // fetched timestamp: formation.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward'
+    )
+    expect(roomStore.getState().roomGaps.has(ROOM)).toBe(true) // the transition happened
+
+    expect(gapsOnDisk().has(ROOM)).toBe(true)
+  })
+
+  it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+      messages: [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
+    }))
+
+    createCoverage(ROOM, 'deep-old', 'top-1')
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+
+    refreshCoverageTop(ROOM, 'deep-old', 'top-2') // throttled → window OPEN
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-2' })
+
+    // Contiguity with the record actively DISPROVEN → the record is replaced
+    // wholesale with this walk's extent, which may be far shallower.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM, [], { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false }
+    )
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow' })
+
+    // Memory holds new-shallow; storage must not still hold deep-old.
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow' })
+  })
+
+  // The other half of the bound: the fix must not defeat the throttle for the
+  // monotone move. A `topId` refresh is the re-entry marker — it proves nothing
+  // new about the bottom, so losing one only costs a re-walk.
+  it('still coalesces the throttled coverage transition (topId refresh)', () => {
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+      messages: [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
+    }))
+    createCoverage(ROOM, 'cov-bottom', 'top-1')
+    localStorageMock.setItem.mockClear()
+
+    refreshCoverageTop(ROOM, 'cov-bottom', 'top-2') // leading edge → window OPEN
+    refreshCoverageTop(ROOM, 'cov-bottom', 'top-3') // coalesced, NOT force-flushed
+    expect(writeCount()).toBe(1)
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-2' })
+
+    flush()
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-3' })
+  })
+
+  it('persists a coverage REMOVAL that was coalesced into an open window', () => {
+    for (const room of [ROOM, ROOM2]) {
+      roomStore.getState().addRoom(createRoom(room, {
+        joined: true,
+        messages: [createMessage(`held-${room}`, room, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
+      }))
+    }
+    createCoverage(ROOM, 'cov-room-1', 'top-1')
+    createCoverage(ROOM2, 'cov-room-2', 'top-1')
+
+    refreshCoverageTop(ROOM2, 'cov-room-2', 'top-2') // throttled → window OPEN
+
+    // The purge guard drops the record: the anchor it names is known gone, so
+    // keeping it on disk would seed Phase B from a cursor that no longer exists.
+    roomStore.getState().clearRoomCoverage(ROOM)
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+
+    const onDisk = coverageOnDisk()
+    expect(onDisk.has(ROOM)).toBe(false)
+    // The neighbour proves the key was rewritten rather than merely absent.
+    expect(onDisk.has(ROOM2)).toBe(true)
   })
 })

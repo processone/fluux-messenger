@@ -5,6 +5,10 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 
 import { chatStore } from './chatStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
+import { forgetAllDurableMapBaselines } from './shared/durableMapPersist'
+import type { Message } from '../core/types'
+import type { GapInterval } from './shared/mamGap'
+import type { CoverageRecord } from './shared/mamCoverage'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 const KEY = 'xmpp-chat-storage'
@@ -26,6 +30,9 @@ beforeEach(() => {
   _resetStorageScopeForTesting()
   chatStore.getState().reset()
   _resetForTesting()
+  // The structural baselines outlive a throttle reset, and a leaked one would
+  // silently turn a later formation into a no-op transition.
+  forgetAllDurableMapBaselines()
   localStorageMock.setItem.mockClear()
 })
 
@@ -124,5 +131,106 @@ describe('pending retraction durability', () => {
     seedConversation(id)
     chatStore.getState().recordPendingRetraction(id, 'target-msg-2', 'someone@example.com')
     expect(localStorage.getItem(KEY)!).toContain('target-msg-2')
+  })
+})
+
+/**
+ * `conversationGaps` and `conversationCoverage` ride inside the SINGLE chat
+ * blob, so a structural transition has to force the whole blob out of the
+ * window — see the roomStore suite's header for why these transitions are not
+ * lagging mirrors, and design §4.2 for the decision table.
+ *
+ * Every scenario is a HARD KILL (no timer advance, no `flush()`, no lifecycle
+ * event) and every one opens the blob's window first with an ordinary chat
+ * mutation, so the ordinary throttled path would NOT have persisted (§5.5).
+ */
+describe('chat gap/coverage structural durability', () => {
+  const CID = 'gaps@example.com'
+  const CID2 = 'gaps2@example.com'
+
+  /** A page the merge will NOT write to IndexedDB, so the transition applies
+   *  synchronously rather than deferring behind the durable commit
+   *  (`mustGateOnChain`). */
+  function unstoredPage(id: string, timestamp: Date): Message[] {
+    return [{
+      type: 'chat', id, conversationId: CID, from: CID, body: id, timestamp,
+      isOutgoing: false, noLocalStore: true,
+    } as Message]
+  }
+
+  function blobOnDisk(): { conversationGaps: [string, GapInterval][]; conversationCoverage: [string, CoverageRecord][] } {
+    return JSON.parse(localStorage.getItem(KEY)!).state
+  }
+
+  function gapsOnDisk(): Map<string, GapInterval> {
+    return new Map(blobOnDisk().conversationGaps ?? [])
+  }
+
+  function coverageOnDisk(): Map<string, CoverageRecord> {
+    return new Map(blobOnDisk().conversationCoverage ?? [])
+  }
+
+  /** Establish a record: a `before:''` fetch-latest with contiguity unproven
+   *  writes the walk extent as a brand-new record. */
+  function createCoverage(cid: string, bottomId: string, topId: string): void {
+    chatStore.getState().mergeMAMMessages(
+      cid, [], { first: bottomId }, true, 'backward', true, false,
+      { sawCoverageTop: false, fetchLatestTopId: topId }
+    )
+  }
+
+  /** Re-entry marker: contiguity PROVEN, so only `topId` refreshes — the one
+   *  coverage transition that stays throttled after the fix. */
+  function refreshCoverageTop(cid: string, bottomId: string, topId: string): void {
+    chatStore.getState().mergeMAMMessages(
+      cid, [], { first: bottomId }, true, 'backward', true, false,
+      { sawCoverageTop: true, fetchLatestTopId: topId }
+    )
+  }
+
+  it('persists a gap FORMATION that was coalesced into an open window', () => {
+    seedConversation(CID) // leading edge writes a blob with NO gap, opens the window
+    localStorageMock.setItem.mockClear()
+
+    chatStore.getState().mergeMAMMessages(
+      CID, unstoredPage('edge', new Date('2026-05-14T09:00:00Z')), {}, false, 'forward'
+    )
+    expect(chatStore.getState().conversationGaps.has(CID)).toBe(true) // the transition happened
+
+    expect(gapsOnDisk().has(CID)).toBe(true)
+  })
+
+  it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {
+    seedConversation(CID)
+
+    createCoverage(CID, 'deep-old', 'top-1')
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+
+    refreshCoverageTop(CID, 'deep-old', 'top-2') // throttled → window OPEN
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-2' })
+
+    chatStore.getState().mergeMAMMessages(
+      CID, [], { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
+    )
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow' })
+
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow' })
+  })
+
+  it('persists a coverage REMOVAL that was coalesced into an open window', () => {
+    seedConversation(CID)
+    seedConversation(CID2)
+    createCoverage(CID, 'cov-1', 'top-1')
+    createCoverage(CID2, 'cov-2', 'top-1')
+
+    refreshCoverageTop(CID2, 'cov-2', 'top-2') // throttled → window OPEN
+
+    chatStore.getState().clearConversationCoverage(CID)
+    expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+
+    const onDisk = coverageOnDisk()
+    expect(onDisk.has(CID)).toBe(false)
+    // The neighbour proves the blob was rewritten rather than merely emptied.
+    expect(onDisk.has(CID2)).toBe(true)
   })
 })
