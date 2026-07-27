@@ -555,7 +555,7 @@ Otherwise leave the verified branch unchanged.
 
 Validation recorded on 2026-07-27:
 
-- `npm test`: SDK 5,325 passed; app 5,338 passed and 22 skipped.
+- `npm test`: SDK 5,325 passed; app 5,339 passed and 22 skipped.
 - `npm run typecheck`: passed for both workspaces.
 - `npm run lint`: zero errors; 34 pre-existing warnings.
 - `npm run test:scroll`: 54/54 passed across Chromium and WebKit.
