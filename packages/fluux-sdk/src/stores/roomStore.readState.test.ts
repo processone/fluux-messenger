@@ -238,9 +238,10 @@ describe('room read state persistence', () => {
   })
 
   // The SDK state snapshot carries a `readPointer` again since #1081, so a
-  // restored Room can arrive holding one — and it is a 500 ms-debounced mirror of
-  // the same store the durable row is written from synchronously, so it can be
-  // BEHIND that row. Taking it at face value would then have addRoom's
+  // restored Room can arrive holding one — and it is a 500 ms-debounced mirror
+  // of the same store the durable row is throttled from by 1000 ms (leading
+  // edge writes immediately, then coalesces), so after a crash EITHER can be
+  // the older. Taking the snapshot at face value would then have addRoom's
   // persistRoomReadState write the older position back over the newer one.
   // Neither source can be ahead of the user's true position, so the later wins.
   it('keeps the durable pointer when the snapshot Room carries a staler one', () => {
