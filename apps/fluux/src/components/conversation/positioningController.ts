@@ -1226,6 +1226,11 @@ export class PositioningController {
           directionalExecution !== null &&
           directionalExecution.request.conversationId === conversationId &&
           this.isDirectionalHistoryExecutionCurrent(directionalExecution)
+        const residentTopExecution = this.residentTopExecution
+        const residentTopWasCurrent =
+          residentTopExecution !== null &&
+          residentTopExecution.request.conversationId === conversationId &&
+          this.isResidentTopExecutionCurrent(residentTopExecution)
         // A boundary wheel can start a directional load and be followed by more wheel events while
         // the network request is still pending. The former prepend loop armed user takeover only
         // after the batch landed and reconciliation began, so those pre-load events could not
@@ -1255,6 +1260,9 @@ export class PositioningController {
         }
         if (directionalWasCurrent) {
           this.cancelDirectionalHistoryExecution('user-takeover')
+        }
+        if (residentTopWasCurrent) {
+          this.cancelResidentTopExecution('user-takeover')
         }
         this.cancelExecutionsIfSuperseded()
       },
@@ -2203,11 +2211,7 @@ export class PositioningController {
     lease: PositionExecutionLease,
   ): void {
     if (!lease.isCurrent()) return
-    if (execution.framesLeft-- <= 0) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-      return
-    }
+    execution.framesLeft -= 1
 
     const scrollTop = runScrollShadowSafely<number | null>({
       event: 'resident-top-read-scroll-top',
@@ -2230,6 +2234,11 @@ export class PositioningController {
     if (execution.stableFrames >= RESIDENT_TOP_STABLE_FRAMES) {
       lease.settle()
       this.completeResidentTopExecution(execution, 'settled')
+      return
+    }
+    if (execution.framesLeft <= 0) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
       return
     }
     this.scheduleResidentTopFrame(execution, lease)
@@ -3519,6 +3528,13 @@ export class PositioningController {
     ) {
       this.cancelExplicitTargetExecution()
     }
+    const residentTopExecution = this.residentTopExecution
+    if (
+      residentTopExecution &&
+      !this.isResidentTopExecutionCurrent(residentTopExecution)
+    ) {
+      this.cancelResidentTopExecution('superseded')
+    }
     const liveEdgeExecution = this.liveEdgeExecution
     if (
       liveEdgeExecution &&
@@ -3546,6 +3562,7 @@ export class PositioningController {
     this.cancelSavedExecution()
     this.cancelUnreadExecution()
     this.cancelExplicitTargetExecution()
+    this.cancelResidentTopExecution(outcome)
     this.cancelLiveEdgeExecution(outcome)
     this.cancelMediaPreservationExecution(outcome)
     this.cancelDirectionalHistoryExecution(outcome)
@@ -3573,6 +3590,15 @@ export class PositioningController {
       this.explicitTargetExecution.abortController?.abort()
     }
     this.explicitTargetExecution = null
+  }
+
+  private cancelResidentTopExecution(
+    outcome: ResidentTopCompletion,
+  ): void {
+    const execution = this.residentTopExecution
+    if (execution) {
+      this.completeResidentTopExecution(execution, outcome)
+    }
   }
 
   private cancelLiveEdgeExecution(outcome: LiveEdgeCompletion): void {
