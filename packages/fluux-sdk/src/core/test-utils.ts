@@ -53,6 +53,7 @@ export const createMockRoom = (jid: string, overrides: Partial<Room> = {}): Room
   mentionsCount: overrides.mentionsCount ?? 0,
   typingUsers: overrides.typingUsers ?? new Set(),
   isBookmarked: overrides.isBookmarked ?? false,
+  isQuickChat: overrides.isQuickChat,
   autojoin: overrides.autojoin,
   password: overrides.password,
   notifyAll: overrides.notifyAll,
@@ -779,6 +780,9 @@ export const createMockXMPPClientForHooks = () => ({
   },
   muc: {
     joinRoom: vi.fn(),
+    // Resolves by default: callers that await the join outcome (acceptInvitation)
+    // treat a rejection as "the server refused", so the neutral default is success.
+    joinResult: vi.fn().mockResolvedValue(undefined),
     leaveRoom: vi.fn(),
     setBookmark: vi.fn(),
     removeBookmark: vi.fn(),

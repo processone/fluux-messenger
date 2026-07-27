@@ -25,6 +25,8 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -750,7 +752,9 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  * `storageKey`, so `serializeState` keeps writing the legacy values back until
  * this pass (or the user's own reading) produces a pointer. Registration happens
  * synchronously, BEFORE the pass yields: `switchAccount` calls `set()` inside the
- * same call that reaches here, and that `set` persists immediately.
+ * same call that reaches here, and that `set` still persists synchronously —
+ * `switchAccount` calls `flush()` first, closing any open throttle window, so
+ * this write takes the throttle's leading edge.
  */
 function scheduleReadPointerBackfill(
   conversationMeta: Map<string, ConversationMetadata>,
@@ -807,12 +811,13 @@ function scheduleReadPointerBackfill(
         // snapping to newest is the forward-only over-advance #1081 exists to kill.
         if (!migrated) continue
         applyMigratedReadPointer(conversationId, migrated)
-        // Deliberately AFTER the apply. The apply persists synchronously, and
-        // that write already omits the legacy pair — `serializeState` skips any
-        // conversation holding a pointer — so nothing is gained by dropping the
-        // entry first, while a throw in between would leave the conversation
-        // pointerless AND legacy-less, which is the state this whole mechanism
-        // exists to prevent.
+        // Deliberately AFTER the apply. The apply's `setState` replaces the
+        // pending thunk with a newer snapshot, so whichever thunk eventually
+        // runs already carries the pointer and already omits the legacy pair
+        // — `serializeState` skips any conversation holding a pointer — so
+        // nothing is gained by dropping the entry first, while a throw in
+        // between would leave the conversation pointerless AND legacy-less,
+        // which is the state this whole mechanism exists to prevent.
         pending.delete(conversationId)
       } catch (error) {
         // Left in `pending`, so the values survive this launch's writes and the
@@ -1097,6 +1102,14 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
     }
   } catch {
     try {
+      // No `cancelDurableMaps` here, against §3.2's rule, and it is safe only
+      // because of WHERE this runs: both callers are LOAD paths (store creation,
+      // and `switchAccount` — which flushes and calls
+      // `forgetAllDurableMapBaselines` before it gets here), so this key has
+      // neither an open window nor a structural baseline to invalidate. A future
+      // caller that reaches this after any write to `scopedStorageKey` must use
+      // `cancelDurableMaps` instead, or a pending thunk resurrects the blob this
+      // line just removed.
       localStorage.removeItem(scopedStorageKey)
     } catch {
       // Ignore storage errors
@@ -2042,6 +2055,18 @@ export const chatStore = createStore<ChatState>()(
           nextPending.set(conversationId, next)
           return { pendingRetractions: nextPending }
         })
+
+        // A pending retraction is a durable EVENT, not a lagging mirror: it
+        // records a retraction whose target was not resident. Lose it and the
+        // message is never tombstoned — once coverage marks the range covered,
+        // MAM will not re-query it and the retraction never arrives again.
+        //
+        // `flushKey` rather than a re-serialize: the `set` above already drove
+        // the persist adapter (zustand calls `setItem` synchronously inside
+        // `set`), so the blob is either already on disk via the leading edge
+        // or sitting in the pending thunk. This lands the second case and
+        // costs nothing in the first.
+        flushKey(getScopedStorageKey())
       },
 
       getMessage: (conversationId, messageId) => {
@@ -2766,6 +2791,16 @@ export const chatStore = createStore<ChatState>()(
       },
 
       switchAccount: (jid) => {
+        // The outgoing account's pending blob must land before we load the
+        // incoming one: a fast A -> B -> A would otherwise reload A from a
+        // blob that predates its last mutations, and that stale load becomes
+        // the live state.
+        flushThrottledStorage()
+        // Structural baselines are keyed by resolved storage key, so they cannot
+        // be read across accounts — but they are dropped anyway, and it is free
+        // to do so: the flush above closed every window, so the next write's
+        // force-flush finds no pending thunk and writes nothing extra.
+        forgetAllDurableMapBaselines()
         clearAllTypingTimeouts()
         // In-flight archive-save gates belong to the previous account; their
         // deferred commits must not land in the new account's maps.
@@ -2783,6 +2818,12 @@ export const chatStore = createStore<ChatState>()(
         // Logout discards the blob, so there is nothing left to carry legacy
         // read state forward into.
         unmigratedLegacyReadState.delete(getScopedStorageKey())
+        // The throttle's contract: cancel BEFORE any raw removeItem. Today the
+        // trailing `set(createEmptyChatState())` below happens to replace any
+        // pending thunk with an empty-state one, so nothing leaks — but that is
+        // coincidence, not design. Without this, moving or dropping that `set`
+        // turns logout into silent data resurrection.
+        cancelDurableMaps(getScopedStorageKey())
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())
@@ -2811,18 +2852,35 @@ export const chatStore = createStore<ChatState>()(
           }
         },
         setItem: (_, value) => {
+          // Resolved HERE, not inside the thunk: a trailing write that fires
+          // after a switchAccount must land under the key that was current
+          // when this state was produced.
           const scopedStorageKey = getScopedStorageKey()
-          try {
-            const state = value.state as ChatState
-            const serialized = serializeState(state, scopedStorageKey)
-            localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
-          } catch {
-            // Storage quota exceeded or other error, continue without persistence
-          }
+          const state = value.state as ChatState
+          // Lazy — a coalesced write never pays for serializeState at all.
+          // Error absorption lives in the throttle's `write`.
+          //
+          // `conversationGaps` and `conversationCoverage` ride in this one blob,
+          // so their structural transitions (a gap FORMED, a coverage record
+          // added/replaced/dropped) force the WHOLE blob out of the window —
+          // acceptable because those transitions are rare, while the merge churn
+          // that motivated the throttle is not one. Detection lives here, at the
+          // single funnel every chat mutation passes through, rather than at the
+          // ~8 gap/coverage mutation sites. See durableMapPersist.
+          scheduleDurableMaps(
+            scopedStorageKey,
+            { gaps: state.conversationGaps, coverage: state.conversationCoverage },
+            () => JSON.stringify({ state: serializeState(state, scopedStorageKey) })
+          )
         },
         removeItem: () => {
+          const scopedStorageKey = getScopedStorageKey()
+          // Before the removal: a write scheduled moments ago would otherwise
+          // fire afterwards and resurrect the blob. The structural baseline
+          // describes that cancelled write, so it goes with it.
+          cancelDurableMaps(scopedStorageKey)
           try {
-            localStorage.removeItem(getScopedStorageKey())
+            localStorage.removeItem(scopedStorageKey)
           } catch {
             // Ignore storage errors
           }

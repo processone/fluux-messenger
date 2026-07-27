@@ -14,23 +14,33 @@ const mockInvoke = vi.fn().mockResolvedValue(undefined)
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a: unknown[]) => mockListen(...(a as [string, () => Promise<void>])) }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a: unknown[]) => mockInvoke(...a) }))
 
-// Records whether shutdown was already marked at the moment disconnect ran.
+// vi.hoisted so the (hoisted) vi.mock('@fluux/sdk', ...) factory below can
+// reference the value directly (not inside a lazy closure) without a TDZ error.
+const { mockFlush } = vi.hoisted(() => ({ mockFlush: vi.fn() }))
+
+// Records whether shutdown was already marked, and whether the flush had
+// already run, at the moment disconnect ran.
 let shuttingDownAtDisconnect: boolean | null = null
+let flushedAtDisconnect: boolean | null = null
 const mockDisconnect = vi.fn(async () => {
   shuttingDownAtDisconnect = isShuttingDown()
+  flushedAtDisconnect = mockFlush.mock.calls.length > 0
 })
 
 vi.mock('@fluux/sdk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useXMPPContext: () => ({ client: { disconnect: mockDisconnect } }),
+  flushPersistentStorage: mockFlush,
 }))
 
 describe('useTauriCloseHandler — shutdown marking', () => {
   beforeEach(() => {
     shutdownHandler = null
     shuttingDownAtDisconnect = null
+    flushedAtDisconnect = null
     mockDisconnect.mockClear()
     mockInvoke.mockClear()
+    mockFlush.mockClear()
     resetShutdownStateForTests()
     // The hook only registers on desktop platforms.
     Object.defineProperty(navigator, 'platform', {
@@ -55,6 +65,17 @@ describe('useTauriCloseHandler — shutdown marking', () => {
 
     expect(mockDisconnect).toHaveBeenCalled()
     expect(shuttingDownAtDisconnect).toBe(true)
+  })
+
+  it('flushes persisted storage before disconnecting', async () => {
+    renderHook(() => useTauriCloseHandler())
+    await waitFor(() => expect(shutdownHandler).not.toBeNull())
+
+    await shutdownHandler!()
+
+    // Not merely "was called" — that passes with the flush placed AFTER
+    // disconnect, where a 2s race and exit_app can beat it.
+    expect(flushedAtDisconnect).toBe(true)
   })
 
   it('still tears down the proxy and exits after disconnect', async () => {
