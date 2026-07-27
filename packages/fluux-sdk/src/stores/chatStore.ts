@@ -757,9 +757,9 @@ function applyMigratedReadPointer(conversationId: string, migrated: ReadPointer)
  * `storageKey`, so `serializeState` keeps writing the legacy values back until
  * this pass (or the user's own reading) produces a pointer. Registration happens
  * synchronously, BEFORE the pass yields: `switchAccount` calls `set()` inside the
- * same call that reaches here, and that write is now scheduled through the
- * throttle rather than landing immediately — it's `switchAccount`'s own
- * `flush()` that forces it out before the incoming account loads.
+ * same call that reaches here, and that `set` still persists synchronously —
+ * `switchAccount` calls `flush()` first, closing any open throttle window, so
+ * this write takes the throttle's leading edge.
  */
 function scheduleReadPointerBackfill(
   conversationMeta: Map<string, ConversationMetadata>,

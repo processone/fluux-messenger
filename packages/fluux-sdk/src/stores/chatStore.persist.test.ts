@@ -85,6 +85,12 @@ describe('chatStore persistence throttling', () => {
     seedConversation('secret@example.com')
     seedConversation('secret2@example.com') // pending, not yet written
     chatStore.getState().reset()
+
+    // Guards the `cancel()` in `reset()`: with the window cancelled, the
+    // trailing `set(empty)` takes the leading edge and writes synchronously.
+    // Without it that `set` is coalesced and the key stays null for a window.
+    expect(localStorage.getItem(KEY)).not.toBeNull()
+
     vi.advanceTimersByTime(5000)
 
     // Per spec 2.1 the key EXISTS holding an empty blob — asserting absence
