@@ -230,12 +230,15 @@ describe('chatStore.applyRemoteDisplayed', () => {
     }
 
     // Non-active, non-resident conversation with a pending deep pointer
-    // (new-device sync: no local read state yet).
+    // (new-device sync: no local read state yet). Seeded with a distinguishing
+    // nonzero stale count — NOT equal to either the old page-scoped undercount
+    // (9) or the true full-walk total (19) — so a broken defer gate that
+    // commits a derived count instead of returning early fails loudly.
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { unreadCount: 0 })
+      newMeta.set(cid, { unreadCount: 8 })
       const newConvs = new Map(state.conversations)
-      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0 })
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 8 })
       return { conversationMeta: newMeta, conversations: newConvs }
     })
     chatStore.getState().applyRemoteDisplayed(cid, 's-ptr')
@@ -262,11 +265,11 @@ describe('chatStore.applyRemoteDisplayed', () => {
     // The archive-derived recount runs (fire-and-forget) but defers: no
     // mamQueryStates/conversationCoverage were seeded, so coverage down to
     // the new floor is not proven. The count stays at its last trusted value
-    // (0) rather than either the old page-scoped undercount (9) or a snap to
+    // (8) rather than either the old page-scoped undercount (9) or a snap to
     // the true total (19) it cannot yet prove.
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
-    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(8)
+    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(8)
   })
 
   it('skips the archive recount commit when the conversation became active meanwhile', async () => {
@@ -873,18 +876,32 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
   // archive-derived (recomputeUnreadForConversation, triggered fire-and-forget
   // by both the forward-merge and the marker-resolution paths). With no
   // mamQueryStates/conversationCoverage seeded, that derivation defers, so the
-  // count stays at its initial value (0) rather than snapping to this page's
-  // own tally (7). The exact-outcome equivalent (real coverage + archive rows)
-  // lives in chatStore.archiveUnread.test.ts.
+  // count stays at its seeded stale value (5, chosen to differ from this
+  // page's own tally of 7) rather than snapping to this page's own tally (7).
+  // The exact-outcome equivalent (real coverage + archive rows) lives in
+  // chatStore.archiveUnread.test.ts.
   it('the marker resolves the pointer; the count defers without proven coverage', async () => {
     seedFreshConversation()
+    // Override the shared fresh-instance seed (0) with a distinguishing
+    // nonzero stale count — NOT equal to the page's own tally of 7 unread
+    // messages (m4..m10) — so a broken defer gate that commits the derived
+    // count instead of returning early fails loudly. Other tests in this
+    // describe block rely on seedFreshConversation()'s own 0, so this
+    // override is local to this test only.
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { ...state.conversationMeta.get(cid)!, unreadCount: 5 })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { ...state.conversations.get(cid)!, unreadCount: 5 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
     chatStore.getState().applyRemoteDisplayed(cid, 's3')
 
     chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m3')
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(5)
   })
 
   // Control: no remote marker ⇒ a fresh conversation is still caught up.

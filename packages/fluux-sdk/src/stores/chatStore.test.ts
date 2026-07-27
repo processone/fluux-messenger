@@ -3501,16 +3501,24 @@ describe('chatStore', () => {
     // (fire-and-forget), which derives the badge from the durable archive instead
     // (see chatStore.archiveUnread.test.ts for the exact-outcome path). With no
     // mamQueryStates/conversationCoverage seeded here, that derivation defers,
-    // so the count stays at its initial value rather than snapping to this
-    // page's own tally (2) — proving the page-scoped write is really gone.
+    // so the count stays at its seeded stale value (5, chosen to differ from
+    // the page's own tally of 2) rather than snapping to this page's own tally
+    // (2) — proving the page-scoped write is really gone, and that a broken
+    // defer gate would visibly overwrite the stale value.
     it('forward merge into a non-active conversation defers the count until coverage is proven (no page-scoped write)', async () => {
       chatStore.setState((state) => {
         const meta = new Map(state.conversationMeta)
         meta.set(conversationId, {
           ...meta.get(conversationId)!,
+          // Distinguishing nonzero stale count — NOT equal to the page's own
+          // tally of 2 unread messages (m2, m3) — so a broken defer gate that
+          // commits the derived count instead of returning early fails loudly.
+          unreadCount: 5,
           readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
         })
-        return { conversationMeta: meta }
+        const convs = new Map(state.conversations)
+        convs.set(conversationId, { ...convs.get(conversationId)!, unreadCount: 5 })
+        return { conversationMeta: meta, conversations: convs }
       })
 
       const mamMessages: Message[] = [
@@ -3552,10 +3560,10 @@ describe('chatStore', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
 
       const meta = chatStore.getState().conversationMeta.get(conversationId)
-      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.unreadCount).toBe(5)
       // Combined map mirrors meta.
       const conv = chatStore.getState().conversations.get(conversationId)
-      expect(conv?.unreadCount).toBe(0)
+      expect(conv?.unreadCount).toBe(5)
     })
 
     it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
