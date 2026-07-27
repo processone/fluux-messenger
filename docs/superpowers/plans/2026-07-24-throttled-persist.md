@@ -1056,8 +1056,13 @@ describe('roomStore throttled persistence', () => {
     // test a sequence that never occurs.
     setStorageScopeJid('b@example.com')
     roomStore.getState().switchAccount('b@example.com')
-    vi.advanceTimersByTime(5000)
 
+    // Deliberately NO `vi.advanceTimersByTime` here. Advancing the clock lets
+    // the pending thunk fire on its own timer — and since it already carries
+    // the outgoing key AND map, it produces a byte-identical result, so the
+    // test passes with `switchAccount`'s flush deleted and with the throttle
+    // removed entirely. Asserting immediately is what makes the flush the only
+    // thing that can have written this.
     expect(localStorage.getItem('fluux-room-drafts:a@example.com')).toContain('a-pending')
     expect(localStorage.getItem('fluux-room-drafts:b@example.com') ?? '').not.toContain('a-pending')
 
