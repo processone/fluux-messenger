@@ -89,7 +89,17 @@ export interface DemoData {
   /** Bare JIDs that have sent a presence-subscription (add-contact) request. Seeded into eventsStore. */
   subscriptionRequests?: string[]
   /** Pending room invitations to seed into eventsStore (Rooms "Invitations" banner). */
-  mucInvitations?: Array<{ roomJid: string; from: string; reason?: string }>
+  mucInvitations?: Array<{
+    roomJid: string
+    from: string
+    reason?: string
+    /**
+     * Password the simulated service demands for this room, mirroring
+     * {@link DemoRoomData.requiredPassword}. The invitation itself carries no
+     * password, so accepting it has to ask the user for one.
+     */
+    requiredPassword?: string
+  }>
   /** Stranger (non-roster) messages to seed into eventsStore (Messages "Message requests" banner). */
   strangerMessages?: Array<{ from: string; body: string }>
   ownResources?: DemoOwnResource[]

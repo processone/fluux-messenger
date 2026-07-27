@@ -447,6 +447,7 @@ export class DemoClient extends XMPPClient {
     // Seed room invitations so the Rooms "Invitations" banner is visible in demo.
     for (const inv of data.mucInvitations ?? []) {
       eventsStore.getState().addMucInvitation(inv.roomJid, inv.from, inv.reason)
+      if (inv.requiredPassword) this.roomPasswords.set(inv.roomJid, inv.requiredPassword)
     }
 
     // Seed stranger messages so the Messages "Message requests" banner is visible in demo.

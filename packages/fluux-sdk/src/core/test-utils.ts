@@ -780,6 +780,9 @@ export const createMockXMPPClientForHooks = () => ({
   },
   muc: {
     joinRoom: vi.fn(),
+    // Resolves by default: callers that await the join outcome (acceptInvitation)
+    // treat a rejection as "the server refused", so the neutral default is success.
+    joinResult: vi.fn().mockResolvedValue(undefined),
     leaveRoom: vi.fn(),
     setBookmark: vi.fn(),
     removeBookmark: vi.fn(),

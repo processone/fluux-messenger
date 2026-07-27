@@ -11,8 +11,10 @@ interface PendingPrompt {
 }
 
 /**
- * Joins a MUC room, asking for the room password when the server refuses the
- * join with `not-authorized` (issue #1126).
+ * Gets the user into a MUC room, asking for the room password when the server
+ * refuses with `not-authorized` (issue #1126). `joinRoomWithPassword` covers a
+ * plain join; `withPasswordPrompt` wraps any other way in (accepting an
+ * invitation, …).
  *
  * The SDK re-sends a password it already knows (bookmark or earlier join in this
  * session), so this only prompts when we genuinely have none or it stopped
@@ -26,12 +28,16 @@ interface PendingPrompt {
  * Render the returned `passwordDialog` in the component so the prompt can
  * appear; it is `null` when nothing is pending.
  *
- * @example
+ * @example Joining a room
  * const { joinRoomWithPassword, passwordDialog } = useRoomPasswordPrompt()
  * // in a handler:
  * if (!(await joinRoomWithPassword(roomJid, nickname))) return
  * // in JSX:
  * {passwordDialog}
+ *
+ * @example Any other way into a room (accepting an invitation, …)
+ * const { withPasswordPrompt, passwordDialog } = useRoomPasswordPrompt()
+ * if (!(await withPasswordPrompt((password) => acceptInvitation(roomJid, password)))) return
  */
 export function useRoomPasswordPrompt() {
   const { t } = useTranslation()
@@ -50,14 +56,17 @@ export function useRoomPasswordPrompt() {
     })
   }, [])
 
-  const joinRoomWithPassword = useCallback(
-    async (roomJid: string, nickname: string): Promise<boolean> => {
-      const attempt = async (password?: string) => {
-        // Room passwords are opaque XMPP strings - never trim them.
-        await joinRoom(roomJid, nickname, password !== undefined ? { password } : undefined)
-        await joinResult(roomJid)
-      }
-
+  /**
+   * Run `attempt`, asking for the room password if the server refuses with
+   * `not-authorized` and retrying until it succeeds or the user gives up.
+   *
+   * `attempt` receives the password the user typed (undefined on the first,
+   * unprompted try) and must reject with a {@link RoomJoinError} carrying the
+   * server's outcome — i.e. it has to await the join result, not just send the
+   * join. Anything else it throws is rethrown untouched.
+   */
+  const withPasswordPrompt = useCallback(
+    async (attempt: (password?: string) => Promise<void>): Promise<boolean> => {
       const isPasswordRefusal = (err: unknown) =>
         err instanceof RoomJoinError && err.condition === 'not-authorized'
 
@@ -83,7 +92,18 @@ export function useRoomPasswordPrompt() {
         }
       }
     },
-    [joinRoom, joinResult, askForPassword, t]
+    [askForPassword, t]
+  )
+
+  /** {@link withPasswordPrompt} over a plain room join. */
+  const joinRoomWithPassword = useCallback(
+    (roomJid: string, nickname: string) =>
+      withPasswordPrompt(async (password) => {
+        // Room passwords are opaque XMPP strings - never trim them.
+        await joinRoom(roomJid, nickname, password !== undefined ? { password } : undefined)
+        await joinResult(roomJid)
+      }),
+    [withPasswordPrompt, joinRoom, joinResult]
   )
 
   const passwordDialog = pending ? (
@@ -94,5 +114,5 @@ export function useRoomPasswordPrompt() {
     />
   ) : null
 
-  return { joinRoomWithPassword, passwordDialog }
+  return { joinRoomWithPassword, withPasswordPrompt, passwordDialog }
 }
