@@ -329,6 +329,11 @@ export class MUC extends BaseModule {
         return
       }
 
+      // The password this join actually got in with — read before clearPendingJoin
+      // drops the pending entry. Only recorded on success, so a wrong password is
+      // never persisted (and never re-sent on the next join).
+      const acceptedPassword = this.pendingJoins.get(roomJid)?.options?.password
+
       // Clear the join timeout - we successfully joined
       this.clearPendingJoin(roomJid)
       this.settleJoinSuccess(roomJid)
@@ -348,16 +353,40 @@ export class MUC extends BaseModule {
 
       this.deps.emit('mucJoined', roomJid, nick)
 
-      // Auto-bookmark the room if not already bookmarked (skip quick chats - they're transient)
+      // Remember a working room password (skip quick chats - they're transient) so
+      // later sessions can rejoin unattended: keep it in the store for this session
+      // and in the bookmark's XEP-0402 <password/> across restarts (issue #1126).
       const room = this.deps.stores?.room.getRoom(roomJid)
-      if (room && !room.isBookmarked && !room.isQuickChat) {
-        this.setBookmark(roomJid, {
-          name: room.name,
-          nick: nick,
-          autojoin: false,
-        }).catch(() => {
-          // Ignore bookmark errors - room join was still successful
-        })
+      if (room && !room.isQuickChat) {
+        const passwordIsNew = !!acceptedPassword && acceptedPassword !== room.password
+        if (passwordIsNew) {
+          // SDK event only - binding calls store.updateRoom
+          this.deps.emitSDK('room:updated', { roomJid, updates: { password: acceptedPassword } })
+        }
+
+        // Auto-bookmark the room if not already bookmarked; if it IS bookmarked,
+        // only re-publish when we learned a new password (setBookmark preserves
+        // the stored one, so the other fields have to be carried over here).
+        if (!room.isBookmarked) {
+          this.setBookmark(roomJid, {
+            name: room.name,
+            nick: nick,
+            autojoin: false,
+            password: acceptedPassword,
+          }).catch(() => {
+            // Ignore bookmark errors - room join was still successful
+          })
+        } else if (passwordIsNew) {
+          this.setBookmark(roomJid, {
+            name: room.name,
+            nick: nick,
+            autojoin: room.autojoin,
+            password: acceptedPassword,
+            notifyAll: room.notifyAllPersistent,
+          }).catch(() => {
+            // Ignore bookmark errors - room join was still successful
+          })
+        }
       }
 
       // Re-query room capabilities if initial disco#info failed before join.
@@ -647,7 +676,10 @@ export class MUC extends BaseModule {
    * @param nickname - Your nickname in the room
    * @param options - Optional join settings
    * @param options.maxHistory - Number of history messages to request (default: 50, use 0 for none)
-   * @param options.password - Room password if required
+   * @param options.password - Room password. Defaults to the password already
+   *   known for the room (from its bookmark or an earlier successful join), so
+   *   callers only pass one the user just typed. A password that works is saved
+   *   to the room's bookmark.
    * @param options.isQuickChat - Mark this as a temporary quick chat room
    *
    * @example
@@ -692,6 +724,14 @@ export class MUC extends BaseModule {
 
     // Register (or reuse, on retry) the awaitable outcome for joinResult().
     this.getOrCreateJoinDeferred(roomJid)
+
+    // Fall back to the password we already know for this room (XEP-0402
+    // <password/>, kept in the store by fetchBookmarks and by a successful
+    // password join). Without this only the connect-time autojoin could enter a
+    // password-protected room: every other entry point — sidebar double-click,
+    // the room-view join prompt, /join, deep links — passes no options and would
+    // be refused with 401 after a restart (issue #1126).
+    const password = options?.password ?? existingRoom?.password
 
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
@@ -770,8 +810,8 @@ export class MUC extends BaseModule {
     const maxHistory = supportsMAM ? 0 : (options?.maxHistory ?? 50)
     xChildren.push(xml('history', { maxstanzas: maxHistory.toString() }))
 
-    if (options?.password) {
-      xChildren.push(xml('password', {}, options.password))
+    if (password) {
+      xChildren.push(xml('password', {}, password))
     }
 
     const presenceChildren: Element[] = [
@@ -801,8 +841,10 @@ export class MUC extends BaseModule {
     logInfo(`Joining room: ${roomJid}`)
     await this.deps.sendStanza(presence)
 
-    // Start timeout - if no self-presence received within timeout, will retry or give up
-    this.startJoinTimeout(roomJid, nickname, options)
+    // Start timeout - if no self-presence received within timeout, will retry or give up.
+    // Remember the RESOLVED password so a retry re-sends it and the success path
+    // knows which password actually got us in.
+    this.startJoinTimeout(roomJid, nickname, { ...options, password })
   }
 
   /**
@@ -1829,7 +1871,9 @@ export class MUC extends BaseModule {
    * @param options.name - Display name for the room
    * @param options.nick - Nickname to use when joining
    * @param options.autojoin - If true, automatically join on connect
-   * @param options.password - Room password (if required)
+   * @param options.password - Room password. Omit to keep the password already
+   *   known for the room (a publish replaces the whole bookmark, so omitting it
+   *   would otherwise erase it); pass an empty string to clear it.
    * @param options.notifyAll - If true, notify on all messages
    *
    * @example
@@ -1854,10 +1898,16 @@ export class MUC extends BaseModule {
     roomJid: string,
     options: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }
   ): Promise<void> {
+    // A bookmark publish REPLACES the stored item, so an unrelated write (renaming
+    // the bookmark, toggling autojoin) would drop the room password — ours or one
+    // another client stored. Omitting `password` therefore means "keep what we
+    // know"; pass an empty string to deliberately clear it (issue #1126).
+    const password = options.password ?? this.deps.stores?.room.getRoom(roomJid)?.password
+
     // Build conference element children
     const confChildren: Element[] = [xml('nick', {}, options.nick)]
-    if (options.password) {
-      confChildren.push(xml('password', {}, options.password))
+    if (password) {
+      confChildren.push(xml('password', {}, password))
     }
 
     // Add extensions element with notify setting if notifyAll is enabled
@@ -1894,7 +1944,7 @@ export class MUC extends BaseModule {
         name: options.name,
         nick: options.nick,
         autojoin: options.autojoin,
-        password: options.password,
+        password: password || undefined,
         notifyAll: options.notifyAll,
       },
     })

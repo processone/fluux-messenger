@@ -11,6 +11,11 @@ export const SELF_NICK = 'You'
 export const ROOM_JID = `team@${CONFERENCE}`
 export const DESIGN_ROOM_JID = `design@${CONFERENCE}`
 
+// Password-protected room: bookmarked but not joined, so the demo can exercise
+// the unlock path (issue #1126). The password is shown in the join prompt hint.
+export const BOARD_ROOM_JID = `board@${CONFERENCE}`
+export const BOARD_ROOM_PASSWORD = 'fluux'
+
 // Discoverable room JIDs (not pre-joined, visible in Browse Rooms)
 export const ENGINEERING_ROOM_JID = `engineering@${CONFERENCE}`
 export const RANDOM_ROOM_JID = `random@${CONFERENCE}`

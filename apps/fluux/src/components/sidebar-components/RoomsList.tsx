@@ -23,6 +23,7 @@ import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
+import { useRoomPasswordPrompt } from '@/hooks/useRoomPasswordPrompt'
 import { CreateRoomModal } from '../CreateRoomModal'
 import {
   Hash,
@@ -61,7 +62,8 @@ export function RoomsList() {
   // a message to one room re-renders just that row. drafts/typing are likewise per-row.
   const sidebarEntries = useRoomStore(useShallow((s) => s.roomSidebarJids()))
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
-  const { joinRoom, joinResult, leaveRoom, setBookmark, removeBookmark, setActiveRoom } = useRoomActions()
+  const { leaveRoom, setBookmark, removeBookmark, setActiveRoom } = useRoomActions()
+  const { joinRoomWithPassword, passwordDialog } = useRoomPasswordPrompt()
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const addToast = useToastStore((s) => s.addToast)
   const { navigateToRooms } = useRouteSync()
@@ -99,8 +101,8 @@ export function RoomsList() {
   // React.memo, re-rendering every row. Building the handlers once in a ref and
   // routing through a "latest" ref keeps their identity stable for the lifetime
   // of the list while always invoking the current actions.
-  const latestRef = useRef({ setActiveConversation, setActiveRoom, joinRoom, joinResult, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t })
-  latestRef.current = { setActiveConversation, setActiveRoom, joinRoom, joinResult, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t }
+  const latestRef = useRef({ setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t })
+  latestRef.current = { setActiveConversation, setActiveRoom, joinRoomWithPassword, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid, addToast, t }
 
   const handlersRef = useRef<{
     onSelect: (roomJid: string) => void
@@ -130,8 +132,8 @@ export function RoomsList() {
           void roomStore.getState().activateRoom(roomJid)
         } else {
           try {
-            await L.joinRoom(roomJid, room?.nickname ?? '')
-            await L.joinResult(roomJid)
+            // Prompts for the room password when the server asks for one.
+            if (!(await L.joinRoomWithPassword(roomJid, room?.nickname ?? ''))) return
           } catch (err) {
             // Do not activate/navigate into a room we failed to join.
             L.addToast('error', getRoomJoinErrorMessage(L.t, err))
@@ -147,8 +149,7 @@ export function RoomsList() {
         const room = roomStore.getState().getRoom(roomJid)
         void (async () => {
           try {
-            await L.joinRoom(roomJid, room?.nickname ?? '')
-            await L.joinResult(roomJid)
+            await L.joinRoomWithPassword(roomJid, room?.nickname ?? '')
           } catch (err) {
             L.addToast('error', getRoomJoinErrorMessage(L.t, err))
           }
@@ -281,6 +282,9 @@ export function RoomsList() {
       {showCreateRoom && (
         <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
       )}
+
+      {/* Room password prompt (shown when a join is refused with 401) */}
+      {passwordDialog}
     </div>
   )
 }

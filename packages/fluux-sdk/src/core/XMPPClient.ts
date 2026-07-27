@@ -729,7 +729,14 @@ export class XMPPClient {
       // Route to modules (order matters - first handler to return true wins)
       // PubSub before Chat so PubSub events aren't treated as chat messages
       // Blocking before Roster so blocklist pushes are handled correctly
-      const modules = [this.pubsub, this.blocking, this.poll, this.chat, this.roster, this.muc, this.profile, this.discovery, this.lastActivity]
+      // MUC before Roster so join/nick-change error presences reach failJoin():
+      // Roster claims EVERY presence type='error', and a MUC join error (401
+      // password required, 409 conflict, …) echoes <x muc>, not muc#user, so it
+      // is indistinguishable from a contact presence error at that layer. MUC
+      // only claims presence it recognises (muc#user, or an error matching an
+      // in-flight join/nick change), so regular contact presence still falls
+      // through to Roster.
+      const modules = [this.pubsub, this.blocking, this.poll, this.chat, this.muc, this.roster, this.profile, this.discovery, this.lastActivity]
       for (const module of modules) {
         if (module.handle(stanza)) break
       }

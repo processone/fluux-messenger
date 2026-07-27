@@ -20,6 +20,7 @@ import {
   type PositioningModel,
   type PositioningPhase,
   type ReachabilityFacts,
+  type ResidentTopRequest,
   type SavedPositionRequest,
   type UnreadMarkerRequest,
   type UnavailablePolicy,
@@ -259,6 +260,30 @@ export interface ExplicitTargetExecutor {
   ) => void
 }
 
+export type ResidentTopCompletion =
+  | 'settled'
+  | 'best-effort'
+  | 'user-takeover'
+  | 'superseded'
+
+export type ResidentTopStartResult =
+  | { kind: 'started' }
+  | { kind: 'unavailable' }
+
+export interface ResidentTopExecutor {
+  reachability: () => ReachabilityFacts
+  beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
+  start: (
+    request: ResidentTopRequest,
+    lease: PositionExecutionLease,
+  ) => ResidentTopStartResult
+  readScrollTop: () => number | null
+  complete: (
+    request: ResidentTopRequest,
+    outcome: ResidentTopCompletion,
+  ) => void
+}
+
 interface SavedPositionExecutionState {
   request: SavedPositionRequest
   executor: SavedPositionExecutor
@@ -300,6 +325,16 @@ interface ExplicitTargetExecutionState {
   applied: boolean
 }
 
+interface ResidentTopExecutionState {
+  request: ResidentTopRequest
+  executor: ResidentTopExecutor
+  operation: number
+  abortController: AbortController | null
+  loop: PositionFrameLoop | null
+  framesLeft: number
+  stableFrames: number
+}
+
 interface LiveEdgeExecutionState {
   request: LiveEdgeRequest
   executor: LiveEdgeExecutor
@@ -337,6 +372,9 @@ const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
 const EXPLICIT_TARGET_TAKEOVER_DRIFT_PX = 300
+const RESIDENT_TOP_OBSERVE_FRAMES = 120
+const RESIDENT_TOP_STABLE_FRAMES = 2
+const RESIDENT_TOP_TOLERANCE_PX = 1
 // Preserved from the former hook-local restore-anchor loop.
 const SAVED_POSITION_REASSERT_FRAMES = 90
 const SAVED_POSITION_STABLE_FRAMES = 8
@@ -399,6 +437,7 @@ export class PositioningController {
   private savedExecution: SavedPositionExecutionState | null = null
   private unreadExecution: UnreadMarkerExecutionState | null = null
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
+  private residentTopExecution: ResidentTopExecutionState | null = null
   private liveEdgeExecution: LiveEdgeExecutionState | null = null
   private mediaPreservationExecution: MediaPreservationExecutionState | null = null
   private directionalHistoryExecution: DirectionalHistoryExecutionState | null = null
@@ -890,6 +929,63 @@ export class PositioningController {
     })
   }
 
+  beginResidentTopNavigation(input: {
+    conversationId: string
+    executor: ResidentTopExecutor
+  }): ResidentTopRequest | null {
+    return runScrollShadowSafely({
+      event: 'resident-top-begin',
+      conversationId: input.conversationId,
+      fallback: null,
+      observe: () => {
+        const generation = mintPositionGeneration()
+        const request = withIdentity(
+          input.conversationId,
+          generation,
+          {
+            source: { kind: 'user-navigation', reason: 'resident-top' },
+            desired: { kind: 'resident-top' },
+          },
+        ) as ResidentTopRequest
+        const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
+          event: 'resident-top-reachability',
+          conversationId: input.conversationId,
+          fallback: null,
+          observe: () => input.executor.reachability(),
+        })
+        if (
+          !reachability ||
+          reachability.kind === 'empty-window' ||
+          !reachabilityMatchesRequest(request, reachability)
+        ) {
+          return null
+        }
+        const accepted = acceptPositionRequest(this.model, request)
+        if (accepted === this.model) return null
+
+        this.cancelAllExecutions('superseded')
+        this.model = advancePhaseIfCurrent(
+          accepted,
+          input.conversationId,
+          generation,
+          resolveReachability(request, reachability),
+        )
+        const execution: ResidentTopExecutionState = {
+          request,
+          executor: input.executor,
+          operation: 0,
+          abortController: null,
+          loop: null,
+          framesLeft: RESIDENT_TOP_OBSERVE_FRAMES,
+          stableFrames: 0,
+        }
+        this.residentTopExecution = execution
+        this.startResidentTopLoop(execution)
+        return request
+      },
+    })
+  }
+
   beginExplicitTarget(input: {
     conversationId: string
     messageId: string
@@ -1130,6 +1226,11 @@ export class PositioningController {
           directionalExecution !== null &&
           directionalExecution.request.conversationId === conversationId &&
           this.isDirectionalHistoryExecutionCurrent(directionalExecution)
+        const residentTopExecution = this.residentTopExecution
+        const residentTopWasCurrent =
+          residentTopExecution !== null &&
+          residentTopExecution.request.conversationId === conversationId &&
+          this.isResidentTopExecutionCurrent(residentTopExecution)
         // A boundary wheel can start a directional load and be followed by more wheel events while
         // the network request is still pending. The former prepend loop armed user takeover only
         // after the batch landed and reconciliation began, so those pre-load events could not
@@ -1159,6 +1260,9 @@ export class PositioningController {
         }
         if (directionalWasCurrent) {
           this.cancelDirectionalHistoryExecution('user-takeover')
+        }
+        if (residentTopWasCurrent) {
+          this.cancelResidentTopExecution('user-takeover')
         }
         this.cancelExecutionsIfSuperseded()
       },
@@ -2044,6 +2148,207 @@ export class PositioningController {
   ): boolean {
     return (
       this.directionalHistoryExecution === execution &&
+      isCurrentGeneration(
+        this.model,
+        execution.request.conversationId,
+        execution.request.generation,
+      )
+    )
+  }
+
+  private startResidentTopLoop(
+    execution: ResidentTopExecutionState,
+  ): void {
+    if (!this.isResidentTopExecutionCurrent(execution) || execution.loop) {
+      return
+    }
+    execution.framesLeft = RESIDENT_TOP_OBSERVE_FRAMES
+    execution.stableFrames = 0
+    const lease = this.beginResidentTopOperation(execution)
+    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
+      event: 'resident-top-loop-start',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.beginLoop(lease),
+    })
+    if (!lease.isCurrent()) {
+      if (loop) {
+        runScrollShadowSafely({
+          event: 'resident-top-loop-stale-finish',
+          conversationId: execution.request.conversationId,
+          fallback: undefined,
+          observe: () => loop.finish(),
+        })
+      }
+      return
+    }
+    if (!loop) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
+      return
+    }
+    execution.loop = loop
+
+    const started = runScrollShadowSafely<ResidentTopStartResult>({
+      event: 'resident-top-start',
+      conversationId: execution.request.conversationId,
+      fallback: { kind: 'unavailable' },
+      observe: () => execution.executor.start(execution.request, lease),
+    })
+    if (!lease.isCurrent()) return
+    if (started.kind === 'unavailable') {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
+      return
+    }
+    this.recordResidentTopFrame(execution, true)
+    if (!lease.markApplied()) return
+    this.scheduleResidentTopFrame(execution, lease)
+  }
+
+  private driveResidentTopFrame(
+    execution: ResidentTopExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent()) return
+    execution.framesLeft -= 1
+
+    const scrollTop = runScrollShadowSafely<number | null>({
+      event: 'resident-top-read-scroll-top',
+      conversationId: execution.request.conversationId,
+      fallback: null,
+      observe: () => execution.executor.readScrollTop(),
+    })
+    if (!lease.isCurrent()) return
+    if (scrollTop === null) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
+      return
+    }
+
+    execution.stableFrames =
+      scrollTop <= RESIDENT_TOP_TOLERANCE_PX
+        ? execution.stableFrames + 1
+        : 0
+    this.recordResidentTopFrame(execution, false)
+    if (execution.stableFrames >= RESIDENT_TOP_STABLE_FRAMES) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'settled')
+      return
+    }
+    if (execution.framesLeft <= 0) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
+      return
+    }
+    this.scheduleResidentTopFrame(execution, lease)
+  }
+
+  private scheduleResidentTopFrame(
+    execution: ResidentTopExecutionState,
+    lease: PositionExecutionLease,
+  ): void {
+    if (!lease.isCurrent() || !execution.loop) return
+    const scheduled = runScrollShadowSafely({
+      event: 'resident-top-frame-schedule',
+      conversationId: execution.request.conversationId,
+      fallback: false,
+      observe: () => {
+        execution.loop?.schedule(
+          () => this.driveResidentTopFrame(execution, lease),
+        )
+        return true
+      },
+    })
+    if (!scheduled && lease.isCurrent()) {
+      lease.settle()
+      this.completeResidentTopExecution(execution, 'best-effort')
+    }
+  }
+
+  private recordResidentTopFrame(
+    execution: ResidentTopExecutionState,
+    wrote: boolean,
+  ): void {
+    runScrollShadowSafely({
+      event: 'resident-top-frame-monitor',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.recordFrame(wrote),
+    })
+  }
+
+  private finishResidentTopLoop(
+    execution: ResidentTopExecutionState,
+  ): void {
+    if (!execution.loop) return
+    runScrollShadowSafely({
+      event: 'resident-top-loop-finish',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.loop?.finish(),
+    })
+    execution.loop = null
+  }
+
+  private completeResidentTopExecution(
+    execution: ResidentTopExecutionState,
+    outcome: ResidentTopCompletion,
+  ): void {
+    this.finishResidentTopLoop(execution)
+    execution.abortController?.abort()
+    runScrollShadowSafely({
+      event: 'resident-top-complete',
+      conversationId: execution.request.conversationId,
+      fallback: undefined,
+      observe: () => execution.executor.complete(execution.request, outcome),
+    })
+    if (this.residentTopExecution === execution) {
+      this.residentTopExecution = null
+    }
+  }
+
+  private beginResidentTopOperation(
+    execution: ResidentTopExecutionState,
+  ): PositionExecutionLease {
+    execution.abortController?.abort()
+    const abortController = new AbortController()
+    execution.abortController = abortController
+    const operation = ++execution.operation
+    const { conversationId, generation } = execution.request
+    const isCurrent = () =>
+      !abortController.signal.aborted &&
+      this.residentTopExecution === execution &&
+      execution.operation === operation &&
+      execution.request.conversationId === conversationId &&
+      execution.request.generation === generation &&
+      isCurrentGeneration(this.model, conversationId, generation)
+    const advance = (phase: PositioningPhase) => {
+      if (!isCurrent()) return false
+      this.model = advancePhaseIfCurrent(
+        this.model,
+        conversationId,
+        generation,
+        phase,
+      )
+      return isCurrent()
+    }
+    return {
+      conversationId,
+      generation,
+      operation,
+      signal: abortController.signal,
+      isCurrent,
+      markApplied: () => advance({ kind: 'position-applied' }),
+      settle: () => advance({ kind: 'settled' }),
+    }
+  }
+
+  private isResidentTopExecutionCurrent(
+    execution: ResidentTopExecutionState,
+  ): boolean {
+    return (
+      this.residentTopExecution === execution &&
       isCurrentGeneration(
         this.model,
         execution.request.conversationId,
@@ -3223,6 +3528,13 @@ export class PositioningController {
     ) {
       this.cancelExplicitTargetExecution()
     }
+    const residentTopExecution = this.residentTopExecution
+    if (
+      residentTopExecution &&
+      !this.isResidentTopExecutionCurrent(residentTopExecution)
+    ) {
+      this.cancelResidentTopExecution('superseded')
+    }
     const liveEdgeExecution = this.liveEdgeExecution
     if (
       liveEdgeExecution &&
@@ -3250,6 +3562,7 @@ export class PositioningController {
     this.cancelSavedExecution()
     this.cancelUnreadExecution()
     this.cancelExplicitTargetExecution()
+    this.cancelResidentTopExecution(outcome)
     this.cancelLiveEdgeExecution(outcome)
     this.cancelMediaPreservationExecution(outcome)
     this.cancelDirectionalHistoryExecution(outcome)
@@ -3277,6 +3590,15 @@ export class PositioningController {
       this.explicitTargetExecution.abortController?.abort()
     }
     this.explicitTargetExecution = null
+  }
+
+  private cancelResidentTopExecution(
+    outcome: ResidentTopCompletion,
+  ): void {
+    const execution = this.residentTopExecution
+    if (execution) {
+      this.completeResidentTopExecution(execution, outcome)
+    }
   }
 
   private cancelLiveEdgeExecution(outcome: LiveEdgeCompletion): void {

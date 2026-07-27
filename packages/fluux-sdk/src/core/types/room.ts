@@ -209,7 +209,8 @@ export interface RoomEntity {
   isBookmarked: boolean
   /** Auto-join on connect (from bookmark) */
   autojoin?: boolean
-  /** Room password (from bookmark) */
+  /** Room password, from the bookmark or a successful join. Re-sent automatically
+   *  by joinRoom() so a password-protected room rejoins without re-prompting. */
   password?: string
 
   // Quick Chat (transient room)

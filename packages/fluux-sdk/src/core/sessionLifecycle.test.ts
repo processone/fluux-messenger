@@ -108,6 +108,25 @@ describe('SessionLifecycleEngine', () => {
     expect(modules.roster.fetchRoster).toHaveBeenCalledTimes(2)
   })
 
+  // Issue #1126: unattended rejoining of a password-protected room depends on
+  // the bookmark's password reaching joinRoom on connect.
+  it('autojoins a bookmarked room with its stored password', async () => {
+    modules.muc.fetchBookmarks.mockResolvedValue({
+      roomsToAutojoin: [{ jid: 'secret@conference.example.com', nick: 'mynick', password: 'from-bookmark' }],
+      allRoomJids: ['secret@conference.example.com'],
+    })
+
+    await engine.handleConnectionSuccess(false)
+    // The autojoin runs in a detached async task after a disco#info probe.
+    await vi.waitFor(() => expect(modules.muc.joinRoom).toHaveBeenCalled())
+
+    expect(modules.muc.joinRoom).toHaveBeenCalledWith(
+      'secret@conference.example.com',
+      'mynick',
+      expect.objectContaining({ password: 'from-bookmark' })
+    )
+  })
+
   it('merges the server conversation list through the injected chat binding', () => {
     stores.roster.getContact.mockReturnValue(undefined)
 

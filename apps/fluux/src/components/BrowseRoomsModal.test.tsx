@@ -40,6 +40,10 @@ vi.mock('@fluux/sdk', () => ({
     getRoomInfo: vi.fn().mockResolvedValue(null),
     acknowledgeNonAnonymousRoom: vi.fn(),
     isNonAnonymousRoomAcknowledged: () => false,
+    // useRoomPasswordPrompt sources the join through here; same mocks as useRoom
+    // so the assertions below cover both entry points.
+    joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
   }),
   WELL_KNOWN_MUC_SERVERS: ['conference.process-one.net', 'muc.xmpp.org'],
   getLocalPart: (jid: string) => jid.split('@')[0],
@@ -506,6 +510,62 @@ describe('BrowseRoomsModal', () => {
         expect(screen.getByText('rooms.membersOnly')).toBeInTheDocument()
       })
       expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
+    // Issue #1126: a public listing can include password-protected rooms. The
+    // modal showed "password required" on its error line with nowhere to type it.
+    describe('password-protected room', () => {
+      const openAndJoin = async () => {
+        render(<BrowseRoomsModal onClose={mockOnClose} />)
+        await waitFor(() => expect(screen.getByText('General Chat')).toBeInTheDocument())
+        fireEvent.click(screen.getAllByText('rooms.join')[0])
+      }
+
+      it('prompts for the password on a 401 and retries with it', async () => {
+        mockJoinRoom.mockResolvedValue(undefined)
+        mockJoinResult
+          .mockRejectedValueOnce(
+            new RoomJoinError('general@conference.example.com', 'not-authorized'),
+          )
+          .mockResolvedValue(undefined)
+
+        await openAndJoin()
+
+        const input = await screen.findByLabelText('rooms.roomPassword')
+        fireEvent.change(input, { target: { value: 's3cret' } })
+        fireEvent.submit(input)
+
+        await waitFor(() =>
+          expect(mockJoinRoom).toHaveBeenLastCalledWith(
+            'general@conference.example.com',
+            'testuser',
+            { password: 's3cret' },
+          ),
+        )
+        await waitFor(() => {
+          expect(mockSetActiveRoom).toHaveBeenCalledWith('general@conference.example.com')
+          expect(mockOnClose).toHaveBeenCalled()
+        })
+      })
+
+      it('keeps the browser open when the password prompt is cancelled', async () => {
+        mockJoinRoom.mockResolvedValue(undefined)
+        mockJoinResult.mockRejectedValue(
+          new RoomJoinError('general@conference.example.com', 'not-authorized'),
+        )
+
+        await openAndJoin()
+
+        fireEvent.click(await screen.findByText('common.cancel'))
+
+        await waitFor(() =>
+          expect(screen.queryByLabelText('rooms.roomPassword')).not.toBeInTheDocument(),
+        )
+        // Still browsing: the room was not opened and the modal stayed put.
+        expect(mockSetActiveRoom).not.toHaveBeenCalled()
+        expect(mockOnClose).not.toHaveBeenCalled()
+        expect(screen.getByText('General Chat')).toBeInTheDocument()
+      })
     })
 
     it('should show error when trying to join with whitespace-only nickname', async () => {

@@ -8,10 +8,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MUC } from './MUC'
 import {
   createMockElement,
+  createMockRoom,
   createMockStores,
   createMockPresenceReader,
 } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
+import type { Room } from '../types/room'
 
 describe('MUC Module', () => {
   let muc: MUC
@@ -784,6 +786,171 @@ describe('MUC Module', () => {
           nick: 'mynick',
           autojoin: true,
         })
+      })
+    })
+  })
+
+  // Issue #1126: a password-protected room could only be entered by typing the
+  // password again in the Join Room modal. It was never stored, never reused by
+  // the secondary join paths, and an unrelated bookmark write dropped one another
+  // client had stored.
+  describe('room password', () => {
+    const ROOM = 'secret@conference.example.org'
+
+    /** The <password/> the join presence actually carried, if any. */
+    const sentJoinPassword = () =>
+      mockSendStanza.mock.calls[0][0].getChild('x', 'http://jabber.org/protocol/muc')?.getChildText('password')
+
+    /** The <password/> of the bookmark we published, if any. */
+    const publishedPassword = (call = 0) =>
+      mockSendIQ.mock.calls[call][0]
+        .children[0].children[0].children[0].children[0]
+        .children.find((c: { name: string }) => c.name === 'password')?.children[0]
+
+    const selfPresence = (nick: string) =>
+      createMockElement('presence', { from: `${ROOM}/${nick}` }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+            { name: 'status', attrs: { code: '110' } },
+          ],
+        },
+      ])
+
+    const storedRoom = (overrides: Partial<Room> = {}) =>
+      createMockRoom(ROOM, { name: 'Secret', nickname: 'mynick', isBookmarked: true, autojoin: false, ...overrides })
+
+    describe('joinRoom', () => {
+      it('reuses the password we already know for the room', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'from-bookmark' }))
+
+        await muc.joinRoom(ROOM, 'mynick')
+
+        expect(sentJoinPassword()).toBe('from-bookmark')
+      })
+
+      it('prefers an explicitly supplied password over the stored one', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'stale' }))
+
+        await muc.joinRoom(ROOM, 'mynick', { password: 'typed-just-now' })
+
+        expect(sentJoinPassword()).toBe('typed-just-now')
+      })
+
+      it('sends no password when none is known', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom())
+
+        await muc.joinRoom(ROOM, 'mynick')
+
+        expect(sentJoinPassword()).toBeNull()
+      })
+
+      it('re-sends the resolved password on the join retry', async () => {
+        vi.useFakeTimers()
+        try {
+          mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'from-bookmark' }))
+          await muc.joinRoom(ROOM, 'mynick')
+          mockSendStanza.mockClear()
+
+          // No self-presence: the 30s timeout fires and retries the join.
+          await vi.advanceTimersByTimeAsync(31000)
+
+          expect(sentJoinPassword()).toBe('from-bookmark')
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+    })
+
+    describe('setBookmark', () => {
+      it('keeps the stored password when the caller does not supply one', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'keep-me' }))
+        mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+        // e.g. toggling autojoin from the sidebar, which knows nothing about passwords
+        await muc.setBookmark(ROOM, { name: 'Secret', nick: 'mynick', autojoin: true })
+
+        expect(publishedPassword()).toBe('keep-me')
+      })
+
+      it('clears the password when explicitly given an empty one', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'keep-me' }))
+        mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+        await muc.setBookmark(ROOM, { name: 'Secret', nick: 'mynick', password: '' })
+
+        expect(publishedPassword()).toBeUndefined()
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:bookmark', {
+          roomJid: ROOM,
+          bookmark: expect.objectContaining({ password: undefined }),
+        })
+      })
+    })
+
+    describe('on a successful join', () => {
+      it('stores a working password and writes it to the bookmark', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom())
+        mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+        await muc.joinRoom(ROOM, 'mynick', { password: 'correct-horse' })
+        muc.handle(selfPresence('mynick'))
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+          roomJid: ROOM,
+          updates: { password: 'correct-horse' },
+        })
+        // joinRoom's disco#info is call 0; the bookmark publish follows it.
+        expect(publishedPassword(1)).toBe('correct-horse')
+      })
+
+      it('does not re-publish the bookmark when the password is unchanged', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ password: 'correct-horse' }))
+        mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+        await muc.joinRoom(ROOM, 'mynick')
+        mockSendIQ.mockClear()
+        muc.handle(selfPresence('mynick'))
+
+        expect(mockSendIQ).not.toHaveBeenCalled()
+      })
+
+      it('does not touch a quick chat', async () => {
+        mockStores.room.getRoom.mockReturnValue(storedRoom({ isBookmarked: false, isQuickChat: true }))
+        mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+        await muc.joinRoom(ROOM, 'mynick', { password: 'correct-horse', isQuickChat: true })
+        mockSendIQ.mockClear()
+        muc.handle(selfPresence('mynick'))
+
+        expect(mockSendIQ).not.toHaveBeenCalled()
+      })
+    })
+
+    it('never stores a password the server refused', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.joinRoom(ROOM, 'mynick', { password: 'wrong' })
+      const result = muc.joinResult(ROOM)
+      mockSendIQ.mockClear()
+      mockEmitSDK.mockClear()
+
+      muc.handle(createMockElement('presence', { from: `${ROOM}/mynick`, type: 'error' }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [{ name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }],
+        },
+      ]))
+
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized' })
+      expect(mockSendIQ).not.toHaveBeenCalled()
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:updated', {
+        roomJid: ROOM,
+        updates: expect.objectContaining({ password: expect.anything() }),
       })
     })
   })

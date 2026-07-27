@@ -3,6 +3,7 @@ import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { useModalInput, useListKeyboardNav } from '@/hooks'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { useRoomPasswordPrompt } from '@/hooks/useRoomPasswordPrompt'
 import {
   useConnection,
   useRoom,
@@ -41,8 +42,9 @@ interface BrowseRoomsModalProps {
 export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
-  const { browsePublicRooms, joinRoom, joinResult, getRoom, setActiveRoom, mucServiceJid } = useRoom()
+  const { browsePublicRooms, getRoom, setActiveRoom, mucServiceJid } = useRoom()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
+  const { joinRoomWithPassword, passwordDialog } = useRoomPasswordPrompt()
   // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [rooms, setRooms] = useState<{ jid: string; name: string; occupants?: number }[]>([])
@@ -250,8 +252,9 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     try {
       // Issue #37: warn before joining a room that would expose the user's real JID.
       if (!(await confirmJoin(roomJid))) return
-      await joinRoom(roomJid, nickname.trim())
-      await joinResult(roomJid)
+      // Issue #1126: a public listing can still include password-protected rooms;
+      // ask for the password on a 401 rather than dead-ending on the error line.
+      if (!(await joinRoomWithPassword(roomJid, nickname.trim()))) return
       void setActiveConversation(null)
       void setActiveRoom(roomJid)
       onClose()
@@ -502,6 +505,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         </div>
     </ModalShell>
     {warningDialog}
+    {passwordDialog}
     </>
   )
 }

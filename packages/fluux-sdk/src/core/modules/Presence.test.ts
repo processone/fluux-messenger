@@ -437,6 +437,66 @@ describe('XMPPClient Presence', () => {
     })
   })
 
+  // Issue #1126: the per-module tests call `muc.handle(stanza)` directly, so they
+  // could not catch Roster claiming EVERY presence type='error' ahead of MUC in
+  // the router — which swallowed join errors and left the room stuck at
+  // "Joining…" until the 60s timeout instead of reporting "password required".
+  // These drive the real router, so they pin the module order down.
+  describe('MUC join error routing', () => {
+    /** Error presence as ejabberd sends it: echoes <x muc> (the request), no muc#user. */
+    const joinError = (from: string, condition: string, type: string) =>
+      createMockElement('presence', { from, type: 'error' }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type },
+          children: [{ name: condition, attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }],
+        },
+      ])
+
+    it('fails the join on a 401 instead of leaving it pending', async () => {
+      await connectClient()
+      await xmppClient.muc.joinRoom('secret@conference.example.com', 'mynick')
+      const result = xmppClient.muc.joinResult('secret@conference.example.com')
+
+      mockXmppClientInstance._emit(
+        'stanza',
+        joinError('secret@conference.example.com/mynick', 'not-authorized', 'auth')
+      )
+
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized', errorType: 'auth' })
+      // The room must not be filed as a contact presence error either.
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence-error', expect.anything())
+    })
+
+    it('fails the join on a nickname conflict', async () => {
+      await connectClient()
+      await xmppClient.muc.joinRoom('room@conference.example.com', 'taken')
+      const result = xmppClient.muc.joinResult('room@conference.example.com')
+
+      mockXmppClientInstance._emit(
+        'stanza',
+        joinError('room@conference.example.com/taken', 'conflict', 'cancel')
+      )
+
+      await expect(result).rejects.toMatchObject({ condition: 'conflict' })
+    })
+
+    it('still routes a contact presence error to the roster', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit(
+        'stanza',
+        joinError('contact@example.com/phone', 'service-unavailable', 'cancel')
+      )
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+        jid: 'contact@example.com',
+        error: expect.any(String),
+      })
+    })
+  })
+
   describe('subscription requests', () => {
     it('should add subscription request to inbox for new contact', async () => {
       await connectClient()

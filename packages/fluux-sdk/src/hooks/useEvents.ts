@@ -57,7 +57,10 @@ import type { Conversation } from '../core'
  *         <li key={inv.roomJid}>
  *           {inv.from} invited you to {inv.roomName || inv.roomJid}
  *           {inv.reason && <p>{inv.reason}</p>}
- *           <button onClick={() => acceptInvitation(inv.roomJid)}>Join</button>
+ *           // Rejects with a RoomJoinError when the server refuses the join
+ *           // (password required, members-only, …). The invitation is kept, so
+ *           // the user can retry — e.g. after supplying a password.
+ *           <button onClick={() => acceptInvitation(inv.roomJid).catch(showError)}>Join</button>
  *           <button onClick={() => declineInvitation(inv.roomJid)}>Decline</button>
  *         </li>
  *       ))}
@@ -181,13 +184,21 @@ export function useEvents() {
       const { jid: currentJid, ownNickname } = connectionStore.getState()
       // Prefer the profile username (XEP-0172 nick) over the bare-JID local part.
       const defaultNick = resolveDefaultMucNick(ownNickname, currentJid) || 'user'
-      const roomPassword = invitation?.password || password
+      // An explicit password wins over the one carried by the invitation: a caller
+      // only passes one after the invitation's own was refused (issue #1126).
+      const roomPassword = password || invitation?.password
 
       // Join the room with isQuickChat flag from invitation
       await client.muc.joinRoom(roomJid, defaultNick, {
         password: roomPassword,
         isQuickChat: invitation?.isQuickChat,
       })
+
+      // joinRoom() resolves once the join presence is SENT; the server may still
+      // refuse it (password required, members-only, nickname taken). Wait for the
+      // outcome so the failure reaches the caller and the invitation survives —
+      // dropping it on a refusal would strand the user with no way to retry.
+      await client.muc.joinResult(roomJid)
 
       // Remove from invitations
       removeMucInvitation(roomJid)

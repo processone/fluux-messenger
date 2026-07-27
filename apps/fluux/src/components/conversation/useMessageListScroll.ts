@@ -3,9 +3,9 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Saved-position, unread-marker, explicit-target, live-edge, media-preservation, and
- *    directional-history policy/retry ownership lives in PositioningController; browser writes
- *    stay imperative in leased hook executors
+ * 2. Saved-position, unread-marker, explicit-target, live-edge, media-preservation,
+ *    directional-history, and resident-top policy/retry ownership lives in
+ *    PositioningController; browser writes stay imperative in leased hook executors
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
@@ -38,6 +38,7 @@ import {
   type LiveEdgeCompletion,
   type MediaPreservationExecutor,
   type PositionExecutionLease,
+  type ResidentTopExecutor,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
   type UnreadMarkerExecutor,
@@ -152,11 +153,11 @@ const CONTENT_ARRIVAL_TRIGGERS: ReadonlySet<string> = new Set([
  *
  * Positioning callbacks close over `messageCount`, `firstMessageId`, and window state through their
  * executors, so their identity changes on every append. That is harmless for a direct call, but two
- * of them are published: `requestMessageTarget` is a context value read by EVERY message row, and
- * both are dependencies of the active-list registration. An unstable identity there re-renders every
- * mounted row on each append — context updates bypass `React.memo` — and re-registers the list.
- * Forwarding through a ref keeps behaviour identical (the newest implementation still runs) while
- * the published identity stays constant.
+ * of them are published: `requestMessageTarget` is a context value read by EVERY message row,
+ * `requestMessageTarget`/`scrollToBottom` feed the active-list registration, and the top/bottom
+ * callbacks feed global keyboard listeners. An unstable identity there re-renders mounted rows or
+ * rebinds listeners on each append. Forwarding through a ref keeps behaviour identical (the newest
+ * implementation still runs) while the published identity stays constant.
  */
 function useStableCallback<Args extends unknown[]>(
   callback: (...args: Args) => void,
@@ -1900,23 +1901,61 @@ export function useMessageListScroll({
   // list — and re-binds the ⌘/Ctrl+↓ listener — on every append.
   const scrollToBottom = useStableCallback(scrollToBottomImpl)
 
-  const scrollToTop = useCallback(() => {
+  const createResidentTopExecutor = useCallback((): ResidentTopExecutor => ({
+    reachability: () => deriveReachabilityForDesired({
+      desired: { kind: 'resident-top' },
+      hasRows: messageCount > 0 && firstMessageId !== undefined,
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      virtualizer: virtualizerRef.current,
+      scroller: scrollerRef.current,
+      loadAround: 'unavailable',
+      canRecenter: false,
+    }),
+    beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
+    start: (_request, lease) => {
+      const scroller = scrollerRef.current
+      if (!lease.isCurrent() || !scroller) return { kind: 'unavailable' }
+      scroller.scrollTo({ top: 0, behavior: 'smooth' })
+      return { kind: 'started' }
+    },
+    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
+    complete: (request, outcome) => {
+      debugLog('RESIDENT TOP: controller completed', {
+        conversationId: request.conversationId,
+        generation: request.generation,
+        outcome,
+      })
+    },
+  }), [
+    beginControllerFrameLoop,
+    firstMessageId,
+    messageCount,
+    windowAtLiveEdge,
+  ])
+
+  const scrollToTopImpl = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const desired = { kind: 'resident-top' } as const
-    positioningControllerRef.current?.observeRequest({
-      event: 'home-key',
+    if (staticMode) {
+      // Search/stranger previews intentionally own neither a controller conversation nor live-list
+      // persistence. Preserve their isolated one-shot Home behavior inside this scroller; routing
+      // it into the live-list controller would reject the request after preventDefault().
+      scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    // `triggerLoadOlder` intentionally lets explicit user travel back to the boundary bypass its
+    // cooldown via this latch. Home is a positioning command, not that travel gesture: it starts
+    // away from the top, so leaving the latch armed would make the smooth arrival immediately
+    // prepend history and supersede the resident-top request. A later genuine move away from the
+    // top re-arms the latch in handleScroll.
+    scrolledAwayFromTopRef.current = false
+    positioningControllerRef.current?.beginResidentTopNavigation({
       conversationId,
-      draft: {
-        source: { kind: 'user-navigation', reason: 'resident-top' },
-        desired,
-      },
-      reachability: shadowReachabilityRef.current(desired),
-      actual: { desired, phase: 'positioning' },
+      executor: createResidentTopExecutor(),
     })
-    scroller.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [conversationId])
+  }, [conversationId, createResidentTopExecutor, staticMode])
+  // Published to MessageList's keyboard listeners. Keep the shell stable while the executor factory
+  // tracks row/window facts so normal appends do not churn global keydown subscriptions.
+  const scrollToTop = useStableCallback(scrollToTopImpl)
 
   // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
   // that is following along — most importantly when the mobile on-screen keyboard
@@ -2474,8 +2513,12 @@ export function useMessageListScroll({
       )
     }
 
-    // Track if user scrolled away from top (allows re-trigger of load)
-    if (scrollTop > 50) scrolledAwayFromTopRef.current = true
+    // Track if the USER scrolled away from top (allows a later return to re-trigger load). A
+    // controller-owned animation can cross this threshold too — most notably Home's smooth trip
+    // from the bottom — but that is not evidence of a separate pagination gesture.
+    if (!programmaticScroll && scrollTop > 50) {
+      scrolledAwayFromTopRef.current = true
+    }
     // Mirror for the newer direction (sliding window): away from the resident bottom.
     if (distFromBottom > 50) scrolledAwayFromBottomRef.current = true
 
