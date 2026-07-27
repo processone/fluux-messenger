@@ -13,6 +13,7 @@ import {
   type MediaPreservationFrameResult,
   type PositionExecutionLease,
   type PositionRequestDraft,
+  type ResidentTopExecutor,
   type SavedPositionExecutionLease,
   type SavedPositionExecutor,
   type SavedPositionFrameResult,
@@ -347,6 +348,86 @@ describe('positioning controller shadow mode', () => {
 
     controller.deactivate(conversationId, current!.generation)
     expect(controller.snapshot().currentConversationId).toBeNull()
+  })
+})
+
+describe('positioning controller resident-top ownership', () => {
+  function residentTopHarness(
+    initialReachability: ReachabilityFacts = {
+      kind: 'available',
+      index: 0,
+      mounted: true,
+      placement: 'viable',
+    },
+  ) {
+    const callbacks: Array<() => void> = []
+    const leases: PositionExecutionLease[] = []
+    const start = vi.fn(() => ({ kind: 'started' as const }))
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const complete = vi.fn()
+    let scrollTop = 640
+    const executor: ResidentTopExecutor = {
+      reachability: () => initialReachability,
+      beginLoop: (lease) => {
+        leases.push(lease)
+        return {
+          schedule: (callback) => callbacks.push(callback),
+          recordFrame,
+          finish,
+        }
+      },
+      start,
+      readScrollTop: () => scrollTop,
+      complete,
+    }
+    return {
+      executor,
+      callbacks,
+      leases,
+      start,
+      finish,
+      recordFrame,
+      complete,
+      setScrollTop: (value: number) => {
+        scrollTop = value
+      },
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback).toBeDefined()
+        callback!()
+      },
+    }
+  }
+
+  it('starts one smooth navigation and only observes until resident top settles', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+
+    expect(request).not.toBeNull()
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(controller.snapshot().active?.phase).toEqual({
+      kind: 'position-applied',
+    })
+
+    for (const scrollTop of [640, 100, 1, 0]) {
+      harness.setScrollTop(scrollTop)
+      harness.runFrame()
+    }
+
+    expect(harness.start).toHaveBeenCalledTimes(1)
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ desired: { kind: 'resident-top' } }),
+      'settled',
+    )
+    expect(harness.recordFrame).toHaveBeenCalledWith(true)
+    expect(harness.recordFrame).toHaveBeenLastCalledWith(false)
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
   })
 })
 

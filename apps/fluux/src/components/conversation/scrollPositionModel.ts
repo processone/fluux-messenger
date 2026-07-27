@@ -206,6 +206,11 @@ export type ExplicitTargetRequest = Extract<
   { source: { kind: 'user-navigation'; reason: 'message-target' } }
 >
 
+export type ResidentTopRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'user-navigation'; reason: 'resident-top' } }
+>
+
 export type UnreadMarkerRequest = Extract<
   PositionRequest,
   | { source: { kind: 'entry'; reason: 'unread-marker' } }
