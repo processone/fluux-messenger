@@ -1935,6 +1935,13 @@ export function useMessageListScroll({
 
   const scrollToTopImpl = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
+    if (staticMode) {
+      // Search/stranger previews intentionally own neither a controller conversation nor live-list
+      // persistence. Preserve their isolated one-shot Home behavior inside this scroller; routing
+      // it into the live-list controller would reject the request after preventDefault().
+      scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     // `triggerLoadOlder` intentionally lets explicit user travel back to the boundary bypass its
     // cooldown via this latch. Home is a positioning command, not that travel gesture: it starts
     // away from the top, so leaving the latch armed would make the smooth arrival immediately
@@ -1945,7 +1952,7 @@ export function useMessageListScroll({
       conversationId,
       executor: createResidentTopExecutor(),
     })
-  }, [conversationId, createResidentTopExecutor])
+  }, [conversationId, createResidentTopExecutor, staticMode])
   // Published to MessageList's keyboard listeners. Keep the shell stable while the executor factory
   // tracks row/window facts so normal appends do not churn global keydown subscriptions.
   const scrollToTop = useStableCallback(scrollToTopImpl)

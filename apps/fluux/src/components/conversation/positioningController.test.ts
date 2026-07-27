@@ -454,6 +454,34 @@ describe('positioning controller resident-top ownership', () => {
     expect(controller.snapshot().watermark).toBe(request!.generation)
   })
 
+  it('deactivates resident-top before its queued frame can observe the old conversation', () => {
+    const harness = residentTopHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const request = controller.beginResidentTopNavigation({
+      conversationId,
+      executor: harness.executor,
+    })
+    const staleFrame = harness.callbacks.shift()!
+
+    controller.deactivate(conversationId, request!.generation)
+    staleFrame()
+
+    expect(harness.complete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ generation: request!.generation }),
+      'superseded',
+    )
+    expect(harness.finish).toHaveBeenCalledTimes(1)
+    expect(harness.leases[0].isCurrent()).toBe(false)
+    expect(controller.snapshot()).toEqual(
+      expect.objectContaining({
+        currentConversationId: null,
+        active: null,
+        watermark: request!.generation,
+      }),
+    )
+  })
+
   it('finishes resident-top as superseded before a queued frame can settle it', () => {
     const harness = residentTopHarness()
     const controller = new PositioningController()

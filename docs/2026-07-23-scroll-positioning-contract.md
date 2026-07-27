@@ -338,7 +338,8 @@ Two visually similar scroll operations are explicitly outside this migration:
   active-list registry holds only one entry, requests from inside any list route by **containment**
   (`messageTargetContext`), not by registration order; previews therefore do not register at all.
   The registry remains for callers with no enclosing list that mean the live conversation
-  (`PollBanner`, find-on-page).
+  (`PollBanner`, find-on-page). Its Home shortcut likewise retains one isolated smooth write because
+  static previews deliberately have no active controller conversation to accept that command.
 - Keyboard selection in `useMessageSelection` uses
   `scrollIntoView({ block: 'nearest' })` only to keep the selected row visible. It is viewport
   maintenance, not a semantic message-position request, and remains intentionally direct.

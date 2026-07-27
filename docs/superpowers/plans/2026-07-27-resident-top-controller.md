@@ -314,7 +314,7 @@ npx vitest run src/components/conversation/MessageList.scroll.test.tsx
 cd ../..
 npx playwright test \
   --config playwright.scroll.config.ts \
-  --grep "Home reaches resident top"
+  --grep "Home issues one smooth write"
 ```
 
 Expected: the Vitest progress test fails because the current direct call has no
@@ -384,7 +384,7 @@ npx vitest run src/components/conversation/MessageList.scroll.test.tsx
 cd ../..
 npx playwright test \
   --config playwright.scroll.config.ts \
-  --grep "Home reaches resident top"
+  --grep "Home issues one smooth write"
 ```
 
 Expected: hook tests pass, resident-top issues one smooth write, and Playwright
@@ -480,7 +480,7 @@ npx vitest run \
 cd ../..
 npx playwright test \
   --config playwright.scroll.config.ts \
-  --grep "Home reaches resident top"
+  --grep "Home issues one smooth write"
 ```
 
 Expected: all focused Vitest tests pass and Playwright reports 2/2.

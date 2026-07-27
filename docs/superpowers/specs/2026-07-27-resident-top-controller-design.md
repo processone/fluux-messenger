@@ -145,3 +145,8 @@ non-competing contexts.
 
 Step 7—splitting persistence, user intent, history windowing, and browser
 reconciliation out of `useMessageListScroll`—is explicitly outside this PR.
+
+Static preview lists remain an isolated exception: they do not activate a
+controller conversation, so their Home shortcut retains its prior one-shot
+smooth write within the preview scroller. It cannot compete with live-list
+positioning or persistence.
