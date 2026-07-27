@@ -133,6 +133,10 @@ describe('MessageList — live-edge executor cost control', () => {
     const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
     instrumentScroller(scroller)
     flush(70) // settle the entry pin completely
+    // Seed the geometry baseline the way a real browser does — scroll events fire constantly, and
+    // the growth correction in the row-growth gate reads the last one. Without this the harness
+    // leaves a pre-instrumentation baseline the real app never has.
+    act(() => { scroller.dispatchEvent(new Event('scroll')) })
     scrollToEndCalls.count = 0
     return { view, scroller }
   }
@@ -142,18 +146,22 @@ describe('MessageList — live-edge executor cost control', () => {
       <MessageList messages={[...makeMessages(50), { ...linked, linkPreview: preview }]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
     )
 
-  // The card's height reaches the scroller a frame or two AFTER the commit that mounts it: under
-  // virtualization scrollHeight is the @tanstack spacer (getTotalSize()), which only grows once the
-  // row's ResizeObserver has re-measured. So the commit and the growth are two separate steps.
+  // The card's height is in the scroller AS SOON AS the commit that mounts it lands: the row is
+  // absolutely positioned inside the @tanstack spacer and @tanstack re-measures it in the same
+  // frame, so scrollHeight already includes the growth when the layout effect runs. Verified in
+  // both engines — see the fastening tests in scripts/scroll-invariants.ts. Modelling this as a
+  // delayed growth is what let an earlier version of the geometry gate look correct here while
+  // failing in a real browser, so the growth is applied together with the rerender below.
+  // Deliberately larger than AT_BOTTOM_THRESHOLD (150): a gate reading POST-growth geometry must
+  // fail this test rather than squeak under the threshold.
   const PREVIEW_CARD_PX = 260
 
   it('re-pins the bottom when a late link-preview fastening grows a resident row', () => {
     const isAtBottomRef = { current: true }
     const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
 
-    fastenPreview(view, isAtBottomRef) // the fastening commits — spacer not grown yet
-    flush(1)
-    geo.scrollHeight += PREVIEW_CARD_PX // the row re-measures; the spacer catches up
+    geo.scrollHeight += PREVIEW_CARD_PX // the card is in the layout the moment it commits
+    fastenPreview(view, isAtBottomRef)
     flush(10)
 
     expect(scrollToEndCalls.count).toBeGreaterThan(0)
@@ -165,9 +173,8 @@ describe('MessageList — live-edge executor cost control', () => {
     const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
 
     scroller.scrollTop = 400 // the reader scrolled up into history
-    fastenPreview(view, isAtBottomRef)
-    flush(1)
     geo.scrollHeight += PREVIEW_CARD_PX
+    fastenPreview(view, isAtBottomRef)
     flush(10)
 
     expect(scrollToEndCalls.count).toBe(0)

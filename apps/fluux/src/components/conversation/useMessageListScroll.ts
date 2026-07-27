@@ -3329,11 +3329,22 @@ export function useMessageListScroll({
   // scrollHeight per frame and re-pins instantly (no smooth easing, so nothing visibly animates),
   // converging in a handful of frames. It's pure imperative scroll work — no React re-render.
   //
-  // Two safeguards keep it from ever fighting a scroll: (1) it's gated on LIVE geometry, not the
-  // latchable isAtBottomRef — a reader scrolled up into history reads distFromBottom >= threshold and
-  // is never re-pinned (a stale-true latch is what made a typing toggle "fight" the scroll in #918);
-  // (2) it fires only on an actual row-height change WITHIN the same conversation, so a conversation
-  // switch / restore is never disturbed.
+  // Two safeguards keep it from ever fighting a scroll: (1) it's gated on geometry, not the
+  // latchable isAtBottomRef — a reader scrolled up into history is never re-pinned (a stale-true
+  // latch is what made a typing toggle "fight" the scroll in #918); (2) it fires only on an actual
+  // row-height change WITHIN the same conversation, so a conversation switch / restore is never
+  // disturbed.
+  //
+  // The gate must read the geometry from BEFORE the growth, which is why it subtracts the height
+  // delta rather than measuring distance-from-bottom directly. By the time this layout effect runs
+  // the row has already grown, and that growth lands in the distance: a ~260px preview card reads as
+  // "260px from the bottom", i.e. further than the threshold, so a naive live-geometry gate refuses
+  // to re-pin the very case it exists for. Worse, the post-commit geometry is not even self
+  // consistent under virtualization — the grown row is absolutely positioned and overflows the
+  // @tanstack spacer, so the row can hang below the fold while scrollHeight (still the pre-growth
+  // spacer) reports a comfortable distance. Both engines reproduce this; see the fastening tests in
+  // scripts/scroll-invariants.ts. lastScrollDataRef is refreshed on every scroll event and by every
+  // bottom pin, so it is the last geometry the reader actually saw.
   const prevRowGrowthKeyRef = useRef(rowGrowthSignature)
   const rowGrowthConvRef = useRef(conversationId)
   useLayoutEffect(() => {
@@ -3346,8 +3357,17 @@ export function useMessageListScroll({
 
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return
-    // Live-geometry gate: only re-pin when genuinely at/near the bottom right now.
-    if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
+    // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
+    // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
+    // and make a scrolled-up reader look as if they had been at the bottom — a yank, the harmful
+    // direction. With no usable baseline we fall back to the raw distance, whose worst case is a
+    // MISSED re-pin that the next stimulus corrects.
+    const baseline = lastScrollDataRef.current?.height ?? 0
+    const growth =
+      baseline >= scroller.clientHeight
+        ? Math.max(0, scroller.scrollHeight - baseline)
+        : 0
+    if (getDistanceFromBottom(scroller) - growth >= AT_BOTTOM_THRESHOLD) return
     // A running pin loop already keeps the bottom pinned — don't stack a second one.
     if (pinBottomClaim().isHeld()) return
 

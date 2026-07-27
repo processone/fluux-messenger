@@ -26,6 +26,23 @@ describe('computeRowGrowthSignature', () => {
     expect(computeRowGrowthSignature(after)).not.toBe(computeRowGrowthSignature(before))
   })
 
+  // Bodies render with `whitespace-pre-wrap` in proportional text, so equal length does NOT mean
+  // equal height. A length-only fingerprint collided here and missed the re-pin entirely.
+  it('changes on a same-length correction that re-wraps the row', () => {
+    const oneLine = [{ ...text('a', 'aaaaa'), isEdited: true }]
+    const threeLines = [{ ...text('a', 'a\na\na'), isEdited: true }]
+    expect(oneLine[0].body).toHaveLength(threeLines[0].body!.length) // premise: same length
+
+    expect(computeRowGrowthSignature(threeLines)).not.toBe(computeRowGrowthSignature(oneLine))
+  })
+
+  it('changes on a same-length correction that only reorders characters', () => {
+    const before = [{ ...text('a', 'iii mmm'), isEdited: true }]
+    const after = [{ ...text('a', 'mmm iii'), isEdited: true }]
+
+    expect(computeRowGrowthSignature(after)).not.toBe(computeRowGrowthSignature(before))
+  })
+
   it('changes on a correction, and again on a second correction of different length', () => {
     const original = [text('a', 'hi')]
     const edited = [{ ...text('a', 'hi there'), isEdited: true }]

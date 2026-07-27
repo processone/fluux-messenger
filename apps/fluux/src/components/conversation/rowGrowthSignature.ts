@@ -32,6 +32,20 @@ export interface RowGrowthMessage {
   isRetracted?: boolean
 }
 
+/**
+ * djb2 over the body, as unsigned base-36. Keeps the signature a fixed few chars per edited row
+ * instead of embedding whole message bodies (this string is rebuilt and compared every render).
+ * A hash collision costs one missed re-pin, which the next stimulus corrects — the previous
+ * length-only fingerprint collided on every same-length rewrap instead.
+ */
+function hashBody(body: string): string {
+  let hash = 5381
+  for (let i = 0; i < body.length; i += 1) {
+    hash = (((hash << 5) + hash) ^ body.charCodeAt(i)) | 0
+  }
+  return (hash >>> 0).toString(36)
+}
+
 export function computeRowGrowthSignature(messages: readonly RowGrowthMessage[]): string {
   let sig = ''
   for (const m of messages) {
@@ -50,9 +64,11 @@ export function computeRowGrowthSignature(messages: readonly RowGrowthMessage[])
     if (hasReactions) sig += `r${JSON.stringify(reactions)}`
     if (m.linkPreview != null) sig += 'l'
     if (m.attachment != null) sig += 'a'
-    // A correction replaces the body; its LENGTH is what re-wraps the row, and it is what changes
-    // between two successive corrections (isEdited stays true after the first one).
-    if (m.isEdited) sig += `e${m.body?.length ?? 0}`
+    // A correction replaces the body, and `isEdited` stays true across successive corrections, so
+    // the body itself has to be fingerprinted. Length alone is not enough: bodies render with
+    // `whitespace-pre-wrap` in proportional text, so two same-length bodies can be different
+    // heights — `aaaaa` is one line, `a\na\na` is three.
+    if (m.isEdited) sig += `e${hashBody(m.body ?? '')}`
     if (m.isRetracted) sig += 'x'
     sig += ';'
   }
