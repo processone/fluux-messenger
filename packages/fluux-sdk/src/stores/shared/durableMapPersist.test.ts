@@ -223,36 +223,58 @@ describe('durableMapPersist — baseline lifecycle', () => {
   })
 })
 
-describe('durableMapPersist — the invariant key-presence rests on', () => {
+describe('durableMapPersist — the gap boundary is structural, the end is not', () => {
   /**
-   * Detection is by gap key ADDED, so an in-place interval replacement — the
-   * same id's gap moving from `{ start: 1000 }` to `{ start: 99000 }` — is NOT
-   * force-flushed. That is the normal shape of a multi-page forward catch-up,
-   * where each incomplete page rewrites the same key with a higher hole.
+   * The asymmetry the gap rule turns on.
    *
-   * It is survivable because gap `start` / `startId` only ever move UPWARD for
-   * an existing key (see the module doc and `syncGapAfterArchiveMerge`), so a
-   * lost replacement leaves an anchor BELOW the true hole — and
-   * `selectCatchUpQuery` gives a recorded gap boundary priority over the cached
-   * edge, so the next session resumes below the hole and re-detects it. Adding
-   * `start` to the signature was considered and rejected: it would force-flush
-   * every intermediate page of a forward catch-up, which is exactly the burst
-   * the throttle exists to collapse.
-   *
-   * This test states that behaviour rather than guarding it — if it ever fails,
-   * the rule changed, and §4.2 plus the module doc have to change with it.
+   * An in-place BOUNDARY advance — the same id's gap moving from
+   * `{ start: 1000 }` to `{ start: 99000 }` — is the normal shape of a
+   * multi-page forward catch-up, and losing it is not self-healing: the restored
+   * stale anchor is closable by a later backward "load older" page where the
+   * true anchor would have survived, leaving the hole above it unrecorded while
+   * the forward cursor sits above it. So it force-flushes.
    */
-  it('does not force-flush an in-place gap interval replacement', () => {
+  it('force-flushes an in-place gap boundary advance', () => {
     write({ gaps: gaps({ a: { start: 1000, startId: 'anchor-low' } }) }, 'baseline')
     write({ gaps: gaps({ a: { start: 1000, end: 900, startId: 'anchor-low' } }) }, 'opener')
     expect(writeCount()).toBe(2)
 
     write({ gaps: gaps({ a: { start: 99000, startId: 'anchor-high' } }) }, 'moved')
 
-    // Memory holds the higher hole; disk still holds the lower anchor.
+    expect(writeCount()).toBe(3)
+    expect(onDisk()).toBe('moved')
+  })
+
+  /** `startId` alone can move while `start` stands still — an incomplete forward
+   *  page whose `rsm.last` advances the id-exact cursor. Same class, same rule. */
+  it('force-flushes a startId-only advance', () => {
+    write({ gaps: gaps({ a: { start: 1000, startId: 'arc-1' } }) }, 'baseline')
+    write({ gaps: gaps({ a: { start: 1000, end: 900, startId: 'arc-1' } }) }, 'opener')
+    expect(writeCount()).toBe(2)
+
+    write({ gaps: gaps({ a: { start: 1000, end: 900, startId: 'arc-2' } }) }, 'cursor-moved')
+
+    expect(writeCount()).toBe(3)
+    expect(onDisk()).toBe('cursor-moved')
+  })
+
+  /**
+   * The other side of the asymmetry, and the reason the throttle still earns its
+   * keep here: `end` moving down is the hole closing from BELOW, and a stale
+   * un-closed gap only costs a redundant re-heal. Without this a rule that
+   * force-flushed on ANY gap field change would pass every durability test in
+   * the file — flushing more is never less durable.
+   */
+  it('leaves an end-only shrink throttled', () => {
+    write({ gaps: gaps({ a: { start: 1000, end: 800, startId: 'anchor' } }) }, 'baseline')
+    write({ gaps: gaps({ a: { start: 1000, end: 900, startId: 'anchor' } }) }, 'opener')
+    expect(writeCount()).toBe(2)
+
+    write({ gaps: gaps({ a: { start: 1000, end: 950, startId: 'anchor', endId: 'e' } }) }, 'shrunk')
+
     expect(writeCount()).toBe(2)
     expect(onDisk()).toBe('opener')
     flush()
-    expect(onDisk()).toBe('moved')
+    expect(onDisk()).toBe('shrunk')
   })
 })

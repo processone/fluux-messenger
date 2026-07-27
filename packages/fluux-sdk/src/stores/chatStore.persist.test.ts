@@ -200,6 +200,41 @@ describe('chat gap/coverage structural durability', () => {
     expect(gapsOnDisk().has(CID)).toBe(true)
   })
 
+  /**
+   * The crash/restart path a lost gap BOUNDARY opens, for the chat blob.
+   *
+   * A multi-page forward catch-up advances `start`/`startId` under the SAME gap
+   * key on each incomplete page, then bails to a `before:''` fetch-latest. If
+   * only the formation is forced out of the window, a hard kill leaves disk
+   * holding a STALE, LOWER boundary, and the true hole above it can be erased by
+   * a later "load older" page.
+   *
+   * Three pages is the minimum that discriminates: page 1 force-flushes on the
+   * formation and CLOSES the window, page 2 takes a fresh leading edge and lands
+   * regardless, and only page 3 is genuinely coalesced (§5.5).
+   */
+  it('persists the LATEST boundary of a multi-page forward catch-up', () => {
+    seedConversation(CID)
+
+    const page1 = new Date('2026-05-14T09:00:00Z')
+    const page2 = new Date('2026-05-14T10:00:00Z')
+    const page3 = new Date('2026-05-14T11:00:00Z')
+
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward')
+    expect(chatStore.getState().conversationGaps.get(CID)?.startId).toBe('arc-1')
+
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward')
+    expect(gapsOnDisk().get(CID)?.startId).toBe('arc-2') // leading edge — lands either way
+
+    chatStore.getState().mergeMAMMessages(CID, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward')
+    expect(chatStore.getState().conversationGaps.get(CID)).toMatchObject({
+      start: page3.getTime(), startId: 'arc-3',
+    })
+
+    // The hard kill: no timer advance, no flush, no lifecycle event.
+    expect(gapsOnDisk().get(CID)).toMatchObject({ start: page3.getTime(), startId: 'arc-3' })
+  })
+
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {
     seedConversation(CID)
 

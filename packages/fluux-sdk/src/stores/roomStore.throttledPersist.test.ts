@@ -373,28 +373,153 @@ describe('roomStore gap/coverage structural durability', () => {
   // EVERY gaps write passes the whole suite — every durability test still goes
   // green, because flushing more is never less durable.
   //
+  // The shrink is driven through a real backward "load older" merge: a page that
+  // reaches from above the gap down INTO it moves `end` down and leaves `start` /
+  // `startId` alone (`closeGapWithBackwardPage`). That is the whole asymmetry —
+  // the hole closing from below is a lagging mirror; the boundary moving up is
+  // not. (This case used to be driven with `clearRoomGapAnchor`, which strips
+  // `startId`: now a boundary change, hence force-flushed, so it no longer states
+  // the row it was written to state.)
+  //
   // Same shape as the formation test: write #1 establishes the baseline and
   // closes the window (the unknown-baseline force-flush), write #2 opens it, and
   // write #3 is the one that must be coalesced.
   it('still coalesces a gap shrink once the baseline is established', () => {
+    for (const room of [ROOM2, ROOM3]) {
+      roomStore.getState().addRoom(createRoom(room, { joined: true }))
+    }
+    const start = new Date('2026-05-14T09:00:00Z').getTime()
     roomStore.setState({
       roomGaps: new Map([
         [ROOM, { start: 500, startId: 'anchor-1' }],
-        [ROOM2, { start: 1000, startId: 'anchor-2' }],
-        [ROOM3, { start: 2000, startId: 'anchor-3' }],
+        [ROOM2, { start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-2' }],
+        [ROOM3, { start, end: new Date('2026-05-14T18:00:00Z').getTime(), startId: 'anchor-3' }],
       ]),
     })
     roomStore.getState().clearRoomGapAnchor(ROOM, 'anchor-1') // baseline established, window CLOSED
-    localStorageMock.setItem.mockClear()
 
-    roomStore.getState().clearRoomGapAnchor(ROOM2, 'anchor-2') // shrink → leading edge → window OPEN
-    roomStore.getState().clearRoomGapAnchor(ROOM3, 'anchor-3') // shrink → coalesced, NOT force-flushed
-    expect(writeCount()).toBe(1)
-    expect(gapsOnDisk().get(ROOM2)?.startId).toBeUndefined()
-    expect(gapsOnDisk().get(ROOM3)?.startId).toBe('anchor-3') // still pending
+    /** A backward page landing inside the gap: `end` moves down to its oldest. */
+    const shrink = (room: string, oldest: string): void => {
+      roomStore.getState().mergeRoomMAMMessages(
+        room,
+        [
+          { ...createMessage(`lo-${room}`, room, 'a', 'lo', false, new Date(oldest)), noLocalStore: true } as RoomMessage,
+          { ...createMessage(`hi-${room}`, room, 'a', 'hi', false, new Date('2026-05-14T19:00:00Z')), noLocalStore: true } as RoomMessage,
+        ],
+        { first: `lo-${room}` }, false, 'backward'
+      )
+    }
+
+    shrink(ROOM2, '2026-05-14T15:00:00Z') // shrink → leading edge → window OPEN
+    shrink(ROOM3, '2026-05-14T14:00:00Z') // shrink → coalesced, NOT force-flushed
+
+    // `start` / `startId` untouched on both — this really is an end-only move.
+    expect(roomStore.getState().roomGaps.get(ROOM3)).toMatchObject({ start, startId: 'anchor-3' })
+
+    expect(gapsOnDisk().get(ROOM2)?.end).toBe(new Date('2026-05-14T15:00:00Z').getTime())
+    expect(gapsOnDisk().get(ROOM3)?.end).toBe(new Date('2026-05-14T18:00:00Z').getTime()) // still pending
 
     flush()
-    expect(gapsOnDisk().get(ROOM3)?.startId).toBeUndefined()
+    expect(gapsOnDisk().get(ROOM3)?.end).toBe(new Date('2026-05-14T14:00:00Z').getTime())
+  })
+
+  /**
+   * The crash/restart path a lost gap BOUNDARY opens.
+   *
+   * A multi-page forward catch-up advances `start`/`startId` under the SAME gap
+   * key on each incomplete page (`MAM_CATCHUP_FORWARD_BAIL_PAGES` = 3, so at
+   * most three), then bails to a `before:''` fetch-latest. If only the first
+   * page (the formation) is forced out of the window, a hard kill leaves disk
+   * holding a STALE, LOWER boundary — and the true hole above it can then be
+   * erased by a backward "load older" page that closes the stale interval.
+   *
+   * Three pages is the minimum that discriminates: page 1 force-flushes on the
+   * formation and CLOSES the window, page 2 therefore takes a fresh leading edge
+   * and lands regardless, and only page 3 is genuinely coalesced (§5.5).
+   */
+  it('persists the LATEST boundary of a multi-page forward catch-up', () => {
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+
+    const page1 = new Date('2026-05-14T09:00:00Z')
+    const page2 = new Date('2026-05-14T10:00:00Z')
+    const page3 = new Date('2026-05-14T11:00:00Z')
+
+    // Page 1 — the gap FORMATION. Force-flushed, window CLOSED.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM, unstoredPage('p1', page1), { last: 'arc-1' }, false, 'forward'
+    )
+    expect(roomStore.getState().roomGaps.get(ROOM)?.startId).toBe('arc-1')
+
+    // Page 2 — same key, higher hole. Leading edge (window was closed), so it
+    // lands either way; what matters is that it re-OPENS the window.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM, unstoredPage('p2', page2), { last: 'arc-2' }, false, 'forward'
+    )
+    expect(gapsOnDisk().get(ROOM)?.startId).toBe('arc-2')
+
+    // Page 3 — the boundary advance that lands inside an OPEN window.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM, unstoredPage('p3', page3), { last: 'arc-3' }, false, 'forward'
+    )
+    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject({
+      start: page3.getTime(), startId: 'arc-3',
+    })
+
+    // The hard kill: no timer advance, no flush, no lifecycle event. Then the
+    // restart reads whatever is on disk.
+    expect(gapsOnDisk().get(ROOM)).toMatchObject({ start: page3.getTime(), startId: 'arc-3' })
+  })
+
+  /**
+   * The user-visible harm, carried one step further: a "load older" page that
+   * lands between the stale anchor and the true one destroys the gap outright.
+   *
+   * `closeGapWithBackwardPage` reads a backward page against `gap.start`:
+   * `newestTs <= start` → the page is entirely below the gap and says nothing;
+   * `oldestTs <= start` → the regions connect → CLEAR. A page spanning
+   * [09:00, 10:30] therefore hits opposite branches depending on the anchor:
+   *
+   * - true anchor 11:00 → `newestTs (10:30) <= 11:00` → gap PRESERVED, still
+   *   healable next session;
+   * - stale anchor 10:00 → `oldestTs (09:00) <= 10:00` → gap CLEARED, and the
+   *   real hole above 11:00 is now unrecorded while the forward cursor already
+   *   sits above it. Silent forever.
+   *
+   * Driven through the real store actions: multi-page catch-up, hard kill,
+   * rehydrate from whatever is on disk, one backward merge.
+   */
+  it('keeps the gap healable after a load-older page that would erase a stale one', () => {
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+
+    const pages = [
+      new Date('2026-05-14T09:00:00Z'),
+      new Date('2026-05-14T10:00:00Z'),
+      new Date('2026-05-14T11:00:00Z'),
+    ]
+    for (const [i, ts] of pages.entries()) {
+      roomStore.getState().mergeRoomMAMMessages(
+        ROOM, unstoredPage(`p${i + 1}`, ts), { last: `arc-${i + 1}` }, false, 'forward'
+      )
+    }
+
+    // Hard kill — no timer, no flush — then restart on whatever disk holds.
+    const restored = gapsOnDisk()
+    roomStore.getState().reset()
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+    roomStore.setState({ roomGaps: restored })
+
+    // "Load older": a page that sits entirely below the TRUE hole but straddles
+    // the stale anchor.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [
+        { ...createMessage('older', ROOM, 'a', 'older', false, new Date('2026-05-14T09:00:00Z')), noLocalStore: true } as RoomMessage,
+        { ...createMessage('newer', ROOM, 'a', 'newer', false, new Date('2026-05-14T10:30:00Z')), noLocalStore: true } as RoomMessage,
+      ],
+      { first: 'older' }, false, 'backward'
+    )
+
+    expect(roomStore.getState().roomGaps.get(ROOM)).toMatchObject({ start: pages[2].getTime() })
   })
 
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {

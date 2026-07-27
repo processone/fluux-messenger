@@ -397,7 +397,7 @@ mutations. Per persisted map, the *direction* of that loss:
 |---|---|---|
 | Read pointers | Under-advances: a few messages re-shown as unread. Forward-only, so the throttle cannot over-advance — the unrecoverable direction stays unreachable (#1081). | Lagging mirror |
 | Gaps / coverage — **monotone** advances (gap shrink/close, coverage deepening) | Gap re-healed or coverage re-walked next session. | Lagging mirror |
-| Gaps / coverage — **structural** transitions (new gap formation, coverage replacement/removal) | **A newly formed gap is silently lost and NOT re-detected; an invalidated coverage record survives and Phase B seeds from it, skipping the disconnected interval.** | **Durable event** |
+| Gaps / coverage — **structural** transitions (new gap formation, gap boundary advance, coverage replacement/removal) | **A newly formed gap is silently lost and NOT re-detected; a lost boundary advance leaves a stale anchor a later "load older" page can erase outright; an invalidated coverage record survives and Phase B seeds from it, skipping the disconnected interval.** | **Durable event** |
 | Drafts / poll state | Up to 1 s of typing, or one vote flag. | Lagging mirror |
 | **Pending retractions** | **A retraction is forgotten and the message is never tombstoned. Not recoverable — the covered range is not re-queried.** | **Durable event** |
 
@@ -435,16 +435,18 @@ monotone advances:
 | Map | Transition | Treatment |
 |---|---|---|
 | gaps | key **added** (formation) | force-flush |
-| gaps | shrink / close / removal | throttle — a stale gap costs a redundant re-heal |
+| gaps | `start` / `startId` **changed** (the hole moves UP) | force-flush |
+| gaps | shrink / close / removal (`end` moves down) | throttle — a stale gap costs a redundant re-heal |
 | coverage | key **added**, `bottomId` **changed**, key **removed** | force-flush |
 | coverage | `topId`-only change (re-entry marker) | throttle |
 
-**Why "key added" is sufficient for gaps, and not arbitrary.** The gap rule keys on the id being
-ADDED, so it does *not* catch an in-place interval **replacement** — the same id's gap moving from
-`{ start: 1000 }` to `{ start: 99000 }`. Measured: zero additional writes, memory at 99000 while disk
-still holds 1000. And that is the *normal* shape of a multi-page forward catch-up, where each
-incomplete page rewrites the same key with a higher hole. It is survivable for a reason that has to be
-written down, because otherwise key-presence looks like an accident:
+**Why the gap rule keys on the lower BOUNDARY, not just the key.** Key-presence alone does not catch
+an in-place interval **advance** — the same id's gap moving from `{ start: 1000 }` to
+`{ start: 99000 }`, which is the *normal* shape of a multi-page forward catch-up, where each
+incomplete page rewrites the same key with a higher hole. Measured under a key-presence-only rule:
+zero additional writes, memory at 99000 while disk still holds 1000.
+
+An earlier revision of this section judged that survivable, on this reasoning:
 
 - A gap's `start` / `startId` for an **existing** key only ever move **upward**.
   `syncGapAfterArchiveMerge`'s forward branch takes `start` from `forwardGapTimestamp`, which
@@ -455,20 +457,41 @@ written down, because otherwise key-presence looks like an accident:
 - And `selectCatchUpQuery` gives a recorded gap boundary **priority** over the cached edge ("a
   recorded forward gap wins", [mamCatchUpUtils.ts:217-222](../../../packages/fluux-sdk/src/utils/mamCatchUpUtils.ts)),
   consumed via `io.getGapStart()` / `io.getGapStartId()` in
-  [MAM.ts:1478-1480](../../../packages/fluux-sdk/src/core/modules/MAM.ts).
+  [MAM.ts:1478-1480](../../../packages/fluux-sdk/src/core/modules/MAM.ts) — so the next session
+  resumes *below* the lost hole and re-detects it.
 
-So the next session resumes *below* the lost hole and re-detects it. That is exactly the property this
-section says is **absent** for a lost formation: with nothing recorded, `selectCatchUpQuery` falls
-through to the cached edge, which sits above the hole. Adding `start` to the signature was considered
-and rejected — it would force-flush every intermediate page of a forward catch-up, i.e. the burst the
-throttle exists to collapse.
+**That reasoning holds only while the stale interval survives, and it is not guaranteed to.** A
+backward "load older" page landing between the stale anchor and the true one hits the opposite branch
+of `closeGapWithBackwardPage` ([mamGap.ts:239-243](../../../packages/fluux-sdk/src/stores/shared/mamGap.ts)):
+with the true anchor `newestTs <= start` leaves the gap standing, while with the stale one
+`oldestTs <= start` **clears** it. The hole above is then unrecorded while the forward cursor already
+sits above it — permanent, silent history loss, from one crash inside the window plus a scroll-up. A
+throttle must not introduce a permanent-loss path that did not exist before it (every gap write was
+synchronous beforehand), so **`start` / `startId` are in the signature and the residual is closed.**
 
-**Accepted residual risk.** The re-detection depends on the stale gap still being on disk next
-session. If a backward "load older" page **closes** it first — `closeGapWithBackwardPage` returns
-`undefined` on `complete` or on reaching held history below `gap.start`
-([mamGap.ts:241-242](../../../packages/fluux-sdk/src/stores/shared/mamGap.ts)) — before any forward
-catch-up runs, the true hole above the stale anchor is silent forever. It takes a crash inside the
-window *plus* a scroll-up before the next catch-up. Accepted, not unnoticed.
+`end` / `endId` deliberately are **not**. The asymmetry is the whole point: `start` advancing is the
+hole moving up, and its loss is unrecoverable; `end` shrinking is the hole closing from below, and a
+stale un-closed gap only costs a redundant re-heal. The "shrink / close / removal → throttle" row
+above still holds, and is pinned by `still coalesces a gap shrink once the baseline is established`
+(§5.3, driven through a real backward merge) and `leaves an end-only shrink throttled` (§5.6).
+
+**The cost is bounded, and was measured rather than assumed.** `MAM_CATCHUP_FORWARD_BAIL_PAGES` = 3
+([mamCatchUpUtils.ts:58](../../../packages/fluux-sdk/src/utils/mamCatchUpUtils.ts)), so a forward
+catch-up auto-paginates at most three pages before bailing to `before:''` — and only an **incomplete**
+page writes an advancing boundary at all. The common reconnect completes on page 1 and records no gap.
+Measured on the room gaps key:
+
+| Scenario | boundary rule | key-presence-only |
+|---|---|---|
+| 1 gapped room, 3-page walk | 3 | 3 |
+| 10 gapped rooms, 3-page walks interleaved | 30 (3/room) | 12 (1.2/room) |
+| reconnect completing on page 1 (no gap) | 0 | 0 |
+
+The single-room walk costs **nothing** extra: the formation already force-flushes and closes the
+window, so each later page takes a fresh leading edge either way. The delta appears only when several
+gapped entities page concurrently and could otherwise have shared a window, and it stays at the ≤ 3
+per gapped entity ceiling. One non-catch-up path also became structural — `clearRoomGapAnchor` strips
+`startId` on an archive purge — costing one forced write on a rare path.
 
 **`bottomId`-changed is deliberately conservative, and the cost is flush FREQUENCY.** It force-flushes
 the provable deepening in `syncCoverageAfterArchiveMerge`'s plain-backward branch too, which is safe to
@@ -626,8 +649,9 @@ The store suites prove the funnels are wired and the end-to-end durability prope
 cheaply reach every row of §4.2's table, and they do not reach the module's two documented baseline
 invariants at all. Direct tests over `scheduleDurableMaps`:
 
-- the full decision table — gap added → flush; gap shrink/close/removal → throttle; coverage
-  added / `bottomId` changed / removed → flush; `topId`-only → throttle;
+- the full decision table — gap added → flush; gap `start` or `startId` advance → flush; gap
+  end-only shrink/close/removal → throttle; coverage added / `bottomId` changed / removed → flush;
+  `topId`-only → throttle;
 - **A → B → A:** the baseline advances on *throttled* writes too, so a there-and-back gap still
   force-flushes. Frozen-baseline mutant → red;
 - `cancelDurableMaps` drops the baseline (observed through whether the following write was coalesced,
@@ -635,8 +659,12 @@ invariants at all. Direct tests over `scheduleDurableMaps`:
 - **omitting a map disables detection for it** — `DurableMaps`' fields are all optional, so a typo
   (`{ gap: … }` for `{ gaps: … }`) type-checks and silently turns detection off. The test states the
   consequence rather than leaving it as folklore;
-- the in-place gap interval replacement is **not** flushed — stating the §4.2 invariant as behaviour, so
-  a change to the rule has to change this test and the doc together.
+- the in-place gap **boundary advance** IS flushed — and a `startId`-only advance with it, since an
+  incomplete forward page can move the id-exact cursor while `start` stands still. This is the
+  crash/restart path §4.2 closes; the store suites carry the end-to-end version
+  (`persists the LATEST boundary of a multi-page forward catch-up`, both stores) and the
+  gap-erasure consequence (`keeps the gap healable after a load-older page that would erase a stale
+  one`).
 
 ### 5.4 Tauri quit ordering
 

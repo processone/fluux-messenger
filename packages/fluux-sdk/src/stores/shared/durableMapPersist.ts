@@ -10,6 +10,9 @@
  *   a reload, "otherwise the next session's catch-up cursor (which sits *above*
  *   the gap after the session-start fix) would never re-detect it". A lost gap
  *   FORMATION is therefore never re-detected — the marker stays silent forever.
+ *   A lost BOUNDARY advance is the same class one step removed: the restored
+ *   stale anchor is closable by a later backward page, and the true hole above
+ *   it is then unrecorded (see `hasGapStructuralChange`).
  * - `mamCoverage`: a `CoverageRecord` is "POSITIVE, DURABLE data" that "must
  *   never point past data that was never stored".
  *   `syncCoverageAfterArchiveMerge`'s fetch-latest branch, when `sawCoverageTop`
@@ -27,7 +30,8 @@
  * | Map      | Transition                                     | Treatment    |
  * |----------|------------------------------------------------|--------------|
  * | gaps     | key ADDED (formation)                          | force-flush  |
- * | gaps     | shrink / close / removal                       | throttle     |
+ * | gaps     | `start` / `startId` CHANGED (boundary moves up) | force-flush |
+ * | gaps     | shrink / close / removal (`end` moves down)    | throttle     |
  * | coverage | key ADDED, `bottomId` CHANGED, key REMOVED     | force-flush  |
  * | coverage | `topId`-only change (re-entry marker)          | throttle     |
  *
@@ -49,8 +53,9 @@
  * ## How the transition is detected
  *
  * Per storage key, this module remembers a SNAPSHOT of the previous write's
- * structural signature — the gap ids, and each coverage id's `bottomId` — and
- * compares the next write against it. Detection therefore lives at the single
+ * structural signature — each gap id's lower boundary (`start` + `startId`), and
+ * each coverage id's `bottomId` — and compares the next write against it.
+ * Detection therefore lives at the single
  * write funnel of each store (roomStore's two save helpers, chatStore's persist
  * adapter) instead of being an obligation ~13 mutation sites must each remember.
  *
@@ -87,9 +92,17 @@ export interface DurableMaps {
   coverage?: ReadonlyMap<string, CoverageRecord>
 }
 
+/** A gap's lower BOUNDARY, flattened for comparison. `end`/`endId` are
+ *  deliberately absent — see `hasGapStructuralChange`. */
+type GapAnchor = string
+
+function gapAnchor(gap: GapInterval): GapAnchor {
+  return `${gap.start} ${gap.startId ?? ''}`
+}
+
 interface Baseline {
-  /** Ids that HAD a gap at the previous write. */
-  gapIds?: Set<string>
+  /** Id → lower-boundary anchor at the previous write. */
+  gapAnchors?: Map<string, GapAnchor>
   /** Id → `bottomId` at the previous write (`topId` is deliberately absent). */
   coverageBottoms?: Map<string, string>
 }
@@ -97,52 +110,66 @@ interface Baseline {
 const baselines = new Map<string, Baseline>()
 
 /**
- * A gap for an id that had none is a FORMATION. Shrink/close/removal is not.
+ * A gap APPEARING for an id that had none, or an existing gap's lower BOUNDARY
+ * (`start` / `startId`) moving. Shrink/close/removal is not structural.
  *
- * ## The invariant key-presence rests on
+ * ## Why the boundary, and not just the key
  *
- * Key-ADDED does not catch an in-place interval REPLACEMENT: the same id's gap
- * moving from `{ start: 1000 }` to `{ start: 99000 }` is invisible here, and a
- * hard kill in that window leaves memory at 99000 and disk at 1000. That is the
- * normal shape of a multi-page forward catch-up — each incomplete page rewrites
- * the same key with a higher hole (`syncGapAfterArchiveMerge`'s forward branch
- * mirrors `forwardGapTimestamp`, which is the page's newest fetched timestamp).
+ * Key-presence alone does not catch an in-place interval advance: the same id's
+ * gap moving from `{ start: 1000 }` to `{ start: 99000 }`. That is the normal
+ * shape of a multi-page forward catch-up — each incomplete page rewrites the
+ * same key with a higher hole (`syncGapAfterArchiveMerge`'s forward branch
+ * mirrors `forwardGapTimestamp`, the page's newest fetched timestamp). A hard
+ * kill in that window would leave memory at 99000 and disk at 1000.
  *
- * It is survivable, and this is the reason — without it, key-presence looks
- * arbitrary:
+ * A stale LOWER anchor is not self-healing. `selectCatchUpQuery` gives a
+ * recorded gap boundary priority over the cached edge ("a recorded forward gap
+ * wins", `mamCatchUpUtils.ts`), so a session restored onto the stale anchor does
+ * resume below the true hole — but only for as long as the stale interval
+ * survives. A backward "load older" page that lands between the stale anchor and
+ * the true one CLOSES it outright (`closeGapWithBackwardPage`: `oldestTs <=
+ * gap.start` → `undefined`), where the true anchor would have left it standing
+ * (`newestTs <= start` → unchanged). The hole above is then unrecorded while the
+ * forward cursor already sits above it: silent, permanent history loss. So the
+ * boundary is force-flushed too.
  *
- * - A gap's `start` / `startId` for an EXISTING key only ever move UPWARD. The
- *   forward branch sets `start` from the marker (`mamState`: the newest fetched
- *   timestamp of an incomplete forward page, and each page resumes above the
- *   last), and `startId` from that merge's `rsm.last`. The backward branch never
- *   moves `start` at all — `closeGapWithBackwardPage` only lowers `end`.
- * - So a stale record's anchor always sits BELOW the true hole, never above it.
- * - And `selectCatchUpQuery` gives a recorded gap boundary PRIORITY over the
- *   cached edge ("a recorded forward gap wins", `mamCatchUpUtils.ts`), consumed
- *   via `io.getGapStart()` / `io.getGapStartId()` in `MAM.ts`. So the next
- *   session resumes at the stale, lower anchor — BELOW the lost hole — and
- *   re-detects it.
+ * ## Why `end` / `endId` are NOT in the signature
  *
- * That is exactly the property a lost FORMATION does not have: with nothing
- * recorded, `selectCatchUpQuery` falls through to the cached edge, which sits
- * ABOVE the hole, and the gap is never re-detected. Hence "key added" is
- * sufficient rather than arbitrary.
+ * The asymmetry is the point. `start` advancing is the hole moving UP, and its
+ * loss is unrecoverable per the paragraph above. `end` shrinking is the hole
+ * closing from BELOW — a stale, un-closed gap only costs a redundant re-heal,
+ * which is the lagging-mirror case the throttle exists for. Design §4.2's
+ * "gaps: shrink / close / removal → throttle" row still holds.
  *
- * Adding `start` to the signature was considered and REJECTED: it would
- * force-flush every intermediate page of a forward catch-up, which is precisely
- * the burst the throttle exists to collapse.
+ * ## Cost
  *
- * **Accepted residual risk.** The re-detection depends on the stale gap still
- * being there next session. If a backward "load older" page CLOSES it first —
- * `closeGapWithBackwardPage` returns `undefined` on `complete`, or when the page
- * reaches below `gap.start` — before any forward catch-up runs, the true hole
- * above the stale anchor is silent forever. It needs a crash inside the window
- * plus a scroll-up before the next catch-up; judged acceptable rather than
- * unnoticed.
+ * Bounded, because forward catch-up auto-pagination is bounded:
+ * `MAM_CATCHUP_FORWARD_BAIL_PAGES` = 3 (`mamCatchUpUtils.ts`), and a page only
+ * writes an advancing boundary when it came back INCOMPLETE. The common
+ * reconnect completes on page 1 and records no gap at all. So the ceiling is
+ * ≤ 3 forced writes per gapped entity per catch-up. Measured on the room gaps
+ * key, boundary rule vs key-presence-only rule:
+ *
+ * | Scenario                                    | boundary | key-only |
+ * |---------------------------------------------|----------|----------|
+ * | 1 gapped room, 3-page walk                  | 3        | 3        |
+ * | 10 gapped rooms, 3-page walks interleaved   | 30 (3/room) | 12 (1.2/room) |
+ * | reconnect completing on page 1 (no gap)     | 0        | 0        |
+ *
+ * The single-room walk costs nothing extra: the formation already force-flushes
+ * and CLOSES the window, so each later page takes a fresh leading edge either
+ * way. The delta only appears when several gapped entities page concurrently and
+ * could otherwise have shared a window — and it stays at the ≤ 3 ceiling.
+ *
+ * One non-catch-up path also became structural: `clearRoomGapAnchor` strips
+ * `startId` when the archive purges the anchor. Rare, and one forced write.
  */
-function hasGapFormation(previous: Set<string> | undefined, gaps: ReadonlyMap<string, GapInterval>): boolean {
-  for (const id of gaps.keys()) {
-    if (!previous?.has(id)) return true
+function hasGapStructuralChange(
+  previous: Map<string, GapAnchor> | undefined,
+  gaps: ReadonlyMap<string, GapInterval>,
+): boolean {
+  for (const [id, gap] of gaps) {
+    if (previous?.get(id) !== gapAnchor(gap)) return true
   }
   return false
 }
@@ -184,11 +211,15 @@ export function scheduleDurableMaps(key: string, maps: DurableMaps, produce: () 
   // Both halves are evaluated: short-circuiting would leave the skipped map
   // comparing against an older baseline, which can hide a there-and-back
   // transition (A → B → A reads as "unchanged" against the pre-A baseline).
-  const gapFormed = maps.gaps !== undefined && hasGapFormation(baseline?.gapIds, maps.gaps)
+  const gapFormed = maps.gaps !== undefined && hasGapStructuralChange(baseline?.gapAnchors, maps.gaps)
   const coverageMoved = maps.coverage !== undefined && hasCoverageStructuralChange(baseline?.coverageBottoms, maps.coverage)
 
   const next: Baseline = { ...baseline }
-  if (maps.gaps !== undefined) next.gapIds = new Set(maps.gaps.keys())
+  if (maps.gaps !== undefined) {
+    const anchors = new Map<string, GapAnchor>()
+    for (const [id, gap] of maps.gaps) anchors.set(id, gapAnchor(gap))
+    next.gapAnchors = anchors
+  }
   if (maps.coverage !== undefined) {
     const bottoms = new Map<string, string>()
     for (const [id, record] of maps.coverage) bottoms.set(id, record.bottomId)
