@@ -36,6 +36,15 @@ export interface DemoRoomData {
   room: Room
   occupants: RoomOccupant[]
   messages: RoomMessage[]
+  /**
+   * Password the simulated MUC service demands (XEP-0045 §7.2.6). A join
+   * presence without it - or with the wrong one - is refused with the same
+   * `not-authorized` error presence a real server sends, so the client's
+   * password prompt and its bookmark round-trip are exercisable offline.
+   *
+   * Pair with `room.joined: false` for a room the user has to unlock.
+   */
+  requiredPassword?: string
 }
 
 /** A timed event in the demo animation sequence. */

@@ -36,6 +36,7 @@ import { CommandMenu } from './composer/CommandMenu'
 import { CommandHelpPanel } from './composer/CommandHelpPanel'
 import { visibleCommands } from '@/commands/registry'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { useRoomPasswordPrompt } from '@/hooks/useRoomPasswordPrompt'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -97,7 +98,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -112,6 +113,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
+  const { joinRoomWithPassword, passwordDialog } = useRoomPasswordPrompt()
 
   // Handler to open search scoped to this room
   const handleSearchInConversation = activeRoom && onSearchInConversation
@@ -651,8 +653,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               // Issue #37: warn before joining a room that would expose the user's real JID.
               if (await confirmJoin(activeRoom.jid)) {
                 try {
-                  await joinRoom(activeRoom.jid, activeRoom.nickname)
-                  await joinResult(activeRoom.jid)
+                  // Prompts for the room password when the server asks for one.
+                  await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
                 } catch (err) {
                   addToast('error', getRoomJoinErrorMessage(t, err))
                 }
@@ -661,6 +663,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           />
         )}
         {warningDialog}
+        {passwordDialog}
       </div>
 
       {/* Occupant panel (>=768px; <768 uses the full-screen panel in ChatLayout).

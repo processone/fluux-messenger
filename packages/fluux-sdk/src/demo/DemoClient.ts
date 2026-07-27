@@ -43,6 +43,7 @@ const NS_DISCO_INFO = 'http://jabber.org/protocol/disco#info'
 const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
 const NS_RSM = 'http://jabber.org/protocol/rsm'
 const NS_MUC = 'http://jabber.org/protocol/muc'
+const NS_MUC_USER = 'http://jabber.org/protocol/muc#user'
 const NS_MUC_OWNER = 'http://jabber.org/protocol/muc#owner'
 const NS_MUC_ADMIN = 'http://jabber.org/protocol/muc#admin'
 const NS_VCARD_TEMP = 'vcard-temp'
@@ -75,6 +76,8 @@ interface MockElement {
   children: MockElement[]
   getChild: (name: string, xmlns?: string) => MockElement | undefined
   getChildren: (name: string) => MockElement[]
+  /** Matches ltx/@xmpp Element.is(), used by the module stanza handlers. */
+  is: (name: string) => boolean
   getChildText: (name: string) => string | null
   getText: () => string
   /** Text content as a method — matches ltx/@xmpp Element.text() used by parseDataForm/version parsing. */
@@ -112,6 +115,8 @@ export class DemoClient extends XMPPClient {
   private seededRoomOccupants = new Map<string, RoomOccupant[]>()
   private seededContacts = new Map<string, Contact>()
   private seededRooms = new Map<string, Room>()
+  // Rooms the simulated MUC service protects with a password (XEP-0045 §7.2.6).
+  private roomPasswords = new Map<string, string>()
   // Simulated XEP-0490 MDS PEP node: conversation bare JID → last-displayed
   // marker. Backs the pubsub publish/items/retract IQs so client.mds.* and the
   // fresh-session seed (fetchAllDisplayed) work in demo mode.
@@ -380,15 +385,23 @@ export class DemoClient extends XMPPClient {
     }
 
     // Rooms: add, mark joined, populate occupants and messages
-    for (const { room, occupants, messages } of data.rooms) {
+    for (const { room, occupants, messages, requiredPassword } of data.rooms) {
       this.emitSDK('room:added', { room })
-      this.emitSDK('room:joined', { roomJid: room.jid, joined: true })
+      // `joined: false` seeds a bookmarked room the user still has to enter
+      // (its cached history shows, its occupant list does not) - the state a
+      // password-protected room is in right after a restart.
+      const startsJoined = room.joined !== false
+      if (requiredPassword) this.roomPasswords.set(room.jid, requiredPassword)
 
-      const selfOccupant = occupants.find(o => o.jid === data.self.jid)
-      if (selfOccupant) {
-        this.emitSDK('room:self-occupant', { roomJid: room.jid, occupant: selfOccupant })
+      if (startsJoined) {
+        this.emitSDK('room:joined', { roomJid: room.jid, joined: true })
+
+        const selfOccupant = occupants.find(o => o.jid === data.self.jid)
+        if (selfOccupant) {
+          this.emitSDK('room:self-occupant', { roomJid: room.jid, occupant: selfOccupant })
+        }
+        this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
       }
-      this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
 
       for (const message of messages) {
         this.emitSDK('room:message', { roomJid: room.jid, message: withDefaultStanzaId(message) })
@@ -668,6 +681,22 @@ export class DemoClient extends XMPPClient {
     const roomJid = to.slice(0, slashIdx)
     const nick = to.slice(slashIdx + 1)
 
+    // XEP-0045 §7.2.6: a password-protected room refuses a join that carries no
+    // <password/>, or the wrong one. Answer exactly as a real service does so the
+    // client runs its own failure path (issue #1126).
+    const required = this.roomPasswords.get(roomJid)
+    if (required !== undefined) {
+      const supplied = stanza.getChild?.('x', NS_MUC)?.getChildText?.('password')
+      if (supplied !== required) {
+        // A task, not a microtask: joinRoom() only registers the pending join
+        // AFTER its `await sendStanza(...)` resumes, and MUC ignores an error
+        // presence for a room with no join in flight. Microtasks would run
+        // first and the refusal would be dropped (leaving "Joining…" forever).
+        setTimeout(() => this.refuseJoin(roomJid, nick), 0)
+        return
+      }
+    }
+
     // Emit join events asynchronously so MUC.startJoinTimeout() runs first,
     // then our events clear the pending join (same timing as a real server).
     queueMicrotask(() => {
@@ -701,6 +730,18 @@ export class DemoClient extends XMPPClient {
       // JoinRoomModal) would hang forever in demo mode.
       this.muc.confirmSimulatedJoin(roomJid)
 
+      // For a password-protected room, also run the REAL post-join bookkeeping by
+      // routing a status-110 self-presence: that is what records the password
+      // that worked, so a later rejoin in this session needs no prompt
+      // (issue #1126). Scoped to these rooms so the plain demo join keeps its
+      // long-standing lightweight path. Deferred to a task for the same reason
+      // refuseJoin is: the pending join only exists once joinRoom() resumes.
+      if (this.roomPasswords.has(roomJid)) {
+        setTimeout(() => {
+          this.muc.handle(this.selfPresence(roomJid, selfOccupant) as unknown as Parameters<typeof this.muc.handle>[0])
+        }, 0)
+      }
+
       // Populate occupants: restore seeded occupants or create minimal list
       const occupants = seededOccupants ?? [selfOccupant]
       this.emitSDK('room:occupants-batch', { roomJid, occupants })
@@ -716,6 +757,39 @@ export class DemoClient extends XMPPClient {
       })
       roomStore.setState({ mamQueryStates: mamStates })
     })
+  }
+
+  /** Build the status-110 self-presence a MUC service sends on a successful join. */
+  private selfPresence(roomJid: string, occupant: RoomOccupant): MockElement {
+    return this.mockElement('presence', { from: `${roomJid}/${occupant.nick}`, to: this.selfJid }, [
+      this.mockElement('x', { xmlns: NS_MUC_USER }, [
+        this.mockElement('item', {
+          affiliation: occupant.affiliation,
+          role: occupant.role,
+          ...(occupant.jid ? { jid: occupant.jid } : {}),
+        }),
+        this.mockElement('status', { code: '110' }),
+      ]),
+    ])
+  }
+
+  /**
+   * Refuse a join the way a password-protected room does: a 401 error presence
+   * routed through the real MUC handler, so the SDK clears `isJoining`, rejects
+   * joinResult() with `not-authorized`, and logs the console event — the client
+   * behaves exactly as it does against a real server.
+   */
+  private refuseJoin(roomJid: string, nick: string): void {
+    const error = this.mockElement('error', { type: 'auth', code: '401' }, [
+      this.mockElement('not-authorized', { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' }),
+    ])
+    // Real services echo the request's <x muc/>, NOT muc#user.
+    const presence = this.mockElement(
+      'presence',
+      { from: `${roomJid}/${nick}`, to: this.selfJid, type: 'error' },
+      [this.mockElement('x', { xmlns: NS_MUC }), error]
+    )
+    this.muc.handle(presence as unknown as Parameters<typeof this.muc.handle>[0])
   }
 
   // -------------------------------------------------------------------------
@@ -738,6 +812,7 @@ export class DemoClient extends XMPPClient {
         children.find(c => c.name === childName && (!xmlns || c.attrs.xmlns === xmlns)),
       getChildren: (childName: string) =>
         children.filter(c => c.name === childName),
+      is: (elName: string) => name === elName,
       getChildText: (childName: string) => {
         const child = children.find(c => c.name === childName)
         return child?._text ?? null
