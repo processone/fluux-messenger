@@ -138,10 +138,12 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('keeps an older-timestamped off-slice marker pending', () => {
-    // A migrated pointer can name m2 while carrying m5's activation timestamp,
-    // so an m4 marker with a strictly older timestamp may still be a real
-    // forward advance. Only an index comparison can resolve it safely.
+  it('discards an off-slice marker the local position is provably past', () => {
+    // Local pointer far ahead (m200) and an older remote marker (m20). A slice
+    // holding m20 cannot hold m200, and a load-around m200 cannot reach back to
+    // m20, so no retry will ever contain both — stashing here would leave the
+    // marker pending forever, re-folding on every activation. The timestamps
+    // decide it outright: the marker is behind, so there is nothing to apply.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
@@ -154,7 +156,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('clear-pending')
   })
 
   it('keeps the marker pending when the off-slice position carries the epoch sentinel', () => {
@@ -210,9 +212,11 @@ describe('resolveRemoteDisplayed', () => {
     expect(result.kind).toBe('stash-pending')
   })
 
-  it('keeps an older-timestamped off-slice marker pending on the ACTIVE entity too', () => {
-    // Active status provides no extra ordering proof. The activation fold must
-    // load both messages before resolving the pending marker by index.
+  it('retires a provably-past off-slice marker on the ACTIVE entity too', () => {
+    // The retire direction is the one timestamps CAN settle: `lastReadAt` is at
+    // or behind the message the pointer names, so a marker older than it is
+    // older than the true position as well. Nothing is derived from the
+    // timestamp here — the pointer is left exactly where it was.
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
@@ -225,7 +229,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: true }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('clear-pending')
   })
 })
 

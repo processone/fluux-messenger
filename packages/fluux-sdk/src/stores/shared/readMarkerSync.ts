@@ -75,22 +75,18 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
     localPointerId === undefined || messages.some((m) => m.id === localPointerId)
 
   if (!pointerInSlice) {
-    // Timestamps cannot order these positions in either direction.
-    // `migrateReadPointer` copies the legacy `lastSeenMessageId` + `lastReadAt`
-    // pair unchanged, while `lastReadAt` means "timestamp of the newest LOADED
-    // message when I last activated." It can therefore sit either ahead of or
-    // behind the message the pointer names. Retiring a strictly older marker can
-    // discard a real forward advance (pointer names m2, timestamp comes from m5,
-    // marker names m4); advancing a strictly newer one can regress a
-    // forward-only pointer. The claim in readPointer.ts that `lastReadAt` "is at
-    // or behind the named message" contradicts migrateReadPointer's own
-    // documentation and cannot be relied on here.
-    //
-    // The activation fold, which loads a slice containing both ends and orders
-    // them by index, remains the only resolver. A marker the pointer is already
-    // past consequently stays pending and re-folds on each activation. That is
-    // churn, not data loss, and is the deliberate tradeoff against discarding a
-    // real read position.
+    if (meta.readPointer && match.timestamp < meta.readPointer.timestamp) {
+      // Timestamps settle THIS direction only. A pointer built by the #1081
+      // migration carries a timestamp at or behind the message it names, so a
+      // strictly older marker is also older than the true local position.
+      return meta.pendingRemoteDisplayedStanzaId === undefined
+        ? { kind: 'unchanged' }
+        : { kind: 'clear-pending' }
+    }
+
+    // Equal or newer timestamps remain undecidable. Advancing from that
+    // comparison could regress a migrated forward-only pointer, so leave the
+    // marker pending until the activation fold can order both ends by index.
     return { kind: 'stash-pending' }
   }
 
