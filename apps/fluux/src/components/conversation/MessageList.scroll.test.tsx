@@ -226,19 +226,19 @@ describe('MessageList scroll behavior', () => {
         <MessageList messages={createTestMessages(10)} {...props} />,
       )
       const keydownAdds = addEventListener.mock.calls.filter(
-        ([eventName]) => eventName === 'keydown',
+        ([eventName]) => String(eventName) === 'keydown',
       ).length
       const keydownRemoves = removeEventListener.mock.calls.filter(
-        ([eventName]) => eventName === 'keydown',
+        ([eventName]) => String(eventName) === 'keydown',
       ).length
 
       rerender(<MessageList messages={createTestMessages(11)} {...props} />)
 
       expect(addEventListener.mock.calls.filter(
-        ([eventName]) => eventName === 'keydown',
+        ([eventName]) => String(eventName) === 'keydown',
       )).toHaveLength(keydownAdds)
       expect(removeEventListener.mock.calls.filter(
-        ([eventName]) => eventName === 'keydown',
+        ([eventName]) => String(eventName) === 'keydown',
       )).toHaveLength(keydownRemoves)
     })
 

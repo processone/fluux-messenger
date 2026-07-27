@@ -37,7 +37,7 @@
   - `ResidentTopExecutor`
   - `PositioningController.beginResidentTopNavigation(input)`
 
-- [ ] **Step 1: Write the failing single-write and convergence tests**
+- [x] **Step 1: Write the failing single-write and convergence tests**
 
 In `positioningController.test.ts`, import the not-yet-existing resident-top
 types and add a harness with literal geometry:
@@ -103,7 +103,7 @@ The test must fail because `ResidentTopExecutor` and
 `beginResidentTopNavigation` do not exist. It would also fail if a frame
 restarted the smooth write or if one top observation settled too early.
 
-- [ ] **Step 2: Run the controller test and verify RED**
+- [x] **Step 2: Run the controller test and verify RED**
 
 Run:
 
@@ -114,7 +114,7 @@ npx vitest run src/components/conversation/positioningController.test.ts
 
 Expected: TypeScript/Vitest failure naming the missing resident-top controller API.
 
-- [ ] **Step 3: Implement the minimal resident-top lifecycle**
+- [x] **Step 3: Implement the minimal resident-top lifecycle**
 
 First add the request alias beside the other exported aliases in
 `scrollPositionModel.ts`:
@@ -174,7 +174,7 @@ Implement `beginResidentTopNavigation` so it:
 
 The frame driver must decrement the 120-frame budget, call only `readScrollTop`, record `false`, and settle after two consecutive values `<= 1`. Budget exhaustion completes `best-effort`. A null reading or unavailable start completes best-effort without a fallback write.
 
-- [ ] **Step 4: Run the controller test and verify GREEN**
+- [x] **Step 4: Run the controller test and verify GREEN**
 
 Run:
 
@@ -185,7 +185,7 @@ npx vitest run src/components/conversation/positioningController.test.ts
 
 Expected: all controller tests pass, including the one-shot smooth start control.
 
-- [ ] **Step 5: Commit the first controller increment**
+- [x] **Step 5: Commit the first controller increment**
 
 ```bash
 git add apps/fluux/src/components/conversation/scrollPositionModel.ts \
@@ -206,7 +206,7 @@ git commit -m "Add resident-top controller execution"
 - Consumes: `ResidentTopExecutionState` and `beginResidentTopNavigation` from Task 1.
 - Produces: resident-top participation in `observeUserInput`, `cancelExecutionsIfSuperseded`, `cancelAllExecutions`, and conversation deactivation.
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 Add four tests using the real controller and resident harness:
 
@@ -217,7 +217,7 @@ Add four tests using the real controller and resident harness:
 
 Each test must assert the final controller phase/watermark as well as completion. These controls fail if resident-top is omitted from any shared cancellation path or if timeout performs a second write.
 
-- [ ] **Step 2: Run the lifecycle tests and verify RED**
+- [x] **Step 2: Run the lifecycle tests and verify RED**
 
 Run:
 
@@ -228,7 +228,7 @@ npx vitest run src/components/conversation/positioningController.test.ts
 
 Expected: failures showing resident-top execution remains current after user input/supersession or lacks best-effort completion.
 
-- [ ] **Step 3: Implement shared cancellation participation**
+- [x] **Step 3: Implement shared cancellation participation**
 
 Add resident-top currentness, lease, finish, completion, and cancellation helpers following the existing live-edge/media shapes:
 
@@ -244,7 +244,7 @@ private beginResidentTopOperation(
 
 Capture `residentTopWasCurrent` before `cancelReconciliationForUserInput`, then cancel it with `user-takeover`. Include resident-top in `cancelExecutionsIfSuperseded` and `cancelAllExecutions('superseded')`. `deactivate` already calls `cancelExecutionsIfSuperseded`, so its stale queued frame must fail the lease without a separate direct path.
 
-- [ ] **Step 4: Run the controller tests and verify GREEN**
+- [x] **Step 4: Run the controller tests and verify GREEN**
 
 Run:
 
@@ -255,7 +255,7 @@ npx vitest run src/components/conversation/positioningController.test.ts
 
 Expected: all tests pass and every stale-frame control observes `lease.isCurrent() === false`.
 
-- [ ] **Step 5: Commit lifecycle coverage**
+- [x] **Step 5: Commit lifecycle coverage**
 
 ```bash
 git add apps/fluux/src/components/conversation/positioningController.ts \
@@ -277,7 +277,7 @@ git commit -m "Cancel stale resident-top positioning"
 - Consumes: `ResidentTopExecutor` and `beginResidentTopNavigation`.
 - Produces: `createResidentTopExecutor()` and stable `scrollToTop`.
 
-- [ ] **Step 1: Write the failing runtime hook tests**
+- [x] **Step 1: Write the failing runtime hook tests**
 
 In `MessageList.scroll.test.tsx`, add a Home test using the real `MessageList` and scroller:
 
@@ -304,7 +304,7 @@ one runtime `RESIDENT TOP: controller completed` trace with zero divergence and
 instrumentation errors. The current direct path reaches top but emits no
 controller completion, so the test must fail on both engines.
 
-- [ ] **Step 2: Run the hook tests and verify RED**
+- [x] **Step 2: Run the hook tests and verify RED**
 
 Run:
 
@@ -321,7 +321,7 @@ Expected: the Vitest progress test fails because the current direct call has no
 controller-owned observation, and Playwright fails because no resident-top
 controller completion trace exists.
 
-- [ ] **Step 3: Implement the hook adapter**
+- [x] **Step 3: Implement the hook adapter**
 
 Import `ResidentTopExecutor`. Add:
 
@@ -374,7 +374,7 @@ const scrollToTopImpl = useCallback(() => {
 
 The only smooth write now lives inside the leased executor start method. Update the design spec's test paragraph to say runtime behavior, not source-text matching.
 
-- [ ] **Step 4: Run hook and real-engine tests and verify GREEN**
+- [x] **Step 4: Run hook and real-engine tests and verify GREEN**
 
 Run:
 
@@ -390,7 +390,7 @@ npx playwright test \
 Expected: hook tests pass, resident-top issues one smooth write, and Playwright
 reports 2/2 with controller completion traces.
 
-- [ ] **Step 5: Write the failing callback-stability test**
+- [x] **Step 5: Write the failing callback-stability test**
 
 Capture `scrollToTop` from the hook consumer, rerender with an appended
 message/current window change, and assert the same function identity. The
@@ -399,7 +399,7 @@ fail until a stable shell is published. The realistic mutation caught is
 removing the stable shell and rebinding the global keyboard listener on every
 append.
 
-- [ ] **Step 6: Run the stability test and verify RED**
+- [x] **Step 6: Run the stability test and verify RED**
 
 Run:
 
@@ -411,7 +411,7 @@ npx vitest run src/components/conversation/MessageList.scroll.test.tsx
 Expected: the new identity assertion fails while the resident-top behavior
 tests remain green.
 
-- [ ] **Step 7: Publish the stable command and verify GREEN**
+- [x] **Step 7: Publish the stable command and verify GREEN**
 
 Add:
 
@@ -431,7 +431,7 @@ npx vitest run \
 Expected: all tests pass and appends do not invalidate the Home command or
 mounted room rows.
 
-- [ ] **Step 8: Commit the hook cutover**
+- [x] **Step 8: Commit the hook cutover**
 
 ```bash
 git add apps/fluux/src/components/conversation/useMessageListScroll.ts \
@@ -453,7 +453,7 @@ git commit -m "Route Home positioning through the controller"
 - Consumes: controller-owned Home behavior and invariant from Task 3.
 - Produces: completed step-6 contract.
 
-- [ ] **Step 1: Update the positioning contract**
+- [x] **Step 1: Update the positioning contract**
 
 In `docs/2026-07-23-scroll-positioning-contract.md`:
 
@@ -463,11 +463,11 @@ In `docs/2026-07-23-scroll-positioning-contract.md`:
 - retain the two isolated-context bullets unchanged;
 - update “all six authoritative slices” to “all seven authoritative slices”.
 
-- [ ] **Step 2: Mark completed plan checkboxes**
+- [x] **Step 2: Mark completed plan checkboxes**
 
 As each step is completed, replace its `- [ ]` with `- [x]` in this plan so the committed plan accurately records execution.
 
-- [ ] **Step 3: Run focused controller, hook, and real-engine tests**
+- [x] **Step 3: Run focused controller, hook, and real-engine tests**
 
 Run:
 
@@ -485,7 +485,7 @@ npx playwright test \
 
 Expected: all focused Vitest tests pass and Playwright reports 2/2.
 
-- [ ] **Step 4: Commit the contract**
+- [x] **Step 4: Commit the contract**
 
 ```bash
 git add docs/2026-07-23-scroll-positioning-contract.md \
@@ -504,7 +504,7 @@ git commit -m "Complete scroll positioning migration step 6"
 - Consumes: complete branch state from Tasks 1–4.
 - Produces: evidence that the exact branch is ready for review.
 
-- [ ] **Step 1: Run the full unit/integration suite**
+- [x] **Step 1: Run the full unit/integration suite**
 
 ```bash
 npm test
@@ -512,7 +512,7 @@ npm test
 
 Expected: all SDK and app tests pass; existing environment warnings do not change the exit code.
 
-- [ ] **Step 2: Run static checks**
+- [x] **Step 2: Run static checks**
 
 ```bash
 npm run typecheck
@@ -522,7 +522,7 @@ git diff --check origin/main...HEAD
 
 Expected: typecheck passes, lint has zero errors, and the diff check is clean.
 
-- [ ] **Step 3: Run the complete scroll-invariant suite**
+- [x] **Step 3: Run the complete scroll-invariant suite**
 
 ```bash
 npm run test:scroll
@@ -530,7 +530,7 @@ npm run test:scroll
 
 Expected: all existing 52 scenarios plus the two new engine cases pass.
 
-- [ ] **Step 4: Audit ownership and scope**
+- [x] **Step 4: Audit ownership and scope**
 
 Review:
 
@@ -542,7 +542,7 @@ git status -sb
 
 Confirm the hook has no shadow `home-key` observation or direct Home write outside `ResidentTopExecutor.start`, static preview and selection scrolling are unchanged, and no unrelated files are present.
 
-- [ ] **Step 5: Commit any final plan-state update**
+- [x] **Step 5: Commit any final plan-state update**
 
 If marking Task 5 checkboxes changes the plan:
 
@@ -552,3 +552,13 @@ git commit -m "Record resident-top migration validation"
 ```
 
 Otherwise leave the verified branch unchanged.
+
+Validation recorded on 2026-07-27:
+
+- `npm test`: SDK 5,325 passed; app 5,338 passed and 22 skipped.
+- `npm run typecheck`: passed for both workspaces.
+- `npm run lint`: zero errors; 34 pre-existing warnings.
+- `npm run test:scroll`: 54/54 passed across Chromium and WebKit.
+- Ownership audit: the only live-list resident-top write is
+  `ResidentTopExecutor.start`; static preview center positioning and keyboard
+  selection remain explicitly isolated.
