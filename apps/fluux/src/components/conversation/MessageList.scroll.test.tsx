@@ -810,8 +810,8 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollTop', {
           get: () => scrollTopValue,
           set: (v) => {
-            scrollTopValue = v
             scrollSpy(v)
+            scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
           },
           configurable: true,
         })
@@ -828,8 +828,9 @@ describe('MessageList scroll behavior', () => {
             observer.triggerResize(460)
           })
 
-          // Should have scrolled to bottom after each resize
-          expect(scrollSpy).toHaveBeenCalled()
+          // The first observation establishes the baseline; each of the three
+          // subsequent shrinks should re-pin to the live edge.
+          expect(scrollSpy).toHaveBeenCalledTimes(3)
           // The last call should be scrolling to bottom
           expect(scrollSpy).toHaveBeenLastCalledWith(1000)
         }
