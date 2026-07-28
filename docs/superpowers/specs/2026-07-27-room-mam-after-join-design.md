@@ -118,6 +118,16 @@ replacement while an older cache promise is pending; the replacement becomes
 the sole owner, and the older continuation returns without querying MAM or
 mutating `fetchInitiated` or loading state.
 
+Foreground ownership is also visible to the delayed background room path.
+That path records successful joins, reserves a room by session generation and
+membership epoch, peeks at its cache, and revalidates those identities plus the
+active-room selection before querying MAM. It skips a room covered by a
+foreground attempt. If foreground hydration aborts or fails after the room
+becomes inactive, it releases coverage and requests a handoff; background
+catch-up drains that handoff after the initial delayed pass, or immediately
+when the room later becomes inactive. Completed foreground coverage suppresses
+the corresponding background retry.
+
 ## Unchanged behavior
 
 - A successful SM resume continues to trust hydrated MUC membership and does
@@ -128,7 +138,8 @@ mutating `fetchInitiated` or loading state.
 - A room first opened after SM resume still fetches its archive when it has
   never been queried and has no resident history.
 - The delayed background room catch-up remains responsible for inactive joined
-  rooms and continues to exclude the active room.
+  rooms and continues to exclude the active room; its new ownership handoff
+  prevents gaps and duplicate queries when a foreground attempt changes role.
 - The MUC join handler may still refresh the cache-first sidebar preview. That
   operation updates only `lastMessage`; it does not populate the active message
   timeline.
@@ -162,12 +173,14 @@ Add race coverage for:
 
 - the active room leaving while its cache read is pending;
 - the connection dropping while its cache read is pending;
-- the active room changing while its cache read is pending.
+- the active room changing while its cache read is pending;
 - an uninterrupted `resumed → room:joined → synthetic online` upgrade;
 - an uninterrupted post-resume synthetic `online` retaining archive-held
   fetch tracking, while a later genuine fresh session clears it;
 - an older cache attempt resolving after a fresh-session retry owns the room;
-- an older cache failure attempting cleanup after that replacement starts.
+- an older cache failure attempting cleanup after that replacement starts;
+- delayed background revalidation across join and session replacement;
+- foreground-to-background handoff without duplicate room MAM.
 
 Retain and run the existing regressions for:
 

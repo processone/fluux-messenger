@@ -3,13 +3,13 @@
  *
  * Subscribes to active room changes and triggers:
  * 1. IndexedDB cache loading (immediate)
- * 2. Background MAM fetch for catch-up (when connected and room supports MAM)
+ * 2. Foreground MAM catch-up after the current membership is trusted
  *
  * Also listens for `room:joined` SDK events and watches `supportsMAM` state
  * transitions to handle the race between session restore and room joining.
  *
- * Uses `fetchInitiated` set to prevent duplicate MAM queries — rooms already
- * caught up via SM resumption are marked in the set by the `'resumed'` handler.
+ * Uses `fetchInitiated` to prevent duplicate MAM queries. A successful SM resume
+ * seeds rooms whose local archives make their preserved membership trustworthy.
  *
  * @module Core/RoomSideEffects
  */
@@ -44,7 +44,8 @@ import {
  *
  * Subscribes to `activeRoomJid` changes and:
  * 1. Loads messages from IndexedDB cache immediately
- * 2. Triggers background MAM fetch for catchup when connected and room supports MAM
+ * 2. Triggers foreground MAM catch-up when connected, MAM-enabled, and joined
+ *    in the current fresh session (or preserved by a successful SM resume)
  *
  * @param client - The XMPPClient instance
  * @param options - Configuration options

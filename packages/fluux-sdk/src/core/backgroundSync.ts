@@ -5,11 +5,13 @@
  * process to populate message history so conversations and rooms are ready
  * when opened.
  *
- * Stages are serialized to avoid overwhelming the server with concurrent queries.
- * The active conversation/room is excluded since side effects handle those.
+ * Conversation stages are serialized, while the delayed room pass has its own
+ * concurrency cap. Active entities are excluded while foreground side effects
+ * own them; released room work can be handed back after the room becomes inactive.
  *
- * Uses client events (`'online'` for fresh sessions) instead of store-based
- * guards, so SM resumptions are simply never triggered — no guard needed.
+ * Uses client events to distinguish fresh-session bulk sync from SM resumption.
+ * Resume only seeds rooms whose archives are not caught up to live; a synthetic
+ * post-resume `online` can then upgrade the same transport to fresh setup.
  *
  * @module Core/BackgroundSync
  */
@@ -52,8 +54,9 @@ import {
  * 4. **Room catch-up** (delayed): After a delay to let rooms finish joining,
  *    populate full message history for all MAM-enabled rooms (concurrency=2).
  *
- * On SM resumption (`'resumed'` event), no MAM queries are needed because the
- * server replays all undelivered stanzas automatically.
+ * On SM resumption (`'resumed'` event), rooms already caught up to live rely on
+ * replayed stanzas. Only joined, inactive rooms that still need archive coverage
+ * receive a resume seed query.
  *
  * @param client - The XMPPClient instance
  * @param options - Configuration options
@@ -346,8 +349,8 @@ export function setupBackgroundSyncSideEffects(
    * Triggers background sync: conversation catch-up, roster discovery,
    * archived conversation check, and room catch-up.
    *
-   * Stages are serialized to cap server load at ~2 concurrent MAM queries
-   * (plus the active entity query from side effects = ~3 total).
+   * Conversation stages are serialized to cap their server load at ~2 concurrent
+   * MAM queries. The delayed room pass is separately capped at concurrency 2.
    */
   function triggerBackgroundSync(): void {
     if (backgroundSyncDone) return
@@ -455,8 +458,9 @@ export function setupBackgroundSyncSideEffects(
     }, MAM_ROOM_CATCHUP_DELAY_MS)
   }
 
-  // Fresh session: 'online' fires only on fresh sessions (not SM resumption).
-  // This is the entry point for all MAM background sync.
+  // A transport 'online' starts fresh-session sync. An uninterrupted resume can
+  // also be followed by a synthetic 'online' when cache integrity forces full
+  // setup; preserve the resume boundary and confirmed joins on that upgrade.
   const unsubscribeOnline = client.on('online', () => {
     const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     uninterruptedResumeMayEmitSyntheticOnline = false

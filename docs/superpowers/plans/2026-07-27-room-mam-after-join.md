@@ -6,4 +6,5 @@ change-specific invariants and [MAM catch-up strategy](../../MAM_CATCHUP.md) for
 the shipped behavior.
 
 Deterministic regression coverage lives in
-`packages/fluux-sdk/src/core/roomSideEffects.test.ts`.
+`packages/fluux-sdk/src/core/roomSideEffects.test.ts` and
+`packages/fluux-sdk/src/core/backgroundSync.test.ts`.
