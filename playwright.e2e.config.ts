@@ -33,9 +33,15 @@ const ENGINES = [
 export default defineConfig({
   testDir: './scripts',
 
-  // Loads the demo once before any project starts, so no test pays the cold vite
-  // transform inside its own mount budget. Best-effort — see scripts/e2e/warmup.ts.
-  globalSetup: './scripts/e2e/warmup.ts',
+  // No globalSetup warm-up. One was tried: it loaded the demo once before the projects
+  // started, on the theory that the first webkit test was blowing its 120s mount budget
+  // on vite's cold transform of the demo bundle. Measured over three CI runs it cost
+  // 33-37s and changed nothing — the first webkit test still failed its first attempt,
+  // 2 for 2, exactly as it had in the 13 runs before. Warming the server cannot help
+  // because the cost is not server-side: WebKitGTK re-parses and re-executes the whole
+  // unbundled dev module graph in every fresh browser context. Serving a development-mode
+  // *build* (the harness needs the import.meta.env.DEV seams, so a production build will
+  // not do) is the direction that could actually fix it.
 
   // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to
   // boot the demo bundle before the test body starts. Ceiling only: warm runs finish in
