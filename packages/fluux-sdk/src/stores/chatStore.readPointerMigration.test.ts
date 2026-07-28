@@ -139,7 +139,7 @@ describe('post-rehydrate readPointer backfill', () => {
     await vi.waitFor(() => {
       expect(pointerOf(CONV)).toMatchObject({ messageId: 'm2', timestamp: at(2000) })
       expect(pointerOf(OTHER)).toMatchObject({ messageId: 'o1', timestamp: at(1500) })
-    })
+    }, { timeout: 2000 })
   })
 
   // The both-fields branch resolves without touching the cache, so its
@@ -151,7 +151,7 @@ describe('post-rehydrate readPointer backfill', () => {
 
     await chatStore.persist.rehydrate()
 
-    await vi.waitFor(() => expect(pointerOf(CONV)).toEqual({ messageId: 'm2', timestamp: at(2000) }))
+    await vi.waitFor(() => expect(pointerOf(CONV)).toEqual({ messageId: 'm2', timestamp: at(2000) }), { timeout: 2000 })
   })
 
   // Both maps must move together: a pointer visible in conversationMeta but not
@@ -162,7 +162,7 @@ describe('post-rehydrate readPointer backfill', () => {
 
     await chatStore.persist.rehydrate()
 
-    await vi.waitFor(() => expect(pointerOf(CONV)).toBeDefined())
+    await vi.waitFor(() => expect(pointerOf(CONV)).toBeDefined(), { timeout: 2000 })
     expect(chatStore.getState().conversations.get(CONV)?.readPointer).toEqual(pointerOf(CONV))
   })
 
@@ -175,7 +175,7 @@ describe('post-rehydrate readPointer backfill', () => {
     persistConversations([[CONV, { lastSeenMessageId: 'm1' }]])
 
     await chatStore.persist.rehydrate()
-    await vi.waitFor(() => expect(release).toBeDefined())
+    await vi.waitFor(() => expect(release).toBeDefined(), { timeout: 2000 })
 
     // The user opens the conversation and reads to the live edge.
     const live = { messageId: 'm3', timestamp: at(3000) }
@@ -220,7 +220,7 @@ describe('post-rehydrate readPointer backfill', () => {
     ])
 
     await chatStore.persist.rehydrate()
-    await vi.waitFor(() => expect(pointerOf(OTHER)).toMatchObject({ messageId: 'o1', timestamp: at(1500) }))
+    await vi.waitFor(() => expect(pointerOf(OTHER)).toMatchObject({ messageId: 'o1', timestamp: at(1500) }), { timeout: 2000 })
 
     expect(pointerOf(CONV)).toEqual({ messageId: 'm1', timestamp: at(1000) })
   })
@@ -371,7 +371,7 @@ describe('unmigrated legacy read state survives the persist', () => {
     ] as never)
 
     relaunch()
-    await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ messageId: 'late1', timestamp: at(1500) }))
+    await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ messageId: 'late1', timestamp: at(1500) }), { timeout: 2000 })
   })
 
   // The other half of the same guarantee, for the id-only shape.
@@ -397,7 +397,7 @@ describe('unmigrated legacy read state survives the persist', () => {
     // archiveOrderKey onto the pointer (unlike the both-fields branch above,
     // which copies the legacy pair through verbatim) — the point of this
     // assertion is messageId/timestamp, not the archive key's exact shape.
-    await vi.waitFor(() => expect(pointerOf(CONV)).toMatchObject({ messageId: 'm2', timestamp: at(2000) }))
+    await vi.waitFor(() => expect(pointerOf(CONV)).toMatchObject({ messageId: 'm2', timestamp: at(2000) }), { timeout: 2000 })
     // This assertion means to observe the final persisted blob, not a
     // mid-pass write still sitting in the throttle's pending thunk.
     flushThrottledStorage()
@@ -504,7 +504,7 @@ describe('catch-up hydration does not fabricate a pointer over un-migrated read 
     // Launch 2: the cache can answer now. The pointer lands where the user
     // actually was — BEHIND the two messages a snap would have marked read.
     relaunch()
-    await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ messageId: 'l1', timestamp: at(1500) }))
+    await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ messageId: 'l1', timestamp: at(1500) }), { timeout: 2000 })
   })
 
   // Control: the stand-down is per-conversation, not a blanket disable. FRESH is

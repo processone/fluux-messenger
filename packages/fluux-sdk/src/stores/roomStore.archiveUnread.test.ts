@@ -303,21 +303,24 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // WHILE this room is active.
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-p0', messages)
 
-    // Let the fire-and-forget recount settle (cache read, coverage resolve,
-    // and countRoomUnreadInArchive are all real async calls against fake-indexeddb).
-    for (let i = 0; i < 5; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    // Still active throughout — this is not a "became inactive" race.
+    // Still active throughout — this is not a "became inactive" race. The
+    // pointer advance and divider reposition are applied synchronously inside
+    // applyRemoteDisplayed's own `set()` call, so these don't need to wait for
+    // the fire-and-forget recount below.
     expect(roomStore.getState().activeRoomJid).toBe(ROOM)
     // The pointer advanced (resolveRemoteDisplayed's job, unaffected by this fix).
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
     // The divider was positioned at the first message after the new pointer.
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
     // FIX 3: the count is re-derived from the archive (u1, u2, u3), not left
-    // at the stale 99 a guard that still exempted the active room would produce.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+    // at the stale 99 a guard that still exempted the active room would
+    // produce. The recount is fire-and-forget (cache read, coverage resolve,
+    // and countRoomUnreadInArchive are all real async calls against
+    // fake-indexeddb) — poll for the derived value instead of guessing a tick
+    // count, which under full-suite load can resolve before the recount lands.
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+    }, { timeout: 2000 })
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(3)
   })
 
@@ -909,14 +912,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       roomStore.getState().advanceReadPointer(ROOM, 'm3')
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
 
-      // Let the fire-and-forget archive recount (this fix's trigger) settle.
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
+      // Poll for the fire-and-forget archive recount (this fix's trigger) to
+      // settle, rather than guessing a tick count.
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
 
       // Still active throughout — this is scenario 5's store half.
       expect(roomStore.getState().activeRoomJid).toBe(ROOM)
-      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     })
 
     it('a partial pointer advance (not to the newest) decreases the count to the correct remaining number', async () => {
@@ -938,13 +941,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       roomStore.getState().advanceReadPointer(ROOM, 'm1')
       expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
       // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
       // nor a wrongly-zeroed 0 (a broken floor/pointer would over-clear).
-      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
     })
 
     it('reading a room to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
@@ -968,11 +969,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       roomStore.getState().setActiveRoom('other-room@conference.example.com')
       expect(roomStore.getState().activeRoomJid).toBe('other-room@conference.example.com')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
-      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
     })
 
     // final-fix-3: room twin of chatStore.archiveUnread.test.ts's. The test
@@ -1010,13 +1009,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       roomStore.getState().setActiveRoom('other-room@conference.example.com')
       expect(roomStore.getState().activeRoomJid).toBe('other-room@conference.example.com')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
       // The true archive-derived remainder (u1, u2) — not the stale 5 and not
       // a force-zeroed 0.
-      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
     })
   })
 })

@@ -263,21 +263,24 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // WHILE this conversation is active.
     chatStore.getState().applyRemoteDisplayed(CID, 's-p0', messages)
 
-    // Let the fire-and-forget recount settle (cache read, coverage resolve,
-    // and countUnreadInArchive are all real async calls against fake-indexeddb).
-    for (let i = 0; i < 5; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    // Still active throughout — this is not a "became inactive" race.
+    // Still active throughout — this is not a "became inactive" race. The
+    // pointer advance and divider reposition are applied synchronously inside
+    // applyRemoteDisplayed's own `set()` call, so these don't need to wait for
+    // the fire-and-forget recount below.
     expect(chatStore.getState().activeConversationId).toBe(CID)
     // The pointer advanced (resolveRemoteDisplayed's job, unaffected by this fix).
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('p0')
     // The divider was positioned at the first message after the new pointer.
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
     // FIX 3: the count is re-derived from the archive (u1, u2, u3), not left
-    // at the stale 99 a guard that still exempted the active entity would produce.
-    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(3)
+    // at the stale 99 a guard that still exempted the active entity would
+    // produce. The recount is fire-and-forget (cache read, coverage resolve,
+    // and countUnreadInArchive are all real async calls against
+    // fake-indexeddb) — poll for the derived value instead of guessing a tick
+    // count, which under full-suite load can resolve before the recount lands.
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(3)
+    }, { timeout: 2000 })
     expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(3)
   })
 
@@ -897,15 +900,15 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       chatStore.getState().advanceReadPointer(CID, 'm3')
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('m3')
 
-      // Let the fire-and-forget archive recount (this fix's trigger) settle.
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
+      // Poll for the fire-and-forget archive recount (this fix's trigger) to
+      // settle, rather than guessing a tick count.
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
 
       // Still active throughout — this is scenario 5's store half: "the
       // sidebar becomes 0" while active and focused, no deactivation involved.
       expect(chatStore.getState().activeConversationId).toBe(CID)
-      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     })
 
     it('a partial pointer advance (not to the newest) decreases the count to the correct remaining number', async () => {
@@ -929,13 +932,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       chatStore.getState().advanceReadPointer(CID, 'm1')
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('m1')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
       // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
       // nor a wrongly-zeroed 0 (a broken floor/pointer would over-clear).
-      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
     })
 
     it('reading a conversation to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
@@ -959,11 +960,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       chatStore.getState().setActiveConversation('someone-else@example.com')
       expect(chatStore.getState().activeConversationId).toBe('someone-else@example.com')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
-      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
     })
 
     // final-fix-3: the test above (fully read, pointer already at the
@@ -1001,13 +1000,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       chatStore.getState().setActiveConversation('someone-else@example.com')
       expect(chatStore.getState().activeConversationId).toBe('someone-else@example.com')
 
-      for (let i = 0; i < 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
-
       // The true archive-derived remainder (u1, u2) — not the stale 5 and not
       // a force-zeroed 0.
-      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
     })
   })
 })
