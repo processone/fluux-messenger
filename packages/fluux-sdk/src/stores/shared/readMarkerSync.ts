@@ -129,7 +129,10 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   // Recompute the divider from the advanced position (reuses onActivate's
   // forward scan). Both callers pass treatDelayedAsNew: chats because delayed
   // means offline delivery, rooms because delayed history after the pointer
-  // is unread (unified divider semantics).
+  // is unread (unified divider semantics). If the pointer caught up, keep the
+  // active visit's parked divider: pointer reconciliation must not retire the
+  // anchor before the reader can inspect it. Explicit read-through, mark-read,
+  // and deactivation paths own clearing it.
   const divider = notifState.onActivate(
     {
       unreadCount: 0,
@@ -145,7 +148,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   return {
     kind: 'advanced-with-divider',
     readPointer,
-    firstNewMessageId: divider,
+    firstNewMessageId: divider ?? currentFirstNewMessageId,
   }
 }
 

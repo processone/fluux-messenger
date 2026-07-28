@@ -761,6 +761,73 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
   })
 
+  it('keeps the ACTIVE conversation\'s divider when the pointer has caught up to the newest message', async () => {
+    // Opening a conversation short enough to fit on screen: the viewport
+    // reports the newest message immediately, the pointer lands past the
+    // divider, and the allowActive recount that advance schedules used to
+    // delete the divider a few milliseconds after it appeared.
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    const u1 = archiveMsg('u1', 1001)
+    await messageCache.saveMessages([anchor, p0, u1])
+    setMeta({
+      unreadCount: 1,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    chatStore.setState({
+      activeConversationId: CID,
+      messages: new Map([[CID, [anchor, p0, u1]]]),
+    })
+    // The divider activation parked on the first unread message.
+    chatStore.setState((state) => {
+      const markers = new Map(state.firstNewMessageMarkers)
+      markers.set(CID, 'u1')
+      return { firstNewMessageMarkers: markers }
+    })
+
+    chatStore.getState().advanceReadPointer(CID, 'u1')
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('u1')
+
+    // The count converges (the advance's whole purpose) — but the divider the
+    // reader is looking at survives. Clearing it belongs to read-through
+    // scroll, Esc, mark-all-read, or deactivation.
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+  })
+
+  it('opening a short conversation keeps the divider the activation just derived', async () => {
+    // End-to-end shape of the same bug, driven through setActiveConversation
+    // rather than a pre-seeded marker.
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    const u1 = archiveMsg('u1', 1001)
+    const resident = [anchor, p0, u1]
+    await messageCache.saveMessages(resident)
+    setMeta({
+      unreadCount: 1,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    chatStore.setState({ messages: new Map([[CID, resident]]) })
+
+    chatStore.getState().setActiveConversation(CID)
+    chatStore.setState((state) => {
+      const messages = new Map(state.messages)
+      messages.set(CID, resident)
+      return { messages }
+    })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+
+    chatStore.getState().advanceReadPointer(CID, 'u1')
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+  })
+
   it('deletes the divider marker when the derived count is zero', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),

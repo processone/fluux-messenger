@@ -95,12 +95,6 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     expect(useChatStore.getState().firstNewMessageMarkers.has(CID)).toBe(false)
   })
 
-  it('clears the divider when the pointer is at the newest message', () => {
-    seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3')] })
-    useChatStore.getState().resyncDividerToReadPointer(CID)
-    expect(useChatStore.getState().firstNewMessageMarkers.has(CID)).toBe(false)
-  })
-
   it('skips outgoing messages when choosing the first unread', () => {
     // m3 is our own message; first incoming unread after pointer m2 is m4
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3', { outgoing: true }), msg('m4')] })
@@ -125,51 +119,19 @@ Expected: FAIL — `resyncDividerToReadPointer is not a function`.
 
 - [ ] **Step 3: Add the chat interface type**
 
-In `packages/fluux-sdk/src/stores/chatStore.ts`, in the store state interface, immediately after the `clearFirstNewMessageId: (conversationId: string) => void` type declaration (near `:249`), add:
+In `packages/fluux-sdk/src/stores/chatStore.ts`, add the signature beside
+`clearFirstNewMessageId`. The authoritative lifecycle contract is in the
+[design](../specs/2026-07-15-new-message-divider-tracks-read-pointer-design.md);
+do not duplicate it in this implementation plan.
 
 ```typescript
-  /** Recompute the session-only "New messages" divider from the current read pointer
-   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: sets the divider to
-   *  the first unread message after the pointer, or clears it when the pointer is at the newest.
-   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers. */
   resyncDividerToReadPointer: (conversationId: string) => void
 ```
 
 - [ ] **Step 4: Add the chat implementation**
 
-In `packages/fluux-sdk/src/stores/chatStore.ts`, immediately after the `clearFirstNewMessageId` implementation (after `:1106`), add:
-
-```typescript
-      resyncDividerToReadPointer: (conversationId) => {
-        set((state) => {
-          // Only reposition an EXISTING divider — never resurrect one the reader has cleared.
-          if (!state.firstNewMessageMarkers.has(conversationId)) return state
-          const meta = state.conversationMeta.get(conversationId)
-          if (!meta) return state
-          const messages = state.messages.get(conversationId) || []
-
-          // Same recompute pattern as applyRemoteDisplayed's active-divider branch: derive the
-          // divider from the pointer via onActivate and keep only .firstNewMessageId.
-          const divider = notifState.onActivate(
-            {
-              unreadCount: 0,
-              mentionsCount: 0,
-              lastReadAt: meta.lastReadAt,
-              lastSeenMessageId: meta.lastSeenMessageId,
-              firstNewMessageId: undefined,
-            },
-            messages,
-            { treatDelayedAsNew: true }
-          ).firstNewMessageId
-
-          if (divider === state.firstNewMessageMarkers.get(conversationId)) return state
-          const newMarkers = new Map(state.firstNewMessageMarkers)
-          if (divider) newMarkers.set(conversationId, divider)
-          else newMarkers.delete(conversationId)
-          return { firstNewMessageMarkers: newMarkers }
-        })
-      },
-```
+Implement the action according to the linked design. In particular, a missing derived boundary is
+a no-op for an existing active-visit divider; explicit lifecycle paths own clearing it.
 
 - [ ] **Step 5: Run the chat test to verify it passes**
 
@@ -227,11 +189,6 @@ describe('roomStore.resyncDividerToReadPointer', () => {
     expect(useRoomStore.getState().firstNewMessageMarkers.has(JID)).toBe(false)
   })
 
-  it('clears the divider when the pointer is at the newest message', () => {
-    seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
-    useRoomStore.getState().resyncDividerToReadPointer(JID)
-    expect(useRoomStore.getState().firstNewMessageMarkers.has(JID)).toBe(false)
-  })
 })
 ```
 
@@ -242,45 +199,17 @@ Expected: FAIL — not a function.
 
 - [ ] **Step 8: Add the room interface type**
 
-In `packages/fluux-sdk/src/stores/roomStore.ts`, after the `clearFirstNewMessageId` type (near `:550`), add the same doc-commented signature:
+In `packages/fluux-sdk/src/stores/roomStore.ts`, add the twin signature beside
+`clearFirstNewMessageId`; its lifecycle is owned by the same design:
 
 ```typescript
-  /** Recompute the session-only "New messages" divider from the current read pointer
-   *  (lastSeenMessageId) for this room. Forward-only, idempotent, no-op when no divider exists.
-   *  Touches nothing but firstNewMessageMarkers. */
   resyncDividerToReadPointer: (roomJid: string) => void
 ```
 
 - [ ] **Step 9: Add the room implementation**
 
-In `packages/fluux-sdk/src/stores/roomStore.ts`, after `clearFirstNewMessageId` (`:1745`), add:
-
-```typescript
-  resyncDividerToReadPointer: (roomJid) => {
-    set((state) => {
-      if (!state.firstNewMessageMarkers.has(roomJid)) return state
-      const meta = state.roomMeta.get(roomJid)
-      const existing = state.rooms.get(roomJid)
-      if (!meta && !existing) return state
-      const runtime = state.roomRuntime.get(roomJid)
-      const messages = runtime?.messages ?? existing?.messages ?? []
-      const lastSeenMessageId = meta?.lastSeenMessageId ?? existing?.lastSeenMessageId
-      const lastReadAt = meta?.lastReadAt ?? existing?.lastReadAt
-
-      const divider = notifState.onActivate(
-        { unreadCount: 0, mentionsCount: 0, lastReadAt, lastSeenMessageId, firstNewMessageId: undefined },
-        messages,
-        { treatDelayedAsNew: true }
-      ).firstNewMessageId
-
-      if (divider === state.firstNewMessageMarkers.get(roomJid)) return state
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      if (divider) newMarkers.set(roomJid, divider)
-      else newMarkers.delete(roomJid)
-      return { firstNewMessageMarkers: newMarkers }
-    })
-  },
-```
+Implement the room twin according to the linked design, including the same no-clear behavior when
+the pointer is at the newest message.
 
 - [ ] **Step 10: Run both SDK tests to verify they pass**
 

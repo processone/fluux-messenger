@@ -173,7 +173,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
   // stale local read) BEFORE the async MDS seed lands, so the marker arrives while the
   // room is already active. The divider must be recomputed from the advanced position,
   // not frozen at the stale local one.
-  it('recomputes firstNewMessageMarkers when a late marker advances the ACTIVE room past the divider', () => {
+  it('keeps firstNewMessageMarkers when a late marker reaches the newest message', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     roomStore.setState((s) => {
       const markers = new Map(s.firstNewMessageMarkers)
@@ -184,7 +184,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
+    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m3')
   })
 
   it('does NOT recompute the divider for a non-active room', () => {
@@ -653,7 +653,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
 
-  it('erases the provisional divider when the marker resolves at the newest message (all read elsewhere)', async () => {
+  it('keeps the divider when the marker resolves at the newest message', async () => {
     const ERASE_ROOM = 'resolve-erase@conference.example'
     const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)]
     seedRoom(ERASE_ROOM, loaded, 'm1')
@@ -670,7 +670,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // The other device read everything: the marker resolves at the newest message.
     roomStore.getState().applyRemoteDisplayed(ERASE_ROOM, 's9', [...loaded, rmsg('m9', 's9', 9)])
 
-    expect(roomSelectors.firstNewMessageIdFor(ERASE_ROOM)(roomStore.getState())).toBeUndefined()
+    expect(roomSelectors.firstNewMessageIdFor(ERASE_ROOM)(roomStore.getState())).toBe('m2')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(ERASE_ROOM)(roomStore.getState())).toBe(false)
     expect(roomStore.getState().roomMeta.get(ERASE_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })

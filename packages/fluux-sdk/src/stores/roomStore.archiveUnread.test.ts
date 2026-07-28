@@ -763,6 +763,42 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
   })
 
+  it('keeps the ACTIVE room\'s divider when the pointer has caught up to the newest message', async () => {
+    // Opening a room short enough to fit on screen: the viewport reports the
+    // newest message immediately, the pointer lands past the divider, and the
+    // allowActive recount that advance schedules used to delete the divider a
+    // few milliseconds after it appeared. Chat twin in
+    // chatStore.archiveUnread.test.ts.
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    const u1 = archiveMsg('u1', 1001)
+    await messageCache.saveRoomMessages([anchor, p0, u1])
+    setMeta({
+      unreadCount: 1,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    roomStore.setState((state) => {
+      const runtime = new Map(state.roomRuntime)
+      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages: [anchor, p0, u1] })
+      const markers = new Map(state.firstNewMessageMarkers)
+      // The divider activation parked on the first unread message.
+      markers.set(ROOM, 'u1')
+      return { activeRoomJid: ROOM, roomRuntime: runtime, firstNewMessageMarkers: markers }
+    })
+
+    roomStore.getState().advanceReadPointer(ROOM, 'u1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('u1')
+
+    // The count converges (the advance's whole purpose) — but the divider the
+    // reader is looking at survives. Clearing it belongs to read-through
+    // scroll, Esc, mark-all-read, or deactivation.
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+  })
+
   it('deletes the divider marker when the derived count is zero', async () => {
     await messageCache.saveRoomMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),

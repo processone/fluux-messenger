@@ -190,12 +190,10 @@ Entry selects exactly one provisional request:
 An explicit reply/search/activity target is not folded into this priority table. It is a separate,
 newer request and supersedes the provisional entry request.
 
-The entry choice is not final. XEP-0490/MDS state can resolve after entry:
-
-- a remote read pointer reaches the live edge; or
-- a stale unread divider clears.
-
-Before genuine user takeover, either event may issue a newer live-edge request, but only for the
+The entry choice is not final: XEP-0490/MDS state can resolve after entry and reposition an unread
+divider. That reconciliation must not issue a live-edge request merely because the remote pointer
+reaches the newest message; the active visit's divider remains parked until an explicit clear path
+retires it. Before genuine user takeover, an accepted MDS positioning correction is limited to the
 currently displayed conversation and only while that provisional entry remains eligible. After
 takeover, explicit navigation, outgoing send, or one accepted MDS correction, the late-MDS entry
 window closes. A delayed result from the room just left must never reactivate it. A later explicit

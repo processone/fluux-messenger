@@ -2636,19 +2636,35 @@ export const chatStore = createStore<ChatState>()(
 
           // Rederive the divider (requirement 5): the boundary may have moved
           // since a marker was last parked here (a remote pointer advance).
-          // Deactivation deletes a background conversation's marker, so this
-          // is normally a no-op — it stays correct if that ever changes.
+          //
+          // Reposition-only while the conversation is ACTIVE: a pointer that
+          // caught up is not a reason to retire a divider the reader is looking
+          // at. This recount is scheduled BY the viewport pointer advance
+          // (advanceReadPointer, allowActive) — and in a conversation short
+          // enough to fit on screen the viewport reports the newest message the
+          // moment it opens, so the pointer lands past the divider within
+          // milliseconds. Deleting here made the "New messages" divider vanish
+          // right after opening. Clearing a live divider belongs to read-through
+          // scroll, Esc, mark-all-read, or deactivation — the same rule
+          // resyncDividerToReadPointer states. A BACKGROUND conversation still
+          // gets its stale marker retired here (deactivation normally already
+          // deleted it; this stays correct if that ever changes).
           let newMarkers = state.firstNewMessageMarkers
-          if (state.firstNewMessageMarkers.has(conversationId)) {
+          const parkedDivider = state.firstNewMessageMarkers.get(conversationId)
+          if (parkedDivider !== undefined) {
             const divider = notifState.onActivate(
               { unreadCount: 0, mentionsCount: 0, readPointer: meta.readPointer, firstNewMessageId: undefined },
               slice,
               'chat',
               { treatDelayedAsNew: true }
             ).firstNewMessageId
-            newMarkers = new Map(state.firstNewMessageMarkers)
-            if (divider) newMarkers.set(conversationId, divider)
-            else newMarkers.delete(conversationId)
+            const nextDivider =
+              divider ?? (state.activeConversationId === conversationId ? parkedDivider : undefined)
+            if (nextDivider !== parkedDivider) {
+              newMarkers = new Map(state.firstNewMessageMarkers)
+              if (nextDivider) newMarkers.set(conversationId, nextDivider)
+              else newMarkers.delete(conversationId)
+            }
           }
 
           // unreadCount commits unconditionally on `exact`; mentionsCount is

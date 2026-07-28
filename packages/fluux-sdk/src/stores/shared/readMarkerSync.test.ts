@@ -77,7 +77,7 @@ describe('resolveRemoteDisplayed', () => {
     })
   })
 
-  it('clears the divider when the advanced position reaches the newest message', () => {
+  it('keeps the current divider when the advanced position reaches the newest message', () => {
     const result = resolveRemoteDisplayed(
       { ...baseMeta, readPointer: seenIn('m1') },
       messages,
@@ -90,7 +90,7 @@ describe('resolveRemoteDisplayed', () => {
     expect(result).toMatchObject({
       kind: 'advanced-with-divider',
       readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
-      firstNewMessageId: undefined,
+      firstNewMessageId: 'm2',
     })
   })
 

@@ -86,22 +86,14 @@ undefined at the fold, so:
 
 ### Fix (two layers, provenance stays in the SDK)
 
-- **SDK — `applyRemoteDisplayed` recomputes the divider for the ACTIVE conversation.** When a
-  marker advances `lastSeenMessageId` and `activeConversationId`/`activeRoomJid` matches, re-derive
-  `firstNewMessageMarkers[id]` via `notifState.onActivate` (chat: `treatDelayedAsNew:true`; rooms:
-  default). Inactive entities are left untouched (recomputed on their next activation). This extends
-  the doc's existing "applied live" path from the badge to the divider. Tests:
-  `chatStore.mds.test.ts` / `roomStore.mds.test.ts` — "recomputes … when a late marker advances the
-  ACTIVE conversation/room past the divider" + a non-active gate (RED → GREEN).
-- **App — settle-window re-scroll (`useMessageListScroll`).** The conversation-switch effect captures
-  the marker id at entry and its re-assert loop chases that stale target, so the SDK divider clear
-  needs a companion `useLayoutEffect`: on a live divider CLEAR (defined → undefined) for the SAME
-  conversation, while the user has NOT scrolled since entry (`userHasScrolledSinceEntryRef`), call
-  `reassertBottom()` (single-flight → supersedes the stale marker loop). Self-contained prev-conv ref
-  so a genuine switch is excluded. Not verifiable in jsdom/preview (rAF gated); verify on device /
-  via `scripts/scroll-invariants.ts`.
+- **SDK — `applyRemoteDisplayed` reconciles the ACTIVE conversation's divider.** The current
+  repositioning and zero-count preservation rules are owned by the
+  [single-source acceptance addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md);
+  inactive entities still rederive on their next activation.
+- **App — late sync never yanks the reader.** Positioning ownership and late-MDS eligibility are
+  defined by the [scroll-positioning contract](../../2026-07-23-scroll-positioning-contract.md).
 
-Note: the divider recompute is deliberately NOT gated by `mdsConsumedThisSession` — that gate is only
-about re-*folding* a stale marker at ENTRY. A genuine forward read-sync arriving live SHOULD move the
-divider (that is what "keep loaded conversations current" means); the settle-window/user-scroll gate
-in the app is what prevents yanking a user who has taken over the scroll.
+Note: divider reconciliation is deliberately NOT gated by `mdsConsumedThisSession` — that gate is
+only about re-*folding* a stale marker at ENTRY. A genuine forward read-sync arriving live SHOULD
+reconcile the divider when a later unread boundary exists; reaching zero preserves the active
+visit's parked divider until an explicit clear path retires it.

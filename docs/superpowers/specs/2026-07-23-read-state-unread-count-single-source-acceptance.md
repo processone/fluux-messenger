@@ -22,17 +22,21 @@ conditions (coverage-incomplete, pointerless-with-count, un-migrated / pending m
 count is derived once (PR B: archive-cursor, coverage-gated, capped — `countUnreadInArchive` /
 the store's `unreadCount`) and every user-visible unread surface renders *that same number*.
 
-**There are five numeric renderings of the one count** — all must show the same value:
+**There are five numeric renderings of the one count** — whenever they render numeric copy, all
+must show the same value:
 
 - **Conversation sidebar counter** — the canonical count.
 - **Room row tooltip** — the canonical count. The room row's unread dot remains a
   non-numeric presence indicator, and its `@mentionsCount` badge is a separate quantity.
-- **Divider** (`NewMessageMarker`, the in-list "New messages" line) — positioned at the first
-  eligible message after the boundary, and it **labels the canonical count** (e.g.
-  *"2 new messages"*). It takes no count today (`NewMessageMarker.tsx` — only `provisional`);
-  PR B passes the canonical count to it and the test asserts the **divider's own text**.
+- **Divider** (`NewMessageMarker`, the in-list "New messages" line) — while unread remains,
+  positioned at the first eligible message after the boundary and **labels the canonical count**
+  (e.g. *"2 new messages"*). If the active visit's pointer catches up, the parked divider remains
+  as a generic per-visit anchor until an explicit clear path retires it. It takes no count today
+  (`NewMessageMarker.tsx` — only `provisional`); PR B passes the canonical count to it and the test
+  asserts the **divider's own text**.
 - **Floating marker pill** (`JumpToLastReadPill`, shown while the divider is above the
-  viewport) — the canonical count.
+  viewport) — the canonical count while positive; generic "You were away" copy when the parked
+  divider outlives zero-count convergence.
 - **FAB badge** — when shown, the canonical count.
 
 No surface may recount DOM rows or the loaded/resident message array. The current
@@ -42,16 +46,19 @@ surfaces receive the canonical count as one prop; the conversation counter and r
 read the same store projection. All five format it through **one shared formatter** (see the
 cap decision below) so identical values render identically.
 
-**The divider live-tracks the boundary, but never moves the reader.** The divider is a true
-canonical-count surface (not a frozen session anchor — this supersedes design decision #4's
-freeze): when the effective read boundary changes, including a **remote XEP-0490 marker** that
-advances the pointer while the conversation is active, the divider repositions to the new
-boundary or disappears, and its label follows the canonical count. A count of `0` removes the
-divider **and** its floating pill. The hard constraint: **repositioning or removing the divider
-must preserve the currently visible message's pixel offset** — a remote pointer update changes
-the semantic boundary but must **not** visually scroll the reader. This reuses the existing
-content-anchor scroll mechanism (anchor a stable visible message, re-assert its offset after the
-divider mutates the list layout); it is a scroll-anchoring requirement, `test:scroll`-gated.
+**The divider live-tracks the boundary forward, but never moves the reader.** When the effective
+read boundary changes, including a **remote XEP-0490 marker** that advances the pointer while the
+conversation is active, the divider repositions when a later unread boundary exists. If the
+pointer reaches the newest message, the active visit's parked divider is preserved instead of
+being retired by pointer reconciliation; its numeric label becomes the generic "New messages"
+label, and a floating pill degrades to "You were away." Clearing that anchor belongs to a genuine
+manual read-through scroll, Esc, mark-all-read, or deactivation. This preserves a divider long
+enough to read when opening a short conversation immediately makes every row visible. The hard
+constraint: **repositioning the divider must preserve the currently visible message's pixel
+offset** — a remote pointer update changes semantic read state but must **not** visually scroll
+the reader. This reuses the existing content-anchor scroll mechanism (anchor a stable visible
+message, re-assert its offset after the divider mutates the list layout); it is a scroll-anchoring
+requirement, `test:scroll`-gated.
 
 **Scrolling is navigation, not read state.** The viewport position governs exactly two
 things and never the count:
@@ -76,12 +83,12 @@ store cap (999), one formatter, five identical numeric renderings.
 ## Convergence at the live edge, and the on-arrival pointer precondition
 
 When the room is **active, focused, and the viewport is at the live edge**, the local read
-pointer advances *optimistically and locally* — the canonical count becomes `0`, the divider
-and pill are removed, and the FAB is hidden (viewport at bottom) **immediately**, without
-waiting on the server. MDS / XEP-0490 publication is a best-effort side effect that retries
-independently; the UI never blocks the count/marker on a publish acknowledgement. A lingering
-non-zero count while the user is settled at the bottom is a brief transitional state, never the
-steady state.
+pointer advances *optimistically and locally* — the canonical count becomes `0` and the FAB is
+hidden (viewport at bottom) **immediately**, without waiting on the server. MDS / XEP-0490
+publication is a best-effort side effect that retries independently; the UI never blocks count
+convergence on a publish acknowledgement. A lingering non-zero count while the user is settled at
+the bottom is a brief transitional state, never the steady state. A divider already parked for
+the active visit is a separate visual anchor: automatic viewport catch-up does not clear it.
 
 **PR B tightens one existing pointer writer's precondition (a scoped, acknowledged exception to
 the B/C boundary).** Today `onMessageReceived` (`notificationState.ts`) treats
@@ -135,11 +142,15 @@ improvise a DOM-row count.
   `formatUnreadCount`.
 - **Divider text is a real acceptance surface** — the tests assert `NewMessageMarker`'s own
   rendered text (e.g. *"2 new messages"*), not only the pill's.
-- **Divider live-tracks the boundary with anchor preservation** — it repositions/clears when the
-  boundary moves (including a remote XEP-0490 advance), and every such mutation preserves the
-  visible message's pixel offset via the content-anchor mechanism. `test:scroll`-gated.
-- **Marker/divider position** stays `firstNewMessageId` (first eligible message after the
-  effective read boundary); only its *count label* is added/switched to the canonical value.
+- **Divider live-tracks the boundary with anchor preservation** — it repositions when a later
+  unread boundary exists (including after a remote XEP-0490 advance), preserving the visible
+  message's pixel offset via the content-anchor mechanism. When reconciliation reaches zero,
+  preserve the active visit's parked marker with generic copy; only the explicit lifecycle paths
+  above clear it. `test:scroll`-gated.
+- **Marker/divider position** stays `firstNewMessageId`: it is the first eligible message after
+  the effective read boundary while unread remains, or the active visit's parked anchor after
+  automatic convergence reaches zero. Only its *count label* is added/switched to the canonical
+  value.
 - **FAB visibility** (`fabVisible`) and the **two-step action** are unchanged — the action's
   destination stays the existing **marker-geometry** rule in `useMessageListScroll.ts`
   (marker below the viewport ⇒ marker first; otherwise bottom), *not* a `count > 0` test.
@@ -209,15 +220,21 @@ rendering at the component layer, both reading the *same* canonical number.
 - *Break check:* with the divider above the viewport but count > 0, assert the target is the
   bottom (not the marker) — a count-driven rule would wrongly scroll up to the marker.
 
-### 5. Reach the live edge while active and focused
+### 5. Manually read through to the live edge while active and focused
 - **Given** the room active, window focused, unread present.
-- **When** the viewport reaches the live edge (bottom) so the convergence gates are satisfied.
+- **When** the user manually scrolls through the unread backlog to the live edge (bottom) so the
+  convergence gates and the explicit read-through clear are satisfied.
 - **Then** the local read pointer advances (optimistically, not gated on MDS publish); the
   sidebar becomes `0`; the divider and floating pill are removed; the FAB is hidden (viewport
   at bottom).
 - *Break check:* assert convergence happens without a resolved publish promise (publish is
   best-effort); assert every surface reaches the cleared state (sidebar `0`, no divider, no
   pill, no FAB).
+
+When activation opens a short conversation whose whole unread backlog already fits in the
+viewport, the automatic pointer advance still converges the canonical count to `0`, but it is not
+a manual read-through gesture: the divider stays visible with generic copy so the reader has a
+chance to inspect it.
 
 ### 6. Previously-read messages below the viewport
 - **Given** the conversation fully read, then the user scrolled up so read messages sit below
@@ -234,11 +251,11 @@ rendering at the component layer, both reading the *same* canonical number.
   viewport.
 - **When** an inbound XEP-0490 read marker from another device advances the effective boundary
   (canonical count drops to `M`, `0 ≤ M < N`).
-- **Then** the canonical count updates to `M` on **every rendered surface** (sidebar, divider,
-  floating pill, FAB badge); the divider **moves** to the new boundary (or, if `M = 0`, the
-  divider **and** the floating pill are **removed**); the FAB may remain visible (viewport away
-  from bottom) but shows **no badge** when `M = 0`; and the anchored message **stays at the same
-  pixel offset** throughout — no visual scroll.
+- **Then** the canonical count updates to `M` on every numeric surface. The divider **moves** to
+  the new boundary when `M > 0`. If `M = 0`, the active visit's divider stays at its parked
+  message with generic copy and a visible floating pill uses its generic "You were away" copy;
+  the FAB may remain visible (viewport away from bottom) but shows **no badge**. The anchored
+  message **stays at the same pixel offset** throughout — no visual scroll.
 - *Break checks:* (a) omit the content-anchor re-assert → the anchored message's offset shifts
   when the divider mutates the layout (fails); (b) leave any surface on the stale `N` (fails the
   all-surfaces-agree assertion).

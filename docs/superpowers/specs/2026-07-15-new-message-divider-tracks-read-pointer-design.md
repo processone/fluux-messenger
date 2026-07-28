@@ -35,9 +35,10 @@ unread-count, or notification behavior — those are all keyed on `lastSeenMessa
 `unreadCount`, which already move independently.
 
 There is an exact existing precedent: `applyRemoteDisplayed` →
-`resolveRemoteDisplayed` (`shared/readMarkerSync.ts`) recomputes the divider from an
-advanced pointer for the active entity by calling `onActivate` with a synthetic state and
-keeping only `.firstNewMessageId`. This design mirrors that pattern for a local trigger.
+`resolveRemoteDisplayed` (`shared/readMarkerSync.ts`) reconciles the divider from an
+advanced pointer for the active entity by calling `onActivate` with a synthetic state,
+using the derived `.firstNewMessageId` when one exists and otherwise preserving the parked
+active-visit marker. This design mirrors that pattern for a local trigger.
 
 ## Design decisions (approved)
 

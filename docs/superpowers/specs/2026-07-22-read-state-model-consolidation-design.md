@@ -93,15 +93,10 @@ therefore in scope, in PR A.
    second source of truth by becoming a denormalised field of the same fact — which keeps
    ordering comparisons synchronous and O(1), leaving the cache needed only for counting.
 
-4. **A remote marker on the active view advances the pointer and live-tracks the divider
-   without moving the reader.** The divider moves or disappears with the effective read boundary
-   so its label stays consistent with the canonical count. Before mutating the divider, capture a
-   stable visible-message anchor and restore the same pixel offset afterward. Semantic state
-   changes immediately; viewport position does not. *(This supersedes the earlier "freeze the
-   divider" decision: once the divider labels the one canonical count, freezing it would show a
-   stale or `0` number — anchor preservation, not freezing, is what keeps the separator from
-   being yanked off content the reader is looking at. See the [single-source acceptance
-   addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md).)*
+4. **A remote marker on the active view advances the pointer without moving the reader.**
+   Divider repositioning, zero-count preservation, explicit clear paths, and anchor preservation
+   are owned by the [single-source acceptance
+   addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md).
 
 5. **A fresh entity gets an explicit watermark, not a pointer write.** `historyFloor`
    records when the entity entered our world, once, at creation. Joining a room with 10k
@@ -248,12 +243,11 @@ position-aware transient overlay because it will never appear in the archive wal
 the fast path and archive cursor call the same `isRenderableStoredMessage` predicate, so
 they cannot drift.
 
-**The divider follows the boundary without moving the reader.** PR B keeps
-`resolveRemoteDisplayed`'s `advanced-with-divider` result as the signal to rederive the
-active entity's `firstNewMessageId`; inactive entities rederive on activation. The app
-continuously maintains a visible-message anchor and restores its pixel offset before paint
-when the divider moves or disappears. PR C may collapse the special result only after the
-divider derives directly from the boundary.
+**The divider follows the boundary without moving the reader.** The authoritative lifecycle,
+including the active-visit zero-count exception, is specified in the [single-source acceptance
+addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md). PR B keeps
+`resolveRemoteDisplayed`'s `advanced-with-divider` result as the reconciliation signal; inactive
+entities rederive on activation.
 
 **Publish path.** `resolveSeenStanzaId` resolves via the cache instead of
 resident-slice-plus-`lastMessage`-fallback, closing its silent `return undefined` drop.

@@ -450,7 +450,7 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
   // active. The divider must be recomputed to reflect the synced read position, not
   // left frozen at the stale local one (which is what made the view open at the last
   // local place and only jump to the synced place on the next open).
-  it('recomputes firstNewMessageMarkers when a late marker advances the active conversation past the divider', () => {
+  it('keeps firstNewMessageMarkers when a late marker reaches the newest message', () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
     seedMessages(cid, messages)
@@ -469,9 +469,7 @@ describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE div
 
     // Read position advanced to m4 …
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m4')
-    // … and because m4 is the last message, there is nothing new: the divider clears
-    // (the UI then settles to the bottom instead of holding the stale m3 marker).
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
   })
 
   it('does NOT recompute the divider for a non-active conversation (it is derived fresh on activation)', () => {
@@ -712,7 +710,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
-  it('erases the provisional divider when the marker resolves at the newest message (all read elsewhere)', async () => {
+  it('keeps the divider when the marker resolves at the newest message', async () => {
     const cid = 'resolve-erase@capulet.example'
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
@@ -727,7 +725,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // The other device read everything: the marker resolves at the newest message.
     chatStore.getState().applyRemoteDisplayed(cid, 's9', [...loaded, timed('m9', 's9', 9)])
 
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
     expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
