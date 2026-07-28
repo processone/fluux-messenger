@@ -21,6 +21,15 @@ export interface TypingIndicatorProps {
    * padding and uses text-xs so it fits a sidebar preview line.
    */
   variant?: 'default' | 'compact'
+  /**
+   * How many lines the label may occupy before it is clipped with an ellipsis.
+   * Clamping is a property of the slot, not of the density: a sidebar preview
+   * row has exactly one line to give, while the in-conversation band grows with
+   * the pill and can afford a second one for long or multi-typer labels.
+   *
+   * Defaults to 1 in `compact` and to no clamp at all in `default`.
+   */
+  maxLines?: 1 | 2
 }
 
 /**
@@ -38,7 +47,13 @@ export interface TypingIndicatorProps {
  * // For rooms - use nicknames directly
  * <TypingIndicator typingUsers={['Alice', 'Bob']} />
  */
-export function TypingIndicator({ typingUsers, formatUser, className = '', variant = 'default' }: TypingIndicatorProps) {
+export function TypingIndicator({
+  typingUsers,
+  formatUser,
+  className = '',
+  variant = 'default',
+  maxLines,
+}: TypingIndicatorProps) {
   const { t } = useTranslation()
 
   if (typingUsers.length === 0) return null
@@ -73,6 +88,12 @@ export function TypingIndicator({ typingUsers, formatUser, className = '', varia
       ? `text-xs text-fluux-muted italic flex items-center gap-1.5 min-w-0 ${className}`
       : `py-2 px-4 text-sm text-fluux-muted italic flex items-center gap-2 ${className}`
 
+  // `truncate` bundles whitespace-nowrap, so the two cases are mutually exclusive: a single line is
+  // ellipsised, two lines wrap first and are ellipsised on the second. break-words keeps an
+  // unspaced nickname from running past the pill instead of wrapping inside it.
+  const lines = maxLines ?? (variant === 'compact' ? 1 : undefined)
+  const labelClass = lines === 1 ? 'truncate' : lines === 2 ? 'line-clamp-2 break-words' : ''
+
   return (
     <div className={containerClass}>
       {/* Dots bounce and shimmer through the aurora hues (delays + colors in CSS). */}
@@ -81,7 +102,7 @@ export function TypingIndicator({ typingUsers, formatUser, className = '', varia
         <span className="size-1.5 rounded-full typing-dot" />
         <span className="size-1.5 rounded-full typing-dot" />
       </span>
-      <span dir="auto" className={variant === 'compact' ? 'truncate' : ''}>{text}</span>
+      <span dir="auto" className={labelClass}>{text}</span>
     </div>
   )
 }

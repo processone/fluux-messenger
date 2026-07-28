@@ -143,4 +143,38 @@ describe('TypingIndicator', () => {
       expect(container.querySelectorAll('.typing-dot').length).toBe(3)
     })
   })
+
+  describe('line clamping', () => {
+    const label = (container: HTMLElement) => container.querySelector('[dir="auto"]') as HTMLElement
+
+    it('keeps the compact label on a single ellipsised line by default (sidebar preview)', () => {
+      const { container } = render(
+        <TypingIndicator typingUsers={['Alice']} variant="compact" />,
+      )
+      expect(label(container).className).toContain('truncate')
+      expect(label(container).className).not.toContain('line-clamp-2')
+    })
+
+    it('lets the compact label wrap to two lines when asked (conversation band)', () => {
+      const { container } = render(
+        <TypingIndicator typingUsers={['Alice']} variant="compact" maxLines={2} />,
+      )
+      // truncate carries whitespace-nowrap, so it must be gone for wrapping to be possible at all
+      expect(label(container).className).not.toContain('truncate')
+      expect(label(container).className).toContain('line-clamp-2')
+    })
+
+    it('breaks long words so an unspaced name cannot overflow the pill', () => {
+      const { container } = render(
+        <TypingIndicator typingUsers={['A'.repeat(80)]} variant="compact" maxLines={2} />,
+      )
+      expect(label(container).className).toContain('break-words')
+    })
+
+    it('never clamps the default variant', () => {
+      const { container } = render(<TypingIndicator typingUsers={['Alice']} />)
+      expect(label(container).className).not.toContain('truncate')
+      expect(label(container).className).not.toContain('line-clamp-2')
+    })
+  })
 })

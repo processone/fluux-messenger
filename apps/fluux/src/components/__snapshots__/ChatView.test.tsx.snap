@@ -610,7 +610,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
                 />
               </span>
               <span
-                class="truncate"
+                class="line-clamp-2 break-words"
                 dir="auto"
               >
                 Alice Smith is typing...

@@ -1952,6 +1952,157 @@ test.describe('Typing indicator never covers message text', () => {
     )
   })
 
+  /** Emit `composing`/`paused` for a set of MUC nicks. `room:typing` carries one nick at a time. */
+  async function emitRoomTyping(page: Page, roomJid: string, nicks: string[], isTyping: boolean): Promise<void> {
+    await page.evaluate(({ jid, names, on }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      for (const nick of names) c.emitSDK('room:typing', { roomJid: jid, nick, isTyping: on })
+    }, { jid: roomJid, names: nicks, on: isTyping })
+  }
+
+  /**
+   * Replace the room's typing set outright: `previous` is stopped and the pill is allowed to
+   * unmount before `nicks` start. Going through empty is what makes the label deterministic —
+   * the store keeps typers in a Set, so a name that survives a transition keeps its original
+   * position and `nicks[0]` would not be the one the label leads with.
+   */
+  async function setRoomTypers(
+    page: Page,
+    roomJid: string,
+    nicks: string[],
+    previous: string[] = [],
+  ): Promise<void> {
+    if (previous.length > 0) {
+      await emitRoomTyping(page, roomJid, previous, false)
+      await page.waitForFunction(() => {
+        const s = document.querySelector('[data-message-list]')
+        return !s?.parentElement?.querySelector('[data-typing-pill]')
+      }, undefined, { timeout: 5_000 })
+    }
+    await emitRoomTyping(page, roomJid, nicks, true)
+    await page.waitForFunction((expected) => {
+      const s = document.querySelector('[data-message-list]')
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!pill) return false
+      const r = pill.getBoundingClientRect()
+      return r.width > 0 && r.height > 0 && (pill.textContent ?? '').includes(expected)
+    }, nicks[0], { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+  }
+
+  /** Height of the live list's pill, or 0 when it is not mounted. */
+  async function pillHeight(page: Page): Promise<number> {
+    return page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]')
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      return pill ? Math.round(pill.getBoundingClientRect().height) : 0
+    })
+  }
+
+  // Issue #1151: the compact label used to be `truncate`d, so a crowded room was cut off with an
+  // ellipsis rather than wrapping. It may now take a SECOND line — the band sizes itself from the
+  // pill, so it grows with it — and is capped there. Both halves of that need a browser: the
+  // clearance above the pill is the thing a taller pill could eat, and the clamp only exists once
+  // the text is really laid out.
+  test('a wrapped two-line room label grows the band instead of covering message text', async ({ page }) => {
+    // Narrow (but still the desktop layout — the mobile breakpoint is 768) so an ordinary
+    // multi-typer label wraps, which is where the truncation was most visible.
+    await page.setViewportSize({ width: 800, height: 800 })
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    await setRoomTypers(page, STRESS_ROOM_JID, ['Ada'])
+    const single = await probeOverlap(page, 0)
+    expect(single.pillFound, 'typing pill not rendered for a single typer').toBe(true)
+    expect(single.pillHeight, 'single-line pill has no height').toBeGreaterThan(10)
+
+    const CROWD = [
+      'Sophia Reyes (Product Design)',
+      'Marcus Chen (Infrastructure)',
+      'Priya Raghunathan (Support)',
+      'Alexandre Dubois (Localisation)',
+    ]
+    await setRoomTypers(page, STRESS_ROOM_JID, CROWD, ['Ada'])
+    const wrapped = await probeOverlap(page, 0)
+
+    // Control: without this the overlap sweep below would pass on a one-line pill and prove
+    // nothing about wrapping. A regression to `truncate` fails HERE, not silently.
+    expect(
+      wrapped.pillHeight,
+      `crowded label did not wrap (pill still ${wrapped.pillHeight}px, single line is ${single.pillHeight}px)`,
+    ).toBeGreaterThan(single.pillHeight)
+
+    // The cap: an absurdly long label must still stop at two lines.
+    const OVERLONG = [
+      'Sophia Reyes, Head of Product Design and Research',
+      'Marcus Chen, Infrastructure and Platform Reliability',
+      ...CROWD.slice(2),
+    ]
+    await setRoomTypers(page, STRESS_ROOM_JID, OVERLONG, CROWD)
+    const clamped = await probeOverlap(page, 0)
+    expect(
+      clamped.pillHeight,
+      `label ran past two lines (${clamped.pillHeight}px vs ${wrapped.pillHeight}px for two)`,
+    ).toBe(wrapped.pillHeight)
+
+    // And the taller pill must not eat the clearance the band is there to provide, at any offset.
+    await setRoomTypers(page, STRESS_ROOM_JID, CROWD, OVERLONG)
+    const covered: Array<{ offset: number; probe: OverlapProbe }> = []
+    for (const offset of OFFSETS_PX) {
+      const probe = await probeOverlap(page, offset)
+      expect(probe.pillFound, `typing pill not rendered at offset ${offset}`).toBe(true)
+      expect(probe.visibleRows, `no message rows visible at offset ${offset}`).toBeGreaterThan(0)
+      if (probe.worstOverlap > 0) covered.push({ offset, probe })
+    }
+    expect(
+      covered,
+      'two-line typing pill covers message text at ' +
+        covered.map((r) => `offset=${r.offset}px (${r.probe.worstOverlap}px of ${r.probe.worstRowId})`).join(', '),
+    ).toEqual([])
+  })
+
+  // The cost of letting the label wrap: the band can now grow while it is ALREADY shown, which the
+  // off→on typing re-pin deliberately ignores (it only fires on the mount edge). A reader glued to
+  // the bottom when a second typer joins must not be left short of it — this is the case that says
+  // whether the scroller's own resize reconciliation is enough to cover the growth.
+  test('a typer joining mid-flight grows the pill without unsticking the bottom', async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 800 })
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+
+    await setRoomTypers(page, STRESS_ROOM_JID, ['Sophia Reyes (Product Design)'])
+    const before = await pillHeight(page)
+    expect(before, 'typing pill not mounted for the first typer').toBeGreaterThan(10)
+
+    // Join, do not replace: the pill stays mounted and grows in place.
+    await emitRoomTyping(
+      page,
+      STRESS_ROOM_JID,
+      ['Marcus Chen (Infrastructure)', 'Priya Raghunathan (Support)', 'Alexandre Dubois (Localisation)'],
+      true,
+    )
+    await page.waitForTimeout(SETTLE_MS)
+
+    const after = await pillHeight(page)
+    // Control: a pill that did not actually grow makes the glue assertion below meaningless.
+    expect(after, `pill did not grow when typers joined (still ${after}px)`).toBeGreaterThan(before)
+
+    const dist = await page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+    })
+    expect(dist, 'view left off the bottom when the typing pill grew to two lines').toBeLessThanOrEqual(
+      GLUED_TOLERANCE_PX,
+    )
+
+    const probe = await probeOverlap(page, 0)
+    expect(probe.worstOverlap, `grown pill covers ${probe.worstRowId}`).toBe(0)
+  })
+
   /** React on the newest message through the real store path, so its row genuinely grows. */
   async function reactToNewest(page: Page, jid: string): Promise<string> {
     const lastId = await page.evaluate((j) => {
