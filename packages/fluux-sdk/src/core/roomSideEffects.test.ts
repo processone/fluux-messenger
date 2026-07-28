@@ -360,6 +360,57 @@ describe('setupRoomSideEffects', () => {
   })
 
   describe('post-cache eligibility', () => {
+    it('replaces a pending fetch when the active room leaves and rejoins', async () => {
+      const staleCache = deferred<[]>()
+      const replacementCache = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      let roomLoadCount = 0
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockImplementation((jid) => {
+        if (jid !== ROOM) return Promise.resolve([])
+        roomLoadCount += 1
+        return roomLoadCount === 1 ? staleCache.promise : replacementCache.promise
+      })
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      confirmRoomJoin()
+      roomStore.getState().setRoomJoined(ROOM, false)
+      mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: false })
+      confirmRoomJoin()
+
+      await vi.waitFor(() => {
+        expect(loadSpy.mock.calls.filter(([jid]) => jid === ROOM)).toHaveLength(2)
+      })
+
+      staleCache.resolve([])
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+
+      replacementCache.resolve([])
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      loadSpy.mockRestore()
+    })
+
     it('disposes a pending hydration before replacement side effects take ownership', async () => {
       const staleCache = deferred<[]>()
       const replacementCache = deferred<[]>()

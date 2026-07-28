@@ -823,18 +823,19 @@ describe('setupBackgroundSyncSideEffects', () => {
       const firstCache = new Promise<[]>((resolve) => {
         resolveFirstCache = resolve
       })
-      let firstRoomLoad = true
+      let resolveReplacementCache!: (messages: []) => void
+      const replacementCache = new Promise<[]>((resolve) => {
+        resolveReplacementCache = resolve
+      })
+      let roomLoadCount = 0
       const loadSpy = vi.spyOn(
         roomStore.getState(),
         'loadMessagesFromCache',
       )
         .mockImplementation((jid) => {
           if (jid !== roomJid) return Promise.resolve([])
-          if (firstRoomLoad) {
-            firstRoomLoad = false
-            return firstCache
-          }
-          return Promise.resolve([])
+          roomLoadCount += 1
+          return roomLoadCount === 1 ? firstCache : replacementCache
         })
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -854,13 +855,18 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       roomStore.getState().setRoomJoined(roomJid, false)
       mockClient._emitSDK('room:joined', { roomJid, joined: false })
-      resolveFirstCache([])
-      await vi.advanceTimersByTimeAsync(0)
-
       roomStore.getState().setRoomJoined(roomJid, true)
       mockClient._emitSDK('room:joined', { roomJid, joined: true })
       mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      await vi.waitFor(() => {
+        expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
+      })
 
+      resolveFirstCache([])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      resolveReplacementCache([])
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })

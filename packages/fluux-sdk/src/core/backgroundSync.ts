@@ -28,6 +28,11 @@ import {
   selectRoomsNeedingResumeSeed,
 } from '../utils/mamCatchUpUtils'
 import { executeWithConcurrency } from '../utils/concurrencyUtils'
+import {
+  getRoomMembershipEpoch,
+  invalidateRoomMemberships,
+  recordRoomMembership,
+} from './roomMembershipEpoch'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -77,7 +82,11 @@ export function setupBackgroundSyncSideEffects(
   // once the initial pass has run, catch up any non-active room that becomes
   // MAM-ready afterwards.
   const mamHandledRooms = new Set<string>()
-  const mamInFlightRooms = new Map<string, number>()
+  interface RoomCatchUpReservation {
+    generation: number
+    membershipEpoch: number
+  }
+  const mamInFlightRooms = new Map<string, RoomCatchUpReservation>()
   let initialRoomPassDone = false
 
   function resetRoomRetryState(): void {
@@ -89,11 +98,13 @@ export function setupBackgroundSyncSideEffects(
   function isFreshRoomCatchUpEligible(
     roomJid: string,
     generation: number,
+    membershipEpoch: number,
   ): boolean {
     const state = roomStore.getState()
     const room = state.rooms.get(roomJid)
     return !!(
       generation === sessionGeneration &&
+      getRoomMembershipEpoch(client, roomJid) === membershipEpoch &&
       isFreshSession &&
       freshSessionJoinedRooms.has(roomJid) &&
       state.activeRoomJid !== roomJid &&
@@ -108,13 +119,18 @@ export function setupBackgroundSyncSideEffects(
   async function catchUpFreshSessionRoom(
     roomJid: string,
     generation: number,
+    membershipEpoch: number,
   ): Promise<boolean> {
-    if (!isFreshRoomCatchUpEligible(roomJid, generation)) return false
+    if (!isFreshRoomCatchUpEligible(roomJid, generation, membershipEpoch)) {
+      return false
+    }
     const messages = await roomStore.getState().loadMessagesFromCache(
       roomJid,
       { limit: MAM_CACHE_LOAD_LIMIT, peek: true },
     )
-    if (!isFreshRoomCatchUpEligible(roomJid, generation)) return false
+    if (!isFreshRoomCatchUpEligible(roomJid, generation, membershipEpoch)) {
+      return false
+    }
     await client.mam.catchUpRoomHistory(
       roomJid,
       messages,
@@ -130,16 +146,30 @@ export function setupBackgroundSyncSideEffects(
     if (mamHandledRooms.has(roomJid) || mamInFlightRooms.has(roomJid)) {
       return false
     }
-    mamInFlightRooms.set(roomJid, generation)
+    const reservation: RoomCatchUpReservation = {
+      generation,
+      membershipEpoch: getRoomMembershipEpoch(client, roomJid),
+    }
+    mamInFlightRooms.set(roomJid, reservation)
     try {
-      const caughtUp = await catchUpFreshSessionRoom(roomJid, generation)
-      if (!caughtUp || generation !== sessionGeneration) return false
+      const caughtUp = await catchUpFreshSessionRoom(
+        roomJid,
+        generation,
+        reservation.membershipEpoch,
+      )
+      if (
+        !caughtUp ||
+        generation !== sessionGeneration ||
+        getRoomMembershipEpoch(client, roomJid) !== reservation.membershipEpoch
+      ) {
+        return false
+      }
       mamHandledRooms.add(roomJid)
       return true
     } catch {
       return false
     } finally {
-      if (mamInFlightRooms.get(roomJid) === generation) {
+      if (mamInFlightRooms.get(roomJid) === reservation) {
         mamInFlightRooms.delete(roomJid)
       }
     }
@@ -355,6 +385,7 @@ export function setupBackgroundSyncSideEffects(
     isFreshSession = true
     if (!followsUninterruptedResume) {
       sessionStartTime = Date.now()
+      invalidateRoomMemberships(client)
       freshSessionJoinedRooms.clear()
     }
     resetRoomRetryState()
@@ -472,9 +503,13 @@ export function setupBackgroundSyncSideEffects(
     'room:joined',
     ({ roomJid, joined }) => {
       if (!joined) {
+        recordRoomMembership(client, roomJid, false)
         freshSessionJoinedRooms.delete(roomJid)
+        mamHandledRooms.delete(roomJid)
+        mamInFlightRooms.delete(roomJid)
         return
       }
+      recordRoomMembership(client, roomJid, true)
       freshSessionJoinedRooms.add(roomJid)
       if (!initialRoomPassDone || !isFreshSession) return
       if (mamHandledRooms.has(roomJid)) return

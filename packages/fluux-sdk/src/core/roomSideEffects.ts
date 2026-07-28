@@ -23,6 +23,11 @@ import {
   isConnectionError,
   MAM_CACHE_LOAD_LIMIT,
 } from '../utils/mamCatchUpUtils'
+import {
+  getRoomMembershipEpoch,
+  invalidateRoomMemberships,
+  recordRoomMembership,
+} from './roomMembershipEpoch'
 
 /**
  * Sets up room-related side effects.
@@ -44,7 +49,10 @@ export function setupRoomSideEffects(
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
   const resumeArchiveHeldRooms = new Set<string>()
-  const roomFetchOwners = new Map<string, symbol>()
+  interface RoomFetchOwner {
+    membershipEpoch: number
+  }
+  const roomFetchOwners = new Map<string, RoomFetchOwner>()
   const freshSessionJoinedRooms = new Set<string>()
   let freshSessionRequiresJoinConfirmation = false
   let uninterruptedResumeMayEmitSyntheticOnline = false
@@ -70,6 +78,16 @@ export function setupRoomSideEffects(
       hasConfirmedJoinForCurrentSession(roomJid) &&
       connectionStore.getState().status === 'online' &&
       client.isConnected()
+    )
+  }
+
+  function isRoomFetchOwnerCurrent(
+    roomJid: string,
+    owner: RoomFetchOwner,
+  ): boolean {
+    return (
+      roomFetchOwners.get(roomJid) === owner &&
+      getRoomMembershipEpoch(client, roomJid) === owner.membershipEpoch
     )
   }
 
@@ -132,7 +150,9 @@ export function setupRoomSideEffects(
       return
     }
 
-    const fetchOwner = Symbol(roomJid)
+    const fetchOwner: RoomFetchOwner = {
+      membershipEpoch: recordRoomMembership(client, roomJid, true),
+    }
     roomFetchOwners.set(roomJid, fetchOwner)
 
     // Mark as initiated BEFORE any state updates
@@ -154,7 +174,7 @@ export function setupRoomSideEffects(
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
-      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
 
@@ -174,13 +194,13 @@ export function setupRoomSideEffects(
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
       await client.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
-      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
       roomFetchOwners.delete(roomJid)
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
-      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
       roomFetchOwners.delete(roomJid)
@@ -282,9 +302,14 @@ export function setupRoomSideEffects(
     freshSessionRequiresJoinConfirmation = true
     if (!followsUninterruptedResume) {
       sessionStartTime = Date.now()
+      invalidateRoomMemberships(client)
       freshSessionJoinedRooms.clear()
       fetchInitiated.clear()
       resumeArchiveHeldRooms.clear()
+      for (const roomJid of roomFetchOwners.keys()) {
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+      }
+      roomFetchOwners.clear()
     }
     uninterruptedResumeMayEmitSyntheticOnline = false
 
@@ -384,10 +409,17 @@ export function setupRoomSideEffects(
   // Listen to room:joined SDK event to trigger MAM fetch after self-presence.
   const unsubscribeRoomJoined = client.subscribe('room:joined', ({ roomJid, joined }) => {
     if (!joined) {
+      recordRoomMembership(client, roomJid, false)
       freshSessionJoinedRooms.delete(roomJid)
+      fetchInitiated.delete(roomJid)
+      resumeArchiveHeldRooms.delete(roomJid)
+      if (roomFetchOwners.delete(roomJid)) {
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+      }
       return
     }
 
+    recordRoomMembership(client, roomJid, true)
     freshSessionJoinedRooms.add(roomJid)
 
     const activeRoomJid = roomStore.getState().activeRoomJid
