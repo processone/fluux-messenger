@@ -3390,23 +3390,14 @@ export function useMessageListScroll({
   // scripts/scroll-invariants.ts. lastScrollDataRef is refreshed on every scroll event and by every
   // bottom pin, so it is the last geometry the reader actually saw.
   //
-  // A signature change is consumed EXACTLY ONCE, so a bail must be a real decision — not a silent
-  // drop. Two of the guards are terminal (the reader is not at the bottom; a navigation owns the
-  // position — in both cases pinning later would be wrong), but "a pin loop already owns the bottom"
-  // is only a DEFERRAL: it assumes that loop absorbs the growth. If that loop was abandoned, its
-  // claim lingers until it lapses and the growth would never be pinned at all, because nothing
-  // re-runs this effect once the signature has been consumed. Deferrals therefore schedule a retry
-  // at the claim's own expiry.
+  // A signature change is consumed EXACTLY ONCE — nothing re-runs this effect for the same
+  // signature — so every skip is final. That includes the skip taken while a pin loop already claims
+  // the bottom, which is a bet that the running loop absorbs the growth itself. The claim
+  // self-expires, so it can never latch permanently and suppress growths forever; but expiry does
+  // not replay a growth already consumed. See the accepted-gap contract on rowGrowthDecision.
   const prevRowGrowthKeyRef = useRef(rowGrowthSignature)
   const rowGrowthConvRef = useRef(conversationId)
 
-  /**
-   * Try to absorb a row-growth change. Returns false when the attempt was DEFERRED and must be
-   * retried; true when it was handled or deliberately declined.
-   *
-   * `deferredAt` is the timestamp of the original stimulus: a retry is abandoned if the reader has
-   * genuinely scrolled since, so a deferred pin can never yank someone who moved away in between.
-   */
   useLayoutEffect(() => {
     const sameConversation = rowGrowthConvRef.current === conversationId
     rowGrowthConvRef.current = conversationId
@@ -3418,19 +3409,17 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return
 
-    // Correct ONLY against a plausible baseline. A mounted list is always at least a viewport tall,
-    // so anything smaller is a stale or not-yet-measured snapshot; trusting it would inflate `growth`
-    // and make a scrolled-up reader look as if they had been at the bottom — a yank, the harmful
-    // direction. With no usable baseline we fall back to the raw distance, whose worst case is a
-    // MISSED re-pin that the next stimulus corrects.
+    // Measure against the last geometry the reader actually saw, and keep the SIGN. A mounted list
+    // is always at least a viewport tall, so a smaller baseline is a stale or not-yet-measured
+    // snapshot — report null rather than a number, so the decision treats it as "unknown" instead of
+    // trusting it. Trusting a bogus baseline would inflate the delta and make a scrolled-up reader
+    // look as if they had been at the bottom, which is the harmful direction.
     const baseline = lastScrollDataRef.current?.height ?? 0
     const active = positioningControllerRef.current?.snapshot().active
     const decision = decideRowGrowth({
       distanceFromBottom: getDistanceFromBottom(scroller),
-      growth:
-        baseline >= scroller.clientHeight
-          ? Math.max(0, scroller.scrollHeight - baseline)
-          : 0,
+      heightDelta:
+        baseline >= scroller.clientHeight ? scroller.scrollHeight - baseline : null,
       atBottomThreshold: AT_BOTTOM_THRESHOLD,
       pinClaimHeld: pinBottomClaim().isHeld(),
       navigationInFlight: Boolean(
