@@ -60,8 +60,9 @@ expect "linux packaging check"       false true  scripts/check-linux-packaging.s
 expect "sdk source"                  true  false packages/fluux-sdk/src/core/XMPPClient.ts
 expect "app source"                  true  false apps/fluux/src/App.tsx
 expect "workspace tsconfig"          true  false apps/fluux/tsconfig.json
-expect "playwright scroll config"    true  false playwright.scroll.config.ts
+expect "playwright e2e config"       true  false playwright.e2e.config.ts
 expect "e2e suite body"              true  false scripts/scroll-invariants.ts
+expect "shared e2e harness"          true  false scripts/e2e/demoBoot.ts
 
 # --- Rule ordering ------------------------------------------------------------
 # src-tauri/* must be matched before apps/fluux/*, or a Tauri change would be

@@ -1,0 +1,82 @@
+import { defineConfig, devices } from '@playwright/test'
+
+/**
+ * The browser-level invariant gates: scroll positioning and composer geometry.
+ *
+ * Both suites were previously separate configs, each spawning its own `npm run dev`.
+ * That paid vite's cold transform of the demo bundle twice per CI job and left the two
+ * runs unable to share workers — the composer suite sat idle while scroll finished, and
+ * vice versa. One config, four projects, one dev server.
+ *
+ * Each suite is still runnable and diagnosable on its own, which is why the projects are
+ * named per suite rather than per engine:
+ *
+ *   npm run test:scroll                        # both engines, scroll only
+ *   npm run test:composer                      # both engines, composer only
+ *   npm run test:e2e                           # everything (what CI runs)
+ *   npx playwright test --config playwright.e2e.config.ts --project=scroll-webkit
+ *
+ * WebKit matters specifically: it reserves scrollbar gutters differently from Blink and
+ * resolves row heights on a coarser cadence, and it is the engine the desktop app runs.
+ */
+
+const SUITES = [
+  { name: 'scroll', testMatch: 'scroll-invariants.ts' },
+  { name: 'composer', testMatch: 'composer-geometry.ts' },
+] as const
+
+const ENGINES = [
+  { name: 'chromium', use: devices['Desktop Chrome'] },
+  { name: 'webkit', use: devices['Desktop Safari'] },
+] as const
+
+export default defineConfig({
+  testDir: './scripts',
+
+  // Loads the demo once before any project starts, so no test pays the cold vite
+  // transform inside its own mount budget. Best-effort — see scripts/e2e/warmup.ts.
+  globalSetup: './scripts/e2e/warmup.ts',
+
+  // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to
+  // boot the demo bundle before the test body starts. Ceiling only: warm runs finish in
+  // ~3s, and the measurements themselves are sub-second.
+  timeout: 180_000,
+
+  // Tests within a file share a worker and run in declaration order. With four projects
+  // the two workers stay fed across both suites instead of draining one then the other.
+  fullyParallel: false,
+
+  // CI: retry twice to absorb timing noise on slower runners (the suites gate on async
+  // measurement settling). Locally: no retries, so flakes surface immediately.
+  retries: process.env.CI ? 2 : 0,
+
+  // Fail the run if a stray `.only` is committed — a blocking gate must run every test.
+  forbidOnly: !!process.env.CI,
+
+  // CI: GitHub annotations on failures + a self-contained HTML report (with traces)
+  // uploaded as an artifact. Locally: a readable list.
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+
+  use: {
+    baseURL: 'http://localhost:5173',
+    viewport: { width: 1280, height: 800 },
+    // Capture a trace on the first retry so CI failures are debuggable.
+    trace: 'on-first-retry',
+  },
+
+  projects: SUITES.flatMap(suite =>
+    ENGINES.map(engine => ({
+      name: `${suite.name}-${engine.name}`,
+      testMatch: suite.testMatch,
+      use: { ...engine.use },
+    })),
+  ),
+
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    // CI always starts a fresh server; locally reuse a running dev server if present.
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
+})

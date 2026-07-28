@@ -6,8 +6,9 @@
  * They become the acceptance gate for the Phase 1 rework.
  *
  * Run:
- *   npx playwright test --config=playwright.scroll.config.ts --project=chromium
- *   npx playwright test --config=playwright.scroll.config.ts --project=webkit
+ *   npm run test:scroll                 # both engines
+ *   npx playwright test --config=playwright.e2e.config.ts --project=scroll-chromium
+ *   npx playwright test --config=playwright.e2e.config.ts --project=scroll-webkit
  *
  * RED BASELINE (2026-06-25): captured below after first run
  * (To be filled in after P0.4 — document which tests failed and why.)
@@ -31,6 +32,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test'
+import { bootDemo } from './e2e/demoBoot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -66,14 +68,7 @@ const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to
 
 /** Load demo, wait for demo to be fully ready (sidebar + stores populated). */
 async function loadDemo(page: Page): Promise<void> {
-  await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' })
-  // Sidebar nav proves React mounted. WebKit on a loaded CI runner has been observed taking >45s
-  // (occasionally >90s) to boot the demo bundle + run the stress seeding — the #1 remaining source
-  // of "flaky" retries. Give it a large ceiling within the 180s per-test budget (leaving ~60s for the
-  // test body, which normally runs in <10s) so a slow boot proceeds instead of failing the mount.
-  await page.waitForSelector('[data-nav="messages"]', { timeout: 120_000 })
-  // Extra wait for the setTimeout(0) stress seeding to complete
-  await page.waitForTimeout(1200)
+  await bootDemo(page, DEMO_URL)
   await page.evaluate(() => {
     ;(
       window as Window & {

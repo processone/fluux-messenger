@@ -161,9 +161,18 @@ export class DemoClient extends XMPPClient {
   /**
    * DEV/DEMO ONLY. Replays a synthetic load (e.g. joining many large rooms) by
    * scheduling SDK events over timers, to reproduce render-performance issues
-   * deterministically. Returns a handle whose stop() cancels pending events.
+   * deterministically.
+   *
+   * Returns a handle whose stop() cancels pending events, and whose `done`
+   * promise resolves once the last scheduled event has been emitted. Callers
+   * that need to act on a fully seeded store — notably the e2e harnesses —
+   * should await `done` rather than guess a settle delay: the scenario's
+   * duration is driven by msgStepMs/roomStepMs and is not a constant.
+   *
+   * stop() settles `done` too, so a cancelled scenario never leaves a waiter
+   * pending.
    */
-  runStressScenario(scenario: StressScenario): { stop: () => void } {
+  runStressScenario(scenario: StressScenario): { stop: () => void; done: Promise<void> } {
     const selfNick = this.selfJid.split('@')[0] || 'you'
     const events = buildStressEvents(scenario, {
       selfJid: this.selfJid,
@@ -178,11 +187,23 @@ export class DemoClient extends XMPPClient {
         }, ev.delayMs),
       ),
     ]
+
+    // Registered after every event timer, so at the same delay it fires last —
+    // which is what makes this a completion signal rather than a race.
+    const lastDelayMs = events.reduce((max, ev) => Math.max(max, ev.delayMs), 0)
+    let settle!: () => void
+    const done = new Promise<void>(resolve => {
+      settle = resolve
+    })
+    timers.push(setTimeout(() => settle(), lastDelayMs))
+
     return {
       stop: () => {
         for (const t of timers) clearTimeout(t)
         timers = []
+        settle()
       },
+      done,
     }
   }
 

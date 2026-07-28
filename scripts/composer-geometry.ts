@@ -28,10 +28,11 @@
  *
  * Run:
  *   npm run test:composer
- *   npx playwright test --config=playwright.composer.config.ts --project=webkit
+ *   npx playwright test --config=playwright.e2e.config.ts --project=composer-webkit
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test'
+import { bootDemo } from './e2e/demoBoot'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -77,24 +78,30 @@ interface Geometry {
 
 /** Load the demo straight into a room and wait for the composer to mount. */
 async function openRoomComposer(page: Page): Promise<Locator> {
-  await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' })
-  // Nav proves React mounted. WebKit on a loaded CI runner has been observed
-  // taking >45s to boot the demo bundle, so keep the ceiling generous.
-  await page.waitForSelector('[data-nav="messages"]', { timeout: 120_000 })
-  await page.waitForTimeout(1200) // demo seeding runs on a setTimeout(0)
+  await bootDemo(page, DEMO_URL)
 
   await page.locator('[data-nav="rooms"]').click()
   await page.getByText(ROOM_NAME, { exact: true }).first().click()
 
-  const textarea = page.locator('textarea').first()
+  // Wait for the ROOM composer specifically — a textarea stacked on a .composer-mirror —
+  // rather than "the first textarea on the page". The demo runs its own default-route
+  // navigation on startup, so an early click can leave the app in a 1:1 view whose
+  // composer carries no mirror; the old unscoped locator matched that one and failed the
+  // assertion below. Waiting on the pairing makes the wait condition and the structure
+  // the tests depend on the same thing.
+  const textarea = page.locator('.composer-mirror + textarea').first()
   await textarea.waitFor({ state: 'visible', timeout: 30_000 })
-  // The mirror is the textarea's preceding sibling; assert the pairing exists so
-  // a structural change here fails loudly instead of silently skipping the
-  // width-parity invariants below.
-  const hasMirror = await textarea.evaluate(
+
+  // The geometry invariants below compare the mirror's box against the textarea's, which
+  // only holds while both carry the shared .message-input styling. Assert that contract
+  // so a class rename fails loudly here instead of silently skewing every measurement.
+  const mirrorSharesComposerStyling = await textarea.evaluate(
     (el) => el.previousElementSibling?.classList.contains('message-input') ?? false
   )
-  expect(hasMirror, 'room composer should stack a .message-input mirror behind the textarea').toBe(true)
+  expect(
+    mirrorSharesComposerStyling,
+    'the composer mirror should share the .message-input styling with the textarea',
+  ).toBe(true)
   return textarea
 }
 

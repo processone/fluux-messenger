@@ -90,14 +90,25 @@ demoClient.setDiscoverableRooms(getDiscoverableRooms())
 // prepend-anchor scroll restore can be exercised without a server.
 installDemoLoadOlder(demoClient)
 
+/**
+ * e2e seam. The Playwright harnesses wait on this instead of sleeping for a fixed
+ * settle delay: the seeding duration is driven by messagesPerRoom/msgStepMs, so any
+ * constant is either wasted time on a fast boot or too short on a slow one.
+ */
+function markDemoReady(): void {
+  ;(window as Window & { __fluuxDemoReady?: boolean }).__fluuxDemoReady = true
+}
+
 const stressScenario = parseStressParam(params)
 if (stressScenario) {
   // Defer so the first paint happens before the load starts.
   setTimeout(() => {
-    demoClient.runStressScenario(stressScenario)
+    const stress = demoClient.runStressScenario(stressScenario)
     // Also seed an immediately-virtualized 1:1 (stress-contact@...) so MAM scroll-up /
     // prepend-anchor restore can be tested in chats too, not just rooms.
+    // Synchronous, so the room scenario is the only thing left to wait on.
     seedStressConversation(stressScenario.messagesPerRoom ?? 150)
+    void stress.done.then(markDemoReady)
     if (stressScenario.activate) {
       // After seeding finishes, navigate into the first seeded room to surface the
       // switch-mount cost. Room JIDs are `stress-<i>@conference.<domain>` (see
@@ -116,6 +127,10 @@ if (stressScenario) {
       }, seedMs)
     }
   }, 500)
+} else {
+  // Nothing to seed: the demo is ready as soon as it mounts. Harnesses still wait
+  // for the nav to appear first, so this is never observed before React renders.
+  markDemoReady()
 }
 
 const perfParam = params.get('perf')
