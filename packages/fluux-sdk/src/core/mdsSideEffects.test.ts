@@ -551,6 +551,42 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('re-arms a position dropped when the publishing JID is temporarily unavailable', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: undefined } as never)
+
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    connectionStore.setState({
+      status: 'online',
+      jid: 'romeo@montague.example/phone',
+    } as never)
+    patchMeta(cid, { unreadCount: 1 })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(
+      cid,
+      's2',
+      'romeo@montague.example'
+    )
+
+    patchMeta(cid, { unreadCount: 2 })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()

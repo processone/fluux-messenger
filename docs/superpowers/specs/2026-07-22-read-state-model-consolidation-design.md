@@ -43,8 +43,9 @@ design generalises that one special case and deletes it.
 
 The resident slice bites in a third place too: `resolveSeenStanzaId`
 (`core/mdsSideEffects.ts`) resolves the pointer's stanza-id from the resident array with a
-`lastMessage`-only fallback, and silently returns `undefined` — dropping a publish —
-whenever neither matches.
+`lastMessage`-only fallback. When neither matches it returns `undefined`; the publisher
+now leaves that position unhandled and retries after relevant message or MAM state
+changes instead of dropping the publish (#1142).
 
 ### Rooms have no durable read pointer at all
 

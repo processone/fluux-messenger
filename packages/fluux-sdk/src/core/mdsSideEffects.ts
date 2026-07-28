@@ -15,9 +15,10 @@
  * a JID that isn't yet a known room are stashed and re-applied once
  * roomStore.rooms gains that JID (bookmark loaded later in the same session).
  *
- * localStorage remains the durable buffer for read positions: pending in-memory
- * work is DROPPED on disconnect and re-published (ahead-of-node only) on the next
- * fresh session.
+ * localStorage remains the durable source for read positions, but pending
+ * in-memory work is DROPPED on disconnect. A later genuine read advance can
+ * publish; fresh-session seeding intentionally snapshots the current pointer
+ * and is not a general retry queue.
  *
  * @module Core/MdsSideEffects
  */
@@ -153,8 +154,8 @@ export function setupMdsSideEffects(
 
   /**
    * Flush the dirty buffer and publish each entry to the MDS node.
-   * Best-effort: on failure the marker stays in localStorage and is
-   * re-published (if still ahead of the node) on the next fresh session.
+   * A failed publish stays handled; a later genuine read advance supersedes it
+   * instead of retrying the same failing IQ on every metadata change.
    */
   async function doPublish(): Promise<void> {
     if (!syncEnabled) return
@@ -195,7 +196,7 @@ export function setupMdsSideEffects(
         await client.mds.publishDisplayed(jid, stanzaId, by)
         lastKnownNodeStanzaId.set(jid, stanzaId)
       } catch {
-        // Best-effort — localStorage keeps the read position; reconnect re-publishes.
+        // Best-effort; keep the position handled as documented above.
       }
     }
   }
@@ -230,8 +231,8 @@ export function setupMdsSideEffects(
   function consider(jid: string): void {
     if (!syncEnabled) return
     // Catch-up gate: never publish a position derived from a partial archive.
-    // Skipping is safe — localStorage holds the local pointer and the next
-    // advance (or the next fresh-session seed) re-considers it once caught up.
+    // Skipping leaves the de-dup key unchanged; MAM-state changes re-consider
+    // the current pointer once catch-up becomes trustworthy.
     if (!archiveIsTrustworthy(jid)) return
 
     const seenId = isRoom(jid)
@@ -261,8 +262,8 @@ export function setupMdsSideEffects(
       const nodeIdx = indexOfStanza(jid, nodeId)
       // When nodeIdx === -1 the node's high-water message is outside the loaded
       // window, so we can't prove the candidate is ahead — publish optimistically
-      // and rely on (a) the local marker being forward-only and (b) the next
-      // fresh-session seed re-reading the node to self-heal a rare backward move.
+      // and rely on the local marker being forward-only. A later genuine read
+      // advance supersedes any rare backward node move.
       if (candidateIdx !== -1 && nodeIdx !== -1 && candidateIdx <= nodeIdx) return
     }
 
@@ -282,8 +283,8 @@ export function setupMdsSideEffects(
    * Forget a JID's in-memory publisher state so a retract/recreate is clean.
    * `dirty.delete` drops a still-buffered (debounced) publish; a publish that
    * already flushed and is awaiting its IQ can still win the race and re-assert
-   * the marker after the retract. That is an accepted best-effort limitation
-   * (hygiene, not correctness) and self-heals on the next fresh-session seed.
+   * the marker after the retract. That is an accepted best-effort limitation of
+   * retract ordering.
    */
   function evictJid(jid: string): void {
     lastKnownNodeStanzaId.delete(jid)
@@ -490,8 +491,8 @@ export function setupMdsSideEffects(
     trackedJids = liveJids()
   })
 
-  // On disconnect: DROP pending work and cancel the timer. localStorage is the
-  // durable buffer; ahead-of-node markers are re-published on the next session.
+  // On disconnect: DROP pending work and cancel the timer. The canonical pointer
+  // remains in localStorage; see the module contract for retry semantics.
   let previousStatus = connectionStore.getState().status
   const unsubscribeConnection = connectionStore.subscribe(
     (state) => state.status,
