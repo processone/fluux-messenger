@@ -19,7 +19,12 @@ const SEED_TIMEOUT_MS = 30_000
 
 /** Navigate to a demo URL and return once it is mounted and fully seeded. */
 export async function bootDemo(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: 'domcontentloaded' })
+  // The navigation timeout must be explicit. Inside a test, page.goto inherits no limit
+  // of its own and is bounded by the 180s test budget; in globalSetup the page comes from
+  // a raw browser, where Playwright's 30s default applies — and a cold CI server does not
+  // answer the first request in 30s. Without this the warm-up timed out and gave up
+  // precisely on the runs it exists to help.
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: MOUNT_TIMEOUT_MS })
   // The sidebar nav proves React mounted.
   await page.waitForSelector('[data-nav="messages"]', { timeout: MOUNT_TIMEOUT_MS })
   await waitForDemoSeeded(page)
