@@ -1062,6 +1062,51 @@ describe('setupRoomSideEffects', () => {
       })
     })
 
+    it('preserves resume-seeded archive tracking across synthetic online', async () => {
+      const resident = {
+        type: 'groupchat' as const,
+        id: 'm1',
+        roomJid: ROOM,
+        from: `${ROOM}/alice`,
+        nick: 'alice',
+        body: 'hi',
+        timestamp: new Date('2026-02-04T12:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [resident],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+      mockClient._emit('online')
+
+      mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: true })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      connectionStore.getState().setStatus('reconnecting')
+      simulateFreshSession(mockClient)
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+    })
+
     it('preserves a confirmed join across the uninterrupted post-resume synthetic online', async () => {
       const cache = deferred<[]>()
       roomStore.getState().addRoom({
@@ -1103,8 +1148,12 @@ describe('setupRoomSideEffects', () => {
         expect.objectContaining({ sessionStartTime: expect.any(Number) }),
       )
 
-      // A later fresh transport session must not inherit that confirmation.
       roomStore.getState().setRoomMAMLoading(ROOM, false)
+      mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: true })
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
+      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+
+      // A later fresh transport session must not inherit that confirmation.
       connectionStore.getState().setStatus('reconnecting')
       simulateFreshSession(mockClient)
       vi.mocked(mockClient.mam.catchUpRoomHistory).mockClear()

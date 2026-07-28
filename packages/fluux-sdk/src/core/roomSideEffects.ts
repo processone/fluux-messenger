@@ -270,12 +270,13 @@ export function setupRoomSideEffects(
     // live messages that arrive after reconnect (silent-gap fix).
     sessionStartTime = Date.now()
 
+    const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     freshSessionRequiresJoinConfirmation = true
-    if (!uninterruptedResumeMayEmitSyntheticOnline) {
+    if (!followsUninterruptedResume) {
       freshSessionJoinedRooms.clear()
+      fetchInitiated.clear()
     }
     uninterruptedResumeMayEmitSyntheticOnline = false
-    fetchInitiated.clear()
 
     if (debug) {
       console.log(
