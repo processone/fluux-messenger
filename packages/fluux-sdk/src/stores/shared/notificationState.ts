@@ -21,7 +21,7 @@
  */
 
 import { advance, makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
-import { isRenderableStoredMessage, type RenderabilityCheckFields } from './readState'
+import { isRenderableStoredMessage, pointerlessDefers, type RenderabilityCheckFields } from './readState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -646,6 +646,7 @@ export function recomputeCountsFromPointer(
     hasUnmigratedLegacyReadState = false,
   } = options ?? {}
   if (messages.length === 0) return state
+  if (pointerlessDefers(state.readPointer, state.unreadCount)) return state
 
   if (!state.readPointer) {
     // An unresolved remote marker IS read state — defer to the fold that will

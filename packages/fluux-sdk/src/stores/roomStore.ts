@@ -2310,6 +2310,14 @@ export const roomStore = createStore<RoomState>()(
     // that resolves after a faster, newer one for the SAME room is discarded
     // instead of overwriting the newer (correct) result.
     const version = bumpRoomRecountVersion(roomJid)
+    const cacheEpochAtStart = roomCacheEpoch
+    const storageScopeAtStart = getStorageScopeJid()
+    const unreadInputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
+    const recountContextIsCurrent = () =>
+      roomCacheEpoch === cacheEpochAtStart &&
+      getStorageScopeJid() === storageScopeAtStart &&
+      roomRecountVersion.get(roomJid) === version &&
+      (roomUnreadInputVersion.get(roomJid) ?? 0) === unreadInputVersionAtStart
 
     // --- Legacy guard pass -------------------------------------------
     // Keep recomputeCountsFromPointer's pointer-advance and its two
@@ -2336,8 +2344,11 @@ export const roomStore = createStore<RoomState>()(
       }
     }
 
+    if (!recountContextIsCurrent()) return
+
     if (slice.length > 0) {
       set((state) => {
+        if (!recountContextIsCurrent()) return state
         // Re-check: the room may have become active, or been removed, while
         // the cache read was in flight.
         if (state.activeRoomJid === roomJid) return state
@@ -2396,6 +2407,7 @@ export const roomStore = createStore<RoomState>()(
 
     const record = get().roomCoverage.get(roomJid)
     const bottom = await resolveCoverageBottom(roomJid, record, true)
+    if (!recountContextIsCurrent()) return
     if (bottom === 'missing') return
     if (bottom === 'unresolvable') {
       // Invalidate the stale record so a later merge can re-establish it,
@@ -2423,6 +2435,7 @@ export const roomStore = createStore<RoomState>()(
       floor,
       pointer: afterGuard.readPointer,
     })
+    if (!recountContextIsCurrent()) return
     if (res === null) return // unavailable — IndexedDB error
 
     // --- Latest-wins commit (requirement 3) ---------------------------
@@ -2433,6 +2446,7 @@ export const roomStore = createStore<RoomState>()(
     const unreadCount = Math.min(999, res.unread + transient.unread)
 
     set((state) => {
+      if (!recountContextIsCurrent()) return state
       if (roomRecountVersion.get(roomJid) !== version) return state
       if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtCompute) return state
       if (!allowActive && state.activeRoomJid === roomJid) return state

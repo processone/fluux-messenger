@@ -14,7 +14,7 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { chatStore } from './chatStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
-import { _resetStorageScopeForTesting, getStorageScopeJid } from '../utils/storageScope'
+import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import type { Message, Conversation } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -23,6 +23,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     // Real by default; wrapped so individual tests can control resolution
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
+    getMessages: vi.fn(actual.getMessages),
     countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
   }
 })
@@ -98,6 +99,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     chatStore.getState().addConversation(createConversation(CID))
     // mockClear() only resets call history, never the base implementation set
     // by vi.fn(actual.countUnreadInArchive) above, so it stays real by default.
+    vi.mocked(messageCache.getMessages).mockClear()
     vi.mocked(messageCache.countUnreadInArchive).mockClear()
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
@@ -203,6 +205,23 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     expect(spy).toHaveBeenCalledWith(CID)
     chatStore.setState({ recomputeUnreadForConversation: original })
+  })
+
+  it('a pointerless conversation with trusted unread keeps its count and pointer during a forward merge', () => {
+    setMeta({ unreadCount: 4, readPointer: undefined })
+    chatStore.setState({ activeConversationId: 'someone-else@example.com' })
+
+    chatStore.getState().mergeMAMMessages(
+      CID,
+      [archiveMsg('u1', 1001)],
+      { first: 'u1' },
+      true,
+      'forward'
+    )
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+    expect(chatStore.getState().conversations.get(CID)?.readPointer).toBeUndefined()
   })
 
   // ---------------------------------------------------------------------
@@ -609,6 +628,51 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
     expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(6)
+  })
+
+  it('rejects a guard-pass pointer write after the account scope changes', async () => {
+    const accountA = 'account-a@example.com'
+    const accountB = 'account-b@example.com'
+
+    setStorageScopeJid(accountA)
+    chatStore.getState().switchAccount(accountA)
+    chatStore.getState().addConversation(createConversation(CID))
+
+    let releaseSlice!: (messages: Message[]) => void
+    vi.mocked(messageCache.getMessages).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSlice = resolve })
+    )
+
+    const stale = chatStore.getState().recomputeUnreadForConversation(CID)
+    await vi.waitFor(() => expect(releaseSlice).toBeDefined())
+
+    setStorageScopeJid(accountB)
+    chatStore.getState().switchAccount(accountB)
+    chatStore.getState().addConversation(createConversation(CID))
+    const accountBPointer = {
+      messageId: 'account-b-pointer',
+      timestamp: new Date(100),
+      archiveOrderKey: { kind: 'chat' as const, id: 'account-b-pointer' },
+    }
+    chatStore.setState((state) => {
+      const conversationMeta = new Map(state.conversationMeta)
+      conversationMeta.set(CID, { ...conversationMeta.get(CID)!, unreadCount: 7, readPointer: accountBPointer })
+      const conversations = new Map(state.conversations)
+      conversations.set(CID, { ...conversations.get(CID)!, unreadCount: 7, readPointer: accountBPointer })
+      const messages = new Map(state.messages)
+      messages.set(CID, [archiveMsg('account-b-current', 150)])
+      return { conversationMeta, conversations, messages }
+    })
+
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    releaseSlice([archiveMsg('account-a-outgoing', 1000, { isOutgoing: true })])
+    await stale
+
+    expect(getStorageScopeJid()).toBe(accountB)
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(7)
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(accountBPointer)
+    expect(chatStore.getState().conversations.get(CID)?.readPointer).toBe(accountBPointer)
   })
 
   // final-fix-2: the race the re-reviewer flagged. An `allowActive` recompute

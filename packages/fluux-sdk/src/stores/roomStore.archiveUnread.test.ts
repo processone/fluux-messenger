@@ -18,7 +18,7 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
-import { _resetStorageScopeForTesting, getStorageScopeJid } from '../utils/storageScope'
+import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import type { Room, RoomMessage } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -27,6 +27,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     // Real by default; wrapped so individual tests can control resolution
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
+    getRoomMessages: vi.fn(actual.getRoomMessages),
     countRoomUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
   }
 })
@@ -117,6 +118,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.getState().addRoom(createRoom(ROOM))
     // mockClear() only resets call history, never the base implementation set
     // by vi.fn(actual.countRoomUnreadInArchive) above, so it stays real by default.
+    vi.mocked(messageCache.getRoomMessages).mockClear()
     vi.mocked(messageCache.countRoomUnreadInArchive).mockClear()
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
@@ -221,6 +223,23 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     expect(spy).toHaveBeenCalledWith(ROOM)
     roomStore.setState({ recomputeUnreadForRoom: original })
+  })
+
+  it('a pointerless room with trusted unread keeps its count and pointer during a forward merge', () => {
+    setMeta({ unreadCount: 4, readPointer: undefined })
+    roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [archiveMsg('u1', 1001)],
+      { first: 'u1' },
+      true,
+      'forward'
+    )
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBeUndefined()
+    expect(roomStore.getState().rooms.get(ROOM)?.readPointer).toBeUndefined()
   })
 
   // ---------------------------------------------------------------------
@@ -612,6 +631,53 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(6)
+  })
+
+  it('rejects a guard-pass pointer write after the account scope changes', async () => {
+    const accountA = 'account-a@example.com'
+    const accountB = 'account-b@example.com'
+
+    setStorageScopeJid(accountA)
+    roomStore.getState().switchAccount(accountA)
+    roomStore.getState().addRoom(createRoom(ROOM))
+
+    let releaseSlice!: (messages: RoomMessage[]) => void
+    vi.mocked(messageCache.getRoomMessages).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSlice = resolve })
+    )
+
+    const stale = roomStore.getState().recomputeUnreadForRoom(ROOM)
+    await vi.waitFor(() => expect(releaseSlice).toBeDefined())
+
+    setStorageScopeJid(accountB)
+    roomStore.getState().switchAccount(accountB)
+    roomStore.getState().addRoom(createRoom(ROOM))
+    const accountBPointer = {
+      messageId: 'account-b-pointer',
+      timestamp: new Date(100),
+      archiveOrderKey: { kind: 'room' as const, from: `${ROOM}/alice`, id: 'account-b-pointer' },
+    }
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, { ...roomMeta.get(ROOM)!, unreadCount: 7, readPointer: accountBPointer })
+      const rooms = new Map(state.rooms)
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, unreadCount: 7, readPointer: accountBPointer })
+      const runtime = state.roomRuntime.get(ROOM)
+      if (!runtime) throw new Error('room runtime missing')
+      const roomRuntime = new Map(state.roomRuntime)
+      roomRuntime.set(ROOM, { ...runtime, messages: [archiveMsg('account-b-current', 150)] })
+      return { roomMeta, rooms, roomRuntime }
+    })
+
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    releaseSlice([archiveMsg('account-a-outgoing', 1000, { isOutgoing: true })])
+    await stale
+
+    expect(getStorageScopeJid()).toBe(accountB)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBe(accountBPointer)
+    expect(roomStore.getState().rooms.get(ROOM)?.readPointer).toBe(accountBPointer)
   })
 
   // final-fix-2: the race the re-reviewer flagged, room twin of

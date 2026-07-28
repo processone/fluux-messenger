@@ -1370,6 +1370,16 @@ describe('recomputeCountsFromPointer', () => {
     expect(out.readPointer).toBeUndefined()
   })
 
+  it('pointerless state with a trusted nonzero count defers before the fresh snap', () => {
+    const state = { ...createInitialNotificationState(), unreadCount: 4, mentionsCount: 2 }
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, 'chat', { countMentions: true })
+    expect(out).toBe(state)
+    expect(out.unreadCount).toBe(4)
+    expect(out.mentionsCount).toBe(2)
+    expect(out.readPointer).toBeUndefined()
+  })
+
   it('fresh entity (no read pointer) is caught up: snaps pointer to newest, zero counts', () => {
     const state = createInitialNotificationState()
     const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
