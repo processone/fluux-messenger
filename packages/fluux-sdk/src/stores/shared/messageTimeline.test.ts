@@ -72,6 +72,44 @@ describe('messageTimeline', () => {
         expect(result.patched.map((p) => p.id)).toEqual(['m1'])
       }
     })
+
+    // FIX 5 (read-state PR B, final whole-branch review): appendLive used to
+    // append in ARRIVAL order (`[...messages, incoming]`, never sorted), while
+    // the archive orders same-millisecond rows by the shared comparator (chat:
+    // id). Since the viewport observer advances the read pointer by RESIDENT
+    // INDEX, an unsorted resident array can place a same-ms sibling LATER than
+    // the archive would — the pointer then advances past a position the
+    // archive still considers unread: a silent under-count. 'm-aaa' arrives
+    // AFTER 'm-zzz' but sorts BEFORE it archive-wise (chat ties break by id) —
+    // the fix must reorder them to match.
+    it('sorts a same-millisecond live arrival into archive order (chat: id tie-break)', () => {
+      const ts = '2024-01-15T10:01:00Z'
+      const resident = [msg('m-zzz', ts)]
+      const result = appendLive(resident, msg('m-aaa', ts), true, cfg)
+
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') {
+        expect(result.messages.map((m) => m.id)).toEqual(['m-aaa', 'm-zzz'])
+      }
+    })
+
+    it('sorts a same-millisecond live arrival into archive order (room: (from, id) tie-break)', () => {
+      const roomCfg = { ...cfg, kind: 'room' as const }
+      const ts = '2024-01-15T10:01:00Z'
+      // Same id, different `from` — the room archive orders by (from, id), so
+      // 'alice' sorts before 'bob' regardless of arrival order.
+      const resident = [msg('same-id', ts, { from: 'room@conf.example.com/bob' })]
+      const incoming = msg('same-id', ts, { from: 'room@conf.example.com/alice' })
+      const result = appendLive(resident, incoming, true, roomCfg)
+
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') {
+        expect(result.messages.map((m) => m.from)).toEqual([
+          'room@conf.example.com/alice',
+          'room@conf.example.com/bob',
+        ])
+      }
+    })
   })
 
   describe('mergeArchive', () => {

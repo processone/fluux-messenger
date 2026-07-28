@@ -84,7 +84,20 @@ export function appendLive<T extends TimelineMessage>(
 
   if (!atLiveEdge) return { kind: 'gated' }
 
-  return { kind: 'appended', messages: trimMessages([...messages, incoming], config.windowSize) }
+  // FIX 5 (read-state PR B, final whole-branch review): sort before trimming.
+  // Live arrivals land in ARRIVAL order, but the archive orders same-millisecond
+  // rows by the shared comparator (id for chat, (from, id) for room — see
+  // `compareOrder`/`makeArchiveOrderKey`). The viewport observer advances the
+  // read pointer by RESIDENT INDEX, so an unsorted resident array can place a
+  // same-ms sibling later than the archive would — the pointer then advances
+  // past it while the archive walk still counts it as unread: a silent
+  // under-count, the unrecoverable direction. `sortMessagesByTimestamp` is the
+  // SAME comparator `loadOlderSlice`/`loadNewerSlice`/`latestSlice` already use
+  // here, so all resident-array construction paths agree with the archive walk.
+  return {
+    kind: 'appended',
+    messages: trimMessages(sortMessagesByTimestamp([...messages, incoming], config.kind), config.windowSize),
+  }
 }
 
 // ============================================================================

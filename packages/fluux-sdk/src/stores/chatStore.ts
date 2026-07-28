@@ -408,9 +408,20 @@ interface ChatState {
    * (reaction/retraction) that had been provisionally counted as unread —
    * {@link removeMessage} clears the row but not the phantom badge it left
    * behind — and after any transient-overlay mutation that reports a change.
-   * No-op for the active conversation (activation owns its counts).
+   *
+   * No-op for the active conversation by default: most triggers (message
+   * arrival, deferred-decrypt, transient-overlay changes) are already
+   * reconciled for the active conversation by their own synchronous path
+   * (`onMessageReceived`'s live-edge convergence, Task 11), so racing an async
+   * archive recompute against that would be redundant at best. The one
+   * exception is `{ allowActive: true }` (read-state PR B, final
+   * whole-branch-review FIX 3): a remote XEP-0490 marker can advance the
+   * ACTIVE entity's read position without that convergence path running at
+   * all, and since FIX 2 removed activation's unconditional zero, nothing
+   * else re-derives the active entity's count after such an advance — pass
+   * `allowActive: true` ONLY from that trigger.
    */
-  recomputeUnreadForConversation: (conversationId: string) => Promise<void>
+  recomputeUnreadForConversation: (conversationId: string, options?: { allowActive?: boolean }) => Promise<void>
   /**
    * XEP-0424: apply an incoming retraction, deferring it when its target is not
    * resident. Applies immediately (and writes through to the durable cache) when
@@ -1552,12 +1563,24 @@ export const chatStore = createStore<ChatState>()(
         // outgoing/seen/historical arrival that `onMessageReceived` would not
         // have incremented for anyway — mirrors that pure function's own
         // branching exactly (see its doc).
+        //
+        // FIX 6 (final whole-branch review): `viewportAtLiveEdge` is read here
+        // too (not just inside `onMessageReceived`'s own `set()` below) so
+        // `isUnseenIncomingMessage` sees the SAME evidence and genuinely
+        // mirrors `onMessageReceived`'s `userSeesMessage` check — an active,
+        // focused, but SCROLLED-UP conversation (not at the live edge) is
+        // "unseen" here too, so a noLocalStore message arriving in that state
+        // gets recorded in the overlay instead of being representable ONLY by
+        // the live `+1`, which an archive-only recount can never see again.
         const priorMeta = get().conversationMeta.get(msg.conversationId)
+        const viewportAtLiveEdgeForNote =
+          currentViewportEvidence(chatViewportEvidenceKey(msg.conversationId)) === 'at-edge'
         const unseen = notifState.isUnseenIncomingMessage(
           msg,
           {
             isActive: get().activeConversationId === msg.conversationId,
             windowVisible: connectionStore.getState().windowVisible,
+            viewportAtLiveEdge: viewportAtLiveEdgeForNote,
           },
           { treatDelayedAsNew: true }
         )
@@ -1682,11 +1705,15 @@ export const chatStore = createStore<ChatState>()(
             // - a bodiless signal placeholder (e.g. an undecrypted encrypted
             //   reaction) has nothing to show, and
             // - a DELAYED arrival (offline replay, s2s catch-up, gateway
-            //   history) can be older than what we already know — appendLive
-            //   puts it last in the resident array, and for a backgrounded
-            //   conversation that array is empty, so nothing dedupes it away.
-            //   Without the gate it drags the sidebar back to an older message
-            //   and that regression persists to localStorage.
+            //   history) can be older than what we already know. This compares
+            //   `msg` directly against `meta.lastMessage` rather than reading
+            //   array position, so it holds regardless of where appendLive
+            //   places the message (FIX 5 now sorts its result into archive
+            //   order instead of always appending at the end) — and for a
+            //   backgrounded conversation the resident array is empty anyway,
+            //   so dedupe has nothing to compare against either way. Without
+            //   this guard a delayed arrival drags the sidebar back to an
+            //   older message and that regression persists to localStorage.
             // 'replace' on ties: arrival order breaks equal timestamps, which
             // second-precision <delay/> stamps make common in a replay burst.
             const previewMessage =
@@ -1957,6 +1984,14 @@ export const chatStore = createStore<ChatState>()(
         // Set when the resolution advanced the pointer on a NON-active
         // conversation — triggers the exact cache recount below.
         let advancedNonActive = false
+        // FIX 3 (read-state PR B, final whole-branch-review): set when the
+        // resolution advanced the pointer on the ACTIVE conversation. Since
+        // FIX 2 removed activation's unconditional zero, the active entity's
+        // count is no longer "already zero" here — it needs the same
+        // archive-derived re-derivation as the non-active case, just with the
+        // active-conversation skip in recomputeUnreadForConversation
+        // explicitly bypassed (`allowActive: true`).
+        let advancedActive = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
@@ -1998,18 +2033,21 @@ export const chatStore = createStore<ChatState>()(
 
           // Inbound read-state sync (spec §4): a marker published by another
           // client advances this conversation's read position now, not on the
-          // next activation. 'advanced' is exactly the non-active
-          // pointer-advance kind (the active conversation resolves as
-          // 'advanced-with-divider' and its counts are already zero). The
-          // pointer keeps the forward-only position resolved above
-          // (metaPatch.readPointer) — PR B no longer derives the unread COUNT
-          // from this page-scoped slice (it may be a single merged page of a
-          // multi-page pointer-stitch walk, which undercounts): `advanced`
-          // instead schedules the archive-derived recount below, which is
-          // ALSO what makes a not-yet-caught-up entity defer rather than
-          // commit a wrong number.
+          // next activation. The pointer keeps the forward-only position
+          // resolved above (metaPatch.readPointer) — PR B no longer derives
+          // the unread COUNT from this page-scoped slice (it may be a single
+          // merged page of a multi-page pointer-stitch walk, which
+          // undercounts): both advance kinds instead schedule the
+          // archive-derived recount below, which is ALSO what makes a
+          // not-yet-caught-up entity defer rather than commit a wrong number.
+          // 'advanced-with-divider' (the active entity — FIX 3) used to be
+          // exempted here on the premise that its counts were "already zero";
+          // FIX 2 removed that zero, so the active entity needs this
+          // re-derivation exactly as much as a non-active one does.
           if (resolution.kind === 'advanced') {
             advancedNonActive = true
+          } else if (resolution.kind === 'advanced-with-divider') {
+            advancedActive = true
           }
 
           // The divider is recomputed only for the active conversation; inactive
@@ -2038,6 +2076,11 @@ export const chatStore = createStore<ChatState>()(
         // new floor, rather than committing a page-scoped undercount.
         if (advancedNonActive) {
           void get().recomputeUnreadForConversation(conversationId)
+        } else if (advancedActive) {
+          // FIX 3: the active entity gets the SAME re-derivation, with the
+          // active-conversation skip explicitly bypassed — see this method's
+          // doc and recomputeUnreadForConversation's.
+          void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
         }
       },
 
@@ -2415,10 +2458,14 @@ export const chatStore = createStore<ChatState>()(
         if (recountNeeded) void get().recomputeUnreadForConversation(conversationId)
       },
 
-      recomputeUnreadForConversation: async (conversationId) => {
-        // Active conversation counts are owned by activation (they are
-        // already zero while viewed); a bulk recompute here could race it.
-        if (get().activeConversationId === conversationId) return
+      recomputeUnreadForConversation: async (conversationId, options) => {
+        const allowActive = options?.allowActive ?? false
+        // Active conversation counts are usually reconciled by their own
+        // synchronous path (Task 11's live-edge convergence) — skip here to
+        // avoid a redundant race, UNLESS the caller explicitly opted in
+        // (FIX 3: a remote XEP-0490 advance on the active entity, which that
+        // convergence path never runs for).
+        if (!allowActive && get().activeConversationId === conversationId) return
         const meta0 = get().conversationMeta.get(conversationId)
         if (!meta0) return
 
@@ -2495,9 +2542,11 @@ export const chatStore = createStore<ChatState>()(
         }
 
         // Re-check: the conversation may have become active while the guard
-        // pass above was awaiting the cache read — activation owns the count
-        // from here on, and continuing would only waste an archive read.
-        if (get().activeConversationId === conversationId) return
+        // pass above was awaiting the cache read — activation usually owns the
+        // count from here on, and continuing would only waste an archive read
+        // (unless this recompute was itself explicitly requested FOR the
+        // active entity — FIX 3).
+        if (!allowActive && get().activeConversationId === conversationId) return
 
         // --- Defer conditions (re-read fresh: the guard pass above may have
         // just moved the pointer, and either flag may itself have changed
@@ -2554,7 +2603,7 @@ export const chatStore = createStore<ChatState>()(
 
         set((state) => {
           if (chatRecountVersion.get(conversationId) !== version) return state
-          if (state.activeConversationId === conversationId) return state
+          if (!allowActive && state.activeConversationId === conversationId) return state
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) return state
 

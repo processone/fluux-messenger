@@ -610,6 +610,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               isAtBottomRef={isAtBottomRef}
               onLiveEdgeMeasured={reportLiveEdge}
               room={stableRoom ?? activeRoom}
+            unreadCount={activeRoom.unreadCount}
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
@@ -900,6 +901,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isAtBottomRef,
   onLiveEdgeMeasured,
   room,
+  unreadCount,
   contactsByJid,
   ownAvatar,
   sendReaction,
@@ -951,6 +953,13 @@ export const RoomMessageList = memo(function RoomMessageList({
   isAtBottomRef: React.MutableRefObject<boolean>
   onLiveEdgeMeasured?: (atEdge: boolean) => void
   room: Room
+  // Read fresh off `activeRoom` (NOT `room`/`stableRoom`): the stable room memo
+  // deliberately freezes on jid/nickname/joined/occupants/etc and does NOT refresh
+  // on unreadCount, so addMessage's count bump would never reach the in-list
+  // divider/pill/FAB badge if this were read from `room` instead. See RoomView
+  // final-review FIX 1. Optional (mirrors MessageList's own `unreadCount?: number`)
+  // so unrelated presence/memo tests that don't care about the badge need no changes.
+  unreadCount?: number
   contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
@@ -1212,7 +1221,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
       readPointerId={readPointerId}
-      unreadCount={room.unreadCount}
+      unreadCount={unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

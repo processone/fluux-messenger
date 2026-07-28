@@ -17,7 +17,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
-import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, type ScopeKey } from './shared/transientUnread'
+import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
 import { _resetStorageScopeForTesting, getStorageScopeJid } from '../utils/storageScope'
 import type { Room, RoomMessage } from '../core/types'
 
@@ -265,6 +265,62 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(5)
   })
 
+  // FIX 3 (final whole-branch review): resolveRemoteDisplayed resolves
+  // 'advanced-with-divider' — not 'advanced' — for the ACTIVE room, and that
+  // branch used to be exempted from triggering a recount on the premise that
+  // an active entity's count was "already zero" (true before FIX 2). A
+  // spy-only assertion ("was recomputeUnreadForRoom called?") would pass even
+  // if the default active-room no-op above still applied to it — the real
+  // regression is that the count never actually changes — so this test
+  // drives a REAL archive derivation (fake-indexeddb) end to end and asserts
+  // the committed number, not just that a call happened.
+  it('a remote marker advancing the ACTIVE room re-derives its unread count', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000, { stanzaId: 's-p0' }),
+      archiveMsg('u1', 1001, { stanzaId: 's-u1' }),
+      archiveMsg('u2', 1002, { stanzaId: 's-u2' }),
+      archiveMsg('u3', 1003, { stanzaId: 's-u3' }),
+    ])
+    // Seeded stale and DISTINCT from the true derived value (3) below — a
+    // seed-0/assert-0 (or seed-3/assert-3 with no advance) fixture couldn't
+    // tell a real recompute from a no-op.
+    setMeta({
+      unreadCount: 99,
+      readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+    })
+    seedCoverage('anchor-stanza')
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    const messages = [
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000, { stanzaId: 's-p0' }),
+      archiveMsg('u1', 1001, { stanzaId: 's-u1' }),
+      archiveMsg('u2', 1002, { stanzaId: 's-u2' }),
+      archiveMsg('u3', 1003, { stanzaId: 's-u3' }),
+    ]
+    // Another device's XEP-0490 marker advances the read position to p0
+    // WHILE this room is active.
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-p0', messages)
+
+    // Let the fire-and-forget recount settle (cache read, coverage resolve,
+    // and countRoomUnreadInArchive are all real async calls against fake-indexeddb).
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+
+    // Still active throughout — this is not a "became inactive" race.
+    expect(roomStore.getState().activeRoomJid).toBe(ROOM)
+    // The pointer advanced (resolveRemoteDisplayed's job, unaffected by this fix).
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+    // The divider was positioned at the first message after the new pointer.
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    // FIX 3: the count is re-derived from the archive (u1, u2, u3), not left
+    // at the stale 99 a guard that still exempted the active room would produce.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(3)
+  })
+
   // ---------------------------------------------------------------------
   // deferred
   // ---------------------------------------------------------------------
@@ -344,9 +400,160 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
   })
 
+  // FIX 4 (final whole-branch review, Minor (r)): the coverage gate's fourth
+  // branch — a RESOLVED coverage bottom that sits ABOVE (i.e. strictly after)
+  // the floor, meaning proven-contiguous coverage does not reach all the way
+  // down to the floor — was the only one of the gate's four branches with no
+  // test anywhere in the suite. A sign flip here (`< 0` instead of `> 0`)
+  // would silently under-count: exactly the unrecoverable direction. Seeded
+  // count is a distinguishing 8, not 0, so a broken gate that proceeds to
+  // derive+commit the real (different) archive count is caught.
+  it('a resolved coverage bottom sitting above the floor defers (coverage does not reach the floor)', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('p0', 1000),
+      archiveMsg('u1', 1001),
+      // The coverage record's bottom — proven contiguous from here to the
+      // live edge, but NEWER than the floor (p0 @ 1000): the region between
+      // the floor and this point is an unproven gap.
+      archiveMsg('gap-anchor', 1500, { stanzaId: 'gap-anchor-stanza' }),
+      archiveMsg('u2', 2000),
+    ])
+    setMeta({
+      unreadCount: 8, // trusted — must survive untouched
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+    })
+    seedCoverage('gap-anchor-stanza')
+
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    // If the gate proceeded (the bug), it would derive u1+gap-anchor+u2 = 3
+    // and overwrite the trusted count — a silent under-count from the
+    // reader's point of view (real unread could sit in the unproven gap).
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(8)
+  })
+
   // ---------------------------------------------------------------------
   // latest-wins
   // ---------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------
+  // FIX 5 (final whole-branch review): same-millisecond live-arrival ordering
+  // ---------------------------------------------------------------------
+
+  // appendLive used to append live arrivals in ARRIVAL order (never sorted),
+  // while the archive (and every OTHER resident-array construction path —
+  // loadOlderSlice/loadNewerSlice/latestSlice) orders same-millisecond room
+  // rows by (from, id). The viewport observer advances the read pointer by
+  // RESIDENT INDEX (`advanceReadPointer` → `onMessageSeen`'s forward-only
+  // guard), so an unsorted resident array can let that guard make the WRONG
+  // forward/no-op decision, landing the stored pointer on the wrong message
+  // and skewing the later archive-derived count. The 'zulu' occupant's
+  // message arrives FIRST (wall-clock) but archive-sorts AFTER the 'alice'
+  // occupant's ((from) tie-break) — arrival order deliberately disagrees with
+  // archive order, the exact case the fix reconciles.
+  it('two same-millisecond live arrivals land in archive order, so the viewport-advance pointer and derived count are both correct', async () => {
+    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    seedCoverage('anchor-stanza')
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    const T = 5000
+    roomStore.getState().addMessage(ROOM, archiveMsg('m1', T, { from: `${ROOM}/zulu`, nick: 'zulu' }))
+    // Viewport observer reports zulu's message seen while it is the only resident message.
+    roomStore.getState().advanceReadPointer(ROOM, 'm1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.archiveOrderKey).toMatchObject({ from: `${ROOM}/zulu` })
+
+    // A same-millisecond message from a DIFFERENT occupant arrives live, SECOND.
+    roomStore.getState().addMessage(ROOM, archiveMsg('m2', T, { from: `${ROOM}/alice`, nick: 'alice' }))
+    // The resident array must be in ARCHIVE order ((from, id) ascending — alice
+    // before zulu), not arrival order — the load-bearing invariant
+    // messageTimeline.test.ts pins at the pure-function level; here it is
+    // asserted through the real store.
+    expect(roomStore.getState().rooms.get(ROOM)?.messages.map((m) => m.from)).toEqual([
+      `${ROOM}/alice`,
+      `${ROOM}/zulu`,
+    ])
+
+    // The observer reports alice's message seen too, as it scrolls into view.
+    // Alice's message now sits BEFORE zulu's in the (correctly sorted)
+    // resident array, so the forward-only guard must NOT move the pointer
+    // backward past the already-confirmed zulu message.
+    roomStore.getState().advanceReadPointer(ROOM, 'm2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+
+    // Settle: the user navigates away, and the archive-derived recompute runs.
+    roomStore.setState({ activeRoomJid: null })
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    // Both same-millisecond messages were genuinely seen (both reported via
+    // advanceReadPointer) — the derived count must be 0. Reverting the sort
+    // lets alice's message get appended last, wrongly advances the pointer TO
+    // it, and zulu's message — already-confirmed-seen — then archive-sorts
+    // AFTER it and gets wrongly counted as unread.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+  })
+
+  // ---------------------------------------------------------------------
+  // FIX 6 (final whole-branch review): active-but-scrolled-up noLocalStore
+  // arrivals must be recorded in the overlay
+  // ---------------------------------------------------------------------
+
+  // noteAsTransient used to be gated on isUnseenIncomingMessage's COARSE
+  // isActive && windowVisible check (no viewport dimension), so an active,
+  // focused, but SCROLLED-UP room (never reported at-edge) looked "seen" to
+  // it — a noLocalStore arrival there took the live +1 (correct at the time,
+  // via onMessageReceived's OWN gate, which does track viewportAtLiveEdge)
+  // but was never noted in the overlay. Since a noLocalStore message is NEVER
+  // archived, the next EXACT recount — deriving purely from the archive —
+  // silently dropped its contribution back to 0.
+  it('an active-but-scrolled-up noLocalStore arrival is recorded in the overlay and survives an exact recount', async () => {
+    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
+    setMeta({
+      unreadCount: 0,
+      readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+    })
+    seedCoverage('anchor-stanza')
+    // Active + focused (default windowVisible), but viewportAtLiveEdge is
+    // never reported — stays at its conservative 'unknown' default, i.e.
+    // scrolled up / not at the live edge.
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    // Untyped literal (not `: RoomMessage`) deliberately — `noLocalStore` is
+    // an internal augmentation (`message-internal.ts`), not on the public
+    // `RoomMessage` type; an explicit annotation here would trip TS's
+    // excess-property check.
+    const ephemeral = {
+      type: 'groupchat' as const,
+      id: 'ephemeral-1',
+      roomJid: ROOM,
+      from: `${ROOM}/bob`,
+      nick: 'bob',
+      body: 'Ephemeral',
+      timestamp: new Date(1000),
+      isOutgoing: false,
+      noLocalStore: true,
+    }
+    roomStore.getState().addMessage(ROOM, ephemeral)
+
+    // The live +1 fires (correct at the time — onMessageReceived's own gate
+    // refused the pointer advance since viewportAtLiveEdge isn't 'at-edge').
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    // FIX 6: also recorded in the overlay — a noLocalStore message's ONLY
+    // durable representation, since it is never archived.
+    expect(
+      transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: ROOM }, undefined).unread
+    ).toBe(1)
+
+    // Settle: the room deactivates and an EXACT archive recount runs
+    // (coverage is proven, a real readPointer exists — this is not a defer).
+    roomStore.setState({ activeRoomJid: null })
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    // The real archive has NO row for the ephemeral message (it was never
+    // saved) — without FIX 6 the overlay would be empty here too, and the
+    // count would silently drop to 0.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+  })
 
   it('latest-wins: a slow recount started before a fast one must not overwrite the fast one', async () => {
     await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])

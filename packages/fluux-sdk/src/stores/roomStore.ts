@@ -853,10 +853,19 @@ export interface RoomState {
    * badge it may have provisionally inflated needs reconciling once the
    * message settles), after a forward MAM merge past the floor, after a
    * remote read-marker advance, at cold-start rehydrate, and after any
-   * transient-overlay mutation that reports a change. No-op for the active
-   * room (activation owns its counts).
+   * transient-overlay mutation that reports a change.
+   *
+   * No-op for the active room by default: most triggers are already
+   * reconciled for the active room by their own synchronous path
+   * (`onMessageReceived`'s live-edge convergence, Task 11). The one exception
+   * is `{ allowActive: true }` (read-state PR B, final whole-branch-review
+   * FIX 3): a remote XEP-0490 marker can advance the ACTIVE room's read
+   * position without that convergence path running at all, and since FIX 2
+   * removed activation's unconditional zero, nothing else re-derives the
+   * active room's count after such an advance — pass `allowActive: true`
+   * ONLY from that trigger.
    */
-  recomputeUnreadForRoom: (roomJid: string) => Promise<void>
+  recomputeUnreadForRoom: (roomJid: string, options?: { allowActive?: boolean }) => Promise<void>
   /**
    * XEP-0424: apply an incoming retraction, deferring it when its target is not
    * resident. Applies immediately (and writes through to the durable cache) when
@@ -1660,10 +1669,21 @@ export const roomStore = createStore<RoomState>()(
     // have incremented for anyway — mirrors that pure function's own
     // branching exactly (see its doc). Also respects the caller's own
     // `incrementUnread: false` (e.g. MUC.ts's nick-change system message).
+    //
+    // FIX 6 (final whole-branch review): `viewportAtLiveEdge` is read here
+    // too (not just inside `onMessageReceived`'s own `set()` below) so
+    // `isUnseenIncomingMessage` sees the SAME evidence and genuinely mirrors
+    // `onMessageReceived`'s `userSeesMessage` check — an active, focused, but
+    // SCROLLED-UP room (not at the live edge) is "unseen" here too, so a
+    // noLocalStore message arriving in that state gets recorded in the
+    // overlay instead of being representable ONLY by the live `+1`, which an
+    // archive-only recount can never see again.
     const priorMeta = get().roomMeta.get(roomJid)
+    const viewportAtLiveEdgeForNote = currentViewportEvidence(roomViewportEvidenceKey(roomJid)) === 'at-edge'
     const unseen = notifState.isUnseenIncomingMessage(messageToAdd, {
       isActive: get().activeRoomJid === roomJid,
       windowVisible: connectionStore.getState().windowVisible,
+      viewportAtLiveEdge: viewportAtLiveEdgeForNote,
     })
     const noteAsTransient = incrementUnread && unseen && isNoLocalStore(messageToAdd) && isRenderableStoredMessage(messageToAdd)
     let overlayUnreadDelta = 0
@@ -1786,14 +1806,24 @@ export const roomStore = createStore<RoomState>()(
       // (not the possibly-gated resident array) so the preview still advances to the
       // incoming message even when the window has slid off the live edge.
       //
-      // appendLive appends at the END without sorting, so a DELAYED arrival
-      // (gateway/offline replay, or the MAM {ids} fetch behind deferred
+      // FIX 5 (read-state PR B, final whole-branch review) now has appendLive
+      // sort its result into archive order (`sortMessagesByTimestamp`) instead
+      // of appending in arrival order — so on the ordinary `append.kind ===
+      // 'appended'` path, `appendedMessages` is already chronological and
+      // `findLastNonIgnoredMessage`'s backward scan finds the true newest
+      // message directly. The GATED path is the one that still concatenates
+      // naively (`[...existing.messages, messageToAdd]`, no timeline/sort
+      // involved at all — the window has slid off the live edge), so a DELAYED
+      // arrival (gateway/offline replay, or the MAM {ids} fetch behind deferred
       // poll-closed verification, which emits the ORIGINAL POLL — older than the
-      // poll-closed that triggered it) becomes the array's last element and would
-      // drag the preview backwards. Dedupe can't protect us: appendLive keys off
-      // the RESIDENT array, which is empty off the active room. roomMeta is
-      // persisted, so an ungated assignment survives a reload. tie: 'replace' so a
-      // replay burst sharing one second-precision <delay/> stamp still advances.
+      // poll-closed that triggered it) can still land as the array's last
+      // element there and would drag the preview backwards. Dedupe can't
+      // protect us: appendLive keys off the RESIDENT array, which is empty off
+      // the active room. roomMeta is persisted, so an ungated assignment
+      // survives a reload. `shouldReplaceLastMessage`'s own timestamp check
+      // below is the guard for that case (and remains harmless belt-and-braces
+      // on the sorted path); tie: 'replace' so a replay burst sharing one
+      // second-precision <delay/> stamp still advances.
       const heldLastMessage = existingMeta?.lastMessage ?? existing.lastMessage
       const previewCandidate = findLastNonIgnoredMessage(appendedMessages, roomJid, existing.nickToJidCache)
       const lastMessage =
@@ -2076,10 +2106,13 @@ export const roomStore = createStore<RoomState>()(
     return findMessageById(room.messages, messageId)
   },
 
-  recomputeUnreadForRoom: async (roomJid) => {
-    // Active room counts are owned by activation (they are already zero while
-    // viewed); a bulk recompute here could race it.
-    if (get().activeRoomJid === roomJid) return
+  recomputeUnreadForRoom: async (roomJid, options) => {
+    const allowActive = options?.allowActive ?? false
+    // Active room counts are usually reconciled by their own synchronous path
+    // (Task 11's live-edge convergence) — skip here to avoid a redundant
+    // race, UNLESS the caller explicitly opted in (FIX 3: a remote XEP-0490
+    // advance on the active room, which that convergence path never runs for).
+    if (!allowActive && get().activeRoomJid === roomJid) return
     const meta0 = get().roomMeta.get(roomJid)
     if (!meta0) return
 
@@ -2154,9 +2187,10 @@ export const roomStore = createStore<RoomState>()(
     }
 
     // Re-check: the room may have become active while the guard pass above
-    // was awaiting the cache read — activation owns the count from here on,
-    // and continuing would only waste an archive read.
-    if (get().activeRoomJid === roomJid) return
+    // was awaiting the cache read — activation usually owns the count from
+    // here on, and continuing would only waste an archive read (unless this
+    // recompute was itself explicitly requested FOR the active room — FIX 3).
+    if (!allowActive && get().activeRoomJid === roomJid) return
 
     // --- Defer conditions (re-read fresh: the guard pass above may have
     // just moved the pointer, and the flag may itself have changed while we
@@ -2212,7 +2246,7 @@ export const roomStore = createStore<RoomState>()(
 
     set((state) => {
       if (roomRecountVersion.get(roomJid) !== version) return state
-      if (state.activeRoomJid === roomJid) return state
+      if (!allowActive && state.activeRoomJid === roomJid) return state
       const meta = state.roomMeta.get(roomJid)
       if (!meta) return state
 
@@ -2627,6 +2661,13 @@ export const roomStore = createStore<RoomState>()(
     // Set when the resolution advanced the pointer on a NON-active room —
     // triggers the archive-derived recount below.
     let advancedNonActive = false
+    // FIX 3 (read-state PR B, final whole-branch-review): set when the
+    // resolution advanced the pointer on the ACTIVE room. Since FIX 2 removed
+    // activation's unconditional zero, the active room's count is no longer
+    // "already zero" here — it needs the same archive-derived re-derivation
+    // as the non-active case, just with the active-room skip in
+    // recomputeUnreadForRoom explicitly bypassed (`allowActive: true`).
+    let advancedActive = false
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
@@ -2670,18 +2711,22 @@ export const roomStore = createStore<RoomState>()(
 
       // Inbound read-state sync (spec §4): a marker published by another
       // client advances this room's read position now, not on the next
-      // activation. 'advanced' is exactly the non-active pointer-advance kind
-      // (the active room resolves as 'advanced-with-divider' and its counts
-      // are already zero). The pointer keeps the forward-only position
-      // resolved above (metaPatch.readPointer) — PR B no longer derives the
-      // unread COUNT from this page-scoped slice (it may be a single merged
-      // page of a multi-page pointer-stitch walk, which undercounts):
-      // 'advanced' instead schedules the archive-derived recount below,
-      // which is ALSO what makes a not-yet-caught-up room defer rather than
-      // commit a wrong number. mentionsCount is left untouched (the spread
-      // above preserves it) — archive recounts never write it either.
+      // activation. The pointer keeps the forward-only position resolved
+      // above (metaPatch.readPointer) — PR B no longer derives the unread
+      // COUNT from this page-scoped slice (it may be a single merged page of
+      // a multi-page pointer-stitch walk, which undercounts): both advance
+      // kinds instead schedule the archive-derived recount below, which is
+      // ALSO what makes a not-yet-caught-up room defer rather than commit a
+      // wrong number. mentionsCount is left untouched (the spread above
+      // preserves it) — archive recounts never write it either.
+      // 'advanced-with-divider' (the active room — FIX 3) used to be exempted
+      // here on the premise that its counts were "already zero"; FIX 2
+      // removed that zero, so the active room needs this re-derivation
+      // exactly as much as a non-active one does.
       if (resolution.kind === 'advanced') {
         advancedNonActive = true
+      } else if (resolution.kind === 'advanced-with-divider') {
+        advancedActive = true
       }
 
       // The divider is recomputed only for the active room; inactive rooms
@@ -2716,6 +2761,11 @@ export const roomStore = createStore<RoomState>()(
     // rather than committing a page-scoped undercount.
     if (advancedNonActive) {
       void get().recomputeUnreadForRoom(roomJid)
+    } else if (advancedActive) {
+      // FIX 3: the active room gets the SAME re-derivation, with the
+      // active-room skip explicitly bypassed — see this method's doc and
+      // recomputeUnreadForRoom's.
+      void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
     }
   },
 

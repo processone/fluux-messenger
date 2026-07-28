@@ -358,10 +358,19 @@ describe('onActivate', () => {
     expect(result.firstNewMessageId).toBeUndefined()
   })
 
-  it('clears unreadCount and mentionsCount', () => {
+  // Read-state PR B, final whole-branch-review FIX 2: activation used to force
+  // unreadCount to 0 unconditionally, as if opening an entity were the same
+  // event as reading it. It is not — the one canonical count is derived
+  // exclusively from the archive (recomputeUnreadForConversation /
+  // recomputeUnreadForRoom) and converges to 0 only through Task 11's
+  // live-edge convergence. This test used to protect "activation zeroes both
+  // counts"; it now protects the opposite for unreadCount — activation must
+  // leave it exactly as given. mentionsCount is untouched by this fix (out of
+  // PR B's scope, see Task 4R) and still clears on open.
+  it('leaves unreadCount unchanged but clears mentionsCount', () => {
     const state = makeState({ unreadCount: 5, mentionsCount: 2, readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages, 'chat')
-    expect(result.unreadCount).toBe(0)
+    expect(result.unreadCount).toBe(5)
     expect(result.mentionsCount).toBe(0)
   })
 
@@ -383,11 +392,13 @@ describe('onActivate', () => {
     expect(result.readPointer?.messageId).toBe('msg-2')
   })
 
+  // FIX 2: an empty slice gives onActivate nothing to derive a divider from —
+  // it must not fabricate a "fully read" 0 either; the seeded 3 passes through.
   it('handles empty messages array', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-1'), unreadCount: 3 })
     const result = onActivate(state, [], 'chat')
     expect(result.firstNewMessageId).toBeUndefined()
-    expect(result.unreadCount).toBe(0)
+    expect(result.unreadCount).toBe(3)
   })
 
   describe('when the read pointer is not in loaded messages (older than memory)', () => {
@@ -1033,10 +1044,14 @@ describe('lifecycle sequences', () => {
     // Start: user has seen m1, messages m2 and m3 arrived while away
     let state = makeState({ readPointer: seenIn(messages, 'm1'), unreadCount: 2 })
 
-    // User opens conversation
+    // User opens conversation. FIX 2: opening is not reading — the divider is
+    // positioned but unreadCount passes through untouched (2, not force-zeroed).
+    // The count only converges to 0 once the archive derivation re-runs off the
+    // pointer `onMessageSeen` below advances — a store-layer concern this pure
+    // lifecycle test doesn't exercise.
     state = onActivate(state, messages, 'chat')
     expect(state.firstNewMessageId).toBe('m2')
-    expect(state.unreadCount).toBe(0)
+    expect(state.unreadCount).toBe(2)
 
     // User scrolls and sees m2 and m3 via viewport
     state = onMessageSeen(state, 'm2', messages, 'chat')

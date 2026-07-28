@@ -956,13 +956,21 @@ describe('chatStore', () => {
       expect(chatStore.getState().activeConversationId).toBeNull()
     })
 
-    it('should mark conversation as read when set active', () => {
+    // Read-state PR B, final whole-branch-review FIX 2: this used to protect
+    // "activating a conversation force-zeroes unreadCount". That behaviour is
+    // removed — the canonical count is derived exclusively from the archive
+    // (recomputeUnreadForConversation) and converges to 0 only through Task
+    // 11's live-edge convergence, never as a side effect of merely opening the
+    // conversation (which used to race ahead of the divider, leaving a "New
+    // messages" marker next to a count of 0). This test now protects the
+    // opposite: setActiveConversation must leave the count untouched.
+    it('does not zero unreadCount when set active (count is archive-derived)', () => {
       const conv = { ...createConversation('alice@example.com'), unreadCount: 5 }
       chatStore.getState().addConversation(conv)
 
       chatStore.getState().setActiveConversation('alice@example.com')
 
-      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(0)
+      expect(chatStore.getState().conversations.get('alice@example.com')?.unreadCount).toBe(5)
     })
   })
 

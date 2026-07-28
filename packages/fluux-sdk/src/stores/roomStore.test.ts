@@ -2209,12 +2209,19 @@ describe('roomStore', () => {
       expect(roomStore.getState().activeRoomJid).toBe('test@conference.example.com')
     })
 
-    it('should mark room as read when becoming active', () => {
+    // Read-state PR B, final whole-branch-review FIX 2: this used to protect
+    // "activating a room force-zeroes unreadCount". That behaviour is removed —
+    // the canonical count is derived exclusively from the archive
+    // (recomputeUnreadForRoom) and converges to 0 only through Task 11's
+    // live-edge convergence, never as a side effect of merely opening the room.
+    // This test now protects the opposite: setActiveRoom must leave the count
+    // untouched.
+    it('does not zero unreadCount when becoming active (count is archive-derived)', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', { unreadCount: 3 }))
 
       roomStore.getState().setActiveRoom('test@conference.example.com')
 
-      expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(3)
     })
 
     it('should allow clearing active room with null', () => {

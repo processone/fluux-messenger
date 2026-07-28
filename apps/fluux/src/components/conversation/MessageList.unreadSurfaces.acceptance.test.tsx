@@ -132,7 +132,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
   // -----------------------------------------------------------------------
   // Scenario 2: Scrolled up, two new eligible messages arrive
   // -----------------------------------------------------------------------
-  it('scenario 2 — two new messages arrive: divider, FAB badge (and pill) all show "2"', () => {
+  it('scenario 2 — two new messages arrive: divider, FAB badge, and pill all show "2"', () => {
     const messages = createTestMessages(10) // msg-0 .. msg-9
     render(
       <MessageList
@@ -153,9 +153,17 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     // FAB badge shows the same canonical number.
     expect(fabBadge(scrollCtx.container)?.textContent).toBe('2')
 
-    // Break check: assert the values are equal and equal to 2 — a divergence (e.g. the FAB
-    // showing a different, resident-relative number) fails.
-    expect(fabBadge(scrollCtx.container)?.textContent).toBe(String(2))
+    // FIX 7 (final whole-branch review): the title promises "(and pill)" but this test never
+    // asserted it — scroll PAST the divider (its pixel offset now behind the current scrollTop,
+    // the pill's own visibility condition) so it actually renders, and assert its OWN text. This
+    // is a REAL break check (distinct from the FAB/divider assertions above): a stale or
+    // resident-relative count on the pill specifically would fail here without failing them.
+    const markerElement = scrollCtx.container.querySelector('[data-message-id="msg-7"]') as HTMLElement
+    Object.defineProperty(markerElement, 'offsetTop', { value: 100, configurable: true })
+    scrollTo(scrollCtx.container, 900)
+
+    expect(pill()).toBeTruthy()
+    expect(pill()?.textContent).toContain('2 new messages')
   })
 
   // -----------------------------------------------------------------------

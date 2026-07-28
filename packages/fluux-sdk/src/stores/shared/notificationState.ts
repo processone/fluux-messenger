@@ -228,15 +228,28 @@ export function onMessageReceived(
  * see `stores/shared/transientUnread.ts`) mirrors this pure transition's own
  * branching instead of re-deriving a similar-but-possibly-different check
  * inline, which is exactly the kind of drift this module exists to prevent.
+ *
+ * `ctx.viewportAtLiveEdge` mirrors {@link onMessageReceived}'s own
+ * `userSeesMessage` three-way check EXACTLY (read-state PR B, final
+ * whole-branch-review FIX 6 — Task 11 added the viewport-evidence dimension
+ * to `onMessageReceived` but left this helper on the coarser `isActive &&
+ * windowVisible`, a deliberately-scoped gap at the time). An active,
+ * focused, but SCROLLED-UP conversation now correctly counts as unseen here
+ * too: `onMessageReceived` already does the live `+1` for it (it never
+ * advances the pointer without `viewportAtLiveEdge === true`), but a
+ * `noLocalStore` message can ONLY ever be represented by the transient
+ * overlay — it is never archived, so nothing else records it, and a later
+ * exact recount (deriving purely from the archive) would otherwise silently
+ * drop its contribution the moment it commits.
  */
 export function isUnseenIncomingMessage(
   msg: Pick<NotificationMessage, 'isOutgoing' | 'isDelayed'>,
-  ctx: Pick<EntityContext, 'isActive' | 'windowVisible'>,
+  ctx: Pick<EntityContext, 'isActive' | 'windowVisible' | 'viewportAtLiveEdge'>,
   options?: { treatDelayedAsNew?: boolean }
 ): boolean {
   if (msg.isOutgoing) return false
   if (msg.isDelayed && !(options?.treatDelayedAsNew ?? false)) return false
-  if (ctx.isActive && ctx.windowVisible) return false
+  if (ctx.isActive && ctx.windowVisible && ctx.viewportAtLiveEdge === true) return false
   return true
 }
 
@@ -244,7 +257,12 @@ export function isUnseenIncomingMessage(
  * Compute new notification state when user opens/activates an entity.
  *
  * Scans messages to find the first unseen message (after the read pointer)
- * and sets the marker, then marks as read.
+ * and sets the marker, resuming the read pointer to a resume-consistent
+ * position within the loaded slice. Does NOT zero unreadCount (read-state PR
+ * B, final whole-branch-review FIX 2) — activating an entity is not the same
+ * event as reading it; the canonical count is derived from the archive and
+ * converges to 0 only via genuine live-edge convergence (Task 11). See the
+ * comment on the return statement for the full rationale.
  *
  * The marker is placed at the first incoming message after the read pointer's
  * position. Whether a delayed message qualifies depends on `treatDelayedAsNew`,
@@ -372,12 +390,29 @@ export function onActivate(
     : undefined
   const updatedPointer = pointerMessage ? makeReadPointer(pointerMessage, kind) : state.readPointer
 
-  // Mark as read: clear the counts. The read position is the pointer above and
-  // nothing else — there is no separate "when I last activated" timestamp to
-  // stamp with the newest loaded message, which is what used to let the two
-  // fields disagree about where the user had actually read to.
+  // The read position is the pointer above and nothing else — there is no
+  // separate "when I last activated" timestamp to stamp with the newest loaded
+  // message, which is what used to let the two fields disagree about where the
+  // user had actually read to.
+  //
+  // unreadCount is DELIBERATELY left unchanged (read-state PR B, final
+  // whole-branch-review FIX 2). Activation used to force it to 0 unconditionally,
+  // as if merely opening an entity were equivalent to reading it. It is not: the
+  // one canonical count is derived exclusively from the archive
+  // (recomputeUnreadForConversation / recomputeUnreadForRoom) and converges to 0
+  // only through Task 11's live-edge convergence — an incoming message's pointer
+  // advance in `onMessageReceived`, gated on a real, current-generation
+  // viewport-at-live-edge signal. Forcing 0 here raced ahead of that: it could
+  // zero the badge while snapping the pointer only to just-before-the-divider
+  // (see the resume-preserving placement above), leaving a "New messages"
+  // divider marking genuinely unread messages sitting right next to a count of
+  // 0 — and, since Task 12 removed the resident-derived counts that used to
+  // paper over the mismatch, no surface anywhere showed the real number.
+  // mentionsCount stays zeroed here: PR B scoped the archive derivation to
+  // unreadCount only (mentions are out of scope — see Task 4R), and clearing
+  // the @-mention badge on open is pre-existing, unrelated behavior.
   return {
-    unreadCount: 0,
+    unreadCount: state.unreadCount,
     mentionsCount: 0,
     readPointer: updatedPointer,
     firstNewMessageId,

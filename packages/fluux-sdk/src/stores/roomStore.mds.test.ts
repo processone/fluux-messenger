@@ -367,16 +367,24 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     // User opens the room before the cache read lands; activation owns the
     // recount now — the stale async result must NOT clobber it.
+    //
+    // Minor (s) (final whole-branch review): seeded to a distinguishing
+    // NONZERO value (5), not 0. A seed-0/assert-0 fixture is confounded with
+    // the coverage gate — this room has no coverage record/mamQueryStates
+    // seeded, so an unguarded recompute would ALSO defer at that separate
+    // gate and coincidentally still land on 0, hiding a missing/broken
+    // active-room check. 5 makes "still 5 after the stale cache read lands"
+    // a real assertion instead of a tautology.
     roomStore.setState({ activeRoomJid: ROOM })
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
-      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 0 })
+      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 5 })
       return { roomMeta: m }
     })
     releaseCache!([...page, rmsg('f0', 'sf0', 5100)])
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(5)
 
     // Restore the factory default so a stale one-shot can't leak into later tests.
     vi.mocked(messageCache.getRoomMessages).mockReset().mockResolvedValue([])
