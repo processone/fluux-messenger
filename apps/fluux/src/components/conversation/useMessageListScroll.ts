@@ -3505,10 +3505,11 @@ export function useMessageListScroll({
 
       const shrunk = lastHeight - newHeight
       if (shrunk > 0 && scrollerRef.current) {
-        const wasNear = getDistanceFromBottom(scrollerRef.current) <= shrunk + AT_BOTTOM_THRESHOLD
+        const distanceFromBottom = getDistanceFromBottom(scrollerRef.current)
+        const wasNear = distanceFromBottom <= shrunk + AT_BOTTOM_THRESHOLD
         // Route through live-edge reconciliation so the virtualized path re-windows rather
         // than a raw scrollTop write that would leave the mounted window stale → blank/clipped.
-        if (wasNear) {
+        if (wasNear && distanceFromBottom > BOTTOM_PIN_TOLERANCE) {
           reconcileLiveEdgeRef.current('container-shrink')
         }
       } else if (

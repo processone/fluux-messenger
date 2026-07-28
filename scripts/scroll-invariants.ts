@@ -1789,6 +1789,33 @@ test.describe('Typing indicator never covers message text', () => {
   /** "Glued", not merely "near" (AT_BOTTOM_OK_PX is 150) — only sub-pixel rounding is allowed. */
   const GLUED_TOLERANCE_PX = 2
 
+  function capturePinStarts(page: Page): () => Promise<string[]> {
+    const pending: Array<Promise<string | null>> = []
+    page.on('console', (message) => {
+      if (!message.text().includes('[Scroll] PIN start')) return
+      const data = message.args()[1]
+      if (!data) return
+      pending.push(
+        data
+          .jsonValue()
+          .then((value) => {
+            const trigger = (value as { trigger?: unknown } | null)?.trigger
+            return typeof trigger === 'string' ? trigger : null
+          })
+          .catch(() => null),
+      )
+    })
+    return async () =>
+      (await Promise.all(pending)).filter((trigger): trigger is string => trigger !== null)
+  }
+
+  async function enableScrollDebug(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__fluuxScrollDebug?.(true)
+    })
+  }
+
   interface OverlapProbe {
     pillFound: boolean
     pillHeight: number
@@ -1900,6 +1927,9 @@ test.describe('Typing indicator never covers message text', () => {
     await startTyping(page, AVA)
     await page.waitForTimeout(SETTLE_MS)
 
+    const readPinStarts = capturePinStarts(page)
+    await enableScrollDebug(page)
+
     /** Drive the draft the way React's controlled textarea expects, then let layout settle. */
     const setDraft = async (value: string) => {
       await page.evaluate((v) => {
@@ -1925,6 +1955,10 @@ test.describe('Typing indicator never covers message text', () => {
     const shrunk = await probeOverlap(page, 0)
     expect(shrunk.pillFound && shrunk.visibleRows > 0, 'pill/rows missing after composer shrank').toBe(true)
     expect(shrunk.worstOverlap, `pill covers ${shrunk.worstRowId} after the composer shrank back`).toBe(0)
+
+    expect(await readPinStarts(), 'composer growth must retain container-shrink reconciliation').toContain(
+      'container-shrink',
+    )
   })
 
   /** React on the newest message through the real store path, so its row genuinely grows. */
@@ -1980,12 +2014,18 @@ test.describe('Typing indicator never covers message text', () => {
     const lastId = await reactToNewest(page, AVA)
     await scrollToBottom(page)
 
+    const readPinStarts = capturePinStarts(page)
+    await enableScrollDebug(page)
     await startTyping(page, AVA)
     await page.waitForTimeout(SETTLE_MS)
 
     const glued = await measureGlued(page, lastId)
     expect(glued.dist, 'view left off the bottom after typing started').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
     expect(glued.belowFold, 'reaction chip on the last message left below the fold').toBeLessThanOrEqual(0)
+
+    const pinStarts = await readPinStarts()
+    expect(pinStarts.filter((trigger) => trigger === 'typing')).toHaveLength(1)
+    expect(pinStarts.filter((trigger) => trigger === 'container-shrink')).toHaveLength(0)
   })
 
   test('a reaction landing on the last message while typing shows stays glued to the bottom', async ({ page }) => {

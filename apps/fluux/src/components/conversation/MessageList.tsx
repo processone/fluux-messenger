@@ -914,9 +914,10 @@ export function MessageList<T extends BaseMessage>({
 
           Geometry is unchanged from the overlay: pt-2 above the pill + the footer's pb-2 inside the
           scroller put ~16px between the last message and the pill, and pb-0.5 leaves it just off the
-          composer. Sizing the band from the pill (rather than a fixed height) keeps that true when a
-          long "X, Y and Z are typing…" wraps. max-w keeps it clear of the bottom-end FAB, which still
-          floats at its own bottom-4 and so does not move when the band appears. */}
+          composer. Sizing the band from the pill (rather than a fixed height) keeps that true if the
+          pill's height changes; compact mode truncates to one line today (multi-line labels: issue
+          #1151). max-w keeps it clear of the bottom-end FAB, which still floats at its own bottom-4
+          and so does not move when the band appears. */}
       {typingUsers.length > 0 && (
         <div className="shrink-0 px-4 pt-2 pb-0.5 pointer-events-none">
           <div
