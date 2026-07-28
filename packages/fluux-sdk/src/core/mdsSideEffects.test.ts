@@ -88,7 +88,7 @@ function patchMeta(
 }
 
 /** Build a RoomMessage (mirrors roomStore.mds.test.ts rmsg helper). */
-function rmsg(room: string, id: string, stanzaId: string, t: number): RoomMessage {
+function rmsg(room: string, id: string, stanzaId: string | undefined, t: number): RoomMessage {
   return {
     type: 'groupchat',
     id,
@@ -476,26 +476,19 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
-    // Backgrounded conversation: meta exists, the resident array is evicted
-    // (memory windowing) and there is no lastMessage preview to fall back on.
     seedMeta(cid)
-    seedMessages(cid, [])
+    seedMessages(cid, [msg('m2', undefined)])
+    chatStore.setState({ activeConversationId: cid })
 
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    // The read position advances to m2 while nothing can resolve it to a
-    // stanza-id — e.g. the catch-up gate held the advance back and by the time
-    // it lifted the conversation had been backgrounded.
     patchMeta(cid, { readPointer: pointerAt('m2') })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
-    // A later merge brings m2 into the loaded slice and touches meta (as any
-    // merge does). The SAME position is now resolvable and must be published.
-    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
-    patchMeta(cid, { unreadCount: 1 })
+    chatStore.getState().mergeMAMMessages(cid, [msg('m2', 's2')], {}, true, 'forward')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
@@ -513,8 +506,8 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
-    // Backgrounded room: no resident messages, no lastMessage preview.
-    seedRoom(ROOM, [])
+    seedRoom(ROOM, [rmsg(ROOM, 'm2', undefined, 2)])
+    roomStore.setState({ activeRoomJid: ROOM })
 
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
@@ -528,21 +521,25 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
-    // The room is re-opened: its slice loads and roomMeta changes with it.
-    roomStore.setState((s) => {
-      const runtime = new Map(s.roomRuntime)
-      runtime.set(ROOM, {
-        ...runtime.get(ROOM)!,
-        messages: [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)],
-      })
-      const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 0 })
-      return { roomRuntime: runtime, roomMeta: meta }
-    })
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg(ROOM, 'm2', 's2', 2)],
+      {},
+      true,
+      'forward'
+    )
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
+
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 1 })
+      return { roomMeta: meta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     cleanup()
   })
 
@@ -780,9 +777,7 @@ describe('setupMdsSideEffects catch-up gate', () => {
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
-    // The catch-up completes. The SAME position must still be publishable.
-    setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
-    patchMeta(cid, { unreadCount: 1 })
+    chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward')
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)

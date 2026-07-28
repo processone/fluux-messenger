@@ -317,29 +317,43 @@ export function setupMdsSideEffects(
     trackedJids = current
   }
 
-  // Watch conversationMeta for read-position changes. On any change, re-consider
-  // every conversation; consider() de-dupes via lastConsideredSeenId so only
-  // actual advances enqueue a publish.
-  const unsubscribeStore = chatStore.subscribe(
-    (state) => state.conversationMeta,
-    () => {
-      if (!syncEnabled) return
-      for (const jid of chatStore.getState().conversationMeta.keys()) {
-        consider(jid)
-      }
+  function considerConversations(): void {
+    if (!syncEnabled) return
+    for (const jid of chatStore.getState().conversationMeta.keys()) {
+      consider(jid)
     }
-  )
+  }
 
-  // Mirror the conversationMeta watch for rooms: on any roomMeta change, re-consider
-  // every room. consider() de-dupes via lastConsideredSeenId and routes via isRoom().
-  const unsubscribeRoomStore = roomStore.subscribe(
-    (state) => state.roomMeta,
-    () => {
-      if (!syncEnabled) return
-      for (const jid of roomStore.getState().roomMeta.keys()) {
-        consider(jid)
-      }
+  function considerRooms(): void {
+    if (!syncEnabled) return
+    for (const jid of roomStore.getState().roomMeta.keys()) {
+      consider(jid)
     }
+  }
+
+  const unsubscribeConversationMeta = chatStore.subscribe(
+    (state) => state.conversationMeta,
+    considerConversations
+  )
+  const unsubscribeMessages = chatStore.subscribe(
+    (state) => state.messages,
+    considerConversations
+  )
+  const unsubscribeConversationMam = chatStore.subscribe(
+    (state) => state.mamQueryStates,
+    considerConversations
+  )
+  const unsubscribeRoomMeta = roomStore.subscribe(
+    (state) => state.roomMeta,
+    considerRooms
+  )
+  const unsubscribeRoomRuntime = roomStore.subscribe(
+    (state) => state.roomRuntime,
+    considerRooms
+  )
+  const unsubscribeRoomMam = roomStore.subscribe(
+    (state) => state.mamQueryStates,
+    considerRooms
   )
 
   // Self-heal for the seed-before-bookmarks ordering. The fresh-session seed
@@ -493,8 +507,12 @@ export function setupMdsSideEffects(
   )
 
   return () => {
-    unsubscribeStore()
-    unsubscribeRoomStore()
+    unsubscribeConversationMeta()
+    unsubscribeMessages()
+    unsubscribeConversationMam()
+    unsubscribeRoomMeta()
+    unsubscribeRoomRuntime()
+    unsubscribeRoomMam()
     unsubscribeRoomsSeedDrain()
     unsubscribeChatEntities()
     unsubscribeRoomEntities()
