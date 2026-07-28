@@ -1976,11 +1976,7 @@ export const roomStore = createStore<RoomState>()(
         'room',
         { incrementUnread: incrementUnread && !noteAsTransient, incrementMentions }
       )
-      const unreadCount = Math.min(
-        999,
-        (updated.readPointer === notifInput.readPointer ? updated.unreadCount : notifInput.unreadCount) +
-          overlayUnreadDelta
-      )
+      const unreadCount = Math.min(999, updated.unreadCount + overlayUnreadDelta)
 
       // Get the last non-ignored message for sidebar preview. Use the appended set
       // (not the possibly-gated resident array) so the preview still advances to the
@@ -2021,18 +2017,24 @@ export const roomStore = createStore<RoomState>()(
         ? (lastMessage?.timestamp ?? existing.lastInteractedAt)
         : existing.lastInteractedAt
 
-      // NOTE: `updated.readPointer` is deliberately NOT written here — this path
-      // has never advanced the room's read position on an outgoing/seen message,
-      // unlike chatStore.addMessage. That chat/room parity gap is left exactly as
-      // it is (#1081 is a refactor). What it USED to write was `lastReadAt`, the
-      // half of the old pair that moved on its own: the room's derivation floor
-      // ran ahead of the position the room actually held. With one pointer that
-      // half-write is not expressible, so the gap is now simply visible.
+      // `updated.readPointer` is now committed atomically with `unreadCount` in
+      // the very same write: `unreadCount` above is DERIVED from `updated`
+      // (plus the overlay delta), so storing it against any pointer other than
+      // `updated.readPointer` would re-open the exact divergence this file's
+      // last regression review caught (room-pointer-count-divergence) — a
+      // count computed relative to one position, filed under a different one.
+      // This is also what makes the outgoing-message unread clear (and any
+      // other pointer-advancing branch of `onMessageReceived`) actually stick:
+      // previously this path discarded the advance, so a room's read position
+      // never moved on send, unlike chatStore.addMessage — a chat/room parity
+      // gap. `onMessageReceived` only ever advances via `advance()`, which is
+      // forward-only, so committing it here unconditionally cannot regress it.
       newRooms.set(roomJid, {
         ...existing,
         messages: newMessages,
         unreadCount,
         mentionsCount: updated.mentionsCount,
+        readPointer: updated.readPointer,
         lastMessage,
         lastInteractedAt: newLastInteractedAt,
       })
@@ -2051,9 +2053,16 @@ export const roomStore = createStore<RoomState>()(
           ...existingMeta,
           unreadCount,
           mentionsCount: updated.mentionsCount,
+          readPointer: updated.readPointer,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
         })
+        // Durable read state (other pointer-committing sites: addRoom,
+        // markAsRead, markReadToNewest, advanceReadPointer, the pointer-only
+        // legacy guard pass in recomputeUnreadForRoom) all persist through
+        // this same helper whenever roomMeta's pointer moves — a live arrival
+        // is no exception, or a reload would resurrect the pre-message count.
+        persistRoomReadState(newMeta)
       }
 
       // Session-only divider (parity with chatStore.addMessage).

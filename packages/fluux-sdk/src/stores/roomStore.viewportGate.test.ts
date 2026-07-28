@@ -11,14 +11,15 @@
  * Acceptance scenarios 8 and 9 — see
  * docs/superpowers/specs/2026-07-23-read-state-unread-count-single-source-acceptance.md
  *
- * NOTE on `readPointer`: unlike chatStore.addMessage, `roomStore.addMessage`
- * deliberately never persists `notifState.onMessageReceived`'s returned
- * `readPointer` back to `roomMeta`/`rooms` — a pre-existing, documented
- * chat/room parity gap (see roomStore.ts's `addMessage`, the comment above
- * `newRooms.set(roomJid, {...})`), out of this task's scope. Since that
- * returned pointer is not written, its matching zero count must
- * also wait for `advanceReadPointer`; otherwise the canonical count and stored
- * pointer describe different boundaries.
+ * NOTE on `readPointer`: `roomStore.addMessage` now commits
+ * `notifState.onMessageReceived`'s returned `readPointer` atomically with
+ * `unreadCount`, in the SAME write (see roomStore.ts's `addMessage`, the
+ * comment above `newRooms.set(roomJid, {...})`) — closing a pre-existing
+ * chat/room parity gap where the room's read position never moved on an
+ * outgoing/seen message, unlike chatStore.addMessage. Because the two are
+ * one atomic commit, the tests below assert both: at the live edge the count
+ * genuinely converges to 0 BECAUSE the pointer has genuinely advanced to the
+ * arriving message, not in spite of a stale one left behind.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
@@ -179,7 +180,7 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       expect(room?.unreadCount).toBe(5)
     })
 
-    it('active + focused + AT THE LIVE EDGE: count waits for the room pointer to advance', () => {
+    it('active + focused + AT THE LIVE EDGE: count converges to 0 and the pointer advances to the arrival', () => {
       activateAndSeed('lounge@conference.example.com')
       reportCurrent('lounge@conference.example.com', 'at-edge')
 
@@ -187,9 +188,10 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       roomStore.getState().addMessage('lounge@conference.example.com', msg)
 
       const room = roomStore.getState().rooms.get('lounge@conference.example.com')
-      expect(room?.unreadCount).toBe(4)
-      expect(room?.readPointer?.messageId).toBe(PRIOR_MESSAGE_ID)
-      expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.unreadCount).toBe(4)
+      expect(room?.unreadCount).toBe(0)
+      expect(room?.readPointer?.messageId).toBe(msg.id)
+      expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.readPointer?.messageId).toBe(msg.id)
     })
 
     it('active + focused + UNKNOWN viewport (never reported): treated as not-at-edge, unread increases', () => {
@@ -261,7 +263,7 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       expect(currentViewportEvidence(evidenceKey(ROOM_B))).toBe('unknown')
     })
 
-    it("after B reports at-edge on its OWN generation, the count still waits for B's pointer writer", () => {
+    it("after B reports at-edge on its OWN generation, a subsequent arrival in B converges unread to 0 and advances B's pointer", () => {
       setUpBoth()
 
       roomStore.getState().setActiveRoom(ROOM_A)
@@ -275,8 +277,8 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       roomStore.getState().addMessage(ROOM_B, msg)
 
       const roomB = roomStore.getState().rooms.get(ROOM_B)
-      expect(roomB?.unreadCount).toBe(4)
-      expect(roomB?.readPointer?.messageId).toBe(PRIOR_B)
+      expect(roomB?.unreadCount).toBe(0)
+      expect(roomB?.readPointer?.messageId).toBe(msg.id)
     })
   })
 
@@ -309,8 +311,8 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       const msg = createMessage(ROOM, 'alice', 'arrives once the new generation reports at-edge')
       roomStore.getState().addMessage(ROOM, msg)
       const roomAfterFreshReport = roomStore.getState().rooms.get(ROOM)
-      expect(roomAfterFreshReport?.unreadCount).toBe(5)
-      expect(roomAfterFreshReport?.readPointer?.messageId).toBe(PRIOR)
+      expect(roomAfterFreshReport?.unreadCount).toBe(0)
+      expect(roomAfterFreshReport?.readPointer?.messageId).toBe(msg.id)
     })
   })
 })

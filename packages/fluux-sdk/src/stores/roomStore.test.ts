@@ -1113,6 +1113,34 @@ describe('roomStore', () => {
       expect(room?.mentionsCount).toBe(0)
     })
 
+    // Regression test for room-pointer-count-divergence: an automated review
+    // pass fixed a stale-count bug by making unreadCount conditional on
+    // whether the pointer moved, which (for THIS exact scenario — outgoing
+    // message, pointer advances, count is genuinely 0) threw away the fresh
+    // `0` and kept the seeded `5`. The real fix commits `updated.readPointer`
+    // in the same write as `unreadCount`, so the two can never disagree about
+    // which position the count is relative to. Seeds a DISTINGUISHING nonzero
+    // count (7, not 0) and asserts BOTH sides of the atomic write — a test
+    // that only checked the count could pass even with the pointer commit
+    // reverted (the conditional-count bug's own regression test proves that);
+    // a test that only checked the pointer would miss the count regression
+    // entirely.
+    it('advances the read pointer atomically with clearing unread count on an outgoing message', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        unreadCount: 7,
+      }))
+
+      const message = createMessage('msg-outgoing', 'test@conference.example.com', 'me', 'My reply', true)
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      const meta = roomStore.getState().roomMeta.get('test@conference.example.com')
+      expect(room?.unreadCount).toBe(0)
+      expect(room?.readPointer?.messageId).toBe('msg-outgoing')
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.readPointer?.messageId).toBe('msg-outgoing')
+    })
+
     it('should not increment unread count for delayed (historical) messages', () => {
       // Regression test: delayed messages from room history on join should not show as unread
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
@@ -1343,10 +1371,16 @@ describe('roomStore', () => {
     // new message'. That behaviour is deliberately gone with #1081: this path
     // advanced `lastReadAt` (the derivation FLOOR) while leaving the position
     // the room actually held put, so the floor ran ahead of the read position
-    // and later derivations under-counted. roomStore.addMessage has never
-    // advanced the room's read position — unlike its chatStore twin — and that
-    // parity gap is now simply visible rather than half-papered-over.
-    it('should NOT move the read pointer when an active room gets a new message', () => {
+    // and later derivations under-counted.
+    //
+    // roomStore.addMessage now DOES advance the room's read position — but
+    // only when `onMessageReceived` decides the user genuinely saw the
+    // message (outgoing, or active+focused+at-the-live-edge), matching its
+    // chatStore twin (see the outgoing-message tests above for the positive
+    // case). This test's room is active but never reports live-edge viewport
+    // evidence (no `reportAtLiveEdge` call), so it stays in the "user doesn't
+    // see the message" branch and the pointer is correctly left untouched.
+    it('should NOT move the read pointer when an active room gets a new message without live-edge evidence', () => {
       const existing = { messageId: 'older', timestamp: new Date('2025-01-15T08:00:00Z') }
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         readPointer: existing,
