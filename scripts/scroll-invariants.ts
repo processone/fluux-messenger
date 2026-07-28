@@ -1773,6 +1773,238 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
 })
 
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
+// The typing indicator is a floating pill anchored to the BOTTOM OF THE VIEWPORT (issue #918 moved
+// it out of the scroll content so toggling it can't re-pin the list). Its clearance, though, used to
+// be reserved as CONTENT padding at the end of the list — the two only line up when the scroller sits
+// at its exact bottom. Every other scroll offset slides the content down under a pill that does not
+// move, so the last message ends up behind it: measured on the demo (30px pill, 48px content spacer)
+// the clearance was a mere 16px, and an offset of 20px already clipped the last line.
+// The fix reserves the band OUTSIDE the scrollport, so no scroll offset can put text under the pill.
+test.describe('Typing indicator never covers message text', () => {
+  const AVA = 'ava@fluux.chat'
+
+  /** Distances from the bottom to park the viewport at. 16-48 is the window the old bug lived in. */
+  const OFFSETS_PX = [0, 8, 16, 20, 24, 32, 40, 48, 96, 240]
+
+  /** "Glued", not merely "near" (AT_BOTTOM_OK_PX is 150) — only sub-pixel rounding is allowed. */
+  const GLUED_TOLERANCE_PX = 2
+
+  interface OverlapProbe {
+    pillFound: boolean
+    pillHeight: number
+    pillWidth: number
+    visibleRows: number
+    /** Largest vertical intersection (px) between the pill and any VISIBLE part of a message row. */
+    worstOverlap: number
+    worstRowId: string | null
+  }
+
+  /**
+   * Emit `composing` and wait for the LIVE list's pill to be laid out. Scoped to the live list's
+   * own container rather than a bare document query: other MessageLists can be mounted (search /
+   * activity previews), and a zero-width one would satisfy a document-wide selector while telling
+   * us nothing about the conversation under test.
+   */
+  async function startTyping(page: Page, jid: string): Promise<void> {
+    await page.evaluate((j) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('chat:typing', { conversationId: j, jid: j, isTyping: true })
+    }, jid)
+    await page.waitForFunction(() => {
+      const s = document.querySelector('[data-message-list]')
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!pill) return false
+      const r = pill.getBoundingClientRect()
+      return r.width > 0 && r.height > 0
+    }, undefined, { timeout: 5_000 })
+  }
+
+  /**
+   * Park the viewport `offset` px above the bottom and measure how deeply the pill cuts into
+   * message text. Rows are clipped to the scrollport first: the virtualizer keeps overscan rows
+   * mounted below the fold, and those are not on screen — only pixels the reader can actually see
+   * count as covered.
+   */
+  async function probeOverlap(page: Page, offset: number): Promise<OverlapProbe> {
+    return page.evaluate((off) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!s || !pill) {
+        return { pillFound: false, pillHeight: 0, pillWidth: 0, visibleRows: 0, worstOverlap: 0, worstRowId: null }
+      }
+
+      s.scrollTop = s.scrollHeight - s.clientHeight - off
+      const sRect = s.getBoundingClientRect()
+      const p = pill.getBoundingClientRect()
+
+      let visibleRows = 0
+      let worstOverlap = 0
+      let worstRowId: string | null = null
+      for (const el of Array.from(s.querySelectorAll('[data-message-id]'))) {
+        const r = el.getBoundingClientRect()
+        const visTop = Math.max(r.top, sRect.top)
+        const visBottom = Math.min(r.bottom, sRect.bottom)
+        if (visBottom - visTop <= 0) continue // clipped out of the scrollport
+        visibleRows++
+        const overlapY = Math.min(visBottom, p.bottom) - Math.max(visTop, p.top)
+        const overlapX = Math.min(r.right, p.right) - Math.max(r.left, p.left)
+        if (overlapY > 0 && overlapX > 0 && overlapY > worstOverlap) {
+          worstOverlap = overlapY
+          worstRowId = el.getAttribute('data-message-id')
+        }
+      }
+      return {
+        pillFound: true,
+        pillHeight: Math.round(p.height),
+        pillWidth: Math.round(p.width),
+        visibleRows,
+        worstOverlap: Math.round(worstOverlap),
+        worstRowId,
+      }
+    }, offset)
+  }
+
+  test('no scroll offset puts a visible message row under the pill', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const results: Array<{ offset: number; probe: OverlapProbe }> = []
+    for (const offset of OFFSETS_PX) {
+      const probe = await probeOverlap(page, offset)
+      // Guard against a hollow pass: an unmounted pill or an empty list would trivially
+      // report zero overlap.
+      expect(probe.pillFound, `typing pill not rendered at offset ${offset}`).toBe(true)
+      expect(probe.pillHeight, `typing pill has no height at offset ${offset}`).toBeGreaterThan(10)
+      expect(probe.pillWidth, `typing pill has no width at offset ${offset}`).toBeGreaterThan(10)
+      expect(probe.visibleRows, `no message rows visible at offset ${offset}`).toBeGreaterThan(0)
+      results.push({ offset, probe })
+    }
+
+    const covered = results.filter((r) => r.probe.worstOverlap > 0)
+    expect(
+      covered,
+      'typing pill covers message text at ' +
+        covered.map((r) => `offset=${r.offset}px (${r.probe.worstOverlap}px of ${r.probe.worstRowId})`).join(', '),
+    ).toEqual([])
+  })
+
+  test('growing the composer to two lines and shrinking it back never parks text under the pill', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    /** Drive the draft the way React's controlled textarea expects, then let layout settle. */
+    const setDraft = async (value: string) => {
+      await page.evaluate((v) => {
+        const ta = document.querySelector('textarea') as HTMLTextAreaElement | null
+        if (!ta) throw new Error('no composer textarea')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+        setter.call(ta, v)
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+      }, value)
+      await page.waitForTimeout(SETTLE_MS)
+    }
+
+    const twoLines =
+      'This draft is long enough to wrap the composer onto a second line, which shrinks the ' +
+      'message viewport under a pill that does not move with it.'
+
+    await setDraft(twoLines)
+    const grown = await probeOverlap(page, 0)
+    expect(grown.pillFound && grown.visibleRows > 0, 'pill/rows missing after composer grew').toBe(true)
+    expect(grown.worstOverlap, `pill covers ${grown.worstRowId} while the composer is two lines`).toBe(0)
+
+    await setDraft('')
+    const shrunk = await probeOverlap(page, 0)
+    expect(shrunk.pillFound && shrunk.visibleRows > 0, 'pill/rows missing after composer shrank').toBe(true)
+    expect(shrunk.worstOverlap, `pill covers ${shrunk.worstRowId} after the composer shrank back`).toBe(0)
+  })
+
+  /** React on the newest message through the real store path, so its row genuinely grows. */
+  async function reactToNewest(page: Page, jid: string): Promise<string> {
+    const lastId = await page.evaluate((j) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const st = (window as any).__chatStore.getState()
+      const msgs = st.messages.get(j) ?? []
+      const last = msgs[msgs.length - 1]
+      if (!last) return null
+      st.updateReactions(j, last.id, j, ['👍'])
+      return last.id as string
+    }, jid)
+    expect(lastId, 'precondition: a newest message to react to').toBeTruthy()
+    await page.waitForFunction(
+      (id) => {
+        const s = document.querySelector('[data-message-list]')
+        return !!s?.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.textContent?.includes('👍')
+      },
+      lastId as string,
+      { timeout: 5_000 },
+    )
+    return lastId as string
+  }
+
+  /** How far off the bottom we are, and how far the reacted row hangs below the fold. */
+  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number }> {
+    return page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      if (!s || !el) return { dist: -1, belowFold: 9999 }
+      return {
+        dist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+        // How far the reacted row's bottom (chip included) sits BELOW the scrollport's bottom edge.
+        belowFold: Math.round(el.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom),
+      }
+    }, id)
+  }
+
+  // Reported alongside the overlap: "we don't stick perfectly to the bottom when the last message
+  // ALSO has reactions". These two pin the combination down at both orders (they exercise different
+  // effects: the typing re-pin vs the reaction nudge). Both were already GREEN on the pre-band code
+  // in Chromium and WebKit — the re-pin runs in a layout effect, so it lands before paint and no dip
+  // is observable here; what the reader was seeing was almost certainly the overlap itself, a chip
+  // hidden under the pill reading as "not stuck to the bottom". Kept as guards: with the indicator
+  // out of the scroll content, showing it must not move content at all, and the reacted row must
+  // stay whole. Tolerance is tight on purpose — this asserts "glued", not "near".
+  test('typing starting on a last message that carries a reaction stays glued to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const lastId = await reactToNewest(page, AVA)
+    await scrollToBottom(page)
+
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const glued = await measureGlued(page, lastId)
+    expect(glued.dist, 'view left off the bottom after typing started').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(glued.belowFold, 'reaction chip on the last message left below the fold').toBeLessThanOrEqual(0)
+  })
+
+  test('a reaction landing on the last message while typing shows stays glued to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const lastId = await reactToNewest(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const glued = await measureGlued(page, lastId)
+    expect(glued.dist, 'view left off the bottom after a reaction landed under the pill').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(glued.belowFold, 'reaction chip on the last message left below the fold').toBeLessThanOrEqual(0)
+  })
+})
+
 // "I sent a message and the view didn't stick to the bottom." A send REPLACES the optimistic last
 // row in place (reconciled to the server id) WITHOUT growing messageCount, so the old count-only
 // new-message effect never re-pinned. The reconciled row often measures taller (final layout), so

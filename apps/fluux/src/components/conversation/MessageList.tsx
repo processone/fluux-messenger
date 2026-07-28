@@ -694,16 +694,14 @@ export function MessageList<T extends BaseMessage>({
         )
       }
       case 'footer':
-        // Typing indicator is NOT rendered here — it floats over the list (see below). The footer's
-        // padding grows to pb-12 (clears the pill's ~46px height) only while it's shown, and shrinks
-        // back to pb-2 otherwise, so idle conversations don't carry the pill's clearance as dead
-        // space. The grow edge is paired with a live-geometry-gated nudge in useMessageListScroll
-        // (only when already at the bottom) so this never re-pins a reader scrolled up into history —
-        // the #918 bug was a stale isAtBottomRef latch, not a reactive footer height per se.
+        // Typing indicator is NOT rendered here — it lives in a band BELOW the scrollport (see the
+        // typing band after the scroller). Breathing room only; it stays a fixed pb-2 whether or not
+        // anyone is typing, so the footer row's measured height never changes and can never re-pin
+        // the list (the reason #918 moved the indicator out of the scroll content in the first place).
         return (
           <div data-row-kind="footer">
             {extraContent}
-            <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-2'} />
+            <div className="pb-2" />
           </div>
         )
     }
@@ -880,11 +878,9 @@ export function MessageList<T extends BaseMessage>({
           {/* Extra content after messages */}
           {extraContent}
 
-          {/* Bottom breathing room. The typing indicator floats over the list (see below) rather
-              than living here. The padding grows to pb-12 (clears the pill) only while it's shown
-              and shrinks back to pb-2 otherwise — see the footer render case above for the safety
-              rationale (live-geometry-gated nudge, never re-pins a reader scrolled up). */}
-          <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-2'} />
+          {/* Bottom breathing room. The typing indicator lives in its own band below the scrollport
+              (see after the scroller), so this stays constant — see the footer render case above. */}
+          <div className="pb-2" />
         </div>
         ))}
       </div>
@@ -901,17 +897,32 @@ export function MessageList<T extends BaseMessage>({
         onJump={scrollToMarker}
       />
 
-      {/* Floating typing indicator — anchored to the bottom of the message area rather than living
-          inside the scroll content, so it (a) stays visible whether the user is at the bottom or
-          scrolled up in history, and (b) never changes the scroll height (toggling it inline used to
-          re-pin the viewport and fight an upward scroll — issue #918). The spacer above grows to
-          pb-12 (48px) while typing; bottom-0.5 centres the ~30px pill vertically in that band so it
-          sits evenly (~16px each side) between the last message and the composer instead of hugging
-          the message. start-4 keeps it aligned under the messages and clear of the bottom-end FAB;
-          pointer-events-none so it never intercepts taps on the message beneath. */}
+      {/* Typing indicator — a band BELOW the scrollport, not inside the scroll content and not an
+          overlay on top of it.
+
+          Out of the scroll content because toggling it there changes scrollHeight, which re-pinned
+          the viewport and fought an upward scroll (issue #918); it also has to stay visible whether
+          the reader is at the bottom or up in history.
+
+          Out of the overlay position it had after #918 because an overlay pinned to the VIEWPORT
+          bottom cannot be cleared by padding reserved in the CONTENT: the two only line up when the
+          scroller sits at its exact bottom, and every other offset slides the last message down under
+          a pill that does not move. The reserved band was 48px against a 30px pill, so a 20px offset
+          — a small trackpad nudge, or the residual left after the composer grows to two lines —
+          already clipped the last line. As real layout the band cannot be scrolled into: the
+          scrollport simply ends above it.
+
+          Geometry is unchanged from the overlay: pt-2 above the pill + the footer's pb-2 inside the
+          scroller put ~16px between the last message and the pill, and pb-0.5 leaves it just off the
+          composer. Sizing the band from the pill (rather than a fixed height) keeps that true when a
+          long "X, Y and Z are typing…" wraps. max-w keeps it clear of the bottom-end FAB, which still
+          floats at its own bottom-4 and so does not move when the band appears. */}
       {typingUsers.length > 0 && (
-        <div className="absolute bottom-0.5 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
-          <div className="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5">
+        <div className="shrink-0 px-4 pt-2 pb-0.5 pointer-events-none">
+          <div
+            data-typing-pill
+            className="inline-block max-w-[calc(100%-4rem)] rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5 animate-toast-in"
+          >
             <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} variant="compact" />
           </div>
         </div>

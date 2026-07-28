@@ -3441,18 +3441,18 @@ export function useMessageListScroll({
   }, [rowGrowthSignature, conversationId, staticMode])
 
   // ==========================================================================
-  // EFFECT: Typing indicator appears — reveal its footer clearance while sticked
+  // EFFECT: Typing indicator appears — re-pin under the band it takes from the scrollport
   // ==========================================================================
 
-  // The footer reserves extra bottom padding only while the typing pill is shown (see
-  // MessageList's footer render), so that clearance grows when typing starts. Unlike a reaction's
-  // few-pixel growth, the virtualized footer row needs a remeasure pass before the virtualizer's
-  // computed end offset accounts for the taller padding — a one-shot scrollToIndex lands short (the
-  // spacer hasn't caught up yet), leaving a residual gap under the pill. So this routes through the
-  // shared controller-owned live-edge loop (the same convergence new messages use)
-  // instead of the reactions effect's single smooth nudge. Same two safeguards though: live-geometry
-  // gate (not the latchable isAtBottomRef) and a same-conversation check. Only the false→true edge
-  // nudges; typing stopping SHRINKS the footer, which the browser clamps scrollTop for on its own.
+  // The typing indicator is a band BELOW the scrollport (see MessageList), so showing it shrinks the
+  // scroller by the band's height and leaves a reader who was sticked to the bottom that many pixels
+  // short of it. The scroller's own ResizeObserver would also catch this, but only a frame later
+  // (its correction is rAF-deferred, see the container-resize effect); re-pinning here, in the same
+  // commit that mounts the band, avoids that frame of visible drift. Routed through the shared
+  // controller-owned live-edge loop (the same convergence new messages use) so the virtualized path
+  // re-windows rather than taking a raw scrollTop write. Two safeguards: a live-geometry gate (not
+  // the latchable isAtBottomRef) and a same-conversation check. Only the false→true edge re-pins;
+  // typing stopping GROWS the scroller back, which the browser clamps scrollTop for on its own.
   const prevHasTypingRef = useRef(hasTypingIndicator)
   const typingConvRef = useRef(conversationId)
   useLayoutEffect(() => {
@@ -3461,7 +3461,7 @@ export function useMessageListScroll({
     const prevHasTyping = prevHasTypingRef.current
     prevHasTypingRef.current = hasTypingIndicator
     if (!sameConversation) return // conversation switch → rebaseline, never nudge
-    if (!hasTypingIndicator || prevHasTyping) return // only the off→on edge grows the footer
+    if (!hasTypingIndicator || prevHasTyping) return // only the off→on edge shrinks the scrollport
 
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return

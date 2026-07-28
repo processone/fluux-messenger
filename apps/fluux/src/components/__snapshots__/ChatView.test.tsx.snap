@@ -586,10 +586,11 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           </div>
         </div>
         <div
-          class="absolute bottom-0.5 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in"
+          class="shrink-0 px-4 pt-2 pb-0.5 pointer-events-none"
         >
           <div
-            class="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5"
+            class="inline-block max-w-[calc(100%-4rem)] rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5 animate-toast-in"
+            data-typing-pill="true"
           >
             <div
               class="text-xs text-fluux-muted italic flex items-center gap-1.5 min-w-0 "
