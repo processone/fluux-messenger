@@ -434,6 +434,34 @@ async function activateChat(page: Page, jid: string): Promise<void> {
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
+/**
+ * EXPERIMENT — not a gate. Delete before merging.
+ *
+ * `Home issues one smooth write` fails its FIRST attempt in ~40-100% of CI runs
+ * (13/13 before PR #1152, 5/9 after), timing out the 120s mount budget while retries
+ * relabel it "flaky". It is also the first test in this file, and with
+ * `fullyParallel: false` therefore the first thing each project's worker runs.
+ *
+ * Two hypotheses have already been falsified by assuming a LOADING cost — a dev-server
+ * warm-up, and serving a bundle instead of the raw module graph. Neither moved it.
+ *
+ * This probe discriminates the two remaining families without guessing further. It does
+ * exactly what every other test's setup does — boot the demo — and nothing else, and it
+ * sits first so it takes the first-test slot.
+ *
+ *   - probe fails / Home passes  -> the cost belongs to the POSITION (first test pays it)
+ *   - probe passes / Home fails  -> the cost belongs to THAT TEST
+ *   - both fail                  -> a per-context cost that hits any early test
+ */
+test.describe('position probe (experiment)', () => {
+  test('probe: boot the demo and assert nothing else', async ({ page }) => {
+    const startedAt = Date.now()
+    await loadDemo(page)
+    console.log(`[probe] loadDemo took ${Date.now() - startedAt}ms`)
+    await expect(page.locator('[data-nav="messages"]')).toBeVisible()
+  })
+})
+
 test.describe('Controller-owned resident-top navigation', () => {
   test('Home issues one smooth write, then the controller observes it to settlement', async ({
     page,

@@ -79,7 +79,10 @@ export default defineConfig({
 
   // CI: GitHub annotations on failures + a self-contained HTML report (with traces)
   // uploaded as an artifact. Locally: a readable list.
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  // EXPERIMENT — the leading ['list'] is temporary. Revert before merging.
+  // The github reporter prints nothing per test, so CI has never shown how long the first
+  // test costs relative to the rest. That number is the point of this branch.
+  reporter: process.env.CI ? [['list'], ['github'], ['html', { open: 'never' }]] : 'list',
 
   use: {
     baseURL: BASE_URL,
