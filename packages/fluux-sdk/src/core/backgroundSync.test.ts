@@ -44,6 +44,7 @@ vi.mock('../utils/messageCache', () => ({
 }))
 
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
+import { setupRoomSideEffects } from './roomSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
@@ -57,6 +58,7 @@ describe('setupBackgroundSyncSideEffects', () => {
   const ROSTER_DISCOVERY_KEY = 'fluux:lastRosterDiscovery'
   let mockClient: ReturnType<typeof createMockClient>
   let cleanup: () => void
+  let roomCleanup: (() => void) | undefined
 
   beforeEach(() => {
     _resetStorageScopeForTesting()
@@ -66,6 +68,8 @@ describe('setupBackgroundSyncSideEffects', () => {
   })
 
   afterEach(() => {
+    roomCleanup?.()
+    roomCleanup = undefined
     cleanup?.()
   })
 
@@ -870,6 +874,79 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
+      expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
+      loadSpy.mockRestore()
+      roomStore.getState().reset()
+    })
+
+    it('hands an inactive foreground hydration to background catch-up once', async () => {
+      roomStore.getState().reset()
+      const roomJid = 'handoff@conference.example.com'
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: roomJid,
+        nickname: 'me',
+        joined: false,
+        supportsMAM: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+      roomStore.getState().setActiveRoom(roomJid)
+      let resolveForegroundCache!: (messages: []) => void
+      const foregroundCache = new Promise<[]>((resolve) => {
+        resolveForegroundCache = resolve
+      })
+      let resolveBackgroundCache!: (messages: []) => void
+      const backgroundCache = new Promise<[]>((resolve) => {
+        resolveBackgroundCache = resolve
+      })
+      let roomLoadCount = 0
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockImplementation((jid) => {
+        if (jid !== roomJid) return Promise.resolve([])
+        roomLoadCount += 1
+        return roomLoadCount === 1 ? foregroundCache : backgroundCache
+      })
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      roomCleanup = setupRoomSideEffects(mockClient)
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      roomStore.getState().setRoomJoined(roomJid, true)
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      await vi.waitFor(() => {
+        expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(1)
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      roomStore.getState().setActiveRoom(null)
+      resolveForegroundCache([])
+      await vi.waitFor(() => {
+        expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(roomStore.getState().getRoomMAMQueryState(roomJid).isLoading).toBe(false)
+
+      resolveBackgroundCache([])
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        roomJid,
+        [],
+        expect.objectContaining({ stitchReadPointer: true }),
+      )
       expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
       loadSpy.mockRestore()
       roomStore.getState().reset()

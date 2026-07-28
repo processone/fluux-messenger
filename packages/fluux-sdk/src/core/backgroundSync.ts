@@ -33,6 +33,7 @@ import {
   invalidateRoomMemberships,
   recordRoomMembership,
 } from './roomMembershipEpoch'
+import { subscribeRoomMamHandoff } from './roomMamHandoff'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -520,6 +521,14 @@ export function setupBackgroundSyncSideEffects(
     },
   )
 
+  const unsubscribeRoomMamHandoff = subscribeRoomMamHandoff(
+    client,
+    (roomJid) => {
+      if (!initialRoomPassDone || !isFreshSession) return
+      void catchUpFreshSessionRoomOnce(roomJid, sessionGeneration)
+    },
+  )
+
   // Subscribe to serverInfo changes (for fresh sessions where MAM discovery is async)
   let hadMAMSupport = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
   const unsubscribeServerInfo = connectionStore.subscribe(
@@ -568,6 +577,7 @@ export function setupBackgroundSyncSideEffects(
     unsubscribeServerInfo()
     unsubscribeRoomMAM()
     unsubscribeRoomJoined()
+    unsubscribeRoomMamHandoff()
     unsubscribePluginRegistered()
     unsubscribeKeyUnlocked()
     if (roomCatchUpTimer) {

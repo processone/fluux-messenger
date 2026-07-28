@@ -28,6 +28,7 @@ import {
   invalidateRoomMemberships,
   recordRoomMembership,
 } from './roomMembershipEpoch'
+import { requestRoomMamHandoff } from './roomMamHandoff'
 
 /**
  * Sets up room-related side effects.
@@ -182,6 +183,7 @@ export function setupRoomSideEffects(
         roomFetchOwners.delete(roomJid)
         fetchInitiated.delete(roomJid)
         roomStore.getState().setRoomMAMLoading(roomJid, false)
+        requestRoomMamHandoff(client, roomJid)
         if (debug) {
           console.log(
             '[SideEffects] Room: MAM aborted after cache hydration - room no longer eligible',
