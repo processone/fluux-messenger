@@ -468,7 +468,9 @@ Increment `unreadCount` only for a message the shared `isRenderableStoredMessage
 
 ---
 
-### Task 10: Delete the slice-limited recount internals
+### Task 10: Delete the slice-limited recount internals — **NO-OP, superseded by Task 7**
+
+> **Execution outcome (2026-07-27):** nothing to delete. Task 7's rewrite already removed the genuinely dead block (the ~50-line re-fetch + recompute in `applyRemoteDisplayed`). The two surviving `MAM_POINTER_RECOUNT_CACHE_LIMIT` consumers feed `recomputeCountsFromPointer`'s **pointer-advance** path for non-resident entities — the mechanism PR B deliberately keeps and PR C removes. Attempting the deletion broke 5 tests that deliberately seed a non-resident entity to prove that path fires. **Retire the constant in PR C, alongside `recomputeCountsFromPointer` itself.**
 
 **Files:** `chatStore.ts:1817-1864`, `roomStore.ts:2320-2337`, the resident-slice fallback in the old `recomputeUnreadForConversation`, `mamCatchUpUtils.ts:78-79`.
 
