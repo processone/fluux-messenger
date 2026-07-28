@@ -48,8 +48,12 @@ import { createMockClient, simulateFreshSession, simulateSmResumption } from './
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((r) => { resolve = r })
-  return { promise, resolve }
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((r, j) => {
+    resolve = r
+    reject = j
+  })
+  return { promise, resolve, reject }
 }
 
 describe('setupRoomSideEffects', () => {
@@ -491,6 +495,115 @@ describe('setupRoomSideEffects', () => {
         expect.anything(),
         expect.anything(),
       )
+
+      loadSpy.mockRestore()
+    })
+
+    it('lets only the replacement attempt query or clear loading after a fresh-session retry', async () => {
+      const cacheA = deferred<[]>()
+      const cacheB = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      )
+        .mockReturnValueOnce(cacheA.promise)
+        .mockReturnValueOnce(cacheB.promise)
+      vi.mocked(mockClient.mam.catchUpRoomHistory)
+        .mockImplementation(async (roomJid: string) => {
+          // Mirror the real MAM module's successful loading-state event.
+          roomStore.getState().setRoomMAMLoading(roomJid, false)
+        })
+
+      // Attempt A starts after the first confirmed join and pauses in hydration.
+      confirmRoomJoin()
+      expect(loadSpy).toHaveBeenCalledTimes(1)
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+
+      // Fresh-session setup resets MAM state, so the confirmed rejoin can start B.
+      connectionStore.getState().setStatus('reconnecting')
+      simulateFreshSession(mockClient)
+      roomStore.getState().resetRoomMAMStates()
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+      expect(loadSpy).toHaveBeenCalledTimes(2)
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+
+      cacheA.resolve([])
+      await cacheA.promise
+
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+
+      cacheB.resolve([])
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
+
+      loadSpy.mockRestore()
+    })
+
+    it('prevents a superseded cache failure from clearing replacement loading state', async () => {
+      const cacheA = deferred<[]>()
+      const cacheB = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      )
+        .mockReturnValueOnce(cacheA.promise)
+        .mockReturnValueOnce(cacheB.promise)
+
+      confirmRoomJoin()
+      connectionStore.getState().setStatus('reconnecting')
+      simulateFreshSession(mockClient)
+      roomStore.getState().resetRoomMAMStates()
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+
+      cacheA.reject(new Error('stale cache failure'))
+      await cacheA.promise.catch(() => {})
+
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      cacheB.resolve([])
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
 
       loadSpy.mockRestore()
     })
@@ -947,6 +1060,67 @@ describe('setupRoomSideEffects', () => {
           expect.objectContaining({}),
         )
       })
+    })
+
+    it('preserves a confirmed join across the uninterrupted post-resume synthetic online', async () => {
+      const cache = deferred<[]>()
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+      roomStore.getState().setActiveRoom(ROOM)
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockReturnValue(cache.promise)
+
+      // A missing cache marker upgrades this uninterrupted resume to fresh setup.
+      // Its rejoin self-presence arrives before SessionLifecycle emits synthetic online.
+      confirmRoomJoin()
+      expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(true)
+      mockClient._emit('online')
+
+      cache.resolve([])
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        ROOM,
+        expect.any(Array),
+        expect.objectContaining({ sessionStartTime: expect.any(Number) }),
+      )
+
+      // A later fresh transport session must not inherit that confirmation.
+      roomStore.getState().setRoomMAMLoading(ROOM, false)
+      connectionStore.getState().setStatus('reconnecting')
+      simulateFreshSession(mockClient)
+      vi.mocked(mockClient.mam.catchUpRoomHistory).mockClear()
+
+      roomStore.getState().updateRoom(ROOM, { supportsMAM: false })
+      roomStore.getState().updateRoom(ROOM, { supportsMAM: true })
+      await Promise.resolve()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      roomStore.getState().markAllRoomsNotJoined()
+      confirmRoomJoin()
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+
+      loadSpy.mockRestore()
     })
 
     it('does NOT re-trigger MAM after SM resumption for a room whose archive we already hold', async () => {

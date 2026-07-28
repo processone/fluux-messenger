@@ -92,6 +92,25 @@ online
   -> run MAM catch-up
 ```
 
+## Review follow-up guards
+
+Successful SM resumption still emits `resumed` before post-connection
+lifecycle work. If the cache-integrity marker is missing, that same transport
+session is upgraded to full fresh setup: rooms may rejoin and emit
+`room:joined` before `SessionLifecycle` emits its synthetic `online`.
+`setupRoomSideEffects` privately remembers that the next uninterrupted
+post-resume `online` may be synthetic and preserves join confirmations already
+observed during setup. Any transition away from `online` cancels that marker,
+so a later genuine fresh transport session clears confirmations as usual.
+
+Each asynchronous foreground room catch-up also receives a private per-room
+owner identity when it starts. After cache hydration, after MAM completion,
+and before error cleanup, the continuation verifies that it still owns the
+room attempt. Fresh-session MAM reset plus confirmed rejoin may start a
+replacement while an older cache promise is pending; the replacement becomes
+the sole owner, and the older continuation returns without querying MAM or
+mutating `fetchInitiated` or loading state.
+
 ## Unchanged behavior
 
 - A successful SM resume continues to trust hydrated MUC membership and does
@@ -137,6 +156,9 @@ Add race coverage for:
 - the active room leaving while its cache read is pending;
 - the connection dropping while its cache read is pending;
 - the active room changing while its cache read is pending.
+- an uninterrupted `resumed → room:joined → synthetic online` upgrade;
+- an older cache attempt resolving after a fresh-session retry owns the room;
+- an older cache failure attempting cleanup after that replacement starts.
 
 Retain and run the existing regressions for:
 

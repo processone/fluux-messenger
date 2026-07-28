@@ -15,6 +15,10 @@
 - Do not redesign the fresh-session or SM-resumption lifecycle.
 - A fresh-session room MAM query requires a successful `room:joined` observed in that fresh session.
 - A successful SM resume continues to trust preserved MUC membership.
+- An uninterrupted missing-marker SM upgrade preserves joins observed before
+  its synthetic `online`; a later transport reconnect does not.
+- A superseded cache-hydration attempt cannot query MAM or clear state owned by
+  its replacement.
 - Keep delayed background catch-up for inactive rooms unchanged.
 - Keep the separate cache-first sidebar preview refresh unchanged.
 - Do not address the redundant first-activation IndexedDB read in this change.
@@ -26,16 +30,21 @@
 
 - `packages/fluux-sdk/src/core/roomSideEffects.ts`
   - Owns the private fresh-session confirmation gate.
+  - Distinguishes an uninterrupted post-resume synthetic `online`.
+  - Owns private per-room fetch-attempt identities.
   - Starts foreground room catch-up only from an eligible active room.
   - Revalidates eligibility after IndexedDB cache hydration.
 - `packages/fluux-sdk/src/core/roomSideEffects.test.ts`
-  - Proves event ordering, late `supportsMAM` fallback, post-cache race aborts,
-    and retryability.
+  - Proves event ordering, synthetic-online preservation, late `supportsMAM`
+    fallback, post-cache race aborts, replacement ownership, and retryability.
 - `packages/fluux-sdk/src/core/networkScenario.testHelpers.ts`
   - Keeps the fresh-session journey description aligned with production order.
 - `packages/fluux-sdk/src/core/networkScenarios.test.ts`
   - Proves the hydrated-room fresh-session journey does not query MAM before
     invalidation/rejoin and does query exactly once after confirmation.
+- `packages/fluux-sdk/src/core/chatNetworkScenarios.test.ts`
+  - Adapts the concurrent chat/room scenario so chat MAM starts on `online`
+    while room MAM waits for confirmed `room:joined`.
 - `docs/superpowers/specs/2026-07-27-room-mam-after-join-design.md`
   - Already contains the approved behavior and the join-confirmation
     clarification discovered during plan self-review.
@@ -602,6 +611,7 @@ git commit -m "fix(mam): abort stale room catch-up before query"
   - `packages/fluux-sdk/src/core/roomSideEffects.test.ts`
   - `packages/fluux-sdk/src/core/networkScenario.testHelpers.ts`
   - `packages/fluux-sdk/src/core/networkScenarios.test.ts`
+  - `packages/fluux-sdk/src/core/chatNetworkScenarios.test.ts`
   - `docs/superpowers/specs/2026-07-27-room-mam-after-join-design.md`
 
 **Interfaces:**
@@ -674,7 +684,9 @@ Confirm each row against a named test:
 | Fresh, inactive background join | no foreground MAM | eligible on later activation |
 | SM resume, archive held | no redundant MAM | unchanged |
 | SM resume, archive never held | unchanged first-open/late-capability fetch | unchanged |
+| Missing-marker SM upgrade | preserve pre-synthetic-online confirmation | exactly one foreground MAM |
 | Leave/disconnect/switch during cache read | abort and clear loading | later retry allowed |
+| Superseded cache attempt | no stale query or cleanup | replacement owns query/loading |
 
 If any row lacks a passing named test, add that test before declaring the branch
 ready.

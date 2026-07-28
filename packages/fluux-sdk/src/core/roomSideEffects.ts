@@ -43,8 +43,10 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+  const roomFetchOwners = new Map<string, symbol>()
   const freshSessionJoinedRooms = new Set<string>()
   let freshSessionRequiresJoinConfirmation = false
+  let uninterruptedResumeMayEmitSyntheticOnline = false
 
   function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
     return (
@@ -126,6 +128,9 @@ export function setupRoomSideEffects(
       return
     }
 
+    const fetchOwner = Symbol(roomJid)
+    roomFetchOwners.set(roomJid, fetchOwner)
+
     // Mark as initiated BEFORE any state updates
     fetchInitiated.add(roomJid)
 
@@ -145,7 +150,12 @@ export function setupRoomSideEffects(
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
+      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+        return
+      }
+
       if (!isRoomFetchStillEligible(roomJid)) {
+        roomFetchOwners.delete(roomJid)
         fetchInitiated.delete(roomJid)
         roomStore.getState().setRoomMAMLoading(roomJid, false)
         if (debug) {
@@ -160,8 +170,17 @@ export function setupRoomSideEffects(
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
       await client.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
+      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+        return
+      }
+      roomFetchOwners.delete(roomJid)
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
+      if (roomFetchOwners.get(roomJid) !== fetchOwner) {
+        return
+      }
+      roomFetchOwners.delete(roomJid)
+
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry
       fetchInitiated.delete(roomJid)
 
@@ -252,7 +271,10 @@ export function setupRoomSideEffects(
     sessionStartTime = Date.now()
 
     freshSessionRequiresJoinConfirmation = true
-    freshSessionJoinedRooms.clear()
+    if (!uninterruptedResumeMayEmitSyntheticOnline) {
+      freshSessionJoinedRooms.clear()
+    }
+    uninterruptedResumeMayEmitSyntheticOnline = false
     fetchInitiated.clear()
 
     if (debug) {
@@ -277,6 +299,10 @@ export function setupRoomSideEffects(
   // empty result) is the durable signal; it's separate from "has resident
   // messages" so a room caught up via live delivery is still covered.
   const unsubscribeResumed = client.on('resumed', () => {
+    // A missing cache marker upgrades this same transport session to full fresh
+    // setup, which emits a synthetic online only after room rejoins can finish.
+    // Keep that next online distinguishable from a later fresh transport session.
+    uninterruptedResumeMayEmitSyntheticOnline = true
     freshSessionRequiresJoinConfirmation = false
     freshSessionJoinedRooms.clear()
 
@@ -304,6 +330,7 @@ export function setupRoomSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
+        uninterruptedResumeMayEmitSyntheticOnline = false
         fetchInitiated.clear()
       }
       previousStatus = status
