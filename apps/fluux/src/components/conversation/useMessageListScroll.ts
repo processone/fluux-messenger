@@ -1671,7 +1671,20 @@ export function useMessageListScroll({
         : null
       let offset: number | null = null
       if (virtualizer) {
-        if (markerIndex === null) return { kind: 'waiting' }
+        if (markerIndex === null) {
+          // An unindexed marker is transient only while the item set is still being
+          // built — then the next frame can resolve it. Once the window HAS rows and
+          // the divider is still absent, it names a message outside the resident
+          // slice (rooms load 100 messages on activation; a read pointer synced from
+          // another device can predate that). No retry can succeed, so `waiting`
+          // would park the list at scrollTop 0 — the oldest loaded message — for the
+          // rest of the visit, with entry's `isAtBottom = false` freezing the read
+          // pointer and counting every later message unread. Terminal instead, so the
+          // controller's live-edge fallback takes over.
+          return virtualizer.itemCount === 0
+            ? { kind: 'waiting' }
+            : { kind: 'unavailable' }
+        }
         offset = virtualizer.getOffsetForMessageId(markerId)
       } else {
         const element = scroller.querySelector(
