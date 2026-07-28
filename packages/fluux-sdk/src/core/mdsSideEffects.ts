@@ -208,6 +208,10 @@ export function setupMdsSideEffects(
    * and MDS positions are forward-only — publishing a wrong one makes every
    * other device adopt it and leaves the real position unrecoverable.
    *
+   * A failed query is not trustworthy even when it is no longer loading and
+   * has not completed before. A later successful merge clears the error and
+   * re-enters the normal completion rules.
+   *
    * An entity that has NEVER been queried is allowed through: a conversation or
    * room created live during the session has no half-downloaded archive to
    * misreport, and gating it would silence read sync for new conversations
@@ -217,6 +221,7 @@ export function setupMdsSideEffects(
     const mam = isRoom(jid)
       ? roomStore.getState().getRoomMAMQueryState(jid)
       : chatStore.getState().getMAMQueryState(jid)
+    if (mam.error !== null) return false
     if (!mam.hasQueried && !mam.isLoading) return true // never queried — nothing partial
     return !mam.isLoading && mam.isCaughtUpToLive
   }

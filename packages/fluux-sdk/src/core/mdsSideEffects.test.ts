@@ -164,7 +164,15 @@ function addConversation(id: string): void {
 }
 
 /** Force a conversation's MAM query state (catch-up gate input). */
-function setConvMamState(cid: string, patch: Partial<{ isLoading: boolean; hasQueried: boolean; isCaughtUpToLive: boolean }>): void {
+function setConvMamState(
+  cid: string,
+  patch: Partial<{
+    isLoading: boolean
+    hasQueried: boolean
+    isCaughtUpToLive: boolean
+    error: string | null
+  }>
+): void {
   chatStore.setState((state) => {
     const next = new Map(state.mamQueryStates)
     next.set(cid, {
@@ -775,6 +783,23 @@ describe('setupMdsSideEffects catch-up gate', () => {
     // must refuse to speak from the now-partial archive.
     setConvMamState(cid, { isLoading: true, hasQueried: true })
     await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('does not publish after a failed first query and recovers after a successful merge', async () => {
+    const { client, cleanup } = await armed()
+    setConvMamState(cid, { error: 'timeout' })
+
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
     chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward')
