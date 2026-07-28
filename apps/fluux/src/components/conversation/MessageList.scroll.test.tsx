@@ -96,6 +96,11 @@ class MockResizeObserver {
   // Helper to trigger resize. Width is optional so existing height-only callers
   // are unaffected (contentRect.width stays undefined → the width branch is inert).
   triggerResize(height: number, width?: number) {
+    // ResizeObserver fires after layout: keep the observed element's live geometry
+    // in sync with the entry instead of leaving jsdom's clientHeight stale.
+    for (const target of this.targets) {
+      Object.defineProperty(target, 'clientHeight', { value: height, configurable: true })
+    }
     this.callback(
       [{ contentRect: { height, width } } as ResizeObserverEntry],
       this
@@ -495,7 +500,10 @@ describe('MessageList scroll behavior', () => {
       Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
       Object.defineProperty(container, 'scrollTop', {
         get: () => scrollTopValue,
-        set: (v) => { scrollTopValue = v; scrollSpy(v) },
+        set: (v) => {
+          scrollSpy(v)
+          scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
+        },
         configurable: true,
       })
 
@@ -738,8 +746,8 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollTop', {
           get: () => scrollTopValue,
           set: (v) => {
-            scrollTopValue = v
             scrollSpy(v)
+            scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
           },
           configurable: true,
         })

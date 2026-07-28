@@ -582,7 +582,11 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     localStorage.clear()
   })
 
-  function instrumentScroller(scroller: HTMLElement, initialHeight: number) {
+  function instrumentScroller(
+    scroller: HTMLElement,
+    initialHeight: number,
+    clampScrollTop = false,
+  ) {
     let scrollHeightVal = initialHeight
     let scrollTopVal = 0
     const scrollTopSets: number[] = []
@@ -591,8 +595,10 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     Object.defineProperty(scroller, 'scrollTop', {
       get: () => scrollTopVal,
       set: (v: number) => {
-        scrollTopVal = v
         scrollTopSets.push(v)
+        scrollTopVal = clampScrollTop
+          ? Math.min(v, scrollHeightVal - scroller.clientHeight)
+          : v
       },
       configurable: true,
     })
@@ -1054,8 +1060,20 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       targets: Element[] = []
       constructor(cb: ResizeObserverCallback) {
         this.cb = cb
-        observers.push({ targets: this.targets, fire: (height: number) =>
-          this.cb([{ contentRect: { height } } as ResizeObserverEntry], this as unknown as ResizeObserver) })
+        observers.push({
+          targets: this.targets,
+          fire: (height: number) => {
+            // ResizeObserver reports post-layout geometry. Mirror that in jsdom so
+            // the live distance-from-bottom check sees the shrunken scrollport.
+            for (const target of this.targets) {
+              Object.defineProperty(target, 'clientHeight', { value: height, configurable: true })
+            }
+            this.cb(
+              [{ contentRect: { height } } as ResizeObserverEntry],
+              this as unknown as ResizeObserver,
+            )
+          },
+        })
       }
       observe(t: Element) { this.targets.push(t) }
       unobserve() {}
@@ -1067,7 +1085,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
         <MessageList messages={makeMessages(50)} conversationId="conv-grow" {...props} />,
       )
       const scroller = container.querySelector('[data-message-list]') as HTMLElement
-      const { grow } = instrumentScroller(scroller, 5000)
+      const { grow } = instrumentScroller(scroller, 5000, true)
       void grow
 
       // Sit at the bottom and let the scroll handler record isAtBottom = true.
