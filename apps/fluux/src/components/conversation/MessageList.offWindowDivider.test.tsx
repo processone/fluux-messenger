@@ -20,6 +20,15 @@
  * The unresolvable case must be terminal so the controller's live-edge fallback
  * takes over.
  *
+ * Both entry orders are covered, because they fail differently. When the slice is
+ * already resident, the executor answers `unavailable` on the first frame. When
+ * the slice lands after entry, the fallback is promoted from inside a rAF frame,
+ * so the live-edge executor it carries was built during the empty entry render —
+ * and a reachability probe that still describes THAT window reports
+ * `empty-window`, parking the promoted execution in `pending` with no frame loop.
+ * Nothing revives it: the refresh effect that would re-drive a parked live edge
+ * ran on the arriving-rows commit, before the fallback existed.
+ *
  * Harness (mocked virtualizer, fake rAF queue, instrumented scroller geometry)
  * mirrors MessageList.pinBottomBehavior.test.tsx. `virt.ready` models the item
  * set being built after entry.
@@ -152,10 +161,12 @@ describe('MessageList — unread divider outside the resident window', () => {
     expect(isAtBottomRef.current).toBe(true)
   })
 
-  // NOTE: the sibling case — an off-window divider when the slice lands AFTER entry
-  // — is still broken and is tracked separately. The marker execution is parked
-  // before its frame loop can observe the arriving rows, so it never reaches the
-  // executor branch this file covers. Fixing it is a controller-level change.
+  it('falls back to the live edge when the divider is outside a slice that lands after entry', () => {
+    const { scroller, isAtBottomRef } = enterThenLoadSlice('room-off-window-late-slice', offWindow)
+
+    expect(scroller.scrollTop).toBe(bottom())
+    expect(isAtBottomRef.current).toBe(true)
+  })
 
   it('still reaches the live edge when entry carries no divider', () => {
     const { scroller, isAtBottomRef } = enterThenLoadSlice('room-no-divider', {})

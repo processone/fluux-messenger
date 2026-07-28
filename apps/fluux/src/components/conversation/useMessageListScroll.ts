@@ -587,6 +587,14 @@ export function useMessageListScroll({
   const reconcileLiveEdgeRef = useRef<(trigger: string) => boolean>(
     () => false,
   )
+  // The resident window as it is NOW, for reachability probes that run outside the render that
+  // created them. Executors capture their scroller and virtualizer through refs already; these
+  // three scalars were the only render-time captures left, so an executor stored by the controller
+  // and consulted a frame later still described the window it was born in. Assigned during render
+  // (like shadowReachabilityRef below) so a probe never has to wait for an effect to catch up.
+  const liveWindowRef = useRef({ messageCount, firstMessageId, windowAtLiveEdge })
+  liveWindowRef.current = { messageCount, firstMessageId, windowAtLiveEdge }
+
   const shadowReachabilityRef = useRef<(desired: DesiredPosition) => ReachabilityFacts>(
     () => ({ kind: 'empty-window' }),
   )
@@ -1059,10 +1067,18 @@ export function useMessageListScroll({
     }
 
     return {
+      // Window facts come from the ref, not this render's props. A live-edge executor can outlive
+      // the render that built it: the unread-marker fallback carries one from entry and promotes it
+      // from inside a rAF frame, long after the cached slice landed. Describing the entry window
+      // there reports `empty-window` for a window that has since filled, which parks the promoted
+      // execution in `pending` with no frame loop — and no later stimulus revives it, because the
+      // refresh effect already ran before the fallback existed. See the ref's declaration.
       reachability: () => deriveReachabilityForDesired({
         desired: { kind: 'live-edge', follow: true },
-        hasRows: messageCount > 0 && firstMessageId !== undefined,
-        windowAtLiveEdge: windowAtLiveEdge !== false,
+        hasRows:
+          liveWindowRef.current.messageCount > 0 &&
+          liveWindowRef.current.firstMessageId !== undefined,
+        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
         virtualizer: virtualizerRef.current,
         scroller: scrollerRef.current,
         loadAround: 'unavailable',
@@ -1236,7 +1252,6 @@ export function useMessageListScroll({
     }
   }, [
     beginControllerFrameLoop,
-    firstMessageId,
     isLoadingNewer,
     lastMessageId,
     messageCount,
