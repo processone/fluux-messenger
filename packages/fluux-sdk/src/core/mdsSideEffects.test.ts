@@ -75,6 +75,18 @@ function seedMeta(cid: string, seenMessageId?: string): void {
   })
 }
 
+/** Patch a conversationMeta entry in place (fires the conversationMeta subscription). */
+function patchMeta(
+  cid: string,
+  patch: Partial<{ readPointer: { messageId: string; timestamp: Date }; unreadCount: number }>
+): void {
+  chatStore.setState((state) => {
+    const newMeta = new Map(state.conversationMeta)
+    newMeta.set(cid, { ...newMeta.get(cid)!, ...patch })
+    return { conversationMeta: newMeta }
+  })
+}
+
 /** Build a RoomMessage (mirrors roomStore.mds.test.ts rmsg helper). */
 function rmsg(room: string, id: string, stanzaId: string, t: number): RoomMessage {
   return {
@@ -455,6 +467,85 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  // #1142: consider() used to commit its de-dup key BEFORE resolving the
+  // stanza-id, so a position that failed to resolve once short-circuited every
+  // later consider() on the equality check and was never published. The key must
+  // mean "this position is handled", not merely "we have seen this position".
+  it('re-considers a 1:1 read position that could not be resolved when it first advanced', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Backgrounded conversation: meta exists, the resident array is evicted
+    // (memory windowing) and there is no lastMessage preview to fall back on.
+    seedMeta(cid)
+    seedMessages(cid, [])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // The read position advances to m2 while nothing can resolve it to a
+    // stanza-id — e.g. the catch-up gate held the advance back and by the time
+    // it lifted the conversation had been backgrounded.
+    patchMeta(cid, { readPointer: pointerAt('m2') })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // A later merge brings m2 into the loaded slice and touches meta (as any
+    // merge does). The SAME position is now resolvable and must be published.
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    patchMeta(cid, { unreadCount: 1 })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+
+    // …and once handled it stays handled: further meta churn must not republish.
+    patchMeta(cid, { unreadCount: 2 })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('re-considers a room read position that could not be resolved when it first advanced', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Backgrounded room: no resident messages, no lastMessage preview.
+    seedRoom(ROOM, [])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: pointerAt('m2') })
+      return { roomMeta: meta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // The room is re-opened: its slice loads and roomMeta changes with it.
+    roomStore.setState((s) => {
+      const runtime = new Map(s.roomRuntime)
+      runtime.set(ROOM, {
+        ...runtime.get(ROOM)!,
+        messages: [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)],
+      })
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, unreadCount: 0 })
+      return { roomRuntime: runtime, roomMeta: meta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
+    cleanup()
+  })
+
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
@@ -670,6 +761,31 @@ describe('setupMdsSideEffects catch-up gate', () => {
     chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  // #1143: the gate is re-checked at FLUSH time, by which point the entry has
+  // already left the coalescer and consider() has marked the position handled.
+  // Dropping it there used to strand it — nothing could ever put it back.
+  it('re-arms a position dropped by the flush-time catch-up gate', async () => {
+    const { client, cleanup } = await armed()
+    setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
+
+    // Enqueued while the archive is trustworthy…
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    // …but a catch-up starts inside the 1500ms debounce window, so the flush
+    // must refuse to speak from the now-partial archive.
+    setConvMamState(cid, { isLoading: true, hasQueried: true })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // The catch-up completes. The SAME position must still be publishable.
+    setConvMamState(cid, { hasQueried: true, isCaughtUpToLive: true })
+    patchMeta(cid, { unreadCount: 1 })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
     cleanup()
   })

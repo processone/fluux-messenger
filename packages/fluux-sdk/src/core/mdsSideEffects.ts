@@ -56,7 +56,11 @@ export function setupMdsSideEffects(
   const dirty = createKeyedCoalescer<string, string>()
   // Highest stanza-id we believe is on the node per JID (seed + our publishes).
   const lastKnownNodeStanzaId = new Map<string, string>()
-  // The read-pointer message id we last considered per JID, to detect advances.
+  // The read-pointer message id we last HANDLED per JID, to detect advances.
+  // "Handled" means the position was resolved to a stanza-id and then either
+  // enqueued or judged not ahead of the node — never merely "seen". A position
+  // that could not be resolved stays out of this map so a later merge retries
+  // it (#1142); recording it would silence the position for good.
   const lastConsideredSeenId = new Map<string, string | undefined>()
   // Seed markers (jid → marker) whose JID was NOT a known room at seed time.
   // The fresh-session seed runs before bookmarks load (roomStore.rooms is empty),
@@ -169,12 +173,24 @@ export function setupMdsSideEffects(
       // Re-check the catch-up gate at FLUSH time, not just at enqueue: the
       // debounce window is long enough for a catch-up to start after the
       // position was buffered, and it is the publish itself that must never
-      // speak from a partial archive. Dropping the entry is safe — the local
-      // pointer lives in localStorage and is re-considered on the next advance
-      // or the next fresh-session seed.
-      if (!archiveIsTrustworthy(jid)) continue
+      // speak from a partial archive.
+      //
+      // Re-arm rather than discard (#1143). The entry has already left the
+      // coalescer via flush() and consider() marked this position handled when
+      // it enqueued, so nothing would ever put it back. Dropping the de-dup key
+      // instead of re-adding to `dirty` avoids clobbering a newer position
+      // buffered during the awaits above: the next meta change re-considers the
+      // CURRENT pointer and re-checks this gate then.
+      if (!archiveIsTrustworthy(jid)) {
+        lastConsideredSeenId.delete(jid)
+        continue
+      }
       const by = stanzaIdBy(jid)
-      if (!by) continue // own JID unknown (should not happen while online) — retry next advance
+      if (!by) {
+        // Own JID unknown (should not happen while online) — same re-arm.
+        lastConsideredSeenId.delete(jid)
+        continue
+      }
       try {
         await client.mds.publishDisplayed(jid, stanzaId, by)
         lastKnownNodeStanzaId.set(jid, stanzaId)
@@ -217,10 +233,20 @@ export function setupMdsSideEffects(
       ? roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
       : chatStore.getState().conversationMeta.get(jid)?.readPointer?.messageId
     if (seenId === lastConsideredSeenId.get(jid)) return
-    lastConsideredSeenId.set(jid, seenId)
 
     const stanzaId = resolveSeenStanzaId(jid)
-    if (!stanzaId) return // no resolvable stanza-id yet → skip (retry on next advance/merge)
+    // No resolvable stanza-id yet: the entity's resident array is evicted and
+    // the pointer doesn't name the lastMessage preview. Leave the de-dup key
+    // UNCOMMITTED so the next meta change re-runs this resolve — committing it
+    // here would make every later call short-circuit on the equality check
+    // above, and the position would never be enqueued nor reach the node
+    // (#1142). The key means "this position is handled", not "we have seen it".
+    if (!stanzaId) return
+
+    // Resolved → handled from here on, whether we enqueue below or decide the
+    // node is already at/ahead of it (a verdict that cannot flip: message order
+    // within a slice is stable).
+    lastConsideredSeenId.set(jid, seenId)
 
     // No regressive publish: only publish if strictly ahead (by message index)
     // of what we believe is already on the node for this JID.
