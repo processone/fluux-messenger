@@ -1,11 +1,12 @@
-# Unread count is one canonical number: sidebar, marker, and FAB badge — acceptance spec
+# Unread count is one canonical number across every numeric surface — acceptance spec
 
 Scope: an addendum to the read-state consolidation design
 ([2026-07-22-read-state-model-consolidation-design.md](2026-07-22-read-state-model-consolidation-design.md)),
 landing inside **PR B** (the count derivation) on top of **B0** (the canonical
 one-row-per-message store). This document fixes the model for **three independent count
-computations feeding four renderings** (sidebar, divider, floating pill, FAB badge) that
-today disagree, and specifies the acceptance tests PR B must pass.
+computations feeding five numeric renderings** (conversation sidebar, room tooltip, divider,
+floating pill, FAB badge) that today disagree, and specifies the acceptance tests PR B must
+pass.
 
 ## The principle
 
@@ -21,9 +22,11 @@ conditions (coverage-incomplete, pointerless-with-count, un-migrated / pending m
 count is derived once (PR B: archive-cursor, coverage-gated, capped — `countUnreadInArchive` /
 the store's `unreadCount`) and every user-visible unread surface renders *that same number*.
 
-**There are four renderings of the one count** — all must show the same value:
+**There are five numeric renderings of the one count** — all must show the same value:
 
-- **Sidebar counter** — the canonical count.
+- **Conversation sidebar counter** — the canonical count.
+- **Room row tooltip** — the canonical count. The room row's unread dot remains a
+  non-numeric presence indicator, and its `@mentionsCount` badge is a separate quantity.
 - **Divider** (`NewMessageMarker`, the in-list "New messages" line) — positioned at the first
   eligible message after the boundary, and it **labels the canonical count** (e.g.
   *"2 new messages"*). It takes no count today (`NewMessageMarker.tsx` — only `provisional`);
@@ -34,9 +37,10 @@ the store's `unreadCount`) and every user-visible unread surface renders *that s
 
 No surface may recount DOM rows or the loaded/resident message array. The current
 `markerUnreadCount` (resident-array length − divider index, `MessageList.tsx`) and
-`countNewBelowViewport` (`unreadBadge.ts`) are **removed**; all four surfaces are fed the one
-canonical count threaded down as a prop, and all four format it through **one shared
-formatter** (see the cap decision below) so identical values render identically.
+`countNewBelowViewport` (`unreadBadge.ts`) are **removed**. The three `MessageList` numeric
+surfaces receive the canonical count as one prop; the conversation counter and room tooltip
+read the same store projection. All five format it through **one shared formatter** (see the
+cap decision below) so identical values render identically.
 
 **The divider live-tracks the boundary, but never moves the reader.** The divider is a true
 canonical-count surface (not a frozen session anchor — this supersedes design decision #4's
@@ -64,10 +68,10 @@ messages below the fold are read, so they contribute nothing to unread.
 
 **Display cap.** The derivation/store caps the value at **999** (design), which bounds the
 cursor early-out. Display is then a single **shared UI formatter** (`formatUnreadCount`) used
-by all four surfaces, so the same value renders identically everywhere; the exact display
+by all five numeric surfaces, so the same value renders identically everywhere; the exact display
 threshold (the design renders `999+`) is the one product-design knob — change the formatter's
 constant, never a per-surface literal. This resolves the earlier `99+`-vs-`999+` split: one
-store cap (999), one formatter, four identical renderings.
+store cap (999), one formatter, five identical numeric renderings.
 
 ## Convergence at the live edge, and the on-arrival pointer precondition
 
@@ -125,10 +129,10 @@ improvise a DOM-row count.
 - **Delete** the `markerUnreadCount` resident-array memo in `MessageList.tsx`.
 - **Thread the canonical count** (`meta.unreadCount` / `room.unreadCount`, PR B's
   pointer-derived value) from `ChatView` / `RoomView` into `MessageList` as a single
-  `unreadCount` prop, and format every rendering through one shared `formatUnreadCount`. **All
-  four surfaces** consume it: the sidebar, the **divider** (`NewMessageMarker` — add a `count`
-  prop; it has none today), the floating **marker pill** (`JumpToLastReadPill count=`), and the
-  **FAB badge**.
+  `unreadCount` prop. Route the **conversation sidebar counter**, **room row tooltip**,
+  **divider** (`NewMessageMarker` — add a `count` prop; it has none today), floating
+  **marker pill** (`JumpToLastReadPill count=`), and **FAB badge** through the shared
+  `formatUnreadCount`.
 - **Divider text is a real acceptance surface** — the tests assert `NewMessageMarker`'s own
   rendered text (e.g. *"2 new messages"*), not only the pill's.
 - **Divider live-tracks the boundary with anchor preservation** — it repositions/clears when the
@@ -272,5 +276,6 @@ viewport signal in `ctx`:
 - Coverage-incomplete → the surfaces keep the last canonical count (`deferred`), never a
   resident/viewport count.
 - The store caps at `999`; the one shared `formatUnreadCount` renders the capped value
-  identically on all four surfaces (sidebar, divider, floating pill, FAB) — assert a large
-  count formats to the same string everywhere, not a per-surface literal.
+  identically on all five numeric surfaces (conversation sidebar, room tooltip, divider,
+  floating pill, FAB) — assert a large count formats to the same string everywhere, not a
+  per-surface literal.

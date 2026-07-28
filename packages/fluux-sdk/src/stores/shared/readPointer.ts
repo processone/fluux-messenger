@@ -41,8 +41,8 @@ export interface ReadPointer {
    * share a millisecond). OPTIONAL, deliberately: a pointer migrated from the
    * pre-#1081 legacy `lastSeenMessageId` + `lastReadAt` pair has only a
    * timestamp and no resolvable message position, so the key is legitimately
-   * absent — counting then falls back to strict-after-timestamp, which
-   * over-counts (the safe direction) rather than under-counts.
+   * absent — counting then falls back to at-or-after-timestamp, which can
+   * over-count the equal-ms set (the safe direction) rather than under-count.
    */
   archiveOrderKey?: ArchiveOrderKey
 }
@@ -122,8 +122,8 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
  * `archiveOrderKey` is validated with {@link isValidArchiveOrderKey} and DROPPED
  * when malformed — storage is untrusted input, so a corrupt key must not ride
  * through verbatim into ordering comparisons. Dropping it alone (keeping the
- * rest of the pointer) is deliberate: it degrades to the strict-after-timestamp
- * fallback, which over-counts rather than under-counts (safe direction),
+ * rest of the pointer) is deliberate: it degrades to the at-or-after-timestamp
+ * fallback, which can over-count rather than under-count (safe direction),
  * without discarding a message id and timestamp that are otherwise fine.
  */
 export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {

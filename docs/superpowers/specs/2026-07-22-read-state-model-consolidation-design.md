@@ -36,10 +36,12 @@ single indexed range walk over the *complete local archive* — exact over what 
 not window-limited (the reconciled PR B design adds a coverage gate so a *partial* local
 archive never overwrites a good count).
 
-The pattern already exists, hand-built for one call site. `applyRemoteDisplayed` runs an
-async exact recount over `MAM_POINTER_RECOUNT_CACHE_LIMIT` cached messages
-(`roomStore.ts`, `chatStore.ts`) *precisely because* the resident slice undercounts. This
-design generalises that one special case and deletes it.
+The pattern already existed, hand-built for one call site:
+`applyRemoteDisplayed` ran an async exact recount over
+`MAM_POINTER_RECOUNT_CACHE_LIMIT` cached messages (`roomStore.ts`, `chatStore.ts`)
+*precisely because* the resident slice undercounts. PR B generalises the count and removes
+that exact-recount block, but keeps the constant's two remaining consumers because they
+feed `recomputeCountsFromPointer`'s pointer-advance path. PR C retires them together.
 
 The resident slice bites in a third place too: `resolveSeenStanzaId`
 (`core/mdsSideEffects.ts`) resolves the pointer's stanza-id from the resident array with a
@@ -70,9 +72,10 @@ therefore in scope, in PR A.
 ## Design decisions (approved)
 
 1. **The count becomes a projection, still persisted.** `unreadCount` stays in the store
-   and stays in persisted meta, but stops being authoritative: the only writer is one
-   `recomputeUnread(entity) = f(floor, archive)`. It is a cache of the derivation, not an
-   accumulator.
+   and stays in persisted meta, but stops being authoritative:
+   `recomputeUnread(entity) = f(floor, archive, transientOverlay)` is its canonical
+   rederivation. The guarded live `+1` and mark-read paths maintain that projection
+   synchronously; they are not independent count sources.
 
    Note this is an *improvement* on today rather than preservation of it: chat counts are
    currently persisted and then zeroed on rehydrate (`unreadCount: 0, // Reset unread on
@@ -136,7 +139,8 @@ interface ReadPointer {
    *   - room: `{ kind: 'room', from, id }` (stanza-id independent)
    *
    * Absent on a migrated pointer that names no trustworthy message — those fall
-   * back to the strict-after-timestamp count.
+   * back to an at-or-after-timestamp count, conservatively recounting the equal-ms
+   * set rather than hiding an unread sibling.
    */
   archiveOrderKey?: ArchiveOrderKey
 }
@@ -212,16 +216,18 @@ Split by testability — the decision logic stays pure and I/O is isolated.
 
 | Module | Purpose | Sync? |
 |---|---|---|
-| `stores/shared/readState.ts` *(new)* | Pure core: `countUnreadInSlice(messages, floor, opts)`, `deriveDivider(messages, floor, opts)`. No I/O. | sync |
+| `stores/shared/readState.ts` *(new)* | Pure core: `compareOrder`, `computeFloor`, defer predicates, the explicit derivation outcome, and the shared renderability export. No I/O. | sync |
 | ~~`stores/shared/readStateArchive.ts`~~ *(superseded)* | The cache-backed exact count instead lands in `messageCache.ts` as `countUnreadInArchive` — the DB handle, compound index, and stored-message deserialization already live there. See the reconciled PR B design. | async |
-| `stores/shared/notificationState.ts` *(shrinks)* | Keeps arrival / notify / badge logic. Loses `recomputeCountsFromPointer`, `onActivate`'s fallback ladder, `onMarkAsRead`'s `advanceSeenTo`. | sync |
+| `stores/shared/notificationState.ts` *(shrinks in PR C)* | PR B keeps `recomputeCountsFromPointer` for pointer/guard effects but discards its count output; PR C removes it and the remaining fallback ladder. | sync |
 
 ## Data flow
 
-**One recompute entry point.** `recomputeUnread(entityId)` is the sole *authoritative*
-writer of `unreadCount` / `mentionsCount`. (This is the end state, after PR C. Through PR B,
-`recomputeCountsFromPointer` still writes a provisional count that `recomputeUnread`
-immediately overwrites — see the reconciled PR B design for that two-phase intermediate.)
+**One unread recompute entry point.** In the end state after PR C,
+`recomputeUnread(entityId)` is the sole authoritative archive-derived writer of
+`unreadCount`. Through PR B, the renderability-guarded live `+1` and explicit mark-read paths
+also update that projection synchronously; `recomputeCountsFromPointer` remains only for its
+pointer/guard effects, and every call site discards its count output. `mentionsCount` is not
+archive-derived; see [Mention counts remain live-only](#mention-counts-remain-live-only).
 Triggers:
 
 - rehydrate / app start (batched, per entity)
@@ -229,23 +235,25 @@ Triggers:
 - a pointer advance (any of the four writers)
 - an inbound XEP-0490 marker that advanced the pointer
 - a deferred-decrypt drop or retraction that changes what is countable
+- a transient-overlay mutation that changes the projection
 
-Per-entity latest-wins coalescing via the existing `createKeyedCoalescer`. The persisted
-count paints immediately on cold start, so the async correction is invisible.
+Per-entity recount versions enforce latest-wins commits. The persisted count paints
+immediately on cold start, so the async correction is invisible.
 
-**The one fast path, and why it is safe.** A live incoming message while the entity is not
-visible still takes a synchronous `+1` — no DB round-trip per message. This is legitimate
-*only* because it yields exactly what the derivation would: the message is after the
-floor, non-outgoing, and renderable. That last clause is a real fix, not bookkeeping — the
-increment path today accepts messages the archive count would reject, which is the
-mechanism behind the E2EE phantom-badge class. Both paths call the same
-`isRenderableStoredMessage` predicate, so they cannot drift.
+**The one fast path, and why it is safe.** A live incoming message that is not
+demonstrably read at the live edge still takes a synchronous `+1` — no DB round-trip per
+message. This is legitimate only when it matches the projection: the message is after the
+floor, non-outgoing, and renderable. A `noLocalStore` message is also recorded in the
+position-aware transient overlay because it will never appear in the archive walk. Both
+the fast path and archive cursor call the same `isRenderableStoredMessage` predicate, so
+they cannot drift.
 
-**The divider stops being a special case.** Activation loads around the pointer's
-timestamp (`loadMessagesAroundFromCache` already exists), then places the divider by
-timestamp comparison inside the slice. Decision 4 needs no new machinery:
-`resolveRemoteDisplayed`'s `advanced-with-divider` kind is deleted and both active and
-inactive entities return `advanced`. Not touching the divider *is* the implementation.
+**The divider follows the boundary without moving the reader.** PR B keeps
+`resolveRemoteDisplayed`'s `advanced-with-divider` result as the signal to rederive the
+active entity's `firstNewMessageId`; inactive entities rederive on activation. The app
+continuously maintains a visible-message anchor and restores its pixel offset before paint
+when the divider moves or disappears. PR C may collapse the special result only after the
+divider derives directly from the boundary.
 
 **Publish path.** `resolveSeenStanzaId` resolves via the cache instead of
 resident-slice-plus-`lastMessage`-fallback, closing its silent `return undefined` drop.
@@ -260,8 +268,8 @@ This is where the payoff is.
 | `onActivate`'s fallback ladder — `lastReadAt` branch, Nth-from-end branch, brand-new-conversation branch, resume-preserving snap (~120 lines) | All of it exists because the pointer could not resolve in the resident slice |
 | `onMarkAsRead`'s `advanceSeenTo` parameter | Mark-read becomes a first-class pointer writer, not an optional side channel |
 | `onMessageSeen`'s `currentIdx === -1` guard + `atLiveEdge` escape hatch | There is no unresolvable pointer any more |
-| `MAM_POINTER_RECOUNT_CACHE_LIMIT` + both stores' async exact-recount blocks | This was already the general derivation, hand-built for one call site |
-| `resolveRemoteDisplayed`'s `advanced-with-divider` kind | Decision 4 |
+| `MAM_POINTER_RECOUNT_CACHE_LIMIT` + its two remaining consumers | PR C retires these with `recomputeCountsFromPointer`; PR B keeps them because they still feed its non-resident pointer-advance path |
+| `resolveRemoteDisplayed`'s `advanced-with-divider` kind | PR C can collapse this once the divider derives directly from the boundary; PR B still uses it to update the active divider without scrolling the reader |
 | the `treatDelayedAsNew` option, everywhere | Moot once the floor is a timestamp: a delayed message timestamped after the floor simply *is* new. It only existed to paper over id-position comparison, and both stores already pass `true` |
 | `apps/fluux/src/utils/newMessagesMarker.ts` + its test | Dead code — referenced only by its own test file |
 
@@ -290,21 +298,26 @@ PR B design: the store writes only on an `exact` outcome). A zero badge produced
 read would be indistinguishable from "you are caught up" — the same shape as the B3
 false-"compromised" defect in the OpenPGP work.
 
-**Unresolvable floor degrades toward more unread, not less.** Pointer message absent from
-the cache → fall back to `historyFloor`; neither present → count nothing rather than
-everything. Every fallback in this design leans the same way: over-counting is a nuisance
-the user clears by reading, while over-advancing the pointer destroys data permanently.
+**An unresolved floor degrades toward more unread, not less.** A persisted pointer without
+an `archiveOrderKey` counts at-or-after its timestamp, conservatively recounting that
+same-millisecond set. No pointer and no trustworthy `historyFloor` defers instead of
+inventing a zero. Every fallback in this design leans the same way: over-counting is a
+nuisance the user clears by reading, while over-advancing the pointer destroys data
+permanently.
 
 **Cap at 999 with cursor early-out**, so an entity with a huge unread range cannot turn
 the walk into a stall. The store holds the capped value; the badge renders `999+`.
 
-**Mention flags are frozen at ingest — carried over, not introduced.** `isMention` is
-computed against the room nickname at the time the message arrives and is persisted with
-the message, so a derived `mentionsCount` inherits whatever was decided then (a nick
-change does not retroactively re-flag history, and MAM-backfilled ranges carry whatever
-the ingest path assigned). `recomputeCountsFromPointer` already reads the same stored
-flags, so this is unchanged behaviour, noted here so it is not mistaken for a regression
-of this work.
+### Mention counts remain live-only
+
+PR B derives `unreadCount` only. Archive recounts never write `mentionsCount`: `isMention`
+is classified only on the live stanza path, while MAM rows do not reconstruct it, so an
+archive scan would report zero for offline-arrived mentions and could erase a correct
+live-counted value. The archive primitive therefore has no mention result, completeness
+flag, or mention scan cap. The live path continues to maintain `mentionsCount`, explicit
+read/mark-read clears it, and `mergeRoomRows` ORs `isMention` independently of content
+ownership so an unflagged copy cannot erase established evidence. Trustworthy archive
+derivation is deferred until mention classification is persisted at ingest.
 
 ## Testing
 
@@ -323,8 +336,8 @@ Regression tests map to actual bug modes, not to functions:
   falls to the timestamp branch and drifts.)*
 - MUC message with misattributed `isOutgoing` → pointer does not move.
 - Fresh join of a room with a deep archive → zero unread, pointer untouched.
-- Remote marker ahead while the entity is active → pointer advances, divider does not
-  move.
+- Remote marker ahead while the entity is active → pointer and divider advance while the
+  reader's visible-message pixel offset stays fixed.
 - Migration from a `lastReadAt`-only entity → resolves at-or-behind the true position,
   never ahead.
 - Failed cache read → persisted count preserved, never zeroed.
@@ -367,10 +380,11 @@ It also retires the existing "double row in the raw cache" edge at its source.
 
 **PR B — the derivation.** See the reconciled design below — the original sketch here
 (`readStateArchive.ts`, "deletes `recomputeCountsFromPointer`") predated PR A and no longer
-holds. In short: the count becomes exact over the complete local archive via a new
-`messageCache` primitive; the
+holds. In short: the count becomes the exact, coverage-gated archive count plus a
+position-aware overlay for messages that are never archived; the archive primitive lives
+in `messageCache`, while the
 pure floor/predicate logic lives in `readState.ts`; `recomputeCountsFromPointer` stays as
-the provisional count and pointer writer (its count output is ignored). PR B **changes
+a pointer/guard writer whose count output is ignored. PR B **changes
 where the count comes from**; PR C removes the pointer writes.
 
 **PR C — the writers.** Pointer reduced to the four writers; `onActivate`'s ladder
@@ -395,12 +409,12 @@ new derivation. A `recomputeUnreadForConversation` scaffold and two slice-limite
 those, it does not add a parallel mechanism.
 
 **Decision — the PR B/C boundary.** PR B changes *where the count comes from*; PR C removes
-the pointer writes. `recomputeCountsFromPointer` stays exactly as-is through PR B — still
-writing the pointer, still carrying the guards — but its count *output* is ignored once the
-archive derivation lands. This keeps the two PRs cleanly separable (B = the count source, C
-= the pointer writers) and never relocates the data-loss guards in the same step that
-changes the count model. PR C then deletes the function; by then only its pointer-writes
-remain to remove.
+the pointer writes. `recomputeCountsFromPointer` keeps its pointer-writing role and guards
+through PR B (while accepting the kind/order metadata needed by the consolidated model),
+but its count output is ignored at every call site. This keeps the two PRs cleanly separable
+(B = the count source, C = the pointer writers) and never relocates the data-loss guards in
+the same step that changes the count model. PR C then deletes the function; by then only
+its pointer writes remain to remove.
 
 *One scoped exception, acknowledged.* PR B **tightens the precondition on one existing
 writer** — the on-arrival advance in `onMessageReceived` — gating it on a real
@@ -468,8 +482,8 @@ row = one position, and everything below needs no dedup:
   cursor compares each entry's `(timestamp, from, id)` against the pointer's
   `(timestamp, archiveOrderKey)` and counts renderable non-outgoing entries strictly after
   it, so `m2` is counted. When the pointer has no `archiveOrderKey` (a migrated `lastReadAt`),
-  fall back to strict-after-timestamp — over-counts there (safe), and the tie edge is moot
-  because `lastReadAt` is not a message's exact position.
+  fall back to at-or-after-timestamp — this can recount the equal-ms set, which over-counts
+  in the safe direction.
 - **The order key must be persisted on the pointer, not recovered from memory.** The whole
   reason the count exists is that a backgrounded entity's resident array is *evicted* — so
   "locate the pointer by the resident message's fields" fails exactly when it is needed, and
@@ -533,7 +547,7 @@ fresh entity correctly stays zero). This subsumes the un-migrated case without d
 registry membership.
 
 **The derivation returns an explicit outcome, not a count-or-not.** `recomputeUnread`
-resolves to `{ kind: 'exact', unread, mentions } | { kind: 'deferred' } | { kind:
+resolves to `{ kind: 'exact', unread } | { kind: 'deferred' } | { kind:
 'unavailable' }`. The store writes the count **only on `exact`**. `deferred` (coverage not
 trustworthy, or pointerless-with-count, or un-migrated / pending marker) and `unavailable`
 (IndexedDB error / cache absent) both leave the persisted count untouched — there is no
@@ -545,15 +559,16 @@ later trigger.
 
 | Module | Purpose | Sync? |
 |---|---|---|
-| `messageCache.ts` *(+2 fns)* | `countUnreadInArchive(conversationId, {pointer, floor, cap})` and a room twin `countRoomUnreadInArchive` returning `{unread, mentions}`. A cursor from the floor timestamp forward — chat over `conv_timestamp`, room over the `room_ts_from_id` index B0 added — counting `!isOutgoing && isRenderableStoredMessage` strictly after the pointer's **position** in `(timestamp, orderKey)` order (matching the row's stable `(from, id)` / `id` against the pointer's persisted `archiveOrderKey`; strict-after-timestamp fallback when it is absent), early-out at `cap` (999). No dedup — B0 guarantees one row per logical message. Only touches the index range at/after the floor → O(unread)-capped over the *local* archive. A cursor, not `index.count()`, which can neither filter nor honor the tiebreak. | async |
+| `messageCache.ts` *(+2 fns)* | `countUnreadInArchive(conversationId, {pointer, floor, cap})` and a room twin `countRoomUnreadInArchive` returning `{unread}` only. A cursor from the floor timestamp forward — chat over `conv_timestamp`, room over the `room_ts_from_id` index B0 added — counting `!isOutgoing && isRenderableStoredMessage` strictly after the pointer's **position** in `(timestamp, orderKey)` order (matching the row's stable `(from, id)` / `id` against the pointer's persisted `archiveOrderKey`; at-or-after-timestamp fallback when it is absent), early-out at `cap` (999). No dedup — B0 guarantees one row per logical message. Only touches the index range at/after the floor → O(unread)-capped over the *local* archive. A cursor, not `index.count()`, which can neither filter nor honor the tiebreak. It does not scan mentions; see [Mention counts remain live-only](#mention-counts-remain-live-only). | async |
 | `stores/shared/readState.ts` *(new, pure)* | `computeFloor(pointer, historyFloor)`; the derivation's outcome + defer logic (`exact | deferred | unavailable`, and the coverage / pointerless-with-count / un-migrated / pending-marker defer conditions); the `(timestamp, archiveOrderKey)` comparator used by the resident sort and the count; re-exports the single `isRenderableStoredMessage` predicate that both the cache walk and the live `+1` path use, so they cannot drift. | sync |
 | `chatStore` / `roomStore` | `recomputeUnreadForConversation` rewritten to gate on coverage, compute the floor (pure), call `countUnreadInArchive`, and write the count **only on an `exact` outcome**; a new parallel `recomputeUnreadForRoom` (rooms inline their recount today). | async |
 
-**Data flow — two-phase.** At every count-writing site: (1) `recomputeCountsFromPointer`
-runs unchanged, writing an immediate **provisional** count (no flash) and advancing the
-pointer; (2) a trigger schedules `recomputeUnread(entity)`, which reads the now-current
+**Data flow — guarded pointer pass, then derivation.** At every legacy call site:
+(1) `recomputeCountsFromPointer` runs for its pointer advance and data-loss guards, but its
+`unreadCount` and `mentionsCount` outputs are discarded; (2) a trigger schedules
+`recomputeUnread(entity)`, which reads the now-current
 pointer, checks coverage, computes the floor, calls `countUnreadInArchive`, and — **only on
-an `exact` outcome** — overwrites the provisional count with the archive-derived one; a
+an `exact` outcome** — commits the archive-derived unread plus the transient overlay; a
 `deferred` or `unavailable` outcome leaves the persisted count in place. Triggers: cold-start
 rehydrate (batched per entity — typically `deferred` under the coverage gate until catch-up
 runs, which is the point), a forward MAM merge past the floor, a pointer advance or inbound
@@ -590,54 +605,13 @@ production caller but *is* exported from `index.ts`, so the wrong version sits o
 public surface. PR B deletes it (and its export) in favour of `computeFloor`, so no reader —
 inside or outside the SDK — can pick it up.
 
-**Decision — one canonical count, FOUR surfaces; the FAB is decomposed.** The unread count
-PR B derives is the *only* unread number in the UI. Today it is computed independently in
-three places: the sidebar reads the store `unreadCount`, the marker pill recounts the resident
-array (`markerUnreadCount = residentLength − dividerIndex`), and the FAB badge runs a third
-resident-array derivation (`countNewBelowViewport` in `unreadBadge.ts`) that ticks down
-relative to the pointer. PR B collapses them onto the single pointer-derived count and
-**deletes** `unreadBadge.ts`/`countNewBelowViewport` and the `markerUnreadCount` memo. The one
-count is rendered by **four** surfaces, all through one shared `formatUnreadCount`: the
-sidebar, the **divider** (`NewMessageMarker`, which takes no count today — PR B adds one and
-tests its text), the **floating marker pill** (`JumpToLastReadPill`), and the **FAB badge**.
-
-The FAB has three *separate* properties and only visibility is viewport-driven:
-
-- **FAB visibility** — viewport / sliding-window driven (away from the bottom). Unchanged.
-- **FAB badge** — the canonical count; `0` ⇒ no badge even while the FAB shows. Not a
-  "messages below the viewport" number — scrolling never redefines unread.
-- **FAB action** — two-step, **marker-geometry driven, not count driven**: the first click
-  goes to the divider only when the divider is still *below* the viewport
-  (`markerOffset > viewportBottom`, as `useMessageListScroll.ts` already implements); when it
-  is on-screen or above, or absent, the click goes straight to the bottom — even with unread
-  present. A non-zero count does not choose the destination.
-
-The divider/marker is *positioned* at the first eligible message after the **effective read
-boundary** — `computeFloor(readPointer, historyFloor)` (the pointer's position when present,
-else `historyFloor`), not the pointer alone — and *labels* the canonical count. It
-**live-tracks** that boundary (superseding decision #4's freeze) and repositions/clears when a
-remote marker advances the pointer, **preserving the reader's pixel offset** via the
-content-anchor mechanism (no visual scroll). **Eligible** = incoming + renderable; delayed
-messages are included (a delayed message after the boundary is unread — the design removes
-`treatDelayedAsNew`). The store caps at `999` and the shared formatter owns the single display
-cap. Two coupled behavior changes follow: (1) the active-conversation force-zero of
-`unreadCount` is removed; and (2) the on-arrival pointer advance in `onMessageReceived` is gated
-on a **real viewport-at-live-edge** signal (unknown/stale ⇒ conservatively not-at-edge) — a
-scoped precondition-tightening on an existing writer, not a new one (see the B/C-boundary note
-above). That signal is held in an **SDK-owned runtime state keyed by entity and activation
-generation** (`unknown | at-edge | away`): activating an entity synchronously creates a new
-generation initialized to `unknown`; the app reports measured viewport state through an explicit
-SDK action carrying that generation, and **late reports from older generations are ignored**. The
-UI's `isAtBottomRef` may remain a boolean internal to scroll mechanics — it is not the semantic
-evidence, and the SDK does not import `apps/fluux`. `onMessageReceived` advances only when the
-current entity's current-generation evidence is explicitly `at-edge`. Together: the count is
-pointer-driven for active conversations, reaching `0` only when
-the reader is genuinely at the live edge, so an active-but-scrolled-up conversation shows the
-real count and a message arriving there stays unread. Coverage-incomplete still `defers` (keeps
-the last canonical count) and never substitutes a viewport/resident count. Full property model
-and the nine
-acceptance tests:
-[2026-07-23-read-state-unread-count-single-source-acceptance.md](2026-07-23-read-state-unread-count-single-source-acceptance.md).
+**Decision — one canonical count across every numeric surface.** The
+[single-source acceptance addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md)
+is authoritative for the surface inventory, shared formatter, FAB
+visibility/badge/action split, live-tracking divider with anchor preservation, removal of the
+active-conversation force-zero, and generation-scoped viewport-evidence contract. PR B
+deletes the resident/viewport count derivations; later documentation should point to that
+addendum rather than restating its UI behavior here.
 
 **PR B0 task order** (the precursor). New canonical room key + `room_ts_from_id` index on a
 fresh object store → the upgrade that copies existing rows into it, merging duplicate
@@ -654,17 +628,19 @@ and round-trip tests) → resident-sort tiebreak in `messageArrayUtils` (isolate
 `test:scroll`-gated, lands before anything depends on the shared order) → cache primitive
 (count-after-position, coverage-gated) → chat `recomputeUnread` rewrite + coverage gate +
 triggers → room `recomputeUnreadForRoom` + triggers → `+1` renderability guard → delete the
-now-dead slice-limited recount internals (and `MAM_POINTER_RECOUNT_CACHE_LIMIT` if nothing
-else uses it) → **single-source the UI count**: remove the active-conversation force-zero **and
+now-dead exact-recount block while retaining `MAM_POINTER_RECOUNT_CACHE_LIMIT` for its two
+remaining pointer-path consumers until PR C → **single-source the UI count**: remove the
+active-conversation force-zero **and
 gate the on-arrival pointer advance (`onMessageReceived`) on an SDK-owned, entity+activation-generation
 viewport-evidence state (`unknown | at-edge | away`)** — activation synchronously starts a new
 generation at `unknown`, the app reports via an explicit SDK action carrying its generation, late
 reports from older generations are ignored, and the advance fires only on current-generation
 `at-edge` (the UI `isAtBottomRef` stays a boolean internal to scroll mechanics; scoped
-precondition-tightening, not a new writer), thread the canonical `unreadCount` into `MessageList` as one prop, render all four
-surfaces — sidebar, divider (`NewMessageMarker`, add a `count` prop, **live-track the boundary
-with content-anchor preservation**), floating pill (`JumpToLastReadPill`), FAB badge — through one
-shared `formatUnreadCount`, delete `unreadBadge.ts`/`countNewBelowViewport` and the
+precondition-tightening, not a new writer), thread the canonical `unreadCount` into
+`MessageList` as one prop, route every numeric surface named in the
+[acceptance addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md) through one
+shared `formatUnreadCount`, live-track the divider boundary with content-anchor preservation,
+delete `unreadBadge.ts`/`countNewBelowViewport` and the
 `markerUnreadCount` memo (leave the geometry-driven two-step action in `useMessageListScroll.ts`
 untouched), and rewrite `MessageList.fab.test.tsx` + add the nine acceptance tests, `test:scroll`
 gate for the anchor-preservation and divider-move cases (see [the acceptance spec](2026-07-23-read-state-unread-count-single-source-acceptance.md)).

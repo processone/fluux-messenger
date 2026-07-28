@@ -47,7 +47,7 @@ export interface OrderPosition {
  * Total order over archive positions: timestamp first, then the kind-aware
  * tie-break key. A missing key sorts BEFORE a present one at an equal
  * timestamp — unresolved sorts first, which under-advances rather than
- * over-advances (under-counting unread is the recoverable direction).
+ * over-advances (over-counting unread is the recoverable direction).
  */
 export function compareOrder(a: OrderPosition, b: OrderPosition): number {
   if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp

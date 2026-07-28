@@ -4,7 +4,7 @@
  * Read-state PR B, Task 12 — acceptance scenarios 1-7 from
  * docs/superpowers/specs/2026-07-23-read-state-unread-count-single-source-acceptance.md,
  * implemented verbatim at the MessageList component boundary: every numeric surface
- * (sidebar excluded here — see ConversationList.badge.test.tsx / RoomsList.tooltip.test.tsx)
+ * (sidebar excluded here — see ConversationList.badge.test.tsx / roomTooltip.test.ts)
  * renders the ONE canonical `unreadCount` prop through the shared `formatUnreadCount`, and
  * scrolling never changes it.
  *
