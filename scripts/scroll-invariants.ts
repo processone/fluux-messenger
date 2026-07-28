@@ -2310,16 +2310,17 @@ test.describe('Fastening stick diagnostic (1:1)', () => {
 test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
   const AVA = 'ava@fluux.chat'
 
-  // End-to-end sanity for the reported sequence: an incoming message, its preview card, and a
-  // reaction landing in quick succession must leave the list stuck to the bottom, with no user
-  // movement anywhere.
+  // SCOPE: a burst of successive in-place changes on the same row — the message, then its preview
+  // card, then a reaction — must leave the list stuck to the bottom, with no user movement anywhere.
+  // What it demonstrates is that the ACTIVE pin loop absorbs them as they land.
   //
-  // NOTE ON SCOPE: this does NOT guard the deferral path specifically. Staging that needs the
-  // preview to commit while the message's pin loop still holds its claim, and the loop converges
-  // faster than emits can be interleaved from here — the test passes with and without the
-  // carry-the-earliest-deferral fix. The invariant itself is pinned by carryDeferral's unit test,
-  // which does break-check. Do not treat a green run here as covering that path.
-  test('an incoming message, its preview and a reaction in quick succession leave the list pinned', async ({ page }) => {
+  // What it does NOT cover: a growth skipped because a pin loop still claimed the bottom. There is
+  // no second chance for such a growth — nothing re-runs the effect for a consumed signature — so
+  // waiting longer here proves nothing and would only imply a recovery that does not exist. Staging
+  // that case is not possible from here anyway: it needs the preview to commit while the loop still
+  // holds its claim, and the loop converges in ~130ms, faster than emits can be interleaved. The gap
+  // is documented on rowGrowthDecision and pinned by its unit test.
+  test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
@@ -2328,10 +2329,9 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     const url = `https://example.invalid/${id}`
 
     // The whole sequence runs INSIDE the page: a Playwright round-trip is far longer than the pin
-    // loop's convergence, so emitting these from separate evaluate() calls lets the loop finish and
-    // release its claim, and nothing is ever deferred. Emitted together, the preview lands while the
-    // incoming message's pin loop still holds the claim — the deferral this test is about — and the
-    // reaction follows as a NEWER row-growth signature before that claim lapses.
+    // loop's convergence, so emitting these from separate evaluate() calls spaces them out beyond
+    // anything a real client would produce. In-page they arrive in the burst this is meant to cover
+    // — message, then its preview, then a reaction on the same row.
     await page.evaluate(async ([j, i, u]) => {
       const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2343,8 +2343,8 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
           timestamp: new Date(), isOutgoing: false,
         },
       })
-      // Separate ticks, or React batches all three into ONE signature change and the
-      // newer-signature-cancels-pending-retry sequence never happens.
+      // Separate ticks, or React batches all three into ONE render and this collapses into a single
+      // row-growth signature change — which is not the sequence under test.
       await wait(30)
       c.emitSDK('chat:message-updated', {
         conversationId: j, messageId: i,
@@ -2365,8 +2365,10 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
     }, [AVA, id, url] as const)
     await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
 
-    // Well past the pin claim's stale window, so any deferred retry has had its chance.
-    await page.waitForTimeout(2_500)
+    // A normal settle, matching the sibling fastening tests. Deliberately NOT the claim's stale
+    // window: no re-pin is owed after that window, so a longer wait would suggest a second chance
+    // the implementation does not offer.
+    await page.waitForTimeout(600)
 
     const state = await page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -2381,7 +2383,7 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
 
     expect(
       state.distFromBottom,
-      `list stranded after preview+reaction — distFromBottom=${state.distFromBottom}`,
+      `list not pinned after the message+preview+reaction burst — distFromBottom=${state.distFromBottom}`,
     ).toBeLessThan(AT_BOTTOM_OK_PX)
     expect(state.visible, 'the fastened message was left below the fold').toBe(true)
   })
