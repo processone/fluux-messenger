@@ -37,17 +37,21 @@ catch-up of the active room during a fresh session. The successful
 Because the hydrated snapshot also carries `joined=true`, the store flag alone
 cannot distinguish preserved SM state from a join confirmed in the new stream.
 `setupRoomSideEffects` will therefore keep a session-local set of room JIDs
-whose successful `room:joined` event has been observed. A fresh `online` event
-enables this confirmation gate and clears the set. A `resumed` event disables
-the gate because SM preserves membership without new joins.
+whose successful `room:joined` event has been observed. A genuine fresh
+transport `online` event enables this confirmation gate and clears the set. A
+`resumed` event disables the gate because SM preserves membership without new
+joins; the uninterrupted synthetic-online exception is described below.
 
 The `online` handler in `setupRoomSideEffects` will continue to:
 
 - record `sessionStartTime`, preserving the catch-up boundary used to avoid
   skipping an offline gap when live messages arrive during synchronization;
-- clear `fetchInitiated`, so every fresh session can catch up rooms again;
-- clear the session-local confirmed-room set and require a new successful
-  `room:joined` event before room MAM can start.
+- on a genuine fresh transport session, clear `fetchInitiated` and the
+  session-local confirmed-room set so a new successful `room:joined` event is
+  required before room MAM can start;
+- on the uninterrupted post-resume synthetic `online`, preserve both
+  resume-seeded fetch tracking and join confirmations already observed during
+  full fresh setup.
 
 It will no longer call `fetchMAMForRoom` for the active room.
 
@@ -77,7 +81,7 @@ is no longer online, it will clear the loading state, remove the room from
 `fetchInitiated`, and return. This closes the leave/disconnect race during the
 asynchronous cache read and leaves the room retryable.
 
-The resulting fresh-session flow is:
+The resulting genuine fresh-transport flow is:
 
 ```text
 online
@@ -99,9 +103,12 @@ lifecycle work. If the cache-integrity marker is missing, that same transport
 session is upgraded to full fresh setup: rooms may rejoin and emit
 `room:joined` before `SessionLifecycle` emits its synthetic `online`.
 `setupRoomSideEffects` privately remembers that the next uninterrupted
-post-resume `online` may be synthetic and preserves join confirmations already
-observed during setup. Any transition away from `online` cancels that marker,
-so a later genuine fresh transport session clears confirmations as usual.
+post-resume `online` may be synthetic and preserves both join confirmations
+already observed during setup and `fetchInitiated` entries seeded by the
+successful resume. Any transition away from `online` cancels that marker, so a
+later genuine fresh transport session clears both sets as usual. Preserving
+resume-seeded tracking is required for an archive-held active room: clearing it
+would allow a later join event to issue a duplicate foreground MAM query.
 
 Each asynchronous foreground room catch-up also receives a private per-room
 owner identity when it starts. After cache hydration, after MAM completion,
@@ -157,6 +164,8 @@ Add race coverage for:
 - the connection dropping while its cache read is pending;
 - the active room changing while its cache read is pending.
 - an uninterrupted `resumed → room:joined → synthetic online` upgrade;
+- an uninterrupted post-resume synthetic `online` retaining archive-held
+  fetch tracking, while a later genuine fresh session clears it;
 - an older cache attempt resolving after a fresh-session retry owns the room;
 - an older cache failure attempting cleanup after that replacement starts.
 

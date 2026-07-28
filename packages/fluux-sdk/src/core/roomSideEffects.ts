@@ -144,8 +144,8 @@ export function setupRoomSideEffects(
 
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
-      // before deciding the MAM query direction. Without this, the 'online'
-      // handler races with the conversation subscriber's cache load, and
+      // before deciding the MAM query direction. Without this, a foreground
+      // trigger can race with the active-room subscriber's cache load, and
       // room.messages may be empty — causing a backward "before:''" query
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
@@ -264,7 +264,8 @@ export function setupRoomSideEffects(
   )
 
   // Fresh sessions require a self-presence confirmation before room MAM starts.
-  // 'online' fires only on fresh sessions (not SM resumption).
+  // A missing-marker upgrade can also emit a synthetic 'online' after 'resumed';
+  // that uninterrupted path must retain resume-seeded fetch tracking.
   const unsubscribeOnline = client.on('online', () => {
     // Record the session start before any catch-up so the forward cursor excludes
     // live messages that arrive after reconnect (silent-gap fix).

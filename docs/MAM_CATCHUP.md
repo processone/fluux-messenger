@@ -71,8 +71,20 @@ Triggered by side effects when the user opens a conversation or room.
 
 - If the conversation/room has cached messages: forward query from the newest cached timestamp.
 - If no cached messages: backward query for recent history.
-- Also triggered on reconnect for the currently active conversation/room.
-- Triggered when MAM support is discovered for the active room (room MAM discovery can be asynchronous).
+- On a fresh session, the active room may display hydrated cache immediately,
+  but it waits for successful self-presence (`room:joined`) in that session
+  before querying its archive.
+- A successful SM resume trusts preserved room membership and does not repeat
+  foreground MAM for an archive already held locally. A room whose archive has
+  never been held remains eligible on first open or late MAM discovery.
+- The active-room catch-up revalidates room, join, and connection state after
+  cache hydration; a superseded attempt cannot query MAM or clear its
+  replacement's tracking.
+- MAM support discovered asynchronously can trigger the active-room fetch only
+  after the same session/join eligibility checks pass.
+
+The detailed fresh-session, SM-resume, and cache-hydration invariants are owned
+by the [confirmed-join design](superpowers/specs/2026-07-27-room-mam-after-join-design.md).
 
 ## Deduplication
 
@@ -97,7 +109,7 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 |------|------|
 | `packages/fluux-sdk/src/core/modules/MAM.ts` | MAM query methods, preview refresh, catch-up, roster discovery |
 | `packages/fluux-sdk/src/core/backgroundSync.ts` | Orchestrates all background sync stages on connect |
-| `packages/fluux-sdk/src/core/sideEffects.ts` | Lazy loading triggers: conversation switch, reconnect |
+| `packages/fluux-sdk/src/core/chatSideEffects.ts` and `roomSideEffects.ts` | Active conversation/room cache and MAM triggers |
 | `packages/fluux-sdk/src/utils/concurrencyUtils.ts` | `executeWithConcurrency()` utility |
 | `packages/fluux-sdk/src/core/modules/MAM.catchup.test.ts` | Tests for catch-up and discovery methods |
 | `packages/fluux-sdk/src/core/sideEffects.test.ts` | Tests for side-effect wiring |
@@ -122,6 +134,12 @@ Connect / Reconnect
 ├─ User opens conversation
 │  └─ fetchMAMForConversation()                  ← on demand, forward query
 │
-└─ User opens room
-   └─ fetchMAMForRoom()                          ← on demand, forward query
+├─ Fresh-session self-presence for active room
+│  └─ fetchMAMForRoom()                          ← after cache + eligibility checks
+│
+├─ Successful SM resume
+│  └─ trust membership; skip held room archive
+│
+└─ User opens eligible room
+   └─ fetchMAMForRoom()                          ← on demand, cache first
 ```
