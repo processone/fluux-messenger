@@ -649,6 +649,85 @@ describe('setupBackgroundSyncSideEffects', () => {
       loadSpy.mockRestore()
       roomStore.getState().reset()
     })
+
+    it('catches up an excluded room that confirms join after becoming inactive', async () => {
+      roomStore.getState().reset()
+      const roomJid = 'late-join@conference.example.com'
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: roomJid,
+        nickname: 'me',
+        joined: true,
+        supportsMAM: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+      roomStore.getState().setActiveRoom(roomJid)
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      await vi.advanceTimersByTimeAsync(10_000)
+      roomStore.getState().setActiveRoom(null)
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      roomStore.getState().reset()
+    })
+
+    it('retains the resume boundary across synthetic online', async () => {
+      roomStore.getState().reset()
+      const roomJid = 'resumed@conference.example.com'
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: roomJid,
+        nickname: 'me',
+        joined: false,
+        supportsMAM: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      vi.setSystemTime(1_754_000_000_000)
+      simulateSmResumption(mockClient)
+      roomStore.getState().setRoomJoined(roomJid, true)
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      vi.setSystemTime(1_754_000_005_000)
+      mockClient._emit('online')
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          roomJid,
+          expect.any(Array),
+          expect.objectContaining({ sessionStartTime: 1_754_000_000_000 }),
+        )
+      })
+      roomStore.getState().reset()
+    })
   })
 
   describe('late MAM-ready room retry (issue D)', () => {

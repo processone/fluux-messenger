@@ -302,13 +302,6 @@ export function setupBackgroundSyncSideEffects(
         // key unlock) would otherwise wait until the next launch. Re-run once room
         // catch-up settles. Coalesced with any in-flight pass.
         void client.retryPendingDecrypts()
-        // Record every room covered by this pass (MAM-ready now, plus the active
-        // room handled by roomSideEffects) so the late-MAM watcher only retries
-        // rooms whose support resolves AFTER this point (issue D).
-        const currentActiveRoomJid = roomStore.getState().activeRoomJid
-        if (currentActiveRoomJid) {
-          mamHandledRooms.add(currentActiveRoomJid)
-        }
         initialRoomPassDone = true
         // Stage 5: Room member discovery (sequential, gentle on server)
         try {
@@ -339,8 +332,8 @@ export function setupBackgroundSyncSideEffects(
     sessionGeneration += 1
     backgroundSyncDone = false
     isFreshSession = true
-    sessionStartTime = Date.now()
     if (!followsUninterruptedResume) {
+      sessionStartTime = Date.now()
       freshSessionJoinedRooms.clear()
     }
     resetRoomRetryState()

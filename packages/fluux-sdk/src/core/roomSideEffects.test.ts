@@ -1263,7 +1263,8 @@ describe('setupRoomSideEffects', () => {
       expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
-    it('uses the resume boundary when a join fetch precedes synthetic online', async () => {
+    it('retains the resume boundary when hydration finishes after synthetic online', async () => {
+      const cache = deferred<[]>()
       const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_754_000_000_000)
       roomStore.getState().addRoom({
         jid: ROOM,
@@ -1280,9 +1281,16 @@ describe('setupRoomSideEffects', () => {
       })
       roomStore.getState().setActiveRoom(ROOM)
       cleanup = setupRoomSideEffects(mockClient)
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockReturnValue(cache.promise)
 
       simulateSmResumption(mockClient)
       confirmRoomJoin()
+      nowSpy.mockReturnValue(1_754_000_005_000)
+      mockClient._emit('online')
+      cache.resolve([])
 
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
@@ -1292,6 +1300,7 @@ describe('setupRoomSideEffects', () => {
         )
       })
 
+      loadSpy.mockRestore()
       nowSpy.mockRestore()
     })
 

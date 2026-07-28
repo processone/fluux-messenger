@@ -278,13 +278,10 @@ export function setupRoomSideEffects(
   // A missing-marker upgrade can also emit a synthetic 'online' after 'resumed';
   // that uninterrupted path must retain resume-seeded fetch tracking.
   const unsubscribeOnline = client.on('online', () => {
-    // Record the session start before any catch-up so the forward cursor excludes
-    // live messages that arrive after reconnect (silent-gap fix).
-    sessionStartTime = Date.now()
-
     const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     freshSessionRequiresJoinConfirmation = true
     if (!followsUninterruptedResume) {
+      sessionStartTime = Date.now()
       freshSessionJoinedRooms.clear()
       fetchInitiated.clear()
       resumeArchiveHeldRooms.clear()
