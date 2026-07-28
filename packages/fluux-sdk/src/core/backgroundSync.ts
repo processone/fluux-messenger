@@ -88,11 +88,13 @@ export function setupBackgroundSyncSideEffects(
     membershipEpoch: number
   }
   const mamInFlightRooms = new Map<string, RoomCatchUpReservation>()
+  const pendingRoomHandoffs = new Map<string, number>()
   let initialRoomPassDone = false
 
   function resetRoomRetryState(): void {
     mamHandledRooms.clear()
     mamInFlightRooms.clear()
+    pendingRoomHandoffs.clear()
     initialRoomPassDone = false
   }
 
@@ -174,6 +176,24 @@ export function setupBackgroundSyncSideEffects(
         mamInFlightRooms.delete(roomJid)
       }
     }
+  }
+
+  async function drainPendingRoomHandoffs(
+    generation: number,
+  ): Promise<void> {
+    const roomJids: string[] = []
+    for (const [roomJid, handoffGeneration] of pendingRoomHandoffs) {
+      if (handoffGeneration !== generation) continue
+      pendingRoomHandoffs.delete(roomJid)
+      roomJids.push(roomJid)
+    }
+    await executeWithConcurrency(
+      roomJids,
+      async (roomJid) => {
+        await catchUpFreshSessionRoomOnce(roomJid, generation)
+      },
+      2,
+    )
   }
 
   // --- E2EE capability warm-up ---
@@ -349,12 +369,14 @@ export function setupBackgroundSyncSideEffects(
           // Silently ignore MAM catch-up errors
         }
         if (syncGeneration !== sessionGeneration) return
+        initialRoomPassDone = true
+        await drainPendingRoomHandoffs(syncGeneration)
+        if (syncGeneration !== sessionGeneration) return
         // Same rationale as the 1:1 catch-up retry above: room messages stashed
         // during this delayed pass (encrypted MUC history fetched after a mid-sync
         // key unlock) would otherwise wait until the next launch. Re-run once room
         // catch-up settles. Coalesced with any in-flight pass.
         void client.retryPendingDecrypts()
-        initialRoomPassDone = true
         // Stage 5: Room member discovery (sequential, gentle on server)
         try {
           const joinedRooms = roomStore.getState().joinedRooms()
@@ -524,7 +546,11 @@ export function setupBackgroundSyncSideEffects(
   const unsubscribeRoomMamHandoff = subscribeRoomMamHandoff(
     client,
     (roomJid) => {
-      if (!initialRoomPassDone || !isFreshSession) return
+      if (!isFreshSession) return
+      if (!initialRoomPassDone) {
+        pendingRoomHandoffs.set(roomJid, sessionGeneration)
+        return
+      }
       void catchUpFreshSessionRoomOnce(roomJid, sessionGeneration)
     },
   )
@@ -571,6 +597,7 @@ export function setupBackgroundSyncSideEffects(
   return () => {
     sessionGeneration += 1
     mamInFlightRooms.clear()
+    pendingRoomHandoffs.clear()
     unsubscribeOnline()
     unsubscribeResumed()
     unsubscribeConnection()

@@ -951,6 +951,106 @@ describe('setupBackgroundSyncSideEffects', () => {
       loadSpy.mockRestore()
       roomStore.getState().reset()
     })
+
+    it('queues a foreground handoff while the initial room pass is pending', async () => {
+      roomStore.getState().reset()
+      const handoffRoomJid = 'queued-handoff@conference.example.com'
+      const blockingRoomJid = 'blocking-pass@conference.example.com'
+      for (const roomJid of [handoffRoomJid, blockingRoomJid]) {
+        roomStore.getState().addRoom({
+          jid: roomJid,
+          name: roomJid,
+          nickname: 'me',
+          joined: false,
+          supportsMAM: true,
+          isBookmarked: true,
+          occupants: new Map(),
+          messages: [],
+          unreadCount: 0,
+          mentionsCount: 0,
+          typingUsers: new Set(),
+        })
+      }
+      roomStore.getState().setActiveRoom(handoffRoomJid)
+      let resolveForegroundCache!: (messages: []) => void
+      const foregroundCache = new Promise<[]>((resolve) => {
+        resolveForegroundCache = resolve
+      })
+      let handoffRoomLoadCount = 0
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      ).mockImplementation((jid) => {
+        if (jid !== handoffRoomJid) return Promise.resolve([])
+        handoffRoomLoadCount += 1
+        return handoffRoomLoadCount === 1
+          ? foregroundCache
+          : Promise.resolve([])
+      })
+      let resolveBlockingCatchUp!: () => void
+      const blockingCatchUp = new Promise<void>((resolve) => {
+        resolveBlockingCatchUp = resolve
+      })
+      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+        async (roomJid) => {
+          if (roomJid === blockingRoomJid) {
+            await blockingCatchUp
+          }
+        },
+      )
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      roomCleanup = setupRoomSideEffects(mockClient)
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      for (const roomJid of [handoffRoomJid, blockingRoomJid]) {
+        roomStore.getState().setRoomJoined(roomJid, true)
+        mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      }
+      await vi.waitFor(() => {
+        expect(
+          loadSpy.mock.calls.filter(([jid]) => jid === handoffRoomJid),
+        ).toHaveLength(1)
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          blockingRoomJid,
+          [],
+          expect.objectContaining({ stitchReadPointer: true }),
+        )
+      })
+
+      roomStore.getState().setActiveRoom(null)
+      resolveForegroundCache([])
+      await vi.waitFor(() => {
+        expect(
+          roomStore.getState().getRoomMAMQueryState(handoffRoomJid).isLoading,
+        ).toBe(false)
+      })
+      expect(
+        vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+          .filter(([jid]) => jid === handoffRoomJid),
+      ).toHaveLength(0)
+
+      resolveBlockingCatchUp()
+      await vi.waitFor(() => {
+        expect(
+          vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+            .filter(([jid]) => jid === handoffRoomJid),
+        ).toHaveLength(1)
+      })
+      expect(
+        loadSpy.mock.calls.filter(([jid]) => jid === handoffRoomJid),
+      ).toHaveLength(2)
+      loadSpy.mockRestore()
+      roomStore.getState().reset()
+    })
   })
 
   describe('late MAM-ready room retry (issue D)', () => {
