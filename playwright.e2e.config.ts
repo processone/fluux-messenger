@@ -1,6 +1,24 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
+ * The suites run against a BUILT demo served by `vite preview`, not the dev server.
+ *
+ * The dev server ships the app as ~3600 separate ES modules, and WebKitGTK re-parses that
+ * graph in every fresh browser context — once per test. On a 2-core CI runner the first
+ * webkit test blew its 120s mount budget doing it, failing its first attempt in ~15 of 16
+ * observed green runs while `retries: 2` quietly relabelled it "flaky".
+ *
+ * `npm run build:e2e` keeps development semantics (`import.meta.env.DEV` stays true, so the
+ * harness seams survive) and asserts those seams are present before the suites start.
+ *
+ * Set FLUUX_E2E_DEV_SERVER=1 to run against the dev server instead — useful when you are
+ * editing components and want HMR while debugging a single test. The default is the build,
+ * so a local run and a CI run exercise the same artefact.
+ */
+const useDevServer = process.env.FLUUX_E2E_DEV_SERVER === '1'
+const BASE_URL = useDevServer ? 'http://localhost:5173' : 'http://localhost:4173'
+
+/**
  * The browser-level invariant gates: scroll positioning and composer geometry.
  *
  * Both suites were previously separate configs, each spawning its own `npm run dev`.
@@ -64,7 +82,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: BASE_URL,
     viewport: { width: 1280, height: 800 },
     // Capture a trace on the first retry so CI failures are debuggable.
     trace: 'on-first-retry',
@@ -79,10 +97,13 @@ export default defineConfig({
   ),
 
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    // CI always starts a fresh server; locally reuse a running dev server if present.
+    // build:e2e builds the SDK too, so this is the only build the e2e job needs.
+    command: useDevServer ? 'npm run dev' : 'npm run build:e2e && npm run preview:e2e',
+    url: BASE_URL,
+    // CI always starts a fresh server; locally reuse a running one if present.
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    // The build runs inside this budget (~10s locally, more on a cold CI runner), so it
+    // is roomier than the dev server's would need to be.
+    timeout: useDevServer ? 120_000 : 240_000,
   },
 })

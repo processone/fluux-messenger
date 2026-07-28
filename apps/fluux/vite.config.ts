@@ -35,6 +35,19 @@ function getVersion(): string {
 const gitCommit = getGitCommit()
 const appVersion = getVersion()
 
+/**
+ * `npm run build:e2e` sets this. It produces a BUNDLED demo that keeps development
+ * semantics — `import.meta.env.DEV` stays true, so the harness seams the Playwright
+ * suites depend on (`__fluuxGetVirtOffset`, `__fluuxTriggerLoadOlder`,
+ * `__fluuxScrollShadow`) are still installed. The dev server serves the same app as
+ * hundreds of separate ES modules, which WebKitGTK re-parses in every fresh browser
+ * context; a bundle is one request's worth of work instead.
+ *
+ * An env var rather than `--mode`, because reading the mode means wrapping the whole
+ * config in a function and reindenting 150 lines of unrelated code.
+ */
+const isE2EBuild = process.env.FLUUX_E2E_BUILD === '1'
+
 export default defineConfig({
   base: './',
   plugins: [
@@ -42,11 +55,13 @@ export default defineConfig({
     babel({
       plugins: [['babel-plugin-react-compiler', {}]],
     }),
-    // Remove demo assets (public/demo/, demo.html) from production builds
+    // Remove demo assets (public/demo/, demo.html) from production builds. The e2e
+    // build exists precisely to serve the demo, so it opts out.
     {
       name: 'strip-demo',
       apply: 'build',
       closeBundle() {
+        if (isE2EBuild) return
         const dist = resolve(__dirname, 'dist')
         rmSync(resolve(dist, 'demo'), { recursive: true, force: true })
         rmSync(resolve(dist, 'demo.html'), { force: true })
@@ -141,9 +156,14 @@ export default defineConfig({
   build: {
     modulePreload: false,
     rolldownOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-      },
+      input: isE2EBuild
+        ? {
+            main: resolve(__dirname, 'index.html'),
+            demo: resolve(__dirname, 'demo.html'),
+          }
+        : {
+            main: resolve(__dirname, 'index.html'),
+          },
       onwarn(warning, warn) {
         // Suppress warnings about Node.js modules being externalized for browser compatibility
         // These come from @xmpp/resolve (DNS for SRV lookups) and SCRAM-SHA-1 crypto deps

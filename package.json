@@ -18,6 +18,8 @@
     "build:sdk": "npm run build -w @fluux/sdk",
     "prebuild:app": "npm run guard:sdk-link",
     "build:app": "npm run build -w @xmpp/fluux",
+    "build:e2e": "npm run build:sdk && node scripts/build-e2e.mjs",
+    "preview:e2e": "npm run preview -w @xmpp/fluux -- --port 4173 --strictPort",
     "test": "npm run test:run --workspaces --if-present",
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",

@@ -71,8 +71,9 @@ while IFS= read -r path || [ -n "$path" ]; do
 
         # --- Rule 4: TypeScript / JavaScript ----------------------------------
         # The scripts named explicitly are the bodies of the Playwright suites run
-        # by the e2e job, plus their shared harness in scripts/e2e/.
-        packages/* | apps/fluux/* | playwright*.config.ts | scripts/scroll-invariants.ts | scripts/composer-geometry.ts | scripts/e2e/*)
+        # by the e2e job, their shared harness in scripts/e2e/, and the build that
+        # produces the bundle those suites load.
+        packages/* | apps/fluux/* | playwright*.config.ts | scripts/scroll-invariants.ts | scripts/composer-geometry.ts | scripts/e2e/* | scripts/build-e2e.mjs)
             js=true
             ;;
 

@@ -170,12 +170,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The Playwright webServer runs `npm run dev` (vite), which imports @fluux/sdk.
-      # The dev build is required because the harness relies on import.meta.env.DEV
-      # test seams (__fluuxGetVirtOffset / __fluuxTriggerLoadOlder) that are stripped
-      # from production builds.
-      - name: Build SDK
-        run: npm run build:sdk
+      # No Build SDK step: the Playwright webServer runs `npm run build:e2e`, which builds
+      # the SDK and then the bundled demo the suites load. That build keeps development
+      # semantics — the harness relies on import.meta.env.DEV seams (__fluuxGetVirtOffset /
+      # __fluuxTriggerLoadOlder / __fluuxTriggerMediaLoad) that a production build strips —
+      # and asserts those seams are present before the suites start.
 
       # Cache the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
       # the download. Caches created in pull_request runs are scoped to that PR, so the shared

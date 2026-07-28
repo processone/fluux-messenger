@@ -63,6 +63,7 @@ expect "workspace tsconfig"          true  false apps/fluux/tsconfig.json
 expect "playwright e2e config"       true  false playwright.e2e.config.ts
 expect "e2e suite body"              true  false scripts/scroll-invariants.ts
 expect "shared e2e harness"          true  false scripts/e2e/demoBoot.ts
+expect "e2e bundle build"            true  false scripts/build-e2e.mjs
 
 # --- Rule ordering ------------------------------------------------------------
 # src-tauri/* must be matched before apps/fluux/*, or a Tauri change would be
