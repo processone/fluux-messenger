@@ -200,7 +200,7 @@ export function setupRoomSideEffects(
         roomFetchOwners.delete(roomJid)
         fetchInitiated.delete(roomJid)
         roomStore.getState().setRoomMAMLoading(roomJid, false)
-        requestRoomMamHandoff(client, roomJid)
+        requestRoomMamHandoff(client, fetchOwner.coverage)
         if (debug) {
           console.log(
             '[SideEffects] Room: MAM aborted after cache hydration - room no longer eligible',
@@ -236,7 +236,7 @@ export function setupRoomSideEffects(
       }
       // Clear loading state on error (MAM module clears it on success)
       roomStore.getState().setRoomMAMLoading(roomJid, false)
-      requestRoomMamHandoff(client, roomJid)
+      requestRoomMamHandoff(client, fetchOwner.coverage)
     }
   }
 

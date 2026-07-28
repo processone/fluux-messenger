@@ -1,6 +1,18 @@
 import type { XMPPClient } from './XMPPClient'
 
-type RoomMamHandoffHandler = (roomJid: string) => void
+type RoomMamHandoffEvent =
+  | {
+      roomJid: string
+      membershipEpoch: number
+      state: 'released'
+    }
+  | {
+      roomJid: string
+      membershipEpoch: number
+      state: 'completed'
+    }
+
+type RoomMamHandoffHandler = (event: RoomMamHandoffEvent) => void
 
 export interface RoomMamForegroundCoverage {
   readonly roomJid: string
@@ -65,6 +77,13 @@ export function completeRoomMamForegroundCoverage(
     coverage?.owner === owner
   ) {
     coverage.completed = true
+    roomMamHandoffHandlers.get(client)?.forEach((handler) => {
+      handler({
+        roomJid: owner.roomJid,
+        membershipEpoch: owner.membershipEpoch,
+        state: 'completed',
+      })
+    })
   }
 }
 
@@ -125,9 +144,15 @@ export function hasRoomMamForegroundCoverage(
 
 export function requestRoomMamHandoff(
   client: XMPPClient,
-  roomJid: string,
+  owner: RoomMamForegroundCoverage,
 ): void {
-  roomMamHandoffHandlers.get(client)?.forEach((handler) => handler(roomJid))
+  roomMamHandoffHandlers.get(client)?.forEach((handler) => {
+    handler({
+      roomJid: owner.roomJid,
+      membershipEpoch: owner.membershipEpoch,
+      state: 'released',
+    })
+  })
 }
 
 export function subscribeRoomMamHandoff(

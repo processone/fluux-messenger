@@ -91,7 +91,7 @@ export function setupBackgroundSyncSideEffects(
     membershipEpoch: number
   }
   const mamInFlightRooms = new Map<string, RoomCatchUpReservation>()
-  const pendingRoomHandoffs = new Map<string, number>()
+  const pendingRoomHandoffs = new Map<string, RoomCatchUpReservation>()
   let initialRoomPassDone = false
 
   function resetRoomRetryState(): void {
@@ -178,6 +178,13 @@ export function setupBackgroundSyncSideEffects(
         return false
       }
       mamHandledRooms.add(roomJid)
+      const pendingHandoff = pendingRoomHandoffs.get(roomJid)
+      if (
+        pendingHandoff?.generation === generation &&
+        pendingHandoff.membershipEpoch === reservation.membershipEpoch
+      ) {
+        pendingRoomHandoffs.delete(roomJid)
+      }
       return true
     } catch {
       return false
@@ -188,13 +195,37 @@ export function setupBackgroundSyncSideEffects(
     }
   }
 
+  async function drainPendingRoomHandoff(roomJid: string): Promise<void> {
+    const pendingHandoff = pendingRoomHandoffs.get(roomJid)
+    if (!pendingHandoff) return
+    if (
+      pendingHandoff.generation !== sessionGeneration ||
+      pendingHandoff.membershipEpoch !==
+        getRoomMembershipEpoch(client, roomJid)
+    ) {
+      if (pendingRoomHandoffs.get(roomJid) === pendingHandoff) {
+        pendingRoomHandoffs.delete(roomJid)
+      }
+      return
+    }
+    if (
+      !initialRoomPassDone ||
+      roomStore.getState().activeRoomJid === roomJid
+    ) {
+      return
+    }
+    await catchUpFreshSessionRoomOnce(
+      roomJid,
+      pendingHandoff.generation,
+    )
+  }
+
   async function reconcileFreshSessionRooms(
     generation: number,
   ): Promise<void> {
     const roomJids = new Set<string>()
-    for (const [roomJid, handoffGeneration] of pendingRoomHandoffs) {
-      if (handoffGeneration !== generation) continue
-      pendingRoomHandoffs.delete(roomJid)
+    for (const [roomJid, pendingHandoff] of pendingRoomHandoffs) {
+      if (pendingHandoff.generation !== generation) continue
       roomJids.add(roomJid)
     }
     const state = roomStore.getState()
@@ -212,7 +243,11 @@ export function setupBackgroundSyncSideEffects(
     await executeWithConcurrency(
       [...roomJids],
       async (roomJid) => {
-        await catchUpFreshSessionRoomOnce(roomJid, generation)
+        if (pendingRoomHandoffs.has(roomJid)) {
+          await drainPendingRoomHandoff(roomJid)
+        } else {
+          await catchUpFreshSessionRoomOnce(roomJid, generation)
+        }
       },
       2,
     )
@@ -552,6 +587,7 @@ export function setupBackgroundSyncSideEffects(
         freshSessionJoinedRooms.delete(roomJid)
         mamHandledRooms.delete(roomJid)
         mamInFlightRooms.delete(roomJid)
+        pendingRoomHandoffs.delete(roomJid)
         return
       }
       recordRoomMembership(client, roomJid, true)
@@ -567,13 +603,41 @@ export function setupBackgroundSyncSideEffects(
 
   const unsubscribeRoomMamHandoff = subscribeRoomMamHandoff(
     client,
-    (roomJid) => {
-      if (!isFreshSession) return
-      if (!initialRoomPassDone) {
-        pendingRoomHandoffs.set(roomJid, sessionGeneration)
+    (event) => {
+      const { roomJid, membershipEpoch } = event
+      if (event.state === 'completed') {
+        const pendingHandoff = pendingRoomHandoffs.get(roomJid)
+        if (pendingHandoff?.membershipEpoch === membershipEpoch) {
+          pendingRoomHandoffs.delete(roomJid)
+        }
         return
       }
-      void catchUpFreshSessionRoomOnce(roomJid, sessionGeneration)
+      if (!isFreshSession) return
+      if (membershipEpoch !== getRoomMembershipEpoch(client, roomJid)) {
+        return
+      }
+      pendingRoomHandoffs.set(roomJid, {
+        generation: sessionGeneration,
+        membershipEpoch,
+      })
+      if (!initialRoomPassDone) {
+        return
+      }
+      void drainPendingRoomHandoff(roomJid)
+    },
+  )
+
+  const unsubscribeActiveRoom = roomStore.subscribe(
+    (state) => state.activeRoomJid,
+    (activeRoomJid, previousActiveRoomJid) => {
+      if (
+        !previousActiveRoomJid ||
+        previousActiveRoomJid === activeRoomJid ||
+        !pendingRoomHandoffs.has(previousActiveRoomJid)
+      ) {
+        return
+      }
+      void drainPendingRoomHandoff(previousActiveRoomJid)
     },
   )
 
@@ -627,6 +691,7 @@ export function setupBackgroundSyncSideEffects(
     unsubscribeRoomMAM()
     unsubscribeRoomJoined()
     unsubscribeRoomMamHandoff()
+    unsubscribeActiveRoom()
     unsubscribePluginRegistered()
     unsubscribeKeyUnlocked()
     if (roomCatchUpTimer) {
