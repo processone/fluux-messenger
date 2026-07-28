@@ -32,32 +32,52 @@
  * | gaps     | key ADDED (formation)                          | force-flush  |
  * | gaps     | `start` / `startId` CHANGED (boundary moves up) | force-flush |
  * | gaps     | shrink / close / removal (`end` moves down)    | throttle     |
- * | coverage | key ADDED, `bottomId` CHANGED, key REMOVED     | force-flush  |
+ * | coverage | record REPLACED (contiguity disproven)         | force-flush  |
+ * | coverage | key REMOVED                                    | force-flush  |
+ * | coverage | key ADDED (bootstrap / first-ever walk)        | throttle     |
+ * | coverage | `bottomId` DEEPENED (Phase B, id-exact resume) | throttle     |
  * | coverage | `topId`-only change (re-entry marker)          | throttle     |
  *
- * `bottomId`-changed is deliberately conservative: it also force-flushes the
- * *provable* deepening in `syncCoverageAfterArchiveMerge`'s plain-backward
- * branch, which would be safe to throttle. Archive ids are NON-SEQUENTIAL
- * (`mamGap`), so this layer cannot compare two `bottomId`s to tell a deepening
- * from a replacement, and distinguishing them would mean threading a
- * "was this monotone" signal out of the pure sync functions. Not worth the
- * coupling — but the cost is flush FREQUENCY, not record size, and it is not
- * zero: the coverage bootstrap fires once per entity that has no record, so the
- * FIRST session after this ships pays one forced chat-blob serialization per
- * conversation, and Phase B's read-pointer stitch advances `bottomId` on up to
- * 10 backward pages per entity per session. Both are launch-window costs on a
- * path that previously wrote unconditionally on every mutation, and the steady
- * state is free (`if (coverage.get(id)) return coverage`). Design §4.2 has the
- * full accounting.
+ * The coverage half of that table is #1138's change. #1133 shipped it as
+ * "key added, `bottomId` changed, or key removed → force-flush", because this
+ * layer cannot order two `bottomId`s (archive ids are NON-SEQUENTIAL, see
+ * `mamGap`) and so could not tell a safe deepening from an unsafe replacement.
+ * Measured on the reference 400-conversation profile (238 KB blob), that
+ * conservatism cost the ENTIRE benefit of the throttle on a first session:
+ * coverage bootstrap fires once per entity with no record, and every one of
+ * those force-flushed the whole chat blob — 400 writes and 88.9 MB serialized,
+ * identical to the pre-#1133 write-on-every-mutation baseline, and 350-550 ms
+ * of main-thread time (Chromium and WebKit alike) inside the launch window.
+ * Phase B's read-pointer stitch added a second helping: 500 writes, 115 MB,
+ * 400-650 ms. Both drop to ~13 writes and ~15 ms here. Full method and
+ * numbers in `docs/superpowers/specs/2026-07-28-coverage-persistence-cost-design.md`;
+ * the harness is `packages/fluux-sdk/bench`.
+ *
+ * The fix is not a cleverer comparison — no comparison exists. It is
+ * {@link CoverageTransition}, computed by `syncCoverageAfterArchiveMerge`, which
+ * is the only place that knows whether a walk PROVED contiguity with the record
+ * it is overwriting. Creation and deepening err SHALLOW when lost (the next
+ * session re-seeds or re-walks); only replacement can leave disk asserting
+ * coverage that memory has disproven. See that type for the per-branch analysis.
  *
  * ## How the transition is detected
  *
- * Per storage key, this module remembers a SNAPSHOT of the previous write's
- * structural signature — each gap id's lower boundary (`start` + `startId`), and
- * each coverage id's `bottomId` — and compares the next write against it.
- * Detection therefore lives at the single
- * write funnel of each store (roomStore's two save helpers, chatStore's persist
- * adapter) instead of being an obligation ~13 mutation sites must each remember.
+ * Two mechanisms, because the two maps differ in what is derivable here:
+ *
+ * - **Gaps, and coverage REMOVAL, are detected locally.** Per storage key, this
+ *   module remembers a SNAPSHOT of the previous write's structural signature —
+ *   each gap id's lower boundary (`start` + `startId`), and the set of coverage
+ *   ids — and compares the next write against it. Detection therefore lives at
+ *   the single write funnel of each store (roomStore's two save helpers,
+ *   chatStore's persist adapter) instead of being an obligation ~13 mutation
+ *   sites must each remember.
+ * - **Coverage REPLACEMENT is signalled**, via {@link noteCoverageTransition},
+ *   by the one caller that can classify it. The signal is consumed by the next
+ *   write on that key — which for both stores is the write the same mutation
+ *   triggers, synchronously: roomStore calls `saveCoverageToStorage` on the next
+ *   line, and zustand's persist adapter runs inside chatStore's `set()`. A
+ *   signal that somehow found no write to attach to would force one extra flush
+ *   on the following write, never skip one.
  *
  * - Keyed by the RESOLVED storage key, so a baseline can never be consulted
  *   across accounts: a different account is a different key (same principle as
@@ -65,9 +85,11 @@
  * - A snapshot, not the live map reference, so it is immune to a map mutated in
  *   place and to the reassigned-binding trap that `persistRoomReadState`
  *   documents.
- * - An UNKNOWN baseline (first write of a session, or after a reset) is treated
- *   as empty, so anything present reads as structural. That costs at most one
- *   extra flush per key per session and never a missed one.
+ * - An UNKNOWN baseline (first write of a session, or after a reset) makes
+ *   anything present read as structural — including a non-empty coverage map,
+ *   whose ids cannot be told apart from a removal without a baseline to remove
+ *   them from. That costs at most one extra flush per key per session and never
+ *   a missed one.
  * - `cancelDurableMaps` drops the baseline with the pending write, because a
  *   cancelled write means the disk no longer matches the baseline: keeping it
  *   would let a later formation compare equal to a state that was never
@@ -84,7 +106,7 @@
 
 import { schedule, flushKey, cancel } from './throttledStorage'
 import type { GapInterval } from './mamGap'
-import type { CoverageRecord } from './mamCoverage'
+import type { CoverageRecord, CoverageTransition } from './mamCoverage'
 
 /** The maps carried by this key's blob. Omit one to leave its baseline alone. */
 export interface DurableMaps {
@@ -103,11 +125,49 @@ function gapAnchor(gap: GapInterval): GapAnchor {
 interface Baseline {
   /** Id → lower-boundary anchor at the previous write. */
   gapAnchors?: Map<string, GapAnchor>
-  /** Id → `bottomId` at the previous write (`topId` is deliberately absent). */
-  coverageBottoms?: Map<string, string>
+  /**
+   * Ids carrying a record at the previous write.
+   *
+   * Deliberately not the `bottomId`s: a `bottomId` change is no longer a
+   * durability signal on its own (see the module doc), and keeping the values
+   * would invite a future reader to resurrect the comparison that #1138
+   * measured out.
+   */
+  coverageIds?: Set<string>
 }
 
 const baselines = new Map<string, Baseline>()
+
+/**
+ * Storage key → ids whose coverage record was invalidated since that key's last
+ * write. Consumed and cleared by the next {@link scheduleDurableMaps} on the key.
+ */
+const invalidatedCoverage = new Map<string, Set<string>>()
+
+/**
+ * Report what a merge did to `id`'s coverage record, so the next write on `key`
+ * can be forced out of the throttle window if it has to be.
+ *
+ * Callers pass the transition UNCONDITIONALLY and this decides — the policy
+ * ("which transitions are unsafe to lose") belongs to the durability layer, not
+ * repeated as an `=== 'replaced'` literal at each of the three call sites, where
+ * adding a fourth unsafe transition would mean remembering all of them.
+ *
+ * Must be called BEFORE the write that carries the transition. Both stores do
+ * this on the same synchronous path as the `set()` that commits it; a
+ * transition that is DEFERRED behind an IndexedDB commit must be reported at
+ * the deferred commit instead, not at the merge, or the signal is consumed by a
+ * write that does not carry the new record yet.
+ */
+export function noteCoverageTransition(key: string, id: string, transition: CoverageTransition): void {
+  // `created` / `deepened` / `topRefreshed` all err SHALLOW when lost, and
+  // `none` changed nothing. Only a replacement can leave disk asserting
+  // coverage that memory has disproven — see CoverageTransition's table.
+  if (transition !== 'replaced') return
+  const ids = invalidatedCoverage.get(key)
+  if (ids) ids.add(id)
+  else invalidatedCoverage.set(key, new Set([id]))
+}
 
 /**
  * A gap APPEARING for an id that had none, or an existing gap's lower BOUNDARY
@@ -175,23 +235,23 @@ function hasGapStructuralChange(
 }
 
 /**
- * A record appearing, its `bottomId` changing, or the record disappearing.
+ * A record being invalidated: REPLACED (signalled) or REMOVED (derived).
  *
- * `previous.get(id) !== bottomId` covers both the appearance (undefined never
- * equals a string) and the change; there is no ordering comparison here, by
- * necessity — archive ids are non-sequential.
+ * Additions and `bottomId` advances are deliberately absent — see the module
+ * doc's table and {@link CoverageTransition}. Both leave disk holding either no
+ * record or a shallower one, and neither can assert coverage that does not
+ * exist; force-flushing them was #1133's conservatism and #1138's measured cost.
  */
-function hasCoverageStructuralChange(
-  previous: Map<string, string> | undefined,
+function hasCoverageRemoval(
+  previous: Set<string> | undefined,
   coverage: ReadonlyMap<string, CoverageRecord>,
 ): boolean {
-  for (const [id, record] of coverage) {
-    if (previous?.get(id) !== record.bottomId) return true
-  }
-  if (previous) {
-    for (const id of previous.keys()) {
-      if (!coverage.has(id)) return true
-    }
+  // No baseline: a removal is undetectable (nothing to be missing FROM), so
+  // anything present has to be treated as structural. One flush per key per
+  // session.
+  if (!previous) return coverage.size > 0
+  for (const id of previous) {
+    if (!coverage.has(id)) return true
   }
   return false
 }
@@ -212,7 +272,15 @@ export function scheduleDurableMaps(key: string, maps: DurableMaps, produce: () 
   // comparing against an older baseline, which can hide a there-and-back
   // transition (A → B → A reads as "unchanged" against the pre-A baseline).
   const gapFormed = maps.gaps !== undefined && hasGapStructuralChange(baseline?.gapAnchors, maps.gaps)
-  const coverageMoved = maps.coverage !== undefined && hasCoverageStructuralChange(baseline?.coverageBottoms, maps.coverage)
+  // The signal stands on its own, independent of whether this write declares
+  // the coverage map: it means "the next write on this key must be durable",
+  // and consuming it without acting would silently drop a replacement. The
+  // derived half (removal) still needs the map, like the gap half.
+  const invalidated = invalidatedCoverage.get(key)
+  invalidatedCoverage.delete(key)
+  const coverageInvalidated =
+    (invalidated !== undefined && invalidated.size > 0) ||
+    (maps.coverage !== undefined && hasCoverageRemoval(baseline?.coverageIds, maps.coverage))
 
   const next: Baseline = { ...baseline }
   if (maps.gaps !== undefined) {
@@ -221,14 +289,12 @@ export function scheduleDurableMaps(key: string, maps: DurableMaps, produce: () 
     next.gapAnchors = anchors
   }
   if (maps.coverage !== undefined) {
-    const bottoms = new Map<string, string>()
-    for (const [id, record] of maps.coverage) bottoms.set(id, record.bottomId)
-    next.coverageBottoms = bottoms
+    next.coverageIds = new Set(maps.coverage.keys())
   }
   baselines.set(key, next)
 
   schedule(key, produce)
-  if (gapFormed || coverageMoved) flushKey(key)
+  if (gapFormed || coverageInvalidated) flushKey(key)
 }
 
 /**
@@ -239,6 +305,10 @@ export function scheduleDurableMaps(key: string, maps: DurableMaps, produce: () 
 export function cancelDurableMaps(key: string): void {
   cancel(key)
   baselines.delete(key)
+  // The cancelled write is what the signal was waiting for. Keeping it would
+  // force-flush the next unrelated write on this key for a record the clear
+  // path has just removed anyway.
+  invalidatedCoverage.delete(key)
 }
 
 /**
@@ -247,4 +317,5 @@ export function cancelDurableMaps(key: string): void {
  */
 export function forgetAllDurableMapBaselines(): void {
   baselines.clear()
+  invalidatedCoverage.clear()
 }

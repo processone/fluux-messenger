@@ -31,6 +31,7 @@ import {
   serializeCoverage,
   deserializeCoverage,
   type CoverageRecord,
+  type CoverageTransition,
   type MergeArchiveExtras,
 } from './shared/mamCoverage'
 import {
@@ -75,7 +76,7 @@ import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
-import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -247,11 +248,22 @@ function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecor
   return new Map()
 }
 
-function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
-  // A record appearing, its `bottomId` changing or the record being dropped
-  // must not sit in the throttle window: the stale one on disk asserts a
-  // contiguity that was just disproven. A `topId`-only refresh stays throttled.
+/**
+ * @param transition - What the merge that produced `coverage` did to
+ *   `transition.roomJid`'s record. `durableMapPersist` owns the policy of which
+ *   transitions must escape the throttle window (#1138); this only reports.
+ *   Removal IS derivable there, so the clear paths pass nothing.
+ */
+function saveCoverageToStorage(
+  coverage: Map<string, CoverageRecord>,
+  jid?: string | null,
+  transition?: { roomJid: string; kind: CoverageTransition },
+): void {
+  // A record being invalidated must not sit in the throttle window: the stale
+  // one on disk asserts a contiguity that was just disproven. Creation, a
+  // `bottomId` deepening and a `topId`-only refresh all stay throttled.
   const key = getRoomCoverageStorageKey(jid)
+  if (transition) noteCoverageTransition(key, transition.roomJid, transition.kind)
   scheduleDurableMaps(key, { coverage }, () => serializeCoverage(coverage))
 }
 
@@ -3827,7 +3839,7 @@ export const roomStore = createStore<RoomState>()(
       // page with persistable messages must wait for the durable commit: the
       // record must never point past unstored data. A merge with nothing
       // persistable (signal-only give-up) applies now.
-      const newCoverage = syncCoverageAfterArchiveMerge({
+      const { coverage: newCoverage, transition: coverageTransition } = syncCoverageAfterArchiveMerge({
         coverage: state.roomCoverage,
         id: roomJid,
         direction,
@@ -3846,7 +3858,9 @@ export const roomStore = createStore<RoomState>()(
         newCoverage !== state.roomCoverage &&
         mustGateOnChain
       const coverageAfterMerge = deferCoverageCommit ? state.roomCoverage : newCoverage
-      if (coverageAfterMerge !== state.roomCoverage) saveCoverageToStorage(coverageAfterMerge)
+      if (coverageAfterMerge !== state.roomCoverage) {
+        saveCoverageToStorage(coverageAfterMerge, undefined, { roomJid, kind: coverageTransition })
+      }
 
       // Deferred commit of the gap/coverage transitions, gated on the given
       // promise (this page's write chained behind every earlier in-flight
@@ -3877,7 +3891,9 @@ export const roomStore = createStore<RoomState>()(
               if (target) {
                 const next = new Map(s.roomCoverage)
                 next.set(roomJid, target)
-                saveCoverageToStorage(next)
+                // Signalled HERE, not at merge time: this is the first write
+                // that carries the replacing record.
+                saveCoverageToStorage(next, undefined, { roomJid, kind: coverageTransition })
                 out.roomCoverage = next
               }
             }

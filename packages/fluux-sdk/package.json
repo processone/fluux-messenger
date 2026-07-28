@@ -77,13 +77,15 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.bench.json",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "docs": "typedoc",
     "docs:watch": "typedoc --watch",
     "clean": "rm -rf dist",
-    "clean:all": "rm -rf dist node_modules docs"
+    "clean:all": "rm -rf dist node_modules docs",
+    "bench:persist": "vitest run --config vitest.bench.config.ts",
+    "bench:persist:browser": "node bench/browser/run.mjs"
   },
   "dependencies": {
     "@xmpp/client": "^0.14.0",

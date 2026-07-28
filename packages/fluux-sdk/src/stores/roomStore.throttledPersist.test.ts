@@ -3,6 +3,13 @@ import { localStorageMock } from '../core/sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
+// Needed only by the deferred-commit case at the bottom: a merge carrying
+// persistable messages gates its coverage transition on the IndexedDB write.
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  return { ...actual, saveRoomMessages: vi.fn().mockResolvedValue(true) }
+})
+
 import { roomStore } from './roomStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
 import { forgetAllDurableMapBaselines } from './shared/durableMapPersist'
@@ -334,6 +341,14 @@ describe('roomStore gap/coverage structural durability', () => {
     )
   }
 
+  /** A Phase B page: a plain backward query resumed id-exactly from the
+   *  recorded bottom, extending the same contiguous run. */
+  function deepenCoverage(room: string, from: string, to: string): void {
+    roomStore.getState().mergeRoomMAMMessages(
+      room, [], { first: to }, false, 'backward', false, false, { initialBefore: from }
+    )
+  }
+
   it('persists a gap FORMATION that was coalesced into an open window', () => {
     // TWO throttled writes are needed before the formation, and the order is
     // load-bearing (§5.5).
@@ -563,6 +578,88 @@ describe('roomStore gap/coverage structural durability', () => {
 
     flush()
     expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'cov-bottom', topId: 'top-3' })
+  })
+
+  /**
+   * #1138, room side. Room coverage lives under its OWN key rather than inside
+   * a whole-store blob, so each forced write is cheap — but the FREQUENCY is
+   * the same, and every one of them still closes the window for the next.
+   *
+   * Three rooms, because the first coverage write of a session has no baseline
+   * and force-flushes on that rule alone (closing the window), the second takes
+   * a fresh leading edge (opening it), and only the third is genuinely the
+   * coalesced case (§5.5).
+   */
+  it('coalesces coverage bootstraps across rooms', () => {
+    for (const room of [ROOM, ROOM2, ROOM3]) {
+      roomStore.getState().addRoom(createRoom(room, { joined: true }))
+    }
+    localStorageMock.setItem.mockClear()
+
+    createCoverage(ROOM, 'cov-1', 'top-1') // unknown baseline → forced, window CLOSED
+    createCoverage(ROOM2, 'cov-2', 'top-1') // creation → throttled → leading edge, window OPEN
+    expect(writeCount()).toBe(2)
+
+    createCoverage(ROOM3, 'cov-3', 'top-1') // creation → coalesced
+
+    // 3 under #1133's "key added → force-flush".
+    expect(writeCount()).toBe(2)
+    expect(coverageOnDisk().has(ROOM3)).toBe(false)
+
+    flush()
+    expect(coverageOnDisk().get(ROOM3)).toEqual({ bottomId: 'cov-3', topId: 'top-1' })
+  })
+
+  it('coalesces a Phase B bottomId deepening', () => {
+    for (const room of [ROOM, ROOM2]) {
+      roomStore.getState().addRoom(createRoom(room, { joined: true }))
+    }
+    localStorageMock.setItem.mockClear()
+
+    createCoverage(ROOM, 'deep-0', 'top-1') // unknown baseline → forced, window CLOSED
+    createCoverage(ROOM2, 'other', 'top-1') // creation → leading edge, window OPEN
+    expect(writeCount()).toBe(2)
+
+    deepenCoverage(ROOM, 'deep-0', 'deep-1')
+    deepenCoverage(ROOM, 'deep-1', 'deep-2')
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+
+    expect(writeCount()).toBe(2) // 4 under #1133
+    flush()
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+  })
+
+  /**
+   * The DEFERRED replacement — the room twin of the chat case.
+   *
+   * A merge carrying persistable messages gates its coverage transition on the
+   * IndexedDB commit, so the record lands from `scheduleDeferredCommit` rather
+   * than from the merge's own `set`. Reporting the transition at merge time
+   * would arm the flush for a write that still carries the OLD record. Timers
+   * are never advanced and `flush()` is never called.
+   */
+  it('persists a DEFERRED coverage replacement that was coalesced into an open window', async () => {
+    for (const room of [ROOM, ROOM2]) {
+      roomStore.getState().addRoom(createRoom(room, { joined: true }))
+    }
+    createCoverage(ROOM, 'deep-old', 'top-1') // unknown baseline → forced, window CLOSED
+    createCoverage(ROOM2, 'other', 'top-1') // creation → leading edge, window OPEN
+    localStorageMock.setItem.mockClear()
+
+    // A storable page, so the transition defers behind the durable write.
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [createMessage('p1', ROOM, 'a', 'p1', false, new Date('2026-05-14T09:00:00Z'))],
+      { first: 'new-shallow' }, true, 'backward', false, true, { sawCoverageTop: false },
+    )
+    // Deliberately still the old record: the transition has NOT applied yet.
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+
+    // Drain the save chain's microtasks WITHOUT advancing the throttle timer.
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'new-shallow' })
+
+    expect(coverageOnDisk().get(ROOM)).toEqual({ bottomId: 'new-shallow' })
   })
 
   it('persists a coverage REMOVAL that was coalesced into an open window', () => {

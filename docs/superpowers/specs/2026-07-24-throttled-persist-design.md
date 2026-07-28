@@ -440,6 +440,15 @@ monotone advances:
 | coverage | key **added**, `bottomId` **changed**, key **removed** | force-flush |
 | coverage | `topId`-only change (re-entry marker) | throttle |
 
+> **The coverage rows above are SUPERSEDED by
+> [#1138](2026-07-28-coverage-persistence-cost-design.md).** The "measured follow-up" at the end of
+> this section turned out to understate the problem: measurement showed the conservative
+> `bottomId`-changed rule cost the *entire* benefit of the throttle on a first session — 400 writes
+> and 88.9 MB on the reference profile, identical to the pre-throttle baseline. `created` and
+> `deepened` are now throttled, signalled by `CoverageTransition` out of
+> `syncCoverageAfterArchiveMerge`; only `replaced` and removal still force a flush. **The gap rows
+> are unchanged.** See that document for the current decision table.
+
 **Why the gap rule keys on the lower BOUNDARY, not just the key.** Key-presence alone does not catch
 an in-place interval **advance** — the same id's gap moving from `{ start: 1000 }` to
 `{ start: 99000 }`, which is the *normal* shape of a multi-page forward catch-up, where each
@@ -523,6 +532,12 @@ empty and this path never runs. That is a limitation of the test, not evidence o
 thunk but leaves the timer ARMED would remove multiplier (3) for free. It is a semantic change to a
 shared primitive — `recordPendingRetraction` uses `flushKey` too, and it wants the window closed — so
 it needs its own change with its own tests, not a rider on this one.
+
+> Measured in [#1138](2026-07-28-coverage-persistence-cost-design.md) §3.2 and **not taken**: it can
+> only recover the window-closing half of a structural write, so on an all-structural workload it
+> saves nothing, and on a gap-heavy mixed one about 2×. Sources (1) and (2) were removed instead, by
+> throttling `created` and `deepened`. The bounding scenario stays in the benchmark for whoever picks
+> it up.
 
 Ordinary termination — tab close, app quit, mobile backgrounding — loses nothing, provided §4.1
 lands.

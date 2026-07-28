@@ -76,3 +76,6 @@ CLAUDE.md
 .runtime/
 .beads/
 .logs/
+
+# Benchmark output (regenerated; the numbers that matter live in the design doc)
+packages/fluux-sdk/bench/results/

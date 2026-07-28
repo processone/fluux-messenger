@@ -30,6 +30,41 @@ export interface CoverageRecord {
   topId?: string
 }
 
+/**
+ * What a merge did to the record — the persistence layer's durability input.
+ *
+ * Only ONE of these can leave disk asserting something memory has disproven,
+ * and it is the only one that has to escape the persistence throttle:
+ *
+ * | Transition     | Loss on a hard kill                                        | Durability |
+ * |----------------|------------------------------------------------------------|------------|
+ * | `none`         | nothing changed                                            | —          |
+ * | `created`      | disk holds NO record; next session re-seeds from the local downloaded edge, which is shallower. Asserts nothing. | throttle |
+ * | `deepened`     | disk holds the SHALLOWER previous bottom; Phase B re-walks covered ground. | throttle |
+ * | `topRefreshed` | disk holds a stale re-entry marker; one extra walked page.  | throttle   |
+ * | `replaced`     | **disk keeps the record whose contiguity this walk just DISPROVED, and Phase B seeds its backward walk from it — skipping the disconnected interval.** | **force-flush** |
+ *
+ * The asymmetry is the whole point: every safe transition errs SHALLOW (costing
+ * a re-walk), and only `replaced` can leave disk claiming coverage that does not
+ * exist. Removal is equally unsafe, but it needs no signal — the persistence
+ * layer sees a key disappear.
+ *
+ * This classification exists here, and not in the persistence layer, because
+ * archive ids are NON-SEQUENTIAL (see `mamGap`): nothing downstream can compare
+ * two `bottomId`s and tell a deepening from a replacement. Before #1138 the
+ * layer could only be conservative and force-flush every `bottomId` change,
+ * which cost one whole-blob serialization per conversation on a first session
+ * (~400 on the reference profile) and one per Phase B page.
+ */
+export type CoverageTransition = 'none' | 'created' | 'deepened' | 'topRefreshed' | 'replaced'
+
+/** {@link syncCoverageAfterArchiveMerge}'s result: the map, and what happened. */
+export interface CoverageSyncResult {
+  /** Copy-on-write: the SAME reference as the input when nothing changed. */
+  coverage: Map<string, CoverageRecord>
+  transition: CoverageTransition
+}
+
 /** Extra merge inputs carried on the mam-messages emit (both entity kinds). */
 export interface MergeArchiveExtras {
   /** The `before` cursor the query was started with ('' = fetch-latest). */
@@ -108,17 +143,21 @@ export interface ArchiveMergeCoverageInput {
  *   prove nothing about the live-contiguous bottom → no-op.
  *
  * Copy-on-write: returns the SAME map reference when nothing changes.
+ *
+ * The returned {@link CoverageTransition} is what the persistence layer keys its
+ * durability decision on — see that type for the loss analysis per branch.
  */
-export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput): Map<string, CoverageRecord> {
+export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput): CoverageSyncResult {
   const {
     coverage, id, direction, isFetchLatest, preserveGapMarker, complete, initialAfter,
     rsmFirst, fetchLatestTopId, initialBefore, sawCoverageTop, walkCarriedModifications,
   } = input
-  if (preserveGapMarker) return coverage
+  const unchanged: CoverageSyncResult = { coverage, transition: 'none' }
+  if (preserveGapMarker) return unchanged
   // Applies to BOTH directions: a walk whose corrections/retractions/reactions
   // were written fire-and-forget is not durably confirmed, so it may not certify
   // coverage — the forward bootstrap anchor included (Codex r4 #2).
-  if (walkCarriedModifications) return coverage
+  if (walkCarriedModifications) return unchanged
 
   if (direction !== 'backward') {
     // Bootstrap. Without this the record can only be born in the fetch-latest
@@ -136,37 +175,42 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
     // existing record, so a bottom already proven deeper always wins. Erring
     // shallow only costs Phase B a re-walk of covered ground; erring deep would
     // skip real history, and this path cannot do that.
-    if (!complete || !initialAfter) return coverage
-    if (coverage.get(id)) return coverage
+    if (!complete || !initialAfter) return unchanged
+    if (coverage.get(id)) return unchanged
     const next = new Map(coverage)
     next.set(id, { bottomId: initialAfter })
-    return next
+    return { coverage: next, transition: 'created' }
   }
 
   const existing = coverage.get(id)
 
   if (isFetchLatest) {
-    if (!rsmFirst) return coverage
+    if (!rsmFirst) return unchanged
     if (sawCoverageTop && existing) {
       if (fetchLatestTopId && fetchLatestTopId !== existing.topId) {
         const next = new Map(coverage)
         next.set(id, { ...existing, topId: fetchLatestTopId })
-        return next
+        return { coverage: next, transition: 'topRefreshed' }
       }
-      return coverage
+      return unchanged
     }
-    if (existing && existing.bottomId === rsmFirst && existing.topId === fetchLatestTopId) return coverage
+    if (existing && existing.bottomId === rsmFirst && existing.topId === fetchLatestTopId) return unchanged
     const next = new Map(coverage)
     next.set(id, { bottomId: rsmFirst, ...(fetchLatestTopId ? { topId: fetchLatestTopId } : {}) })
-    return next
+    // With a record present and contiguity with it NOT proven, this overwrites
+    // an assertion rather than making a first one — the one unsafe transition.
+    return { coverage: next, transition: existing ? 'replaced' : 'created' }
   }
 
   if (existing && rsmFirst && initialBefore === existing.bottomId && rsmFirst !== existing.bottomId) {
     const next = new Map(coverage)
     next.set(id, { ...existing, bottomId: rsmFirst })
-    return next
+    // The query resumed id-EXACTLY from the recorded bottom, so the new bottom
+    // extends the same contiguous run: losing it leaves the shallower one,
+    // which is still true.
+    return { coverage: next, transition: 'deepened' }
   }
-  return coverage
+  return unchanged
 }
 
 /**

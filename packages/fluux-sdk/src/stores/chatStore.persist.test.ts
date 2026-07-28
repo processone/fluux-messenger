@@ -3,6 +3,13 @@ import { localStorageMock } from '../core/sideEffects.testHelpers'
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
+// Needed only by the deferred-commit case at the bottom: a merge carrying
+// persistable messages gates its coverage transition on the IndexedDB write.
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  return { ...actual, saveMessages: vi.fn().mockResolvedValue(true) }
+})
+
 import { chatStore } from './chatStore'
 import { _resetForTesting, flush } from './shared/throttledStorage'
 import { forgetAllDurableMapBaselines } from './shared/durableMapPersist'
@@ -188,6 +195,22 @@ describe('chat gap/coverage structural durability', () => {
     )
   }
 
+  /** The bootstrap branch: a COMPLETED forward catch-up with a resume cursor
+   *  seeds the record for an entity that has none. */
+  function bootstrapCoverage(cid: string, initialAfter: string): void {
+    chatStore.getState().mergeMAMMessages(
+      cid, [], {}, true, 'forward', false, false, { initialAfter }
+    )
+  }
+
+  /** A Phase B page: a plain backward query resumed id-exactly from the
+   *  recorded bottom, extending the same contiguous run. */
+  function deepenCoverage(cid: string, from: string, to: string): void {
+    chatStore.getState().mergeMAMMessages(
+      cid, [], { first: to }, false, 'backward', false, false, { initialBefore: from }
+    )
+  }
+
   it('persists a gap FORMATION that was coalesced into an open window', () => {
     seedConversation(CID) // leading edge writes a blob with NO gap, opens the window
     localStorageMock.setItem.mockClear()
@@ -247,6 +270,100 @@ describe('chat gap/coverage structural durability', () => {
     chatStore.getState().mergeMAMMessages(
       CID, [], { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
     )
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow' })
+
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow' })
+  })
+
+  /**
+   * #1138's headline: the coverage bootstrap.
+   *
+   * `syncCoverageAfterArchiveMerge` seeds a record for every entity that has
+   * none and completes a forward catch-up, which on a first session is
+   * essentially every conversation. #1133 force-flushed each one, so a
+   * 400-conversation profile paid ~400 whole-blob serializations — the same
+   * order as the burst the throttle exists to remove, and measurably identical
+   * to the pre-throttle baseline.
+   *
+   * A creation is safe to coalesce because losing it leaves NO record: the next
+   * session re-seeds from the local downloaded edge, which is shallower. The
+   * write-count assertion is the one that fails under the old rule; the
+   * REPLACEMENT tests above are what stop "coalesce everything" from passing.
+   */
+  it('coalesces the coverage bootstrap across conversations', () => {
+    seedConversation(CID) // leading edge (both maps empty → not structural), window OPEN
+    seedConversation(CID2) // coalesced
+    expect(writeCount()).toBe(1)
+
+    bootstrapCoverage(CID, 'edge-1')
+    bootstrapCoverage(CID2, 'edge-2')
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'edge-1' })
+    expect(chatStore.getState().getConversationCoverage(CID2)).toEqual({ bottomId: 'edge-2' })
+
+    // Under #1133's "bottomId changed → force-flush" this is 3.
+    expect(writeCount()).toBe(1)
+    expect(coverageOnDisk().size).toBe(0)
+
+    flush()
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'edge-1' })
+    expect(coverageOnDisk().get(CID2)).toEqual({ bottomId: 'edge-2' })
+  })
+
+  /**
+   * The other half of the measured cost: Phase B's read-pointer stitch walks up
+   * to `MAM_POINTER_STITCH_MAX_PAGES` (10) backward pages per entity per
+   * session, each advancing `bottomId` id-exactly from the recorded one. Losing
+   * one leaves the shallower bottom, which is still true.
+   */
+  it('coalesces a Phase B bottomId deepening', () => {
+    seedConversation(CID)
+    createCoverage(CID, 'deep-0', 'top-1') // creation → throttled
+    expect(writeCount()).toBe(1)
+
+    deepenCoverage(CID, 'deep-0', 'deep-1')
+    deepenCoverage(CID, 'deep-1', 'deep-2')
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+
+    expect(writeCount()).toBe(1) // 3 under #1133
+    flush()
+    expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'deep-2', topId: 'top-1' })
+  })
+
+  /**
+   * The DEFERRED replacement.
+   *
+   * When the merge carries persistable messages, the coverage transition waits
+   * for the IndexedDB commit (`mustGateOnChain`) and lands from
+   * `scheduleDeferredCommit`, not from the merge's own `set`. Reporting the
+   * transition at merge time would arm the flush for a write that still carries
+   * the OLD record and leave the real one sitting in the throttle window — a
+   * durability hole that the synchronous replacement test above cannot see,
+   * because it deliberately uses unstored pages.
+   *
+   * Timers are never advanced and `flush()` is never called: the record reaches
+   * disk only if the deferred write force-flushed.
+   */
+  it('persists a DEFERRED coverage replacement that was coalesced into an open window', async () => {
+    seedConversation(CID)
+    createCoverage(CID, 'deep-old', 'top-1') // creation → throttled, window OPEN
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+    // The window is open and nothing coverage-related has reached disk, so the
+    // ordinary throttled path demonstrably would NOT persist what follows.
+    expect(coverageOnDisk().has(CID)).toBe(false)
+
+    // A storable page, so the transition defers behind the durable write.
+    const stored: Message[] = [{
+      type: 'chat', id: 'p1', conversationId: CID, from: CID, body: 'p1',
+      timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false, stanzaId: 'new-shallow',
+    } as Message]
+    chatStore.getState().mergeMAMMessages(
+      CID, stored, { first: 'new-shallow' }, true, 'backward', true, false, { sawCoverageTop: false }
+    )
+    // Deliberately still the old record: the transition has NOT applied yet.
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
+
+    // Drain the save chain's microtasks WITHOUT advancing the throttle timer.
+    for (let i = 0; i < 10; i++) await Promise.resolve()
     expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'new-shallow' })
 
     expect(coverageOnDisk().get(CID)).toEqual({ bottomId: 'new-shallow' })

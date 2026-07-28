@@ -57,7 +57,7 @@ import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
-import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -2840,7 +2840,7 @@ export const chatStore = createStore<ChatState>()(
           // past a page with persistable messages must wait for the durable
           // commit: the record must never point past unstored data. A merge
           // with nothing persistable (signal-only give-up) applies now.
-          const newCoverage = syncCoverageAfterArchiveMerge({
+          const { coverage: newCoverage, transition: coverageTransition } = syncCoverageAfterArchiveMerge({
             coverage: state.conversationCoverage,
             id: conversationId,
             direction,
@@ -2859,6 +2859,13 @@ export const chatStore = createStore<ChatState>()(
             newCoverage !== state.conversationCoverage &&
             mustGateOnChain
           const coverageAfterMerge = deferCoverageCommit ? state.conversationCoverage : newCoverage
+          // Reported where the value actually enters the state (#1138):
+          // reporting at merge time on the DEFERRED path would arm the flush for
+          // a write that still carries the old record, and leave the real one
+          // throttled. `noteCoverageTransition` no-ops for the safe transitions.
+          if (!deferCoverageCommit) {
+            noteCoverageTransition(getScopedStorageKey(), conversationId, coverageTransition)
+          }
 
           // Deferred commit of the gap/coverage transitions, gated on the
           // given promise (this page's write chained behind every earlier
@@ -2890,6 +2897,9 @@ export const chatStore = createStore<ChatState>()(
                     const next = new Map(s.conversationCoverage)
                     next.set(conversationId, target)
                     out.conversationCoverage = next
+                    // The deferred half of the report above: THIS is the write
+                    // that first carries the new record.
+                    noteCoverageTransition(getScopedStorageKey(), conversationId, coverageTransition)
                   }
                 }
                 return Object.keys(out).length > 0 ? out : s
