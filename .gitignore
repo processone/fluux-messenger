@@ -70,6 +70,7 @@ server/
 .superpowers/
 .agents/
 AGENTS.md
+CLAUDE.md
 
 # Gas Town (added by gt)
 .runtime/
