@@ -43,10 +43,12 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+  const resumeArchiveHeldRooms = new Set<string>()
   const roomFetchOwners = new Map<string, symbol>()
   const freshSessionJoinedRooms = new Set<string>()
   let freshSessionRequiresJoinConfirmation = false
   let uninterruptedResumeMayEmitSyntheticOnline = false
+  let disposed = false
 
   function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
     return (
@@ -56,6 +58,7 @@ export function setupRoomSideEffects(
   }
 
   function isRoomFetchStillEligible(roomJid: string): boolean {
+    if (disposed) return false
     const state = roomStore.getState()
     const room = state.rooms.get(roomJid)
     return !!(
@@ -82,6 +85,7 @@ export function setupRoomSideEffects(
    * loading the IndexedDB cache.
    */
   async function fetchMAMForRoom(roomJid: string): Promise<void> {
+    if (disposed) return
     const room = roomStore.getState().rooms.get(roomJid)
     if (!room) {
       return
@@ -231,7 +235,10 @@ export function setupRoomSideEffects(
         // scroll position off (lands mid-list). Live delivery keeps the resident set
         // current, so there is genuinely nothing to fetch.
         const residentCount = roomStore.getState().rooms.get(activeRoomJid)?.messages.length ?? 0
-        if (fetchInitiated.has(activeRoomJid) && residentCount > 0) {
+        if (
+          fetchInitiated.has(activeRoomJid) &&
+          (residentCount > 0 || resumeArchiveHeldRooms.has(activeRoomJid))
+        ) {
           if (debug) console.log('[SideEffects] Room: re-entry of caught-up resident room, skipping cache reload + MAM', activeRoomJid)
           return
         }
@@ -241,6 +248,7 @@ export function setupRoomSideEffects(
         // setActiveRoom, session restore) and the first activation / post-reconnect catch-up.
         if (debug) console.log('[SideEffects] Room: Loading from cache')
         await roomStore.getState().loadMessagesFromCache(activeRoomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+        if (disposed) return
 
         // Step 2: Background MAM fetch for catchup. Skip only if this room's archive
         // was actually fetched this session. Guard on hasQueried, NOT just
@@ -251,7 +259,10 @@ export function setupRoomSideEffects(
         // so a genuinely-empty room still skips the redundant re-query on re-entry.
         if (
           fetchInitiated.has(activeRoomJid) &&
-          roomStore.getState().getRoomMAMQueryState(activeRoomJid).hasQueried
+          (
+            resumeArchiveHeldRooms.has(activeRoomJid) ||
+            roomStore.getState().getRoomMAMQueryState(activeRoomJid).hasQueried
+          )
         ) {
           if (debug) console.log('[SideEffects] Room: MAM already fetched for', activeRoomJid)
           return
@@ -276,6 +287,7 @@ export function setupRoomSideEffects(
     if (!followsUninterruptedResume) {
       freshSessionJoinedRooms.clear()
       fetchInitiated.clear()
+      resumeArchiveHeldRooms.clear()
     }
     uninterruptedResumeMayEmitSyntheticOnline = false
 
@@ -307,10 +319,12 @@ export function setupRoomSideEffects(
     uninterruptedResumeMayEmitSyntheticOnline = true
     freshSessionRequiresJoinConfirmation = false
     freshSessionJoinedRooms.clear()
+    sessionStartTime = Date.now()
 
     if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
 
     const state = roomStore.getState()
+    resumeArchiveHeldRooms.clear()
     const archiveHeld = (jid: string): boolean => {
       const room = state.rooms.get(jid)
       if (!room) return false
@@ -319,10 +333,12 @@ export function setupRoomSideEffects(
     for (const [jid, room] of state.rooms) {
       if ((room.joined || room.isJoining) && archiveHeld(jid)) {
         fetchInitiated.add(jid)
+        resumeArchiveHeldRooms.add(jid)
       }
     }
     if (state.activeRoomJid && archiveHeld(state.activeRoomJid)) {
       fetchInitiated.add(state.activeRoomJid)
+      resumeArchiveHeldRooms.add(state.activeRoomJid)
     }
   })
 
@@ -334,6 +350,7 @@ export function setupRoomSideEffects(
       if (status !== 'online' && previousStatus === 'online') {
         uninterruptedResumeMayEmitSyntheticOnline = false
         fetchInitiated.clear()
+        resumeArchiveHeldRooms.clear()
       }
       previousStatus = status
     }
@@ -391,6 +408,13 @@ export function setupRoomSideEffects(
   })
 
   return () => {
+    disposed = true
+    for (const roomJid of roomFetchOwners.keys()) {
+      roomStore.getState().setRoomMAMLoading(roomJid, false)
+    }
+    roomFetchOwners.clear()
+    fetchInitiated.clear()
+    resumeArchiveHeldRooms.clear()
     unsubscribe()
     unsubscribeOnline()
     unsubscribeResumed()
