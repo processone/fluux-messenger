@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStatus, useXMPPContext, hasFastToken, getBareJid, getDomain } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'

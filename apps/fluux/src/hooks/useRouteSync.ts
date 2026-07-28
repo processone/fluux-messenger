@@ -25,7 +25,7 @@
  * - Back/up navigation uses `replace` (clean return to list)
  */
 import { useCallback, useMemo } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import type { SidebarView } from '@/components/sidebar-components/types'
 
 /** Options for navigation functions to control history behavior */

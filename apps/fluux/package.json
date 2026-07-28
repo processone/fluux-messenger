@@ -46,7 +46,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-i18next": "^17.0.0",
-    "react-router-dom": "^7.12.0",
+    "react-router": "^8.3.0",
     "shiki": "^4.0.2",
     "xstate": "^5.25.1",
     "zustand": "^5.0.0"

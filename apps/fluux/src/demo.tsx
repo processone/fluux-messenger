@@ -10,7 +10,7 @@
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { HashRouter } from 'react-router-dom'
+import { HashRouter } from 'react-router'
 import { XMPPProvider, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
 import { DemoClient, setResidentWindowSize } from '@fluux/sdk/demo'
 import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'

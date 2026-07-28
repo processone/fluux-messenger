@@ -8,7 +8,7 @@
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
 import { useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { dismissNotification } from '@/utils/dismissNotification'
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, NavLink, useLocation, useNavigate } from 'react-router'
 import { ChatLayout } from './ChatLayout'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 
@@ -491,9 +491,7 @@ vi.mock('./Sidebar', () => ({
     onSelectContact: (contact: Contact) => void
     onStartChat: (contact: Contact) => void
   }) => {
-    // Use NavLink from react-router-dom for navigation
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { NavLink, useLocation } = require('react-router-dom')
+    // Use NavLink from react-router for navigation
     const location = useLocation()
     // Derive sidebarView from URL path for display
     const pathToView: Record<string, string> = {

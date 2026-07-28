@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { useNavigate, useLocation, useNavigationType } from 'react-router-dom'
+import { useNavigate, useLocation, useNavigationType } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'

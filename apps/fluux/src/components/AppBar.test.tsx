@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { AppBar } from './AppBar'
 
 // Reactive gates — toggled per test.
@@ -17,8 +17,8 @@ vi.mock('@/hooks/useFullscreen', () => ({
 }))
 
 const navigateSpy = vi.fn()
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>()
+vi.mock('react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router')>()
   return { ...actual, useNavigate: () => navigateSpy }
 })
 
