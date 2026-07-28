@@ -12,8 +12,14 @@ describe('MessageComposer responsive layout', () => {
     const row = textarea.closest('.composer-actions')
     expect(row).not.toBeNull()
 
-    // The text field occupies the `input` grid area.
-    expect(textarea.className).toContain('[grid-area:input]')
+    // The text field occupies the `input` grid area — via the frame that wraps
+    // it, which is what carries the composer's block padding. That padding must
+    // stay off the textarea itself: padding on the scroll container offsets the
+    // line grid inside the scrollport and half-clips a line at every scroll edge.
+    const frame = textarea.closest('[class*="[grid-area:input]"]')
+    expect(frame).not.toBeNull()
+    expect(frame!.className).toContain('py-3')
+    expect(textarea.className).not.toContain('py-3')
 
     // The flanking controls carry their own grid areas so the template can
     // place them on either one row (wide) or two rows (narrow).

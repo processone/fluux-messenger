@@ -539,7 +539,6 @@
             "encryptedCouldNotDecrypt": "Níorbh fhéidir an teachtaireacht seo a dhíchriptiú",
             "encryptedDecrypting": "Teachtaireacht criptithe, ag díchriptiú…",
             "encryptedDisabled": "Tá an criptiú díchumasaithe. Cumasaigh é sna socruithe",
-            "couldNotDecryptTooltip": "Tá an teachtaireacht criptithe le heochair nach bhfuil ar fáil ar an ngléas seo",
             "unsupportedMethodTooltip": "Criptithe le {{method}}, modh nach dtacaíonn an gléas seo leis go fóill",
             "unsupportedMessage": "Teachtaireacht chriptithe: ní thacaítear le {{method}}",
             "unsupportedMessageGeneric": "Teachtaireacht chriptithe: ní thacaítear leis an modh",
@@ -565,7 +564,10 @@
                     "untrusted": "gan fíorú",
                     "rejected": "DIÚLTAITHE: síniú neamhbhailí"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Criptithe le heochair nach bhfuil ag an ngléas seo",
+            "couldNotDecryptSignature": "Níor taispeánadh an teachtaireacht seo toisc nárbh fhéidir muinín a chur ina síniú",
+            "couldNotDecryptUnreadable": "Níorbh fhéidir an teachtaireacht seo a léamh"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptithe go {{name}}. Cliceáil chun méarlorg a fhíorú",

@@ -17,7 +17,7 @@ The SDK uses a **hybrid lazy + background** approach organized into five layers:
 | **Preview refresh** | Connect | All non-archived conversations | Fast (max=5, concurrency=3) |
 | **Conversation catch-up** | After preview refresh | All non-archived conversations | Slow (max=100, concurrency=2) |
 | **Roster discovery** | Connect | Roster contacts without a conversation | Slow (max=50, concurrency=2) |
-| **Room catch-up** | 10 s after connect | All MAM-enabled joined rooms | Slow (max=100, concurrency=2) |
+| **Room catch-up** | 10 s after fresh-session setup | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
 | **Lazy fetch** | User opens a conversation/room | Single conversation or room | On demand |
 
 Additionally, once per day, archived conversations are checked for new activity and auto-unarchived if new incoming messages are found.
@@ -57,11 +57,17 @@ Runs in parallel with stages 1–2.
 
 ### 4. Room Catch-Up (delayed, background)
 
-Triggered 10 seconds after connect, giving rooms time to finish joining via bookmarks and to discover MAM support.
+Triggered 10 seconds after fresh-session setup, giving rooms time to finish joining via bookmarks and to discover MAM support.
 
-- Calls `catchUpAllRooms()`.
-- Filters rooms to only those that are joined, support MAM, and are not Quick Chat rooms.
-- Same forward/backward query pattern as conversation catch-up.
+- Filters rooms to those that confirmed self-presence in the current session,
+  are still joined, support MAM, are not Quick Chat rooms, and are not active.
+- Peeks at each room's cached messages and uses the same forward/backward query
+  pattern as conversation catch-up.
+- Revalidates the session, membership, active room, and foreground ownership
+  after cache hydration so an obsolete background attempt cannot query MAM.
+- Rooms that join or discover MAM after the initial pass are caught up once
+  eligible. If a foreground attempt releases an inactive room, ownership is
+  handed to this background path rather than issuing overlapping queries.
 - Runs at **concurrency 2**.
 - The 10-second timer is cancelled on disconnect and cleaned up on subscription teardown.
 
@@ -71,12 +77,29 @@ Triggered by side effects when the user opens a conversation or room.
 
 - If the conversation/room has cached messages: forward query from the newest cached timestamp.
 - If no cached messages: backward query for recent history.
-- Also triggered on reconnect for the currently active conversation/room.
-- Triggered when MAM support is discovered for the active room (room MAM discovery can be asynchronous).
+- On a fresh session, the active room may display hydrated cache immediately,
+  but it waits for successful self-presence (`room:joined`) in that session
+  before querying its archive.
+- A successful SM resume trusts preserved room membership and does not repeat
+  foreground MAM for an archive already held locally. A room whose archive has
+  never been held remains eligible on first open or late MAM discovery.
+- The active-room catch-up revalidates room, join, and connection state after
+  cache hydration; a superseded attempt cannot query MAM or clear its
+  replacement's tracking.
+- MAM support discovered asynchronously can trigger the active-room fetch only
+  after the same session/join eligibility checks pass.
+
+The detailed fresh-session, SM-resume, and cache-hydration invariants are owned
+by the [confirmed-join design](superpowers/specs/2026-07-27-room-mam-after-join-design.md).
 
 ## Deduplication
 
-The store layer handles deduplication automatically. If the background catch-up and the lazy fetch both return the same messages, duplicates are discarded by the store based on message IDs. This means the active conversation does not need to be excluded from background catch-up — simpler code with no risk of duplicate messages.
+The store layer still deduplicates returned messages by ID. In addition, the
+foreground and delayed room paths coordinate ownership: the background pass
+excludes the active room, observes foreground coverage for the current
+membership, and accepts a released attempt only after the room becomes
+inactive. This prevents duplicate room archive queries instead of relying on
+store deduplication alone.
 
 ## Concurrency
 
@@ -97,10 +120,11 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 |------|------|
 | `packages/fluux-sdk/src/core/modules/MAM.ts` | MAM query methods, preview refresh, catch-up, roster discovery |
 | `packages/fluux-sdk/src/core/backgroundSync.ts` | Orchestrates all background sync stages on connect |
-| `packages/fluux-sdk/src/core/sideEffects.ts` | Lazy loading triggers: conversation switch, reconnect |
+| `packages/fluux-sdk/src/core/chatSideEffects.ts` and `roomSideEffects.ts` | Active conversation/room cache and MAM triggers |
+| `packages/fluux-sdk/src/core/roomMamHandoff.ts` and `roomMembershipEpoch.ts` | Coordinates foreground/background room ownership across membership changes |
 | `packages/fluux-sdk/src/utils/concurrencyUtils.ts` | `executeWithConcurrency()` utility |
 | `packages/fluux-sdk/src/core/modules/MAM.catchup.test.ts` | Tests for catch-up and discovery methods |
-| `packages/fluux-sdk/src/core/sideEffects.test.ts` | Tests for side-effect wiring |
+| `packages/fluux-sdk/src/core/roomSideEffects.test.ts` and `backgroundSync.test.ts` | Tests for room trigger, ownership, and handoff wiring |
 
 ## Sequence Diagram
 
@@ -117,11 +141,17 @@ Connect / Reconnect
 │  ├─ discoverNewConversationsFromRoster()       ← concurrency 2, max=50
 │  │
 │  └─ setTimeout(10s)
-│     └─ catchUpAllRooms()                       ← concurrency 2, max=100
+│     └─ confirmed inactive room catch-up        ← concurrency 2, max=100
 │
 ├─ User opens conversation
 │  └─ fetchMAMForConversation()                  ← on demand, forward query
 │
-└─ User opens room
-   └─ fetchMAMForRoom()                          ← on demand, forward query
+├─ Fresh-session self-presence for active room
+│  └─ fetchMAMForRoom()                          ← after cache + eligibility checks
+│
+├─ Successful SM resume
+│  └─ trust membership; skip held room archive
+│
+└─ User opens eligible room
+   └─ fetchMAMForRoom()                          ← on demand, cache first
 ```

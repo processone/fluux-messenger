@@ -12,6 +12,7 @@ import {
   _clearAllViewportEvidenceForTesting,
   type EvidenceKey,
 } from './shared/viewportEvidence'
+import { _resetForTesting, flush as flushThrottledStorage } from './shared/throttledStorage'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -101,6 +102,10 @@ describe('chatStore', () => {
       drafts: new Map(),
       windowAtLiveEdge: new Map(),
     })
+    // The setState above went through the persist adapter and opened a
+    // throttle window. Drop it, so each test starts with a closed window and
+    // its first mutation takes the leading edge.
+    _resetForTesting()
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
     // rejecting/false-resolving saveMessages would leak it into every later
@@ -330,6 +335,8 @@ describe('chatStore', () => {
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationGaps.has(cid)).toBe(true)
       })
+      // This test means to observe the final persisted blob (survives reload).
+      flushThrottledStorage()
       const scoped = localStorageMock._store['xmpp-chat-storage:alice@example.com']
       expect(scoped).toBeDefined()
       expect(scoped).toContain('conversationGaps')
@@ -1945,9 +1952,10 @@ describe('chatStore', () => {
       const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
       const payload = JSON.parse(persisted)
       // What JSON.stringify actually writes for a `Date` inside the meta blob.
-      const isoPointer = { messageId: 'msg1', timestamp: '2025-01-10T10:00:00.000Z' }
-      payload.state.conversations[0][1].readPointer = isoPointer
-      payload.state.conversationMeta[0][1].readPointer = isoPointer
+      payload.state.conversationMeta[0][1].readPointer = {
+        messageId: 'msg1',
+        timestamp: '2025-01-10T10:00:00.000Z',
+      }
 
       chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
       localStorageMock._store['xmpp-chat-storage'] = JSON.stringify(payload)
@@ -2127,6 +2135,11 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setDraft('alice@example.com', 'local draft')
 
+      // The mutations above left a pending throttled write for the bare key.
+      // Dropping it (not just the on-disk copy) is what makes "no saved data
+      // anywhere" true — otherwise switchAccount's flush would resurrect it
+      // into the legacy-migration path below.
+      _resetForTesting()
       localStorageMock.removeItem('xmpp-chat-storage')
       setStorageScopeJid('bob@example.com')
       chatStore.getState().switchAccount('bob@example.com')
@@ -2167,9 +2180,11 @@ describe('chatStore', () => {
   })
 
   describe('persistence', () => {
-    it('should serialize conversations Map to array', () => {
+    it('should serialize conversation Maps to arrays', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com', 'Alice'))
       chatStore.getState().addConversation(createConversation('bob@example.com', 'Bob'))
+      // This test means to observe the final persisted blob, not a mid-burst write.
+      flushThrottledStorage()
 
       // Check localStorage was called with serialized data
       expect(localStorageMock.setItem).toHaveBeenCalled()
@@ -2177,9 +2192,65 @@ describe('chatStore', () => {
       const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
       const stored = JSON.parse(lastCall[1])
 
-      // Should be array of tuples, not a Map
-      expect(Array.isArray(stored.state.conversations)).toBe(true)
-      expect(stored.state.conversations.length).toBe(2)
+      // Should be arrays of tuples, not Maps
+      expect(Array.isArray(stored.state.conversationEntities)).toBe(true)
+      expect(stored.state.conversationEntities.length).toBe(2)
+      expect(Array.isArray(stored.state.conversationMeta)).toBe(true)
+      expect(stored.state.conversationMeta.length).toBe(2)
+    })
+
+    // The compat map is a view over the two maps above — `deserializeState`
+    // rebuilds it on load — so persisting it wrote the same data twice and
+    // doubled the cost of every write.
+    it('does not persist the conversations compat map', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com', 'Alice'))
+
+      const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
+      expect('conversations' in JSON.parse(lastCall[1]).state).toBe(false)
+    })
+
+    // The compat map has to come back on rehydrate even though nothing wrote
+    // it, and it has to be exactly the entity/meta merge.
+    it('rebuilds the compat map on rehydrate from entities and meta alone', async () => {
+      const conv = { ...createConversation('alice@example.com', 'Alice'), unreadCount: 4 }
+      chatStore.getState().addConversation(conv)
+      const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
+
+      chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
+      localStorageMock._store['xmpp-chat-storage'] = persisted
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
+
+      const state = chatStore.getState()
+      const restored = state.conversations.get('alice@example.com')
+      expect(restored).toBeDefined()
+      expect(restored).toEqual({
+        ...state.conversationEntities.get('alice@example.com'),
+        ...state.conversationMeta.get('alice@example.com'),
+      })
+      expect(restored?.name).toBe('Alice')
+      expect(restored?.unreadCount).toBe(4)
+    })
+
+    // A blob written before the entity/meta split carries only `conversations`.
+    // Dropping the field from what we WRITE must not stop us READING those.
+    it('still restores a legacy blob that carries only the conversations map', async () => {
+      chatStore.setState({ conversations: new Map(), conversationMeta: new Map(), conversationEntities: new Map() })
+      localStorageMock._store['xmpp-chat-storage'] = JSON.stringify({
+        state: {
+          conversations: [
+            ['alice@example.com', { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 2 }],
+          ],
+          archivedConversations: [],
+        },
+      })
+      localStorageMock.getItem.mockImplementation((key: string) => localStorageMock._store[key] || null)
+      await chatStore.persist.rehydrate()
+
+      const state = chatStore.getState()
+      expect(state.conversations.get('alice@example.com')?.name).toBe('Alice')
+      expect(state.conversationEntities.get('alice@example.com')?.name).toBe('Alice')
+      expect(state.conversationMeta.get('alice@example.com')?.unreadCount).toBe(2)
     })
 
     it('should NOT serialize messages to localStorage (they are in IndexedDB)', () => {
@@ -2187,6 +2258,9 @@ describe('chatStore', () => {
       // The localStorage persistence only stores conversations metadata
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().addMessage(createMessage('alice@example.com', 'Hello'))
+      // This test means to observe the final persisted blob, not a mid-burst
+      // write coalesced away by the throttle.
+      flushThrottledStorage()
 
       const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
       const stored = JSON.parse(lastCall[1])
@@ -2227,6 +2301,8 @@ describe('chatStore', () => {
         isOutgoing: false,
       }
       chatStore.getState().addMessage(msg)
+      // This test means to observe the final persisted blob, not a mid-burst write.
+      flushThrottledStorage()
 
       // Get the serialized data
       const lastCall = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1]
@@ -2235,15 +2311,14 @@ describe('chatStore', () => {
       // The persist middleware serializes the conversation
       const parsed = JSON.parse(serialized)
 
-      // Conversation should have lastMessage (updated when message was added)
-      const conversationData = parsed.state.conversations.find(
+      // The preview rides in conversationMeta — the only persisted carrier.
+      const metaData = parsed.state.conversationMeta.find(
         ([id]: [string, unknown]) => id === 'alice@example.com'
       )
-      expect(conversationData).toBeDefined()
-      // lastMessage is now stored on the conversation
-      expect(conversationData[1].lastMessage).toBeDefined()
-      expect(conversationData[1].lastMessage.id).toBe('test-msg')
-      expect(conversationData[1].lastMessage.body).toBe('Test')
+      expect(metaData).toBeDefined()
+      expect(metaData[1].lastMessage).toBeDefined()
+      expect(metaData[1].lastMessage.id).toBe('test-msg')
+      expect(metaData[1].lastMessage.body).toBe('Test')
     })
 
     // Deserialization used to zero the count, so a cold start flashed empty
@@ -2255,7 +2330,7 @@ describe('chatStore', () => {
 
       // The serialized data carries the count...
       const persisted = localStorageMock.setItem.mock.calls[localStorageMock.setItem.mock.calls.length - 1][1]
-      expect(JSON.parse(persisted).state.conversations[0][1].unreadCount).toBe(5)
+      expect(JSON.parse(persisted).state.conversationMeta[0][1].unreadCount).toBe(5)
 
       // ...and the restore keeps it. (Clearing the store re-persists an empty
       // payload, so the captured one has to be put back before rehydrating.)
@@ -2317,6 +2392,9 @@ describe('chatStore', () => {
       // See: ChatLayout manages activeConversationId via ViewStateData.
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')
+      // This test means to observe the final persisted blob, not a mid-burst
+      // write coalesced away by the throttle.
+      flushThrottledStorage()
 
       // Verify the store has the active conversation set
       expect(chatStore.getState().activeConversationId).toBe('alice@example.com')
@@ -2556,6 +2634,10 @@ describe('chatStore', () => {
     beforeEach(() => {
       // Reset drafts state
       chatStore.setState({ drafts: new Map() })
+      // Same gotcha as the outer beforeEach: this setState opened a throttle
+      // window via the persist adapter. Close it so each test's first
+      // mutation takes the leading edge instead of being coalesced behind it.
+      _resetForTesting()
     })
 
     it('should save a draft for a conversation', () => {

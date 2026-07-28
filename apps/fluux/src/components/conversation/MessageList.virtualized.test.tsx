@@ -73,6 +73,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       measureElement: () => {},
       scrollToOffset: () => {},
       scrollToIndex: () => {},
+      beginAnimatedScrollToOffset: () => {},
     }
     return stub
   },

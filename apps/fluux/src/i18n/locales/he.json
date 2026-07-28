@@ -535,7 +535,6 @@
             "encryptedCouldNotDecrypt": "לא ניתן היה לפענח הודעה זו",
             "encryptedDecrypting": "הודעה מוצפנת, מפענח…",
             "encryptedDisabled": "ההצפנה מושבתת. הפעל אותה בהגדרות",
-            "couldNotDecryptTooltip": "ההודעה הוצפנה למפתח שאינו זמין במכשיר זה",
             "unsupportedMethodTooltip": "מוצפן באמצעות {{method}}, שיטה שמכשיר זה עדיין אינו תומך בה",
             "unsupportedMessage": "הודעה מוצפנת: {{method}} אינו נתמך",
             "unsupportedMessageGeneric": "הודעה מוצפנת: השיטה אינה נתמכת",
@@ -561,7 +560,10 @@
                     "untrusted": "לא מאומת",
                     "rejected": "נדחה: חתימה לא תקינה"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "מוצפן במפתח שאין במכשיר הזה",
+            "couldNotDecryptSignature": "ההודעה לא הוצגה משום שלא ניתן היה לסמוך על החתימה שלה",
+            "couldNotDecryptUnreadable": "לא ניתן היה לקרוא את ההודעה הזאת"
         },
         "verifyPeer": {
             "chipAriaLabel": "מוצפן ל-{{name}}. לחץ כדי לאמת את טביעת האצבע",

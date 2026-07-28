@@ -15,6 +15,7 @@ Then open **http://localhost:5173/demo.html**
 | Parameter  | Default | Description                                                                              |
 |------------|---------|------------------------------------------------------------------------------------------|
 | `tutorial` | `true`  | Set to `false` to disable tutorial tooltips (useful for video recording and screenshots) |
+| `sound`    | `false` | Set to `true` to enable the notification sound (off by default so the scripted demo and automated runs stay silent) |
 
 Example: **http://localhost:5173/demo.html?tutorial=false**
 
@@ -30,7 +31,11 @@ The demo populates the UI with:
   - PDF attachment
   - Video attachment
   - Link preview with Open Graph metadata (XEP-0422 Message Fastening)
-- **1 group chat room** ("Team Chat") with 4 occupants, reactions, and replies
+- **Group chat rooms**: "Team Chat" (4 occupants, reactions, replies) and "Design Review"
+- **1 password-protected room** ("Board"), bookmarked but not joined. The simulated
+  service refuses a join without the password (`fluux`) exactly as a real one does,
+  so the unlock path — 401, password prompt, retry, and remembering the password for
+  the next join — can be exercised without a server.
 - **Live animations** that start after page load: typing indicators, incoming messages, and emoji reactions
 
 ## Recording a Demo Video

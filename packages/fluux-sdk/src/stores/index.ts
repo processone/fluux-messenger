@@ -84,3 +84,9 @@ export type { SDKStores } from './sdkStores'
 // =============================================================================
 
 export { buildScopedStorageKey } from '../utils/storageScope'
+
+// Flush throttled localStorage writes. Re-exported here (not just from the main
+// entry) because `splitting: false` gives each subpath bundle its OWN copy of
+// throttledStorage — a consumer who imports stores from here but flush from
+// '@fluux/sdk' would be flushing a different module instance, a silent no-op.
+export { flush as flushPersistentStorage } from './shared/throttledStorage'

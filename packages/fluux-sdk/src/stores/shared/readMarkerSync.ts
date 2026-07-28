@@ -22,8 +22,9 @@ export interface ReadMarkerMeta {
 
 export type RemoteDisplayedResolution =
   /**
-   * The referenced message is not loaded — remember the stanza-id as a
-   * pending high-water mark, to be resolved when messages arrive.
+   * The loaded slice cannot yet order the remote marker against the local read
+   * pointer — remember the stanza-id as a pending high-water mark for a later
+   * merge or activation fold.
    */
   | { kind: 'stash-pending' }
   /** No advance and nothing stale to clean up — state untouched. */
@@ -61,6 +62,42 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
 ): RemoteDisplayedResolution {
   const match = messages.find((m) => m.stanzaId === stanzaId)
   if (!match) return { kind: 'stash-pending' }
+
+  // `onMessageSeen` orders positions BY INDEX, so it needs BOTH ends in this
+  // slice. When the message the local pointer names is absent it refuses to
+  // advance — it cannot prove the marker is ahead rather than behind. That is an
+  // undecided comparison, not an "already read" verdict, and it is reachable on
+  // every fresh session: the forward catch-up merges only the newest MAM page,
+  // so the marker's message is in it while the pointer's is still on disk.
+  // Letting it fall through to the index comparator would report
+  // `unchanged`/`clear-pending` and drop the remote position for good.
+  //
+  const localPointerId = meta.readPointer?.messageId
+  const pointerInSlice =
+    localPointerId === undefined || messages.some((m) => m.id === localPointerId)
+
+  if (!pointerInSlice) {
+    // Timestamps settle NEITHER direction, so nothing is decided here.
+    //
+    // `migrateReadPointer` copies the pre-#1081 `lastSeenMessageId` +
+    // `lastReadAt` pair through unchanged, and that `lastReadAt` meant
+    // "timestamp of the newest LOADED message when I last activated" — not the
+    // timestamp of the message actually read up to. A migrated pointer's
+    // timestamp can therefore sit on EITHER side of the message it names, which
+    // breaks both comparisons: a strictly-older marker may still be a valid
+    // forward advance (discarding it loses a real cross-device read), and a
+    // strictly-newer one may sit behind the true position (advancing to it
+    // regresses a forward-only pointer, unrecoverably).
+    //
+    // Note that the `ReadPointer` doc comment claiming `lastReadAt` "is at or
+    // behind the named message" contradicts `migrateReadPointer`'s own comment.
+    // Do not build ordering on either statement until one is proven.
+    //
+    // Accepted cost: a marker the pointer is already past stays pending and
+    // re-folds on each activation. That is churn, not data loss — the safe
+    // direction to err in, given the alternative is dropping a read position.
+    return { kind: 'stash-pending' }
+  }
 
   // Forward-only advance using the shared comparator (compares by index).
   const updated = notifState.onMessageSeen(
@@ -133,10 +170,11 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
  *
  * Only RESOLVED folds are recorded (via `markFolded`, called by
  * {@link foldPendingRemoteDisplayed} when the apply actually advanced or cleared
- * the marker). A fold that stashed — the marker's message wasn't in the loaded
- * slice — never took effect, so recording it would strand the marker: the next
- * activation would skip the fold as "already consumed" while no merge may ever
- * retry it. Each store owns one gate instance; `reset()` on account switch.
+ * the marker). A fold that stashed — the loaded slice could not order the marker
+ * against the local pointer — never took effect, so recording it would strand
+ * the marker: the next activation would skip the fold as "already consumed"
+ * while no merge may ever retry it. Each store owns one gate instance; `reset()`
+ * on account switch.
  */
 export interface MdsSessionGate {
   /**
@@ -181,7 +219,7 @@ export interface ActivationFoldResult {
  * actually resolved. Shared by chatStore.activateConversation and
  * roomStore.activateRoom, which call it twice per activation:
  * once against the freshly loaded latest slice, and again after a load-around
- * of a deep stale pointer may have brought the marker's message into the slice.
+ * may have brought the marker and local pointer into one orderable slice.
  */
 export function foldPendingRemoteDisplayed(
   gate: MdsSessionGate,

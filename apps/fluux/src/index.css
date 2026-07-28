@@ -1227,11 +1227,42 @@ input[type="range"]::-moz-range-thumb {
 
 /* Message input auto-resize - JS handles height, CSS ensures proper text wrapping */
 .message-input {
-  min-height: 44px;
-  max-height: 200px;
-  line-height: 24px; /* Must match lineHeight constant in MessageComposer.tsx */
+  /* One line. The block padding lives on the input frame, not here, so these
+     bounds are pure line boxes — a taller min-height would bind against the
+     autosize's one-line height and stretch the box past its content. */
+  min-height: 24px;
+  /* Ceiling for the height MessageComposer's autosize writes: COMPOSER_MAX_LINES
+     (8) line boxes. Leaving this below the JS cap would clamp the composer and
+     clip the last line. */
+  max-height: calc(24px * 8);
+  line-height: 24px; /* Must match COMPOSER_LINE_HEIGHT in MessageComposer.tsx */
   word-break: break-word;
   overflow-wrap: break-word;
+  /* Reserve the scrollbar gutter unconditionally. The room composer stacks a
+     mention-highlight mirror div behind a transparent textarea, and both carry
+     this class. ::-webkit-scrollbar is styled with an explicit width, so the
+     scrollbar takes layout rather than overlaying: without a stable gutter the
+     textarea loses those pixels of content width the moment it starts scrolling
+     while the mirror keeps the full width. The two layers then wrap at different
+     columns and the visible text drifts away from the caret it is meant to sit
+     under. A stable gutter also keeps text from reflowing as the cap is crossed. */
+  scrollbar-gutter: stable;
+}
+
+/* The room composer's mention-highlight mirror. It is a scroll container purely
+   so it reserves the same scrollbar width as the textarea stacked on top of it
+   (see RoomView) — its scrollbar must never be *seen*, only measured. Hiding the
+   thumb keeps the reserved width intact, where `::-webkit-scrollbar { width: 0 }`
+   would give it back and reintroduce the wrap mismatch. The textarea above paints
+   the real scrollbar in the same gutter.
+
+   Deliberately NOT `scrollbar-color: transparent`: declaring that property opts
+   the element out of the styled ::-webkit-scrollbar and back onto the engine's
+   standard scrollbar, which reserves a different width — measured as a 6px
+   mismatch against the textarea, i.e. the exact drift this class exists to
+   prevent. */
+.composer-mirror::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 /* Tauri window title bar integration */

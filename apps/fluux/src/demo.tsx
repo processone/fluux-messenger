@@ -68,6 +68,13 @@ if (densityParam === 'compact' || densityParam === 'comfortable') {
   // Drive the store directly (the store is already created by this point via the import)
   useSettingsStore.getState().setDensityMode(densityParam)
 }
+// Demo mode is silent by default: the scripted animation and automated runs (screenshots,
+// e2e, agent-driven checks) deliver messages continuously, and the notification "ding" on
+// every arrival is noise. Pass ?sound=true to hear it (or flip the toggle in Settings).
+// setState (not setSoundEnabled) so we don't write 'fluux-sound' — demo.html and the real
+// app share a localStorage origin, and the demo must not change the app's saved preference.
+useSettingsStore.setState({ soundEnabled: params.get('sound') === 'true' })
+
 // Clear IndexedDB caches (async, best-effort)
 indexedDB.deleteDatabase('fluux-message-cache')
 indexedDB.deleteDatabase('fluux-avatar-cache')

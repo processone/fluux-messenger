@@ -251,6 +251,14 @@ export function useTanstackMessageVirtualizer({
       // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
       offsetCbRef.current?.(offset, false)
     },
+    // Deliberately WITHOUT the offsetCb push its two neighbours perform: during an animation
+    // the scroller has not arrived yet, so claiming the destination offset would re-window to it
+    // before paint and retire @tanstack's pending-scroll reconciler on its next frame — losing
+    // exactly the ownership this call is taken out to hold. The rAF-polled observeElementOffset
+    // tracks the animation frame by frame instead, so there is no scrollOffset desync to guard.
+    beginAnimatedScrollToOffset: (offset) => {
+      virtualizer.scrollToOffset(offset, { behavior: 'smooth' })
+    },
     scrollToIndex: (index, opts) => {
       virtualizer.scrollToIndex(index, opts)
       // Same scrollOffset-desync guard as scrollToOffset above, on the stick-to-bottom path.
@@ -258,7 +266,7 @@ export function useTanstackMessageVirtualizer({
       // leaves its reactive scrollOffset stale until the scroll element's native 'scroll' event
       // fires. On Tauri WebKit that event is withheld/coalesced for a programmatic scroll, so the
       // mounted window never re-windows and a just-appended bottom row (new message — send OR
-      // receive, via pinVirtualizedBottom) is never windowed in: the view fails to stick to the
+      // receive, via the live-edge executor) is never windowed in: the view fails to stick to the
       // bottom. Push the landed scrollTop straight into @tanstack's offset callback with
       // isScrolling=false (non-sync, plain rerender — NOT a synthetic scroll event, which would
       // flushSync mid-commit) to re-window before paint. Chromium fires the native event promptly

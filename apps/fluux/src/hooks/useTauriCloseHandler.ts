@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useXMPPContext } from '@fluux/sdk'
+import { useXMPPContext, flushPersistentStorage } from '@fluux/sdk'
 import { markShuttingDown } from '@/utils/appShutdown'
 
 /**
@@ -51,6 +51,12 @@ export function useTauriCloseHandler(): void {
           // and auto-connect from the keychain — a pointless new XMPP session
           // that the exit kills moments later.
           markShuttingDown()
+
+          // Synchronously, BEFORE the first await. `disconnectBestEffort`
+          // races a 2s timeout and `exit_app` follows it, so a flush placed
+          // after any await can lose up to a window of state. `pagehide` is
+          // not reliable inside the webview on window close.
+          flushPersistentStorage()
 
           await disconnectBestEffort()
           await invoke('stop_xmpp_proxy').catch(() => {})

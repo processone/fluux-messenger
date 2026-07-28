@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * pinVirtualizedBottom cost-control behavior (the WebKitGTK freeze fixes):
+ * Live-edge executor cost-control behavior (the WebKitGTK freeze fixes):
  *
  * 1. CONVERGENCE EARLY-EXIT — the ~60-frame re-assert loop must stop once the
  *    geometry has been stable for a few consecutive frames instead of always
@@ -44,6 +44,8 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     ensureMessageMounted: vi.fn(() => Promise.resolve()),
     measureElement: () => {},
     scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+    // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
+    beginAnimatedScrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
     scrollToIndex: (_index: number, opts?: { align?: string }) => {
       const el = args.scrollRef.current; if (!el) return
       if (opts?.align === 'end') { scrollToEndCalls.count += 1; el.scrollTop = el.scrollHeight }
@@ -59,7 +61,7 @@ function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
   }))
 }
 
-describe('MessageList — pinVirtualizedBottom cost control', () => {
+describe('MessageList — live-edge executor cost control', () => {
   let realRaf: typeof requestAnimationFrame
   let rafQueue: FrameRequestCallback[]
   const flush = (frames: number) => { for (let i = 0; i < frames; i++) rafQueue.splice(0).forEach((cb) => cb(0)) }
@@ -115,6 +117,74 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
     repaint.overflowSets = []
     return { ...view, isAtBottomRef }
   }
+
+  // A link-preview (OGP) fastening lands SECONDS after its message, as an in-place update: same
+  // message id, same message count, no reactions change, and LinkPreviewCard deliberately never
+  // calls onMediaLoad. Under virtualization the content ResizeObserver is disabled too, so nothing
+  // else can notice the growth — the card used to render below the fold and stay there.
+  const linked: BaseMessage = {
+    id: 'linked-1', from: 'me@example.com', body: 'look at https://example.com',
+    timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
+  }
+  const preview = { url: 'https://example.com', title: 'Example', description: 'An example page' }
+
+  function renderWithLinkMessage(isAtBottomRef: { current: boolean }) {
+    const view = render(
+      <MessageList messages={[...makeMessages(50), linked]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70) // settle the entry pin completely
+    // Put the list in the state these tests are about: pinned at the bottom, with the geometry
+    // baseline seeded the way a real browser seeds it (scroll events fire constantly, and the
+    // growth correction reads the last one). The entry pin runs before instrumentScroller replaces
+    // the scrollTop accessor, so without this the harness starts at scrollTop=0 with a baseline the
+    // real app never has — and every gate downstream reads nonsense.
+    scroller.scrollTop = geo.scrollHeight
+    act(() => { scroller.dispatchEvent(new Event('scroll')) })
+    scrollToEndCalls.count = 0
+    return { view, scroller }
+  }
+
+  const fastenPreview = (view: { rerender: (ui: React.ReactElement) => void }, isAtBottomRef: { current: boolean }) =>
+    view.rerender(
+      <MessageList messages={[...makeMessages(50), { ...linked, linkPreview: preview }]} conversationId="conv-fastening" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+
+  // The card's height is in the scroller AS SOON AS the commit that mounts it lands: the row is
+  // absolutely positioned inside the @tanstack spacer and @tanstack re-measures it in the same
+  // frame, so scrollHeight already includes the growth when the layout effect runs. Verified in
+  // both engines — see the fastening tests in scripts/scroll-invariants.ts. Modelling this as a
+  // delayed growth is what let an earlier version of the geometry gate look correct here while
+  // failing in a real browser, so the growth is applied together with the rerender below.
+  // Deliberately larger than AT_BOTTOM_THRESHOLD (150): a gate reading POST-growth geometry must
+  // fail this test rather than squeak under the threshold.
+  const PREVIEW_CARD_PX = 260
+
+  it('re-pins the bottom when a late link-preview fastening grows a resident row', () => {
+    const isAtBottomRef = { current: true }
+    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+
+    geo.scrollHeight += PREVIEW_CARD_PX // the card is in the layout the moment it commits
+    fastenPreview(view, isAtBottomRef)
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBeGreaterThan(0)
+    expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
+  })
+
+  it('does not yank a scrolled-up reader down when a link-preview fastening lands', () => {
+    const isAtBottomRef = { current: true } // deliberately left latched true — geometry must decide
+    const { view, scroller } = renderWithLinkMessage(isAtBottomRef)
+
+    scroller.scrollTop = 400 // the reader scrolled up into history
+    geo.scrollHeight += PREVIEW_CARD_PX
+    fastenPreview(view, isAtBottomRef)
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBe(0)
+    expect(scroller.scrollTop).toBe(400)
+  })
 
   it('stops the re-assert loop early once geometry is stable (convergence exit)', () => {
     const { rerender, isAtBottomRef } = renderPinned()
@@ -211,8 +281,8 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
     const scroller = document.querySelector('[data-message-list]') as HTMLElement
 
     // Reproduce the reported state faithfully: the user has scrolled UP into history, but the
-    // follow flag is still latched `true`. That latch is the real bug — pinVirtualizedBottom's
-    // user-intent bail calls finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
+    // follow flag is still latched `true`. That latch was the real bug — the former pin loop's
+    // user-intent bail called finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
     // wheel-up mid-pin the flag stays true. With the old code (typing indicator inside the scroll
     // content, typingUsersCount driving the re-pin effect) each XEP-0085 composing/paused toggle
     // then re-pinned and hauled the viewport back to the bottom. The typing indicator now floats

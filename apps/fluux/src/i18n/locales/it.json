@@ -537,7 +537,6 @@
             "encryptedCouldNotDecrypt": "Impossibile decifrare questo messaggio",
             "encryptedDecrypting": "Messaggio crittografato, decrittazione…",
             "encryptedDisabled": "Crittografia disattivata. Attivala nelle impostazioni",
-            "couldNotDecryptTooltip": "Messaggio cifrato per una chiave non disponibile su questo dispositivo",
             "unsupportedMethodTooltip": "Crittografato con {{method}}, un metodo non ancora supportato da questo dispositivo",
             "unsupportedMessage": "Messaggio cifrato: {{method}} non supportato",
             "unsupportedMessageGeneric": "Messaggio cifrato: metodo non supportato",
@@ -563,7 +562,10 @@
                     "untrusted": "non verificato",
                     "rejected": "RIFIUTATO: firma non valida"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Cifrato con una chiave che questo dispositivo non ha",
+            "couldNotDecryptSignature": "Questo messaggio non è stato mostrato perché non è stato possibile fidarsi della sua firma",
+            "couldNotDecryptUnreadable": "Non è stato possibile leggere questo messaggio"
         },
         "verifyPeer": {
             "chipAriaLabel": "Cifrato per {{name}}. Fai clic per verificare l'impronta",

@@ -386,13 +386,25 @@ describe('Chat Network Scenario Journey Tests', () => {
 
       simulateFreshSession(client)
 
-      // Both should trigger independently
+      // Chat MAM starts immediately, while room MAM waits for a confirmed join.
       await vi.waitFor(() => {
         expect(client.mam.catchUpConversationHistory).toHaveBeenCalledWith(
           'alice@example.com',
           expect.any(Array),
           expect.objectContaining({}),
         )
+      })
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      rs.getState().markAllRoomsNotJoined()
+      rs.getState().setRoomJoined('room@conference.example.com', true)
+      client._emitSDK('room:joined', {
+        roomJid: 'room@conference.example.com',
+        joined: true,
+      })
+
+      // The confirmed room join starts its independent MAM catch-up.
+      await vi.waitFor(() => {
         expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           'room@conference.example.com',
           expect.any(Array),

@@ -537,7 +537,6 @@
             "encryptedCouldNotDecrypt": "Nu s-a putut decripta acest mesaj",
             "encryptedDecrypting": "Mesaj criptat, decriptare…",
             "encryptedDisabled": "Criptarea este dezactivată. Activați-o din setări",
-            "couldNotDecryptTooltip": "Mesaj criptat pentru o cheie care nu este disponibilă pe acest dispozitiv",
             "unsupportedMethodTooltip": "Criptat cu {{method}}, o metodă pe care acest dispozitiv nu o acceptă încă",
             "unsupportedMessage": "Mesaj criptat: {{method}} neacceptat",
             "unsupportedMessageGeneric": "Mesaj criptat: metodă neacceptată",
@@ -563,7 +562,10 @@
                     "untrusted": "neverificat",
                     "rejected": "RESPINS: semnătură nevalidă"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Criptat cu o cheie pe care acest dispozitiv nu o are",
+            "couldNotDecryptSignature": "Acest mesaj nu a fost afișat deoarece semnătura sa nu a putut fi considerată de încredere",
+            "couldNotDecryptUnreadable": "Acest mesaj nu a putut fi citit"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptat către {{name}}. Faceți clic pentru a verifica amprenta",

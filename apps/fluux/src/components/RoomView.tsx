@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
+import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomEntity, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, getStorageScopeJid, currentViewportGeneration, reportViewport, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
@@ -36,6 +36,7 @@ import { CommandMenu } from './composer/CommandMenu'
 import { CommandHelpPanel } from './composer/CommandHelpPanel'
 import { visibleCommands } from '@/commands/registry'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { useRoomPasswordPrompt } from '@/hooks/useRoomPasswordPrompt'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -97,7 +98,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -112,6 +113,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
+  const { joinRoomWithPassword, passwordDialog } = useRoomPasswordPrompt()
 
   // Handler to open search scoped to this room
   const handleSearchInConversation = activeRoom && onSearchInConversation
@@ -268,33 +270,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Composer handle ref for focusing after staging attachment
   const composerHandleRef = useRef<MessageComposerHandle>(null)
-
-  // Scroll to bottom (used after sending a message)
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
-    }
-  }, [])
-
-  // Scroll to bottom when media loads (images, videos, link previews)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      // Use instant scroll to avoid jarring animation when content expands
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
-
-  // Scroll to bottom when composer resizes (typing long message)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
 
   // Keyboard navigation for message selection
   const {
@@ -639,7 +614,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
-            onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
             onLoadAround={loadMessagesAround}
             isLoadingOlder={activeMAMState?.isLoading}
@@ -679,8 +653,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             sendWhisperChatState={sendWhisperChatState}
             sendEasterEgg={sendEasterEgg}
             sendPoll={sendPoll}
-            onMessageSent={scrollToBottom}
-            onInputResize={handleInputResize}
             replyingTo={replyingTo}
             onCancelReply={handleCancelReply}
             editingMessage={editingMessage}
@@ -707,8 +679,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               // Issue #37: warn before joining a room that would expose the user's real JID.
               if (await confirmJoin(activeRoom.jid)) {
                 try {
-                  await joinRoom(activeRoom.jid, activeRoom.nickname)
-                  await joinResult(activeRoom.jid)
+                  // Prompts for the room password when the server asks for one.
+                  await joinRoomWithPassword(activeRoom.jid, activeRoom.nickname)
                 } catch (err) {
                   addToast('error', getRoomJoinErrorMessage(t, err))
                 }
@@ -717,6 +689,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           />
         )}
         {warningDialog}
+        {passwordDialog}
       </div>
 
       {/* Occupant panel (>=768px; <768 uses the full-screen panel in ChatLayout).
@@ -929,7 +902,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   onMessageSeen,
   isJoined,
   isDarkMode,
-  onMediaLoad,
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
@@ -987,7 +959,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
-  onMediaLoad?: () => void
   onScrollToTop?: () => void
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
@@ -1029,6 +1000,10 @@ export const RoomMessageList = memo(function RoomMessageList({
     }
     return ids
   }, [messages])
+
+  // Resolve reply identities once per resident message window. The lookup
+  // includes stanza/origin aliases, matching reply resolution elsewhere.
+  const messagesById = useMemo(() => createMessageLookup(messages), [messages])
 
   // Set of known occupant nicknames for IRC-style mention highlighting.
   // Ref-stable across presence (show/status) churn — only changes when the nick
@@ -1123,7 +1098,16 @@ export const RoomMessageList = memo(function RoomMessageList({
     date: format(msg.timestamp, 'yyyy-MM-dd'),
   })
 
-  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
+  // Use the media callback supplied by MessageList. It owns the controller-backed choice between
+  // live-edge re-pin and fixed-anchor preservation; the former RoomView callback bypassed that
+  // arbitration with a raw scrollTop write.
+  const renderMessage = (
+    msg: RoomMessage,
+    idx: number,
+    groupMessages: RoomMessage[],
+    _showNewMarker: boolean,
+    onMediaLoad: () => void,
+  ) => {
     // System notices (e.g. nick changes) render as a centered line, not a bubble.
     if (msg.systemEvent) {
       return <RoomSystemLine event={msg.systemEvent} />
@@ -1143,7 +1127,15 @@ export const RoomMessageList = memo(function RoomMessageList({
       // avatar is resolved here so it can be passed down as a memo-safe primitive.
       // replyNick may be undefined (no `to`); resolveReplyAvatar handles that safely.
       const replyNick = msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined
-      const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
+      const replyOccupantId = messagesById.get(msg.replyTo.id)?.occupantId
+      const ra = resolveReplyAvatar(
+        replyNick,
+        room,
+        contactsByJid,
+        room.nickname,
+        ownAvatar,
+        replyOccupantId,
+      )
       replyAvatarUrl = ra.avatarUrl
       replyAvatarIdentifier = ra.avatarIdentifier
       replyBareJid = ra.senderBareJid
@@ -1741,8 +1733,6 @@ interface RoomMessageInputProps {
   sendWhisperChatState: (roomJid: string, nick: string, state: ChatStateNotification) => Promise<void>
   sendEasterEgg: (roomJid: string, animation: string) => Promise<void>
   sendPoll: (roomJid: string, title: string, options: string[], settings?: Partial<import('@fluux/sdk').PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => Promise<string>
-  onMessageSent?: () => void
-  onInputResize?: () => void
   replyingTo: RoomMessage | null
   onCancelReply: () => void
   editingMessage: RoomMessage | null
@@ -1775,8 +1765,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   sendWhisperChatState,
   sendEasterEgg,
   sendPoll,
-  onMessageSent,
-  onInputResize,
   replyingTo,
   onCancelReply,
   editingMessage,
@@ -1856,6 +1844,20 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     composerRef,
     onDraftRestored: handleDraftRestored,
   })
+
+  // Keep the mention mirror's scroll offset locked to the textarea's after every
+  // content change. The textarea's own scroll event is not sufficient: on a
+  // keystroke the browser scrolls to reveal the caret BEFORE React re-renders the
+  // mirror, so the handler copies the offset while the mirror is still a line
+  // short — the write clamps to 0 and nothing re-syncs once the content lands.
+  // Re-asserting here, after the DOM is updated and before paint, is what keeps
+  // the highlighted text under the caret on the newline that grows the draft.
+  const mirrorRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const mirror = mirrorRef.current
+    const input = textareaRef?.current
+    if (mirror && input) mirror.scrollTop = input.scrollTop
+  }, [text, textareaRef])
 
   // Exit whisper mode AND discard the typed text. The composer draft is keyed only
   // by room JID, so a private whisper draft would otherwise survive into the public
@@ -2001,7 +2003,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
       const messageId = await sendWhisper(roomJid, decision.nick, decision.body)
       onMessageIdSent?.(messageId)
       clearDraft(roomJid)
-      onMessageSent?.()
       setTimeout(() => clearFirstNewMessageId(roomJid), 500)
       return true
     }
@@ -2053,9 +2054,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     if (shouldSendTypingNotifications) {
       void sendChatState(roomJid, 'active')
     }
-
-    // Scroll to bottom to show the sent message
-    onMessageSent?.()
 
     // Clear the "new messages" marker after a short delay (user is actively engaged)
     setTimeout(() => clearFirstNewMessageId(roomJid), 500)
@@ -2246,16 +2244,21 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     return (
       <>
         {/* Background layer with styled mentions - positioned absolutely within parent wrapper */}
+        {/* The mirror must wrap at exactly the textarea's content width, or the
+            glyphs the user reads drift away from the caret they sit under. The
+            styled scrollbar takes layout, so the width depends on whether a
+            scrollbar is reserved — and `scrollbar-gutter: stable` (index.css)
+            only reserves one on an overflow:hidden box in Blink, not WebKit,
+            which is the engine the desktop app runs. Matching the textarea's
+            `overflow-y: auto` makes the reservation track it in every engine:
+            both boxes hold the same content at the same height, so they cross
+            the overflow boundary together. `composer-mirror` then hides this
+            layer's own scrollbar without giving back the width it reserves. */}
         <div
-          className="message-input absolute inset-0 px-2 py-3 pointer-events-none whitespace-pre-wrap
-                     overflow-hidden"
+          className="message-input composer-mirror absolute inset-0 px-2 pointer-events-none
+                     whitespace-pre-wrap overflow-y-auto overflow-x-hidden"
           aria-hidden="true"
-          ref={(el) => {
-            // Sync scroll position with textarea
-            if (el && inputRef.current) {
-              el.scrollTop = inputRef.current.scrollTop
-            }
-          }}
+          ref={mirrorRef}
         >
           {renderInputWithMentions(value, references)}
         </div>
@@ -2341,7 +2344,6 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
-        onInputResize={onInputResize}
         onSend={handleSend}
         onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}
@@ -2424,12 +2426,27 @@ function RoomJoinPrompt({
  * Render text with @mentions highlighted for the input overlay
  * Only highlights completed mentions (those in the references array)
  */
+/**
+ * A `pre-wrap` container lays out no line box for a terminal newline, but a
+ * textarea does — so for any draft ending in a newline the mirror is one line
+ * shorter than the textarea it has to match. At the cap that means it never
+ * becomes a scroll container: it reserves no scrollbar gutter (a 6px wrap
+ * mismatch in WebKit) and cannot follow the textarea's scrollTop, so the
+ * highlighted text drifts away from the caret. Pressing Enter for a new line is
+ * the most ordinary way to hit this. A zero-width space forces the final line
+ * box without contributing any advance width.
+ */
+const TRAILING_LINE_SENTINEL = '\u200b'
+
 function renderInputWithMentions(text: string, references: MentionReference[]): React.ReactNode {
   if (!text) return null
 
+  // However many newlines a draft ends with, only the last one loses its line box.
+  const sentinel = text.endsWith('\n') ? TRAILING_LINE_SENTINEL : ''
+
   // If no references, render plain text
   if (references.length === 0) {
-    return <span className="text-fluux-text">{text}</span>
+    return <span className="text-fluux-text">{text + sentinel}</span>
   }
 
   // Sort references by begin position
@@ -2460,11 +2477,18 @@ function renderInputWithMentions(text: string, references: MentionReference[]): 
     lastIndex = ref.end
   }
 
-  // Add any remaining text after the last mention
+  // Add any remaining text after the last mention. The sentinel rides along on
+  // that trailing run, or stands alone when a mention ends the draft.
   if (lastIndex < text.length) {
     parts.push(
       <span key="text-end" className="text-fluux-text">
-        {text.slice(lastIndex)}
+        {text.slice(lastIndex) + sentinel}
+      </span>
+    )
+  } else if (sentinel) {
+    parts.push(
+      <span key="text-end" className="text-fluux-text">
+        {sentinel}
       </span>
     )
   }

@@ -109,9 +109,10 @@ export async function simulateSmResumptionWithRejoin(
 
 /**
  * Simulate the full fresh session flow:
- * 1. Emit 'online' event (side effects clear fetchInitiated, trigger MAM)
+ * 1. Emit 'online' (reset fetch tracking and require confirmed joins)
  * 2. markAllRoomsNotJoined()
- * 3. Re-join specified rooms
+ * 3. Re-join specified rooms and emit room:joined
+ * 4. Foreground MAM may start only after step 3
  */
 export async function simulateFreshSessionWithRejoin(
   client: ScenarioMockClient,

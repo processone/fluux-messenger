@@ -3,6 +3,9 @@ import { useEvents } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { useRouteSync } from '@/hooks'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { useRoomPasswordPrompt } from '@/hooks/useRoomPasswordPrompt'
+import { useToastStore } from '@/stores/toastStore'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { MucInvitationItem } from './MucInvitationItem'
 
 export function RoomInvitationsBanner() {
@@ -12,6 +15,8 @@ export function RoomInvitationsBanner() {
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
   const { navigateToRooms } = useRouteSync()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
+  const { withPasswordPrompt, passwordDialog } = useRoomPasswordPrompt()
+  const addToast = useToastStore((s) => s.addToast)
 
   if (mucInvitations.length === 0) return null
 
@@ -19,7 +24,17 @@ export function RoomInvitationsBanner() {
   // room that would expose the user's real JID.
   const handleAccept = async (roomJid: string, password?: string) => {
     if (!(await confirmJoin(roomJid))) return
-    await acceptInvitation(roomJid, password)
+    try {
+      // Issue #1126: an invitation to a password-protected room carries no
+      // password unless the inviter added one. Ask for it rather than failing.
+      // acceptInvitation keeps the invitation when the join is refused, so a
+      // cancelled prompt (or any other error) leaves the banner intact to retry.
+      const joined = await withPasswordPrompt((typed) => acceptInvitation(roomJid, typed ?? password))
+      if (!joined) return
+    } catch (err) {
+      addToast('error', getRoomJoinErrorMessage(t, err))
+      return
+    }
     void setActiveConversation(null)
     void setActiveRoom(roomJid)
     navigateToRooms(roomJid)
@@ -41,6 +56,7 @@ export function RoomInvitationsBanner() {
         ))}
       </div>
       {warningDialog}
+      {passwordDialog}
     </div>
   )
 }

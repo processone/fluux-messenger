@@ -167,16 +167,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     return registerViewportBottomRef('conversation', id, isAtBottomRef)
   }, [activeConversation?.id])
 
-  // Scroll to bottom (used after sending a message)
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
-    }
-  }, [])
-
   // Stable handler for the send-animation: clears the highlight after 400 ms.
   const handleMessageIdSent = useCallback((id: string) => {
     if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
@@ -187,14 +177,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Note: Media load scroll handling is now managed by useMessageListScroll hook
   // via the handleMediaLoad callback passed through renderMessage. This provides
   // batched scroll correction to avoid jitter when multiple images load.
-
-  // Scroll to bottom when composer resizes (typing long message)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
 
   // Keyboard navigation for message selection
   const {
@@ -602,9 +584,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         conversationId={activeConversation.id}
         conversationName={activeConversation.name}
         type={activeConversation.type}
-        onMessageSent={scrollToBottom}
         onMessageIdSent={handleMessageIdSent}
-        onInputResize={handleInputResize}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
         editingMessage={editingMessage}
@@ -1097,8 +1077,6 @@ export const MessageInput = memo(function MessageInput({
   conversationId,
   conversationName,
   type,
-  onMessageSent,
-  onInputResize,
   replyingTo,
   onCancelReply,
   editingMessage,
@@ -1136,9 +1114,7 @@ export const MessageInput = memo(function MessageInput({
   conversationId: string
   conversationName: string
   type: 'chat' | 'groupchat'
-  onMessageSent?: () => void
   onMessageIdSent?: (messageId: string) => void
-  onInputResize?: () => void
   replyingTo: Message | null
   onCancelReply: () => void
   editingMessage: Message | null
@@ -1323,9 +1299,6 @@ export const MessageInput = memo(function MessageInput({
       processLinkPreview(messageId, text, conversationId, type).catch(console.error)
     }
 
-    // Scroll to bottom to show the sent message
-    onMessageSent?.()
-
     // Clear the "new messages" marker after a short delay (user is actively engaged)
     setTimeout(() => clearFirstNewMessageId(conversationId), 500)
 
@@ -1350,7 +1323,6 @@ export const MessageInput = memo(function MessageInput({
         onSendCorrection={handleCorrection}
         onRetractMessage={handleRetract}
         onComposingChange={onComposingChange}
-        onInputResize={onInputResize}
         onSend={handleSend}
         onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
         onSendTypingState={handleTypingState}

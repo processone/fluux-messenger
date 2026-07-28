@@ -22,6 +22,7 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import { scrollToMessage } from './messageGrouping'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
@@ -29,6 +30,10 @@ const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
 // path). A direct scrollTop write does NOT go through here, so this distinguishes a
 // virtualizer-aware restore (re-windows before paint) from a raw scrollTop write (blank).
 const scrollToOffsetCalls: number[] = []
+// Records every offset pushed through beginAnimatedScrollToOffset — the animated commands the
+// app owns (Home / resident top). Kept apart from scrollToOffsetCalls so a test can prove an
+// animated navigation retargets the virtualizer rather than writing the scroller behind its back.
+const animatedScrollToOffsetCalls: number[] = []
 // Records the align of every scrollToIndex. A bottom re-pin goes through
 // scrollToIndex(last,'end') (re-windows the virtualizer); a raw scrollTop write does not.
 // Lets a test prove the composer-resize correction routes through the virtualizer.
@@ -80,6 +85,13 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     // scrollTop = scrollHeight, matching the test expectations for bottom-stick behavior.
     scrollToOffset: (offset: number) => {
       scrollToOffsetCalls.push(offset)
+      const el = args.scrollRef.current
+      if (el) el.scrollTop = offset
+    },
+    // jsdom has no smooth-scroll animation, so an animated scroll lands immediately. Recorded
+    // separately from scrollToOffset so tests can tell an animated command from a re-window write.
+    beginAnimatedScrollToOffset: (offset: number) => {
+      animatedScrollToOffsetCalls.push(offset)
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
     },
@@ -154,6 +166,7 @@ describe('MessageList — virtualized scroll integration', () => {
     scrollToIndexCalls.length = 0
     scrollToIndexBehaviors.length = 0
     scrollToOffsetCalls.length = 0
+    animatedScrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
     windowedOutKeys.clear()
   })
@@ -166,7 +179,27 @@ describe('MessageList — virtualized scroll integration', () => {
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 
-  it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', () => {
+  it('routes Home through the virtualizer so a superseded live-edge pin cannot re-assert over it', async () => {
+    // @tanstack keeps a pending-scroll reconciler armed for several seconds after the live-edge
+    // pin's scrollToIndex(last,'end'), and re-applies THAT target on every frame late measurement
+    // moves it. Cancelling the pin's controller execution does not retire it, so a Home animation
+    // written straight to the scroller gets snapped back to the bottom mid-flight (observed on the
+    // WebKitGTK CI runner, where rows are still measuring seconds after entry). Issuing the write
+    // through the virtualizer retargets that reconciler instead of racing it.
+    //
+    // The wrong implementation this must fail against is the previous one: a direct
+    // `scroller.scrollTo({ top: 0, behavior: 'smooth' })`, which leaves animatedScrollToOffsetCalls
+    // empty. Asserting scrollTop alone would NOT catch it — the mock scroller lands at 0 either way.
+    renderList()
+    await waitFor(() => expect(scrollToIndexCalls.length).toBeGreaterThan(0))
+    animatedScrollToOffsetCalls.length = 0
+
+    act(() => { fireEvent.keyDown(window, { key: 'Home' }) })
+
+    await waitFor(() => expect(animatedScrollToOffsetCalls).toEqual([0]))
+  })
+
+  it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', async () => {
     // targetMessageId (reply-to jump, search result open) resolves the row through the virtualizer
     // index (works for unmounted rows — no DOM query, no async waits) and centers it via
     // scrollToIndex('center'). Center — not align:'start' — so the row does NOT sit flush against
@@ -176,9 +209,18 @@ describe('MessageList — virtualized scroll integration', () => {
     // used for this path.
     scrollToIndexCalls.length = 0
     renderList({ targetMessageId: 'msg-30' })
-    expect(scrollToIndexCalls).toContain('center')
+    await waitFor(() => expect(scrollToIndexCalls).toContain('center'))
     expect(scrollToIndexCalls).not.toContain('start') // not tucked flush against the top edge
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
+  })
+
+  it('routes reply, poll, and find-on-page jumps through the active list controller', async () => {
+    renderList()
+    scrollToIndexCalls.length = 0
+
+    act(() => scrollToMessage('msg-30'))
+
+    await waitFor(() => expect(scrollToIndexCalls).toContain('center'))
   })
 
   it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', async () => {
@@ -399,12 +441,14 @@ describe('MessageList — virtualized scroll integration', () => {
       set: (v: number) => { scrollTopVal = v },
       configurable: true,
     })
+    // The authoritative live-edge entry first requests the global tail from this slid-up window.
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
     // Near the bottom (distFromBottom = 800-600-200 = 0): a scroll fires triggerLoadNewer, which
     // captures the top-visible anchor and calls onLoadNewer.
     scrollTopVal = 600
     fireEvent.scroll(scroller)
-    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
 
     scrollToOffsetCalls.length = 0
     getOffsetForMessageId.mockClear()
@@ -435,11 +479,13 @@ describe('MessageList — virtualized scroll integration', () => {
     Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
+    // Entry owns global-live-edge reachability and asks for a newer slice before user scrolling.
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
 
     // Load-newer fires near the bottom → stashes an anchor (no message change here = tail no-op).
     scrollTopVal = 600
     fireEvent.scroll(scroller)
-    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+    expect(onLoadNewer).toHaveBeenCalledTimes(2)
 
     // Tail reached: windowAtLiveEdge flips false→true → the stale anchor must be dropped.
     rerender(<MessageList messages={makeMessages(20)} windowAtLiveEdge={true} {...base} />)
@@ -536,7 +582,11 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     localStorage.clear()
   })
 
-  function instrumentScroller(scroller: HTMLElement, initialHeight: number) {
+  function instrumentScroller(
+    scroller: HTMLElement,
+    initialHeight: number,
+    clampScrollTop = false,
+  ) {
     let scrollHeightVal = initialHeight
     let scrollTopVal = 0
     const scrollTopSets: number[] = []
@@ -545,8 +595,10 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     Object.defineProperty(scroller, 'scrollTop', {
       get: () => scrollTopVal,
       set: (v: number) => {
-        scrollTopVal = v
         scrollTopSets.push(v)
+        scrollTopVal = clampScrollTop
+          ? Math.min(v, scrollHeightVal - scroller.clientHeight)
+          : v
       },
       configurable: true,
     })
@@ -554,6 +606,30 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   }
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+  it('does not highlight a target cancelled before its first position write', () => {
+    const onConsumed = vi.fn()
+    const { container } = render(
+      <MessageList
+        messages={makeMessages(50)}
+        conversationId="conv-target-takeover"
+        targetMessageId="msg-30"
+        onTargetMessageConsumed={onConsumed}
+        {...props}
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+
+    fireEvent.wheel(scroller, { deltaY: -20 })
+
+    expect(onConsumed).toHaveBeenCalledTimes(1)
+    expect(
+      container
+        .querySelector('[data-message-id="msg-30"]')
+        ?.classList.contains('message-highlight'),
+    ).toBe(false)
+    expect(scrollToIndexCalls).not.toContain('center')
+  })
 
   it('reasserts target-message jumps while virtualized rows settle', () => {
     // Reply/search/activity jumps used to call scrollToIndex('center') once. If rows above the
@@ -899,7 +975,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // row is NOT in the DOM, so the DOM anchor lookup (restoreToAnchor) fails. The restore must then
     // resolve the anchor through the virtualizer INDEX (getIndexForMessageId → scrollToIndex),
     // re-deriving its position from measurements — it must NOT go blank or fall back to
-    // pinVirtualizedBottom() (which would clear the saved state and stick the convo at the bottom).
+    // live-edge fallback (which would clear the saved state and stick the convo at the bottom).
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />,
     )
@@ -984,8 +1060,20 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       targets: Element[] = []
       constructor(cb: ResizeObserverCallback) {
         this.cb = cb
-        observers.push({ targets: this.targets, fire: (height: number) =>
-          this.cb([{ contentRect: { height } } as ResizeObserverEntry], this as unknown as ResizeObserver) })
+        observers.push({
+          targets: this.targets,
+          fire: (height: number) => {
+            // ResizeObserver reports post-layout geometry. Mirror that in jsdom so
+            // the live distance-from-bottom check sees the shrunken scrollport.
+            for (const target of this.targets) {
+              Object.defineProperty(target, 'clientHeight', { value: height, configurable: true })
+            }
+            this.cb(
+              [{ contentRect: { height } } as ResizeObserverEntry],
+              this as unknown as ResizeObserver,
+            )
+          },
+        })
       }
       observe(t: Element) { this.targets.push(t) }
       unobserve() {}
@@ -997,7 +1085,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
         <MessageList messages={makeMessages(50)} conversationId="conv-grow" {...props} />,
       )
       const scroller = container.querySelector('[data-message-list]') as HTMLElement
-      const { grow } = instrumentScroller(scroller, 5000)
+      const { grow } = instrumentScroller(scroller, 5000, true)
       void grow
 
       // Sit at the bottom and let the scroll handler record isAtBottom = true.
@@ -1196,7 +1284,7 @@ describe('MessageList — target-message highlight survives the target clear (vi
   }
 
   it('applies .message-highlight to the target row even though consuming it clears the target', () => {
-    // Hold scrollTop steady so the reassert loop reaches TARGET_STABLE_FRAMES and consumes.
+    // Hold scrollTop steady so the controller reaches its stable-frame threshold and consumes.
     scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
     const { container } = render(<Harness />)
     const scroller = container.querySelector('[data-message-list]') as HTMLElement

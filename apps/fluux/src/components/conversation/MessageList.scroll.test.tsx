@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // fully-mounted DOM — still shipping until the old path is removed). Force the flag OFF;
 // virtualized scroll is verified via the scroll-hook unit tests + the real-engine pass.
 vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 
@@ -96,6 +96,11 @@ class MockResizeObserver {
   // Helper to trigger resize. Width is optional so existing height-only callers
   // are unaffected (contentRect.width stays undefined → the width branch is inert).
   triggerResize(height: number, width?: number) {
+    // ResizeObserver fires after layout: keep the observed element's live geometry
+    // in sync with the entry instead of leaving jsdom's clientHeight stale.
+    for (const target of this.targets) {
+      Object.defineProperty(target, 'clientHeight', { value: height, configurable: true })
+    }
     this.callback(
       [{ contentRect: { height, width } } as ResizeObserverEntry],
       this
@@ -139,13 +144,158 @@ describe('MessageList scroll behavior', () => {
     window.requestAnimationFrame = originalRAF
   })
 
+  describe('resident-top navigation', () => {
+    it.each([
+      {
+        label: 'Home',
+        key: 'Home',
+        modifiers: {},
+      },
+      {
+        label: 'Mod+ArrowUp',
+        key: 'ArrowUp',
+        modifiers: navigator.platform.includes('Mac')
+          ? { metaKey: true }
+          : { ctrlKey: true },
+      },
+    ])('starts one smooth $label navigation and only observes its progress afterward', ({
+      key,
+      modifiers,
+    }) => {
+      const callbacks: FrameRequestCallback[] = []
+      window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+        callbacks.push(callback)
+        return callbacks.length
+      }
+      render(
+        <MessageList
+          messages={createTestMessages(10)}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />,
+      )
+
+      const container = document.querySelector(
+        '[data-message-list]',
+      ) as HTMLDivElement
+      let scrollTop = 500
+      Object.defineProperties(container, {
+        scrollHeight: { value: 1000, configurable: true },
+        clientHeight: { value: 500, configurable: true },
+        scrollTop: {
+          get: () => scrollTop,
+          set: (value: number) => {
+            scrollTop = value
+          },
+          configurable: true,
+        },
+      })
+      const scrollTo = vi.fn()
+      container.scrollTo = scrollTo
+      const callbacksBeforeHome = callbacks.length
+
+      act(() => {
+        fireEvent.keyDown(window, { key, ...modifiers })
+      })
+
+      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 0,
+        behavior: 'smooth',
+      })
+      expect(callbacks).toHaveLength(callbacksBeforeHome + 1)
+
+      for (const nextScrollTop of [500, 20, 1, 0]) {
+        scrollTop = nextScrollTop
+        const callback = callbacks.pop()
+        expect(callback).toBeDefined()
+        act(() => {
+          callback!(0)
+        })
+      }
+
+      expect(scrollTo).toHaveBeenCalledTimes(1)
+      expect(callbacks).toHaveLength(callbacksBeforeHome)
+    })
+
+    it('does not rebind the global shortcut listener when messages append', () => {
+      const addEventListener = vi.spyOn(window, 'addEventListener')
+      const removeEventListener = vi.spyOn(window, 'removeEventListener')
+      const props = {
+        conversationId: 'conv-1',
+        clearFirstNewMessageId: vi.fn(),
+        renderMessage: (msg: BaseMessage) => <div key={msg.id}>{msg.body}</div>,
+      }
+      const { rerender } = render(
+        <MessageList messages={createTestMessages(10)} {...props} />,
+      )
+      const keydownAdds = addEventListener.mock.calls.filter(
+        ([eventName]) => String(eventName) === 'keydown',
+      ).length
+      const keydownRemoves = removeEventListener.mock.calls.filter(
+        ([eventName]) => String(eventName) === 'keydown',
+      ).length
+
+      rerender(<MessageList messages={createTestMessages(11)} {...props} />)
+
+      expect(addEventListener.mock.calls.filter(
+        ([eventName]) => String(eventName) === 'keydown',
+      )).toHaveLength(keydownAdds)
+      expect(removeEventListener.mock.calls.filter(
+        ([eventName]) => String(eventName) === 'keydown',
+      )).toHaveLength(keydownRemoves)
+    })
+
+    it('does not reinterpret Home reaching resident top as a load-older gesture', () => {
+      const callbacks: FrameRequestCallback[] = []
+      window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+        callbacks.push(callback)
+        return callbacks.length
+      }
+      const onScrollToTop = vi.fn()
+      render(
+        <MessageList
+          messages={createTestMessages(10)}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          onScrollToTop={onScrollToTop}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />,
+      )
+      const container = document.querySelector(
+        '[data-message-list]',
+      ) as HTMLDivElement
+      let scrollTop = 500
+      Object.defineProperties(container, {
+        scrollHeight: { value: 1000, configurable: true },
+        clientHeight: { value: 500, configurable: true },
+        scrollTop: {
+          get: () => scrollTop,
+          set: (value: number) => {
+            scrollTop = value
+          },
+          configurable: true,
+        },
+      })
+      container.scrollTo = vi.fn()
+
+      fireEvent.scroll(container)
+      fireEvent.keyDown(window, { key: 'Home' })
+      // Native smooth scrolling emits intermediate scroll events. They remain controller-owned
+      // and must not re-arm the "user travelled away from top" pagination latch.
+      scrollTop = 200
+      fireEvent.scroll(container)
+      scrollTop = 0
+      fireEvent.scroll(container)
+
+      expect(onScrollToTop).not.toHaveBeenCalled()
+    })
+  })
+
   describe('typing indicator scroll', () => {
-    // The typing indicator floats OVER the list (it is not part of the scroll content); toggling it
-    // never changes scroll height on its own. But the footer reserves extra bottom padding to clear
-    // the pill while it's shown, and that DOES grow the scroll content — so while genuinely sticked
-    // to the bottom, reassertBottom re-pins to reveal the new clearance (same shared helper new
-    // messages use — a one-shot smooth nudge lands short because a virtualized footer needs a
-    // remeasure pass first). A reader scrolled up must never be yanked back (issue #918).
+    // MessageList owns the typing-band layout; these tests cover useMessageListScroll's edge
+    // contract: follow the band at the live edge, but never yank a reader out of history (#918).
     it('re-pins to the bottom when typing starts while sticked', () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
@@ -190,7 +340,7 @@ describe('MessageList scroll behavior', () => {
           />
         )
 
-        // Sticked to the bottom → the grown footer clearance is revealed by a re-pin to bottom.
+        // At the live edge, the typing edge re-pins.
         expect(scrollSpy).toHaveBeenCalledWith(1000)
       }
     })
@@ -254,7 +404,7 @@ describe('MessageList scroll behavior', () => {
   describe('reactions scroll', () => {
     // A reaction grows a message's row. While the reader is sticked to the bottom we keep the newest
     // message glued to the bottom edge via reassertBottom — the same shared helper new messages and the
-    // typing footer use. On the non-virtualized path that's an INSTANT scrollTop = scrollHeight write
+    // typing band use. On the non-virtualized path that's an INSTANT scrollTop = scrollHeight write
     // (no smooth animation, which is what used to visibly shove the newest message down). It is gated
     // on LIVE geometry, so a reader scrolled up into history is never re-pinned.
     const reactOnLast = (msgs: ReturnType<typeof createTestMessages>) => {
@@ -350,7 +500,10 @@ describe('MessageList scroll behavior', () => {
       Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
       Object.defineProperty(container, 'scrollTop', {
         get: () => scrollTopValue,
-        set: (v) => { scrollTopValue = v; scrollSpy(v) },
+        set: (v) => {
+          scrollSpy(v)
+          scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
+        },
         configurable: true,
       })
 
@@ -593,8 +746,8 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollTop', {
           get: () => scrollTopValue,
           set: (v) => {
-            scrollTopValue = v
             scrollSpy(v)
+            scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
           },
           configurable: true,
         })
@@ -657,8 +810,8 @@ describe('MessageList scroll behavior', () => {
         Object.defineProperty(container, 'scrollTop', {
           get: () => scrollTopValue,
           set: (v) => {
-            scrollTopValue = v
             scrollSpy(v)
+            scrollTopValue = Math.min(v, container.scrollHeight - container.clientHeight)
           },
           configurable: true,
         })
@@ -675,8 +828,9 @@ describe('MessageList scroll behavior', () => {
             observer.triggerResize(460)
           })
 
-          // Should have scrolled to bottom after each resize
-          expect(scrollSpy).toHaveBeenCalled()
+          // The first observation establishes the baseline; each of the three
+          // subsequent shrinks should re-pin to the live edge.
+          expect(scrollSpy).toHaveBeenCalledTimes(3)
           // The last call should be scrolling to bottom
           expect(scrollSpy).toHaveBeenLastCalledWith(1000)
         }

@@ -16,6 +16,7 @@
  */
 
 import { buildScopedStorageKey } from '../../utils/storageScope'
+import { schedule, cancel } from './throttledStorage'
 import {
   deserializeReadPointer,
   serializeReadPointer,
@@ -123,6 +124,9 @@ export function loadRoomReadState(jid?: string | null): Map<string, RoomReadStat
  */
 export function clearRoomReadState(jid?: string | null): void {
   const key = getRoomReadStateStorageKey(jid)
+  // Before the removal, or a pending write fires afterwards and restores the
+  // row this just deleted.
+  cancel(key)
   writtenRoomReadStateKeys.delete(key)
   try {
     localStorage.removeItem(key)
@@ -139,6 +143,10 @@ export function clearRoomReadState(jid?: string | null): void {
  */
 export function _clearAllRoomReadStateForTesting(): void {
   for (const key of writtenRoomReadStateKeys) {
+    // Without this a timer armed by one test fires during the next and
+    // reintroduces a row the cleanup deleted — which surfaces as a flaky
+    // suite somewhere else entirely.
+    cancel(key)
     try {
       localStorage.removeItem(key)
     } catch {
@@ -150,23 +158,29 @@ export function _clearAllRoomReadStateForTesting(): void {
   clearRoomReadState()
 }
 
-export function saveRoomReadState(state: Map<string, RoomReadState>, jid?: string | null): void {
-  try {
-    const entries: [string, SerializedRoomReadState][] = []
-    for (const [roomJid, value] of state) {
-      if (!value.readPointer && !value.historyFloor) continue
-      entries.push([
-        roomJid,
-        {
-          ...(value.readPointer ? { readPointer: serializeReadPointer(value.readPointer) } : {}),
-          ...(value.historyFloor ? { historyFloor: value.historyFloor.getTime() } : {}),
-        },
-      ])
-    }
-    const key = getRoomReadStateStorageKey(jid)
-    localStorage.setItem(key, JSON.stringify(entries))
-    writtenRoomReadStateKeys.add(key)
-  } catch {
-    // Ignore storage errors (quota exceeded, private mode, etc.).
+function serializeRoomReadState(state: Map<string, RoomReadState>): string {
+  const entries: [string, SerializedRoomReadState][] = []
+  for (const [roomJid, value] of state) {
+    if (!value.readPointer && !value.historyFloor) continue
+    entries.push([
+      roomJid,
+      {
+        ...(value.readPointer ? { readPointer: serializeReadPointer(value.readPointer) } : {}),
+        ...(value.historyFloor ? { historyFloor: value.historyFloor.getTime() } : {}),
+      },
+    ])
   }
+  return JSON.stringify(entries)
+}
+
+export function saveRoomReadState(state: Map<string, RoomReadState>, jid?: string | null): void {
+  const key = getRoomReadStateStorageKey(jid)
+  // Registered at SCHEDULE time, not write time: a clear-all must be able to
+  // cancel a write that is still pending.
+  writtenRoomReadStateKeys.add(key)
+  // `state` is a parameter, so the closure holds the MAP REFERENCE the caller
+  // passed — not roomStore's reassignable `persistedRoomReadState` binding.
+  // Keep it that way: reading a module binding inside the thunk would let a
+  // pending write for account A serialize account B's map.
+  schedule(key, () => serializeRoomReadState(state))
 }

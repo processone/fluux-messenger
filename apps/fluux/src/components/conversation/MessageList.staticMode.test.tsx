@@ -19,7 +19,7 @@
  * so the "all rows present" assertion fails.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import { createTestMessages } from './MessageList.test-utils'
 import { scrollStateManager } from '@/utils/scrollStateManager'
@@ -90,5 +90,24 @@ describe('MessageList staticMode — non-virtualized render path (search/preview
     )
 
     expect(container.querySelectorAll('[data-message-id]')).toHaveLength(COUNT)
+  })
+
+  it('keeps Home navigation inside the isolated static preview scroller', () => {
+    const { container } = render(
+      <MessageList
+        messages={messages}
+        conversationId="static-conv"
+        renderMessage={renderMessage}
+        staticMode
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLDivElement
+    const scrollTo = vi.fn()
+    scroller.scrollTo = scrollTo
+
+    fireEvent.keyDown(window, { key: 'Home' })
+
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 })

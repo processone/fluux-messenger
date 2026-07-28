@@ -48,7 +48,11 @@ const createRoom = (overrides: Partial<Room> & { occupantsList?: RoomOccupant[] 
   const { occupantsList = [], ...rest } = overrides
   // Convert occupants array to Map keyed by nick
   const occupantsMap = new Map<string, RoomOccupant>()
+  const occupantIdToNick = new Map<string, string>()
   occupantsList.forEach(occ => occupantsMap.set(occ.nick, occ))
+  occupantsList.forEach(occ => {
+    if (occ.occupantId) occupantIdToNick.set(occ.occupantId, occ.nick)
+  })
 
   return {
     jid: 'room@conference.example.com',
@@ -57,6 +61,7 @@ const createRoom = (overrides: Partial<Room> & { occupantsList?: RoomOccupant[] 
     nickname: 'Me', // Our nick in the room
     messages: [],
     occupants: occupantsMap,
+    ...(occupantIdToNick.size > 0 && { occupantIdToNick }),
     typingUsers: new Set<string>(),
     unreadCount: 0,
     mentionsCount: 0,
@@ -215,6 +220,10 @@ vi.mock('@fluux/sdk', () => ({
     getRoomInfo: vi.fn().mockResolvedValue(null),
     acknowledgeNonAnonymousRoom: vi.fn(),
     isNonAnonymousRoomAcknowledged: () => false,
+    // The join prompt joins through useRoomPasswordPrompt (issue #1126), which
+    // sources its actions here rather than from the useRoomActive spread.
+    joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
   }),
   useXMPP: () => ({
     client: { profile: { fetchVCard: vi.fn().mockResolvedValue(null) } },
@@ -666,6 +675,35 @@ describe('RoomView', () => {
         const toasts = useToastStore.getState().toasts
         expect(toasts.some((t) => t.type === 'error' && t.message === 'rooms.membersOnly')).toBe(true)
       })
+    })
+
+    // Issue #1126: a password-protected room used to dead-end here — the join
+    // failed and the user had nowhere to type the password.
+    it('asks for the room password when the server refuses the join', async () => {
+      const { useToastStore } = await import('@/stores/toastStore')
+      useToastStore.setState({ toasts: [] })
+      mockActiveRoom = createRoom({ joined: false })
+      mockJoinRoom.mockResolvedValue(undefined)
+      mockJoinResult
+        .mockRejectedValueOnce(new RoomJoinError('room@conference.example.com', 'not-authorized'))
+        .mockResolvedValue(undefined)
+
+      render(<RoomView />)
+      fireEvent.click(screen.getByText(/rooms.joinToParticipate/))
+
+      const input = await screen.findByLabelText('rooms.roomPassword')
+      fireEvent.change(input, { target: { value: ' s3cret ' } })
+      fireEvent.submit(input)
+
+      await waitFor(() => {
+        // Retried with the typed password, untrimmed (passwords are opaque).
+        expect(mockJoinRoom).toHaveBeenLastCalledWith(
+          'room@conference.example.com',
+          expect.any(String),
+          { password: ' s3cret ' },
+        )
+      })
+      expect(useToastStore.getState().toasts).toHaveLength(0)
     })
   })
 

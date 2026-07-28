@@ -98,6 +98,8 @@ export function ModalOverlay({
   children,
 }: ModalOverlayProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  /** The overlay root — used to tell whether this modal is the topmost one. */
+  const rootRef = useRef<HTMLDivElement>(null)
   const { panelClass, scrimClass, requestClose } = useModalTransition(
     panelInClass ? { panelInClass } : undefined,
   )
@@ -119,6 +121,16 @@ export function ModalOverlay({
     if (!closeOnEscape || !dismissable) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
+      // Only the TOPMOST modal dismisses. Stacked modals (the room-password
+      // prompt over Browse Rooms, the real-JID warning over any join modal) each
+      // register their own document listener, and stopPropagation cannot stop a
+      // sibling listener on the same node — so without this, one Escape would
+      // close the whole stack instead of just the dialog on top. A stacked dialog
+      // is rendered after the modal it opens over (nested in it or as its next
+      // sibling), so the LAST overlay in document order is the one on top — which
+      // is also the one painted last, since they share a z-index.
+      const modals = document.querySelectorAll('[data-modal="true"]')
+      if (modals.length > 1 && modals[modals.length - 1] !== rootRef.current) return
       // CONSUME the Escape (mirroring useCloseOnEscape) so it cannot also reach
       // the app's window-level shortcut handler, whose Escape branch falls
       // through to onConversationEscape (scroll-to-bottom + mark-read). Without
@@ -133,6 +145,7 @@ export function ModalOverlay({
 
   return (
     <div
+      ref={rootRef}
       data-modal="true"
       className={`fixed inset-0 flex ${ALIGN_CLASS[align]} justify-center z-50`}
     >

@@ -352,25 +352,40 @@ export function createStoreBindings(
   // resolution individually replaces the occupants Map N times in a burst and
   // re-renders every room subscriber once per avatar (render storm on join).
   const AVATAR_FLUSH_DELAY_MS = 200
-  const pendingOccupantAvatars = new Map<string, Map<string, { nick: string; avatar: string | null; avatarHash: string | null }>>()
+  const pendingOccupantAvatars = new Map<string, Map<string, {
+    nick?: string
+    occupantId?: string
+    avatar: string | null
+    avatarHash: string | null
+  }>>()
   let avatarFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   const flushOccupantAvatars = () => {
     avatarFlushTimer = null
     const stores = getStores()
-    for (const [roomJid, byNick] of pendingOccupantAvatars) {
-      stores.room.updateOccupantAvatars(roomJid, [...byNick.values()])
+    for (const [roomJid, byIdentity] of pendingOccupantAvatars) {
+      stores.room.updateOccupantAvatars(roomJid, [...byIdentity.values()])
     }
     pendingOccupantAvatars.clear()
   }
 
-  on('room:occupant-avatar', ({ roomJid, nick, avatar, avatarHash }) => {
-    let byNick = pendingOccupantAvatars.get(roomJid)
-    if (!byNick) {
-      byNick = new Map()
-      pendingOccupantAvatars.set(roomJid, byNick)
+  on('room:occupant-avatar', ({ roomJid, nick, occupantId, avatar, avatarHash }) => {
+    let byIdentity = pendingOccupantAvatars.get(roomJid)
+    if (!byIdentity) {
+      byIdentity = new Map()
+      pendingOccupantAvatars.set(roomJid, byIdentity)
     }
-    byNick.set(nick, { nick, avatar, avatarHash })
+    // Prefer the stable occupant-id as the coalescing key. Restored offline
+    // identities deliberately have no nick, while live updates carry both.
+    const identityKey = occupantId ? `id:${occupantId}` : `nick:${nick ?? ''}`
+    const previous = byIdentity.get(identityKey)
+    byIdentity.set(identityKey, {
+      ...previous,
+      ...(nick !== undefined && { nick }),
+      ...(occupantId !== undefined && { occupantId }),
+      avatar,
+      avatarHash,
+    })
     if (avatarFlushTimer === null) {
       avatarFlushTimer = setTimeout(flushOccupantAvatars, AVATAR_FLUSH_DELAY_MS)
     }

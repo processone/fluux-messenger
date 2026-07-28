@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Ezt az üzenetet nem sikerült visszafejteni",
             "encryptedDecrypting": "Titkosított üzenet, visszafejtés…",
             "encryptedDisabled": "A titkosítás ki van kapcsolva. Kapcsolja be a beállításokban",
-            "couldNotDecryptTooltip": "Az üzenetet olyan kulccsal titkosították, amely ezen az eszközön nem érhető el",
             "unsupportedMethodTooltip": "{{method}} titkosítással, ezt a módszert ez az eszköz még nem támogatja",
             "unsupportedMessage": "Titkosított üzenet: a(z) {{method}} nem támogatott",
             "unsupportedMessageGeneric": "Titkosított üzenet: a módszer nem támogatott",
@@ -559,7 +558,10 @@
                     "untrusted": "nem hitelesítve",
                     "rejected": "ELUTASÍTVA: érvénytelen aláírás"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Olyan kulccsal titkosítva, amellyel ez az eszköz nem rendelkezik",
+            "couldNotDecryptSignature": "Ez az üzenet nem jelent meg, mert az aláírása nem volt megbízható",
+            "couldNotDecryptUnreadable": "Ezt az üzenetet nem sikerült elolvasni"
         },
         "verifyPeer": {
             "chipAriaLabel": "Titkosítva {{name}} számára. Kattintson a ujjlenyomat ellenőrzéséhez",

@@ -93,7 +93,7 @@ function HookHarness({
     readPointerId,
     clearFirstNewMessageId,
     onLoadAround,
-    reactionsSignature: '',
+    rowGrowthSignature: '',
     lastMessageId: ids.at(-1),
   })
 

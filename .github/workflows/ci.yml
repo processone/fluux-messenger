@@ -5,8 +5,56 @@ on:
     branches: [main, devel]
 
 jobs:
+  # Decide which of the jobs below the diff can actually affect. The workflow
+  # still triggers on every PR and the jobs are suppressed with `if:` rather
+  # than a workflow-level `paths:` filter — a skipped job reports a conclusion,
+  # a workflow that never ran does not, so required status checks (should any
+  # be added to main later) stay satisfiable.
+  changes:
+    name: Detect changed scopes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    outputs:
+      js: ${{ steps.classify.outputs.js }}
+      rust: ${{ steps.classify.outputs.rust }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The gatekeeper validates itself before it gates anything. Sub-second.
+      - name: Test the classifier
+        run: scripts/ci-changed-scopes.test.sh
+
+      # The PR's file list comes from the API rather than `git diff`: it is the
+      # diff GitHub itself computes, so it is immune to force-pushes, rebases
+      # and shallow clones, and needs no fetch-depth tuning. A failure here
+      # fails this job red — downstream jobs are then skipped and the workflow
+      # is visibly broken rather than quietly green.
+      - name: Classify changed files
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[].filename' > changed-files.txt
+
+          echo "Changed files ($(wc -l < changed-files.txt)):"
+          sed 's/^/  /' changed-files.txt
+
+          scripts/ci-changed-scopes.sh < changed-files.txt | tee -a "$GITHUB_OUTPUT"
+
   test:
     name: Test
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
     # Backstop against a hung step (default GitHub timeout is 6h). A healthy run is ~7min.
     timeout-minutes: 15
@@ -101,6 +149,8 @@ jobs:
 
   e2e-scroll:
     name: Scroll invariants (e2e)
+    needs: changes
+    if: needs.changes.outputs.js == 'true'
     runs-on: ubuntu-latest
     # Backstop against a hung dev server / browser install (default GitHub timeout is 6h).
     # A healthy run is ~7min; the Playwright OS-dep apt install can be slow on an unlucky
@@ -177,6 +227,15 @@ jobs:
       - name: Run scroll invariants (chromium + webkit)
         run: npm run test:scroll
 
+      # Composer box-model invariants. These cannot be unit tested: jsdom has no
+      # layout, so the autosize unit tests mock scrollHeight — and a mocked
+      # measurement can never contradict the real box model, which is where both
+      # shipped composer bugs lived. WebKit matters specifically here: it reserves
+      # scrollbar gutters differently from Blink, and it is the engine the desktop
+      # app runs.
+      - name: Run composer geometry invariants (chromium + webkit)
+        run: npm run test:composer
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7
@@ -187,6 +246,8 @@ jobs:
 
   rust:
     name: Rust
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     # Backstop against a hung build/test (default GitHub timeout is 6h). A cached run is ~5min.
     timeout-minutes: 20
@@ -233,6 +294,8 @@ jobs:
 
   rust-windows:
     name: Rust (Windows)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: windows-latest
     timeout-minutes: 25
 

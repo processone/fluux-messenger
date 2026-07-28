@@ -68,6 +68,7 @@ server/
 .cursor/
 .codeium/
 .superpowers/
+.agents/
 AGENTS.md
 
 # Gas Town (added by gt)

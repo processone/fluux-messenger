@@ -6,6 +6,7 @@ import * as messageCache from '../utils/messageCache'
 import { _resetStorageScopeForTesting, setStorageScopeJid, buildScopedStorageKey } from '../utils/storageScope'
 import { localStorageMock } from '../core/sideEffects.testHelpers'
 import { chatStore, migrateReadPointer } from './chatStore'
+import { _resetForTesting, flush as flushThrottledStorage } from './shared/throttledStorage'
 
 Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
@@ -33,6 +34,14 @@ beforeEach(async () => {
   messageCache._resetDBForTesting()
   _resetStorageScopeForTesting()
   setStorageScopeJid(JID)
+  // This file exercises the persist adapter directly with real timers, so an
+  // open throttle window from one test would otherwise coalesce the next
+  // test's leading write. Several assertions here read localStorage
+  // synchronously right after a persisting call, on the strength of that call
+  // being the throttle's LEADING edge (no window already open) — a schedule()
+  // with no open window still writes synchronously. Assertions that instead
+  // land inside a burst call `flushThrottledStorage()` before reading.
+  _resetForTesting()
   await messageCache.saveMessages([
     { type: 'chat', id: 'm1', conversationId: CONV, from: CONV, body: 'a', timestamp: at(1000), isOutgoing: false },
     { type: 'chat', id: 'm2', conversationId: CONV, from: CONV, body: 'b', timestamp: at(2000), isOutgoing: false },
@@ -97,9 +106,11 @@ function persistConversations(entries: Array<[string, LegacyMeta]>): void {
     STORAGE_KEY,
     JSON.stringify({
       state: {
+        // New-format blob: entities + meta only. The compat map is rebuilt from
+        // these on load and is no longer persisted, so writing one here would
+        // describe a shape the app never produces.
         conversationEntities: entries.map(([id]) => [id, { id, name: id, type: 'chat' }]),
         conversationMeta: entries.map(([id, m]) => [id, { unreadCount: 0, ...m }]),
-        conversations: entries.map(([id, m]) => [id, { id, name: id, type: 'chat', unreadCount: 0, ...m }]),
         archivedConversations: [],
       },
     })
@@ -301,7 +312,7 @@ describe('post-rehydrate readPointer backfill', () => {
 const LATE = 'late@example.com'
 
 /** One conversation's entry in one persisted map, as it actually sits on disk. */
-function diskEntry(map: 'conversationMeta' | 'conversations', id: string): Record<string, unknown> {
+function diskEntry(map: 'conversationMeta' | 'conversationEntities', id: string): Record<string, unknown> {
   const raw = localStorage.getItem(STORAGE_KEY)
   if (!raw) throw new Error(`diskEntry: nothing persisted under ${STORAGE_KEY}`)
   const entries = JSON.parse(raw).state[map] as Array<[string, Record<string, unknown>]>
@@ -311,13 +322,12 @@ function diskEntry(map: 'conversationMeta' | 'conversations', id: string): Recor
 }
 
 /**
- * The legacy pair on disk. Both persisted maps are read: `serializeState` writes
- * them separately, and either one going missing is the same loss.
+ * The legacy pair on disk. `conversationMeta` is the only persisted carrier: the
+ * `conversations` compat map is no longer written at all (it is rebuilt from
+ * entities + meta on load), so there is one place left for this to go missing.
  */
 function legacyOnDisk(id: string): { lastSeenMessageId?: unknown; lastReadAt?: unknown } {
   const meta = diskEntry('conversationMeta', id)
-  const conv = diskEntry('conversations', id)
-  expect([conv.lastSeenMessageId, conv.lastReadAt]).toEqual([meta.lastSeenMessageId, meta.lastReadAt])
   return { lastSeenMessageId: meta.lastSeenMessageId, lastReadAt: meta.lastReadAt }
 }
 
@@ -383,14 +393,22 @@ describe('unmigrated legacy read state survives the persist', () => {
     persistConversations([[CONV, { lastSeenMessageId: 'm2' }]])
 
     relaunch()
+    // toMatchObject: this path resolves the message from cache and stamps an
+    // archiveOrderKey onto the pointer (unlike the both-fields branch above,
+    // which copies the legacy pair through verbatim) — the point of this
+    // assertion is messageId/timestamp, not the archive key's exact shape.
     await vi.waitFor(() => expect(pointerOf(CONV)).toMatchObject({ messageId: 'm2', timestamp: at(2000) }))
+    // This assertion means to observe the final persisted blob, not a
+    // mid-pass write still sitting in the throttle's pending thunk.
+    flushThrottledStorage()
 
     expect(diskEntry('conversationMeta', CONV).readPointer).toMatchObject({
       messageId: 'm2',
       timestamp: at(2000).toISOString(),
     })
     expect('lastSeenMessageId' in diskEntry('conversationMeta', CONV)).toBe(false)
-    expect('lastSeenMessageId' in diskEntry('conversations', CONV)).toBe(false)
+    // The compat map is not on disk to check any more — nothing writes it.
+    expect('conversations' in JSON.parse(localStorage.getItem(STORAGE_KEY)!).state).toBe(false)
   })
 
   // A conversation the user reads normally gets its pointer from the store, not
@@ -410,6 +428,9 @@ describe('unmigrated legacy read state survives the persist', () => {
       conversations.set(LATE, { ...conversations.get(LATE)!, readPointer: live })
       return { conversationMeta: meta, conversations }
     })
+    // This assertion means to observe the final persisted blob, not a
+    // mid-pass write still sitting in the throttle's pending thunk.
+    flushThrottledStorage()
 
     expect(diskEntry('conversationMeta', LATE).readPointer).toEqual({
       messageId: 'live1',

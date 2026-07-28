@@ -54,6 +54,7 @@ import {
   settle,
   type ScenarioMockClient,
 } from './networkScenario.testHelpers'
+import { simulateFreshSession } from './sideEffects.testHelpers'
 import { setupRoomSideEffects } from './roomSideEffects'
 
 describe('Network Scenario Journey Tests', () => {
@@ -205,21 +206,32 @@ describe('Network Scenario Journey Tests', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupRoomSideEffects(client)
 
-      // Fresh session (SM failed) — unlike SM resume, this clears fetchInitiated
-      await simulateFreshSessionWithRejoin(client, ['room@conference.example.com'])
+      // Fresh session (SM failed) requires a new self-presence before MAM.
+      simulateFreshSession(client)
+      await settle()
+      expect(client.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+
+      roomStore.getState().markAllRoomsNotJoined()
+      roomStore.getState().setRoomJoined('room@conference.example.com', true)
+      client._emitSDK('room:joined', {
+        roomJid: 'room@conference.example.com',
+        joined: true,
+      })
+      await settle()
 
       // Room should be joined
       const room = roomStore.getState().rooms.get('room@conference.example.com')
       expect(room?.joined).toBe(true)
 
-      // MAM SHOULD be triggered on fresh session (fetchInitiated was cleared by 'online' handler)
+      // MAM starts after the confirmed join.
       await vi.waitFor(() => {
-        expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(client.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(client.mam.catchUpRoomHistory).toHaveBeenCalledWith(
         'room@conference.example.com',
         expect.any(Array),
         expect.objectContaining({}),
       )
-      })
     })
   })
 

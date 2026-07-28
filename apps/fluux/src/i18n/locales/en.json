@@ -528,7 +528,6 @@
             "encryptedCouldNotDecrypt": "Couldn't decrypt this message",
             "encryptedDecrypting": "Encrypted message, decrypting…",
             "encryptedDisabled": "Encryption disabled. Enable it in the settings",
-            "couldNotDecryptTooltip": "Message encrypted to a key not available on this device",
             "unsupportedMethodTooltip": "Encrypted with {{method}}, a method this device doesn't support yet",
             "unsupportedMessage": "Encrypted message: {{method}} not supported",
             "unsupportedMessageGeneric": "Encrypted message: method not supported",
@@ -559,7 +558,10 @@
                     "untrusted": "unverified",
                     "rejected": "REJECTED: invalid signature"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Encrypted to a key this device doesn't have",
+            "couldNotDecryptSignature": "This message wasn't shown because its signature could not be trusted",
+            "couldNotDecryptUnreadable": "This message could not be read"
         },
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}}. Click to verify fingerprint",

@@ -61,4 +61,25 @@ export interface MessageVirtualizer {
    * behavior: 'auto' (instant) | 'smooth'
    */
   scrollToIndex(index: number, opts?: { align?: 'start' | 'center' | 'end' | 'auto'; behavior?: 'auto' | 'smooth' }): void
+  /**
+   * Start an ANIMATED scroll to `offset` and hand the virtualizer's own pending-scroll state
+   * over to it. Use this — never a raw `scroller.scrollTo({ behavior: 'smooth' })` — for any
+   * animated position the app owns on the virtualized path.
+   *
+   * Why it exists: @tanstack keeps a pending-scroll reconciler alive for several seconds after
+   * every scrollToIndex/scrollToOffset and re-applies ITS target on every frame that
+   * measurement moves it. That reconciler is invisible to the positioning controller's
+   * generations, so a superseded live-edge pin can still snap the list back to the bottom in
+   * the middle of a newer animation (worst on a slow engine, where rows are still measuring for
+   * the first time). Retargeting the reconciler is what makes the animation survive; it also
+   * suppresses @tanstack's own size-change scroll adjustments for the animation's duration.
+   *
+   * Distinct from `scrollToOffset(offset, { behavior: 'smooth' })`: that variant additionally
+   * pushes the target into @tanstack's offset callback so the window re-renders before paint,
+   * which is right for an instant write but wrong for an animation — it would claim the
+   * scroller had already arrived, re-windowing to the destination while the view is still at
+   * the origin (and retiring the reconciler immediately). Here the offset is left to be
+   * observed as the animation runs.
+   */
+  beginAnimatedScrollToOffset(offset: number): void
 }

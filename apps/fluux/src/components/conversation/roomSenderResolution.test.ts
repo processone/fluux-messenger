@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomAvatar, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './roomSenderResolution'
 import { auroraSenderColor } from '@/utils/senderColor'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
@@ -39,6 +39,8 @@ describe('stableNickSet', () => {
 const room = (over: Partial<Room>): Room => ({
   jid: 'r@conf', nickname: 'me', joined: true, supportsReactions: true,
   occupants: new Map(), nickToJidCache: new Map(), nickToAvatarCache: new Map(),
+  occupantIdToJidCache: new Map(), occupantIdToNick: new Map(),
+  occupantIdToAvatarCache: new Map(),
   ...over,
 } as Room)
 const msg = (over: Partial<RoomMessage>): RoomMessage =>
@@ -56,7 +58,10 @@ describe('resolveRoomSender', () => {
   })
   it('falls back to occupant-id match when nick is not a current occupant', () => {
     const bob = { nick: 'bob2', occupantId: 'oid-bob', role: 'participant', affiliation: 'none', show: 'online' } as any
-    const r = room({ occupants: new Map([['bob2', bob]]) })
+    const r = room({
+      occupants: new Map([['bob2', bob]]),
+      occupantIdToNick: new Map([['oid-bob', 'bob2']]),
+    })
     const s = resolveRoomSender(msg({ nick: 'bob', occupantId: 'oid-bob' }), r, new Map(), undefined)
     expect(s.occupant).toBe(bob)
     expect(s.resolvedSenderName).toBe('bob2')
@@ -64,6 +69,76 @@ describe('resolveRoomSender', () => {
   it('reports avatarPresence offline when occupant absent (joined room)', () => {
     const s = resolveRoomSender(msg({ nick: 'ghost' }), room({}), new Map(), undefined)
     expect(s.avatarPresence).toBe('offline')
+  })
+  it('restores an offline anonymous sender avatar by room-scoped occupant-id', () => {
+    const r = room({
+      occupantIdToAvatarCache: new Map([['occ-alice', 'blob:stable']]),
+      nickToAvatarCache: new Map([['alice', 'blob:nick']]),
+    })
+    const s = resolveRoomSender(
+      msg({ nick: 'alice', occupantId: 'occ-alice' }),
+      r,
+      new Map(),
+      undefined,
+    )
+    expect(s.senderAvatar).toBe('blob:stable')
+    expect(s.avatarPresence).toBe('offline')
+  })
+  it('does not give a historical sender the avatar of a recycled nickname', () => {
+    const recycled = occ('alice', {
+      occupantId: 'occ-new-person',
+      avatar: 'blob:new-person',
+    })
+    const r = room({
+      occupants: new Map([['alice', recycled]]),
+      nickToAvatarCache: new Map([['alice', 'blob:unsafe-nick-cache']]),
+    })
+    const resolved = resolveRoomAvatar(
+      { nick: 'alice', occupantId: 'occ-old-person' },
+      r,
+      new Map(),
+    )
+    expect(resolved.occupant).toBeUndefined()
+    expect(resolved.avatarUrl).toBeUndefined()
+    expect(resolved.source).toBe('fallback')
+  })
+  it('follows a stable occupant-id across a nickname change', () => {
+    const renamed = occ('alice-new', {
+      occupantId: 'occ-alice',
+      avatar: 'blob:renamed',
+    })
+    const r = room({
+      occupants: new Map([['alice-new', renamed]]),
+      occupantIdToNick: new Map([['occ-alice', 'alice-new']]),
+    })
+    const resolved = resolveRoomAvatar(
+      { nick: 'alice-old', occupantId: 'occ-alice' },
+      r,
+      new Map(),
+    )
+    expect(resolved.occupant).toBe(renamed)
+    expect(resolved.matchedNick).toBe('alice-new')
+    expect(resolved.avatarUrl).toBe('blob:renamed')
+  })
+  it('falls back through the stable JID alias in a non-anonymous room', () => {
+    const r = room({
+      occupantIdToJidCache: new Map([['occ-alice', 'alice@example.com']]),
+    })
+    const contacts = new Map([
+      ['alice@example.com', {
+        jid: 'alice@example.com',
+        name: 'Alice',
+        avatar: 'blob:contact',
+      } as any],
+    ])
+    const resolved = resolveRoomAvatar(
+      { nick: 'old-nick', occupantId: 'occ-alice' },
+      r,
+      contacts,
+    )
+    expect(resolved.avatarUrl).toBe('blob:contact')
+    expect(resolved.senderBareJid).toBe('alice@example.com')
+    expect(resolved.source).toBe('jid')
   })
   it('counterpartPresent is true for non-private messages', () => {
     const s = resolveRoomSender(msg({ isPrivate: false }), room({}), new Map(), undefined)
@@ -100,20 +175,20 @@ describe('resolveRoomSender', () => {
     const s = resolveRoomSender(msg({ isPrivate: true, whisperWith: 'alice' }), room({}), new Map(), undefined)
     expect(s.counterpartPresent).toBe(false)
   })
-  it('senderBareJid falls back via the occupant-id cache where senderBareJidForBan is undefined', () => {
-    // Message nick is NOT a current occupant, but occupant-id matches an occupant
-    // under a different nick; the JID for that nick lives only in nickToJidCache.
-    const bob = { nick: 'bob2', occupantId: 'oid-bob', role: 'participant', affiliation: 'none' } as any
+  it('keeps Ban available for a departed occupant through the stable JID alias', () => {
+    const self = { nick: 'me', role: 'moderator', affiliation: 'admin' } as any
     const r = room({
-      occupants: new Map([['bob2', bob]]),
-      // cache keyed by the occupant-id-matched nick, NOT message.nick
-      nickToJidCache: new Map([['bob2', 'bob@server']]),
+      occupantIdToJidCache: new Map([['oid-bob', 'bob@server']]),
     })
-    const s = resolveRoomSender(msg({ nick: 'bob', occupantId: 'oid-bob' }), r, new Map(), undefined)
-    // Ban path has no occupant-id fallback → undefined (occupant.jid absent, cache miss on message.nick)
-    expect(s.senderBareJidForBan).toBeUndefined()
-    // Superset JID resolves via the occupant-id-matched nick cache entry
+    const s = resolveRoomSender(
+      msg({ nick: 'departed-bob', occupantId: 'oid-bob' }),
+      r,
+      new Map(),
+      self,
+    )
+    expect(s.senderBareJidForBan).toBe('bob@server')
     expect(s.senderBareJid).toBe('bob@server')
+    expect(s.canBan).toBe(true)
   })
 })
 
@@ -140,6 +215,31 @@ describe('resolveReplyAvatar', () => {
       nickToAvatarCache: new Map([['alice', 'blob:cache']]),
     })
     expect(resolveReplyAvatar('alice', r, new Map(), 'me', undefined).avatarUrl).toBe('blob:cache')
+  })
+  it('uses the replied-to occupant-id instead of a recycled live nickname', () => {
+    const r = room({
+      occupants: new Map([[
+        'alice',
+        {
+          nick: 'alice',
+          occupantId: 'new-alice',
+          avatar: 'blob:new-alice',
+        } as any,
+      ]]),
+      occupantIdToNick: new Map([['new-alice', 'alice']]),
+      occupantIdToAvatarCache: new Map([['old-alice', 'blob:old-alice']]),
+    })
+
+    expect(
+      resolveReplyAvatar(
+        'alice',
+        r,
+        new Map(),
+        'me',
+        undefined,
+        'old-alice',
+      ).avatarUrl
+    ).toBe('blob:old-alice')
   })
   it('falls back to the contact avatar when occupant and cache have none', () => {
     const r = room({

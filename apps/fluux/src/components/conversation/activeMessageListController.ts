@@ -1,34 +1,26 @@
 /**
  * Registry for the currently-mounted conversation message list, so code outside the
- * list (DOM-based jump helpers, and ChatLayout's Escape handler) can reach the active
+ * list (message-target helpers and ChatLayout's Escape handler) can reach the active
  * list without threading it through every caller.
  *
- * Why this exists: under virtualization the target row of an in-conversation jump may be OUTSIDE
- * the mounted DOM window, so a raw `querySelector('[data-message-id]')` finds nothing and the jump
- * silently no-ops. The active list registers a tiny controller here; the helper asks it to window
- * the row in first, then the DOM read + scrollIntoView succeed. Non-virtualized lists keep every
- * row mounted, so `hasMessage`/`ensureMessageMounted` are no-ops there — the helper's plain DOM
- * path works unchanged. `scrollToBottom` is registered regardless of virtualization (see
- * `scrollToMessage` in messageGrouping.ts for the jump consumer, and ChatLayout's
- * `onConversationEscape` for the scroll-to-bottom consumer).
+ * Why this exists: positioning ownership lives with the active message list. Callers such as reply
+ * quotes, poll banners, and find-on-page submit a semantic target through `requestMessageTarget`;
+ * they must not start independent DOM/rAF scroll implementations outside the generation-aware
+ * positioning controller. `scrollToBottom` is registered for ChatLayout's conversation-level
+ * Escape handling.
  *
  * There is a single active conversation list at a time (ChatView / RoomView render one), so a
  * module-level singleton is sufficient. The list clears its registration on unmount (identity-
  * checked, so a fast conversation switch can't clobber the newly mounted list's registration).
+ *
+ * Static previews (SearchContextView, StrangerRequestPreviewView) deliberately do NOT register:
+ * several of them can be mounted at once beside the live list, and this registry holds only one,
+ * so registering them would make routing depend on render order. Callers rendered inside any list
+ * route by containment through `messageTargetContext` instead.
  */
 export interface ActiveMessageListController {
-  /** True when `id` is in the loaded item set (resolvable by the virtualizer index), whether or
-   *  not its row is currently mounted. Always false for non-virtualized lists. */
-  hasMessage(id: string): boolean
-  /** Window the (possibly unmounted) row for `id` into the virtualizer's mounted set so a
-   *  subsequent DOM query can find it. No-op when `id` isn't in the item set. */
-  ensureMessageMounted(id: string): void
-  /** Pull the cache slice around `id` into the loaded item set, for a target that scrolled
-   *  so far out of the window it isn't even resolvable by the virtualizer index yet
-   *  (`hasMessage` is false). Reuses the same load-around path as the targetMessageId jump.
-   *  Resolves once the slice is merged. Absent on lists with no load-around wiring (older
-   *  callers, non-virtualized). `id` must be a LOCAL message id — see `scrollToMessage`. */
-  loadAround?(id: string): Promise<unknown> | void
+  /** Submit an explicit message target to the active list's positioning controller. */
+  requestMessageTarget(id: string): void
   /** Scroll the active list to the newest message (same action as the ⌘/Ctrl+↓ shortcut
    *  and the scroll-to-bottom FAB). */
   scrollToBottom(): void

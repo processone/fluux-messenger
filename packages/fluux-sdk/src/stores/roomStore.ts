@@ -74,6 +74,8 @@ import { markerDebugLog } from '../utils/markerDebug'
 import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
+import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
@@ -132,13 +134,9 @@ function loadDraftsFromStorage(jid?: string | null): Map<string, string> {
  * Save room drafts to localStorage.
  */
 function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): void {
-  const storageKey = getRoomDraftsStorageKey(jid)
-  try {
-    const entries = Array.from(drafts.entries())
-    localStorage.setItem(storageKey, JSON.stringify(entries))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  // Lazy: a coalesced write never pays for the stringify. Error absorption
+  // lives in the throttle.
+  schedule(getRoomDraftsStorageKey(jid), () => JSON.stringify(Array.from(drafts.entries())))
 }
 
 /**
@@ -175,14 +173,11 @@ function loadPollIdsFromStorage(storageKey: string): Map<string, Set<string>> {
 }
 
 function savePollIdsToStorage(pollIds: Map<string, Set<string>>, storageKey: string): void {
-  try {
-    const entries = Array.from(pollIds.entries()).map(
-      ([k, v]) => [k, Array.from(v)] as [string, string[]]
+  schedule(storageKey, () =>
+    JSON.stringify(
+      Array.from(pollIds.entries()).map(([k, v]) => [k, Array.from(v)] as [string, string[]])
     )
-    localStorage.setItem(storageKey, JSON.stringify(entries))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  )
 }
 
 function loadVotedPollsFromStorage(jid?: string | null): Map<string, Set<string>> {
@@ -224,11 +219,10 @@ function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
 }
 
 function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
-  try {
-    localStorage.setItem(getRoomGapsStorageKey(jid), serializeGaps(gaps))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  // A gap FORMATION must not sit in the throttle window — nothing re-detects
+  // it next session. Shrink/close/removal stays throttled. See durableMapPersist.
+  const key = getRoomGapsStorageKey(jid)
+  scheduleDurableMaps(key, { gaps }, () => serializeGaps(gaps))
 }
 
 /**
@@ -254,11 +248,11 @@ function loadCoverageFromStorage(jid?: string | null): Map<string, CoverageRecor
 }
 
 function saveCoverageToStorage(coverage: Map<string, CoverageRecord>, jid?: string | null): void {
-  try {
-    localStorage.setItem(getRoomCoverageStorageKey(jid), serializeCoverage(coverage))
-  } catch {
-    // Ignore storage errors (quota exceeded, etc.)
-  }
+  // A record appearing, its `bottomId` changing or the record being dropped
+  // must not sit in the throttle window: the stale one on disk asserts a
+  // contiguity that was just disproven. A `topId`-only refresh stays throttled.
+  const key = getRoomCoverageStorageKey(jid)
+  scheduleDurableMaps(key, { coverage }, () => serializeCoverage(coverage))
 }
 
 /**
@@ -317,11 +311,13 @@ function persistRoomReadState(roomMeta: Map<string, RoomMetadata>): void {
  *
  * Between the other two, neither can be ahead of the user's true position, so
  * the later one is right. They are two mirrors of the same store and either can
- * be the stale one: the SDK state snapshot is debounced by 500 ms, while the
- * durable `readStateStorage` row is written synchronously on every advance — so
- * a snapshot restored after a crash is routinely BEHIND the row it shadows, and
- * taking it at face value would then have `persistRoomReadState` write that
- * older position back over the row.
+ * be the stale one: the SDK state snapshot is debounced by 500 ms and the
+ * durable `readStateStorage` row is throttled by 1000 ms, so after a crash
+ * EITHER can be the older. Taking one at face value would then have
+ * `persistRoomReadState` write an older position back over the row.
+ *
+ * The rule holds because both are LAGGING mirrors — throttling the row makes it
+ * lag more, never lead — so "later" only ever recovers the freshest one.
  *
  * INVARIANT this "take the later" rule depends on: both `room` (from the state
  * snapshot) and `restored` (the durable row) are lagging MIRRORS of one store
@@ -551,7 +547,8 @@ const ROOM_META_FIELDS = Object.keys({
 } satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
 
 const ROOM_RUNTIME_FIELD_ROUTING = {
-  occupants: 'sync', nickToJidCache: 'sync', nickToAvatarCache: 'sync',
+  occupants: 'sync', nickToJidCache: 'sync', occupantIdToJidCache: 'sync',
+  occupantIdToNick: 'sync', nickToAvatarCache: 'sync', occupantIdToAvatarCache: 'sync',
   affiliatedMembers: 'sync', selfOccupant: 'sync', messages: 'sync',
   // A plain field update must never silently recenter the window — the
   // live-edge flag only changes through window operations (see
@@ -815,9 +812,9 @@ export interface RoomState {
   addOccupant: (roomJid: string, occupant: RoomOccupant) => void
   batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
   removeOccupant: (roomJid: string, nick: string) => void
-  updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
+  updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null, occupantId?: string) => void
   /** Batch variant of updateOccupantAvatar — one state update for N resolved avatars (e.g. after joining a large room) */
-  updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
+  updateOccupantAvatars: (roomJid: string, updates: Array<{ nick?: string; occupantId?: string; avatar: string | null; avatarHash: string | null }>) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   mergeRoomMembers: (roomJid: string, members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>, contactAvatarLookup?: (jid: string) => string | null) => void
   /**
@@ -920,8 +917,8 @@ export interface RoomState {
   advanceReadPointer: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
-   * the read pointer forward-only by resolving the stanza-id to a local
-   * message id; stores a pending high-water mark if not yet loaded.
+   * the read pointer forward-only. Pending and ordering semantics are owned by
+   * the shared `readMarkerSync` resolver.
    */
   applyRemoteDisplayed: (roomJid: string, stanzaId: string, messagesOverride?: RoomMessage[]) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
@@ -1113,6 +1110,13 @@ export const roomStore = createStore<RoomState>()(
       }
       const existingMeta = state.roomMeta.get(room.jid)
       const restoredReadState = persistedRoomReadState.get(room.jid)
+      const occupantIdToNick = room.occupantIdToNick ?? (() => {
+        const index = new Map<string, string>()
+        for (const occupant of room.occupants?.values() ?? []) {
+          if (occupant.occupantId) index.set(occupant.occupantId, occupant.nick)
+        }
+        return index.size > 0 ? index : undefined
+      })()
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
         mentionsCount: room.mentionsCount,
@@ -1133,6 +1137,9 @@ export const roomStore = createStore<RoomState>()(
       const runtime: RoomRuntime = {
         occupants: room.occupants,
         nickToJidCache: room.nickToJidCache,
+        occupantIdToJidCache: room.occupantIdToJidCache,
+        occupantIdToNick,
+        occupantIdToAvatarCache: room.occupantIdToAvatarCache,
         selfOccupant: room.selfOccupant,
         messages: room.messages,
         // A room upsert seeds the newest window → at the live edge by default.
@@ -1145,6 +1152,7 @@ export const roomStore = createStore<RoomState>()(
       // fields, and an incoming Room carries none of them.
       newRooms.set(room.jid, {
         ...room,
+        ...(occupantIdToNick && { occupantIdToNick }),
         readPointer: meta.readPointer,
         historyFloor: meta.historyFloor,
       })
@@ -1298,14 +1306,32 @@ export const roomStore = createStore<RoomState>()(
 
       const newOccupants = new Map(existing.occupants)
       // Presence carries only the avatar hash — keep an already-fetched blob alive.
-      const merged = preserveOccupantAvatar(existing.occupants.get(occupant.nick), occupant)
+      const previousAtNick = existing.occupants.get(occupant.nick)
+      const merged = preserveOccupantAvatar(previousAtNick, occupant)
       newOccupants.set(merged.nick, merged)
+
+      let occupantIdToNick = existing.occupantIdToNick
+      const previousIdNeedsRemoval = previousAtNick?.occupantId
+        && previousAtNick.occupantId !== merged.occupantId
+        && occupantIdToNick?.get(previousAtNick.occupantId) === previousAtNick.nick
+      const currentIdNeedsUpdate = merged.occupantId
+        && occupantIdToNick?.get(merged.occupantId) !== merged.nick
+      if (previousIdNeedsRemoval || currentIdNeedsUpdate) {
+        occupantIdToNick = new Map(occupantIdToNick || [])
+        if (previousIdNeedsRemoval) occupantIdToNick.delete(previousAtNick.occupantId!)
+        if (merged.occupantId) occupantIdToNick.set(merged.occupantId, merged.nick)
+      }
 
       // Update nick→jid cache for non-anonymous rooms (when real JID is visible)
       let nickToJidCache = existing.nickToJidCache
       if (merged.jid) {
         nickToJidCache = new Map(nickToJidCache || [])
         nickToJidCache.set(merged.nick, getBareJid(merged.jid))
+      }
+      let occupantIdToJidCache = existing.occupantIdToJidCache
+      if (merged.occupantId && merged.jid) {
+        occupantIdToJidCache = new Map(occupantIdToJidCache || [])
+        occupantIdToJidCache.set(merged.occupantId, getBareJid(merged.jid))
       }
 
       // Update nick→avatar cache if occupant has avatar
@@ -1314,14 +1340,35 @@ export const roomStore = createStore<RoomState>()(
         nickToAvatarCache = new Map(nickToAvatarCache || [])
         nickToAvatarCache.set(merged.nick, merged.avatar)
       }
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
+      if (merged.occupantId && merged.avatar) {
+        occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+        occupantIdToAvatarCache.set(merged.occupantId, merged.avatar)
+      }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants,
+        nickToJidCache,
+        occupantIdToJidCache,
+        occupantIdToNick,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants,
+          nickToJidCache,
+          occupantIdToJidCache,
+          occupantIdToNick,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -1338,13 +1385,30 @@ export const roomStore = createStore<RoomState>()(
 
       const newOccupants = new Map(existing.occupants)
       let nickToJidCache = existing.nickToJidCache
+      let occupantIdToJidCache = existing.occupantIdToJidCache
+      let occupantIdToNick = existing.occupantIdToNick
       let nickToAvatarCache = existing.nickToAvatarCache
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
 
       // Add all occupants in a single update
       for (const occupant of occupants) {
         // Presence carries only the avatar hash — keep an already-fetched blob alive.
-        const merged = preserveOccupantAvatar(newOccupants.get(occupant.nick), occupant)
+        const previousAtNick = newOccupants.get(occupant.nick)
+        const merged = preserveOccupantAvatar(previousAtNick, occupant)
         newOccupants.set(merged.nick, merged)
+
+        const previousIdNeedsRemoval = previousAtNick?.occupantId
+          && previousAtNick.occupantId !== merged.occupantId
+          && occupantIdToNick?.get(previousAtNick.occupantId) === previousAtNick.nick
+        const currentIdNeedsUpdate = merged.occupantId
+          && occupantIdToNick?.get(merged.occupantId) !== merged.nick
+        if (previousIdNeedsRemoval || currentIdNeedsUpdate) {
+          if (!occupantIdToNick || occupantIdToNick === existing.occupantIdToNick) {
+            occupantIdToNick = new Map(occupantIdToNick || [])
+          }
+          if (previousIdNeedsRemoval) occupantIdToNick.delete(previousAtNick.occupantId!)
+          if (merged.occupantId) occupantIdToNick.set(merged.occupantId, merged.nick)
+        }
 
         // Update nick→jid cache for non-anonymous rooms
         if (merged.jid) {
@@ -1352,6 +1416,12 @@ export const roomStore = createStore<RoomState>()(
             nickToJidCache = new Map(nickToJidCache || [])
           }
           nickToJidCache.set(merged.nick, getBareJid(merged.jid))
+        }
+        if (merged.occupantId && merged.jid) {
+          if (!occupantIdToJidCache || occupantIdToJidCache === existing.occupantIdToJidCache) {
+            occupantIdToJidCache = new Map(occupantIdToJidCache || [])
+          }
+          occupantIdToJidCache.set(merged.occupantId, getBareJid(merged.jid))
         }
 
         // Update nick→avatar cache
@@ -1361,15 +1431,37 @@ export const roomStore = createStore<RoomState>()(
           }
           nickToAvatarCache.set(merged.nick, merged.avatar)
         }
+        if (merged.occupantId && merged.avatar) {
+          if (!occupantIdToAvatarCache || occupantIdToAvatarCache === existing.occupantIdToAvatarCache) {
+            occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+          }
+          occupantIdToAvatarCache.set(merged.occupantId, merged.avatar)
+        }
       }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants,
+        nickToJidCache,
+        occupantIdToJidCache,
+        occupantIdToNick,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants,
+          nickToJidCache,
+          occupantIdToJidCache,
+          occupantIdToNick,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -1382,18 +1474,32 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
+      const leavingOccupant = existing.occupants.get(nick)
       const newOccupants = new Map(existing.occupants)
       newOccupants.delete(nick)
+      let occupantIdToNick = existing.occupantIdToNick
+      if (
+        leavingOccupant?.occupantId
+        && occupantIdToNick?.get(leavingOccupant.occupantId) === nick
+      ) {
+        occupantIdToNick = new Map(occupantIdToNick)
+        occupantIdToNick.delete(leavingOccupant.occupantId)
+      }
       // Also remove from typing users when they leave
       const newTypingUsers = new Set(existing.typingUsers)
       newTypingUsers.delete(nick)
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, typingUsers: newTypingUsers })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants,
+        occupantIdToNick,
+        typingUsers: newTypingUsers,
+      })
 
       // Update runtime (occupants)
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants })
+        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, occupantIdToNick })
       }
 
       // Update metadata (typingUsers)
@@ -1407,8 +1513,8 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  updateOccupantAvatar: (roomJid, nick, avatar, avatarHash) => {
-    get().updateOccupantAvatars(roomJid, [{ nick, avatar, avatarHash }])
+  updateOccupantAvatar: (roomJid, nick, avatar, avatarHash, occupantId) => {
+    get().updateOccupantAvatars(roomJid, [{ nick, occupantId, avatar, avatarHash }])
   },
 
   updateOccupantAvatars: (roomJid, updates) => {
@@ -1419,36 +1525,74 @@ export const roomStore = createStore<RoomState>()(
       let newOccupants: Map<string, RoomOccupant> | null = null
       // Update nick→avatar cache so avatars persist after occupants leave
       let nickToAvatarCache = existing.nickToAvatarCache
+      // Stable XEP-0421 cache survives nick changes and can be hydrated for
+      // occupants who are already offline when the room is joined.
+      let occupantIdToAvatarCache = existing.occupantIdToAvatarCache
+      let cacheChanged = false
 
-      for (const { nick, avatar, avatarHash } of updates) {
-        const occupant = (newOccupants ?? existing.occupants).get(nick)
-        if (!occupant) continue
+      for (const { nick, occupantId, avatar, avatarHash } of updates) {
+        const occupantAtNick = nick
+          ? (newOccupants ?? existing.occupants).get(nick)
+          : undefined
+        // An async avatar fetch may finish after the old occupant left and a
+        // different person recycled the nick. Never write the old avatar into
+        // that new live occupant.
+        const occupant = occupantId && occupantAtNick?.occupantId
+          && occupantAtNick.occupantId !== occupantId
+          ? undefined
+          : occupantAtNick
+        const stableOccupantId = occupantId ?? occupant?.occupantId
 
-        if (!newOccupants) newOccupants = new Map(existing.occupants)
-        newOccupants.set(nick, {
-          ...occupant,
-          avatar: avatar ?? undefined,
-          avatarHash: avatarHash ?? undefined,
-        })
+        if (occupant && nick) {
+          if (!newOccupants) newOccupants = new Map(existing.occupants)
+          newOccupants.set(nick, {
+            ...occupant,
+            avatar: avatar ?? undefined,
+            avatarHash: avatarHash ?? undefined,
+          })
+        }
 
-        if (avatar) {
+        if (avatar && nick && (occupant || !occupantId)) {
           if (!nickToAvatarCache || nickToAvatarCache === existing.nickToAvatarCache) {
             nickToAvatarCache = new Map(nickToAvatarCache || [])
           }
           nickToAvatarCache.set(nick, avatar)
+          cacheChanged = true
+        }
+
+        if (stableOccupantId) {
+          if (!occupantIdToAvatarCache || occupantIdToAvatarCache === existing.occupantIdToAvatarCache) {
+            occupantIdToAvatarCache = new Map(occupantIdToAvatarCache || [])
+          }
+          if (avatar) {
+            occupantIdToAvatarCache.set(stableOccupantId, avatar)
+          } else {
+            occupantIdToAvatarCache.delete(stableOccupantId)
+          }
+          cacheChanged = true
         }
       }
 
-      if (!newOccupants) return state
+      if (!newOccupants && !cacheChanged) return state
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToAvatarCache })
+      newRooms.set(roomJid, {
+        ...existing,
+        occupants: newOccupants ?? existing.occupants,
+        nickToAvatarCache,
+        occupantIdToAvatarCache,
+      })
 
       // Update runtime (occupants + avatar cache)
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToAvatarCache })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          occupants: newOccupants ?? existingRuntime.occupants,
+          nickToAvatarCache,
+          occupantIdToAvatarCache,
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -1580,6 +1724,15 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
+    // Freshness on an immediate return: without this, a fast A -> B -> A runs
+    // loadRoomReadState(A) against a blob predating A's last mutations, and
+    // that stale load becomes the live state.
+    flushThrottledStorage()
+    // Structural baselines are keyed by resolved storage key, so they cannot be
+    // read across accounts — but they are dropped anyway, and it is free to do
+    // so: the flush above closed every window, so the next write's force-flush
+    // finds no pending thunk and writes nothing extra.
+    forgetAllDurableMapBaselines()
     // In-flight archive-save gates belong to the previous account; their
     // deferred commits must not land in the new account's maps.
     roomArchiveSaves.clear()
@@ -1621,13 +1774,26 @@ export const roomStore = createStore<RoomState>()(
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
     // New session → the XEP-0490 synced read marker may be folded again on first open.
     mdsGate.reset()
-    // Clear persisted room drafts and poll state on logout
-    localStorage.removeItem(getRoomDraftsStorageKey())
-    localStorage.removeItem(getRoomVotedPollsStorageKey())
-    localStorage.removeItem(getRoomDismissedPollsStorageKey())
-    localStorage.removeItem(getRoomGapsStorageKey())
-    localStorage.removeItem(getRoomCoverageStorageKey())
-    localStorage.removeItem(getRoomNonAnonAckStorageKey())
+    // Clear persisted room drafts and poll state on logout.
+    //
+    // Cancel BEFORE removing. Unlike chatStore, nothing after this re-triggers
+    // these helper writes, so a pending thunk would resurrect logged-out data.
+    for (const key of [
+      getRoomDraftsStorageKey(),
+      getRoomVotedPollsStorageKey(),
+      getRoomDismissedPollsStorageKey(),
+      getRoomGapsStorageKey(),
+      getRoomCoverageStorageKey(),
+      getRoomNonAnonAckStorageKey(),
+    ]) {
+      // `cancelDurableMaps` for every key: it is `cancel` plus the structural
+      // baseline, and the gap/coverage baselines describe exactly the write
+      // being cancelled here. Keeping one would let a formation after a
+      // re-login compare equal to a state that was never persisted and skip
+      // its flush (durableMapPersist). A no-op for the keys that have none.
+      cancelDurableMaps(key)
+      localStorage.removeItem(key)
+    }
     // Logout forgets read positions for rooms exactly as chatStore.reset()
     // forgets them for 1:1 conversations (it drops the whole chat storage key,
     // pointers included) — one kind of conversation must not outlive the other.
@@ -2567,9 +2733,10 @@ export const roomStore = createStore<RoomState>()(
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded
       // messages, and applied only once per distinct RESOLVED marker this
-      // session — a fold that stashed (message not loaded) stays retryable, a
-      // resolved one is never re-folded (that would reposition the divider on
-      // every return). Gate + retry policy live in shared/readMarkerSync.
+      // session — a fold that could not order the marker against the local
+      // pointer stays retryable, while a resolved one is never re-folded (that
+      // would reposition the divider on every return). Gate + retry policy live
+      // in shared/readMarkerSync.
       const foldOnce = (stage: string) => {
         const lastSeenBefore = get().roomMeta.get(roomJid)?.readPointer?.messageId
         const fold = foldPendingRemoteDisplayed(
@@ -2608,9 +2775,8 @@ export const roomStore = createStore<RoomState>()(
         if (!loaded.some((m) => m.id === pointer)) {
           await get().loadMessagesAroundFromCache(roomJid, pointer)
           if (token !== activationToken) return
-          // The around-slice sits just past the stale pointer — exactly where a
-          // marker too deep for the latest-100 window lives. Retry a fold that
-          // stashed above so the divider derives from the synced position.
+          // Retry against the post-load slice: it may now contain both the
+          // local pointer and remote marker needed for archive-index ordering.
           foldOnce('around slice')
         }
       }
@@ -3807,8 +3973,9 @@ export const roomStore = createStore<RoomState>()(
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
-    // XEP-0490: a remote room marker may have arrived before its message.
-    // Now that messages are merged, try to resolve it forward-only.
+    // XEP-0490: a pending marker was not orderable in an earlier slice.
+    // Retry against the merged messages; the shared resolver clears it only
+    // when the comparison resolves.
     const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
     if (pending) {
       get().applyRemoteDisplayed(roomJid, pending, mergedForMarker)

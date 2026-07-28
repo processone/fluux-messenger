@@ -533,7 +533,6 @@
             "encryptedCouldNotDecrypt": "Kunne ikke dekryptere denne besked",
             "encryptedDecrypting": "Krypteret besked, dekrypterer…",
             "encryptedDisabled": "Kryptering deaktiveret. Aktivér den i indstillingerne",
-            "couldNotDecryptTooltip": "Beskeden er krypteret til en nøgle, der ikke er tilgængelig på denne enhed",
             "unsupportedMethodTooltip": "Krypteret med {{method}}, en metode, som denne enhed endnu ikke understøtter",
             "unsupportedMessage": "Krypteret besked: {{method}} understøttes ikke",
             "unsupportedMessageGeneric": "Krypteret besked: metoden understøttes ikke",
@@ -559,7 +558,10 @@
                     "untrusted": "uverificeret",
                     "rejected": "AFVIST: ugyldig signatur"
                 }
-            }
+            },
+            "couldNotDecryptKeyUnavailable": "Krypteret med en nøgle, som denne enhed ikke har",
+            "couldNotDecryptSignature": "Beskeden blev ikke vist, fordi dens signatur ikke kunne godkendes",
+            "couldNotDecryptUnreadable": "Beskeden kunne ikke læses"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krypteret til {{name}}. Klik for at verificere fingeraftrykket",

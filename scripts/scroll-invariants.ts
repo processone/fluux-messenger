@@ -439,6 +439,134 @@ async function activateChat(page: Page, jid: string): Promise<void> {
 
 // ── Invariant tests ───────────────────────────────────────────────────────────
 
+test.describe('Controller-owned resident-top navigation', () => {
+  test('Home issues one smooth write, then the controller observes it to settlement', async ({
+    page,
+  }) => {
+    const trace: string[] = []
+    page.on('console', (message) => {
+      const text = message.text()
+      if (text.includes('RESIDENT TOP: controller completed')) trace.push(text)
+    })
+
+    await loadDemo(page)
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__fluuxScrollDebug?.(true)
+    })
+    await navigateToStressRoom(page)
+    // Start materially away from resident top without turning this into a deep virtualized-list
+    // animation test. The approved contract deliberately allows a native smooth scroll that a
+    // browser interrupts during deep re-windowing to time out best-effort without a corrective
+    // snap; the controller unit test covers that 120-frame path.
+    await setScrollTop(page, 800)
+    await page.waitForTimeout(300)
+
+    // The entry position must actually BE where this test put it. `> 1` used to pass vacuously at
+    // the live edge, so a run whose entry pin had already dragged the list back to the bottom
+    // still entered the body and then failed 5s later on the real assertion with no clue why
+    // (run 30267369388). Bracketing the start pins the failure to the setup instead.
+    const initialScrollTop = await getScrollTop(page)
+    expect(
+      initialScrollTop,
+      'precondition: resident window must start at the offset this test set, not at the live edge',
+    ).toBeGreaterThan(600)
+    expect(
+      initialScrollTop,
+      'precondition: entry positioning must have settled before Home is pressed',
+    ).toBeLessThan(1200)
+
+    // Record every scroll write AND watch, frame by frame, for the list moving AWAY from resident
+    // top after Home. A superseded live-edge owner re-asserting mid-animation is the regression
+    // this guards: it shows up as backward motion long before the position poll would time out,
+    // and it is visible even on an engine too slow to finish the animation inside the poll window.
+    await page.evaluate((startedAt) => {
+      const scroller = document.querySelector('[data-message-list]') as HTMLDivElement | null
+      if (!scroller) return
+      const nativeScrollTo = scroller.scrollTo.bind(scroller)
+      const writes: ScrollToOptions[] = []
+      const probe = window as Window & {
+        __fluuxResidentTopWrites?: ScrollToOptions[]
+        __fluuxResidentTopMaxBacktrack?: number
+      }
+      probe.__fluuxResidentTopWrites = writes
+      probe.__fluuxResidentTopMaxBacktrack = 0
+      scroller.scrollTo = ((...args: Parameters<HTMLDivElement['scrollTo']>) => {
+        const first = args[0]
+        if (typeof first === 'object') writes.push({ ...first })
+        return nativeScrollTo(...args)
+      }) as HTMLDivElement['scrollTo']
+      let closestToTop = startedAt
+      const sample = () => {
+        closestToTop = Math.min(closestToTop, scroller.scrollTop)
+        probe.__fluuxResidentTopMaxBacktrack = Math.max(
+          probe.__fluuxResidentTopMaxBacktrack ?? 0,
+          scroller.scrollTop - closestToTop,
+        )
+        requestAnimationFrame(sample)
+      }
+      requestAnimationFrame(sample)
+    }, initialScrollTop)
+
+    const scroller = page.locator('[data-message-list]').first()
+    await scroller.focus()
+    await page.keyboard.press('Home')
+
+    const readProbe = () => page.evaluate(() => {
+      const probe = window as Window & {
+        __fluuxResidentTopWrites?: ScrollToOptions[]
+        __fluuxResidentTopMaxBacktrack?: number
+      }
+      return {
+        writes: probe.__fluuxResidentTopWrites ?? [],
+        backtrack: probe.__fluuxResidentTopMaxBacktrack ?? 0,
+      }
+    })
+
+    // Generous ceiling, not a relaxed contract: a green run reaches the top in well under a second,
+    // but the WebKitGTK CI runner has been measured at ~1.8s per MessageList layout+paint, and the
+    // per-test budget is 180s. The assertions below are what make a regression fail fast.
+    await expect.poll(async () => {
+      const top = await getScrollTop(page)
+      const { writes, backtrack } = await readProbe()
+      // Fail immediately, with the culprit named, rather than waiting out the timeout.
+      expect(
+        backtrack,
+        `Home navigation moved AWAY from resident top — a superseded position owner re-asserted mid-animation. Writes: ${JSON.stringify(writes)}`,
+      ).toBeLessThanOrEqual(1)
+      return top
+    }, {
+      timeout: 30_000,
+      message: 'Home navigation must reach the resident-window top',
+    }).toBeLessThanOrEqual(1)
+
+    await expect.poll(() => trace.length, {
+      timeout: 30_000,
+      message: `resident-top controller did not settle: ${JSON.stringify(trace)}`,
+    }).toBe(1)
+
+    // The single-write contract, split into the two things it actually guarantees. Both are
+    // engine-speed independent, so this is what holds the line on a slow runner.
+    const { writes } = await readProbe()
+    // 1. The controller starts the animation once and never restarts it. A frame loop that
+    //    reissued the smooth write — the failure the original assertion was built to catch —
+    //    produces repeated smooth writes and fails here.
+    expect(
+      writes.filter((write) => write.behavior === 'smooth'),
+      `Home must issue exactly one smooth write: ${JSON.stringify(writes)}`,
+    ).toEqual([{ top: 0, behavior: 'smooth' }])
+    // 2. Nothing writes the scroller anywhere else for the duration. The virtualizer may add one
+    //    instant convergence write to the SAME offset when it retires the animated command
+    //    sub-pixel short of 0 (seen on Chromium, not WebKit) — that is the owner we handed the
+    //    navigation to finishing it. A competing owner re-asserting the live edge targets a
+    //    completely different offset and fails here.
+    expect(
+      writes.filter((write) => write.top !== 0),
+      `only resident top may be written during a Home navigation — another position owner wrote elsewhere: ${JSON.stringify(writes)}`,
+    ).toEqual([])
+  })
+})
+
 test.describe('Virtualization scroll invariants', () => {
 
   // ── 1: Prepend holds position ──────────────────────────────────────────────
@@ -589,7 +717,7 @@ test.describe('Virtualization scroll invariants', () => {
       const last = rows[rows.length - 1] as HTMLElement
       const sRect = scroller.getBoundingClientRect()
       const lRect = last.getBoundingClientRect()
-      // Accept a bottom gap of 120px (FAB / padding / typing indicator overlap)
+      // This legacy blank-window check is loose; the strict message/pill overlap check lives below.
       return lRect.top >= sRect.top - 10 && lRect.bottom <= sRect.bottom + 120
     })
     expect(isLastVisible, 'last message row is not in viewport after FAB click — blank/short window').toBe(true)
@@ -1413,8 +1541,8 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
-    // Real-world sequence: the other party is typing (indicator grows the footer), THEN the
-    // message lands (indicator clears + message appends).
+    // Real-world sequence: the other party is typing (a band appears below the scrollport), THEN
+    // the message lands (the band disappears and the message appends).
     await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (window as any).__demoClient
@@ -1645,6 +1773,274 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
 })
 
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
+// Regression for the overlay/content-coordinate mismatch documented beside the typing band in
+// MessageList. In the old layout a 30px pill had only 16px clearance at the exact bottom, and a
+// 20px scroll offset already clipped the last line.
+test.describe('Typing indicator never covers message text', () => {
+  const AVA = 'ava@fluux.chat'
+
+  /** Distances from the bottom to park the viewport at. 16-48 is the window the old bug lived in. */
+  const OFFSETS_PX = [0, 8, 16, 20, 24, 32, 40, 48, 96, 240]
+
+  /** "Glued", not merely "near" (AT_BOTTOM_OK_PX is 150) — only sub-pixel rounding is allowed. */
+  const GLUED_TOLERANCE_PX = 2
+
+  function capturePinStarts(page: Page): () => Promise<string[]> {
+    const pending: Array<Promise<string | null>> = []
+    page.on('console', (message) => {
+      if (!message.text().includes('[Scroll] PIN start')) return
+      const data = message.args()[1]
+      if (!data) return
+      pending.push(
+        data
+          .jsonValue()
+          .then((value) => {
+            const trigger = (value as { trigger?: unknown } | null)?.trigger
+            return typeof trigger === 'string' ? trigger : null
+          })
+          .catch(() => null),
+      )
+    })
+    return async () =>
+      (await Promise.all(pending)).filter((trigger): trigger is string => trigger !== null)
+  }
+
+  async function enableScrollDebug(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__fluuxScrollDebug?.(true)
+    })
+  }
+
+  interface OverlapProbe {
+    pillFound: boolean
+    pillHeight: number
+    pillWidth: number
+    visibleRows: number
+    /** Largest vertical intersection (px) between the pill and any VISIBLE part of a message row. */
+    worstOverlap: number
+    worstRowId: string | null
+  }
+
+  /**
+   * Emit `composing` and wait for the LIVE list's pill to be laid out. Scoped to the live list's
+   * own container rather than a bare document query: other MessageLists can be mounted (search /
+   * activity previews), and a zero-width one would satisfy a document-wide selector while telling
+   * us nothing about the conversation under test.
+   */
+  async function startTyping(page: Page, jid: string): Promise<void> {
+    await page.evaluate((j) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('chat:typing', { conversationId: j, jid: j, isTyping: true })
+    }, jid)
+    await page.waitForFunction(() => {
+      const s = document.querySelector('[data-message-list]')
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!pill) return false
+      const r = pill.getBoundingClientRect()
+      return r.width > 0 && r.height > 0
+    }, undefined, { timeout: 5_000 })
+  }
+
+  /**
+   * Park the viewport `offset` px above the bottom and measure how deeply the pill cuts into
+   * message text. Rows are clipped to the scrollport first: the virtualizer keeps overscan rows
+   * mounted below the fold, and those are not on screen — only pixels the reader can actually see
+   * count as covered.
+   */
+  async function probeOverlap(page: Page, offset: number): Promise<OverlapProbe> {
+    return page.evaluate((off) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const pill = s?.parentElement?.querySelector('[data-typing-pill]') as HTMLElement | null
+      if (!s || !pill) {
+        return { pillFound: false, pillHeight: 0, pillWidth: 0, visibleRows: 0, worstOverlap: 0, worstRowId: null }
+      }
+
+      s.scrollTop = s.scrollHeight - s.clientHeight - off
+      const sRect = s.getBoundingClientRect()
+      const p = pill.getBoundingClientRect()
+
+      let visibleRows = 0
+      let worstOverlap = 0
+      let worstRowId: string | null = null
+      for (const el of Array.from(s.querySelectorAll('[data-message-id]'))) {
+        const r = el.getBoundingClientRect()
+        const visTop = Math.max(r.top, sRect.top)
+        const visBottom = Math.min(r.bottom, sRect.bottom)
+        if (visBottom - visTop <= 0) continue // clipped out of the scrollport
+        visibleRows++
+        const overlapY = Math.min(visBottom, p.bottom) - Math.max(visTop, p.top)
+        const overlapX = Math.min(r.right, p.right) - Math.max(r.left, p.left)
+        if (overlapY > 0 && overlapX > 0 && overlapY > worstOverlap) {
+          worstOverlap = overlapY
+          worstRowId = el.getAttribute('data-message-id')
+        }
+      }
+      return {
+        pillFound: true,
+        pillHeight: Math.round(p.height),
+        pillWidth: Math.round(p.width),
+        visibleRows,
+        worstOverlap: Math.round(worstOverlap),
+        worstRowId,
+      }
+    }, offset)
+  }
+
+  test('no scroll offset puts a visible message row under the pill', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const results: Array<{ offset: number; probe: OverlapProbe }> = []
+    for (const offset of OFFSETS_PX) {
+      const probe = await probeOverlap(page, offset)
+      // Guard against a hollow pass: an unmounted pill or an empty list would trivially
+      // report zero overlap.
+      expect(probe.pillFound, `typing pill not rendered at offset ${offset}`).toBe(true)
+      expect(probe.pillHeight, `typing pill has no height at offset ${offset}`).toBeGreaterThan(10)
+      expect(probe.pillWidth, `typing pill has no width at offset ${offset}`).toBeGreaterThan(10)
+      expect(probe.visibleRows, `no message rows visible at offset ${offset}`).toBeGreaterThan(0)
+      results.push({ offset, probe })
+    }
+
+    const covered = results.filter((r) => r.probe.worstOverlap > 0)
+    expect(
+      covered,
+      'typing pill covers message text at ' +
+        covered.map((r) => `offset=${r.offset}px (${r.probe.worstOverlap}px of ${r.probe.worstRowId})`).join(', '),
+    ).toEqual([])
+  })
+
+  test('growing the composer to two lines and shrinking it back never parks text under the pill', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const readPinStarts = capturePinStarts(page)
+    await enableScrollDebug(page)
+
+    /** Drive the draft the way React's controlled textarea expects, then let layout settle. */
+    const setDraft = async (value: string) => {
+      await page.evaluate((v) => {
+        const ta = document.querySelector('textarea') as HTMLTextAreaElement | null
+        if (!ta) throw new Error('no composer textarea')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
+        setter.call(ta, v)
+        ta.dispatchEvent(new Event('input', { bubbles: true }))
+      }, value)
+      await page.waitForTimeout(SETTLE_MS)
+    }
+
+    const twoLines =
+      'This draft is long enough to wrap the composer onto a second line, which shrinks the ' +
+      'message viewport under a pill that does not move with it.'
+
+    await setDraft(twoLines)
+    const grown = await probeOverlap(page, 0)
+    expect(grown.pillFound && grown.visibleRows > 0, 'pill/rows missing after composer grew').toBe(true)
+    expect(grown.worstOverlap, `pill covers ${grown.worstRowId} while the composer is two lines`).toBe(0)
+
+    await setDraft('')
+    const shrunk = await probeOverlap(page, 0)
+    expect(shrunk.pillFound && shrunk.visibleRows > 0, 'pill/rows missing after composer shrank').toBe(true)
+    expect(shrunk.worstOverlap, `pill covers ${shrunk.worstRowId} after the composer shrank back`).toBe(0)
+
+    expect(await readPinStarts(), 'composer growth must retain container-shrink reconciliation').toContain(
+      'container-shrink',
+    )
+  })
+
+  /** React on the newest message through the real store path, so its row genuinely grows. */
+  async function reactToNewest(page: Page, jid: string): Promise<string> {
+    const lastId = await page.evaluate((j) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const st = (window as any).__chatStore.getState()
+      const msgs = st.messages.get(j) ?? []
+      const last = msgs[msgs.length - 1]
+      if (!last) return null
+      st.updateReactions(j, last.id, j, ['👍'])
+      return last.id as string
+    }, jid)
+    expect(lastId, 'precondition: a newest message to react to').toBeTruthy()
+    await page.waitForFunction(
+      (id) => {
+        const s = document.querySelector('[data-message-list]')
+        return !!s?.querySelector(`[data-message-id="${CSS.escape(id)}"]`)?.textContent?.includes('👍')
+      },
+      lastId as string,
+      { timeout: 5_000 },
+    )
+    return lastId as string
+  }
+
+  /** How far off the bottom we are, and how far the reacted row hangs below the fold. */
+  async function measureGlued(page: Page, id: string): Promise<{ dist: number; belowFold: number }> {
+    return page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      if (!s || !el) return { dist: -1, belowFold: 9999 }
+      return {
+        dist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+        // How far the reacted row's bottom (chip included) sits BELOW the scrollport's bottom edge.
+        belowFold: Math.round(el.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom),
+      }
+    }, id)
+  }
+
+  // Reported alongside the overlap: "we don't stick perfectly to the bottom when the last message
+  // ALSO has reactions". These two pin the combination down at both orders (they exercise different
+  // effects: the typing re-pin vs the reaction nudge). Both were already GREEN on the pre-band code
+  // in Chromium and WebKit — the re-pin runs in a layout effect, so it lands before paint and no dip
+  // is observable here; what the reader was seeing was almost certainly the overlap itself, a chip
+  // hidden under the pill reading as "not stuck to the bottom". Kept as guards: with the indicator
+  // out of the scroll content, showing it must not change the content height, and the reacted row
+  // must stay whole. Tolerance is tight on purpose — this asserts "glued", not "near".
+  test('typing starting on a last message that carries a reaction stays glued to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const lastId = await reactToNewest(page, AVA)
+    await scrollToBottom(page)
+
+    const readPinStarts = capturePinStarts(page)
+    await enableScrollDebug(page)
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const glued = await measureGlued(page, lastId)
+    expect(glued.dist, 'view left off the bottom after typing started').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(glued.belowFold, 'reaction chip on the last message left below the fold').toBeLessThanOrEqual(0)
+
+    const pinStarts = await readPinStarts()
+    expect(pinStarts.filter((trigger) => trigger === 'typing')).toHaveLength(1)
+    expect(pinStarts.filter((trigger) => trigger === 'container-shrink')).toHaveLength(0)
+  })
+
+  test('a reaction landing on the last message while typing shows stays glued to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    await startTyping(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const lastId = await reactToNewest(page, AVA)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const glued = await measureGlued(page, lastId)
+    expect(glued.dist, 'view left off the bottom after a reaction landed under the pill').toBeLessThanOrEqual(GLUED_TOLERANCE_PX)
+    expect(glued.belowFold, 'reaction chip on the last message left below the fold').toBeLessThanOrEqual(0)
+  })
+})
+
 // "I sent a message and the view didn't stick to the bottom." A send REPLACES the optimistic last
 // row in place (reconciled to the server id) WITHOUT growing messageCount, so the old count-only
 // new-message effect never re-pinned. The reconciled row often measures taller (final layout), so
@@ -2114,5 +2510,212 @@ test.describe('Jump-to-last-read pill', () => {
       `divider must snap forward from ${setup.dividerId} to ${setup.expectedTargetId} (stayed at ${after.markerId})`,
     ).toBe(setup.expectedTargetId)
     expect(after.markerIdx, 'the divider must snap FORWARD toward the read pointer').toBeGreaterThan(after.dividerIdx)
+  })
+})
+
+test.describe('Fastening stick diagnostic (1:1)', () => {
+  const AVA = 'ava@fluux.chat'
+
+  /**
+   * The reported bug, end to end in a real engine: you send a message containing a link, and the
+   * OGP preview card is fastened onto that ALREADY-RENDERED row seconds later. Nothing about the
+   * message list changes except the row's height — same message count, same last-message id, no
+   * reactions — so this exercises the only trigger that can notice it (the row-growth signature)
+   * AND the real spacer/row geometry the jsdom harness can only approximate.
+   */
+  async function emitLinkMessage(page: Page, jid: string, id: string): Promise<void> {
+    await page.evaluate(([j, i]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: 'look at this https://example.invalid/article',
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+    }, [jid, id] as const)
+  }
+
+  async function fastenPreview(page: Page, jid: string, id: string, url: string): Promise<void> {
+    await page.evaluate(([j, i, u]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:message-updated', {
+        conversationId: j,
+        messageId: i,
+        updates: {
+          linkPreview: {
+            url: u,
+            title: 'A fastened link preview card',
+            description:
+              'Fastened after the fact. Long enough that the card is several lines tall, so the ' +
+              'row it grows genuinely pushes the newest message below the fold when nothing re-pins.',
+            siteName: 'example.invalid',
+            // An image gives the card an aspect-video box, so the row grows by well over the
+            // at-bottom threshold — without it the growth stays under the threshold and the test
+            // passes even with a gate that reads post-growth geometry.
+            image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+          },
+        },
+      })
+    }, [jid, id, url] as const)
+  }
+
+  async function bottomState(page: Page, msgId: string) {
+    return page.evaluate((id) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { visible: false, distFromBottom: -1, scrollHeight: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const visible = !!el && el.getBoundingClientRect().bottom <= sRect.bottom + 8
+      return {
+        visible,
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+        scrollHeight: s.scrollHeight,
+      }
+    }, msgId)
+  }
+
+  test('a link-preview fastening on the newest row keeps the view stuck to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `fastened-${Date.now()}`
+    const url = `https://example.invalid/${id}`
+    await emitLinkMessage(page, AVA, id)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const before = await bottomState(page, id)
+    expect(before.distFromBottom, 'precondition: must start stuck to the bottom').toBeLessThan(AT_BOTTOM_OK_PX)
+
+    await fastenPreview(page, AVA, id, url)
+    // Wait for the REAL card to be in the DOM — this is the growth the scroll layer must absorb.
+    await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(600)
+
+    const after = await bottomState(page, id)
+    // The growth must exceed the at-bottom threshold, otherwise a gate that reads POST-growth
+    // geometry still squeaks under the threshold and the test proves nothing.
+    expect(
+      after.scrollHeight - before.scrollHeight,
+      `the preview card must grow the content by more than the at-bottom threshold (before=${before.scrollHeight}, after=${after.scrollHeight}) — otherwise this test is vacuous`,
+    ).toBeGreaterThan(AT_BOTTOM_OK_PX)
+    expect(
+      after.distFromBottom,
+      `view not re-pinned after the fastening — distFromBottom=${after.distFromBottom}`,
+    ).toBeLessThan(AT_BOTTOM_OK_PX)
+    expect(after.visible, `the fastened message "${id}" was pushed below the fold`).toBe(true)
+  })
+
+  test('a link-preview fastening does not yank a scrolled-up reader to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `fastened-up-${Date.now()}`
+    const url = `https://example.invalid/${id}`
+    await emitLinkMessage(page, AVA, id)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(SETTLE_MS)
+
+    await setScrollTop(page, 200)
+    await page.waitForTimeout(SETTLE_MS)
+    const before = await getScrollTop(page)
+
+    await fastenPreview(page, AVA, id, url)
+    await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(600)
+
+    const after = await getScrollTop(page)
+    expect(
+      Math.abs(after - before),
+      `a scrolled-up reader was moved by the fastening (${before} -> ${after})`,
+    ).toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+})
+
+test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
+  const AVA = 'ava@fluux.chat'
+
+  // SCOPE: a burst of successive in-place changes on the same row — the message, then its preview
+  // card, then a reaction — must leave the list stuck to the bottom, with no user movement anywhere.
+  // What it demonstrates is that the ACTIVE pin loop absorbs them as they land.
+  //
+  // What it does NOT cover: a growth skipped because a pin loop still claimed the bottom. There is
+  // no second chance for such a growth — nothing re-runs the effect for a consumed signature — so
+  // waiting longer here proves nothing and would only imply a recovery that does not exist. Staging
+  // that case is not possible from here anyway: it needs the preview to commit while the loop still
+  // holds its claim, and the loop converges in ~130ms, faster than emits can be interleaved. The gap
+  // is documented on rowGrowthDecision and pinned by its unit test.
+  test('an active pin loop absorbs a burst of in-place changes on the same row', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `pending-${Date.now()}`
+    const url = `https://example.invalid/${id}`
+
+    // The whole sequence runs INSIDE the page: a Playwright round-trip is far longer than the pin
+    // loop's convergence, so emitting these from separate evaluate() calls spaces them out beyond
+    // anything a real client would produce. In-page they arrive in the burst this is meant to cover
+    // — message, then its preview, then a reaction on the same row.
+    await page.evaluate(async ([j, i, u]) => {
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: 'look at this https://example.invalid/article',
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+      // Separate ticks, or React batches all three into ONE render and this collapses into a single
+      // row-growth signature change — which is not the sequence under test.
+      await wait(30)
+      c.emitSDK('chat:message-updated', {
+        conversationId: j, messageId: i,
+        updates: {
+          linkPreview: {
+            url: u, title: 'A fastened link preview card',
+            description: 'Fastened after the fact, tall enough to push the newest message below the fold.',
+            siteName: 'example.invalid',
+            image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+          },
+        },
+      })
+      await wait(60)
+      c.emitSDK('chat:message-updated', {
+        conversationId: j, messageId: i,
+        updates: { reactions: { '\u{1F44D}': ['someone@fluux.chat'] } },
+      })
+    }, [AVA, id, url] as const)
+    await page.waitForSelector(`a[href="${url}"]`, { timeout: 5_000 })
+
+    // A normal settle, matching the sibling fastening tests. Deliberately NOT the claim's stale
+    // window: no re-pin is owed after that window, so a longer wait would suggest a second chance
+    // the implementation does not offer.
+    await page.waitForTimeout(600)
+
+    const state = await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { visible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      return {
+        visible: !!el && el.getBoundingClientRect().bottom <= sRect.bottom + 8,
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+
+    expect(
+      state.distFromBottom,
+      `list not pinned after the message+preview+reaction burst — distFromBottom=${state.distFromBottom}`,
+    ).toBeLessThan(AT_BOTTOM_OK_PX)
+    expect(state.visible, 'the fastened message was left below the fold').toBe(true)
   })
 })

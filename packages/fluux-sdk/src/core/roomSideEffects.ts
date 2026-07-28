@@ -3,13 +3,13 @@
  *
  * Subscribes to active room changes and triggers:
  * 1. IndexedDB cache loading (immediate)
- * 2. Background MAM fetch for catch-up (when connected and room supports MAM)
+ * 2. Foreground MAM catch-up after the current membership is trusted
  *
  * Also listens for `room:joined` SDK events and watches `supportsMAM` state
  * transitions to handle the race between session restore and room joining.
  *
- * Uses `fetchInitiated` set to prevent duplicate MAM queries — rooms already
- * caught up via SM resumption are marked in the set by the `'resumed'` handler.
+ * Uses `fetchInitiated` to prevent duplicate MAM queries. A successful SM resume
+ * seeds rooms whose local archives make their preserved membership trustworthy.
  *
  * @module Core/RoomSideEffects
  */
@@ -23,13 +23,29 @@ import {
   isConnectionError,
   MAM_CACHE_LOAD_LIMIT,
 } from '../utils/mamCatchUpUtils'
+import {
+  getRoomMembershipEpoch,
+  invalidateRoomMemberships,
+  recordRoomMembership,
+} from './roomMembershipEpoch'
+import {
+  beginRoomMamForegroundCoverage,
+  completeRoomMamForegroundCoverage,
+  releaseInFlightRoomMamForegroundCoverage,
+  releaseRoomMamForegroundCoverage,
+  releaseRoomMamForegroundCoverageForRoom,
+  requestRoomMamHandoff,
+  resetRoomMamForegroundCoverage,
+  type RoomMamForegroundCoverage,
+} from './roomMamHandoff'
 
 /**
  * Sets up room-related side effects.
  *
  * Subscribes to `activeRoomJid` changes and:
  * 1. Loads messages from IndexedDB cache immediately
- * 2. Triggers background MAM fetch for catchup when connected and room supports MAM
+ * 2. Triggers foreground MAM catch-up when connected, MAM-enabled, and joined
+ *    in the current fresh session (or preserved by a successful SM resume)
  *
  * @param client - The XMPPClient instance
  * @param options - Configuration options
@@ -43,6 +59,49 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+  const resumeArchiveHeldRooms = new Set<string>()
+  interface RoomFetchOwner {
+    membershipEpoch: number
+    coverage: RoomMamForegroundCoverage
+  }
+  const roomFetchOwners = new Map<string, RoomFetchOwner>()
+  const freshSessionJoinedRooms = new Set<string>()
+  let freshSessionRequiresJoinConfirmation = false
+  let uninterruptedResumeMayEmitSyntheticOnline = false
+  let disposed = false
+
+  function hasConfirmedJoinForCurrentSession(roomJid: string): boolean {
+    return (
+      !freshSessionRequiresJoinConfirmation ||
+      freshSessionJoinedRooms.has(roomJid)
+    )
+  }
+
+  function isRoomFetchStillEligible(roomJid: string): boolean {
+    if (disposed) return false
+    const state = roomStore.getState()
+    const room = state.rooms.get(roomJid)
+    return !!(
+      room &&
+      state.activeRoomJid === roomJid &&
+      room.joined &&
+      room.supportsMAM &&
+      !room.isQuickChat &&
+      hasConfirmedJoinForCurrentSession(roomJid) &&
+      connectionStore.getState().status === 'online' &&
+      client.isConnected()
+    )
+  }
+
+  function isRoomFetchOwnerCurrent(
+    roomJid: string,
+    owner: RoomFetchOwner,
+  ): boolean {
+    return (
+      roomFetchOwners.get(roomJid) === owner &&
+      getRoomMembershipEpoch(client, roomJid) === owner.membershipEpoch
+    )
+  }
 
   // Epoch ms of the current fresh session's connection (set on 'online'). Used as
   // the forward catch-up cursor boundary so a live message arriving during catch-up
@@ -56,6 +115,7 @@ export function setupRoomSideEffects(
    * loading the IndexedDB cache.
    */
   async function fetchMAMForRoom(roomJid: string): Promise<void> {
+    if (disposed) return
     const room = roomStore.getState().rooms.get(roomJid)
     if (!room) {
       return
@@ -70,6 +130,16 @@ export function setupRoomSideEffects(
     // Skip if not fully joined yet (wait for self-presence)
     if (!room.joined) {
       if (debug) console.log('[SideEffects] Room: Skipping MAM - not joined yet', roomJid)
+      return
+    }
+
+    if (!hasConfirmedJoinForCurrentSession(roomJid)) {
+      if (debug) {
+        console.log(
+          '[SideEffects] Room: Skipping MAM - fresh-session join not confirmed',
+          roomJid,
+        )
+      }
       return
     }
 
@@ -92,6 +162,17 @@ export function setupRoomSideEffects(
       return
     }
 
+    const membershipEpoch = recordRoomMembership(client, roomJid, true)
+    const fetchOwner: RoomFetchOwner = {
+      membershipEpoch,
+      coverage: beginRoomMamForegroundCoverage(
+        client,
+        roomJid,
+        membershipEpoch,
+      ),
+    }
+    roomFetchOwners.set(roomJid, fetchOwner)
+
     // Mark as initiated BEFORE any state updates
     fetchInitiated.add(roomJid)
 
@@ -105,17 +186,47 @@ export function setupRoomSideEffects(
 
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
-      // before deciding the MAM query direction. Without this, the 'online'
-      // handler races with the conversation subscriber's cache load, and
+      // before deciding the MAM query direction. Without this, a foreground
+      // trigger can race with the active-room subscriber's cache load, and
       // room.messages may be empty — causing a backward "before:''" query
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
+        return
+      }
+
+      if (!isRoomFetchStillEligible(roomJid)) {
+        releaseRoomMamForegroundCoverage(client, fetchOwner.coverage)
+        roomFetchOwners.delete(roomJid)
+        fetchInitiated.delete(roomJid)
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+        requestRoomMamHandoff(client, fetchOwner.coverage)
+        if (debug) {
+          console.log(
+            '[SideEffects] Room: MAM aborted after cache hydration - room no longer eligible',
+            roomJid,
+          )
+        }
+        return
+      }
+
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
       await client.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
+        return
+      }
+      completeRoomMamForegroundCoverage(client, fetchOwner.coverage)
+      roomFetchOwners.delete(roomJid)
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
+      if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
+        return
+      }
+      releaseRoomMamForegroundCoverage(client, fetchOwner.coverage)
+      roomFetchOwners.delete(roomJid)
+
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry
       fetchInitiated.delete(roomJid)
 
@@ -126,6 +237,7 @@ export function setupRoomSideEffects(
       }
       // Clear loading state on error (MAM module clears it on success)
       roomStore.getState().setRoomMAMLoading(roomJid, false)
+      requestRoomMamHandoff(client, fetchOwner.coverage)
     }
   }
 
@@ -166,7 +278,10 @@ export function setupRoomSideEffects(
         // scroll position off (lands mid-list). Live delivery keeps the resident set
         // current, so there is genuinely nothing to fetch.
         const residentCount = roomStore.getState().rooms.get(activeRoomJid)?.messages.length ?? 0
-        if (fetchInitiated.has(activeRoomJid) && residentCount > 0) {
+        if (
+          fetchInitiated.has(activeRoomJid) &&
+          (residentCount > 0 || resumeArchiveHeldRooms.has(activeRoomJid))
+        ) {
           if (debug) console.log('[SideEffects] Room: re-entry of caught-up resident room, skipping cache reload + MAM', activeRoomJid)
           return
         }
@@ -176,6 +291,7 @@ export function setupRoomSideEffects(
         // setActiveRoom, session restore) and the first activation / post-reconnect catch-up.
         if (debug) console.log('[SideEffects] Room: Loading from cache')
         await roomStore.getState().loadMessagesFromCache(activeRoomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+        if (disposed) return
 
         // Step 2: Background MAM fetch for catchup. Skip only if this room's archive
         // was actually fetched this session. Guard on hasQueried, NOT just
@@ -186,7 +302,10 @@ export function setupRoomSideEffects(
         // so a genuinely-empty room still skips the redundant re-query on re-entry.
         if (
           fetchInitiated.has(activeRoomJid) &&
-          roomStore.getState().getRoomMAMQueryState(activeRoomJid).hasQueried
+          (
+            resumeArchiveHeldRooms.has(activeRoomJid) ||
+            roomStore.getState().getRoomMAMQueryState(activeRoomJid).hasQueried
+          )
         ) {
           if (debug) console.log('[SideEffects] Room: MAM already fetched for', activeRoomJid)
           return
@@ -198,22 +317,30 @@ export function setupRoomSideEffects(
     { fireImmediately: false }
   )
 
-  // Fresh session: catch up MAM for the active room.
-  // 'online' fires only on fresh sessions (not SM resumption).
+  // Fresh sessions require a self-presence confirmation before room MAM starts.
+  // A missing-marker upgrade can also emit a synthetic 'online' after 'resumed';
+  // that uninterrupted path must retain resume-seeded fetch tracking.
   const unsubscribeOnline = client.on('online', () => {
-    // Record the session start before any catch-up so the forward cursor excludes
-    // live messages that arrive after reconnect (silent-gap fix).
-    sessionStartTime = Date.now()
-
-    const activeRoomJid = roomStore.getState().activeRoomJid
-    if (activeRoomJid) {
-      if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)
-
-      // Clear all fetch tracking so every room gets re-fetched after reconnect
+    const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
+    freshSessionRequiresJoinConfirmation = true
+    if (!followsUninterruptedResume) {
+      sessionStartTime = Date.now()
+      invalidateRoomMemberships(client)
+      resetRoomMamForegroundCoverage(client)
+      freshSessionJoinedRooms.clear()
       fetchInitiated.clear()
+      resumeArchiveHeldRooms.clear()
+      for (const roomJid of roomFetchOwners.keys()) {
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+      }
+      roomFetchOwners.clear()
+    }
+    uninterruptedResumeMayEmitSyntheticOnline = false
 
-      // Trigger MAM catch-up for the active room
-      void fetchMAMForRoom(activeRoomJid)
+    if (debug) {
+      console.log(
+        '[SideEffects] Room: Fresh session — waiting for confirmed room joins before MAM',
+      )
     }
   })
 
@@ -232,9 +359,18 @@ export function setupRoomSideEffects(
   // empty result) is the durable signal; it's separate from "has resident
   // messages" so a room caught up via live delivery is still covered.
   const unsubscribeResumed = client.on('resumed', () => {
+    // A missing cache marker upgrades this same transport session to full fresh
+    // setup, which emits a synthetic online only after room rejoins can finish.
+    // Keep that next online distinguishable from a later fresh transport session.
+    uninterruptedResumeMayEmitSyntheticOnline = true
+    freshSessionRequiresJoinConfirmation = false
+    freshSessionJoinedRooms.clear()
+    sessionStartTime = Date.now()
+
     if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
 
     const state = roomStore.getState()
+    resumeArchiveHeldRooms.clear()
     const archiveHeld = (jid: string): boolean => {
       const room = state.rooms.get(jid)
       if (!room) return false
@@ -243,10 +379,12 @@ export function setupRoomSideEffects(
     for (const [jid, room] of state.rooms) {
       if ((room.joined || room.isJoining) && archiveHeld(jid)) {
         fetchInitiated.add(jid)
+        resumeArchiveHeldRooms.add(jid)
       }
     }
     if (state.activeRoomJid && archiveHeld(state.activeRoomJid)) {
       fetchInitiated.add(state.activeRoomJid)
+      resumeArchiveHeldRooms.add(state.activeRoomJid)
     }
   })
 
@@ -256,7 +394,14 @@ export function setupRoomSideEffects(
     (state) => state.status,
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
+        uninterruptedResumeMayEmitSyntheticOnline = false
+        releaseInFlightRoomMamForegroundCoverage(client)
+        for (const roomJid of roomFetchOwners.keys()) {
+          roomStore.getState().setRoomMAMLoading(roomJid, false)
+        }
+        roomFetchOwners.clear()
         fetchInitiated.clear()
+        resumeArchiveHeldRooms.clear()
       }
       previousStatus = status
     }
@@ -291,22 +436,45 @@ export function setupRoomSideEffects(
   )
 
   // Listen to room:joined SDK event to trigger MAM fetch after self-presence.
-  // This is more direct and reliable than watching store state transitions,
-  // and doesn't need isFreshSession guards — fetchInitiated already prevents
-  // duplicate queries for rooms caught up via SM resumption.
   const unsubscribeRoomJoined = client.subscribe('room:joined', ({ roomJid, joined }) => {
-    if (!joined) return // Only handle successful joins
+    if (!joined) {
+      recordRoomMembership(client, roomJid, false)
+      freshSessionJoinedRooms.delete(roomJid)
+      fetchInitiated.delete(roomJid)
+      resumeArchiveHeldRooms.delete(roomJid)
+      releaseRoomMamForegroundCoverageForRoom(client, roomJid)
+      if (roomFetchOwners.delete(roomJid)) {
+        roomStore.getState().setRoomMAMLoading(roomJid, false)
+      }
+      return
+    }
+
+    recordRoomMembership(client, roomJid, true)
+    freshSessionJoinedRooms.add(roomJid)
 
     const activeRoomJid = roomStore.getState().activeRoomJid
-    if (roomJid !== activeRoomJid) return // Only fetch for the active room
+    if (roomJid !== activeRoomJid) return
 
-    if (fetchInitiated.has(roomJid)) return // Already fetched this session
+    if (fetchInitiated.has(roomJid)) return
 
-    if (debug) console.log('[SideEffects] Room: Self-presence received, triggering MAM fetch', roomJid)
+    if (debug) {
+      console.log(
+        '[SideEffects] Room: Self-presence received, triggering MAM fetch',
+        roomJid,
+      )
+    }
     void fetchMAMForRoom(roomJid)
   })
 
   return () => {
+    disposed = true
+    resetRoomMamForegroundCoverage(client)
+    for (const roomJid of roomFetchOwners.keys()) {
+      roomStore.getState().setRoomMAMLoading(roomJid, false)
+    }
+    roomFetchOwners.clear()
+    fetchInitiated.clear()
+    resumeArchiveHeldRooms.clear()
     unsubscribe()
     unsubscribeOnline()
     unsubscribeResumed()
