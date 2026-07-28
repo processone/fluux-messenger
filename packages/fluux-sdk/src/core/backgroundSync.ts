@@ -33,7 +33,10 @@ import {
   invalidateRoomMemberships,
   recordRoomMembership,
 } from './roomMembershipEpoch'
-import { subscribeRoomMamHandoff } from './roomMamHandoff'
+import {
+  hasRoomMamForegroundCoverage,
+  subscribeRoomMamHandoff,
+} from './roomMamHandoff'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -108,6 +111,7 @@ export function setupBackgroundSyncSideEffects(
     return !!(
       generation === sessionGeneration &&
       getRoomMembershipEpoch(client, roomJid) === membershipEpoch &&
+      !hasRoomMamForegroundCoverage(client, roomJid, membershipEpoch) &&
       isFreshSession &&
       freshSessionJoinedRooms.has(roomJid) &&
       state.activeRoomJid !== roomJid &&
@@ -149,9 +153,15 @@ export function setupBackgroundSyncSideEffects(
     if (mamHandledRooms.has(roomJid) || mamInFlightRooms.has(roomJid)) {
       return false
     }
+    const membershipEpoch = getRoomMembershipEpoch(client, roomJid)
+    if (
+      hasRoomMamForegroundCoverage(client, roomJid, membershipEpoch)
+    ) {
+      return false
+    }
     const reservation: RoomCatchUpReservation = {
       generation,
-      membershipEpoch: getRoomMembershipEpoch(client, roomJid),
+      membershipEpoch,
     }
     mamInFlightRooms.set(roomJid, reservation)
     try {

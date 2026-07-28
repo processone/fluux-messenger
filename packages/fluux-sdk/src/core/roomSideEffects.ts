@@ -28,7 +28,16 @@ import {
   invalidateRoomMemberships,
   recordRoomMembership,
 } from './roomMembershipEpoch'
-import { requestRoomMamHandoff } from './roomMamHandoff'
+import {
+  beginRoomMamForegroundCoverage,
+  completeRoomMamForegroundCoverage,
+  releaseInFlightRoomMamForegroundCoverage,
+  releaseRoomMamForegroundCoverage,
+  releaseRoomMamForegroundCoverageForRoom,
+  requestRoomMamHandoff,
+  resetRoomMamForegroundCoverage,
+  type RoomMamForegroundCoverage,
+} from './roomMamHandoff'
 
 /**
  * Sets up room-related side effects.
@@ -52,6 +61,7 @@ export function setupRoomSideEffects(
   const resumeArchiveHeldRooms = new Set<string>()
   interface RoomFetchOwner {
     membershipEpoch: number
+    coverage: RoomMamForegroundCoverage
   }
   const roomFetchOwners = new Map<string, RoomFetchOwner>()
   const freshSessionJoinedRooms = new Set<string>()
@@ -151,8 +161,14 @@ export function setupRoomSideEffects(
       return
     }
 
+    const membershipEpoch = recordRoomMembership(client, roomJid, true)
     const fetchOwner: RoomFetchOwner = {
-      membershipEpoch: recordRoomMembership(client, roomJid, true),
+      membershipEpoch,
+      coverage: beginRoomMamForegroundCoverage(
+        client,
+        roomJid,
+        membershipEpoch,
+      ),
     }
     roomFetchOwners.set(roomJid, fetchOwner)
 
@@ -180,6 +196,7 @@ export function setupRoomSideEffects(
       }
 
       if (!isRoomFetchStillEligible(roomJid)) {
+        releaseRoomMamForegroundCoverage(client, fetchOwner.coverage)
         roomFetchOwners.delete(roomJid)
         fetchInitiated.delete(roomJid)
         roomStore.getState().setRoomMAMLoading(roomJid, false)
@@ -199,12 +216,14 @@ export function setupRoomSideEffects(
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
+      completeRoomMamForegroundCoverage(client, fetchOwner.coverage)
       roomFetchOwners.delete(roomJid)
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }
+      releaseRoomMamForegroundCoverage(client, fetchOwner.coverage)
       roomFetchOwners.delete(roomJid)
 
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry
@@ -217,6 +236,7 @@ export function setupRoomSideEffects(
       }
       // Clear loading state on error (MAM module clears it on success)
       roomStore.getState().setRoomMAMLoading(roomJid, false)
+      requestRoomMamHandoff(client, roomJid)
     }
   }
 
@@ -305,6 +325,7 @@ export function setupRoomSideEffects(
     if (!followsUninterruptedResume) {
       sessionStartTime = Date.now()
       invalidateRoomMemberships(client)
+      resetRoomMamForegroundCoverage(client)
       freshSessionJoinedRooms.clear()
       fetchInitiated.clear()
       resumeArchiveHeldRooms.clear()
@@ -373,6 +394,11 @@ export function setupRoomSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         uninterruptedResumeMayEmitSyntheticOnline = false
+        releaseInFlightRoomMamForegroundCoverage(client)
+        for (const roomJid of roomFetchOwners.keys()) {
+          roomStore.getState().setRoomMAMLoading(roomJid, false)
+        }
+        roomFetchOwners.clear()
         fetchInitiated.clear()
         resumeArchiveHeldRooms.clear()
       }
@@ -415,6 +441,7 @@ export function setupRoomSideEffects(
       freshSessionJoinedRooms.delete(roomJid)
       fetchInitiated.delete(roomJid)
       resumeArchiveHeldRooms.delete(roomJid)
+      releaseRoomMamForegroundCoverageForRoom(client, roomJid)
       if (roomFetchOwners.delete(roomJid)) {
         roomStore.getState().setRoomMAMLoading(roomJid, false)
       }
@@ -440,6 +467,7 @@ export function setupRoomSideEffects(
 
   return () => {
     disposed = true
+    resetRoomMamForegroundCoverage(client)
     for (const roomJid of roomFetchOwners.keys()) {
       roomStore.getState().setRoomMAMLoading(roomJid, false)
     }

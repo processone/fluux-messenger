@@ -2,10 +2,126 @@ import type { XMPPClient } from './XMPPClient'
 
 type RoomMamHandoffHandler = (roomJid: string) => void
 
+export interface RoomMamForegroundCoverage {
+  readonly roomJid: string
+  readonly generation: number
+  readonly membershipEpoch: number
+}
+
+interface RoomMamForegroundCoverageState {
+  generation: number
+  rooms: Map<
+    string,
+    {
+      owner: RoomMamForegroundCoverage
+      completed: boolean
+    }
+  >
+}
+
 const roomMamHandoffHandlers = new WeakMap<
   XMPPClient,
   Set<RoomMamHandoffHandler>
 >()
+const roomMamForegroundCoverage = new WeakMap<
+  XMPPClient,
+  RoomMamForegroundCoverageState
+>()
+
+function getRoomMamForegroundCoverageState(
+  client: XMPPClient,
+): RoomMamForegroundCoverageState {
+  let state = roomMamForegroundCoverage.get(client)
+  if (!state) {
+    state = { generation: 0, rooms: new Map() }
+    roomMamForegroundCoverage.set(client, state)
+  }
+  return state
+}
+
+export function beginRoomMamForegroundCoverage(
+  client: XMPPClient,
+  roomJid: string,
+  membershipEpoch: number,
+): RoomMamForegroundCoverage {
+  const state = getRoomMamForegroundCoverageState(client)
+  const owner = {
+    roomJid,
+    generation: state.generation,
+    membershipEpoch,
+  }
+  state.rooms.set(roomJid, { owner, completed: false })
+  return owner
+}
+
+export function completeRoomMamForegroundCoverage(
+  client: XMPPClient,
+  owner: RoomMamForegroundCoverage,
+): void {
+  const state = roomMamForegroundCoverage.get(client)
+  const coverage = state?.rooms.get(owner.roomJid)
+  if (
+    state?.generation === owner.generation &&
+    coverage?.owner === owner
+  ) {
+    coverage.completed = true
+  }
+}
+
+export function releaseRoomMamForegroundCoverage(
+  client: XMPPClient,
+  owner: RoomMamForegroundCoverage,
+): void {
+  const state = roomMamForegroundCoverage.get(client)
+  const coverage = state?.rooms.get(owner.roomJid)
+  if (
+    state?.generation === owner.generation &&
+    coverage?.owner === owner
+  ) {
+    state.rooms.delete(owner.roomJid)
+  }
+}
+
+export function releaseRoomMamForegroundCoverageForRoom(
+  client: XMPPClient,
+  roomJid: string,
+): void {
+  roomMamForegroundCoverage.get(client)?.rooms.delete(roomJid)
+}
+
+export function releaseInFlightRoomMamForegroundCoverage(
+  client: XMPPClient,
+): void {
+  const state = roomMamForegroundCoverage.get(client)
+  if (!state) return
+  for (const [roomJid, coverage] of state.rooms) {
+    if (!coverage.completed) {
+      state.rooms.delete(roomJid)
+    }
+  }
+}
+
+export function resetRoomMamForegroundCoverage(
+  client: XMPPClient,
+): void {
+  const state = getRoomMamForegroundCoverageState(client)
+  state.generation += 1
+  state.rooms.clear()
+}
+
+export function hasRoomMamForegroundCoverage(
+  client: XMPPClient,
+  roomJid: string,
+  membershipEpoch: number,
+): boolean {
+  const state = roomMamForegroundCoverage.get(client)
+  const coverage = state?.rooms.get(roomJid)
+  return !!(
+    coverage &&
+    coverage.owner.generation === state?.generation &&
+    coverage.owner.membershipEpoch === membershipEpoch
+  )
+}
 
 export function requestRoomMamHandoff(
   client: XMPPClient,
