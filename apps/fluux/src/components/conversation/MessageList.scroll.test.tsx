@@ -289,12 +289,8 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('typing indicator scroll', () => {
-    // The typing indicator floats OVER the list (it is not part of the scroll content); toggling it
-    // never changes scroll height on its own. But the footer reserves extra bottom padding to clear
-    // the pill while it's shown, and that DOES grow the scroll content — so while genuinely sticked
-    // to the bottom, reassertBottom re-pins to reveal the new clearance (same shared helper new
-    // messages use — a one-shot smooth nudge lands short because a virtualized footer needs a
-    // remeasure pass first). A reader scrolled up must never be yanked back (issue #918).
+    // MessageList owns the typing-band layout; these tests cover useMessageListScroll's edge
+    // contract: follow the band at the live edge, but never yank a reader out of history (#918).
     it('re-pins to the bottom when typing starts while sticked', () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
@@ -339,7 +335,7 @@ describe('MessageList scroll behavior', () => {
           />
         )
 
-        // Sticked to the bottom → the grown footer clearance is revealed by a re-pin to bottom.
+        // At the live edge, the typing edge re-pins.
         expect(scrollSpy).toHaveBeenCalledWith(1000)
       }
     })
@@ -403,7 +399,7 @@ describe('MessageList scroll behavior', () => {
   describe('reactions scroll', () => {
     // A reaction grows a message's row. While the reader is sticked to the bottom we keep the newest
     // message glued to the bottom edge via reassertBottom — the same shared helper new messages and the
-    // typing footer use. On the non-virtualized path that's an INSTANT scrollTop = scrollHeight write
+    // typing band use. On the non-virtualized path that's an INSTANT scrollTop = scrollHeight write
     // (no smooth animation, which is what used to visibly shove the newest message down). It is gated
     // on LIVE geometry, so a reader scrolled up into history is never re-pinned.
     const reactOnLast = (msgs: ReturnType<typeof createTestMessages>) => {

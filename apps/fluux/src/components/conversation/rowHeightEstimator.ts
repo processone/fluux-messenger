@@ -9,7 +9,7 @@ export interface RowChrome {
   newMarker: number       // the "New messages" divider rendered above a first-new row
   date: number            // a date separator row
   loadEarlierHeader: number // the load-earlier / history-start header row
-  footer: number          // the footer (typing indicator + bottom padding)
+  footer: number          // footer content (extra content + constant bottom padding)
 }
 
 export interface RowEstimatorContext {

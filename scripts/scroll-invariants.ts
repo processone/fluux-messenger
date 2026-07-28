@@ -717,7 +717,7 @@ test.describe('Virtualization scroll invariants', () => {
       const last = rows[rows.length - 1] as HTMLElement
       const sRect = scroller.getBoundingClientRect()
       const lRect = last.getBoundingClientRect()
-      // Accept a bottom gap of 120px (FAB / padding / typing indicator overlap)
+      // This legacy blank-window check is loose; the strict message/pill overlap check lives below.
       return lRect.top >= sRect.top - 10 && lRect.bottom <= sRect.bottom + 120
     })
     expect(isLastVisible, 'last message row is not in viewport after FAB click — blank/short window').toBe(true)
@@ -1541,8 +1541,8 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
-    // Real-world sequence: the other party is typing (indicator grows the footer), THEN the
-    // message lands (indicator clears + message appends).
+    // Real-world sequence: the other party is typing (a band appears below the scrollport), THEN
+    // the message lands (the band disappears and the message appends).
     await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (window as any).__demoClient
@@ -1773,13 +1773,9 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
 })
 
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
-// The typing indicator is a floating pill anchored to the BOTTOM OF THE VIEWPORT (issue #918 moved
-// it out of the scroll content so toggling it can't re-pin the list). Its clearance, though, used to
-// be reserved as CONTENT padding at the end of the list — the two only line up when the scroller sits
-// at its exact bottom. Every other scroll offset slides the content down under a pill that does not
-// move, so the last message ends up behind it: measured on the demo (30px pill, 48px content spacer)
-// the clearance was a mere 16px, and an offset of 20px already clipped the last line.
-// The fix reserves the band OUTSIDE the scrollport, so no scroll offset can put text under the pill.
+// Regression for the overlay/content-coordinate mismatch documented beside the typing band in
+// MessageList. In the old layout a 30px pill had only 16px clearance at the exact bottom, and a
+// 20px scroll offset already clipped the last line.
 test.describe('Typing indicator never covers message text', () => {
   const AVA = 'ava@fluux.chat'
 
@@ -2004,8 +2000,8 @@ test.describe('Typing indicator never covers message text', () => {
   // in Chromium and WebKit — the re-pin runs in a layout effect, so it lands before paint and no dip
   // is observable here; what the reader was seeing was almost certainly the overlap itself, a chip
   // hidden under the pill reading as "not stuck to the bottom". Kept as guards: with the indicator
-  // out of the scroll content, showing it must not move content at all, and the reacted row must
-  // stay whole. Tolerance is tight on purpose — this asserts "glued", not "near".
+  // out of the scroll content, showing it must not change the content height, and the reacted row
+  // must stay whole. Tolerance is tight on purpose — this asserts "glued", not "near".
   test('typing starting on a last message that carries a reaction stays glued to the bottom', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)

@@ -299,11 +299,10 @@ export interface UseMessageListScrollOptions {
    *  while the reader is sticked to the bottom, so the growth is absorbed above (previous messages
    *  scroll up) instead of shoving the newest message down. */
   rowGrowthSignature: string
-  /** Whether the floating typing-indicator pill is currently shown. The footer reserves extra bottom
-   *  padding to clear the pill only while this is true; the 0→true edge drives the same instant
-   *  bottom re-pin as a reaction growing a row, gated on live geometry (see the reactions
-   *  effect) so it never fires for a reader scrolled up into history — the #918 "fight" was a stale
-   *  isAtBottomRef latch, not the padding change itself. */
+  /** Whether the in-flow typing-indicator band below the scrollport is currently shown. Its 0→true
+   *  edge shrinks the scrollport and drives the same instant bottom re-pin as a reaction growing a
+   *  row, gated on live geometry (see the typing effect) so it never fires for a reader scrolled up
+   *  into history — the #918 "fight" was a stale isAtBottomRef latch. */
   hasTypingIndicator?: boolean
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
@@ -3374,8 +3373,8 @@ export function useMessageListScroll({
   // last one: a row grown in the middle of the viewport would otherwise push everything below it
   // (including the newest message) down.
   //
-  // We route through the controller-owned live-edge convergence that new
-  // messages and the typing footer use) rather than a one-shot scrollToIndex, because the row's
+  // We route through the controller-owned live-edge convergence that new messages and the typing
+  // band use rather than a one-shot scrollToIndex, because the row's
   // ResizeObserver reports the grown height a frame or two AFTER the chip mounts — a single
   // synchronous pin would land on the pre-growth height and still let the bottom dip. The loop polls
   // scrollHeight per frame and re-pins instantly (no smooth easing, so nothing visibly animates),
