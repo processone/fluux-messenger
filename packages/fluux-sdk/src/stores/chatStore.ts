@@ -546,11 +546,16 @@ const conversationArchiveSaves = createArchiveSaveChain()
 // account can only ever cause an extra discarded recompute, never a wrong
 // write (the recompute also re-checks `conversationMeta` under the same key).
 const chatRecountVersion = new Map<string, number>()
+const chatUnreadInputVersion = new Map<string, number>()
 
 function bumpChatRecountVersion(conversationId: string): number {
   const next = (chatRecountVersion.get(conversationId) ?? 0) + 1
   chatRecountVersion.set(conversationId, next)
   return next
+}
+
+function bumpChatUnreadInputVersion(conversationId: string): void {
+  chatUnreadInputVersion.set(conversationId, (chatUnreadInputVersion.get(conversationId) ?? 0) + 1)
 }
 
 // Cache epoch (Codex r4 #5): bumped whenever the chat cache lifecycle resets
@@ -1553,6 +1558,8 @@ export const chatStore = createStore<ChatState>()(
       },
 
       addMessage: (incoming) => {
+        bumpChatUnreadInputVersion(incoming.conversationId)
+
         // XEP-0424: a retraction can outrun its target (live retraction against a
         // non-resident message, out-of-order delivery). Tombstone BEFORE the
         // append so the cache write below persists the tombstone — patching
@@ -2543,6 +2550,7 @@ export const chatStore = createStore<ChatState>()(
         // (see that guard's comment) to close a race the new allowActive
         // trigger (advanceReadPointer) makes materially more likely.
         const pointerIdAtCompute = afterGuard.readPointer?.messageId
+        const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
         const floor = computeFloor(afterGuard.readPointer, afterGuard.historyFloor)
         if (!floor) return
@@ -2584,12 +2592,14 @@ export const chatStore = createStore<ChatState>()(
 
         // --- Latest-wins commit (requirement 3) ---------------------------
         if (chatRecountVersion.get(conversationId) !== version) return
+        if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) return
 
         const transient = transientCounts(chatTransientScopeKey(conversationId), floorPos)
         const unreadCount = Math.min(999, res.unread + transient.unread)
 
         set((state) => {
           if (chatRecountVersion.get(conversationId) !== version) return state
+          if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) return state
           if (!allowActive && state.activeConversationId === conversationId) return state
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) return state
@@ -2680,6 +2690,8 @@ export const chatStore = createStore<ChatState>()(
       },
 
       mergeMAMMessages: (conversationId, archivePage, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
+        bumpChatUnreadInputVersion(conversationId)
+
         // XEP-0424: a retraction recorded earlier can target a message arriving in
         // THIS page (the live pass missed it because nothing was resident). Patch
         // the page BEFORE it merges, so the tombstone rides the same saveMessages
@@ -3274,6 +3286,7 @@ export const chatStore = createStore<ChatState>()(
         conversationArchiveSaves.clear()
         chatCacheEpoch++
         chatRecountVersion.clear()
+        chatUnreadInputVersion.clear()
         // Task 9: tear down the OUTGOING account's transient overlay entries
         // before adopting the new scope — see lastChatTransientScope's doc for
         // why this can't just read getStorageScopeJid() here.
@@ -3291,6 +3304,7 @@ export const chatStore = createStore<ChatState>()(
         conversationArchiveSaves.clear()
         chatCacheEpoch++
         chatRecountVersion.clear()
+        chatUnreadInputVersion.clear()
         // Task 9: logout tears down this account's transient overlay too.
         // Unlike switchAccount, nothing flips the global scope before reset()
         // runs (clearLocalData calls it directly), so getStorageScopeJid()

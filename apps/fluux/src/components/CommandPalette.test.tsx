@@ -1390,6 +1390,25 @@ describe('CommandPalette', () => {
       expect(within(bobRow!).getByText('2')).toBeInTheDocument()
     })
 
+    it('formats a saturated unread count as 999+', () => {
+      mockRooms = [
+        ...defaultRooms,
+        {
+          jid: 'busy@conference.example.com',
+          name: 'Busy Room',
+          joined: true,
+          unreadCount: 999,
+          mentionsCount: 0,
+        },
+      ]
+
+      render(<CommandPalette {...defaultProps} />)
+
+      const row = screen.getByText('Busy Room').closest('button')
+      expect(within(row!).getByText('999+')).toBeInTheDocument()
+      expect(within(row!).queryByText('999')).not.toBeInTheDocument()
+    })
+
     it('does not show unread badges once the user types a query', () => {
       render(<CommandPalette {...defaultProps} />)
       fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })

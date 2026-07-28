@@ -373,6 +373,7 @@ export interface UseMessageListScrollResult {
    * rendered message row (nothing to anchor to).
    */
   captureAnchor: () => ScrollAnchor | null
+  getLatestAnchor: () => ScrollAnchor | null
   /**
    * Read-state PR B, Task 12: restore the scroll position so the anchor message sits at the same
    * fractional offset it was captured at, using the CURRENT scroller and the message's CURRENT
@@ -3671,8 +3672,12 @@ export function useMessageListScroll({
   const captureAnchor = useCallback((): ScrollAnchor | null => {
     const scroller = scrollerRef.current
     if (!scroller) return null
-    return findBottomAnchor(scroller)
+    const anchor = findBottomAnchor(scroller)
+    lastAnchorRef.current = anchor
+    return anchor
   }, [])
+
+  const getLatestAnchor = useCallback((): ScrollAnchor | null => lastAnchorRef.current, [])
 
   const restoreAnchor = useCallback((anchor: ScrollAnchor): boolean => {
     const scroller = scrollerRef.current
@@ -3699,6 +3704,7 @@ export function useMessageListScroll({
     bottomVisibleMessageId,
     scrollToMarker,
     captureAnchor,
+    getLatestAnchor,
     restoreAnchor,
   }
 }

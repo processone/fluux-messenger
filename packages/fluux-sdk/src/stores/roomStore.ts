@@ -400,11 +400,16 @@ export function _resetRoomArchiveSavesForTesting(): void {
 // recompute, never a wrong write (the recompute also re-checks `roomMeta`
 // under the same key).
 const roomRecountVersion = new Map<string, number>()
+const roomUnreadInputVersion = new Map<string, number>()
 
 function bumpRoomRecountVersion(roomJid: string): number {
   const next = (roomRecountVersion.get(roomJid) ?? 0) + 1
   roomRecountVersion.set(roomJid, next)
   return next
+}
+
+function bumpRoomUnreadInputVersion(roomJid: string): void {
+  roomUnreadInputVersion.set(roomJid, (roomUnreadInputVersion.get(roomJid) ?? 0) + 1)
 }
 
 /**
@@ -1738,6 +1743,7 @@ export const roomStore = createStore<RoomState>()(
     roomArchiveSaves.clear()
     roomCacheEpoch++
     roomRecountVersion.clear()
+    roomUnreadInputVersion.clear()
     // Task 9: tear down the OUTGOING account's transient overlay entries
     // before adopting the new scope — see lastRoomTransientScope's doc for
     // why this can't just read getStorageScopeJid() here.
@@ -1760,6 +1766,7 @@ export const roomStore = createStore<RoomState>()(
     roomArchiveSaves.clear()
     roomCacheEpoch++
     roomRecountVersion.clear()
+    roomUnreadInputVersion.clear()
     // Task 9: logout tears down this account's transient overlay too.
     // Unlike switchAccount, nothing flips the global scope before reset()
     // runs (clearLocalData calls it directly), so getStorageScopeJid() here
@@ -1804,6 +1811,8 @@ export const roomStore = createStore<RoomState>()(
 
   // Message actions
   addMessage: (roomJid, message, options = {}) => {
+    bumpRoomUnreadInputVersion(roomJid)
+
     const { incrementUnread = true, incrementMentions = false } = options
 
     // Get room to check if it's a Quick Chat (transient history)
@@ -1967,7 +1976,11 @@ export const roomStore = createStore<RoomState>()(
         'room',
         { incrementUnread: incrementUnread && !noteAsTransient, incrementMentions }
       )
-      const unreadCount = Math.min(999, updated.unreadCount + overlayUnreadDelta)
+      const unreadCount = Math.min(
+        999,
+        (updated.readPointer === notifInput.readPointer ? updated.unreadCount : notifInput.unreadCount) +
+          overlayUnreadDelta
+      )
 
       // Get the last non-ignored message for sidebar preview. Use the appended set
       // (not the possibly-gated resident array) so the preview still advances to the
@@ -2372,6 +2385,7 @@ export const roomStore = createStore<RoomState>()(
     // guard's comment) to close a race the new allowActive trigger
     // (advanceReadPointer) makes materially more likely.
     const pointerIdAtCompute = afterGuard.readPointer?.messageId
+    const unreadInputVersionAtCompute = roomUnreadInputVersion.get(roomJid) ?? 0
 
     const floor = computeFloor(afterGuard.readPointer, afterGuard.historyFloor)
     if (!floor) return
@@ -2413,12 +2427,14 @@ export const roomStore = createStore<RoomState>()(
 
     // --- Latest-wins commit (requirement 3) ---------------------------
     if (roomRecountVersion.get(roomJid) !== version) return
+    if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtCompute) return
 
     const transient = transientCounts(roomTransientScopeKey(roomJid), floorPos)
     const unreadCount = Math.min(999, res.unread + transient.unread)
 
     set((state) => {
       if (roomRecountVersion.get(roomJid) !== version) return state
+      if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtCompute) return state
       if (!allowActive && state.activeRoomJid === roomJid) return state
       const meta = state.roomMeta.get(roomJid)
       if (!meta) return state
@@ -3643,6 +3659,8 @@ export const roomStore = createStore<RoomState>()(
   },
 
   mergeRoomMAMMessages: (roomJid, archivePage, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
+    bumpRoomUnreadInputVersion(roomJid)
+
     // XEP-0424: a retraction recorded earlier can target a message arriving in
     // THIS page (the live pass missed it because nothing was resident). Patch
     // the page BEFORE it merges, so the tombstone rides the same saveRoomMessages

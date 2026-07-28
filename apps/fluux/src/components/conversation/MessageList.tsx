@@ -532,6 +532,7 @@ export function MessageList<T extends BaseMessage>({
     bottomVisibleMessageId,
     scrollToMarker,
     captureAnchor,
+    getLatestAnchor,
     restoreAnchor,
   } = useMessageListScroll({
     conversationId,
@@ -614,10 +615,11 @@ export function MessageList<T extends BaseMessage>({
   // thing protecting the reader's current position.
   useLayoutEffect(() => {
     if (prevDividerIdRef.current !== firstNewMessageId) {
-      if (showScrollToBottom && dividerAnchorRef.current) restoreAnchor(dividerAnchorRef.current)
+      const anchor = getLatestAnchor() ?? dividerAnchorRef.current
+      if (showScrollToBottom && anchor) restoreAnchor(anchor)
       prevDividerIdRef.current = firstNewMessageId
     }
-  }, [firstNewMessageId, restoreAnchor, showScrollToBottom])
+  }, [firstNewMessageId, getLatestAnchor, restoreAnchor, showScrollToBottom])
 
   // Combined ref setter for scroll container
   const setScrollContainerRef = (element: HTMLDivElement | null) => {

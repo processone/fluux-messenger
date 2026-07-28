@@ -121,6 +121,21 @@ describe('onMessageReceived', () => {
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
       expect(result.readPointer).toMatchObject({ messageId: msg.id, timestamp: msg.timestamp })
     })
+
+    it('does not regress the read pointer for an older outgoing message', () => {
+      const current = seen('newer-msg', new Date('2025-01-15T10:05:00Z'))
+      const state = makeState({ unreadCount: 4, readPointer: current })
+      const msg = makeMsg({
+        id: 'older-outgoing',
+        isOutgoing: true,
+        timestamp: new Date('2025-01-15T10:00:00Z'),
+      })
+
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
+
+      expect(result.readPointer).toBe(current)
+      expect(result.unreadCount).toBe(0)
+    })
   })
 
   describe('delayed/historical messages', () => {
@@ -147,6 +162,23 @@ describe('onMessageReceived', () => {
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
       expect(result.readPointer).toMatchObject({ messageId: 'new-msg', timestamp: msg.timestamp })
+    })
+
+    it('does not regress the read pointer for an older delayed arrival at the live edge', () => {
+      const current = seen('newer-msg', new Date('2025-01-15T10:05:00Z'))
+      const state = makeState({ unreadCount: 4, readPointer: current })
+      const msg = makeMsg({
+        id: 'older-delayed',
+        isDelayed: true,
+        timestamp: new Date('2025-01-15T10:00:00Z'),
+      })
+
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat', {
+        treatDelayedAsNew: true,
+      })
+
+      expect(result.readPointer).toBe(current)
+      expect(result.unreadCount).toBe(0)
     })
 
     it('preserves existing marker', () => {
@@ -1100,11 +1132,11 @@ describe('lifecycle sequences', () => {
     // Regression: user reads messages, replies, then re-opens the conversation.
     // The "new messages" divider must NOT appear above messages the user already saw.
     const msgs: NotificationMessage[] = [
-      makeMsg({ id: 'msg-1', timestamp: new Date() }),
-      makeMsg({ id: 'msg-2', timestamp: new Date() }),
-      makeMsg({ id: 'reply-1', isOutgoing: true, timestamp: new Date() }),
-      makeMsg({ id: 'msg-3', timestamp: new Date() }),
-      makeMsg({ id: 'reply-2', isOutgoing: true, timestamp: new Date() }),
+      makeMsg({ id: 'msg-1', timestamp: new Date(1000) }),
+      makeMsg({ id: 'msg-2', timestamp: new Date(2000) }),
+      makeMsg({ id: 'reply-1', isOutgoing: true, timestamp: new Date(3000) }),
+      makeMsg({ id: 'msg-3', timestamp: new Date(4000) }),
+      makeMsg({ id: 'reply-2', isOutgoing: true, timestamp: new Date(5000) }),
     ]
 
     // User has seen everything up to msg-2

@@ -582,6 +582,35 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
   })
 
+  it('discards a recount whose archive snapshot predates a live arrival', async () => {
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+    ])
+    setMeta({
+      unreadCount: 5,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
+    )
+
+    const stale = chatStore.getState().recomputeUnreadForConversation(CID)
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+    chatStore.getState().addMessage(archiveMsg('live', 2000))
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+
+    releaseCount({ unread: 3 })
+    await stale
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(6)
+  })
+
   // final-fix-2: the race the re-reviewer flagged. An `allowActive` recompute
   // (this fix's new advanceReadPointer trigger runs one) can be in flight
   // while a DIRECT writer — onMessageReceived's own live-edge convergence,

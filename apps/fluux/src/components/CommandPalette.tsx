@@ -22,6 +22,7 @@ import { RoomAvatar } from './RoomAvatar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isAdvancedMode } from '@/stores/advancedModeStore'
 import { ModalOverlay } from './ModalOverlay'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
 
 // =============================================================================
 // Types
@@ -719,7 +720,7 @@ function CommandPaletteContent({
                               : 'bg-fluux-hover text-fluux-text'
                           }`}
                         >
-                          {item.unreadCount}
+                          {formatUnreadCount(item.unreadCount ?? 0)}
                         </span>
                       )}
                       {isSelected && (

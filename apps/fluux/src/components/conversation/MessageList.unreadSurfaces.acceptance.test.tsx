@@ -335,6 +335,8 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     layoutRowsForDivider('msg-3')
     scrollCtx.container.scrollTop = 50
     act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
+    scrollCtx.container.scrollTop = 80
+    act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
 
     expect(fabBadge(scrollCtx.container)?.textContent).toBe('5')
     expect(divider()?.textContent).toContain('5 new messages')
@@ -342,7 +344,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
 
     const msg4 = () => scrollCtx.container.querySelector('[data-message-id="msg-4"]') as HTMLElement
     const relativeTopBefore = msg4().getBoundingClientRect().top
-    expect(relativeTopBefore).toBe(450) // sanity: confirms the capture actually saw this position
+    expect(relativeTopBefore).toBe(420) // sanity: confirms the capture actually saw this position
 
     // The remote marker advances the boundary: the divider moves to msg-6, the count drops to 2
     // (M). This pushes msg-6..msg-9 down instead of msg-3..msg-9 — msg-4's OWN offsetTop moves

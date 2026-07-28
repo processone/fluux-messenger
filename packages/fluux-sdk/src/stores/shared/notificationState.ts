@@ -20,7 +20,7 @@
  * permanent (the pointer is forward-only).
  */
 
-import { makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
+import { advance, makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
 import { isRenderableStoredMessage, type RenderabilityCheckFields } from './readState'
 
 // ---------------------------------------------------------------------------
@@ -165,7 +165,7 @@ export function onMessageReceived(
     return {
       unreadCount: 0,
       mentionsCount: 0,
-      readPointer: makeReadPointer(msg, kind),
+      readPointer: advance(state.readPointer, makeReadPointer(msg, kind)),
       firstNewMessageId: undefined,
     }
   }
@@ -185,7 +185,7 @@ export function onMessageReceived(
     return {
       unreadCount: 0,
       mentionsCount: 0,
-      readPointer: makeReadPointer(msg, kind),
+      readPointer: advance(state.readPointer, makeReadPointer(msg, kind)),
       firstNewMessageId: state.firstNewMessageId,
     }
   }
