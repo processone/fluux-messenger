@@ -127,6 +127,7 @@ export function measure(body: () => void): Metrics {
   const t0 = performance.now()
   body()
   const cpuMs = performance.now() - t0
+  const stringifyAfter = stringifyCalls
   const byKey = countingStorage.stop()
 
   let writes = 0
@@ -135,7 +136,7 @@ export function measure(body: () => void): Metrics {
     writes += entry.writes
     bytes += entry.bytes
   }
-  return { byKey, writes, bytes, stringifyCalls: stringifyCalls - stringifyBefore, cpuMs }
+  return { byKey, writes, bytes, stringifyCalls: stringifyAfter - stringifyBefore, cpuMs }
 }
 
 /**

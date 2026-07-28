@@ -60,6 +60,7 @@ vi.mock('../src/stores/shared/durableMapPersist', async (importOriginal) => {
 
   return {
     ...actual,
+    resetMergedBottomsForBench: () => mergedBottoms.clear(),
     scheduleDurableMaps: (
       key: string,
       maps: { gaps?: ReadonlyMap<string, unknown>; coverage?: ReadonlyMap<string, { bottomId: string }> },
@@ -80,11 +81,11 @@ vi.mock('../src/stores/shared/durableMapPersist', async (importOriginal) => {
         // addition, a monotone deepening or a replacement — the conservatism
         // #1138 measured. Removal and the unknown-baseline case are unchanged
         // between the two rules, so they are left to the production path.
-        const previous = mergedBottoms.get(key)
-        const bottoms = new Map<string, string>()
+        const bottoms = mergedBottoms.get(key) ?? new Map<string, string>()
         for (const [id, record] of maps.coverage) {
+          const previous = bottoms.get(id)
           bottoms.set(id, record.bottomId)
-          if (previous?.get(id) !== record.bottomId) actual.noteCoverageTransition(key, id, 'replaced')
+          if (previous !== record.bottomId) actual.noteCoverageTransition(key, id, 'replaced')
         }
         mergedBottoms.set(key, bottoms)
       }
@@ -96,7 +97,13 @@ vi.mock('../src/stores/shared/durableMapPersist', async (importOriginal) => {
 const { chatStore } = await import('../src/stores/chatStore')
 const { roomStore } = await import('../src/stores/roomStore')
 const { flush, _resetForTesting } = await import('../src/stores/shared/throttledStorage')
-const { forgetAllDurableMapBaselines } = await import('../src/stores/shared/durableMapPersist')
+const {
+  forgetAllDurableMapBaselines,
+  resetMergedBottomsForBench,
+} = await import('../src/stores/shared/durableMapPersist') as
+  typeof import('../src/stores/shared/durableMapPersist') & {
+    resetMergedBottomsForBench: () => void
+  }
 const { _resetStorageScopeForTesting } = await import('../src/utils/storageScope')
 const { _clearAllRoomReadStateForTesting } = await import('../src/stores/shared/readStateStorage')
 const { createRoom } = await import('../src/stores/roomStore.testHelpers')
@@ -433,6 +440,7 @@ function resetWorld(): void {
   roomStore.getState().reset()
   _resetForTesting()
   forgetAllDurableMapBaselines()
+  resetMergedBottomsForBench()
   countingStorage.reset()
 }
 
