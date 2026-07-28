@@ -728,6 +728,146 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       roomStore.getState().reset()
     })
+
+    it('does not let an old pass unlock replacement-session joins early', async () => {
+      roomStore.getState().reset()
+      const oldRoomJid = 'old@conference.example.com'
+      const replacementRoomJid = 'replacement@conference.example.com'
+      for (const jid of [oldRoomJid, replacementRoomJid]) {
+        roomStore.getState().addRoom({
+          jid,
+          name: jid,
+          nickname: 'me',
+          joined: false,
+          supportsMAM: true,
+          isBookmarked: true,
+          occupants: new Map(),
+          messages: [],
+          unreadCount: 0,
+          mentionsCount: 0,
+          typingUsers: new Set(),
+        })
+      }
+      let resolveOldCatchUp!: () => void
+      const oldCatchUp = new Promise<void>((resolve) => {
+        resolveOldCatchUp = resolve
+      })
+      vi.mocked(mockClient.mam.catchUpRoomHistory)
+        .mockReturnValueOnce(oldCatchUp)
+        .mockResolvedValue(undefined)
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      roomStore.getState().setRoomJoined(oldRoomJid, true)
+      mockClient._emitSDK('room:joined', { roomJid: oldRoomJid, joined: true })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          oldRoomJid,
+          expect.any(Array),
+          expect.any(Object),
+        )
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      simulateFreshSession(mockClient)
+      resolveOldCatchUp()
+      await vi.advanceTimersByTimeAsync(0)
+
+      roomStore.getState().setRoomJoined(replacementRoomJid, true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: replacementRoomJid,
+        joined: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalledWith(
+        replacementRoomJid,
+        expect.any(Array),
+        expect.any(Object),
+      )
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          replacementRoomJid,
+          expect.any(Array),
+          expect.any(Object),
+        )
+      })
+      roomStore.getState().reset()
+    })
+
+    it('retries once after a join catch-up aborts during hydration', async () => {
+      roomStore.getState().reset()
+      const roomJid = 'retry@conference.example.com'
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: roomJid,
+        nickname: 'me',
+        joined: false,
+        supportsMAM: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+      let resolveFirstCache!: (messages: []) => void
+      const firstCache = new Promise<[]>((resolve) => {
+        resolveFirstCache = resolve
+      })
+      let firstRoomLoad = true
+      const loadSpy = vi.spyOn(
+        roomStore.getState(),
+        'loadMessagesFromCache',
+      )
+        .mockImplementation((jid) => {
+          if (jid !== roomJid) return Promise.resolve([])
+          if (firstRoomLoad) {
+            firstRoomLoad = false
+            return firstCache
+          }
+          return Promise.resolve([])
+        })
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      await vi.advanceTimersByTimeAsync(10_000)
+      roomStore.getState().setRoomJoined(roomJid, true)
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      await vi.waitFor(() => {
+        expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(1)
+      })
+
+      roomStore.getState().setRoomJoined(roomJid, false)
+      mockClient._emitSDK('room:joined', { roomJid, joined: false })
+      resolveFirstCache([])
+      await vi.advanceTimersByTimeAsync(0)
+
+      roomStore.getState().setRoomJoined(roomJid, true)
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+      mockClient._emitSDK('room:joined', { roomJid, joined: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+      })
+      expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
+      loadSpy.mockRestore()
+      roomStore.getState().reset()
+    })
   })
 
   describe('late MAM-ready room retry (issue D)', () => {

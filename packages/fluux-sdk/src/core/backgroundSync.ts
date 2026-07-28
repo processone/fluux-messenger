@@ -77,10 +77,12 @@ export function setupBackgroundSyncSideEffects(
   // once the initial pass has run, catch up any non-active room that becomes
   // MAM-ready afterwards.
   const mamHandledRooms = new Set<string>()
+  const mamInFlightRooms = new Map<string, number>()
   let initialRoomPassDone = false
 
   function resetRoomRetryState(): void {
     mamHandledRooms.clear()
+    mamInFlightRooms.clear()
     initialRoomPassDone = false
   }
 
@@ -119,6 +121,28 @@ export function setupBackgroundSyncSideEffects(
       { sessionStartTime, stitchReadPointer: true },
     )
     return true
+  }
+
+  async function catchUpFreshSessionRoomOnce(
+    roomJid: string,
+    generation: number,
+  ): Promise<boolean> {
+    if (mamHandledRooms.has(roomJid) || mamInFlightRooms.has(roomJid)) {
+      return false
+    }
+    mamInFlightRooms.set(roomJid, generation)
+    try {
+      const caughtUp = await catchUpFreshSessionRoom(roomJid, generation)
+      if (!caughtUp || generation !== sessionGeneration) return false
+      mamHandledRooms.add(roomJid)
+      return true
+    } catch {
+      return false
+    } finally {
+      if (mamInFlightRooms.get(roomJid) === generation) {
+        mamInFlightRooms.delete(roomJid)
+      }
+    }
   }
 
   // --- E2EE capability warm-up ---
@@ -286,17 +310,14 @@ export function setupBackgroundSyncSideEffects(
           await executeWithConcurrency(
             candidates,
             async (room) => {
-              try {
-                if (await catchUpFreshSessionRoom(room.jid, syncGeneration)) {
-                  mamHandledRooms.add(room.jid)
-                }
-              } catch {}
+              await catchUpFreshSessionRoomOnce(room.jid, syncGeneration)
             },
             2,
           )
         } catch {
           // Silently ignore MAM catch-up errors
         }
+        if (syncGeneration !== sessionGeneration) return
         // Same rationale as the 1:1 catch-up retry above: room messages stashed
         // during this delayed pass (encrypted MUC history fetched after a mid-sync
         // key unlock) would otherwise wait until the next launch. Re-run once room
@@ -371,6 +392,7 @@ export function setupBackgroundSyncSideEffects(
     isFreshSession = false
     sessionStartTime = Date.now()
     freshSessionJoinedRooms.clear()
+    resetRoomRetryState()
 
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(
@@ -438,11 +460,10 @@ export function setupBackgroundSyncSideEffects(
         if (!room.supportsMAM || room.isQuickChat) continue
         if (!freshSessionJoinedRooms.has(room.jid)) continue
         if (mamHandledRooms.has(room.jid)) continue
-        mamHandledRooms.add(room.jid)
         // The active room is handled by roomSideEffects' own supportsMAM watcher.
         if (room.jid === activeRoomJid) continue
         logInfo(`Background sync: late MAM-ready room — catching up ${room.jid}`)
-        void catchUpFreshSessionRoom(room.jid, sessionGeneration)
+        void catchUpFreshSessionRoomOnce(room.jid, sessionGeneration)
       }
     }
   )
@@ -459,12 +480,8 @@ export function setupBackgroundSyncSideEffects(
       if (mamHandledRooms.has(roomJid)) return
       const room = roomStore.getState().rooms.get(roomJid)
       if (!room?.supportsMAM || room.isQuickChat) return
-      if (roomStore.getState().activeRoomJid === roomJid) {
-        mamHandledRooms.add(roomJid)
-        return
-      }
-      mamHandledRooms.add(roomJid)
-      void catchUpFreshSessionRoom(roomJid, sessionGeneration)
+      if (roomStore.getState().activeRoomJid === roomJid) return
+      void catchUpFreshSessionRoomOnce(roomJid, sessionGeneration)
     },
   )
 
@@ -509,6 +526,7 @@ export function setupBackgroundSyncSideEffects(
 
   return () => {
     sessionGeneration += 1
+    mamInFlightRooms.clear()
     unsubscribeOnline()
     unsubscribeResumed()
     unsubscribeConnection()
