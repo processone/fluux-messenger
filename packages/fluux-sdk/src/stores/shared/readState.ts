@@ -85,6 +85,26 @@ export function pointerlessDefers(pointer: ReadPointer | undefined, persistedUnr
   return !pointer && persistedUnread > 0
 }
 
+/**
+ * Whether an entity's notification state has anything a deactivation-triggered
+ * recount could possibly correct (read-state final-fix-2).
+ *
+ * A truly fresh entity — never read (no pointer ever established) AND already
+ * showing zero unread — has nothing to reconcile: there is no stale count to
+ * catch up, and no pointer whose archive-derived position could differ from
+ * what's shown. Recomputing anyway costs a real cache/archive read for no
+ * possible benefit, on every close of a conversation/room the user never even
+ * opened for real. An entity with EITHER a pointer (it was genuinely read to
+ * some position, which may have advanced further than the last commit) or a
+ * nonzero count (which may itself be stale) is worth reconciling.
+ */
+export function worthReconcilingOnDeactivate(
+  meta: { readPointer?: ReadPointer; unreadCount: number } | undefined
+): boolean {
+  if (!meta) return false
+  return meta.readPointer !== undefined || meta.unreadCount > 0
+}
+
 /** Runtime guard for an `ArchiveOrderKey` read back from untrusted storage. */
 export function isValidArchiveOrderKey(v: unknown): v is ArchiveOrderKey {
   if (!v || typeof v !== 'object') return false

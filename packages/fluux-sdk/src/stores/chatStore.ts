@@ -20,6 +20,7 @@ import {
 import {
   computeFloor,
   pointerlessDefers,
+  worthReconcilingOnDeactivate,
   compareOrder,
   makeArchiveOrderKey,
   isRenderableStoredMessage,
@@ -1356,11 +1357,44 @@ export const chatStore = createStore<ChatState>()(
               else newMarkers.delete(id)
               return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id, firstNewMessageMarkers: newMarkers }
             })
+            // final-fix-2: reconcile the entity we just LEFT (see the trigger
+            // below the final fallback `set()` for the full rationale, including
+            // the `worthReconcilingOnDeactivate` guard). By this point activeConversationId
+            // already reads `id`, not `prevId`, so the ordinary (non-allowActive)
+            // guard in recomputeUnreadForConversation no longer sees prevId as
+            // active and proceeds normally.
+            if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
+              void get().recomputeUnreadForConversation(prevId)
+            }
             return
           }
         }
         // Default case: conversation not found, just set active
         set({ activeConversationId: id })
+        // final-fix-2: deactivation is the other trigger this fix adds (the
+        // twin of advanceReadPointer's live-edge trigger below). Task 11's
+        // convergence advances the READ POINTER while an entity is active but
+        // never re-derives the COUNT for it — advanceReadPointer now schedules
+        // that recount itself while still active, but a conversation that
+        // never received another arrival after the pointer advanced would
+        // otherwise carry its stale count forward until the NEXT arrival
+        // bumped it. Reconciling on deactivation closes that gap: the ordinary
+        // (non-allowActive) form is correct here — activeConversationId has
+        // just been set above (to `id`, possibly null), so prevId reads as
+        // genuinely inactive and the guard proceeds rather than skipping.
+        //
+        // `worthReconcilingOnDeactivate` skips a truly fresh entity (no read
+        // pointer ever established AND unreadCount already 0) — there is
+        // nothing this recompute could correct, and calling it anyway would
+        // cost a real cache read for every close of a never-opened,
+        // never-unread conversation (pins "should deactivate immediately
+        // without touching the cache when passed null" in chatStore.test.ts).
+        // A conversation that was genuinely read (a pointer exists) or genuinely
+        // has unread (a nonzero count) still triggers, which is what the
+        // acceptance scenario needs.
+        if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
+          void get().recomputeUnreadForConversation(prevId)
+        }
       },
 
       activateConversation: async (id) => {
@@ -1932,6 +1966,7 @@ export const chatStore = createStore<ChatState>()(
         // messages whether or not the user is at the window. Rendered is not seen.
         if (!connectionStore.getState().windowVisible) return
 
+        let pointerAdvanced = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
@@ -1956,6 +1991,8 @@ export const chatStore = createStore<ChatState>()(
           // reference) whenever it did not advance, and a fresh object when it did.
           if (updated.readPointer === meta.readPointer) return state
 
+          pointerAdvanced = true
+
           // Task 9: the viewport-driven pointer just advanced — bound the
           // transient overlay's memory. Safe to call unconditionally: a
           // pruned-away entry was already excluded from transientCounts by
@@ -1978,6 +2015,21 @@ export const chatStore = createStore<ChatState>()(
 
           return { conversationMeta: newMeta }
         })
+
+        // final-fix-2 (PR B, Task 11 gap): onMessageSeen only ever moves the
+        // pointer — it never recomputes unreadCount, and nothing else did
+        // either once onActivate stopped force-zeroing the active entity. Without
+        // this trigger, live-edge convergence (acceptance scenario 5: scroll an
+        // active, focused conversation to the bottom) left the sidebar badge at
+        // its stale pre-convergence value until the next arrival or the next
+        // activation. `allowActive: true` is safe here because a pointer only
+        // ever advances against the RESIDENT messages array, which only the
+        // active conversation keeps (setActiveConversation evicts everyone
+        // else's) — this trigger only ever fires for the entity that is, in
+        // practice, active.
+        if (pointerAdvanced) {
+          void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
+        }
       },
 
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
@@ -2557,6 +2609,12 @@ export const chatStore = createStore<ChatState>()(
         if (hasUnmigratedLegacyReadState(conversationId)) return
         if (pointerlessDefers(afterGuard.readPointer, afterGuard.unreadCount)) return
 
+        // final-fix-2: snapshot the pointer identity the archive-derived
+        // count below is computed AGAINST. Re-checked at the final commit
+        // (see that guard's comment) to close a race the new allowActive
+        // trigger (advanceReadPointer) makes materially more likely.
+        const pointerIdAtCompute = afterGuard.readPointer?.messageId
+
         const floor = computeFloor(afterGuard.readPointer, afterGuard.historyFloor)
         if (!floor) return
 
@@ -2606,6 +2664,22 @@ export const chatStore = createStore<ChatState>()(
           if (!allowActive && state.activeConversationId === conversationId) return state
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) return state
+
+          // final-fix-2: `res.unread` was derived against `pointerIdAtCompute`
+          // (afterGuard.readPointer, captured before the coverage-bottom and
+          // countUnreadInArchive awaits). chatRecountVersion only orders this
+          // recompute against ANOTHER recompute for the same entity — it does
+          // NOT order it against a direct writer like onMessageReceived's own
+          // live-edge convergence, which advances the pointer and commits a
+          // fresh, correct unreadCount without bumping the version. An
+          // allowActive recompute (this trigger's whole point is to run while
+          // still active) can therefore be in flight exactly when that direct
+          // write lands. Re-reading the pointer here and bailing if it moved
+          // means a result computed against a now-stale pointer never clobbers
+          // the newer, correct value — worst case this recompute under-acts
+          // once; the next trigger (another arrival, deactivation, or
+          // activation) re-derives it.
+          if (meta.readPointer?.messageId !== pointerIdAtCompute) return state
 
           // Rederive the divider (requirement 5): the boundary may have moved
           // since a marker was last parked here (a remote pointer advance).

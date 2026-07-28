@@ -29,9 +29,12 @@ function msg(id: string, iso: string, extra: Partial<TestMsg> = {}): TestMsg {
   return { id, from: 'peer@example.com', timestamp: new Date(iso), ...extra }
 }
 
-// `kind: 'chat'` is arbitrary here — every fixture below uses distinct
-// timestamps, so the tie-break rule never actually engages. The kind-aware
-// tiebreak itself is specified in messageArrayUtils.test.ts.
+// `kind: 'chat'` is arbitrary for most fixtures below, which use distinct
+// timestamps — the tie-break rule never engages for them. Two exceptions
+// deliberately use same-millisecond fixtures to exercise the tie-break itself
+// ("sorts a same-millisecond live arrival into archive order", chat and room,
+// below). The kind-aware comparator internals are specified in
+// messageArrayUtils.test.ts.
 const cfg = { getKeys, windowSize: 3, kind: 'chat' as const }
 
 describe('messageTimeline', () => {

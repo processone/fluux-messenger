@@ -582,6 +582,62 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
   })
 
+  // final-fix-2: the race the re-reviewer flagged, room twin of
+  // chatStore.archiveUnread.test.ts's. An `allowActive` recompute (this fix's
+  // new advanceReadPointer trigger runs one) can be in flight while a DIRECT
+  // writer — onMessageReceived's own live-edge convergence, which commits
+  // straight to roomMeta and does NOT bump roomRecountVersion — advances the
+  // pointer and writes a fresh, correct count in the meantime.
+  // roomRecountVersion's "latest-wins" guard above only orders a recompute
+  // against ANOTHER recompute; it does nothing here. Re-reading the pointer
+  // at commit time (added by this fix) is what closes this specific gap.
+  it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+      archiveMsg('u1', 1001),
+    ])
+    setMeta({
+      unreadCount: 5, // stale — the slow recompute below would derive 1 (u1) from THIS pointer
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
+    )
+
+    // The allowActive recompute this fix's advanceReadPointer trigger would
+    // schedule — started while the pointer is still 'p0'.
+    const slow = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+    // While the slow recompute awaits the archive count, a DIRECT write (NOT
+    // going through recomputeUnreadForRoom, exactly like onMessageReceived's
+    // live-edge commit) advances the pointer to the newest message and
+    // writes the correct, fresh count.
+    roomStore.setState((state) => {
+      const meta = new Map(state.roomMeta)
+      meta.set(ROOM, {
+        ...meta.get(ROOM)!,
+        unreadCount: 0,
+        readPointer: { messageId: 'u1', timestamp: new Date(1001), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'u1' } },
+      })
+      return { roomMeta: meta }
+    })
+
+    // The slow recompute's archive read finally resolves — computed against
+    // the OLD pointer ('p0'), it would derive 1 (u1) if it committed.
+    releaseCount({ unread: 1 })
+    await slow
+
+    // The direct write's fresher, correct state survives untouched.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('u1')
+  })
+
   // ---------------------------------------------------------------------
   // divider rederivation
   // ---------------------------------------------------------------------
@@ -809,6 +865,114 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // Deferred: the trusted count (1) survives — NOT recomputed to 2, and
       // NOT cleared to 0 either.
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    })
+  })
+
+  // ---------------------------------------------------------------------
+  // final-fix-2: the previous fix wave removed onActivate's force-zero for
+  // the active entity but added no replacement trigger — a pointer that
+  // advances (Task 11 live-edge convergence) or an entity that deactivates
+  // never re-derived the COUNT to match. These tests pin the two triggers
+  // this fix adds: advanceReadPointer and setActiveRoom's deactivation
+  // branch — the room twins of chatStore.archiveUnread.test.ts's. Every seed
+  // below is a NONZERO value distinct from the correct outcome.
+  // ---------------------------------------------------------------------
+
+  describe('final-fix-2: pointer-advance and deactivation triggers re-derive the count', () => {
+    /** Seed the room's resident window (roomRuntime.messages) directly. */
+    function seedResident(messages: RoomMessage[]): void {
+      roomStore.setState((state) => {
+        const runtime = new Map(state.roomRuntime)
+        runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
+        return { roomRuntime: runtime }
+      })
+    }
+
+    it('acceptance scenario 5: live-edge convergence (pointer reaches the newest message while active+focused) converges the count to 0', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      const m2 = archiveMsg('m2', 1001)
+      const m3 = archiveMsg('m3', 1002)
+      await messageCache.saveRoomMessages([anchor, m1, m2, m3])
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0 derived below
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+      })
+      seedCoverage('anchor-stanza')
+      // Active + focused (default windowVisible), with the full history
+      // resident — this is the "scrolled to the bottom" precondition.
+      roomStore.setState({ activeRoomJid: ROOM })
+      seedResident([anchor, m1, m2, m3])
+
+      // The viewport observer reports the NEWEST resident message seen —
+      // reaching the live edge.
+      roomStore.getState().advanceReadPointer(ROOM, 'm3')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+
+      // Let the fire-and-forget archive recount (this fix's trigger) settle.
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      // Still active throughout — this is scenario 5's store half.
+      expect(roomStore.getState().activeRoomJid).toBe(ROOM)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    })
+
+    it('a partial pointer advance (not to the newest) decreases the count to the correct remaining number', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      const m2 = archiveMsg('m2', 1001)
+      const m3 = archiveMsg('m3', 1002)
+      await messageCache.saveRoomMessages([anchor, m1, m2, m3])
+      setMeta({
+        unreadCount: 5, // stale — distinct from BOTH 0 and the correct 2
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+      })
+      seedCoverage('anchor-stanza')
+      roomStore.setState({ activeRoomJid: ROOM })
+      seedResident([anchor, m1, m2, m3])
+
+      // The viewport observer reports 'm1' seen — the user scrolled PARTWAY,
+      // not to the bottom. 'm2' and 'm3' remain genuinely unread.
+      roomStore.getState().advanceReadPointer(ROOM, 'm1')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
+      // nor a wrongly-zeroed 0 (a broken floor/pointer would over-clear).
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+    })
+
+    it('reading a room to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      await messageCache.saveRoomMessages([anchor, m1])
+      // The pointer already sits at the newest message (as if the user had
+      // read to the bottom through some OTHER path than advanceReadPointer —
+      // isolating the deactivation trigger from the advance trigger tested
+      // above) while unreadCount is stale.
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+      })
+      seedCoverage('anchor-stanza')
+      roomStore.getState().addRoom(createRoom('other-room@conference.example.com'))
+      roomStore.setState({ activeRoomJid: ROOM })
+
+      // Switch away — exercises setActiveRoom's deactivation branch, NOT
+      // advanceReadPointer (never called in this test).
+      roomStore.getState().setActiveRoom('other-room@conference.example.com')
+      expect(roomStore.getState().activeRoomJid).toBe('other-room@conference.example.com')
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     })
   })
 })

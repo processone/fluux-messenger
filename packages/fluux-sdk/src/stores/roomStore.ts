@@ -36,6 +36,7 @@ import {
 import {
   computeFloor,
   pointerlessDefers,
+  worthReconcilingOnDeactivate,
   compareOrder,
   makeArchiveOrderKey,
   isRenderableStoredMessage,
@@ -2200,6 +2201,12 @@ export const roomStore = createStore<RoomState>()(
     if (afterGuard.pendingRemoteDisplayedStanzaId !== undefined) return
     if (pointerlessDefers(afterGuard.readPointer, afterGuard.unreadCount)) return
 
+    // final-fix-2: snapshot the pointer identity the archive-derived count
+    // below is computed AGAINST. Re-checked at the final commit (see that
+    // guard's comment) to close a race the new allowActive trigger
+    // (advanceReadPointer) makes materially more likely.
+    const pointerIdAtCompute = afterGuard.readPointer?.messageId
+
     const floor = computeFloor(afterGuard.readPointer, afterGuard.historyFloor)
     if (!floor) return
 
@@ -2249,6 +2256,22 @@ export const roomStore = createStore<RoomState>()(
       if (!allowActive && state.activeRoomJid === roomJid) return state
       const meta = state.roomMeta.get(roomJid)
       if (!meta) return state
+
+      // final-fix-2: `res.unread` was derived against `pointerIdAtCompute`
+      // (afterGuard.readPointer, captured before the coverage-bottom and
+      // countRoomUnreadInArchive awaits). roomRecountVersion only orders this
+      // recompute against ANOTHER recompute for the same room — it does NOT
+      // order it against a direct writer like onMessageReceived's own
+      // live-edge convergence, which advances the pointer and commits a
+      // fresh, correct unreadCount without bumping the version. An
+      // allowActive recompute (this trigger's whole point is to run while
+      // still active) can therefore be in flight exactly when that direct
+      // write lands. Re-reading the pointer here and bailing if it moved
+      // means a result computed against a now-stale pointer never clobbers
+      // the newer, correct value — worst case this recompute under-acts
+      // once; the next trigger (another arrival, deactivation, or
+      // activation) re-derives it.
+      if (meta.readPointer?.messageId !== pointerIdAtCompute) return state
 
       // Rederive the divider (requirement 5): the boundary may have moved
       // since a marker was last parked here (a remote pointer advance).
@@ -2492,11 +2515,42 @@ export const roomStore = createStore<RoomState>()(
           else newMarkers.delete(roomJid)
           return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid, firstNewMessageMarkers: newMarkers }
         })
+        // final-fix-2: reconcile the room we just LEFT (see the trigger below
+        // the final fallback `set()` for the full rationale, including the
+        // `worthReconcilingOnDeactivate` guard). By this point activeRoomJid
+        // already reads `roomJid`, not `prevJid`, so the ordinary
+        // (non-allowActive) guard in recomputeUnreadForRoom no longer sees
+        // prevJid as active and proceeds normally.
+        if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
+          void get().recomputeUnreadForRoom(prevJid)
+        }
         return
       }
     }
     // Clearing active room or room not found
     set({ activeRoomJid: roomJid })
+    // final-fix-2: deactivation is the other trigger this fix adds (the twin
+    // of advanceReadPointer's live-edge trigger below). Task 11's convergence
+    // advances the READ POINTER while a room is active but never re-derives
+    // the COUNT for it — advanceReadPointer now schedules that recount itself
+    // while still active, but a room that never received another arrival
+    // after the pointer advanced would otherwise carry its stale count
+    // forward until the NEXT arrival bumped it. Reconciling on deactivation
+    // closes that gap: the ordinary (non-allowActive) form is correct here —
+    // activeRoomJid has just been set above (to `roomJid`, possibly null), so
+    // prevJid reads as genuinely inactive and the guard proceeds rather than
+    // skipping.
+    //
+    // `worthReconcilingOnDeactivate` skips a truly fresh room (no read pointer
+    // ever established AND unreadCount already 0) — there is nothing this
+    // recompute could correct, and calling it anyway would cost a real cache
+    // read for every close of a never-opened, never-unread room. A room that
+    // was genuinely read (a pointer exists) or genuinely has unread (a
+    // nonzero count) still triggers, which is what the acceptance scenario
+    // needs.
+    if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
+      void get().recomputeUnreadForRoom(prevJid)
+    }
   },
 
   activateRoom: async (roomJid) => {
@@ -2615,6 +2669,7 @@ export const roomStore = createStore<RoomState>()(
     // is published to other devices over XEP-0490. Rendered is not seen.
     if (!connectionStore.getState().windowVisible) return
 
+    let pointerAdvanced = false
     set((state) => {
       const existing = state.rooms.get(roomJid)
       const meta = state.roomMeta.get(roomJid)
@@ -2632,6 +2687,8 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
       const updated = notifState.onMessageSeen(notifInput, messageId, messages, 'room', { atLiveEdge })
       if (updated === notifInput) return state
+
+      pointerAdvanced = true
 
       // Task 9: the viewport-driven pointer just advanced — bound the
       // transient overlay's memory. Safe to call unconditionally: a
@@ -2655,6 +2712,19 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
+
+    // final-fix-2 (PR B, Task 11 gap): onMessageSeen only ever moves the
+    // pointer — it never recomputes unreadCount. Without this trigger, an
+    // active room's pointer could converge to the live edge (acceptance
+    // scenario 5) while the sidebar badge kept its stale pre-convergence
+    // value until the next arrival or the next activation. `allowActive:
+    // true` is safe here because a pointer only ever advances against the
+    // RESIDENT messages array, which only the active room keeps (setActiveRoom
+    // evicts everyone else's) — this trigger only ever fires for the room
+    // that is, in practice, active.
+    if (pointerAdvanced) {
+      void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+    }
   },
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {

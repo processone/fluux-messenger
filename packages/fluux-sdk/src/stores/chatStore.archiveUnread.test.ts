@@ -579,6 +579,65 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
   })
 
+  // final-fix-2: the race the re-reviewer flagged. An `allowActive` recompute
+  // (this fix's new advanceReadPointer trigger runs one) can be in flight
+  // while a DIRECT writer — onMessageReceived's own live-edge convergence,
+  // which commits straight to conversationMeta and does NOT bump
+  // chatRecountVersion — advances the pointer and writes a fresh, correct
+  // count in the meantime. chatRecountVersion's "latest-wins" guard above
+  // only orders a recompute against ANOTHER recompute; it does nothing here.
+  // Re-reading the pointer at commit time (added by this fix) is what closes
+  // this specific gap.
+  it('a stale allowActive recompute does not clobber a pointer/count that moved via a direct write while it awaited the archive read', async () => {
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+      archiveMsg('u1', 1001),
+    ])
+    setMeta({
+      unreadCount: 5, // stale — the slow recompute below would derive 1 (u1) from THIS pointer
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    chatStore.setState({ activeConversationId: CID })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
+    )
+
+    // The allowActive recompute this fix's advanceReadPointer trigger would
+    // schedule — started while the pointer is still 'p0'.
+    const slow = chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+
+    // While the slow recompute awaits the archive count, a DIRECT write (NOT
+    // going through recomputeUnreadForConversation, exactly like
+    // onMessageReceived's live-edge commit) advances the pointer to the
+    // newest message and writes the correct, fresh count.
+    chatStore.setState((state) => {
+      const meta = new Map(state.conversationMeta)
+      meta.set(CID, {
+        ...meta.get(CID)!,
+        unreadCount: 0,
+        readPointer: { messageId: 'u1', timestamp: new Date(1001), archiveOrderKey: { kind: 'chat', id: 'u1' } },
+      })
+      return { conversationMeta: meta }
+    })
+
+    // The slow recompute's archive read finally resolves — computed against
+    // the OLD pointer ('p0'), it would derive 1 (u1 is still unread from p0's
+    // point of view) if it committed.
+    releaseCount({ unread: 1 })
+    await slow
+
+    // The direct write's fresher, correct state survives untouched — the
+    // stale derivation (computed against a pointer that moved since) must not
+    // clobber it.
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('u1')
+  })
+
   // ---------------------------------------------------------------------
   // divider rederivation
   // ---------------------------------------------------------------------
@@ -799,6 +858,112 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       // Deferred: the trusted count (1) survives — NOT recomputed to 2, and
       // NOT cleared to 0 either.
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
+    })
+  })
+
+  // ---------------------------------------------------------------------
+  // final-fix-2: the previous fix wave removed onActivate's force-zero for
+  // the active entity but added no replacement trigger — a pointer that
+  // advances (Task 11 live-edge convergence) or an entity that deactivates
+  // never re-derived the COUNT to match. These tests pin the two triggers
+  // this fix adds: advanceReadPointer and setActiveConversation's
+  // deactivation branch. Every seed below is a NONZERO value distinct from
+  // the correct outcome, per the reviewer's "seven hollow tests" finding —
+  // a seed-0/assert-0 fixture cannot distinguish a real recompute from a
+  // no-op.
+  // ---------------------------------------------------------------------
+
+  describe('final-fix-2: pointer-advance and deactivation triggers re-derive the count', () => {
+    it('acceptance scenario 5: live-edge convergence (pointer reaches the newest message while active+focused) converges the count to 0', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      const m2 = archiveMsg('m2', 1001)
+      const m3 = archiveMsg('m3', 1002)
+      await messageCache.saveMessages([anchor, m1, m2, m3])
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0 derived below
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'chat', id: 'anchor' } },
+      })
+      seedCoverage('anchor-stanza')
+      // Active + focused (default windowVisible), with the full history
+      // resident — this is the "scrolled to the bottom" precondition.
+      chatStore.setState({
+        activeConversationId: CID,
+        messages: new Map([[CID, [anchor, m1, m2, m3]]]),
+      })
+
+      // The viewport observer reports the NEWEST resident message seen —
+      // reaching the live edge.
+      chatStore.getState().advanceReadPointer(CID, 'm3')
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('m3')
+
+      // Let the fire-and-forget archive recount (this fix's trigger) settle.
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      // Still active throughout — this is scenario 5's store half: "the
+      // sidebar becomes 0" while active and focused, no deactivation involved.
+      expect(chatStore.getState().activeConversationId).toBe(CID)
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    })
+
+    it('a partial pointer advance (not to the newest) decreases the count to the correct remaining number', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      const m2 = archiveMsg('m2', 1001)
+      const m3 = archiveMsg('m3', 1002)
+      await messageCache.saveMessages([anchor, m1, m2, m3])
+      setMeta({
+        unreadCount: 5, // stale — distinct from BOTH 0 and the correct 2
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'chat', id: 'anchor' } },
+      })
+      seedCoverage('anchor-stanza')
+      chatStore.setState({
+        activeConversationId: CID,
+        messages: new Map([[CID, [anchor, m1, m2, m3]]]),
+      })
+
+      // The viewport observer reports 'm1' seen — the user scrolled PARTWAY,
+      // not to the bottom. 'm2' and 'm3' remain genuinely unread.
+      chatStore.getState().advanceReadPointer(CID, 'm1')
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('m1')
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      // Exactly 2 remaining (m2, m3) — neither the stale 5 (trigger missing)
+      // nor a wrongly-zeroed 0 (a broken floor/pointer would over-clear).
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+    })
+
+    it('reading a conversation to the bottom then deactivating reconciles the stale badge instead of leaving it stuck', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      await messageCache.saveMessages([anchor, m1])
+      // The pointer already sits at the newest message (as if the user had
+      // read to the bottom through some OTHER path than advanceReadPointer —
+      // isolating the deactivation trigger from the advance trigger tested
+      // above) while unreadCount is stale.
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
+      })
+      seedCoverage('anchor-stanza')
+      chatStore.getState().addConversation(createConversation('someone-else@example.com'))
+      chatStore.setState({ activeConversationId: CID })
+
+      // Switch away — exercises setActiveConversation's deactivation branch,
+      // NOT advanceReadPointer (never called in this test).
+      chatStore.getState().setActiveConversation('someone-else@example.com')
+      expect(chatStore.getState().activeConversationId).toBe('someone-else@example.com')
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     })
   })
 })

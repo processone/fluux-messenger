@@ -348,7 +348,21 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(3)
   })
 
-  it('skips the archive recount commit when the room became active meanwhile', async () => {
+  // NOTE (final-fix-2): this test's title used to claim it isolated the
+  // active-room guard ("skips the archive recount commit when the room
+  // became active meanwhile"). It doesn't: this room has no coverage
+  // record/mamQueryStates seeded, so `recomputeUnreadForRoom` ALSO defers at
+  // the (entirely separate) coverage gate regardless of `activeRoomJid` —
+  // verified by deleting all three active-room guards in recomputeUnreadForRoom
+  // and confirming this test still passes. The dedicated, genuinely isolating
+  // test for that guard is roomStore.archiveUnread.test.ts's "does not touch
+  // the active room (activation owns its counts)", which seeds real coverage
+  // so the guard is the ONLY thing standing between the seeded count and a
+  // different derived one. What THIS test actually proves: a stale recompute
+  // that settles after external state changed mid-flight (room became active,
+  // count set to a fresh value) does not clobber that fresher state — here,
+  // via the still-unproven coverage gate.
+  it('a stale in-flight recount that settles after the room becomes active does not clobber the fresher count', async () => {
     seedRoom(ROOM, [])
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-ptr')
 
@@ -365,16 +379,11 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
 
-    // User opens the room before the cache read lands; activation owns the
-    // recount now — the stale async result must NOT clobber it.
-    //
-    // Minor (s) (final whole-branch review): seeded to a distinguishing
-    // NONZERO value (5), not 0. A seed-0/assert-0 fixture is confounded with
-    // the coverage gate — this room has no coverage record/mamQueryStates
-    // seeded, so an unguarded recompute would ALSO defer at that separate
-    // gate and coincidentally still land on 0, hiding a missing/broken
-    // active-room check. 5 makes "still 5 after the stale cache read lands"
-    // a real assertion instead of a tautology.
+    // User opens the room before the cache read lands. No coverage record or
+    // mamQueryStates is seeded anywhere in this test, so the pending recompute
+    // defers at the coverage gate once it resumes below — regardless of
+    // activeRoomJid. Seeded to a distinguishing NONZERO value (5), not 0, so
+    // "still 5 after the stale cache read lands" isn't a trivial 0-to-0 no-op.
     roomStore.setState({ activeRoomJid: ROOM })
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
