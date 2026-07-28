@@ -51,15 +51,16 @@ const ENGINES = [
 export default defineConfig({
   testDir: './scripts',
 
-  // No globalSetup warm-up. One was tried: it loaded the demo once before the projects
-  // started, on the theory that the first webkit test was blowing its 120s mount budget
-  // on vite's cold transform of the demo bundle. Measured over three CI runs it cost
-  // 33-37s and changed nothing — the first webkit test still failed its first attempt,
-  // 2 for 2, exactly as it had in the 13 runs before. Warming the server cannot help
-  // because the cost is not server-side: WebKitGTK re-parses and re-executes the whole
-  // unbundled dev module graph in every fresh browser context. Serving a development-mode
-  // *build* (the harness needs the import.meta.env.DEV seams, so a production build will
-  // not do) is the direction that could actually fix it.
+  // No globalSetup warm-up, and no more load-time optimisation aimed at the first-attempt
+  // webkit stall. Two attempts were made and both failed: a warm-up that loaded the demo
+  // once before the projects started (cost 33-37s, changed nothing across three runs), and
+  // serving a bundle instead of the dev server's module graph (kept, for its per-test and
+  // variance gains, but it does not fix the stall either).
+  //
+  // Both assumed a loading cost. Instrumenting the boot showed why neither could work: a
+  // healthy boot on the same runner is ~1s in chromium and ~3.5s in webkit, against a 120s
+  // ceiling. The failure is a ~30x cliff, so something stalls — it is not slow loading.
+  // scripts/e2e/demoBoot.ts now attributes that stall to a stage instead of guessing.
 
   // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to
   // boot the demo bundle before the test body starts. Ceiling only: warm runs finish in
@@ -84,8 +85,13 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     viewport: { width: 1280, height: 800 },
-    // Capture a trace on the first retry so CI failures are debuggable.
-    trace: 'on-first-retry',
+    // NOT 'on-first-retry'. That records the trace *during* the retry — which passes — so
+    // the failing first attempt was never captured, and every trace uploaded from CI so far
+    // has shown a healthy run. 'retain-on-failure' traces each attempt and discards the
+    // passing ones, which is the only setting that catches an intermittent first-attempt
+    // failure. It costs some per-test recording overhead; that is worth paying while the
+    // first-attempt webkit stall is open, and worth revisiting once it is closed.
+    trace: 'retain-on-failure',
   },
 
   projects: SUITES.flatMap(suite =>
