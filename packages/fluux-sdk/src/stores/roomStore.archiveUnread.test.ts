@@ -974,5 +974,49 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
       expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     })
+
+    // final-fix-3: room twin of chatStore.archiveUnread.test.ts's. The test
+    // above (fully read, pointer already at the newest message) converges to
+    // 0 — but 0 is ALSO exactly what a naive "just write 0 on deactivation"
+    // implementation would produce, the force-zero behaviour this PR is
+    // walking back from onActivate. A seed-5/assert-0 fixture with the
+    // pointer at the newest message can't tell "recount ran and correctly
+    // derived 0" apart from "deactivation force-zeroed it". This test
+    // isolates the deactivation trigger with the pointer at a NON-newest
+    // message, so genuinely unread messages remain and the true
+    // archive-derived answer is a nonzero remainder: a force-zero
+    // implementation would produce 0 (wrong), "trigger missing" would leave
+    // the stale 5 (also wrong), and only a real recount lands on 2.
+    it('deactivating with the pointer short of the newest message reconciles to the true nonzero remainder, not zero', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const p0 = archiveMsg('p0', 1000)
+      const u1 = archiveMsg('u1', 1001)
+      const u2 = archiveMsg('u2', 1002)
+      await messageCache.saveRoomMessages([anchor, p0, u1, u2])
+      // The pointer is seeded directly at p0 — NOT the newest message — so u1
+      // and u2 are genuinely still unread. This isolates the deactivation
+      // trigger from the advance trigger (advanceReadPointer is never called
+      // here), same as the fully-read sibling test above.
+      setMeta({
+        unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+      roomStore.getState().addRoom(createRoom('other-room@conference.example.com'))
+      roomStore.setState({ activeRoomJid: ROOM })
+
+      // Switch away — exercises setActiveRoom's deactivation branch, NOT
+      // advanceReadPointer (never called in this test).
+      roomStore.getState().setActiveRoom('other-room@conference.example.com')
+      expect(roomStore.getState().activeRoomJid).toBe('other-room@conference.example.com')
+
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+
+      // The true archive-derived remainder (u1, u2) — not the stale 5 and not
+      // a force-zeroed 0.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+    })
   })
 })

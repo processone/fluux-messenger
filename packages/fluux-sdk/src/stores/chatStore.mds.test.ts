@@ -272,7 +272,23 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(8)
   })
 
-  it('skips the archive recount commit when the conversation became active meanwhile', async () => {
+  // NOTE (final-fix-3, consistency with roomStore.mds.test.ts's twin under
+  // final-fix-2): this test's title used to claim it isolated the
+  // active-conversation guard ("skips the archive recount commit when the
+  // conversation became active meanwhile"). It doesn't: this conversation has
+  // no coverage record/mamQueryStates seeded, so `recomputeUnreadForConversation`
+  // ALSO defers at the (entirely separate) coverage gate regardless of
+  // `activeConversationId` — verified by deleting the active-conversation
+  // guards in recomputeUnreadForConversation and confirming this test still
+  // passes. The dedicated, genuinely isolating test for that guard lives in
+  // chatStore.archiveUnread.test.ts (the analogous room test is "does not
+  // touch the active room (activation owns its counts)"), which seeds real
+  // coverage so the guard is the ONLY thing standing between the seeded count
+  // and a different derived one. What THIS test actually proves: a stale
+  // recompute that settles after external state changed mid-flight
+  // (conversation became active, count set to a fresh value) does not clobber
+  // that fresher state — here, via the still-unproven coverage gate.
+  it('a stale in-flight recount that settles after the conversation becomes active does not clobber the fresher count', async () => {
     const cid = 'juliet@capulet.example'
     const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min))
     function timedMsg(id: string, stanzaId: string, ts: Date): Message {
@@ -301,18 +317,22 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('p0')
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
 
-    // User opens the conversation before the cache read lands; activation owns
-    // the recount now — the stale async result must NOT clobber it.
+    // User opens the conversation before the cache read lands. No coverage
+    // record or mamQueryStates is seeded anywhere in this test, so the
+    // pending recompute defers at the coverage gate once it resumes below —
+    // regardless of activeConversationId. Seeded to a distinguishing NONZERO
+    // value (5), not 0, so "still 5 after the stale cache read lands" isn't a
+    // trivial 0-to-0 no-op.
     chatStore.setState({ activeConversationId: cid })
     chatStore.setState((state) => {
       const newMeta = new Map(state.conversationMeta)
-      newMeta.set(cid, { ...newMeta.get(cid)!, unreadCount: 0 })
+      newMeta.set(cid, { ...newMeta.get(cid)!, unreadCount: 5 })
       return { conversationMeta: newMeta }
     })
     releaseCache!([...page, timedMsg('f0', 'sf0', t(51))])
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(5)
 
     // Restore the factory default so a stale one-shot can't leak into later tests.
     vi.mocked(messageCache.getMessages).mockReset().mockResolvedValue([])
