@@ -1051,6 +1051,109 @@ describe('setupBackgroundSyncSideEffects', () => {
       loadSpy.mockRestore()
       roomStore.getState().reset()
     })
+
+    it.each([
+      ['self-presence', 'join'],
+      ['MAM support', 'mam'],
+    ] as const)(
+      'reconciles %s received during a pending initial pass',
+      async (_transitionName, transition) => {
+        roomStore.getState().reset()
+        const targetRoomJid = `post-snapshot-${transition}@conference.example.com`
+        const blockingRoomJid = `blocking-${transition}@conference.example.com`
+        roomStore.getState().addRoom({
+          jid: targetRoomJid,
+          name: targetRoomJid,
+          nickname: 'me',
+          joined: false,
+          supportsMAM: transition === 'join',
+          isBookmarked: true,
+          occupants: new Map(),
+          messages: [],
+          unreadCount: 0,
+          mentionsCount: 0,
+          typingUsers: new Set(),
+        })
+        roomStore.getState().addRoom({
+          jid: blockingRoomJid,
+          name: blockingRoomJid,
+          nickname: 'me',
+          joined: false,
+          supportsMAM: true,
+          isBookmarked: true,
+          occupants: new Map(),
+          messages: [],
+          unreadCount: 0,
+          mentionsCount: 0,
+          typingUsers: new Set(),
+        })
+        let resolveBlockingCatchUp!: () => void
+        const blockingCatchUp = new Promise<void>((resolve) => {
+          resolveBlockingCatchUp = resolve
+        })
+        vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+          async (roomJid) => {
+            if (roomJid === blockingRoomJid) {
+              await blockingCatchUp
+            }
+          },
+        )
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+        simulateFreshSession(mockClient)
+        roomStore.getState().setRoomJoined(blockingRoomJid, true)
+        mockClient._emitSDK('room:joined', {
+          roomJid: blockingRoomJid,
+          joined: true,
+        })
+        if (transition === 'mam') {
+          roomStore.getState().setRoomJoined(targetRoomJid, true)
+          mockClient._emitSDK('room:joined', {
+            roomJid: targetRoomJid,
+            joined: true,
+          })
+        }
+        await vi.advanceTimersByTimeAsync(10_000)
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+            blockingRoomJid,
+            [],
+            expect.objectContaining({ stitchReadPointer: true }),
+          )
+        })
+
+        if (transition === 'join') {
+          roomStore.getState().setRoomJoined(targetRoomJid, true)
+          mockClient._emitSDK('room:joined', {
+            roomJid: targetRoomJid,
+            joined: true,
+          })
+        } else {
+          roomStore.getState().updateRoom(targetRoomJid, {
+            supportsMAM: true,
+          })
+        }
+        expect(
+          vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+            .filter(([jid]) => jid === targetRoomJid),
+        ).toHaveLength(0)
+
+        resolveBlockingCatchUp()
+        await vi.waitFor(() => {
+          expect(
+            vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+              .filter(([jid]) => jid === targetRoomJid),
+          ).toHaveLength(1)
+        })
+        roomStore.getState().reset()
+      },
+    )
   })
 
   describe('late MAM-ready room retry (issue D)', () => {

@@ -178,17 +178,29 @@ export function setupBackgroundSyncSideEffects(
     }
   }
 
-  async function drainPendingRoomHandoffs(
+  async function reconcileFreshSessionRooms(
     generation: number,
   ): Promise<void> {
-    const roomJids: string[] = []
+    const roomJids = new Set<string>()
     for (const [roomJid, handoffGeneration] of pendingRoomHandoffs) {
       if (handoffGeneration !== generation) continue
       pendingRoomHandoffs.delete(roomJid)
-      roomJids.push(roomJid)
+      roomJids.add(roomJid)
+    }
+    const state = roomStore.getState()
+    for (const room of state.joinedRooms()) {
+      if (
+        room.supportsMAM &&
+        !room.isQuickChat &&
+        room.jid !== state.activeRoomJid &&
+        freshSessionJoinedRooms.has(room.jid) &&
+        !mamHandledRooms.has(room.jid)
+      ) {
+        roomJids.add(room.jid)
+      }
     }
     await executeWithConcurrency(
-      roomJids,
+      [...roomJids],
       async (roomJid) => {
         await catchUpFreshSessionRoomOnce(roomJid, generation)
       },
@@ -370,7 +382,7 @@ export function setupBackgroundSyncSideEffects(
         }
         if (syncGeneration !== sessionGeneration) return
         initialRoomPassDone = true
-        await drainPendingRoomHandoffs(syncGeneration)
+        await reconcileFreshSessionRooms(syncGeneration)
         if (syncGeneration !== sessionGeneration) return
         // Same rationale as the 1:1 catch-up retry above: room messages stashed
         // during this delayed pass (encrypted MUC history fetched after a mid-sync
