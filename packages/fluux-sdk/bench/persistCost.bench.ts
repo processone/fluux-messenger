@@ -81,11 +81,11 @@ vi.mock('../src/stores/shared/durableMapPersist', async (importOriginal) => {
         // addition, a monotone deepening or a replacement — the conservatism
         // #1138 measured. Removal and the unknown-baseline case are unchanged
         // between the two rules, so they are left to the production path.
-        const bottoms = mergedBottoms.get(key) ?? new Map<string, string>()
+        const previous = mergedBottoms.get(key)
+        const bottoms = new Map<string, string>()
         for (const [id, record] of maps.coverage) {
-          const previous = bottoms.get(id)
           bottoms.set(id, record.bottomId)
-          if (previous !== record.bottomId) actual.noteCoverageTransition(key, id, 'replaced')
+          if (previous?.get(id) !== record.bottomId) actual.noteCoverageTransition(key, id, 'replaced')
         }
         mergedBottoms.set(key, bottoms)
       }
