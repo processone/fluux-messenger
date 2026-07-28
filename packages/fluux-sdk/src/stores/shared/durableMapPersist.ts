@@ -42,16 +42,9 @@
  * "key added, `bottomId` changed, or key removed → force-flush", because this
  * layer cannot order two `bottomId`s (archive ids are NON-SEQUENTIAL, see
  * `mamGap`) and so could not tell a safe deepening from an unsafe replacement.
- * Measured on the reference 400-conversation profile (238 KB blob), that
- * conservatism cost the ENTIRE benefit of the throttle on a first session:
- * coverage bootstrap fires once per entity with no record, and every one of
- * those force-flushed the whole chat blob — 400 writes and 88.9 MB serialized,
- * identical to the pre-#1133 write-on-every-mutation baseline, and 350-550 ms
- * of main-thread time (Chromium and WebKit alike) inside the launch window.
- * Phase B's read-pointer stitch added a second helping: 500 writes, 115 MB,
- * 400-650 ms. Both drop to ~13 writes and ~15 ms here. Full method and
- * numbers in `docs/superpowers/specs/2026-07-28-coverage-persistence-cost-design.md`;
- * the harness is `packages/fluux-sdk/bench`.
+ * Measurement showed that conservatism erased the throttle's first-session
+ * benefit. The method and numbers are owned by
+ * `docs/superpowers/specs/2026-07-28-coverage-persistence-cost-design.md`.
  *
  * The fix is not a cleverer comparison — no comparison exists. It is
  * {@link CoverageTransition}, computed by `syncCoverageAfterArchiveMerge`, which

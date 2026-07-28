@@ -429,8 +429,8 @@ preserves the coverage claiming there is no hole.
 so a store-level helper cannot compare two `bottomId`s and decide which is deeper. Any rule that
 depends on ordering ids is unimplementable here.
 
-**Resolution.** Force these transitions out of the window, keeping the throttle for ordinary
-monotone advances:
+**Resolution shipped by #1133.** Force these transitions out of the window, keeping the throttle
+for ordinary monotone advances:
 
 | Map | Transition | Treatment |
 |---|---|---|
@@ -440,14 +440,9 @@ monotone advances:
 | coverage | key **added**, `bottomId` **changed**, key **removed** | force-flush |
 | coverage | `topId`-only change (re-entry marker) | throttle |
 
-> **The coverage rows above are SUPERSEDED by
-> [#1138](2026-07-28-coverage-persistence-cost-design.md).** The "measured follow-up" at the end of
-> this section turned out to understate the problem: measurement showed the conservative
-> `bottomId`-changed rule cost the *entire* benefit of the throttle on a first session — 400 writes
-> and 88.9 MB on the reference profile, identical to the pre-throttle baseline. `created` and
-> `deepened` are now throttled, signalled by `CoverageTransition` out of
-> `syncCoverageAfterArchiveMerge`; only `replaced` and removal still force a flush. **The gap rows
-> are unchanged.** See that document for the current decision table.
+> **The coverage rows above are superseded by
+> [#1138](2026-07-28-coverage-persistence-cost-design.md).** The gap rows remain current; the
+> follow-up owns the current coverage decision table and its measurements.
 
 **Why the gap rule keys on the lower BOUNDARY, not just the key.** Key-presence alone does not catch
 an in-place interval **advance** — the same id's gap moving from `{ start: 1000 }` to
@@ -502,42 +497,11 @@ gapped entities page concurrently and could otherwise have shared a window, and 
 per gapped entity ceiling. One non-catch-up path also became structural — `clearRoomGapAnchor` strips
 `startId` on an archive purge — costing one forced write on a rare path.
 
-**`bottomId`-changed is deliberately conservative, and the cost is flush FREQUENCY.** It force-flushes
-the provable deepening in `syncCoverageAfterArchiveMerge`'s plain-backward branch too, which is safe to
-throttle in principle. Since ids cannot be ordered at this layer, distinguishing it would mean
-threading a "was this monotone" signal out of the sync functions. The decision stands — but the
-justification is *not* that a coverage record is small. Size is the wrong axis: the record rides in the
-chat blob, so what a force-flush costs is one whole-blob serialization, and the question is how OFTEN.
-Three sources, counted honestly:
-
-1. **Coverage bootstrap** ([mamCoverage.ts:136-140](../../../packages/fluux-sdk/src/stores/shared/mamCoverage.ts))
-   fires once for every entity that has no record and completes a forward catch-up. On the first
-   session after this ships that is essentially *every* conversation: at the 400-conversation profile,
-   ~400 O(conversations) blob serializations — the same order as the ~180 writes this work exists to
-   remove. Steady state is free (`if (coverage.get(id)) return coverage`).
-2. **Phase B read-pointer stitch** loops up to `MAM_POINTER_STITCH_MAX_PAGES` = 10 backward queries
-   per entity per session ([MAM.ts:1561-1577](../../../packages/fluux-sdk/src/core/modules/MAM.ts)),
-   each advancing `bottomId` and so force-flushing.
-3. **A multiplier on top of both:** `flushKey` **closes** the window
-   ([throttledStorage.ts:141-142](../../../packages/fluux-sdk/src/stores/shared/throttledStorage.ts)),
-   so the *next* mutation is a fresh leading edge instead of being coalesced. Measured on the room
-   gap-formation scenario: 3 writes where a pure throttle produces 1.
-
-All three are first-session / launch-window costs, and all three are still strictly better than the
-pre-branch baseline, which serialized the blob on **every** mutation unconditionally. The burst test
-cannot see any of it — `collapses a long burst…` drives only `setMAMLoading`, so gaps and coverage stay
-empty and this path never runs. That is a limitation of the test, not evidence of no cost.
-
-**Measured follow-up, deliberately out of scope here.** A `flushKey` variant that writes the pending
-thunk but leaves the timer ARMED would remove multiplier (3) for free. It is a semantic change to a
-shared primitive — `recordPendingRetraction` uses `flushKey` too, and it wants the window closed — so
-it needs its own change with its own tests, not a rider on this one.
-
-> Measured in [#1138](2026-07-28-coverage-persistence-cost-design.md) §3.2 and **not taken**: it can
-> only recover the window-closing half of a structural write, so on an all-structural workload it
-> saves nothing, and on a gap-heavy mixed one about 2×. Sources (1) and (2) were removed instead, by
-> throttling `created` and `deepened`. The bounding scenario stays in the benchmark for whoever picks
-> it up.
+**The conservative coverage rule required the measured follow-up.** #1133 could not distinguish a
+safe deepening from an unsafe replacement because archive ids are non-sequential, so it force-flushed
+both and identified bootstrap, Phase B, and `flushKey` closing the window as launch-window costs.
+[#1138](2026-07-28-coverage-persistence-cost-design.md) owns the measurements, current rule, and the
+decision not to change `flushKey`.
 
 Ordinary termination — tab close, app quit, mobile backgrounding — loses nothing, provided §4.1
 lands.
@@ -653,10 +617,9 @@ are wired to it. A helper left calling `localStorage.setItem` directly passes ev
 
 - **Both sides of the §4.2 bound, per map.** The force-flush tests are one-directional: an
   implementation that flushed on *every* gap or coverage write would pass all of them, and the whole
-  suite besides. Each map therefore needs a coalescing guard for the transition §4.2 still throttles —
-  a gap shrink, and a coverage `topId` refresh. Both take **three** writes, for the reason in §5.5:
-  one to establish the baseline (the first write of a session force-flushes on the unknown baseline and
-  *closes* the window), one to re-open it, and the one that must be coalesced.
+  suite besides. The gap shrink remains the coalescing guard for gaps. The current coverage
+  decision table and its bidirectional tests are owned by
+  [#1138 §5](2026-07-28-coverage-persistence-cost-design.md#5-tests).
 
 ### 5.6 `stores/shared/durableMapPersist.test.ts`
 
@@ -664,9 +627,9 @@ The store suites prove the funnels are wired and the end-to-end durability prope
 cheaply reach every row of §4.2's table, and they do not reach the module's two documented baseline
 invariants at all. Direct tests over `scheduleDurableMaps`:
 
-- the full decision table — gap added → flush; gap `start` or `startId` advance → flush; gap
-  end-only shrink/close/removal → throttle; coverage added / `bottomId` changed / removed → flush;
-  `topId`-only → throttle;
+- the gap decision table — gap added → flush; gap `start` or `startId` advance → flush; gap
+  end-only shrink/close/removal → throttle. The superseding coverage decision table and tests are
+  owned by [#1138 §5](2026-07-28-coverage-persistence-cost-design.md#5-tests);
 - **A → B → A:** the baseline advances on *throttled* writes too, so a there-and-back gap still
   force-flushes. Frozen-baseline mutant → red;
 - `cancelDurableMaps` drops the baseline (observed through whether the following write was coalesced,
