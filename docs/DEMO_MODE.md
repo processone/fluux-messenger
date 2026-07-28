@@ -15,6 +15,7 @@ Then open **http://localhost:5173/demo.html**
 | Parameter  | Default | Description                                                                              |
 |------------|---------|------------------------------------------------------------------------------------------|
 | `tutorial` | `true`  | Set to `false` to disable tutorial tooltips (useful for video recording and screenshots) |
+| `sound`    | `false` | Set to `true` to enable the notification sound (off by default so the scripted demo and automated runs stay silent) |
 
 Example: **http://localhost:5173/demo.html?tutorial=false**
 
