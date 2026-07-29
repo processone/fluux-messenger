@@ -144,17 +144,30 @@ function makeClient() {
       handlers[ev] = (handlers[ev] || []).filter((h) => h !== cb)
     }
   }
+  const mds = {
+    publishDisplayed: vi.fn().mockResolvedValue(undefined),
+    fetchAllDisplayed: vi.fn().mockResolvedValue([]),
+    fetchAllDisplayedResult: vi.fn(),
+    retractDisplayed: vi.fn().mockResolvedValue(undefined),
+  }
+  mds.fetchAllDisplayedResult.mockImplementation(async () => {
+    try {
+      return {
+        status: 'authoritative' as const,
+        markers: await mds.fetchAllDisplayed(),
+      }
+    } catch {
+      return { status: 'unknown' as const }
+    }
+  })
+
   return {
     // Connection lifecycle events ('online'/'resumed') use client.on(...).
     on: register,
     // SDK events ('read:displayed-synced') use client.subscribe(...).
     subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
-    mds: {
-      publishDisplayed: vi.fn().mockResolvedValue(undefined),
-      fetchAllDisplayed: vi.fn().mockResolvedValue([]),
-      retractDisplayed: vi.fn().mockResolvedValue(undefined),
-    },
+    mds,
   }
 }
 
@@ -783,6 +796,95 @@ describe('setupMdsSideEffects', () => {
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
     restarted()
+  })
+
+  it('does not sweep local positions when the node fetch fails', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi.fn().mockRejectedValue(new Error('timeout'))
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMessages(cid, [msg('m1', 's1')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('rechecks a queued position when a peer marker arrives during the debounce', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMessages(cid, [msg('m1', 's1')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(0)
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's9')
+    client._emit('read:displayed-synced', { conversationId: cid, stanzaId: 's9' })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('publishes a local position removed from the node between fresh sessions', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValueOnce([{ conversationJid: cid, stanzaId: 's1' }])
+      .mockResolvedValueOnce([])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMessages(cid, [msg('m1', 's1')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    connectionStore.setState({ status: 'offline' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('preserves a live marker that arrives while the node seed is in flight', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    let resolveFetch!: (markers: Array<{ conversationJid: string; stanzaId: string }>) => void
+    client.mds.fetchAllDisplayed = vi.fn().mockImplementation(
+      () => new Promise((resolve) => {
+        resolveFetch = resolve
+      })
+    )
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMessages(cid, [msg('m1', 's1')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(0)
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's9')
+    client._emit('read:displayed-synced', { conversationId: cid, stanzaId: 's9' })
+    resolveFetch([{ conversationJid: cid, stanzaId: 's5' }])
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
   })
 
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {

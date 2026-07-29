@@ -130,4 +130,30 @@ describe('Mds.fetchAllDisplayed', () => {
     const mds2 = new Mds(makeDeps(sendIQErr))
     expect(await mds2.fetchAllDisplayed()).toEqual([])
   })
+
+  it('reports a missing node as an authoritative empty result', async () => {
+    const error = Object.assign(new Error('item-not-found'), {
+      name: 'StanzaError',
+      condition: 'item-not-found',
+    })
+    const mds = new Mds(makeDeps(vi.fn().mockRejectedValue(error)))
+
+    expect(await mds.fetchAllDisplayedResult()).toEqual({
+      status: 'authoritative',
+      markers: [],
+    })
+  })
+
+  it('reports transport and timeout failures as unknown', async () => {
+    const mds = new Mds(makeDeps(vi.fn().mockRejectedValue(new Error('timeout'))))
+
+    expect(await mds.fetchAllDisplayedResult()).toEqual({ status: 'unknown' })
+    expect(await mds.fetchAllDisplayed()).toEqual([])
+  })
+
+  it('reports a malformed result without pubsub items as unknown', async () => {
+    const mds = new Mds(makeDeps(vi.fn().mockResolvedValue(xml('iq', { type: 'result' }))))
+
+    expect(await mds.fetchAllDisplayedResult()).toEqual({ status: 'unknown' })
+  })
 })

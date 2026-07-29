@@ -19,6 +19,16 @@ export interface DisplayedMarker {
   legacy?: boolean
 }
 
+export type DisplayedMarkerFetchResult =
+  | { status: 'authoritative'; markers: DisplayedMarker[] }
+  | { status: 'unknown' }
+
+function isMissingNodeError(error: unknown): boolean {
+  return error instanceof Error
+    && error.name === 'StanzaError'
+    && (error as Error & { condition?: string }).condition === 'item-not-found'
+}
+
 /**
  * Parse the `<items/>` of an MDS node into markers.
  * Accepts the XEP-0490 payload (`<displayed xmlns='urn:xmpp:mds:displayed:0'>`
@@ -124,12 +134,22 @@ export class Mds {
   }
 
   /**
-   * Fetch all per-conversation displayed markers from our own MDS node.
-   * Returns an empty array if the node does not exist yet.
+   * Best-effort fetch of all displayed markers from our own MDS node.
+   * Returns an empty array when the node is absent or its state is unavailable.
    */
   async fetchAllDisplayed(timeoutMs?: number): Promise<DisplayedMarker[]> {
+    const result = await this.fetchAllDisplayedResult(timeoutMs)
+    return result.status === 'authoritative' ? result.markers : []
+  }
+
+  /**
+   * Fetch all displayed markers while preserving whether the node response was
+   * authoritative. A missing node is authoritative and contains no markers;
+   * transport, timeout, and unexpected failures are unknown.
+   */
+  async fetchAllDisplayedResult(timeoutMs?: number): Promise<DisplayedMarkerFetchResult> {
     const currentJid = this.deps.getCurrentJid()
-    if (!currentJid) return []
+    if (!currentJid) return { status: 'unknown' }
 
     const bareJid = getBareJid(currentJid)
     const iq = xml('iq', { type: 'get', to: bareJid, id: `mds_get_${generateUUID()}` },
@@ -141,10 +161,15 @@ export class Mds {
     try {
       const result = await this.deps.sendIQ(iq, timeoutMs)
       const items = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')
-      if (!items) return []
-      return parseMdsItems(items)
-    } catch {
-      return []
+      if (!items) return { status: 'unknown' }
+      return {
+        status: 'authoritative',
+        markers: parseMdsItems(items),
+      }
+    } catch (error) {
+      return isMissingNodeError(error)
+        ? { status: 'authoritative', markers: [] }
+        : { status: 'unknown' }
     }
   }
 }

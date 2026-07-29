@@ -25,7 +25,7 @@
  */
 
 import type { XMPPClient } from './XMPPClient'
-import type { DisplayedMarker } from './modules/Mds'
+import type { DisplayedMarker, DisplayedMarkerFetchResult } from './modules/Mds'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -58,6 +58,9 @@ export function setupMdsSideEffects(
   const dirty = createKeyedCoalescer<string, string>()
   // Highest stanza-id we believe is on the node per JID (seed + our publishes).
   const lastKnownNodeStanzaId = new Map<string, string>()
+  const lastKnownNodeRevision = new Map<string, number>()
+  let nodeRevision = 0
+  let nodeSnapshotAuthoritative = false
   // The read-pointer message id we last HANDLED per JID, to detect advances.
   // "Handled" means the position was resolved to a stanza-id and then either
   // enqueued or judged not ahead of the node — never merely "seen". A position
@@ -73,6 +76,11 @@ export function setupMdsSideEffects(
   // Live conversation/room JIDs, to detect user deletes (retraction). Maintained
   // while disarmed; the removed delta is retracted only while armed (syncEnabled).
   let trackedJids = new Set<string>()
+
+  function recordKnownNodeStanzaId(jid: string, stanzaId: string): void {
+    lastKnownNodeStanzaId.set(jid, stanzaId)
+    lastKnownNodeRevision.set(jid, ++nodeRevision)
+  }
 
   /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
   function isRoom(jid: string): boolean {
@@ -132,8 +140,8 @@ export function setupMdsSideEffects(
   /**
    * What to do with a resolved local position for `jid`:
    *
-   * - `publish` — strictly ahead of what we believe the node holds, or the node
-   *   holds nothing for this JID (nothing there to regress).
+   * - `publish` — strictly ahead of what we believe the node holds, or an
+   *   authoritative snapshot proves the node holds nothing for this JID.
    * - `skip` — at or behind the node; handled, nothing to send.
    * - `retry` — we cannot PROVE the position is not regressive. The caller must
    *   leave it unhandled so a later merge or activation fold re-considers it.
@@ -151,7 +159,7 @@ export function setupMdsSideEffects(
    */
   function publishDecision(jid: string, stanzaId: string): 'publish' | 'skip' | 'retry' {
     const nodeId = lastKnownNodeStanzaId.get(jid)
-    if (!nodeId) return 'publish'
+    if (!nodeId) return nodeSnapshotAuthoritative ? 'publish' : 'retry'
 
     const candidateIdx = indexOfStanza(jid, stanzaId)
     const nodeIdx = indexOfStanza(jid, nodeId)
@@ -239,9 +247,15 @@ export function setupMdsSideEffects(
         lastConsideredSeenId.delete(jid)
         continue
       }
+      const decision = publishDecision(jid, stanzaId)
+      if (decision === 'retry') {
+        lastConsideredSeenId.delete(jid)
+        continue
+      }
+      if (decision === 'skip') continue
       try {
         await client.mds.publishDisplayed(jid, stanzaId, by)
-        lastKnownNodeStanzaId.set(jid, stanzaId)
+        recordKnownNodeStanzaId(jid, stanzaId)
       } catch {
         // Best-effort; keep the position handled as documented above.
       }
@@ -320,8 +334,8 @@ export function setupMdsSideEffects(
     if (decision === 'retry') return
 
     // Resolved AND ordered → handled from here on, whether we enqueue below or
-    // decide the node is already at/ahead of it (a verdict that cannot flip:
-    // message order within a slice is stable).
+    // decide the node is already at/ahead of it. Enqueued positions are checked
+    // again at flush time because live node state can change during the debounce.
     lastConsideredSeenId.set(jid, seenId)
     if (decision === 'skip') return
 
@@ -346,6 +360,7 @@ export function setupMdsSideEffects(
    */
   function evictJid(jid: string): void {
     lastKnownNodeStanzaId.delete(jid)
+    lastKnownNodeRevision.delete(jid)
     lastConsideredSeenId.delete(jid)
     unroutedSeedMarkers.delete(jid)
     dirty.delete(jid)
@@ -465,20 +480,47 @@ export function setupMdsSideEffects(
   // disabled for the whole async seed so the seeded positions aren't republished.
   const unsubscribeOnline = client.on('online', () => {
     syncEnabled = false
+    nodeSnapshotAuthoritative = false
     void (async () => {
-      let markers: DisplayedMarker[] = []
+      const seedStartedAtRevision = nodeRevision
+      let result: DisplayedMarkerFetchResult = { status: 'unknown' }
       try {
-        markers = await client.mds.fetchAllDisplayed()
+        result = await client.mds.fetchAllDisplayedResult()
       } catch {
-        // Node may not exist yet — proceed with an empty seed.
+        result = { status: 'unknown' }
       }
 
-      // Reset the unrouted-marker stash for this seed (mirrors dirty.drop below).
+      dirty.drop()
+      dirty.open()
+      lastConsideredSeenId.clear()
+
+      if (result.status === 'unknown') {
+        syncEnabled = true
+        trackedJids = liveJids()
+        logInfo('MDS: node state unavailable; publishing remains guarded')
+        return
+      }
+
+      const effectiveMarkers = new Map<string, DisplayedMarker>()
+      for (const marker of result.markers) {
+        const bare = getBareJid(marker.conversationJid)
+        effectiveMarkers.set(bare, { ...marker, conversationJid: bare })
+      }
+      for (const [jid, revision] of lastKnownNodeRevision) {
+        if (revision <= seedStartedAtRevision) continue
+        const stanzaId = lastKnownNodeStanzaId.get(jid)
+        if (stanzaId) effectiveMarkers.set(jid, { conversationJid: jid, stanzaId })
+      }
+
+      lastKnownNodeStanzaId.clear()
+      lastKnownNodeRevision.clear()
+      for (const [jid, { stanzaId }] of effectiveMarkers) {
+        recordKnownNodeStanzaId(jid, stanzaId)
+      }
+      nodeSnapshotAuthoritative = true
       unroutedSeedMarkers.clear()
 
-      for (const { conversationJid, stanzaId, legacy } of markers) {
-        const bare = getBareJid(conversationJid)
-        lastKnownNodeStanzaId.set(bare, stanzaId)
+      for (const [bare, { stanzaId, legacy }] of effectiveMarkers) {
         // Route the seed by membership. The fresh-session seed runs BEFORE
         // bookmarks load (online fires before fetchBookmarks populates
         // roomStore.rooms), so a bookmarked room is typically NOT yet known
@@ -504,10 +546,6 @@ export function setupMdsSideEffects(
         }
       }
 
-      // Open the coalescer window for the publishing phase.
-      dirty.drop()
-      dirty.open()
-
       // A fresh session starts with NOTHING recorded as handled.
       //
       // This used to re-snapshot the current pointers from both stores, which
@@ -518,8 +556,6 @@ export function setupMdsSideEffects(
       // set for every node marker, so publishDecision() answers `skip` for a
       // position the node already holds and `retry` for one it holds a marker we
       // could not order against.
-      lastConsideredSeenId.clear()
-
       syncEnabled = true
       // Rebuild the delete-detection baseline to the current live set so the
       // fresh-session population is never seen as deletions.
@@ -545,7 +581,7 @@ export function setupMdsSideEffects(
   const unsubscribeDisplayedSynced = client.subscribe(
     'read:displayed-synced',
     ({ conversationId, stanzaId }) => {
-      lastKnownNodeStanzaId.set(getBareJid(conversationId), stanzaId)
+      recordKnownNodeStanzaId(getBareJid(conversationId), stanzaId)
     }
   )
 
