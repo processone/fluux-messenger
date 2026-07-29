@@ -144,6 +144,21 @@ describe('Mds.fetchAllDisplayed', () => {
     })
   })
 
+  // A brand-new account has no MDS node, so recognising its absence is what lets
+  // the read-position seed publish at all. Some servers surface the condition only
+  // in the error text, which is why this goes through the shared
+  // `hasErrorCondition` helper rather than reading `.condition` directly.
+  it('recognises a missing node when the condition rides only in the error text', async () => {
+    const mds = new Mds(
+      makeDeps(vi.fn().mockRejectedValue(new Error('IQ error: item-not-found')))
+    )
+
+    expect(await mds.fetchAllDisplayedResult()).toEqual({
+      status: 'authoritative',
+      markers: [],
+    })
+  })
+
   it('reports transport and timeout failures as unknown', async () => {
     const mds = new Mds(makeDeps(vi.fn().mockRejectedValue(new Error('timeout'))))
 

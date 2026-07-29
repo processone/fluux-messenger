@@ -3,6 +3,7 @@ import type { Element } from '@xmpp/client'
 import { getBareJid } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { NS_PUBSUB, NS_MDS, NS_CHAT_MARKERS, NS_STANZA_ID } from '../namespaces'
+import { hasErrorCondition } from '../../utils/xmppError'
 import type { ModuleDependencies } from './BaseModule'
 
 /** A per-conversation last-displayed marker (XEP-0490). */
@@ -23,10 +24,19 @@ export type DisplayedMarkerFetchResult =
   | { status: 'authoritative'; markers: DisplayedMarker[] }
   | { status: 'unknown' }
 
+/**
+ * Is this rejection the server telling us the MDS node does not exist?
+ *
+ * That answer is AUTHORITATIVE — there is genuinely nothing published — and the
+ * distinction matters: a brand-new account has no node, and reading its absence
+ * as "unknown" would stop the read-position seed from ever publishing.
+ *
+ * Uses the shared {@link hasErrorCondition} rather than matching `.condition`
+ * directly, so a server that carries the condition only in the error text is
+ * still recognised.
+ */
 function isMissingNodeError(error: unknown): boolean {
-  return error instanceof Error
-    && error.name === 'StanzaError'
-    && (error as Error & { condition?: string }).condition === 'item-not-found'
+  return hasErrorCondition(error, 'item-not-found')
 }
 
 /**
