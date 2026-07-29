@@ -44,7 +44,7 @@ right tool for human troubleshooting and is not modified or reduced anywhere (se
 
 | Constraint | Source | Consequence |
 |---|---|---|
-| Local only, no transport | Decided | No consent flow, no collector, no retention policy |
+| Local only, no transport | Decided | No consent flow, no collector, no remote retention obligation. Local files are pruned at 30 days by the review skill (§3.5) |
 | Dev builds only | Decided | Corpus comes from `Fluux Messenger Dev`, demo mode, and Playwright |
 | Zero production JS, no new native command, no new permission | Decided | Build-time constant + guarded call sites + build-audit plugin + paired CI assertions (§7.2). One named exception: the stage-5 SDK seams (§5.5) |
 | SDK `dist` is built without defines | `packages/fluux-sdk/tsup.config.ts` | Detectors must not live in SDK source — see §3.1 |
@@ -86,7 +86,7 @@ So the system lives in `apps/fluux/src/anomaly/` and consumes SDK surfaces that 
 - typed SDK events via the existing subscription API
 - direct Zustand `store.subscribe`
 
-**Zero SDK changes in stages 1–4.** Stage 5 adds two read-only SDK seams (§5.5).
+**Zero SDK changes in stages 1–4.** Stage 5 adds four read-only SDK seams (§5.5).
 
 ### 3.2 Layout
 
@@ -224,17 +224,21 @@ counters (in recorder) ── every 5 min + visibilitychange/exit ──▶ flus
 
 One envelope, two kinds. Short flat keys, so a day's file stays small enough to read whole.
 
+The envelope — `v`, `t`, `sid`, `build`, `tokenKeyId` — is identical on both kinds.
+
 ```jsonc
 { "v":1, "t":"2026-07-29T11:47:02Z", "sid":"9f2c1a04-...", "build":"0.17.2+5abd37a",
+  "tokenKeyId":"3b91cc07",
   "kind":"anomaly", "id":"read-state/pointer-regression", "sev":"bug",
   "expected":"ahead", "observed":"behind",
-  "ctx":{ "conv":"c:7f3a2b", "route":"#/chat" },
-  "crumbs":[ ["msg:in","c:7f3a2b"], ["ptr:advance",42], ["focus",1] ] }
+  "ctx":{ "conv":"c:7f3a2b1d40e9c815", "route":"#/chat" },
+  "crumbs":[ ["msg:in","c:7f3a2b1d40e9c815","s:m41"], ["ptr:advance",42], ["focus",1] ] }
 ```
 
 ```jsonc
 { "v":1, "t":"2026-07-29T11:50:00Z", "sid":"9f2c1a04-...", "build":"0.17.2+5abd37a",
-  "kind":"digest", "windowMs":300000, "tokenKeyId":"3b91cc07",
+  "tokenKeyId":"3b91cc07",
+  "kind":"digest", "windowMs":300000,
   "counters":{ "mam.queries":108, "mam.rowsRetained":340, "mam.pagesEmpty":4,
                "room.joins":10, "render.MessageList":1840, "scroll.writes":96 },
   "suppressed":{ "scroll/reassert-nonconverging":47 } }
@@ -303,7 +307,8 @@ field — `expected`, `observed`, crumb values, **and every value in `ctx`** —
 
 - be a member of the runtime `Tag` allowlist (a frozen `Set` in `schema.ts`, the same source the
   `Tag` type is derived from), or
-- match the opaque-token pattern `/^c:(?:[0-9a-f]{16}|unresolved)$/`.
+- match the opaque-token pattern `/^c:(?:[0-9a-f]{16}|unresolved)$/`, or
+- match the session-local ref pattern `/^s:[a-z][0-9]+$/`.
 
 Anything else **rejects the whole record** and increments a `recorder/rejected-value` counter in the
 digest. It is not truncated. Truncation was the flaw in the previous revision: a 64-character cap on
@@ -311,38 +316,63 @@ an accidentally-supplied body still emits the first 64 characters of that body, 
 the leak the rule exists to prevent. A rejected record is a visible bug in a detector; a truncated
 one is a silent disclosure.
 
-**Opaque tokens are namespaced.** JIDs are not the only identifiers these records carry — MAM
-breadcrumbs will hold `queryId`, message ids and stanza ids. A single-purpose `token(bareJid)` would
-either leave those raw or silently mix identifier spaces, so the constructor is:
+**Two identifier classes, because one mechanism cannot serve both.** JIDs are not the only
+identifiers these records carry — MAM breadcrumbs also hold query ids, message ids and stanza ids.
+Those two populations behave differently, and a single async-tokenized space fails the second one:
 
-```ts
-token(ns: 'jid' | 'message' | 'mam-query' | 'room' | 'device', value: string): Token
-```
+| Class | Examples | Lifetime | Mechanism |
+|---|---|---|---|
+| **Entity** | bare JID, room, device | Long-lived, seen repeatedly, known before use | `Token` — HMAC, cross-session stable |
+| **Ephemeral** | message id, stanza id, MAM query id | Often seen exactly once, unknown until the moment it is recorded | `LocalRef` — synchronous, session-local |
 
-HMAC-SHA-256 over `ns + '\0' + value` under a per-install key, rendered as `c:` + **16 hex chars
-(64 bits)**. The namespace is part of the preimage, so the same string in two roles yields two
-tokens and cannot produce a spurious correlation. Six hex characters would have been 24 bits, which
-collides at roughly 4 000 distinct entities by the birthday bound — plausible over a long-lived
-install, and a collision silently merges two conversations' evidence.
+`Token(ns, value)` is HMAC-SHA-256 over `ns + '\0' + value` under a per-install key, rendered as
+`c:` + **16 hex chars (64 bits)**, with `ns ∈ {jid, room, device}`. The namespace is part of the
+preimage, so the same string in two roles yields two tokens and cannot produce a spurious
+correlation. Six hex characters would have been 24 bits, which collides at roughly 4 000 distinct
+entities by the birthday bound — plausible over a long-lived install, and a collision silently
+merges two conversations' evidence.
+
+`LocalRef(ns, value)` is a **synchronously assigned session-local sequence number**, rendered as
+`s:` + a one-letter namespace + an integer (`s:m41`, `s:q7`), backed by a bounded `Map` from raw
+value to ref. It carries no information about the value, needs no key, and is available in the same
+tick the crumb is recorded.
+
+**Why ephemeral ids cannot use the async path.** A pre-warmed cache only works when the identifier
+is known *before* the breadcrumb. A message or stanza id seen for the first time has no prior event
+to warm from, so it would serialize as `c:unresolved` and only acquire a real token after the event
+had passed — meaning essentially every ephemeral breadcrumb would collapse into the same sentinel
+and become mutually indistinguishable. `LocalRef` resolves this by never being async.
+
+Cost accepted: a `LocalRef` does not correlate across sessions. For message and query identity that
+is the correct scope anyway — cross-session correlation of a single stanza is not a question the
+review asks. Entity identity keeps cross-session stability via `Token`.
+
+**`c:unresolved` remains possible only for the entity class** — a genuinely new JID recorded in the
+same tick it is first observed. It is rare rather than routine, counted as
+`recorder/token-unresolved`, and the review skill **must never correlate two `c:unresolved` values
+with each other**; they are explicitly not an identity.
 
 - **Key persistence:** 32 random bytes from `crypto.getRandomValues`, generated once and stored in
   `localStorage` under `fluux:anomaly-token-key`. Never derived from account identity, so the token
   space cannot be reversed by guessing JIDs against a known salt.
-- **`tokenKeyId` in every digest.** The first 8 hex chars of SHA-256 of the key — a one-way digest,
-  so it discloses nothing. Without it, a key rotation or a cleared `localStorage` produces a second,
-  disjoint token space that looks identical to the first, and a review spanning the boundary would
-  read two different conversations as one. The review skill treats a `tokenKeyId` change as a hard
-  correlation boundary and refuses to join records across it.
+- **`tokenKeyId` in the common envelope — every record, not only digests.** The first 8 hex chars
+  of SHA-256 of the key: a one-way digest, so it discloses nothing. Without it, a key rotation or a
+  cleared `localStorage` produces a second, disjoint token space that looks identical to the first,
+  and a review spanning the boundary would read two different conversations as one. It cannot live
+  in the digest alone, because a short session — or a close before the first flush, which §4.3
+  declares normal since the exit flush is best effort — yields anomaly records with no digest at
+  all, leaving their tokens unattributable. Eight characters per record is the right price for that.
+  The review skill treats a `tokenKeyId` change as a hard correlation boundary and refuses to join
+  records across it.
 - **Raw identifiers never enter a record object.** Not in the breadcrumb ring, not in a generic
   record field, and **not transiently inside the write queue**. Tokenization happens at the
   *call site*, before any value is handed to `record()`.
-- **Sync lookup, async pre-warm.** WebCrypto is async but detector paths are synchronous, so a
-  background tokenizer subscribes to conversation, roster, room and MAM-query lifecycle events and
-  populates a bounded LRU (`Map`, 500 entries, keyed by `ns + '\0' + value`) *ahead of use*. Crumb
-  recording does a synchronous `Map.get`. A miss emits the reserved sentinel `c:unresolved` — never
-  the raw value — and schedules tokenization so later crumbs resolve. Misses are counted as
-  `recorder/token-unresolved` in the digest, so a systematically cold cache is visible rather than
-  quietly degrading evidence quality.
+- **Sync lookup, async pre-warm — entity class only.** WebCrypto is async but detector paths are
+  synchronous, so a background tokenizer subscribes to conversation, roster and room lifecycle
+  events and populates a bounded LRU (`Map`, 500 entries, keyed by `ns + '\0' + value`) *ahead of
+  use*. Crumb recording does a synchronous `Map.get`. A miss emits `c:unresolved` — never the raw
+  value — and schedules tokenization so later crumbs resolve. The ephemeral class bypasses this
+  entirely via `LocalRef`, which is why the sentinel stays rare.
 
 **Recursive serialization limits.** Max depth 2, max 50 array entries, applied in the serializer —
 belt-and-braces against a malformed record shape, not the privacy mechanism itself.
@@ -360,24 +390,33 @@ the second assertion is what would have caught the previous revision's truncatio
 
 | id | check | sev | stage |
 |---|---|---|---|
-| `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts:89`) | bug | 3 |
+| `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts:89`) | bug | **5 — blocked** |
 | `unread-survives-focus` | active + focused + at live edge for >2s, yet `unreadCount > 0` | bug | 3 |
 | `badge-vs-pointer` | archive-derived recount vs displayed count | bug | **5 — blocked** |
 
-**Generation resets for `pointer-regression`.** "Forward-only" holds *within* one store generation.
-Several normal transitions legitimately move a pointer backwards or replace it wholesale, and a
-detector that ignores them would fire on routine behaviour and be deleted under §6.1. The detector
-therefore keys its last-seen state on a **generation identity** — account/storage scope, hydration
-epoch, and cache epoch — and:
+**`pointer-regression` moves to stage 5, because generations are not observable.** "Forward-only"
+holds *within* one store generation. Several normal transitions legitimately replace a pointer
+wholesale, so the detector needs a **generation identity** to reset on — and the previous revision
+claimed that identity was reachable from the signals `recountContextIsCurrent` guards on. It is not:
+`chatRecountVersion` and `chatUnreadInputVersion` (`chatStore.ts:548–549`) and `chatCacheEpoch`
+(`:566`) are module-private and exported from neither `stores/index.ts` nor `index.ts`.
 
-- **resets** whenever that identity changes (account switch, rehydration, store reset);
+Only account/storage scope is publicly observable. A rehydration or cache-epoch bump would therefore
+be invisible, and every one of them would surface as a false `pointer-regression` — the exact
+outcome §6.1 deletes a detector for. Shipping it in stage 3 on partial signals would spend the
+system's credibility on its first detector.
+
+It therefore moves to stage 5 behind a `readStateGeneration` seam (§5.5). Its contract, once the
+seam exists:
+
+- **resets** whenever the generation changes (account switch, rehydration, store reset);
 - **ignores the first observation** in each generation, having no predecessor to compare against;
 - **accepts an identical rewrite** — the same pointer written twice is idempotence, not regression.
   Only a strictly-behind pointer within one generation is an anomaly.
 
-The generation identity is available from the same signals the real recount already guards on
-(`chatStore.ts:2478`, `recountContextIsCurrent`), so the detector observes the product's own notion
-of currency rather than inventing a parallel one.
+`unread-survives-focus` stays in stage 3: its reset condition is an account/scope change, which
+*is* publicly observable, and a generation change during its 2s window resets the timer rather than
+producing a verdict.
 
 **Why `badge-vs-pointer` is deferred.** The original design proposed
 `recomputeCountsFromPointer` (`stores/shared/notificationState.ts:637`) as an oracle. That is not
@@ -394,8 +433,8 @@ would **recreate the exact under-count class it exists to catch** — the worst 
 detector, because it would be silent precisely when the bug is present.
 
 This detector therefore requires a **read-only SDK diagnostic seam** exposing an archive-derived
-count with the same coverage gating, and lands in stage 5 (§5.5). The two stage-3 detectors need no
-such seam: both are observable from store transitions alone.
+count with the same coverage gating, and lands in stage 5 (§5.5). Only `unread-survives-focus`
+remains in stage 3 — it is the one read-state invariant fully observable from public surfaces.
 
 **Evaluation trigger for stage 5.** When it does land, `badge-vs-pointer` must not free-run — during
 a normal recompute the displayed count and the pointer legitimately disagree for a window. It must
@@ -468,13 +507,20 @@ Two further requirements, without which a rate is still misleading:
 
 ### 5.5 SDK seams (stage 5)
 
-Three read-only additions to the SDK public API, each useful beyond this system:
+Four read-only additions to the SDK public API, each useful beyond this system.
+
+**Boundary rule: the SDK never emits anomaly types.** `Token` and `LocalRef`, and the HMAC key
+behind them, belong to `apps/fluux/src/anomaly/`. A seam typed as `queryId: Token` would drag them
+into `dist` and contradict "no anomaly-system code enters `dist`". Every seam therefore emits its
+own **raw or SDK-opaque** identifier, and the app tokenizes at the recorder boundary — the same
+boundary §4.4 already requires for JIDs.
 
 1. **`onApplicationStanzaOut(handler)`** — outbound application stanzas only.
+
 2. **A MAM outcome seam** emitting, once a page has been merged into the cache:
 
    ```ts
-   { queryId: Token, outcome: 'durable' | 'partial' | 'failed',
+   { queryId: string, outcome: 'durable' | 'partial' | 'failed',
      returned: number, retained: number, dropped: number }
    ```
 
@@ -483,23 +529,28 @@ Three read-only additions to the SDK public API, each useful beyond this system:
    detector that collapsed them would report a storage failure as a deduplication win. Unblocks
    §5.2.
 
-3. **A read-only unread diagnostic** returning the archive-derived count without mutating store
-   state:
+3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**:
 
    ```ts
-   { status: 'exact' | 'deferred' | 'stale', count?: number, inputs: InputVersions }
+   { status: 'exact' | 'deferred' | 'stale', archiveCount?: number, badgeCount?: number }
    ```
 
-   Only `exact` may be compared against the displayed badge. `deferred` means the coverage gate
-   declined (the real recount would also have declined), and `stale` means the inputs moved during
-   computation — neither is evidence of a bug, and treating either as a mismatch would make the
-   detector fire during ordinary catch-up.
+   Only `exact` may be compared. `deferred` means the coverage gate declined (the real recount would
+   also have declined) and `stale` means the inputs moved during computation — neither is evidence
+   of a bug, and treating either as a mismatch would make the detector fire during ordinary
+   catch-up.
 
-   `inputs` carries the identity and version of everything the count was computed against, and the
-   detector **re-verifies them after the comparison** before recording. This mirrors the product's
-   own `recountContextIsCurrent()` re-check at `chatStore.ts:2478`, which exists because the inputs
-   can move mid-computation; a detector without the same re-check would report that race as an
-   anomaly. Unblocks `badge-vs-pointer` (§5.1).
+   Returning both numbers **from the same guarded snapshot** is what removes the need for a public
+   revalidation operation: the SDK performs the `recountContextIsCurrent()`-style re-check
+   (`chatStore.ts:2478`) internally, where the private versions actually live, and hands out two
+   numbers already known to be mutually consistent. The detector compares two integers and needs no
+   view of `InputVersions` at all. Exposing versions to the app would have meant publishing internal
+   race-guard state as API. Unblocks `badge-vs-pointer` (§5.1).
+
+4. **A `readStateGeneration` signal** — a monotonically increasing value that changes on account
+   switch, rehydration, and cache-epoch bump. Unblocks `pointer-regression` (§5.1), and is
+   independently useful to any SDK consumer that caches derived read state and needs to know when
+   to discard it.
 
 **Why `onApplicationStanzaOut` and not `onStanzaOut`.** Several connection-level sends bypass
 `XMPPClient.sendIQ` (`core/XMPPClient.ts:1784`) and go straight to the transport — the keepalive
@@ -574,10 +625,14 @@ Additionally required:
   order, newline rejection (§4.3).
 - **Queue-poisoning test** — a rejected write must not prevent the next N writes from succeeding,
   and must surface on `console.warn` plus the failure counter (§4.3).
-- **Generation-reset test** — account switch, rehydration, and an identical pointer rewrite each
-  produce **no** anomaly from `pointer-regression`; only a strictly-behind pointer within one
-  generation does (§5.1). This is a control test in the §7.1 sense: the transitions it covers are
+- **Generation-reset test** (stage 5) — account switch, rehydration, and an identical pointer
+  rewrite each produce **no** anomaly from `pointer-regression`; only a strictly-behind pointer
+  within one generation does (§5.1). A control test in the §7.1 sense: the transitions it covers are
   exactly the ones a naive implementation would report.
+- **Ephemeral-ref test** — a message id seen exactly once serializes as a distinct `s:` ref, never
+  as `c:unresolved`. This is the regression guard for §4.4's two-class split; without it, a future
+  refactor routing ephemeral ids through the async path would silently collapse every such crumb
+  into one indistinguishable sentinel.
 
 ### 7.2 Paired CI assertions
 
@@ -642,9 +697,9 @@ Each stage is independently useful and independently revertable.
 | 0 | **Fix the `MessageList` probe gate** (§2.1): move `:497` and `:652` off `import.meta.env.DEV` onto `__FLUUX_ANOMALY__`, plus the gate matrix and its test (§7.2.1) | The gate is correct before anything is built on it | none |
 | 1 | Schema + constrained serializer, recorder with cooldown/ceiling, single-flight `writeFile` sink, build-audit plugin, paired CI assertions, registry skeleton | Production cost is zero, Dev actually runs, privacy holds at runtime | none |
 | 2 | Scroll/stall sentinel **fan-out** | The pipe works end to end with no new detection logic, and the prose log is untouched | none |
-| 3 | `read-state/` (pointer-regression, unread-survives-focus) + `scroll/` (fab-at-live-edge, jump-target-miss) | Real detectors on store- and DOM-observable state | none |
+| 3 | `read-state/` (unread-survives-focus) + `scroll/` (fab-at-live-edge, jump-target-miss) | Real detectors on state observable from public surfaces alone | none |
 | 4 | `resource/` **rates with denominators**, baseline, `/fluux-anomaly-review` skill incl. retention pruning | The review loop closes and drift detection starts | none |
-| 5 | `onApplicationStanzaOut` + MAM outcome seam + read-only unread diagnostic, then `xmpp-traffic/` and `badge-vs-pointer` | Everything requiring new SDK visibility | three read-only additions, measured (§5.5) |
+| 5 | Four SDK seams (§5.5), then `xmpp-traffic/`, `badge-vs-pointer` and `pointer-regression` | Everything requiring new SDK visibility | four read-only additions, measured (§5.5) |
 
 Stage 0 is separated out because the gate correction is a live pre-existing bug (§2.1) that is worth
 landing on its own, and because every later stage depends on the gate being right.
