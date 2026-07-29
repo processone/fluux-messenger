@@ -1189,6 +1189,8 @@ describe('preview / renderer parity for code spans', () => {
     '*bold*```\ncode\n```',
     '```\ncode\n```*bold*',
     '_before_```\ncode\n```_after_',
+    '*before```\ncode\n```after*',
+    '_before```\ncode\n```after_',
     '*bold*`code`',
     '`code`*bold*',
     '_before_`code`_after_',

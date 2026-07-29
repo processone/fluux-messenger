@@ -382,6 +382,22 @@ describe('messagePreview', () => {
         expect(stripMessageStyling('_before_```\ncode\n```_after_')).toBe('beforecodeafter')
       })
 
+      it('should keep styling that crosses a fenced code block literal', () => {
+        expect(stripMessageStyling('*before```\ncode\n```after*')).toBe('*beforecodeafter*')
+      })
+
+      it('should keep non-asterisk styling that crosses a fenced code block literal', () => {
+        expect(stripMessageStyling('_before```\ncode\n```after_')).toBe('_beforecodeafter_')
+      })
+
+      it('should strip a heading marker after a fenced code block', () => {
+        expect(stripMessageStyling('```\ncode\n```\n# Heading')).toBe('code\nHeading')
+      })
+
+      it('should strip a heading marker at the start of a post-fence chunk', () => {
+        expect(stripMessageStyling('```\ncode\n```# Heading')).toBe('codeHeading')
+      })
+
       it('should keep styling literal directly before an inline code span', () => {
         expect(stripMessageStyling('*bold*`code`')).toBe('*bold*code')
       })

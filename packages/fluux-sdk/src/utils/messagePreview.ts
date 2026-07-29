@@ -114,6 +114,7 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
  * never forge a placeholder and capture or corrupt the surrounding text.
  */
 const CODE_PLACEHOLDER = '\u0000'
+const CODE_FENCE_PLACEHOLDER_REGEX = /(\u0000f\d+\u0000)/g
 const CODE_PLACEHOLDER_REGEX = /\u0000f(\d+)\u0000|`\u0000i(\d+)\u0000`/g
 
 /** Fenced code blocks, matching the renderer's ```lang\n ... ``` pattern. */
@@ -157,30 +158,35 @@ export function stripMessageStyling(text: string): string {
     return kind === 'fence' ? placeholder : `\`${placeholder}\``
   }
 
-  // Protect fenced code blocks first (the renderer also handles them before
-  // inline styling), then inline code spans in what remains.
   result = result.replace(CODE_FENCE_REGEX, (_match, _lang, content: string) => protectCode(content.trim(), 'fence'))
-  result = result.replace(INLINE_CODE_REGEX, match => protectCode(match.slice(1, -1), 'inline'))
+  result = result
+    .split(CODE_FENCE_PLACEHOLDER_REGEX)
+    .map((chunk) => {
+      if (chunk.startsWith(CODE_PLACEHOLDER)) return chunk
 
-  // Strip heading markers (# Title, ## Title, ### Title, #### Title)
-  // Must be at start of line, followed by space
-  result = result.replace(/^#{1,4}\s+/gm, '')
+      let styledChunk = chunk.replace(INLINE_CODE_REGEX, match => protectCode(match.slice(1, -1), 'inline'))
 
-  // Strip Markdown-style bold (**text**) - must come before single asterisk
-  // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
-  result = result.replace(/(?<=^|[\s\p{P}\u0000])\*\*([^\s*](?:[^*]*[^\s*])?)\*\*(?=$|[\s\p{P}\u0000])/gu, '$1')
+      // Strip heading markers (# Title, ## Title, ### Title, #### Title)
+      // Must be at start of line, followed by space
+      styledChunk = styledChunk.replace(/^#{1,4}\s+/gm, '')
 
-  // Strip XEP-0393 bold (*text*)
-  result = result.replace(/(?<=^|[\s\p{P}\u0000])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}\u0000])/gu, '$1')
+      // Strip Markdown-style bold (**text**) - must come before single asterisk
+      // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
+      styledChunk = styledChunk.replace(/(?<=^|[\s\p{P}])\*\*([^\s*](?:[^*]*[^\s*])?)\*\*(?=$|[\s\p{P}])/gu, '$1')
 
-  // Strip italic (_text_)
-  result = result.replace(/(?<=^|[\s\p{P}\u0000])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}\u0000])/gu, '$1')
+      // Strip XEP-0393 bold (*text*)
+      styledChunk = styledChunk.replace(/(?<=^|[\s\p{P}])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}])/gu, '$1')
 
-  // Strip Markdown-style strikethrough (~~text~~) - must come before single tilde
-  result = result.replace(/(?<=^|[\s\p{P}\u0000])~~([^\s~](?:[^~]*[^\s~])?)~~(?=$|[\s\p{P}\u0000])/gu, '$1')
+      // Strip italic (_text_)
+      styledChunk = styledChunk.replace(/(?<=^|[\s\p{P}])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}])/gu, '$1')
 
-  // Strip XEP-0393 strikethrough (~text~)
-  result = result.replace(/(?<=^|[\s\p{P}\u0000])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}\u0000])/gu, '$1')
+      // Strip Markdown-style strikethrough (~~text~~) - must come before single tilde
+      styledChunk = styledChunk.replace(/(?<=^|[\s\p{P}])~~([^\s~](?:[^~]*[^\s~])?)~~(?=$|[\s\p{P}])/gu, '$1')
+
+      // Strip XEP-0393 strikethrough (~text~)
+      return styledChunk.replace(/(?<=^|[\s\p{P}])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}])/gu, '$1')
+    })
+    .join('')
 
   // Restore the protected code contents verbatim, in a single pass so restored
   // text is never rescanned.
