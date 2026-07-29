@@ -61,6 +61,7 @@ export function setupMdsSideEffects(
   const lastKnownNodeRevision = new Map<string, number>()
   let nodeRevision = 0
   let nodeSnapshotAuthoritative = false
+  const currentSessionConfirmedNodeJids = new Set<string>()
   // The read-pointer message id we last HANDLED per JID, to detect advances.
   // "Handled" means the position was resolved to a stanza-id and then either
   // enqueued or judged not ahead of the node — never merely "seen". A position
@@ -80,6 +81,7 @@ export function setupMdsSideEffects(
   function recordKnownNodeStanzaId(jid: string, stanzaId: string): void {
     lastKnownNodeStanzaId.set(jid, stanzaId)
     lastKnownNodeRevision.set(jid, ++nodeRevision)
+    currentSessionConfirmedNodeJids.add(jid)
   }
 
   /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
@@ -158,6 +160,12 @@ export function setupMdsSideEffects(
    * the one value we must never publish over.
    */
   function publishDecision(jid: string, stanzaId: string): 'publish' | 'skip' | 'retry' {
+    // A failed fresh-session read makes every prior-session entry unproven.
+    // Until an authoritative reconnect or a current-session live update confirms
+    // a JID, its position stays unpublished: delay is recoverable, overwriting a
+    // newer forward-only MDS marker is not.
+    if (!nodeSnapshotAuthoritative && !currentSessionConfirmedNodeJids.has(jid)) return 'retry'
+
     const nodeId = lastKnownNodeStanzaId.get(jid)
     if (!nodeId) return nodeSnapshotAuthoritative ? 'publish' : 'retry'
 
@@ -361,6 +369,7 @@ export function setupMdsSideEffects(
   function evictJid(jid: string): void {
     lastKnownNodeStanzaId.delete(jid)
     lastKnownNodeRevision.delete(jid)
+    currentSessionConfirmedNodeJids.delete(jid)
     lastConsideredSeenId.delete(jid)
     unroutedSeedMarkers.delete(jid)
     dirty.delete(jid)
@@ -481,6 +490,7 @@ export function setupMdsSideEffects(
   const unsubscribeOnline = client.on('online', () => {
     syncEnabled = false
     nodeSnapshotAuthoritative = false
+    currentSessionConfirmedNodeJids.clear()
     void (async () => {
       const seedStartedAtRevision = nodeRevision
       let result: DisplayedMarkerFetchResult = { status: 'unknown' }

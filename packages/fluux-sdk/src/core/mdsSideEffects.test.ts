@@ -814,6 +814,34 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('does not publish over a prior-session marker after a reconnect fetch fails', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(0)
+
+    chatStore.getState().advanceReadPointer(cid, 'm1')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+
+    connectionStore.setState({ status: 'offline' } as never)
+    client.mds.fetchAllDisplayed = vi.fn().mockRejectedValue(new Error('timeout'))
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    client._emit('online')
+    await vi.advanceTimersByTimeAsync(0)
+
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
   it('rechecks a queued position when a peer marker arrives during the debounce', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
