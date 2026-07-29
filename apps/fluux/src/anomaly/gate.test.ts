@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { resolveAnomalyGate } from './gate'
+import { ANOMALY_BUILD_SENTINEL, markAnomalyBuild, resolveAnomalyGate } from './gate'
 
 /**
  * The gate matrix, asserted directly against the single function both
@@ -34,5 +35,39 @@ describe('resolveAnomalyGate', () => {
 
   it('exposes the constant to application code at runtime', () => {
     expect(typeof __FLUUX_ANOMALY__).toBe('boolean')
+  })
+})
+
+describe('build sentinel', () => {
+  it('publishes the sentinel on window so it reaches the emitted bundle', () => {
+    // Declaring the constant is not enough: vite.config.ts imports this module in
+    // Node at build time, which puts nothing in the browser bundle. Only a
+    // reference from application code makes the string greppable in dist/.
+    markAnomalyBuild()
+    expect((window as unknown as Record<string, unknown>).__fluuxAnomalyBuild).toBe(
+      ANOMALY_BUILD_SENTINEL,
+    )
+  })
+
+  it('is idempotent', () => {
+    markAnomalyBuild()
+    markAnomalyBuild()
+    expect((window as unknown as Record<string, unknown>).__fluuxAnomalyBuild).toBe(
+      ANOMALY_BUILD_SENTINEL,
+    )
+  })
+
+  it('is a literal string, not derived at runtime', () => {
+    // A computed sentinel would not survive minification intact, so the CI grep
+    // would look for something the bundle never contains.
+    expect(ANOMALY_BUILD_SENTINEL).toBe('fluux-anomaly-instrumentation-present')
+  })
+
+  it('does not throw without a DOM', () => {
+    const saved = globalThis.window
+    // @ts-expect-error deliberately removing window to exercise the SSR guard
+    delete globalThis.window
+    expect(() => markAnomalyBuild()).not.toThrow()
+    globalThis.window = saved
   })
 })
