@@ -302,19 +302,32 @@ samples someone thought to write. Neither can TypeScript alone: **branded types 
 so a cast, an `any`, or a JS-side caller defeats them entirely. Enforcement therefore lives in the
 serializer, at runtime.
 
-**The serializer allowlists; it does not sanitize.** For every string appearing in a constrained
-field — `expected`, `observed`, crumb values, **and every value in `ctx`** — the string must either:
+**The serializer checks provenance, not shape.** A pattern-matching allowlist validates what a
+string *looks like*, which is not the same question. A message body equal to `focus`, or to
+`c:0123456789abcdef`, or to `s:m41`, would satisfy any shape check — so a detector that accidentally
+passed a body through would emit it, and the guarantee would be decorative.
 
-- be a member of the runtime `Tag` allowlist (a frozen `Set` in `schema.ts`, the same source the
-  `Tag` type is derived from), or
-- match the opaque-token pattern `/^c:(?:[0-9a-f]{16}|unresolved)$/`, or
-- match the session-local ref pattern `/^s:[a-z][0-9]+$/`.
+Constrained values are therefore **opaque objects, never primitive strings**. `Tag`, `Token` and
+`LocalRef` are frozen objects created only by their constructors in `schema.ts`, each registered in
+a module-private `WeakSet` at construction. The serializer:
+
+1. **rejects any primitive string** appearing in `expected`, `observed`, a crumb value, or **any
+   value in `ctx`** — unconditionally, whatever it contains;
+2. accepts an object only if the private `WeakSet` recognizes it, then emits its carried string.
+
+Provenance is what is checked: the value is emitted because *this module made it*, not because it
+resembles something this module makes. A body cannot forge membership of a `WeakSet` it was never
+inserted into.
 
 Anything else **rejects the whole record** and increments a `recorder/rejected-value` counter in the
-digest. It is not truncated. Truncation was the flaw in the previous revision: a 64-character cap on
+digest. It is not truncated. Truncation was the flaw in an earlier revision: a 64-character cap on
 an accidentally-supplied body still emits the first 64 characters of that body, which is precisely
 the leak the rule exists to prevent. A rejected record is a visible bug in a detector; a truncated
 one is a silent disclosure.
+
+The wire format is unchanged — records still serialize to `"c:7f3a…"` and `"focus"` — so the
+patterns below remain the *reader's* contract for the review skill. They are simply no longer the
+writer's authorization check.
 
 **Two identifier classes, because one mechanism cannot serve both.** JIDs are not the only
 identifiers these records carry — MAM breadcrumbs also hold query ids, message ids and stanza ids.
@@ -333,9 +346,27 @@ entities by the birthday bound — plausible over a long-lived install, and a co
 merges two conversations' evidence.
 
 `LocalRef(ns, value)` is a **synchronously assigned session-local sequence number**, rendered as
-`s:` + a one-letter namespace + an integer (`s:m41`, `s:q7`), backed by a bounded `Map` from raw
-value to ref. It carries no information about the value, needs no key, and is available in the same
-tick the crumb is recorded.
+`s:` + a one-letter namespace + an integer (`s:m41`, `s:q7`), backed by a `Map` from raw value to
+ref. It carries no information about the value, needs no key, and is available in the same tick the
+crumb is recorded.
+
+**Eviction is pinned, not LRU.** "Bounded" alone is unimplementable in either direction: an
+un-evicted `Map` grows with session length, while a naive LRU can evict a MAM query or IQ that is
+*still in flight* and then assign it a **second, different ref** on its next appearance — splitting
+one query's evidence across two identities inside a single anomaly record, which is worse than not
+recording it. The rule:
+
+- An entry is **pinned** while it is referenced by the breadcrumb ring, or by an open request or
+  timer that a detector is tracking.
+- Pins are released when the crumb falls out of the fixed 100-entry ring, or when the request or
+  timer it belongs to completes.
+- Eviction removes **unpinned entries only**, oldest first, above a soft cap of 2 000 entries.
+- If the cap is reached and every entry is pinned, nothing is evicted and
+  `recorder/localref-pressure` is counted. Growing is the correct failure here; a ref that changes
+  identity under a live reference is not.
+
+A ref is therefore guaranteed stable for at least as long as anything can still refer to it, which
+is exactly the window in which stability matters.
 
 **Why ephemeral ids cannot use the async path.** A pre-warmed cache only works when the identifier
 is known *before* the breadcrumb. A message or stanza id seen for the first time has no prior event
@@ -377,10 +408,19 @@ with each other**; they are explicitly not an identity.
 **Recursive serialization limits.** Max depth 2, max 50 array entries, applied in the serializer —
 belt-and-braces against a malformed record shape, not the privacy mechanism itself.
 
-**Adversarial tests.** Property-based: feed detectors messages whose bodies are random high-entropy
-strings, then assert (a) no substring of any body of length ≥ 8 appears anywhere in sink output, and
-(b) the record was *rejected* rather than emitted-and-truncated. The test targets the mechanism, and
-the second assertion is what would have caught the previous revision's truncation flaw.
+**Adversarial tests.** Three layers, each targeting a mechanism rather than a sample:
+
+1. **High-entropy bodies.** Property-based: bodies of random high-entropy strings; assert no
+   substring of length ≥ 8 appears anywhere in sink output, and that the record was *rejected*
+   rather than emitted-and-truncated.
+2. **Shape-collision bodies.** Bodies set to values that a shape check would have accepted — every
+   member of the `Tag` allowlist in turn, a string matching `/^c:[0-9a-f]{16}$/`, one matching
+   `/^s:[a-z][0-9]+$/`, and `c:unresolved`. All must be **rejected**, because they arrive as
+   primitive strings and are absent from the `WeakSet`. This is the direct regression test for the
+   provenance rule; under the previous pattern-based check every one of these would have passed.
+3. **Forgery attempt.** A hand-built object carrying the same fields as a `Token` but constructed
+   outside `schema.ts` must be rejected, confirming the check is `WeakSet` membership and not
+   structural duck-typing.
 
 ---
 
@@ -521,13 +561,17 @@ boundary §4.4 already requires for JIDs.
 
    ```ts
    { queryId: string, outcome: 'durable' | 'partial' | 'failed',
-     returned: number, retained: number, dropped: number }
+     returned: number, retained: number, deduplicated: number, persistenceFailed: number }
    ```
 
-   The three-way `outcome` matters: a page that returned rows but failed to persist is not the same
-   event as one that persisted nothing because everything was a duplicate, and a `mam-page-yield`
-   detector that collapsed them would report a storage failure as a deduplication win. Unblocks
-   §5.2.
+   **The counts must balance: `returned === retained + deduplicated + persistenceFailed`**, and the
+   event is emitted only *after* the persistence attempt has finished, so the three terms are final.
+
+   A single `dropped` was insufficient. Under `partial` it conflates two opposite facts — rows the
+   cache already had, and rows that failed to persist — so a `mam-page-yield` detector reading it
+   would report a storage failure as a deduplication win, which is precisely the direction that
+   hides a bug. The three-way `outcome` remains, as the fast triage key; the balance identity is
+   what makes the numbers usable. Unblocks §5.2.
 
 3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**:
 
@@ -547,10 +591,24 @@ boundary §4.4 already requires for JIDs.
    view of `InputVersions` at all. Exposing versions to the app would have meant publishing internal
    race-guard state as API. Unblocks `badge-vs-pointer` (§5.1).
 
-4. **A `readStateGeneration` signal** — a monotonically increasing value that changes on account
-   switch, rehydration, and cache-epoch bump. Unblocks `pointer-regression` (§5.1), and is
-   independently useful to any SDK consumer that caches derived read state and needs to know when
-   to discard it.
+4. **A scoped `readStateGeneration` signal:**
+
+   ```ts
+   { scope: 'store', gen: number } | { scope: 'entity', id: string, gen: number }
+   ```
+
+   **The scope is the whole point.** A single global counter would be wrong, because the underlying
+   `chatCacheEpoch` is bumped by conversation *deletion* as well as by logout and account switch —
+   its own comment says so (`chatStore.ts:560`), and the deletion bump is at `:1525`. A global
+   signal would therefore reset every conversation's detector state whenever one unrelated
+   conversation was deleted, and a genuine regression elsewhere would be silently forgiven as a
+   generation change.
+
+   So: `store` scope for hydration, reset and account switch; `entity` scope for the deletion or
+   recreation of one conversation. A detector resets only the state matching the scope it received.
+
+   Unblocks `pointer-regression` (§5.1), and is independently useful to any SDK consumer caching
+   derived read state that needs to know precisely what to discard.
 
 **Why `onApplicationStanzaOut` and not `onStanzaOut`.** Several connection-level sends bypass
 `XMPPClient.sendIQ` (`core/XMPPClient.ts:1784`) and go straight to the transport — the keepalive
@@ -633,6 +691,15 @@ Additionally required:
   as `c:unresolved`. This is the regression guard for §4.4's two-class split; without it, a future
   refactor routing ephemeral ids through the async path would silently collapse every such crumb
   into one indistinguishable sentinel.
+- **Ref-stability test** — a `LocalRef` for an in-flight query keeps the same value across cache
+  pressure that evicts unpinned entries around it; and an entry unpins, then evicts, once its crumb
+  leaves the ring and its request completes (§4.4).
+- **Generation-scope test** (stage 5) — deleting conversation A must **not** reset
+  `pointer-regression` state for conversation B, and a store-scope generation change must reset
+  both. This is the control test for the `chatCacheEpoch` conflation described in §5.5.
+- **MAM balance test** (stage 5) — every emitted outcome satisfies
+  `returned === retained + deduplicated + persistenceFailed`, including on the `partial` and
+  `failed` paths.
 
 ### 7.2 Paired CI assertions
 
