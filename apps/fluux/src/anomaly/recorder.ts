@@ -17,6 +17,7 @@ import {
   isKind,
   isRecordValue,
   isReservedCounter,
+  isTokenizerReady,
   localRefOverflowCount,
   releaseOpaque,
   retainOpaque,
@@ -100,6 +101,8 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
   let recordsWritten = 0
   let bytesWritten = 0
+  /** Writes refused because the tokenizer had no key yet. Reported once it does. */
+  let droppedNotReady = 0
   /**
    * Set once the budget has genuinely refused a write. Announcing alone was not
    * enough: a single line too large for the remaining budget produced a
@@ -191,6 +194,13 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
     record(input: RecordInput): void {
       if (terminal) return
+      // Before the tokenizer holds a key every record would carry
+      // `tokenKeyId: "unknown"`. Dropping is counted, so the gap is visible in the
+      // first digest that follows rather than silently swallowed.
+      if (!isTokenizerReady()) {
+        droppedNotReady++
+        return
+      }
       if (atCeiling()) {
         announceCeiling()
         return
@@ -259,6 +269,10 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
     flushDigest(windowMs: number): void {
       if (terminal) return
+      if (!isTokenizerReady()) {
+        droppedNotReady++
+        return
+      }
 
       // Validate the window BEFORE the shedding loop below. That loop retries
       // serialization once per shed entry, so a input that fails for a reason
@@ -281,6 +295,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         [COUNTER.localRefOverflow, localRefOverflowCount()],
         [COUNTER.tokenUnresolved, tokenUnresolvedCount()],
         [COUNTER.sinkWriteFailed, sink.failureCount()],
+        [COUNTER.droppedNotReady, droppedNotReady],
       ]
 
       const all: Array<[Opaque, number]> = [...counters.values()]

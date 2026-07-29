@@ -27,16 +27,21 @@ const sessionId =
     : `sid-${Date.now()}`
 
 let recorder: Recorder | null = null
-let ready: Promise<void> | null = null
+let ready: Promise<boolean> | null = null
 let sessionAnnounced = false
 
 let attachments = 0
 /**
- * Identifies the CURRENT attachment. React can run a previous effect's cleanup
- * after the next effect has already attached; a cleanup that blindly cleared the
- * timer would silently stop the digest schedule for the rest of the session.
+ * How many live handles hold the attachment.
+ *
+ * React can run a previous effect's cleanup after the next effect has already
+ * mounted. A guard keyed on "who attached last" does not help, because the second
+ * install finds the timer already armed and returns without claiming ownership —
+ * so the first cleanup tears down an attachment the second holder still depends
+ * on, and the digest schedule dies for the rest of the session. Counting holders
+ * and detaching only at zero is what actually survives that interleaving.
  */
-let attachmentToken = 0
+let attachRefs = 0
 let digestTimer: ReturnType<typeof setInterval> | null = null
 let detachListener: (() => void) | null = null
 
@@ -58,21 +63,24 @@ export function getRecorder(): Recorder | null {
 }
 
 /**
- * Resolves once the tokenizer holds its key.
+ * Resolves to whether the tokenizer holds its key.
  *
- * Awaited before the first record, because one written earlier would carry
- * `tokenKeyId: "unknown"` — and that field is the correlation boundary, so an
- * unattributable record is worse than a late one.
+ * Never REJECTS — a cached rejection would make every later awaiter throw — but it
+ * does report failure, because a caller that cannot tell success from failure will
+ * happily write a record stamped `tokenKeyId: "unknown"`, which is unattributable
+ * to a token space and therefore worse than no record at all.
  *
- * Never rejects: a cached rejection would make every later awaiter throw and the
- * session record would never be attempted again, so a failure is logged and
- * swallowed. Records still work; their tokens simply stay unresolved.
+ * A failed attempt is not cached: the promise is cleared so the next call retries.
  */
-export function whenReady(): Promise<void> {
+export function whenReady(): Promise<boolean> {
   if (!ready) {
-    ready = initTokenizer().catch((err: unknown) => {
-      console.warn(`[Anomaly] tokenizer unavailable, tokens will not resolve: ${String(err)}`)
-    })
+    ready = initTokenizer()
+      .then(() => true)
+      .catch((err: unknown) => {
+        console.warn(`[Anomaly] tokenizer unavailable: ${String(err)}`)
+        ready = null
+        return false
+      })
   }
   return ready
 }
@@ -88,7 +96,16 @@ export function whenReady(): Promise<void> {
 function announceSessionOnce(rec: Recorder): void {
   if (sessionAnnounced) return
   sessionAnnounced = true
-  void whenReady().then(() => rec.record({ id: ID.sessionStart, sev: 'drift' }))
+  void whenReady().then((ok) => {
+    // Latch only on success. A tokenizer failure must leave the announcement
+    // pending, so a later attach can retry it rather than the session silently
+    // never opening.
+    if (!ok) {
+      sessionAnnounced = false
+      return
+    }
+    rec.record({ id: ID.sessionStart, sev: 'drift' })
+  })
 }
 
 /**
@@ -99,29 +116,35 @@ function announceSessionOnce(rec: Recorder): void {
  * runtime.
  */
 export function install(): () => void {
-  if (digestTimer) return () => {}
-
-  attachments++
-  const token = ++attachmentToken
   const rec = runtime()
-
   markAnomalyBuild()
   announceSessionOnce(rec)
 
-  digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
+  attachRefs++
+  if (attachRefs === 1) {
+    attachments++
 
-  const onVisibility = () => {
-    // Best effort: the WebView gives no guarantee that asynchronous I/O completes
-    // during teardown, so a missing trailing digest is normal and never a signal.
-    if (document.visibilityState === 'hidden') rec.flushDigest(DIGEST_INTERVAL_MS)
+    digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
+
+    const onVisibility = () => {
+      // Best effort: the WebView gives no guarantee that asynchronous I/O completes
+      // during teardown, so a missing trailing digest is normal and never a signal.
+      if (document.visibilityState === 'hidden') rec.flushDigest(DIGEST_INTERVAL_MS)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    detachListener = () => document.removeEventListener('visibilitychange', onVisibility)
   }
-  document.addEventListener('visibilitychange', onVisibility)
-  detachListener = () => document.removeEventListener('visibilitychange', onVisibility)
 
+  let released = false
   return () => {
-    // Only the owner may detach. A stale cleanup arriving after a later attach must
-    // not disarm it.
-    if (token !== attachmentToken) return
+    // Per-handle, so a double cleanup cannot over-release and detach an attachment
+    // another holder still needs.
+    if (released) return
+    released = true
+
+    attachRefs--
+    if (attachRefs > 0) return
+
     detachListener?.()
     detachListener = null
     if (digestTimer) clearInterval(digestTimer)
@@ -139,7 +162,7 @@ export function resetInstallForTesting(): void {
   ready = null
   sessionAnnounced = false
   attachments = 0
-  attachmentToken = 0
+  attachRefs = 0
 }
 
 /** Diagnostic: how many times `install()` actually attached. */

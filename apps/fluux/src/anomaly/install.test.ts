@@ -7,7 +7,7 @@ import {
   resetInstallForTesting,
   whenReady,
 } from './install'
-import { METRIC } from './values'
+import { METRIC, resetValuesForTesting } from './values'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
 const w = () => window as unknown as WindowWithSink
@@ -19,6 +19,10 @@ beforeEach(() => {
   delete w().__fluuxAnomalies
   delete w().__fluuxAnomalyBuild
   resetInstallForTesting()
+  // Also reset the value layer: the tokenizer key lives there, so without this a
+  // test that awaits readiness leaves the NEXT test already ready, and any
+  // assertion about the pre-ready window silently stops testing anything.
+  resetValuesForTesting()
 })
 
 describe('the runtime is a singleton', () => {
@@ -86,21 +90,30 @@ describe('attach and detach', () => {
     cleanup2()
   })
 
-  it('a stale cleanup cannot detach a later attachment', async () => {
+  it('a stale cleanup cannot detach an attachment another holder still needs', async () => {
     // React can run a previous effect's cleanup after the next effect has already
-    // attached. A cleanup that blindly cleared the timer would silently stop the
-    // digest schedule for the rest of the session.
+    // mounted. Asserting that a LATER install still works would only prove the
+    // runtime can restart; the property that matters is that the listener never
+    // came off while a holder remained, so count the listener directly.
     await whenReady()
-    const stale = install()
-    const live = install() // no-op, already attached
-    stale() // the FIRST cleanup, running late
+    const add = vi.spyOn(document, 'addEventListener')
+    const remove = vi.spyOn(document, 'removeEventListener')
 
-    // Re-attaching must still work, and the live handle must not have been armed
-    // by the stale one.
-    const cleanup = install()
-    expect(installCount()).toBe(2)
-    live()
-    cleanup()
+    const cleanupA = install()
+    const cleanupB = install()
+    cleanupA() // A's cleanup, running late
+
+    const attached = add.mock.calls.filter((c) => c[0] === 'visibilitychange').length
+    const detached = remove.mock.calls.filter((c) => c[0] === 'visibilitychange').length
+    expect(attached - detached).toBe(1)
+
+    cleanupB()
+    expect(
+      remove.mock.calls.filter((c) => c[0] === 'visibilitychange').length,
+    ).toBe(detached + 1)
+
+    add.mockRestore()
+    remove.mockRestore()
   })
 
   it('tolerates a double cleanup', () => {
@@ -167,9 +180,55 @@ describe('readiness', () => {
     const crypto = globalThis.crypto.subtle
     vi.spyOn(globalThis.crypto.subtle, 'importKey').mockRejectedValue(new Error('no crypto'))
 
-    await expect(whenReady()).resolves.toBeUndefined()
+    await expect(whenReady()).resolves.toBe(false)
 
     vi.mocked(crypto.importKey).mockRestore?.()
     warn.mockRestore()
+  })
+
+  it('retries after a failure rather than caching it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const importKey = vi.spyOn(globalThis.crypto.subtle, 'importKey')
+    importKey.mockRejectedValueOnce(new Error('transient'))
+
+    expect(await whenReady()).toBe(false)
+    // A cached rejection would keep answering false forever.
+    expect(await whenReady()).toBe(true)
+
+    importKey.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('leaves the session announcement pending when the tokenizer fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const importKey = vi.spyOn(globalThis.crypto.subtle, 'importKey')
+    importKey.mockRejectedValueOnce(new Error('transient'))
+
+    install()()
+    await whenReady()
+    await Promise.resolve()
+    expect(records().filter((r) => r.id === 'recorder/session-start')).toHaveLength(0)
+
+    // A later attach must still open the session.
+    install()()
+    await whenReady()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(records().filter((r) => r.id === 'recorder/session-start')).toHaveLength(1)
+
+    importKey.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('drops records written before the tokenizer is ready, and counts them', async () => {
+    install()
+    // No await: the tokenizer is still resolving.
+    getRecorder()!.flushDigest(1000)
+    expect(records().filter((r) => r.kind === 'digest')).toHaveLength(0)
+
+    await whenReady()
+    getRecorder()!.flushDigest(1000)
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    expect(digest.counters['recorder/dropped-not-ready']).toBeGreaterThan(0)
   })
 })

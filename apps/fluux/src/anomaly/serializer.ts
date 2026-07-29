@@ -173,6 +173,11 @@ export function serialize(
   const maxLineBytes = resolveMaxLineBytes(options.maxLineBytes)
 
   try {
+    // The envelope's key id is the correlation boundary; an unattributable record
+    // is not worth writing. Checked here so every path is covered, not only the
+    // recorder's.
+    if (!/^[0-9a-f]{8}$/.test(record.tokenKeyId)) throw new Error('invalid tokenKeyId')
+
     if (record.kind === 'digest') {
       assertNoUnknownKeys(record, DIGEST_KEYS)
       // `windowMs` is a plain number on the record, so its type is erased by any

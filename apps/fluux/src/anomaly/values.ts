@@ -120,6 +120,7 @@ export const COUNTER = Object.freeze({
   localRefOverflow: mint('recorder/localref-overflow', 'counter'),
   tokenUnresolved: mint('recorder/token-unresolved', 'counter'),
   sinkWriteFailed: mint('recorder/sink-write-failed', 'counter'),
+  droppedNotReady: mint('recorder/dropped-not-ready', 'counter'),
 })
 
 /** Counter names available to application code and detectors. */
@@ -252,6 +253,17 @@ export function tokenSync(ns: TokenNs, value: string): Opaque {
 /** Non-secret; goes in every record envelope. */
 export function tokenKeyId(): string {
   return keyId
+}
+
+/**
+ * True once the tokenizer holds a key.
+ *
+ * Until then `tokenKeyId()` is `'unknown'`, and a record carrying that is
+ * unattributable to a token space — worse than a late record, since the key id is
+ * the correlation boundary a review relies on.
+ */
+export function isTokenizerReady(): boolean {
+  return hmacKey !== null
 }
 
 export function tokenUnresolvedCount(): number {
