@@ -7,6 +7,7 @@ import { readFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
 import { createRequire } from 'module'
 import { resolveAnomalyGate } from './src/anomaly/gate'
+import { anomalyBuildAudit } from './scripts/anomalyBuildAudit'
 
 // Resolve packages via Node's module resolution (walks up parent dirs) instead of
 // a hardcoded ../../node_modules path. The latter assumes apps/fluux sits directly
@@ -119,6 +120,8 @@ export default defineConfig(({ mode }) => ({
         globIgnores: ['demo/**', 'demo.html'],
       },
     }),
+    // Asserts the anomaly tree is present exactly where the gate says it should be.
+    anomalyBuildAudit(resolveAnomalyGate(mode, process.env)),
   ],
   resolve: {
     alias: {

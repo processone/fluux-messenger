@@ -43,6 +43,11 @@ const SUITES = [
   { name: 'composer', testMatch: 'composer-geometry.ts' },
 ] as const
 
+/**
+ * `anomaly-smoke.ts` is NOT in SUITES: it is chromium-only (see the project below),
+ * so it does not fit the suite x engine matrix.
+ */
+
 const ENGINES = [
   { name: 'chromium', use: devices['Desktop Chrome'] },
   { name: 'webkit', use: devices['Desktop Safari'] },
@@ -94,13 +99,24 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
 
-  projects: SUITES.flatMap(suite =>
-    ENGINES.map(engine => ({
-      name: `${suite.name}-${engine.name}`,
-      testMatch: suite.testMatch,
-      use: { ...engine.use },
-    })),
-  ),
+  projects: [
+    ...SUITES.flatMap(suite =>
+      ENGINES.map(engine => ({
+        name: `${suite.name}-${engine.name}`,
+        testMatch: suite.testMatch,
+        use: { ...engine.use },
+      })),
+    ),
+    // Chromium only, deliberately. The anomaly smoke test reads a JavaScript global
+    // and is engine-independent, so a second engine would double its cost for no
+    // signal. The suites above run on both because they measure layout, which is
+    // exactly where the engines differ.
+    {
+      name: 'anomaly-chromium',
+      testMatch: 'anomaly-smoke.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
 
   webServer: {
     // build:e2e builds the SDK too, so this is the only build the e2e job needs.

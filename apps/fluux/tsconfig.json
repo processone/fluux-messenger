@@ -12,5 +12,5 @@
       "@fluux/sdk/demo": ["../../packages/fluux-sdk/dist/demo/index.d.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "scripts"]
 }

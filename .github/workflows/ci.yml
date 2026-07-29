@@ -87,6 +87,19 @@ jobs:
       - name: Lint App
         run: npm run lint --workspace=@xmpp/fluux
 
+      # Two builds, two directions. The production direction protects users; the Dev
+      # direction catches a silent regression to "eliminated everywhere, including
+      # where it was supposed to run" — which is exactly what the import.meta.env.DEV
+      # gate did in the packaged Dev bundle before #1167, with nothing to notice.
+      #
+      # Each build also runs the anomaly-build-audit vite plugin, which asserts the
+      # module graph from inside the build; these scripts grep the emitted artefact.
+      # Two mechanisms because they fail differently.
+      - name: Anomaly instrumentation is eliminated in production and present in Dev
+        run: |
+          npm run check:anomaly:prod
+          npm run check:anomaly:dev
+
       - name: Check for unstable Zustand selectors
         run: |
           # Zustand selectors passed to useStore/useSyncExternalStore MUST return
