@@ -8,6 +8,11 @@ computations feeding five numeric renderings** (conversation sidebar, room toolt
 floating pill, FAB badge) that today disagree, and specifies the acceptance tests PR B must
 pass.
 
+The five-surface inventory below records PR B's scope. The current surface inventory and display
+cap contract are owned by the doc comment on
+`apps/fluux/src/utils/formatUnreadCount.ts`; later human-visible numeric surfaces use that same
+formatter.
+
 ## The principle
 
 **There is exactly one unread count per conversation/room: the number of eligible messages

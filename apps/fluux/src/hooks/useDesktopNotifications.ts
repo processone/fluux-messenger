@@ -226,8 +226,8 @@ export function useDesktopNotifications(): void {
       // the body (matches the SW push path; the title stays the plain name).
       // Both remaining `conv.unreadCount` uses below stay raw numbers on purpose:
       // newMessagesText's argument drives ICU plural selection, and the third
-      // argument is the machine-readable native payload's `count` field. Do not
-      // route either through formatUnreadCount.
+      // argument is the machine-readable notification navigation payload's
+      // `count` field. Do not route either through formatUnreadCount.
       const coalesced = conv.unreadCount > 1
       await showWebNotification(
         baseTitle,

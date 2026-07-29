@@ -4,7 +4,8 @@
  * Pins the deliberate split in useDesktopNotifications' unread-count handling:
  * the human-visible title formats through formatUnreadCount (covered in
  * useDesktopNotifications.posting.test.tsx, which mocks isTauri: true), while the
- * i18n plural argument and the native payload's `count` field stay raw numbers.
+ * i18n plural argument and the web navigation payload's `count` field stay raw
+ * numbers.
  * Formatting either of the latter would break ICU plural selection or turn a
  * machine-readable field into a string — a future "route every count through the
  * formatter" sweep must not touch them.
