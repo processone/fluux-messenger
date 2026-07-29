@@ -307,9 +307,21 @@ string *looks like*, which is not the same question. A message body equal to `fo
 `c:0123456789abcdef`, or to `s:m41`, would satisfy any shape check — so a detector that accidentally
 passed a body through would emit it, and the guarantee would be decorative.
 
-Constrained values are therefore **opaque objects, never primitive strings**. `Tag`, `Token` and
-`LocalRef` are frozen objects created only by their constructors in `schema.ts`, each registered in
-a module-private `WeakSet` at construction. The serializer:
+Constrained values are therefore **opaque objects, never primitive strings**, registered in a
+module-private `WeakSet` at construction. But `WeakSet` membership only proves *which constructor
+ran*, not *where the content came from* — so the two value families need different treatment:
+
+- **`Tag` has no public constructor.** Tags are a closed set of **pre-constructed frozen constants**
+  exported by name from `schema.ts` (`TAG.focus`, `TAG.ptrAdvance`, …). There is no `Tag(value)`
+  taking a runtime string, because such a function would let `Tag(message.body as any)` emit a body
+  that happens to equal `focus` — passing the `WeakSet` check honestly, having been constructed
+  honestly. Removing the entry point removes the class of mistake.
+- **`Token` and `LocalRef` keep dynamic constructors**, and are safe despite taking runtime input
+  precisely because **neither ever re-emits its input**: one emits an HMAC digest, the other a
+  sequence number. Passing a body to either is harmless — it yields an opaque value derived from it,
+  never the thing itself.
+
+The serializer:
 
 1. **rejects any primitive string** appearing in `expected`, `observed`, a crumb value, or **any
    value in `ctx`** — unconditionally, whatever it contains;
@@ -356,17 +368,19 @@ un-evicted `Map` grows with session length, while a naive LRU can evict a MAM qu
 one query's evidence across two identities inside a single anomaly record, which is worse than not
 recording it. The rule:
 
-- An entry is **pinned** while it is referenced by the breadcrumb ring, or by an open request or
-  timer that a detector is tracking.
-- Pins are released when the crumb falls out of the fixed 100-entry ring, or when the request or
-  timer it belongs to completes.
-- Eviction removes **unpinned entries only**, oldest first, above a soft cap of 2 000 entries.
-- If the cap is reached and every entry is pinned, nothing is evicted and
-  `recorder/localref-pressure` is counted. Growing is the correct failure here; a ref that changes
-  identity under a live reference is not.
+- **Pins are ref-counted.** The same ref can appear in several crumbs *and* in an open request at
+  once, so a boolean pin would be released by whichever holder finished first while others still
+  referred to it. Each reference increments; the crumb leaving the fixed 100-entry ring, or the
+  request or timer completing, decrements. An entry is evictable at zero.
+- Eviction removes **zero-count entries only**, oldest first, above a cap of 2 000 entries.
+- **Under pressure the map stops issuing, it does not grow.** If the cap is reached and every entry
+  is still referenced, existing refs are all **kept** — identity is never broken — but **no new ref
+  is allocated**: the crumb that wanted one is omitted and `recorder/localref-overflow` is counted.
 
-A ref is therefore guaranteed stable for at least as long as anything can still refer to it, which
-is exactly the window in which stability matters.
+That last rule is what makes the bound real. An earlier revision chose to keep growing under full
+pressure, which is simply an unbounded map with a counter attached. Losing a crumb is a bounded,
+counted, visible degradation; growing without limit is not, and reassigning a live ref would corrupt
+evidence rather than merely thin it.
 
 **Why ephemeral ids cannot use the async path.** A pre-warmed cache only works when the identifier
 is known *before* the breadcrumb. A message or stanza id seen for the first time has no prior event
@@ -413,14 +427,18 @@ belt-and-braces against a malformed record shape, not the privacy mechanism itse
 1. **High-entropy bodies.** Property-based: bodies of random high-entropy strings; assert no
    substring of length ≥ 8 appears anywhere in sink output, and that the record was *rejected*
    rather than emitted-and-truncated.
-2. **Shape-collision bodies.** Bodies set to values that a shape check would have accepted — every
-   member of the `Tag` allowlist in turn, a string matching `/^c:[0-9a-f]{16}$/`, one matching
-   `/^s:[a-z][0-9]+$/`, and `c:unresolved`. All must be **rejected**, because they arrive as
-   primitive strings and are absent from the `WeakSet`. This is the direct regression test for the
-   provenance rule; under the previous pattern-based check every one of these would have passed.
+2. **Shape-collision bodies.** Bodies set to values a shape check would have accepted — every `Tag`
+   constant's string in turn, a string matching `/^c:[0-9a-f]{16}$/`, one matching
+   `/^s:[a-z][0-9]+$/`, and `c:unresolved`. All must be **rejected**: they arrive as primitive
+   strings and are absent from the `WeakSet`. Under the earlier pattern-based check every one of
+   these would have passed.
 3. **Forgery attempt.** A hand-built object carrying the same fields as a `Token` but constructed
    outside `schema.ts` must be rejected, confirming the check is `WeakSet` membership and not
    structural duck-typing.
+4. **No dynamic `Tag`.** A static test asserts `schema.ts` exports no function producing a `Tag`
+   from a runtime string — the API-shape guard for §4.4's first rule. `Token` and `LocalRef` are
+   separately asserted never to echo their input: given a body as input, the output must share no
+   substring of length ≥ 8 with it.
 
 ---
 
@@ -454,9 +472,13 @@ seam exists:
 - **accepts an identical rewrite** — the same pointer written twice is idempotence, not regression.
   Only a strictly-behind pointer within one generation is an anomaly.
 
-`unread-survives-focus` stays in stage 3: its reset condition is an account/scope change, which
-*is* publicly observable, and a generation change during its 2s window resets the timer rather than
-producing a verdict.
+`unread-survives-focus` stays in stage 3, and its reset condition is **only** the publicly
+observable account/storage-scope change — it cannot see a generation change before stage 5, so the
+spec must not claim it reacts to one. That is tolerable here in a way it was not for
+`pointer-regression`: this detector requires the condition to hold continuously for 2s while the
+conversation is active and focused, so a rehydration inside the window disturbs the state it is
+watching and the timer restarts on the next evaluation rather than producing a verdict from a
+half-rebuilt store.
 
 **Why `badge-vs-pointer` is deferred.** The original design proposed
 `recomputeCountsFromPointer` (`stores/shared/notificationState.ts:637`) as an oracle. That is not
@@ -496,9 +518,9 @@ the same seam — and an outbound hook alone is not sufficient for any of them:
 **`mam-page-yield` cannot be built from an outbound hook.** The outbound seam sees the query and the
 typed MAM event sees the messages *returned*, but retention is decided later — durable
 deduplication and cache writes happen downstream of that event. "Rows retained" is not observable
-from either end, so it needs its own outcome seam carrying query identity, returned count, retained
-count, and dropped/deduplicated count. Without those four numbers the detector would report page
-yield as returned-count, which is not the quantity in question.
+from either end, so it needs its own outcome seam giving each returned row exactly one disposition
+(§5.5). Without that breakdown the detector would report page yield as returned-count, which is not
+the quantity in question.
 
 Stage 4 previously claimed partial coverage via module events; that was optimistic — disco and vCard
 traffic is not visible in the typed event stream at the granularity these checks need.
@@ -560,18 +582,30 @@ boundary §4.4 already requires for JIDs.
 2. **A MAM outcome seam** emitting, once a page has been merged into the cache:
 
    ```ts
-   { queryId: string, outcome: 'durable' | 'partial' | 'failed',
-     returned: number, retained: number, deduplicated: number, persistenceFailed: number }
+   { queryId: string, outcome: 'durable' | 'partial' | 'failed', returned: number,
+     retained: number, deduplicated: number, patched: number,
+     intentionallyUnstored: number, persistenceFailed: number }
    ```
 
-   **The counts must balance: `returned === retained + deduplicated + persistenceFailed`**, and the
-   event is emitted only *after* the persistence attempt has finished, so the three terms are final.
+   **Every returned row gets exactly one disposition**, and they balance:
 
-   A single `dropped` was insufficient. Under `partial` it conflates two opposite facts — rows the
-   cache already had, and rows that failed to persist — so a `mam-page-yield` detector reading it
-   would report a storage failure as a deduplication win, which is precisely the direction that
-   hides a bug. The three-way `outcome` remains, as the fast triage key; the balance identity is
-   what makes the numbers usable. Unblocks §5.2.
+   ```
+   returned === retained + deduplicated + patched + intentionallyUnstored + persistenceFailed
+   ```
+
+   Three dispositions were not enough, because the merge has more real outcomes than that:
+
+   - **`intentionallyUnstored`** — `noLocalStore` messages are filtered out of `persistableMessages`
+     deliberately (`chatStore.ts:2844`). Counting them as `persistenceFailed` would invent a storage
+     bug; counting them as `retained` would claim a write that never happened.
+   - **`patched`** — a duplicate row can still trigger a durable stanza-id backfill
+     (`chatStore.ts:2758–2760`). It is neither a plain duplicate nor a plain insert, and folding it
+     into `deduplicated` would make a page look inert while it was in fact writing.
+
+   **Emission waits for inserts *and* patches to resolve.** Today those patches are fire-and-forget
+   (`void messageCache.updateMessage(...)`), so this seam requires tracking them rather than
+   discarding the promise — a small change to product code, not only a new event, and one to plan
+   for in stage 5. The three-way `outcome` remains as the fast triage key. Unblocks §5.2.
 
 3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**:
 
@@ -691,15 +725,18 @@ Additionally required:
   as `c:unresolved`. This is the regression guard for §4.4's two-class split; without it, a future
   refactor routing ephemeral ids through the async path would silently collapse every such crumb
   into one indistinguishable sentinel.
-- **Ref-stability test** — a `LocalRef` for an in-flight query keeps the same value across cache
-  pressure that evicts unpinned entries around it; and an entry unpins, then evicts, once its crumb
-  leaves the ring and its request completes (§4.4).
+- **Ref-stability test** — a `LocalRef` for an in-flight query keeps the same value across pressure
+  that evicts zero-count entries around it; an entry held by two crumbs plus an open request only
+  becomes evictable after **all three** release it (the ref-count case a boolean pin would get
+  wrong); and at full pressure existing refs are preserved while a new allocation is refused and
+  counted as `recorder/localref-overflow` (§4.4).
 - **Generation-scope test** (stage 5) — deleting conversation A must **not** reset
   `pointer-regression` state for conversation B, and a store-scope generation change must reset
   both. This is the control test for the `chatCacheEpoch` conflation described in §5.5.
-- **MAM balance test** (stage 5) — every emitted outcome satisfies
-  `returned === retained + deduplicated + persistenceFailed`, including on the `partial` and
-  `failed` paths.
+- **MAM balance test** (stage 5) — every emitted outcome satisfies the five-way identity, with
+  explicit cases for a `noLocalStore` page (`intentionallyUnstored`, not `persistenceFailed`) and a
+  duplicate page carrying stanza-id backfills (`patched`, not `deduplicated`), plus an assertion
+  that emission happens only after the patch promises resolve.
 
 ### 7.2 Paired CI assertions
 
