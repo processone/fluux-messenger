@@ -262,10 +262,22 @@ ignoreStore.getState().setIgnoredForRoom('team@conference.fluux.chat', [
   { identifier: 'alex@fluux.chat', displayName: 'Alex', jid: 'alex@fluux.chat' },
 ])
 
+// Anomaly instrumentation. A `lazy` import inside a statically-false branch means
+// Rollup does not merely skip the code — it never emits the chunk. See
+// src/anomaly/gate.ts for the build matrix.
+const AnomalyInstaller = __FLUUX_ANOMALY__
+  ? React.lazy(() => import('./anomaly/AnomalyInstaller'))
+  : null
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
       <XMPPProvider client={demoClient}>
+        {AnomalyInstaller && (
+          <React.Suspense fallback={null}>
+            <AnomalyInstaller />
+          </React.Suspense>
+        )}
         <ThemeProvider>
           <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
             <HashRouter>

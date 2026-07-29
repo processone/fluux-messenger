@@ -62,9 +62,13 @@ export interface RecorderOptions {
   build: string
   sid: string
   /**
-   * Byte budget. A function, not a number, so a test can raise the limit and retry
-   * on the SAME recorder instance — the only way to assert that a failed flush
-   * preserved its window.
+   * Byte budget, read on every write.
+   *
+   * A function rather than a number so a test can TIGHTEN the budget partway
+   * through a session and drive the recorder to its limit without writing megabytes
+   * of records first. It cannot loosen one: the value is clamped to the default on
+   * every read, and a budget refusal is terminal, so raising the limit afterwards
+   * would not revive the recorder anyway.
    */
   maxBytes?: () => number
 }
