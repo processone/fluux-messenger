@@ -166,10 +166,21 @@ async function enableScrollTrace(page: Page): Promise<void> {
  * completion arrives, the premise itself (growth modelled INSIDE the pin window) did not hold, and
  * saying so beats asserting on a geometry nobody was driving.
  */
-async function withPinSettled(page: Page, trigger: () => Promise<void>): Promise<void> {
+async function withPinSettled(
+  page: Page,
+  expectedTrigger: 'switch' | 'new-message',
+  trigger: () => Promise<void>,
+): Promise<void> {
   let completions = 0
   const onConsole = (message: { text: () => string }) => {
-    if (message.text().includes('PIN completed')) completions++
+    const text = message.text()
+    if (
+      text.includes('PIN completed') &&
+      text.includes(`trigger: ${expectedTrigger},`) &&
+      /\boutcome: (?:settled|best-effort)(?:,|})/.test(text)
+    ) {
+      completions++
+    }
   }
   page.on('console', onConsole)
   try {
@@ -501,7 +512,16 @@ test.describe('Controller-owned resident-top navigation', () => {
     // edge over anything written underneath it. Waiting for the loop to report completion — rather
     // than for navigateToStressRoom's fixed settle to elapse — is what keeps the setup below from
     // being undone on a slow runner (CI run 30466867270 read 4372 here, the live edge).
-    await withPinSettled(page, () => navigateToStressRoom(page))
+    await withPinSettled(page, 'switch', () => navigateToStressRoom(page))
+    const entryDistanceFromBottom = await page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null
+    })
+    expect(
+      entryDistanceFromBottom,
+      'precondition: stress-room entry pin must finish at the live edge',
+    ).not.toBeNull()
+    expect(entryDistanceFromBottom).toBeLessThan(AT_BOTTOM_OK_PX)
     // Start materially away from resident top without turning this into a deep virtualized-list
     // animation test. The approved contract deliberately allows a native smooth scroll that a
     // browser interrupts during deep re-windowing to time out best-effort without a corrective
@@ -1694,7 +1714,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     // While the pin-bottom loop is still settling, model WebKitGTK: the row grows tall AFTER paint
     // (scrollHeight up, scrollTop unchanged → distFromBottom large) and the engine fires a scroll
     // event. One rAF in keeps us inside the 60-frame pin window.
-    await withPinSettled(page, () => page.evaluate((msgId) => new Promise<void>((resolve) => {
+    await withPinSettled(page, 'new-message', () => page.evaluate((msgId) => new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         const s = document.querySelector('[data-message-list]') as HTMLElement | null
         const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
@@ -1760,7 +1780,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     //   event 1 (growth frame): scrollHeight UP vs prev → discriminator absorbs it (isAtBottom kept).
     //   event 2 (one frame later): SAME height, scrollTop short → discriminator misses → current code
     //   flips isAtBottom false and the pin bails. The intent-gated pin re-pins through it.
-    await withPinSettled(page, () => page.evaluate((msgId) => {
+    await withPinSettled(page, 'new-message', () => page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
       if (!s || !el) return
