@@ -273,11 +273,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
       <XMPPProvider client={demoClient}>
-        {AnomalyInstaller && (
-          <React.Suspense fallback={null}>
-            <AnomalyInstaller />
-          </React.Suspense>
-        )}
         <ThemeProvider>
           <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
             <HashRouter>
