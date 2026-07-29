@@ -57,34 +57,62 @@ test.describe('anomaly runtime', () => {
     expect(sentinel).toBe('fluux-anomaly-instrumentation-present')
   })
 
-  test('React StrictMode does not duplicate the session record', async ({ page }) => {
+  test('React StrictMode produces neither a duplicate record nor a phantom suppression', async ({
+    page,
+  }) => {
     // The demo tree mounts under StrictMode, so every effect runs
-    // install → cleanup → install. A per-attachment announcement would emit twice;
-    // the cooldown would hide the second record but still count a phantom
-    // suppression, so assert the digest as well as the record count.
+    // install → cleanup → install. A per-attachment announcement would emit twice,
+    // and the per-id cooldown would swallow the second RECORD — leaving the count
+    // at one while `suppressed` gained an entry. Counting records alone therefore
+    // cannot see this regression; the digest has to be inspected, which means
+    // forcing a flush.
     await page.goto('/demo.html?tutorial=false')
 
     await expect
-      .poll(async () =>
-        page.evaluate(
-          () =>
-            ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
-              .length,
-        ),
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never wrote its session record' },
       )
       .toBeGreaterThan(0)
 
+    // Drive the visibility flush the installer listens for. Playwright has no API
+    // for the visibility state, so override the property the handler reads.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
     const summary = await page.evaluate(() => {
       const w = window as unknown as { __fluuxAnomalies: string[] }
-      const records = w.__fluuxAnomalies.map((l) => JSON.parse(l) as Record<string, unknown>)
+      const records = w.__fluuxAnomalies.map((l) => JSON.parse(l) as Record<string, never>)
+      const digest = records.filter((r) => r.kind === 'digest').pop()
       return {
         starts: records.filter((r) => r.id === 'recorder/session-start').length,
         ceilings: records.filter((r) => r.id === 'recorder/ceiling-reached').length,
+        digestSeen: digest !== undefined,
+        suppressedSessionStart: digest
+          ? (digest.suppressed as Record<string, number>)['recorder/session-start']
+          : 'no-digest',
+        rejected: digest
+          ? (digest.counters as Record<string, number>)['recorder/rejected-value']
+          : -1,
       }
     })
 
+    // Guard the guard: without a digest the two assertions below prove nothing.
+    expect(summary.digestSeen).toBe(true)
+    expect(summary.suppressedSessionStart).toBeUndefined()
     expect(summary.starts).toBe(1)
     // A ceiling in a freshly loaded demo would mean the budget accounting is wrong.
     expect(summary.ceilings).toBe(0)
+    expect(summary.rejected).toBe(0)
   })
 })
