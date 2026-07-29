@@ -125,6 +125,34 @@ describe('useDesktopNotifications posting + guard', () => {
     expect(requestAttention).toHaveBeenCalledTimes(1)
   })
 
+  // The coalesced-backlog count in the title is human-visible text, so it must
+  // render through the shared formatUnreadCount and saturate as "999+" like the
+  // sidebar badge and the command palette. See useDesktopNotifications.unreadCount.test.tsx
+  // for the other half of the split (plural argument and payload stay numeric).
+  it('formats the coalesced unread count in the notification title', async () => {
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice', unreadCount: 999 },
+      { id: 'message-1', from: 'alice@example.com' },
+    )
+    expect(invoke).toHaveBeenCalledWith(
+      'post_notification',
+      expect.objectContaining({ title: 'Alice (999+)' }),
+    )
+  })
+
+  it('renders an unsaturated coalesced count as the plain number', async () => {
+    renderHook(() => useDesktopNotifications())
+    await handlers.onConversationMessage?.(
+      { id: 'alice@example.com', name: 'Alice', unreadCount: 7 },
+      { id: 'message-1', from: 'alice@example.com' },
+    )
+    expect(invoke).toHaveBeenCalledWith(
+      'post_notification',
+      expect.objectContaining({ title: 'Alice (7)' }),
+    )
+  })
+
   it('keeps the plugin notification path on mobile Tauri', async () => {
     isMobileTauri.mockResolvedValue(true)
     renderHook(() => useDesktopNotifications())

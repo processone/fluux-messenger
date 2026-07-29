@@ -16,6 +16,7 @@ import {
 } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { newMessagesText } from '@/utils/swMessages'
+import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
@@ -178,7 +179,11 @@ export function useDesktopNotifications(): void {
     const senderName = getLocalPart(message.from)
     const baseTitle = conv.name || senderName
     // When a reconnect backlog collapsed into one notification, surface the count.
-    const title = conv.unreadCount > 1 ? `${baseTitle} (${conv.unreadCount})` : baseTitle
+    // Human-visible text, so it renders through the shared formatter and saturates
+    // as "999+" like every other numeric unread surface.
+    const title = conv.unreadCount > 1
+      ? `${baseTitle} (${formatUnreadCount(conv.unreadCount)})`
+      : baseTitle
     const body = formatLocalizedPreview(message, t)
 
     notificationDebug.desktopNotification({
@@ -219,6 +224,10 @@ export function useDesktopNotifications(): void {
     } else {
       // Same-tag replacement swallows earlier messages, so surface the count in
       // the body (matches the SW push path; the title stays the plain name).
+      // Both remaining `conv.unreadCount` uses below stay raw numbers on purpose:
+      // newMessagesText's argument drives ICU plural selection, and the third
+      // argument is the machine-readable native payload's `count` field. Do not
+      // route either through formatUnreadCount.
       const coalesced = conv.unreadCount > 1
       await showWebNotification(
         baseTitle,
@@ -287,6 +296,9 @@ export function useDesktopNotifications(): void {
     } else {
       // Coalesced room notifications drop the per-message nick: the messages
       // may come from several senders, so the room name is the honest title.
+      // The room title never interpolates the count, so there is nothing to format
+      // here; as on the conversation path, the plural argument and the payload
+      // `count` field stay raw numbers.
       const coalesced = room.unreadCount > 1
       await showWebNotification(
         coalesced ? room.name : title,
