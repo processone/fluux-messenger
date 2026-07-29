@@ -5,9 +5,10 @@ import {
   install,
   installCount,
   resetInstallForTesting,
+  setSessionRetryDelayForTesting,
   whenReady,
 } from './install'
-import { METRIC, resetValuesForTesting } from './values'
+import { CTX, METRIC, resetValuesForTesting } from './values'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
 const w = () => window as unknown as WindowWithSink
@@ -199,25 +200,61 @@ describe('readiness', () => {
     warn.mockRestore()
   })
 
-  it('leaves the session announcement pending when the tokenizer fails', async () => {
+  it('retries the session record itself when both mounts share a failing promise', async () => {
+    // The real StrictMode shape: BOTH mounts happen before the promise settles, so
+    // the second finds the announcement claimed and registers no callback. When the
+    // shared promise then fails there is no third mount to notice, and nothing else
+    // calls back into the announcement — so the runtime has to retry on its own.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const importKey = vi.spyOn(globalThis.crypto.subtle, 'importKey')
     importKey.mockRejectedValueOnce(new Error('transient'))
+    setSessionRetryDelayForTesting(1)
+
+    const cleanupA = install()
+    cleanupA()
+    const cleanupB = install()
+
+    await vi.waitFor(() => {
+      expect(records().filter((r) => r.id === 'recorder/session-start')).toHaveLength(1)
+    })
+
+    cleanupB()
+    importKey.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('gives up after a bounded number of attempts rather than retrying forever', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const importKey = vi.spyOn(globalThis.crypto.subtle, 'importKey')
+    importKey.mockRejectedValue(new Error('permanent'))
+    setSessionRetryDelayForTesting(1)
 
     install()()
-    await whenReady()
-    await Promise.resolve()
-    expect(records().filter((r) => r.id === 'recorder/session-start')).toHaveLength(0)
-
-    // A later attach must still open the session.
-    install()()
-    await whenReady()
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(records().filter((r) => r.id === 'recorder/session-start')).toHaveLength(1)
+    await vi.waitFor(() => {
+      expect(warn.mock.calls.some((c) => String(c[0]).includes('abandoned'))).toBe(true)
+    })
+    expect(records()).toHaveLength(0)
 
     importKey.mockRestore()
     warn.mockRestore()
+  })
+
+  it('files an invalid pre-ready payload as a rejection, not as merely early', async () => {
+    // Otherwise a detector bug arriving during startup is indistinguishable from a
+    // well-formed record that was simply too early.
+    install()
+    getRecorder()!.record({
+      id: CTX.conv as never,
+      sev: 'bug',
+      ctx: [[CTX.conv, 'raw' as never]],
+    })
+
+    await whenReady()
+    getRecorder()!.flushDigest(1000)
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    expect(digest.counters['recorder/rejected-value']).toBe(1)
+    expect(digest.counters['recorder/dropped-not-ready']).toBe(0)
   })
 
   it('drops records written before the tokenizer is ready, and counts them', async () => {

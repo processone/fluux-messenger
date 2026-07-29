@@ -194,13 +194,30 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 
     record(input: RecordInput): void {
       if (terminal) return
+
       // Before the tokenizer holds a key every record would carry
-      // `tokenKeyId: "unknown"`. Dropping is counted, so the gap is visible in the
-      // first digest that follows rather than silently swallowed.
+      // `tokenKeyId: "unknown"`, so the record cannot be written. Validate the
+      // payload anyway before filing the drop: otherwise a detector bug arriving
+      // during startup is indistinguishable from a well-formed record that was
+      // merely early. The placeholder key id exists only to let the real validator
+      // run — this line is discarded either way.
       if (!isTokenizerReady()) {
-        droppedNotReady++
+        const probe = serialize({
+          ...envelope(),
+          tokenKeyId: '00000000',
+          kind: 'anomaly',
+          id: input.id,
+          sev: input.sev,
+          ...(input.expected !== undefined ? { expected: input.expected } : {}),
+          ...(input.observed !== undefined ? { observed: input.observed } : {}),
+          ctx: input.ctx ?? [],
+          crumbs: [],
+        })
+        // A null probe already counted itself as a rejected value.
+        if (probe) droppedNotReady++
         return
       }
+
       if (atCeiling()) {
         announceCeiling()
         return

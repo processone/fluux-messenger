@@ -20,6 +20,26 @@ import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
 import { ID, initTokenizer } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
+/**
+ * The session announcement retries itself, because nothing else will.
+ *
+ * In a real StrictMode cycle both mounts happen before the first readiness promise
+ * settles, so the second one finds the announcement already claimed and registers
+ * no callback of its own. When that shared promise then fails there is no third
+ * mount to notice, and neither the digest timer nor a visibilitychange calls back
+ * into the announcement — the session would simply never open.
+ */
+const SESSION_RETRY_MS = 2000
+const SESSION_MAX_ATTEMPTS = 3
+
+/**
+ * Retry delay, overridable ONLY by tests.
+ *
+ * The retry path involves real WebCrypto, which fake timers cannot advance, so a
+ * test either waits two real seconds or shortens the delay. A named seam is
+ * clearer than either a three-second test or a pile of crypto mocks.
+ */
+let sessionRetryMs = SESSION_RETRY_MS
 
 const sessionId =
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -29,6 +49,8 @@ const sessionId =
 let recorder: Recorder | null = null
 let ready: Promise<boolean> | null = null
 let sessionAnnounced = false
+let sessionAttempts = 0
+let sessionRetryTimer: ReturnType<typeof setTimeout> | null = null
 
 let attachments = 0
 /**
@@ -96,24 +118,40 @@ export function whenReady(): Promise<boolean> {
 function announceSessionOnce(rec: Recorder): void {
   if (sessionAnnounced) return
   sessionAnnounced = true
+  attemptSessionRecord(rec)
+}
+
+function attemptSessionRecord(rec: Recorder): void {
+  sessionAttempts++
   void whenReady().then((ok) => {
-    // Latch only on success. A tokenizer failure must leave the announcement
-    // pending, so a later attach can retry it rather than the session silently
-    // never opening.
-    if (!ok) {
-      sessionAnnounced = false
+    if (ok) {
+      rec.record({ id: ID.sessionStart, sev: 'drift' })
       return
     }
-    rec.record({ id: ID.sessionStart, sev: 'drift' })
+    if (sessionAttempts >= SESSION_MAX_ATTEMPTS) {
+      console.warn(
+        `[Anomaly] session record abandoned after ${SESSION_MAX_ATTEMPTS} attempts; ` +
+          'this session has no key-space anchor',
+      )
+      return
+    }
+    // whenReady() cleared its cached promise on failure, so this re-initialises.
+    sessionRetryTimer = setTimeout(() => {
+      sessionRetryTimer = null
+      attemptSessionRecord(rec)
+    }, sessionRetryMs)
   })
 }
 
 /**
- * Attach subscriptions and timers. Idempotent: a second call while already
- * attached is a no-op returning a cleanup that does nothing.
+ * Acquire a hold on the shared subscriptions, attaching them on the first hold.
  *
- * @returns cleanup that detaches what THIS call attached. It does not destroy the
- * runtime.
+ * NOT a no-op when already attached: the call takes a reference, so its cleanup is
+ * required — skipping it would leave the timer and listener alive for the rest of
+ * the session.
+ *
+ * @returns a release for THIS hold. The subscriptions come down when the last hold
+ * is released; the runtime itself is never destroyed.
  */
 export function install(): () => void {
   const rec = runtime()
@@ -152,15 +190,24 @@ export function install(): () => void {
   }
 }
 
+/** Test-only: shorten the session-record retry delay. */
+export function setSessionRetryDelayForTesting(ms: number): void {
+  sessionRetryMs = ms
+}
+
 /** Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
   detachListener?.()
   detachListener = null
   if (digestTimer) clearInterval(digestTimer)
   digestTimer = null
+  if (sessionRetryTimer) clearTimeout(sessionRetryTimer)
+  sessionRetryTimer = null
   recorder = null
   ready = null
   sessionAnnounced = false
+  sessionAttempts = 0
+  sessionRetryMs = SESSION_RETRY_MS
   attachments = 0
   attachRefs = 0
 }
