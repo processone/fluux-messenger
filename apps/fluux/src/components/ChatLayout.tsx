@@ -609,6 +609,8 @@ function ChatLayoutContent() {
   // nothing about the rooms list, and counting it anywhere else would blank a
   // sidebar the user just asked for (Rooms/Contacts/Search), or hand the screen
   // to a category-less Settings/Admin view they never selected.
+  // Matching a store flag against sidebarView relies on the shared synchronous
+  // router policy; see config/routerTransitions for the ordering contract.
   const activationHoldsMainPane =
     (sidebarView === 'messages' && chatActivationPending) ||
     (sidebarView === 'rooms' && roomActivationPending)
@@ -1166,7 +1168,7 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
   const { Icon, title, description, hint } = getEmptyStateContent()
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted px-6 text-center">
+    <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted px-6 text-center" data-testid="empty-state">
       <div className="size-24 rounded-full bg-fluux-brand/10 border border-fluux-brand/30 flex items-center justify-center mb-5">
         <Icon className="size-11 text-fluux-brand" />
       </div>
