@@ -149,6 +149,83 @@ describe('renderStyledMessage', () => {
     })
   })
 
+  describe('Markdown strikethrough (~~text~~)', () => {
+    it('renders strikethrough and consumes both tilde pairs', () => {
+      const container = renderText('Hello ~~world~~')
+      expect(container.querySelector('del')?.textContent).toBe('world')
+      expect(container.textContent).toBe('Hello world')
+    })
+
+    it('renders a single-character body', () => {
+      const container = renderText('Hello ~~x~~')
+      expect(container.querySelector('del')?.textContent).toBe('x')
+      expect(container.textContent).toBe('Hello x')
+    })
+
+    it('renders multiple Markdown strikethrough segments', () => {
+      const container = renderText('~~one~~ and ~~two~~')
+      const strikes = container.querySelectorAll('del')
+      expect(strikes).toHaveLength(2)
+      expect(strikes[0].textContent).toBe('one')
+      expect(strikes[1].textContent).toBe('two')
+      expect(container.textContent).toBe('one and two')
+    })
+
+    it('keeps the XEP-0393 single-tilde form working alongside it', () => {
+      const container = renderText('~~markdown~~ and ~xep~')
+      const strikes = container.querySelectorAll('del')
+      expect(strikes).toHaveLength(2)
+      expect(strikes[0].textContent).toBe('markdown')
+      expect(strikes[1].textContent).toBe('xep')
+      expect(container.textContent).toBe('markdown and xep')
+    })
+
+    it('renders Markdown strikethrough with bold, italic and code', () => {
+      const container = renderText('**bold** and _italic_ and ~~strike~~ and `code`')
+      expect(container.querySelector('strong')?.textContent).toBe('bold')
+      expect(container.querySelector('em')?.textContent).toBe('italic')
+      expect(container.querySelector('del')?.textContent).toBe('strike')
+      expect(container.querySelector('code')?.textContent).toBe('code')
+      expect(container.textContent).toBe('bold and italic and strike and code')
+    })
+
+    it('does not strike when the markers wrap whitespace', () => {
+      const container = renderText('Hello ~~ world ~~ again')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.textContent).toBe('Hello ~~ world ~~ again')
+    })
+
+    it('leaves an unmatched ~~ literal', () => {
+      const container = renderText('Hello ~~world')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.textContent).toBe('Hello ~~world')
+    })
+
+    it('leaves a lone ~~ literal', () => {
+      const container = renderText('Hello ~~ there')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.textContent).toBe('Hello ~~ there')
+    })
+
+    it('suppresses strikethrough when the leading tilde is escaped', () => {
+      const container = renderText('Use \\~~not strike~~')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.textContent).toContain('~~not strike~~')
+    })
+
+    it('keeps tildes literal inside inline code', () => {
+      const container = renderText('Type `~~not strike~~` here')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.querySelector('code')?.textContent).toBe('~~not strike~~')
+    })
+
+    it('keeps tildes literal inside a fenced code block', () => {
+      const container = renderText('```\n~~not strike~~\n```')
+      expect(container.querySelector('del')).toBeFalsy()
+      expect(container.querySelector('pre code')?.textContent).toContain('~~not strike~~')
+    })
+  })
+
   describe('inline code (`text`)', () => {
     it('renders inline code', () => {
       const container = renderText('Hello `world`')
