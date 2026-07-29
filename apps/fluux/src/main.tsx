@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router'
 import { XMPPProvider } from '@fluux/sdk'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import App from './App'
 import './i18n'
 import './index.css'
@@ -147,7 +148,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         shouldAutoReconnect={() => getReconnectIntent() === 'active'}
       >
         <ThemeProvider>
-          <HashRouter>
+          <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
             <App />
           </HashRouter>
         </ThemeProvider>

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, NavLink, useLocation, useNavigate } from 'react-router'
 import { ChatLayout } from './ChatLayout'
+import { ROUTER_USE_TRANSITIONS } from '@/config/routerTransitions'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 
 // Use vi.hoisted() so mock functions are available when vi.mock factory runs
@@ -102,10 +103,11 @@ const {
   }
 })
 
-// Wrapper component for tests that need routing
+// Frame-sensitive routing tests must use the transition policy the app ships.
+// See config/routerTransitions for the route/store ordering contract.
 function ChatLayoutWithRouter({ initialRoute = '/messages' }: { initialRoute?: string }) {
   return (
-    <MemoryRouter initialEntries={[initialRoute]}>
+    <MemoryRouter initialEntries={[initialRoute]} useTransitions={ROUTER_USE_TRANSITIONS}>
       <ChatLayout />
     </MemoryRouter>
   )
@@ -267,6 +269,8 @@ vi.mock('@fluux/sdk', () => ({
       activateRoom: mockActivateRoom,
       rooms: getMockState().rooms,
       allRooms: () => Array.from(getMockState().rooms.values()),
+      // What useViewNavigation falls back to when the Rooms tab has no memory yet.
+      joinedRooms: () => Array.from(getMockState().rooms.values()).filter((room) => room.joined),
     }),
   },
   connectionStore: {
@@ -487,9 +491,10 @@ vi.mock('@/hooks/useSessionPersistence', () => ({
 // Mock child components to simplify testing
 // Sidebar now uses useRouteSync internally, so we mock with NavLinks for navigation
 vi.mock('./Sidebar', () => ({
-  Sidebar: ({ onSelectContact, onStartChat }: {
+  Sidebar: ({ onSelectContact, onStartChat, onViewChange }: {
     onSelectContact: (contact: Contact) => void
     onStartChat: (contact: Contact) => void
+    onViewChange: (view: string) => void
   }) => {
     // Use NavLink from react-router for navigation
     const location = useLocation()
@@ -514,6 +519,12 @@ vi.mock('./Sidebar', () => ({
         <NavLink to="/rooms/lobby@conference.example.com" data-testid="deep-room-link">Deep Room</NavLink>
         <button type="button" data-testid="select-contact" onClick={() => onSelectContact(mockContact)}>Select Contact</button>
         <button type="button" data-testid="start-chat" onClick={() => onStartChat(mockContact)}>Start Chat</button>
+        {/* The real icon rail navigates through onViewChange, not through a NavLink: the
+            handler clears the outgoing tab's store and fires the hydrating activation
+            BEFORE calling navigate(). The NavLinks above only move the URL, so they
+            cannot reproduce a store/route tear. */}
+        <button type="button" data-testid="rail-messages" onClick={() => onViewChange('messages')}>Rail Messages</button>
+        <button type="button" data-testid="rail-rooms" onClick={() => onViewChange('rooms')}>Rail Rooms</button>
       </div>
     )
   },
@@ -1339,6 +1350,147 @@ describe('ChatLayout - activation gap (no empty-state flash)', () => {
     render(<ChatLayoutWithRouter initialRoute="/messages" />)
 
     expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+  })
+})
+
+// The tests above pin the steady states either side of the activation gap. This
+// block pins rail navigation itself; see config/routerTransitions for the
+// route/store ordering contract that prevents the torn frame.
+//
+// The final DOM is identical either way, so asserting on it proves nothing —
+// these tests watch every node the switch ADDS, including ones removed again
+// before the assertion runs.
+describe('ChatLayout - rail tab switch (no torn empty-state frame)', () => {
+  const ROOM_JID = 'lobby@conference.example.com'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: 'alice@example.com',
+      activeRoomJid: null,
+      chatActivationPending: false,
+      roomActivationPending: false,
+      isArchivedResult: false,
+      conversations: new Map([['alice@example.com', { id: 'alice@example.com' }]]),
+      rooms: new Map([[ROOM_JID, { jid: ROOM_JID, joined: true }]]),
+    })
+  })
+
+  afterEach(() => {
+    // Restores the shared vi.fn(impl) defaults — holdActivation() replaces them.
+    mockActivateRoom.mockReset()
+    mockActivateConversation.mockReset()
+    setMockState({ chatActivationPending: false, roomActivationPending: false })
+  })
+
+  /**
+   * Collects the `data-testid` of every element added anywhere under `root`
+   * since the last read. MutationObserver queues records synchronously and
+   * `takeRecords()` drains them synchronously, so a surface that existed for a
+   * single commit and was replaced in the next one is still recorded.
+   */
+  function watchAddedTestIds(root: HTMLElement) {
+    const observer = new MutationObserver(() => {})
+    observer.observe(root, { childList: true, subtree: true })
+    return {
+      read: () => {
+        const ids = new Set<string>()
+        const collect = (element: HTMLElement) => {
+          if (element.dataset.testid) ids.add(element.dataset.testid)
+          for (const child of element.querySelectorAll<HTMLElement>('[data-testid]')) {
+            if (child.dataset.testid) ids.add(child.dataset.testid)
+          }
+        }
+        for (const record of observer.takeRecords()) {
+          for (const node of record.addedNodes) {
+            if (node instanceof HTMLElement) collect(node)
+          }
+        }
+        observer.disconnect()
+        return ids
+      },
+    }
+  }
+
+  /**
+   * Stands in for the real store: flag the hydration window synchronously, land
+   * the active id only on release. Not `mockImplementationOnce` — the URL→store
+   * sync effect fires a second activation for the same target once the location
+   * lands, and that one has to hold the window too.
+   */
+  function holdActivation(
+    activate: typeof mockActivateRoom,
+    pendingFlag: 'roomActivationPending' | 'chatActivationPending',
+    activeField: 'activeRoomJid' | 'activeConversationId',
+  ) {
+    let release: (() => void) | undefined
+    const cacheRead = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    activate.mockImplementation(async (target: string | null) => {
+      if (target === null) return
+      setMockState({ [pendingFlag]: true })
+      await cacheRead
+      setMockState({ [activeField]: target, [pendingFlag]: false })
+    })
+    return () => release?.()
+  }
+
+  // The reported path: Conversations → Rooms.
+  it('holds the neutral surface instead of the empty-state hero switching to Rooms', async () => {
+    const releaseCacheRead = holdActivation(mockActivateRoom, 'roomActivationPending', 'activeRoomJid')
+
+    const { container } = render(<ChatLayoutWithRouter initialRoute="/messages/alice@example.com" />)
+    expect(screen.getByTestId('chat-view')).toBeInTheDocument()
+
+    const watcher = watchAddedTestIds(container)
+    fireEvent.click(screen.getByTestId('rail-rooms'))
+    const rendered = watcher.read()
+
+    // The regression: the outgoing tab's hero must never take a frame.
+    expect(rendered.has('empty-state')).toBe(false)
+    // Positive control — the hydration surface takes the frame the hero used to.
+    expect(rendered.has('view-loading-fallback')).toBe(true)
+
+    releaseCacheRead()
+    expect(await screen.findByTestId('room-view')).toBeInTheDocument()
+  })
+
+  // The tear is in the shared navigation path, not in either tab: Rooms →
+  // Conversations flashed the rooms hero just the same, it was simply never
+  // reported. Pin both so a partial fix can't pass.
+  it('holds the neutral surface instead of the empty-state hero switching to Conversations', async () => {
+    setMockState({ activeConversationId: null, activeRoomJid: ROOM_JID })
+    const releaseCacheRead = holdActivation(mockActivateConversation, 'chatActivationPending', 'activeConversationId')
+
+    const { container } = render(<ChatLayoutWithRouter initialRoute={`/rooms/${ROOM_JID}`} />)
+    expect(screen.getByTestId('room-view')).toBeInTheDocument()
+
+    const watcher = watchAddedTestIds(container)
+    fireEvent.click(screen.getByTestId('rail-messages'))
+    const rendered = watcher.read()
+
+    expect(rendered.has('empty-state')).toBe(false)
+    expect(rendered.has('view-loading-fallback')).toBe(true)
+
+    releaseCacheRead()
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+  })
+
+  // Guards the fix against being "no hero, ever": a Rooms tab with nothing to
+  // restore and nothing to join is genuinely empty and still owes the user the
+  // hero, not a skeleton that never resolves.
+  it('still shows the rooms hero when the switch has no room to open', () => {
+    setMockState({ rooms: new Map() })
+
+    const { container } = render(<ChatLayoutWithRouter initialRoute="/messages/alice@example.com" />)
+    const watcher = watchAddedTestIds(container)
+    fireEvent.click(screen.getByTestId('rail-rooms'))
+    const rendered = watcher.read()
+
+    expect(rendered.has('empty-state')).toBe(true)
+    expect(screen.getByTestId('empty-state')).toBeInTheDocument()
+    expect(screen.getByText('Create a room')).toBeInTheDocument()
   })
 })
 

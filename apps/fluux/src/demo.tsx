@@ -22,6 +22,7 @@ import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
 import { setSessionPassphrase } from './e2ee/webPassphraseStore'
 import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
+import { ROUTER_USE_TRANSITIONS } from './config/routerTransitions'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
@@ -268,7 +269,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <XMPPProvider client={demoClient}>
         <ThemeProvider>
           <DemoTutorialProvider enabled={tutorialEnabled} client={demoClient} animation={demoAnimation}>
-            <HashRouter>
+            <HashRouter useTransitions={ROUTER_USE_TRANSITIONS}>
               <App />
             </HashRouter>
           </DemoTutorialProvider>
