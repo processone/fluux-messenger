@@ -63,6 +63,11 @@ const PREPEND_DRIFT_PX = 20  // acceptable anchor-position drift after prepend (
 const PREPEND_DRIFT_WEBKIT_PX = 48
 const LARGE_JUMP_PX = 150     // frame-to-frame jump threshold signalling instability
 const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to bottom"
+// Distance-from-bottom a test must reach before it can claim the reader is NOT at the bottom.
+// Deliberately several times AT_BOTTOM_OK_PX: engines differ in how much of a wheel gesture they
+// apply per scroll event, so a margin this wide is what makes "the reader has left the bottom" an
+// engine-independent fact rather than a coin flip on event granularity.
+const CLEAR_OF_BOTTOM_PX = 800
 
 // ── Shared setup ─────────────────────────────────────────────────────────────
 
@@ -135,6 +140,49 @@ async function navigateToStressRoom(page: Page): Promise<void> {
   // Wait for at least one virtualized row to mount ([data-index] exists)
   await page.waitForSelector('[data-index]', { timeout: 15_000 })
   await page.waitForTimeout(SETTLE_MS)
+}
+
+/** Turn on the shared scroll-decision trace ([Scroll] / [ScrollStateManager] console lines). */
+async function enableScrollTrace(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__fluuxScrollDebug?.(true)
+  })
+}
+
+/**
+ * Run `trigger`, then resolve once the bottom-pin frame loop reports it has FINISHED — settled or
+ * bailed. Requires the scroll-decision trace (`__fluuxScrollDebug(true)`), the same seam the
+ * marker-reentry and resident-top invariants already read.
+ *
+ * Why not a sleep: the pin converges over frames, so its duration is frame-rate bound, not
+ * wall-clock bound. On a loaded CI runner (two workers, four browser projects) frames stretch far
+ * enough that a fixed 700ms expired mid-convergence and the assertion read a half-settled geometry —
+ * which is how `TWO scroll events` failed CI at distFromBottom=928 and then passed, unchanged, on
+ * retry.
+ *
+ * This waits for the loop to STOP, never for the test to pass: a pin that bails reports completion
+ * too, so a genuine bail still reaches the geometry assertions and still fails them. If no
+ * completion arrives, the premise itself (growth modelled INSIDE the pin window) did not hold, and
+ * saying so beats asserting on a geometry nobody was driving.
+ */
+async function withPinSettled(page: Page, trigger: () => Promise<void>): Promise<void> {
+  let completions = 0
+  const onConsole = (message: { text: () => string }) => {
+    if (message.text().includes('PIN completed')) completions++
+  }
+  page.on('console', onConsole)
+  try {
+    await trigger()
+    await expect
+      .poll(() => completions, {
+        message: 'the bottom-pin loop never reported completion after the modelled growth',
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0)
+  } finally {
+    page.off('console', onConsole)
+  }
 }
 
 /** Get the scrollTop of the message-list scroll container. */
@@ -449,13 +497,20 @@ test.describe('Controller-owned resident-top navigation', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(window as any).__fluuxScrollDebug?.(true)
     })
-    await navigateToStressRoom(page)
+    // Entry positioning OWNS scrollTop until its pin loop finishes, and it re-asserts to the live
+    // edge over anything written underneath it. Waiting for the loop to report completion — rather
+    // than for navigateToStressRoom's fixed settle to elapse — is what keeps the setup below from
+    // being undone on a slow runner (CI run 30466867270 read 4372 here, the live edge).
+    await withPinSettled(page, () => navigateToStressRoom(page))
     // Start materially away from resident top without turning this into a deep virtualized-list
     // animation test. The approved contract deliberately allows a native smooth scroll that a
     // browser interrupts during deep re-windowing to time out best-effort without a corrective
     // snap; the controller unit test covers that 120-frame path.
     await setScrollTop(page, 800)
-    await page.waitForTimeout(300)
+    await page.waitForFunction(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return !!s && Math.abs(s.scrollTop - 800) < 50
+    }, undefined, { timeout: 5_000 })
 
     // The entry position must actually BE where this test put it. `> 1` used to pass vacuously at
     // the live edge, so a run whose entry pin had already dragged the list back to the bottom
@@ -1615,6 +1670,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
   // ignores scroll events fired while a programmatic re-assert loop owns scrollTop.
   test('group-start send survives a growth-driven scroll event during the pin (WebKitGTK model)', async ({ page }) => {
     await loadDemo(page)
+    await enableScrollTrace(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
@@ -1638,7 +1694,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     // While the pin-bottom loop is still settling, model WebKitGTK: the row grows tall AFTER paint
     // (scrollHeight up, scrollTop unchanged → distFromBottom large) and the engine fires a scroll
     // event. One rAF in keeps us inside the 60-frame pin window.
-    await page.evaluate((msgId) => new Promise<void>((resolve) => {
+    await withPinSettled(page, () => page.evaluate((msgId) => new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         const s = document.querySelector('[data-message-list]') as HTMLElement | null
         const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
@@ -1648,8 +1704,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
         }
         resolve()
       })
-    }), id)
-    await page.waitForTimeout(700) // let the remaining pin frames run (or bail)
+    }), id))
 
     const res = await page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -1680,6 +1735,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
   // converging on real geometry and only yields to a genuine wheel/touch/keyboard scroll).
   test('group-start send survives a growth that settles across TWO scroll events (height-unchanged discriminator hole)', async ({ page }) => {
     await loadDemo(page)
+    await enableScrollTrace(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
@@ -1704,7 +1760,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     //   event 1 (growth frame): scrollHeight UP vs prev → discriminator absorbs it (isAtBottom kept).
     //   event 2 (one frame later): SAME height, scrollTop short → discriminator misses → current code
     //   flips isAtBottom false and the pin bails. The intent-gated pin re-pins through it.
-    await page.evaluate((msgId) => {
+    await withPinSettled(page, () => page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
       if (!s || !el) return
@@ -1718,8 +1774,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
           s.dispatchEvent(new Event('scroll', { bubbles: true })) // event 2: height === prev (slips guard)
         }))
       })
-    }, id)
-    await page.waitForTimeout(700) // let the remaining pin frames run (converge) or bail
+    }, id))
 
     const res = await page.evaluate((msgId) => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
@@ -2582,10 +2637,45 @@ test.describe('Jump-to-last-read pill', () => {
   // is deterministic and does not depend on the stress room's live-message cache-reload behavior; the
   // observer→pointer and entry-positioning paths are covered by the marker-reentry / pill invariants.
   // What this exercises for real: the MessageList scroll-up snap effect → resyncDividerToReadPointer.
+  //
+  // The reader is carried clear of the at-bottom band BEFORE the divider is planted, and every wait
+  // below is on an observable condition. That is not tidying: planting the divider while the list
+  // was still parked at the live edge put this test one scroll event away from the read-through
+  // clear, and which engine won that race decided whether it passed (see the wheel step).
   test('divider snaps forward to the read pointer on genuine scroll-up (never cleared)', async ({ page }) => {
     await loadDemo(page)
     await navigateToStressRoom(page)
-    await page.waitForTimeout(400)
+
+    // Entry parks this room at the live edge. Wait for THAT rather than for a duration: every step
+    // below is stated relative to the at-bottom band, so a sleep would only establish it by luck.
+    await page.waitForFunction((band) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return !!s && s.scrollHeight - s.scrollTop - s.clientHeight < band
+    }, AT_BOTTOM_OK_PX, { timeout: 15_000 })
+
+    // Scroll the reader genuinely UP and clear of the at-bottom band BEFORE planting the divider.
+    // The ORDER is the invariant this test needs and used to leave to chance. While the list sits
+    // inside the at-bottom band, the first genuine scroll event is the documented read-through clear
+    // ("MARKER CLEAR (reached bottom)") — a path that legitimately owns clearing — so it would wipe
+    // the divider before the snap ever ran. Whether that happened came down to how the engine
+    // delivers one wheel gesture: Chromium and WebKit/macOS apply the whole 1200px in a single
+    // scroll event (first event ~1248px from the bottom, safely clear), while WebKitGTK on CI
+    // delivers it incrementally and the first event can land ~88px from the bottom — inside the
+    // band. That is the whole flake: same code, same assertion, engine-dependent event granularity.
+    // Scrolling clear FIRST takes the engine out of it, so the only thing that can move the divider
+    // afterwards is the snap — which is what this test is about.
+    const listBox = await page.locator('[data-message-list]').first().boundingBox()
+    if (listBox) await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2)
+    await expect.poll(
+      async () => {
+        await page.mouse.wheel(0, -1200)
+        return page.evaluate(() => {
+          const s = document.querySelector('[data-message-list]') as HTMLElement | null
+          return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+        })
+      },
+      { message: 'a genuine wheel scroll-up must carry the reader clear of the at-bottom band', timeout: 20_000 },
+    ).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
 
     // Plant a divider BEHIND an advanced read pointer, and place the pointer JUST BEFORE a verified
     // incoming (non-outgoing) message so the recompute has a deterministic forward target. This is
@@ -2629,23 +2719,14 @@ test.describe('Jump-to-last-read pill', () => {
       return { ok: true, dividerId, pointerId, expectedTargetId, dIdx, pIdx, targetIdx, len: msgs.length }
     }, STRESS_ROOM_JID)
     expect(setup.ok, `stress room needs a resident incoming message (len=${setup.len})`).toBe(true)
-    await page.waitForTimeout(200)
 
-    // Genuine (non-programmatic) user scroll-up to near the top: the viewport bottom is now well
-    // above the advanced pointer, so the snap fires and repositions the divider to the read spot.
-    // A REAL wheel gesture, not `scrollTop = n`: this room opens parked at the live edge (nothing
-    // after its join watermark is unread), and the bottom-stick re-assert simply undoes a
-    // programmatic scroll there — the viewport observer then never reports a row above the
-    // pointer and the snap has no reason to fire. Mirrors invariant-9's reliable scroll-up.
-    const listBox = await page.locator('[data-message-list]').first().boundingBox()
-    if (listBox) await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2)
-    for (let i = 0; i < 4; i++) {
-      await page.mouse.wheel(0, -1200)
-      await page.waitForTimeout(350)
-    }
-    await page.waitForTimeout(1000)
+    // One more genuine (non-programmatic) wheel, still upward and still clear of the bottom: the
+    // snap trigger reads the bottom-most-visible row, and that is republished only on a genuine
+    // scroll event. A REAL wheel gesture, not `scrollTop = n` — a programmatic write is gated out
+    // of the trigger on purpose (entry positioning must not drift the divider).
+    await page.mouse.wheel(0, -600)
 
-    const after = await page.evaluate(([jid, dividerId]) => {
+    const readDividerState = () => page.evaluate(([jid, dividerId]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
       const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
@@ -2656,9 +2737,20 @@ test.describe('Jump-to-last-read pill', () => {
         markerIdx: msgs.findIndex((m: { id: string }) => m.id === markerId),
         dividerIdx: msgs.findIndex((m: { id: string }) => m.id === dividerId),
         scrollTop: s ? Math.round(s.scrollTop) : null,
+        distFromBottom: s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null,
       }
     }, [STRESS_ROOM_JID, setup.dividerId] as const)
 
+    // Wait for the divider to LEAVE the spot it was planted in, not for a duration. Both terminal
+    // outcomes settle this poll — the snap moved it, or something cleared it — and which one
+    // happened is exactly what the assertions below are here to distinguish. A regression that
+    // never runs the snap leaves it planted and times out with that stated.
+    await expect.poll(
+      async () => (await readDividerState()).markerId !== setup.dividerId,
+      { message: `the scroll-up snap never ran — divider still planted at ${setup.dividerId}`, timeout: 15_000 },
+    ).toBe(true)
+
+    const after = await readDividerState()
     console.log('── DIVIDER SNAP ──', JSON.stringify({ setup, after }))
 
     // The snap moved the divider FORWARD to the first unread after the pointer, and did NOT clear it.
