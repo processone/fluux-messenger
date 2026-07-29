@@ -139,10 +139,10 @@ well at a glance.
 
 ## 6. Directory (contacts)
 
-![Directory profile](ux-review-screenshots/05-directory-profile.png)
-*[04-directory-list.png](ux-review-screenshots/04-directory-list.png),
-[05-directory-profile.png](ux-review-screenshots/05-directory-profile.png),
-[12-directory-empty-detail.png](ux-review-screenshots/12-directory-empty-detail.png)*
+![Contact profile](ux-review-screenshots/05-contacts-profile.png)
+*[04-contacts-list.png](ux-review-screenshots/04-contacts-list.png),
+[05-contacts-profile.png](ux-review-screenshots/05-contacts-profile.png),
+[12-contacts-empty-detail.png](ux-review-screenshots/12-contacts-empty-detail.png)*
 
 | #   | Issue                                                                                                                                                                                                                                                                             | Recommendation                                                                                                                                                                 | Sev | Eff |
 |-----|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|-----|
@@ -185,18 +185,19 @@ well at a glance.
 
 ---
 
-## 9. Events / Activity log
+## 9. Events / Activity log — removed
 
-![Events](ux-review-screenshots/07-events.png)
-*[07-events.png](ux-review-screenshots/07-events.png) ·
-`apps/fluux/src/components/ActivityContextView.tsx`*
+🗑️ **This section no longer applies.** The Events tab and its activity log were
+dissolved by "Conversation-first navigation: relocate contacts, dissolve Events,
+in-context reactions" (#789). `EventsView`, `ActivityLogView`, and
+`ActivityContextView` are gone; pending subscription requests now surface
+inline in the contacts list, room invitations now surface inline in the Rooms
+list, and reactions are shown in context in the conversation itself.
 
-| #   | Issue                                                                                                                                                                                                                                            | Recommendation                                                                                                                                                                                                             | Sev | Eff |
-|-----|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|-----|
-| 9.1 | ⚠️ **Partially addressed.** Terminology is still split — the sidebar tab reads "Events" while the right-pane header reads "Activity Log". | Pick one term ("Activity") and apply consistently. The empty-state copy on the right should match what the sidebar list contains.                                                                                          | M   | S   |
-| 9.2 | **Activity log still co-mingles by date only.** A separate `EventsView` *does* surface pending actions (subscription requests, invitations) as their own section, but `ActivityLogView` itself is still a single flat list grouped only by date — "Contact request from alex" can sit next to "james reacted 💪" with no Action-required vs Activity split.                | Split into two top-level groups: **Action required** (subscription requests, room invitations, mediated invites) at top, **Activity** (reactions, replies, mentions) below. Maintain a counter only for "action required". | H   | S   |
-| 9.3 | ✅ **Resolved.** Reaction attribution copy was fixed: proper capitalization of the reactor name and a clean conversation name (no more lowercase "in emma" / duplicated name).                                                                         | Shipped — `ActivityLogView.tsx:400-422`.                                                                                                        | L   | S   |
-| 9.4 | Old accepted requests ("Accepted ✓") still show in the YESTERDAY group — clutter.                                                                                                                                                                | Auto-archive after 7 days; surface a "Show archived activity" toggle.                                                                                                                                                      | L   | S   |
+The findings that were recorded here (9.1–9.4) were all specific to that
+screen and died with it. The section number is kept so the references from
+earlier sections still resolve. Its audit screenshot has been dropped along
+with the corresponding `events-list` capture in `scripts/ux-screenshots.ts`.
 
 ---
 

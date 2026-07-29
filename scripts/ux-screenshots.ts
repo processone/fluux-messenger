@@ -61,6 +61,16 @@ async function navigateTo(page: Page, view: string) {
   await page.waitForTimeout(800)
 }
 
+/**
+ * Switch the messages list to its archived conversations. The archive is not a
+ * rail tab — it is a toggle in the messages header (`MessagesHeaderActions`),
+ * so it is only reachable from the messages view.
+ */
+async function showArchivedConversations(page: Page) {
+  await page.click('button[aria-label="Show archived conversations"]')
+  await page.waitForTimeout(800)
+}
+
 async function selectItem(page: Page, name: string) {
   await page.getByText(name, { exact: true }).first().click()
   await page.waitForTimeout(800)
@@ -95,33 +105,27 @@ test('rooms-with-members', async ({ page }) => {
   await capture(page, '03-rooms-with-members')
 })
 
-test('directory-empty', async ({ page }) => {
+test('contacts-list', async ({ page }) => {
   await waitForDemoReady(page)
   await setLanguage(page, 'en')
-  await navigateTo(page, 'directory')
-  await capture(page, '04-directory-list')
+  await navigateTo(page, 'contacts')
+  await capture(page, '04-contacts-list')
 })
 
-test('directory-profile', async ({ page }) => {
+test('contacts-profile', async ({ page }) => {
   await waitForDemoReady(page)
   await setLanguage(page, 'en')
-  await navigateTo(page, 'directory')
+  await navigateTo(page, 'contacts')
   await selectItem(page, 'Emma Wilson')
-  await capture(page, '05-directory-profile')
+  await capture(page, '05-contacts-profile')
 })
 
 test('archives-empty', async ({ page }) => {
   await waitForDemoReady(page)
   await setLanguage(page, 'en')
-  await navigateTo(page, 'archive')
+  await navigateTo(page, 'messages')
+  await showArchivedConversations(page)
   await capture(page, '06-archives')
-})
-
-test('events-list', async ({ page }) => {
-  await waitForDemoReady(page)
-  await setLanguage(page, 'en')
-  await navigateTo(page, 'events')
-  await capture(page, '07-events')
 })
 
 test('search-empty', async ({ page }) => {
@@ -157,12 +161,12 @@ test('command-palette', async ({ page }) => {
   await capture(page, '11-command-palette')
 })
 
-test('directory-empty-detail', async ({ page }) => {
-  // Directory tab with no contact selected — shows the empty "Contact Information" pane.
+test('contacts-empty-detail', async ({ page }) => {
+  // Contacts tab with no contact selected — shows the empty "Contact Information" pane.
   await waitForDemoReady(page)
   await setLanguage(page, 'en')
-  await navigateTo(page, 'directory')
-  await capture(page, '12-directory-empty-detail')
+  await navigateTo(page, 'contacts')
+  await capture(page, '12-contacts-empty-detail')
 })
 
 test('rooms-default', async ({ page }) => {

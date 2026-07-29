@@ -202,7 +202,9 @@ SDK Events (emitSDK)
                             └── useActivityLog hook ──► React UI
 ```
 
-The EventHook system layers on top of existing store bindings. Both subscribe to the same SDK events independently, so the existing `eventsStore` and `EventsView` continue working unchanged.
+The EventHook system layers on top of existing store bindings. Both subscribe to
+the same SDK events independently, so hooks can add side effects without
+changing updates to existing Zustand stores such as `eventsStore`.
 
 ## Available SDK Events
 
