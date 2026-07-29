@@ -358,9 +358,13 @@ entities by the birthday bound — plausible over a long-lived install, and a co
 merges two conversations' evidence.
 
 `LocalRef(ns, value)` is a **synchronously assigned session-local sequence number**, rendered as
-`s:` + a one-letter namespace + an integer (`s:m41`, `s:q7`), backed by a `Map` from raw value to
-ref. It carries no information about the value, needs no key, and is available in the same tick the
-crumb is recorded.
+`s:` + a one-letter namespace + an integer (`s:m41`, `s:q7`). It carries no information about the
+value, needs no key, and is available in the same tick the crumb is recorded.
+
+Its backing map is keyed by **`ns + '\0' + value`** (or equivalently one map per namespace) — never
+by the raw value alone. The namespaces overlap in practice: a stanza id and a MAM query id can be
+the same string, and a shared key would hand them one ref, silently asserting an identity that does
+not exist. This mirrors the namespacing already in `Token`'s HMAC preimage.
 
 **Eviction is pinned, not LRU.** "Bounded" alone is unimplementable in either direction: an
 un-evicted `Map` grows with session length, while a naive LRU can evict a MAM query or IQ that is
@@ -605,7 +609,18 @@ boundary §4.4 already requires for JIDs.
    **Emission waits for inserts *and* patches to resolve.** Today those patches are fire-and-forget
    (`void messageCache.updateMessage(...)`), so this seam requires tracking them rather than
    discarding the promise — a small change to product code, not only a new event, and one to plan
-   for in stage 5. The three-way `outcome` remains as the fast triage key. Unblocks §5.2.
+   for in stage 5.
+
+   `outcome` is then derived mechanically from `persistenceFailed` and the number of writes
+   attempted, so it can never disagree with the counts:
+
+   | `outcome` | Condition |
+   |---|---|
+   | `durable` | no write failed — **including** a page where nothing was attempted, every row being deduplicated or `intentionallyUnstored` |
+   | `partial` | at least one attempted write succeeded and at least one failed |
+   | `failed` | writes were attempted and **all** of them failed |
+
+   Unblocks §5.2.
 
 3. **A read-only unread diagnostic** returning **both counts from one validated snapshot**:
 
