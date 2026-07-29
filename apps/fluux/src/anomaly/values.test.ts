@@ -7,17 +7,19 @@ import {
   initTokenizer,
   isKind,
   isOpaque,
+  isRecordValue,
+  isReservedCounter,
   localRef,
   localRefOverflowCount,
   METRIC,
   releaseRef,
   resetValuesForTesting,
+  retainOpaque,
   retainRef,
   TAG,
   tokenKeyId,
   tokenSync,
   tokenUnresolvedCount,
-  VALUE_KINDS,
   warmToken,
 } from './values'
 
@@ -52,8 +54,28 @@ describe('registries', () => {
     expect(isKind(CTX.conv, 'ctx')).toBe(true)
     expect(isKind(CTX.conv, 'counter')).toBe(false)
     expect(isKind(COUNTER.rejectedValue, 'counter')).toBe(true)
-    expect(isKind(TAG.focus, ...VALUE_KINDS)).toBe(true)
-    expect(isKind(ID.sessionStart, ...VALUE_KINDS)).toBe(false)
+    expect(isRecordValue(TAG.focus)).toBe(true)
+    expect(isRecordValue(ID.sessionStart)).toBe(false)
+    expect(isRecordValue(CTX.conv)).toBe(false)
+  })
+
+  it('exposes no mutable collection that a caller could widen the policy through', async () => {
+    // A `readonly Kind[]` or `ReadonlySet` is a COMPILE-TIME type; both erase at
+    // runtime. An exported array could be pushed to — making every invariant id
+    // admissible as a record value — and an exported Set could be cleared, silently
+    // dropping the counter reservation. The policy is exported as predicates, so
+    // there is nothing to mutate.
+    const mod = (await import('./values')) as Record<string, unknown>
+    for (const [name, value] of Object.entries(mod)) {
+      const isCollection =
+        Array.isArray(value) || value instanceof Set || value instanceof Map
+      expect(isCollection, `${name} exports a mutable collection`).toBe(false)
+    }
+  })
+
+  it('keeps the reserved-counter policy intact', () => {
+    expect(isReservedCounter('recorder/rejected-value')).toBe(true)
+    expect(isReservedCounter('mam.queries')).toBe(false)
   })
 })
 
@@ -192,6 +214,22 @@ describe('tokens', () => {
     expect(tokenSync('jid', 'shared').s).not.toBe(tokenSync('room', 'shared').s)
   })
 
+  it('keeps a hot token alive through cache churn (LRU, not FIFO)', async () => {
+    // A plain Map evicts by INSERTION order, so a token referenced on every record
+    // still ages out after 500 new entities and silently starts resolving to the
+    // sentinel — the evidence degrades exactly for the busiest conversation.
+    await warmToken('jid', 'hot@example.com')
+    const hot = tokenSync('jid', 'hot@example.com').s
+    expect(hot).toMatch(/^c:[0-9a-f]{16}$/)
+
+    for (let i = 0; i < 499; i++) await warmToken('jid', `cold-${i}@example.com`)
+    // Touch it, then push the cache past its limit.
+    expect(tokenSync('jid', 'hot@example.com').s).toBe(hot)
+    await warmToken('jid', 'one-more@example.com')
+
+    expect(tokenSync('jid', 'hot@example.com').s).toBe(hot)
+  })
+
   it('exposes a non-secret key id that changes with the key', async () => {
     const first = tokenKeyId()
     expect(first).toMatch(/^[0-9a-f]{8}$/)
@@ -217,6 +255,19 @@ describe('local refs', () => {
     releaseRef('q', 'live')
     for (let i = 0; i < 2100; i++) localRef('m', `filler-${i}`)
     expect(localRef('q', 'live')!.s).toBe(original)
+  })
+
+  it('drops the reverse mapping on reset, so a stale ref cannot pin a new entry', () => {
+    const stale = localRef('m', 'k')!
+    resetValuesForTesting()
+    const fresh = localRef('m', 'k')!
+
+    // The stale handle predates the reset; retaining through it must be a no-op,
+    // otherwise the fresh entry is pinned by something no longer alive and a later
+    // eviction test passes for the wrong reason.
+    retainOpaque(stale)
+    for (let i = 0; i < 2100; i++) localRef('m', `f-${i}`)
+    expect(localRef('m', 'k')!.s).not.toBe(fresh.s)
   })
 
   it('refuses new allocations rather than growing when everything is pinned', () => {

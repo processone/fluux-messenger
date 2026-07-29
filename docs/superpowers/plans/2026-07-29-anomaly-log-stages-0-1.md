@@ -424,8 +424,9 @@ import {
   initTokenizer,
   isKind,
   isOpaque,
+  isRecordValue,
+  isReservedCounter,
   METRIC,
-  VALUE_KINDS,
   localRef,
   localRefOverflowCount,
   releaseRef,
@@ -469,8 +470,9 @@ describe('registries', () => {
     expect(isKind(CTX.conv, 'ctx')).toBe(true)
     expect(isKind(CTX.conv, 'counter')).toBe(false)
     expect(isKind(COUNTER.rejectedValue, 'counter')).toBe(true)
-    expect(isKind(TAG.focus, ...VALUE_KINDS)).toBe(true)
-    expect(isKind(ID.sessionStart, ...VALUE_KINDS)).toBe(false)
+    expect(isRecordValue(TAG.focus)).toBe(true)
+    expect(isRecordValue(ID.sessionStart)).toBe(false)
+    expect(isRecordValue(CTX.conv)).toBe(false)
   })
 })
 
@@ -684,8 +686,13 @@ export function isKind(v: unknown, ...kinds: Kind[]): v is Opaque {
   return kind !== undefined && kinds.includes(kind)
 }
 
-/** The categories admissible as a record VALUE (as opposed to a key or an id). */
-export const VALUE_KINDS: Kind[] = ['tag', 'token', 'ref']
+/** Private: an exported array is mutable whatever its declared type. */
+const VALUE_KINDS: readonly Kind[] = Object.freeze(['tag', 'token', 'ref'] as const)
+
+/** True for a value admissible in a record VALUE position. */
+export function isRecordValue(v: unknown): v is Opaque {
+  return isKind(v, ...VALUE_KINDS)
+}
 
 // ---------------------------------------------------------------------------
 // Closed registries
@@ -749,10 +756,14 @@ export const METRIC = Object.freeze({
   probe: mint('probe.metric', 'counter'),
 })
 
-/** @internal The reserved set, enforced by `count()`. */
-export const RESERVED_COUNTERS: ReadonlySet<string> = new Set(
-  Object.values(COUNTER).map((c) => c.s),
-)
+/** The reserved set, kept PRIVATE — a `ReadonlySet` type erases at runtime, so an
+ * exported Set can be cleared and the reservation silently stops applying. */
+const RESERVED_COUNTERS: ReadonlySet<string> = new Set(Object.values(COUNTER).map((c) => c.s))
+
+/** True for a counter name reserved for recorder health. */
+export function isReservedCounter(name: string): boolean {
+  return RESERVED_COUNTERS.has(name)
+}
 
 // ---------------------------------------------------------------------------
 // Entity tokens — cross-session identity for JIDs, rooms, devices
@@ -967,7 +978,7 @@ export function resetValuesForTesting(): void {
 cd apps/fluux && npx vitest run src/anomaly/values.test.ts
 ```
 
-Expected: PASS, 15 tests. Two of them carry the weight: the **targeted** case calls every dynamic
+Expected: PASS, 20 tests. Two of them carry the weight: the **targeted** case calls every dynamic
 constructor with a real body and a valid companion argument (`tokenSync('jid', BODY)`,
 `localRef('m', BODY)`, each `warmToken` awaited), and the **generic sweep** covers any export added
 later, awaiting anything that returns a promise. A parity test compares the `ID` registry against
@@ -1345,7 +1356,7 @@ Create `apps/fluux/src/anomaly/serializer.ts`:
  * a truncated body still discloses its prefix. A rejected record is a visible bug in
  * a detector; a truncated one is a silent leak.
  */
-import { isKind, isOpaque, VALUE_KINDS, type Kind, type Opaque } from './values'
+import { isKind, isOpaque, isRecordValue, type Kind, type Opaque } from './values'
 
 const MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
@@ -1402,12 +1413,15 @@ export function resetSerializerCountersForTesting(): void {
  * where a ctx key belongs, or a tag where an id belongs, is rejected — membership
  * alone would make every constant interchangeable and dissolve the registries.
  */
-function unwrap(value: unknown, ...kinds: Kind[]): string | number | boolean | null {
+type Position = 'value' | Kind
+
+function unwrap(value: unknown, position: Position): string | number | boolean | null {
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
-    if (kinds.length && !kinds.includes('tag')) throw new Error('scalar in a key position')
+    if (position !== 'value') throw new Error('scalar in a key position')
     return value as number | boolean | null
   }
-  if (kinds.length ? isKind(value, ...kinds) : isOpaque(value)) {
+  const ok = position === 'value' ? isRecordValue(value) : isKind(value, position)
+  if (ok) {
     const s = (value as Opaque).s
     // A newline would forge a second JSONL record. Constructors cannot produce one,
     // so this is a belt-and-braces check rather than the primary defence.
@@ -1444,12 +1458,12 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
     // as a key name; provenance does not.
     const ctx: Record<string, string | number | boolean | null> = {}
     for (const [key, value] of record.ctx) {
-      ctx[String(unwrap(key, 'ctx'))] = unwrap(value, ...VALUE_KINDS)
+      ctx[String(unwrap(key, 'ctx'))] = unwrap(value, 'value')
     }
 
     const crumbs = record.crumbs
       .slice(0, MAX_ARRAY)
-      .map((crumb) => crumb.slice(0, MAX_ARRAY).map((v) => unwrap(v, ...VALUE_KINDS)))
+      .map((crumb) => crumb.slice(0, MAX_ARRAY).map((v) => unwrap(v, 'value')))
 
     const out: Record<string, unknown> = {
       v: record.v,
@@ -1463,8 +1477,8 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
       ctx,
       crumbs,
     }
-    if (record.expected !== undefined) out.expected = unwrap(record.expected, ...VALUE_KINDS)
-    if (record.observed !== undefined) out.observed = unwrap(record.observed, ...VALUE_KINDS)
+    if (record.expected !== undefined) out.expected = unwrap(record.expected, 'value')
+    if (record.observed !== undefined) out.observed = unwrap(record.observed, 'value')
 
     let line = JSON.stringify(out)
     if (byteLength(line) <= MAX_LINE_BYTES) return line
@@ -2179,9 +2193,9 @@ Create `apps/fluux/src/anomaly/recorder.ts`:
 import {
   COUNTER,
   ID,
+  isReservedCounter,
   localRefOverflowCount,
   releaseOpaque,
-  RESERVED_COUNTERS,
   retainOpaque,
   tokenKeyId,
   tokenUnresolvedCount,
@@ -2363,7 +2377,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // application counter sharing one would be silently overwritten by the health
       // delta when the pairs are folded into an object — a wrong number rather than
       // a visible error.
-      if (RESERVED_COUNTERS.has(key.s)) {
+      if (isReservedCounter(key.s)) {
         throw new Error(`${key.s} is reserved for recorder health; use a METRIC constant`)
       }
       const [, n] = counters.get(key.s) ?? [key, 0]

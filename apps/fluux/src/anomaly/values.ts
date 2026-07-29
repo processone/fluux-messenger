@@ -52,8 +52,20 @@ export function isKind(v: unknown, ...kinds: Kind[]): v is Opaque {
   return kind !== undefined && kinds.includes(kind)
 }
 
-/** The categories admissible as a record VALUE (as opposed to a key or an id). */
-export const VALUE_KINDS: Kind[] = ['tag', 'token', 'ref']
+/**
+ * The categories admissible as a record VALUE (as opposed to a key or an id).
+ *
+ * Deliberately NOT exported. An exported array is mutable whatever its declared
+ * type — a caller could `VALUE_KINDS.push('id')` and make every invariant id
+ * admissible as a value. Freezing the array would stop that one case but not the
+ * pattern; keeping the policy private and exporting a predicate does.
+ */
+const VALUE_KINDS: readonly Kind[] = Object.freeze(['tag', 'token', 'ref'] as const)
+
+/** True for a value admissible in a record VALUE position. */
+export function isRecordValue(v: unknown): v is Opaque {
+  return isKind(v, ...VALUE_KINDS)
+}
 
 // ---------------------------------------------------------------------------
 // Closed registries
@@ -119,10 +131,19 @@ export const METRIC = Object.freeze({
   probe: mint('probe.metric', 'counter'),
 })
 
-/** The reserved set, enforced by the recorder's `count()`. */
-export const RESERVED_COUNTERS: ReadonlySet<string> = new Set(
-  Object.values(COUNTER).map((c) => c.s),
-)
+/**
+ * The reserved set, enforced by the recorder's `count()`.
+ *
+ * Private for the same reason as VALUE_KINDS: `ReadonlySet` is a compile-time type
+ * that erases at runtime, so an exported Set can be cleared by any caller and the
+ * reservation silently stops applying.
+ */
+const RESERVED_COUNTERS: ReadonlySet<string> = new Set(Object.values(COUNTER).map((c) => c.s))
+
+/** True for a counter name reserved for recorder health. */
+export function isReservedCounter(name: string): boolean {
+  return RESERVED_COUNTERS.has(name)
+}
 
 // ---------------------------------------------------------------------------
 // Entity tokens — cross-session identity for JIDs, rooms, devices
@@ -213,8 +234,16 @@ export async function warmToken(ns: TokenNs, value: string): Promise<void> {
 /** Synchronous lookup. A miss returns the sentinel — never the raw value. */
 export function tokenSync(ns: TokenNs, value: string): Opaque {
   if (!TOKEN_NS.has(ns)) throw new TypeError('unknown token namespace')
-  const hit = tokens.get(nsKey(ns, value))
-  if (hit) return hit
+  const key = nsKey(ns, value)
+  const hit = tokens.get(key)
+  if (hit) {
+    // Re-insert so the Map's iteration order reflects RECENCY, not insertion.
+    // Without this the cache is FIFO: a token used on every record still ages out
+    // after 500 new entities and starts resolving to the sentinel.
+    tokens.delete(key)
+    tokens.set(key, hit)
+    return hit
+  }
   unresolved++
   void warmToken(ns, value)
   return UNRESOLVED
@@ -247,7 +276,10 @@ interface RefEntry {
 }
 
 const refs = new Map<string, RefEntry>()
-const keyByRef = new WeakMap<Opaque, string>()
+// Reassignable: a stale ref handed out before a reset must not be able to pin a
+// NEW entry that happens to reuse its key, which would make a later test pass for
+// the wrong reason.
+let keyByRef = new WeakMap<Opaque, string>()
 let nextSeq = 0
 let overflow = 0
 
@@ -325,6 +357,7 @@ export function localRefOverflowCount(): number {
 export function resetValuesForTesting(): void {
   tokens.clear()
   refs.clear()
+  keyByRef = new WeakMap<Opaque, string>()
   hmacKey = null
   keyId = 'unknown'
   unresolved = 0
