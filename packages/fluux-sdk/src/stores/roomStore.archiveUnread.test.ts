@@ -1147,4 +1147,109 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       }, { timeout: 2000 })
     })
   })
+
+  // ---------------------------------------------------------------------
+  // The ACTIVATION trigger. final-fix-2 gave the count two triggers —
+  // advanceReadPointer and deactivation — but both are reached only by the
+  // read pointer MOVING: advanceReadPointer recounts `if (pointerAdvanced)`,
+  // and onMessageSeen returns its input unchanged once the pointer sits on
+  // the newest loaded message. A reader who opens a room already at the live
+  // edge with the pointer already at newest therefore moves nothing, triggers
+  // nothing, and watches a stale badge for as long as the room stays open —
+  // the deactivation trigger repairs it only once they leave, so the badge is
+  // stuck precisely while it is being looked at. Activation was the one entry
+  // point with no recount of its own.
+  // ---------------------------------------------------------------------
+
+  describe('activation re-derives the count for the room being entered', () => {
+    /** Seed the room's resident window (roomRuntime.messages) directly. */
+    function seedResident(messages: RoomMessage[]): void {
+      roomStore.setState((state) => {
+        const runtime = new Map(state.roomRuntime)
+        runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
+        return { roomRuntime: runtime }
+      })
+    }
+
+    it('opening a room whose pointer is already at the newest message clears the stale badge', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      await messageCache.saveRoomMessages([anchor, m1])
+      // Fully read: the pointer already sits on the newest message, so the
+      // viewport observer has nothing left to advance and advanceReadPointer
+      // can never schedule a recount. This is the reported defect.
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+      })
+      seedCoverage('anchor-stanza')
+      seedResident([anchor, m1])
+
+      // Open the room. advanceReadPointer is never called in this test, and
+      // there is no previous room, so the deactivation trigger cannot fire
+      // either — activation is the only trigger under test.
+      roomStore.getState().setActiveRoom(ROOM)
+      expect(roomStore.getState().activeRoomJid).toBe(ROOM)
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
+      // Still active — the badge cleared while the reader sits in the room,
+      // which is the whole point (deactivation already covered the rest).
+      expect(roomStore.getState().activeRoomJid).toBe(ROOM)
+    })
+
+    // The discrimination control, in the spirit of final-fix-3 above: the test
+    // above seeds 5 and asserts 0, which a naive "force-zero on activation"
+    // would also satisfy — and force-zeroing on activation is exactly the
+    // behaviour FIX 2 walked back. Here the pointer stops SHORT of the newest
+    // message, so genuinely unread messages remain: force-zero lands on 0
+    // (wrong), a missing trigger leaves the stale 5 (wrong), and only a real
+    // archive derivation lands on 2.
+    it('opening a room with the pointer short of the newest message derives the true remainder, not zero', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const p0 = archiveMsg('p0', 1000)
+      const u1 = archiveMsg('u1', 1001)
+      const u2 = archiveMsg('u2', 1002)
+      await messageCache.saveRoomMessages([anchor, p0, u1, u2])
+      setMeta({
+        unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+      seedResident([anchor, p0, u1, u2])
+
+      roomStore.getState().setActiveRoom(ROOM)
+
+      await vi.waitFor(() => {
+        expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
+
+      // ...and the "New messages" divider the reader is looking at survives.
+      // recomputeUnreadForRoom is reposition-only while the room is ACTIVE;
+      // a recount that retired the divider here would reintroduce the defect
+      // commit ca26ff35 fixed (divider vanishing right after opening).
+      expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    })
+
+    it('opening a room whose badge is already clear does not read the archive', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('m1', 1000),
+      ])
+      setMeta({
+        unreadCount: 0, // nothing to correct downward
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+      })
+      seedCoverage('anchor-stanza')
+      vi.mocked(messageCache.countRoomUnreadInArchive).mockClear()
+
+      roomStore.getState().setActiveRoom(ROOM)
+
+      // The guard keeps the common case (opening an already-read room) free of
+      // a cache read; an arrival would recount anyway.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(messageCache.countRoomUnreadInArchive).not.toHaveBeenCalled()
+    })
+  })
 })

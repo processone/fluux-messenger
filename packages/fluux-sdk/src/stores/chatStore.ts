@@ -1376,6 +1376,22 @@ export const chatStore = createStore<ChatState>()(
             if (prevId && prevId !== id && worthReconcilingOnDeactivate(get().conversationMeta.get(prevId))) {
               void get().recomputeUnreadForConversation(prevId)
             }
+            // ...and reconcile the entity we just ENTERED — the room twin of
+            // this trigger carries the full rationale. In short: Task 11's
+            // convergence is a side effect of the read pointer MOVING, and
+            // onMessageSeen returns its input unchanged once the pointer sits
+            // on the newest loaded message. Opening a conversation already at
+            // the live edge with the pointer already at newest therefore makes
+            // every viewport report a no-op, schedules no recount, and strands
+            // a stale badge for as long as the conversation stays open.
+            // Activation was the one entry point without a recount of its own.
+            //
+            // A DERIVATION against the current pointer, not FIX 2's removed
+            // unconditional zero: real unread keeps a real count, and the
+            // divider is repositioned rather than retired while active.
+            if (activated.unreadCount > 0) {
+              void get().recomputeUnreadForConversation(id, { allowActive: true })
+            }
             return
           }
         }

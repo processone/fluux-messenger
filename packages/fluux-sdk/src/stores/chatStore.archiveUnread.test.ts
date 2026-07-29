@@ -1167,4 +1167,70 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       }, { timeout: 2000 })
     })
   })
+
+  // ---------------------------------------------------------------------
+  // The ACTIVATION trigger (room twin: roomStore.archiveUnread.test.ts).
+  // final-fix-2's two triggers are both reached only by the read pointer
+  // MOVING: advanceReadPointer recounts `if (pointerAdvanced)`, and
+  // onMessageSeen returns its input unchanged once the pointer sits on the
+  // newest loaded message. Opening a conversation already at the live edge
+  // with the pointer already at newest therefore moves nothing and triggers
+  // nothing — the deactivation trigger repairs it only on the way out, so the
+  // badge is stuck precisely while it is being looked at.
+  // ---------------------------------------------------------------------
+
+  describe('activation re-derives the count for the conversation being entered', () => {
+    it('opening a conversation whose pointer is already at the newest message clears the stale badge', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const m1 = archiveMsg('m1', 1000)
+      await messageCache.saveMessages([anchor, m1])
+      // Fully read: the pointer already sits on the newest message, so the
+      // viewport observer has nothing left to advance.
+      setMeta({
+        unreadCount: 5, // stale — distinct from the correct 0
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } },
+      })
+      seedCoverage('anchor-stanza')
+      chatStore.setState({ messages: new Map([[CID, [anchor, m1]]]) })
+
+      // Open it. advanceReadPointer is never called, and there is no previous
+      // conversation, so the deactivation trigger cannot fire either —
+      // activation is the only trigger under test.
+      chatStore.getState().setActiveConversation(CID)
+      expect(chatStore.getState().activeConversationId).toBe(CID)
+
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+      }, { timeout: 2000 })
+      expect(chatStore.getState().activeConversationId).toBe(CID)
+    })
+
+    // Discrimination control, per final-fix-3 above: seed-5/assert-0 would
+    // also be satisfied by a force-zero on activation — the very behaviour
+    // FIX 2 walked back. With the pointer SHORT of newest, force-zero lands on
+    // 0 (wrong), a missing trigger leaves 5 (wrong), only a real derivation
+    // lands on 2.
+    it('opening a conversation with the pointer short of the newest message derives the true remainder, not zero', async () => {
+      const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+      const p0 = archiveMsg('p0', 1000)
+      const u1 = archiveMsg('u1', 1001)
+      const u2 = archiveMsg('u2', 1002)
+      await messageCache.saveMessages([anchor, p0, u1, u2])
+      setMeta({
+        unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+      chatStore.setState({ messages: new Map([[CID, [anchor, p0, u1, u2]]]) })
+
+      chatStore.getState().setActiveConversation(CID)
+
+      await vi.waitFor(() => {
+        expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+      }, { timeout: 2000 })
+
+      // ...and the divider the reader is looking at survives the recount.
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+    })
+  })
 })

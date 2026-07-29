@@ -2755,6 +2755,36 @@ export const roomStore = createStore<RoomState>()(
         if (prevJid && prevJid !== roomJid && worthReconcilingOnDeactivate(get().roomMeta.get(prevJid))) {
           void get().recomputeUnreadForRoom(prevJid)
         }
+        // ...and reconcile the room we just ENTERED. Task 11's convergence is
+        // implemented as a SIDE EFFECT of the read pointer moving:
+        // advanceReadPointer only schedules a recount `if (pointerAdvanced)`,
+        // and onMessageSeen returns its input unchanged once the pointer sits
+        // on the newest loaded message. So a reader who opens a room already at
+        // the live edge, with the pointer already at the newest message, makes
+        // every viewport report a no-op — the pointer has nowhere left to move,
+        // no recount is ever scheduled, and a stale count sits in the sidebar
+        // for as long as the room stays open. Activation was the one entry
+        // point with no recount of its own (arrival, remote XEP-0490 marker,
+        // MAM merge and DEACTIVATION all had one), which is exactly why the
+        // gap was invisible: leaving the room repaired it, so the badge only
+        // looked stuck while you were looking at it.
+        //
+        // This does NOT reinstate the unconditional zero that FIX 2 removed.
+        // That zero was a WRITE — it forced 0 while snapping the pointer only
+        // to just-before-the-divider, leaving a count of zero beside a divider
+        // marking genuinely unread messages. This is a DERIVATION against the
+        // current pointer: a room with real unread keeps a real count, and the
+        // divider is repositioned, never retired, while the room is active (see
+        // the reposition-only branch in recomputeUnreadForRoom). `allowActive`
+        // is required — the room is active by the `set()` above — and mirrors
+        // advanceReadPointer's own trigger.
+        //
+        // Guarded on a nonzero count: with the badge already clear there is
+        // nothing to correct downward, and an arrival would recount anyway, so
+        // an unguarded call would buy a cache read on every room open.
+        if (activated.unreadCount > 0) {
+          void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+        }
         return
       }
     }
