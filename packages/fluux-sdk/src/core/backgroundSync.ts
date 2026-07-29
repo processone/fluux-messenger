@@ -10,8 +10,10 @@
  * own them; released room work can be handed back after the room becomes inactive.
  *
  * Uses client events to distinguish fresh-session bulk sync from SM resumption.
- * Resume only seeds rooms whose archives are not caught up to live; a synthetic
- * post-resume `online` can then upgrade the same transport to fresh setup.
+ * Resume only seeds rooms whose archives are not caught up to live — including
+ * rooms that join after the resume event, which the one-shot predicate cannot
+ * see. A synthetic post-resume `online` can then upgrade the same transport to
+ * fresh setup.
  *
  * @module Core/BackgroundSync
  */
@@ -72,6 +74,13 @@ export function setupBackgroundSyncSideEffects(
   let backgroundSyncDone = false
   // Whether the current session is fresh (set by 'online' event, cleared on disconnect)
   let isFreshSession = false
+  // Whether the current session came up via SM resumption (set by 'resumed',
+  // cleared on 'online' and on disconnect). Distinct from `!isFreshSession`,
+  // which is also true while the transport is down.
+  let isResumedSession = false
+  // Rooms already given a resume seed this session, so a room that joins,
+  // leaves, and rejoins can't re-query the archive repeatedly.
+  const resumeSeededRooms = new Set<string>()
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
   // Epoch ms of the current fresh session's connection. Used as the forward
@@ -254,6 +263,54 @@ export function setupBackgroundSyncSideEffects(
       },
       2,
     )
+  }
+
+  /**
+   * Give one room its single resume seed, re-checking the resume predicate at
+   * call time.
+   *
+   * The `'resumed'` handler evaluates `selectRoomsNeedingResumeSeed` once,
+   * synchronously, against the rooms joined at that instant. Rooms that join
+   * later in the same session — `handleSmResumption` re-fetches bookmarks after
+   * a long disconnect and joins everything not currently joined — were never
+   * offered to that predicate, and no other trigger covers them: the
+   * `room:joined` catch-up and the late-MAM retry both require a FRESH session,
+   * and the `mucJoined` preview fetch is skipped outright while SM-resumed. This
+   * closes that hole by running the same predicate per room, as each one becomes
+   * eligible.
+   *
+   * Deliberately still gated on `isCaughtUpToLive`: a room SM genuinely replayed
+   * for is skipped, so this adds queries only for rooms whose archive coverage
+   * was never established this session — never a blanket re-query on resume.
+   */
+  async function seedResumeRoomOnce(
+    roomJid: string,
+    generation: number,
+  ): Promise<void> {
+    if (!isResumedSession || generation !== sessionGeneration) return
+    if (resumeSeededRooms.has(roomJid)) return
+    if (connectionStore.getState().status !== 'online' || !client.isConnected()) {
+      return
+    }
+    const state = roomStore.getState()
+    const room = state.rooms.get(roomJid)
+    if (!room) return
+    const [eligible] = selectRoomsNeedingResumeSeed(
+      [room],
+      (jid) => state.getRoomMAMQueryState(jid).isCaughtUpToLive,
+      state.activeRoomJid,
+    )
+    if (!eligible) return
+
+    resumeSeededRooms.add(roomJid)
+    logInfo(`Background sync: SM resumption — catching up late-joined room ${roomJid}`)
+    try {
+      await client.mam.catchUpRoom(roomJid, sessionStartTime)
+    } catch {
+      // Best-effort, exactly like the resume pass this mirrors. The seed stays
+      // recorded so a failing room can't be retried on every presence change;
+      // the next session re-evaluates it from scratch.
+    }
   }
 
   // --- E2EE capability warm-up ---
@@ -467,6 +524,8 @@ export function setupBackgroundSyncSideEffects(
     sessionGeneration += 1
     backgroundSyncDone = false
     isFreshSession = true
+    isResumedSession = false
+    resumeSeededRooms.clear()
     if (!followsUninterruptedResume) {
       sessionStartTime = Date.now()
       invalidateRoomMemberships(client)
@@ -505,10 +564,13 @@ export function setupBackgroundSyncSideEffects(
     sessionGeneration += 1
     uninterruptedResumeMayEmitSyntheticOnline = true
     isFreshSession = false
+    isResumedSession = true
     sessionStartTime = Date.now()
     freshSessionJoinedRooms.clear()
+    resumeSeededRooms.clear()
     resetRoomRetryState()
 
+    const resumeGeneration = sessionGeneration
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(
       state.joinedRooms(),
@@ -516,7 +578,9 @@ export function setupBackgroundSyncSideEffects(
       state.activeRoomJid,
     )
     if (eligible.length === 0) {
-      logInfo('Background sync: SM resumption — all rooms caught up')
+      // Says nothing about rooms not yet joined — the bookmark re-join runs
+      // later in handleSmResumption and is covered by seedResumeRoomOnce.
+      logInfo('Background sync: SM resumption — no already-joined room needs catch-up')
       return
     }
 
@@ -524,11 +588,7 @@ export function setupBackgroundSyncSideEffects(
     void (async () => {
       for (const room of eligible) {
         if (!client.isConnected()) break
-        try {
-          await client.mam.catchUpRoom(room.jid, sessionStartTime)
-        } catch {
-          // Best-effort — a per-room failure shouldn't block the others.
-        }
+        await seedResumeRoomOnce(room.jid, resumeGeneration)
       }
     })()
   })
@@ -544,7 +604,9 @@ export function setupBackgroundSyncSideEffects(
         sessionGeneration += 1
         uninterruptedResumeMayEmitSyntheticOnline = false
         isFreshSession = false
+        isResumedSession = false
         freshSessionJoinedRooms.clear()
+        resumeSeededRooms.clear()
         resetRoomRetryState()
         if (roomCatchUpTimer) {
           clearTimeout(roomCatchUpTimer)
@@ -566,9 +628,20 @@ export function setupBackgroundSyncSideEffects(
         .sort()
         .join(','),
     () => {
+      if (!client.isConnected()) return
+
+      // A resumed session has no initial pass to wait for; its seed is per-room
+      // and the same disco race applies, so cover it here too.
+      if (isResumedSession) {
+        for (const room of roomStore.getState().joinedRooms()) {
+          if (!room.supportsMAM || room.isQuickChat) continue
+          void seedResumeRoomOnce(room.jid, sessionGeneration)
+        }
+        return
+      }
+
       // Only retry after the initial pass; before it, the pass will cover them.
       if (!initialRoomPassDone || !isFreshSession) return
-      if (!client.isConnected()) return
 
       const activeRoomJid = roomStore.getState().activeRoomJid
       for (const room of roomStore.getState().joinedRooms()) {
@@ -596,6 +669,12 @@ export function setupBackgroundSyncSideEffects(
       }
       recordRoomMembership(client, roomJid, true)
       freshSessionJoinedRooms.add(roomJid)
+      if (isResumedSession) {
+        // Joined after the one-shot resume seed already ran — SM never replayed
+        // this room's history, so it needs the seed the predicate couldn't offer.
+        void seedResumeRoomOnce(roomJid, sessionGeneration)
+        return
+      }
       if (!initialRoomPassDone || !isFreshSession) return
       if (mamHandledRooms.has(roomJid)) return
       const room = roomStore.getState().rooms.get(roomJid)

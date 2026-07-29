@@ -17,7 +17,7 @@ The SDK uses a **hybrid lazy + background** approach organized into five layers:
 | **Preview refresh** | Connect | All non-archived conversations | Fast (max=5, concurrency=3) |
 | **Conversation catch-up** | After preview refresh | All non-archived conversations | Slow (max=100, concurrency=2) |
 | **Roster discovery** | Connect | Roster contacts without a conversation | Slow (max=50, concurrency=2) |
-| **Room catch-up** | 10 s after fresh-session setup | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
+| **Room catch-up** | 10 s after fresh-session setup; per room on SM resume | Confirmed, inactive MAM-enabled rooms | Slow (max=100, concurrency=2) |
 | **Lazy fetch** | User opens a conversation/room | Single conversation or room | On demand |
 
 Additionally, once per day, archived conversations are checked for new activity and auto-unarchived if new incoming messages are found.
@@ -70,6 +70,20 @@ Triggered 10 seconds after fresh-session setup, giving rooms time to finish join
   handed to this background path rather than issuing overlapping queries.
 - Runs at **concurrency 2**.
 - The 10-second timer is cancelled on disconnect and cleaned up on subscription teardown.
+
+On an SM resume the delayed pass never runs, so room coverage comes from the
+resume seed instead: rooms joined, MAM-enabled, inactive, and **not** already
+caught up to live are queried with `catchUpRoom`. Caught-up rooms are skipped —
+SM replayed their traffic, and re-querying them on every resume is exactly the
+cost this predicate avoids.
+
+The seed is evaluated per room rather than once, because `handleSmResumption`
+re-fetches bookmarks after a long disconnect and joins any room that is not
+currently joined — hundreds of milliseconds after the resume event. Such a room
+is not in `joinedRooms()` when the resume handler runs, and the fresh-session
+triggers that would otherwise cover it (the `room:joined` catch-up, the late-MAM
+retry, the `mucJoined` preview fetch) are all disabled on a resumed session. It
+therefore joins and is caught up as it becomes eligible, once per session.
 
 ### 5. Lazy Fetch (on demand)
 

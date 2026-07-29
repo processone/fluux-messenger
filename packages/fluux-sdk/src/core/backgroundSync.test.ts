@@ -1701,6 +1701,140 @@ describe('setupBackgroundSyncSideEffects', () => {
         expect.anything(),
       )
     })
+
+    // The resume seed is evaluated ONCE, synchronously, when 'resumed' fires —
+    // but handleSmResumption re-fetches bookmarks after a long disconnect and
+    // joins every room that is not currently joined, which lands hundreds of ms
+    // LATER. Such a room was not in joinedRooms() when the predicate ran, so it
+    // never got a seed; and every other trigger that could have covered it is
+    // gated on a FRESH session (the room:joined catch-up and the late-MAM retry)
+    // or on `!isSmResumed()` (the mucJoined preview fetch). It therefore received
+    // no archive coverage at all for the whole session: no preview, sidebar order
+    // pinned at epoch 0, and `isCaughtUpToLive` false, which keeps the unread
+    // recount deferring behind the coverage gate.
+    it('catches up a room that joins AFTER resumption (bookmark re-join)', async () => {
+      addRoom('late@conference.example.com')
+      roomStore.getState().setRoomJoined('late@conference.example.com', false)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(300)
+      // Nothing was eligible at resume time — the room was still unjoined.
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+
+      roomStore.getState().setRoomJoined('late@conference.example.com', true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: 'late@conference.example.com', joined: true,
+      })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+      })
+      expect(
+        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+      ).toBe('late@conference.example.com')
+    })
+
+    it('catches up a room whose MAM support resolves AFTER it joins on a resumed session', async () => {
+      // The post-join disco re-query (MUC) can flip supportsMAM well after
+      // self-presence. On a fresh session the late-MAM retry covers that; on a
+      // resumed one it must too, or the disco race reopens the same hole.
+      addRoom('latemam@conference.example.com', { supportsMAM: false })
+      roomStore.getState().setRoomJoined('latemam@conference.example.com', false)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(300)
+
+      roomStore.getState().setRoomJoined('latemam@conference.example.com', true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: 'latemam@conference.example.com', joined: true,
+      })
+      await vi.advanceTimersByTimeAsync(100)
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+
+      roomStore.getState().updateRoom('latemam@conference.example.com', { supportsMAM: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+      })
+      expect(
+        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+      ).toBe('latemam@conference.example.com')
+    })
+
+    // Discrimination for the two tests above: seeding EVERY room that joins on a
+    // resumed session would satisfy them while re-querying archives SM already
+    // covered — the exact cost the coverage predicate exists to avoid. A room
+    // that is caught up to live must still be skipped when it re-joins.
+    it('does not catch up a caught-up room that re-joins on a resumed session', async () => {
+      addRoom('livelate@conference.example.com')
+      markCaughtUp('livelate@conference.example.com')
+      roomStore.getState().setRoomJoined('livelate@conference.example.com', false)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(300)
+
+      roomStore.getState().setRoomJoined('livelate@conference.example.com', true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: 'livelate@conference.example.com', joined: true,
+      })
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    // Second discrimination axis: the seed must be scoped to RESUMED sessions.
+    // A fresh session owns its rooms through the delayed pass
+    // (catchUpRoomHistory, which carries the session-start cursor and read-pointer
+    // stitching); routing them through catchUpRoom as well would double-query
+    // every room on every fresh connect.
+    it('does not seed a fresh-session join through the resume path', async () => {
+      addRoom('fresh@conference.example.com')
+      roomStore.getState().setRoomJoined('fresh@conference.example.com', false)
+      connectionStore.getState().setServerInfo({
+        identities: [], domain: 'example.com', features: [NS_MAM],
+      })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+      await vi.advanceTimersByTimeAsync(300)
+
+      roomStore.getState().setRoomJoined('fresh@conference.example.com', true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: 'fresh@conference.example.com', joined: true,
+      })
+      await vi.advanceTimersByTimeAsync(30_000)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    // A room joining while the transport is DOWN must not seed either: the
+    // offline transition ends the session, and the next 'online'/'resumed' owns
+    // the catch-up decision.
+    it('does not seed a join that lands after the session went offline', async () => {
+      addRoom('offline@conference.example.com')
+      roomStore.getState().setRoomJoined('offline@conference.example.com', false)
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(100)
+      connectionStore.getState().setStatus('reconnecting')
+
+      roomStore.getState().setRoomJoined('offline@conference.example.com', true)
+      mockClient._emitSDK('room:joined', {
+        roomJid: 'offline@conference.example.com', joined: true,
+      })
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
   })
 
   describe('room member discovery (Stage 5)', () => {
