@@ -46,12 +46,13 @@ fails the production build if any module under `src/anomaly/` survives.
 | `apps/fluux/scripts/tauri-build.sh` | Sets `FLUUX_ANOMALY=1` for the Dev identity build |
 | `scripts/build-e2e.mjs` | Sets `FLUUX_ANOMALY=1` for the Playwright build |
 | `apps/fluux/scripts/anomalyBuildAudit.ts` | Rollup plugin asserting the module graph |
-| `apps/fluux/src/anomaly/schema.ts` | Opaque values, `TAG`, `Token`, `LocalRef` |
+| `apps/fluux/src/anomaly/values.ts` | Opaque values, closed registries, tokenizer, local refs |
+| `apps/fluux/src/anomaly/identity.ts` | Domain helpers (bare-JID narrowing, message/query refs) |
 | `apps/fluux/src/anomaly/serializer.ts` | Provenance validation and JSONL line construction |
 | `apps/fluux/src/anomaly/recorder.ts` | Ring, counters, cooldown, ceiling, envelope, digest |
 | `apps/fluux/src/anomaly/sinks/memory.ts` | `window.__fluuxAnomalies` sink |
 | `apps/fluux/src/anomaly/sinks/tauri.ts` | Single-flight append sink |
-| `apps/fluux/src/anomaly/install.ts` | Idempotent install returning cleanup |
+| `apps/fluux/src/anomaly/install.ts` | Runtime singleton; attach/detach returning cleanup |
 | `apps/fluux/src/anomaly/AnomalyInstaller.tsx` | Mounts inside `XMPPProvider` |
 | `docs/ANOMALY_INVARIANTS.md` | Registry keyed by invariant id |
 
@@ -381,77 +382,192 @@ daily."
 
 # Stage 1 — the spine
 
-### Task 4: Opaque values and the `TAG` constants
+### Task 4: The value layer — one module, no escape hatches
 
 **Files:**
-- Create: `apps/fluux/src/anomaly/schema.ts`
-- Test: `apps/fluux/src/anomaly/schema.test.ts`
+- Create: `apps/fluux/src/anomaly/values.ts`
+- Test: `apps/fluux/src/anomaly/values.test.ts`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `Opaque` (`{ readonly s: string }`), `isOpaque(v): v is Opaque`, and
-  `TAG` — a frozen record of pre-built `Opaque` constants. No exported function produces an
-  `Opaque` from a caller-supplied string.
+- Produces:
+  - `interface Opaque { readonly s: string }`, `isOpaque(v): v is Opaque`
+  - `TAG`, `ID`, `CTX`, `COUNTER` — frozen registries of pre-built `Opaque` constants
+  - `initTokenizer(): Promise<void>`, `warmToken(ns, value): Promise<void>`,
+    `tokenSync(ns, value): Opaque`, `tokenKeyId(): string`, `tokenUnresolvedCount(): number`
+  - `localRef(ns, value): Opaque | null`, `retainRef`/`releaseRef`, `retainOpaque`/`releaseOpaque`,
+    `localRefOverflowCount(): number`
+  - `resetValuesForTesting(): void`
+
+**Why one module.** The privacy guarantee is exactly as strong as the narrowest exported entry
+point. Splitting the WeakSet from the constructors that use it forces `schema.ts` to export a
+minting function, and ES modules have no friend visibility — so any minter reachable by `token.ts`
+is equally reachable by a detector. Two concrete leaks in the previous plan revision came from
+precisely that: `mintToken(new TextEncoder().encode(body).buffer)` emitted the body's first eight
+bytes as hex, and `mintLocalRef(body as any, 1)` re-emitted the body verbatim.
+
+Collapsing the WeakSet, the registries, the HMAC tokenizer and the ref map into one file means
+**no exported function turns caller data into an `Opaque`.** The derivation functions are module
+private; only their safe wrappers are exported.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `apps/fluux/src/anomaly/schema.test.ts`:
+Create `apps/fluux/src/anomaly/values.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest'
-import { isOpaque, TAG } from './schema'
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  COUNTER,
+  CTX,
+  ID,
+  initTokenizer,
+  isOpaque,
+  localRef,
+  localRefOverflowCount,
+  releaseRef,
+  resetValuesForTesting,
+  retainRef,
+  TAG,
+  tokenKeyId,
+  tokenSync,
+  tokenUnresolvedCount,
+  warmToken,
+} from './values'
 
-describe('opaque values', () => {
-  it('recognises a TAG constant', () => {
-    expect(isOpaque(TAG.focus)).toBe(true)
-  })
+beforeEach(async () => {
+  localStorage.clear()
+  resetValuesForTesting()
+  await initTokenizer()
+})
 
-  it('rejects a primitive string that equals a tag', () => {
-    expect(isOpaque('focus')).toBe(false)
-  })
-
-  it('rejects a structurally identical forgery', () => {
-    expect(isOpaque({ s: 'focus' })).toBe(false)
-  })
-
-  it('rejects a frozen forgery', () => {
-    expect(isOpaque(Object.freeze({ s: 'focus' }))).toBe(false)
-  })
-
-  it('exposes NO function that turns an arbitrary string into an Opaque', async () => {
-    // The provenance guarantee is only as strong as the narrowest entry point. Any
-    // exported `(s: string) => Opaque` — however documented — lets a detector mint
-    // an opaque value from a message body, and the serializer would then accept it.
-    const mod = (await import('./schema')) as Record<string, unknown>
-    for (const [name, value] of Object.entries(mod)) {
-      if (typeof value !== 'function') continue
-      let result: unknown
-      try {
-        result = (value as (x: unknown) => unknown)('a message body')
-      } catch {
-        continue // Rejected the string outright: that is the correct behaviour.
-      }
-      expect(
-        isOpaque(result),
-        `${name}() minted an Opaque from a caller-supplied string`,
-      ).toBe(false)
+describe('registries', () => {
+  it('recognises constants from every registry', () => {
+    for (const value of [TAG.focus, ID.sessionStart, CTX.conv, COUNTER.rejectedValue]) {
+      expect(isOpaque(value)).toBe(true)
     }
   })
 
-  it('mints a token only from digest bytes', async () => {
-    const { mintToken } = await import('./schema')
-    const token = mintToken(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4]).buffer)
-    expect(token.s).toBe('c:deadbeef01020304')
+  it('rejects primitives and forgeries that match a constant', () => {
+    expect(isOpaque('focus')).toBe(false)
+    expect(isOpaque({ s: 'focus' })).toBe(false)
+    expect(isOpaque(Object.freeze({ s: 'recorder/session-start' }))).toBe(false)
   })
 
-  it('mints a local ref only from a namespace and an integer', async () => {
-    const { mintLocalRef } = await import('./schema')
-    expect(mintLocalRef('m', 41).s).toBe('s:m41')
-    expect(() => mintLocalRef('m', 1.5)).toThrow()
+  it('freezes every registry', () => {
+    for (const registry of [TAG, ID, CTX, COUNTER]) expect(Object.isFrozen(registry)).toBe(true)
+  })
+})
+
+describe('no export can turn caller data into an Opaque', () => {
+  // The adversarial suite. Each case is a leak that existed in an earlier draft of
+  // this design, so these are regression tests, not hypotheticals.
+  const BODY = 'SECRET-BODY-abcdefghijklmnop'
+
+  it('resists every export called with the body in every argument position', async () => {
+    const mod = (await import('./values')) as Record<string, unknown>
+    const encoded = new TextEncoder().encode(BODY)
+    const candidates: unknown[] = [
+      BODY,
+      encoded,
+      encoded.buffer,
+      { s: BODY },
+      { toString: () => BODY },
+      [BODY],
+    ]
+
+    for (const [name, fn] of Object.entries(mod)) {
+      if (typeof fn !== 'function') continue
+      for (const a of candidates) {
+        for (const b of [undefined, 1, BODY, ...candidates]) {
+          let out: unknown
+          try {
+            out = (fn as (...args: unknown[]) => unknown)(a, b)
+          } catch {
+            continue // Rejecting is the correct behaviour.
+          }
+          if (!isOpaque(out)) continue
+          // It minted something. That is only acceptable if the result cannot
+          // carry any of the body.
+          const s = (out as { s: string }).s
+          for (let i = 0; i + 6 <= BODY.length; i++) {
+            expect(
+              s.includes(BODY.slice(i, i + 6)),
+              `${name}() leaked body content into an Opaque: ${s}`,
+            ).toBe(false)
+          }
+          // Nor its hex encoding, which is how a raw-bytes minter leaks.
+          const hex = Array.from(encoded)
+            .map((x) => x.toString(16).padStart(2, '0'))
+            .join('')
+          expect(
+            s.includes(hex.slice(0, 12)),
+            `${name}() leaked hex-encoded body into an Opaque: ${s}`,
+          ).toBe(false)
+        }
+      }
+    }
   })
 
-  it('freezes the TAG record', () => {
-    expect(Object.isFrozen(TAG)).toBe(true)
+  it('rejects an invalid local-ref namespace instead of echoing it', () => {
+    // `localRef(body, x)` must not produce `s:<body>1`.
+    expect(() => localRef(BODY as never, 'x')).toThrow()
+  })
+})
+
+describe('tokens', () => {
+  it('produces a 64-bit opaque token after warming', async () => {
+    await warmToken('jid', 'someone@example.com')
+    expect(tokenSync('jid', 'someone@example.com').s).toMatch(/^c:[0-9a-f]{16}$/)
+  })
+
+  it('returns the sentinel on a cold lookup, never the raw value', () => {
+    const t = tokenSync('jid', 'cold@example.com')
+    expect(t.s).toBe('c:unresolved')
+    expect(tokenUnresolvedCount()).toBe(1)
+  })
+
+  it('namespaces the preimage so one string in two roles differs', async () => {
+    await warmToken('jid', 'shared')
+    await warmToken('room', 'shared')
+    expect(tokenSync('jid', 'shared').s).not.toBe(tokenSync('room', 'shared').s)
+  })
+
+  it('exposes a non-secret key id that changes with the key', async () => {
+    const first = tokenKeyId()
+    expect(first).toMatch(/^[0-9a-f]{8}$/)
+    localStorage.clear()
+    resetValuesForTesting()
+    await initTokenizer()
+    expect(tokenKeyId()).not.toBe(first)
+  })
+})
+
+describe('local refs', () => {
+  it('is stable per namespace and value, and namespaces the key', () => {
+    expect(localRef('m', 'abc')).toBe(localRef('m', 'abc'))
+    expect(localRef('m', 'shared')!.s).not.toBe(localRef('q', 'shared')!.s)
+    expect(localRef('m', 'first')!.s).toMatch(/^s:m[0-9]+$/)
+  })
+
+  it('only becomes evictable after every holder releases', () => {
+    localRef('q', 'live')
+    retainRef('q', 'live')
+    retainRef('q', 'live')
+    const original = localRef('q', 'live')!.s
+    releaseRef('q', 'live')
+    for (let i = 0; i < 2100; i++) localRef('m', `filler-${i}`)
+    expect(localRef('q', 'live')!.s).toBe(original)
+  })
+
+  it('refuses new allocations rather than growing when everything is pinned', () => {
+    for (let i = 0; i < 2000; i++) {
+      localRef('m', `pinned-${i}`)
+      retainRef('m', `pinned-${i}`)
+    }
+    expect(localRef('m', 'one-too-many')).toBeNull()
+    expect(localRefOverflowCount()).toBe(1)
+    expect(localRef('m', 'pinned-0')!.s).toBe('s:m1')
   })
 })
 ```
@@ -459,41 +575,41 @@ describe('opaque values', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-cd apps/fluux && npx vitest run src/anomaly/schema.test.ts
+cd apps/fluux && npx vitest run src/anomaly/values.test.ts
 ```
 
-Expected: FAIL — `Failed to resolve import "./schema"`.
+Expected: FAIL — `Failed to resolve import "./values"`.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `apps/fluux/src/anomaly/schema.ts`:
+Create `apps/fluux/src/anomaly/values.ts`:
 
 ```ts
 /**
- * Opaque record values.
+ * The value layer: everything that may legally appear inside a record.
  *
- * Privacy here is enforced by PROVENANCE, not by shape. A pattern check ("does
- * this look like a tag or a token?") would accept a message body that happens to
- * equal `focus` or to match the token format. Instead every value admissible in a
- * record is an object this module built and registered in a module-private
- * WeakSet, and the serializer rejects primitive strings outright.
+ * Privacy is enforced by PROVENANCE. A value is admissible because THIS MODULE
+ * built it, not because it looks like something this module builds — a shape check
+ * would accept a message body equal to `focus`, or one matching the token format.
  *
- * `TAG` has no dynamic constructor on purpose: a `tag(value: string)` helper would
- * let `tag(message.body as any)` emit a body through a check it passed honestly.
- * `Token` and `LocalRef` (below, later tasks) may take runtime input because
- * neither ever re-emits it — one returns an HMAC digest, the other a sequence
- * number.
+ * Everything lives in one file because ES modules have no friend visibility: any
+ * minting function exported for a sibling module is equally callable by a detector.
+ * The derivation helpers below are therefore module private, and only safe wrappers
+ * are exported. There is NO exported path from caller data to an `Opaque`.
  */
+
+// ---------------------------------------------------------------------------
+// Opaque values
+// ---------------------------------------------------------------------------
 
 const OPAQUE = new WeakSet<object>()
 
-/** A value cleared for inclusion in a record. Construct only via this module. */
 export interface Opaque {
   readonly s: string
 }
 
-/** @internal Build and register an opaque value. Never exported. */
-function makeOpaque(s: string): Opaque {
+/** Module private. Never exported, directly or via a wrapper taking free text. */
+function mint(s: string): Opaque {
   const value = Object.freeze({ s })
   OPAQUE.add(value)
   return value
@@ -504,462 +620,73 @@ export function isOpaque(v: unknown): v is Opaque {
   return typeof v === 'object' && v !== null && OPAQUE.has(v as object)
 }
 
-/**
- * The closed set of breadcrumb and field tags. Add a constant here to add a tag;
- * there is deliberately no way to mint one at runtime.
- */
+// ---------------------------------------------------------------------------
+// Closed registries
+//
+// ids, ctx keys and counter names are ALSO opaque constants, not validated
+// strings. A regex such as /^[a-z][a-zA-Z0-9]{0,15}$/ accepts a short body like
+// "hello", so form validation cannot close these positions; a closed set can.
+// Adding an entry here is the deliberate act of adding a loggable name, and it
+// keeps `docs/ANOMALY_INVARIANTS.md` in parity with the code by construction.
+// ---------------------------------------------------------------------------
+
+/** Breadcrumb and field tags. */
 export const TAG = Object.freeze({
-  focus: makeOpaque('focus'),
-  blur: makeOpaque('blur'),
-  msgIn: makeOpaque('msg:in'),
-  msgOut: makeOpaque('msg:out'),
-  ptrAdvance: makeOpaque('ptr:advance'),
-  activate: makeOpaque('activate'),
-  deactivate: makeOpaque('deactivate'),
-  scrollWrite: makeOpaque('scroll:write'),
-  mamQuery: makeOpaque('mam:query'),
-  mamResult: makeOpaque('mam:result'),
-  ahead: makeOpaque('ahead'),
-  behind: makeOpaque('behind'),
+  focus: mint('focus'),
+  blur: mint('blur'),
+  msgIn: mint('msg:in'),
+  msgOut: mint('msg:out'),
+  ptrAdvance: mint('ptr:advance'),
+  activate: mint('activate'),
+  deactivate: mint('deactivate'),
+  scrollWrite: mint('scroll:write'),
+  mamQuery: mint('mam:query'),
+  mamResult: mint('mam:result'),
+  ahead: mint('ahead'),
+  behind: mint('behind'),
 })
 
-export type Tag = (typeof TAG)[keyof typeof TAG]
-```
-
-- [ ] **Step 4: Run the test to verify it passes**
-
-```bash
-cd apps/fluux && npx vitest run src/anomaly/schema.test.ts
-```
-
-Expected: PASS, 8 tests.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add apps/fluux/src/anomaly/schema.ts apps/fluux/src/anomaly/schema.test.ts
-git commit -m "feat: add opaque anomaly record values with WeakSet provenance"
-```
-
----
-
-### Task 5: `LocalRef` with namespaced keys, ref-counted pins and a hard cap
-
-**Files:**
-- Create: `apps/fluux/src/anomaly/localRef.ts`
-- Test: `apps/fluux/src/anomaly/localRef.test.ts`
-
-**Interfaces:**
-- Consumes: `Opaque`, `mintLocalRef` from Task 4.
-- Produces:
-  - `type LocalNs = 'm' | 'q' | 'x'` (message, MAM query, stanza)
-  - `localRef(ns: LocalNs, value: string): Opaque | null` — `null` means overflow
-  - `retainRef(ns: LocalNs, value: string): void`
-  - `releaseRef(ns: LocalNs, value: string): void`
-  - `retainOpaque(value: unknown): void` / `releaseOpaque(value: unknown): void` — pin by value,
-    used by the recorder's ring (Task 9); a no-op for tags and tokens
-  - `localRefOverflowCount(): number`
-  - `resetLocalRefsForTesting(): void`
-
-- [ ] **Step 1: Add the specialised constructors to `schema.ts`**
-
-Add to `apps/fluux/src/anomaly/schema.ts`, below `isOpaque`:
-
-```ts
-/**
- * Specialised constructors.
- *
- * There is deliberately NO exported `string -> Opaque` function. A generic one —
- * even marked `@internal` — is a runtime hole: `@internal` is a doc convention that
- * TypeScript erases, so a detector could call it with `message.body` and mint an
- * `Opaque` the serializer would accept. Each constructor below therefore takes
- * non-string, structurally-constrained input and performs the formatting itself,
- * so no caller-supplied text can reach an opaque value.
- */
-
-/**
- * Mint an entity token from an HMAC digest. Takes bytes, never a string.
- *
- * The instanceof check is load-bearing, not defensive style: `new Uint8Array(str)`
- * silently yields a zero-length array rather than throwing, so without it a string
- * argument would mint a valid — if empty — Opaque instead of being rejected.
- */
-export function mintToken(digest: ArrayBuffer): Opaque {
-  if (!(digest instanceof ArrayBuffer)) throw new TypeError('mintToken requires an ArrayBuffer')
-  const hex = Array.from(new Uint8Array(digest).slice(0, 8))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return makeOpaque(`c:${hex}`)
-}
-
-/** Mint a session-local ref. Takes a one-character namespace and a number. */
-export function mintLocalRef(ns: 'm' | 'q' | 'x', seq: number): Opaque {
-  if (!Number.isInteger(seq) || seq < 0) throw new Error('localRef seq must be a non-negative integer')
-  return makeOpaque(`s:${ns}${seq}`)
-}
-
-/** The sentinel for an entity token requested before it was warmed. */
-export const UNRESOLVED_TOKEN: Opaque = makeOpaque('c:unresolved')
-```
-
-- [ ] **Step 2: Write the failing test**
-
-Create `apps/fluux/src/anomaly/localRef.test.ts`:
-
-```ts
-import { beforeEach, describe, expect, it } from 'vitest'
-import { isOpaque } from './schema'
-import {
-  localRef,
-  localRefOverflowCount,
-  releaseRef,
-  resetLocalRefsForTesting,
-  retainRef,
-} from './localRef'
-
-beforeEach(() => resetLocalRefsForTesting())
-
-describe('localRef', () => {
-  it('returns a stable opaque ref for the same namespace and value', () => {
-    const a = localRef('m', 'abc')
-    const b = localRef('m', 'abc')
-    expect(isOpaque(a!)).toBe(true)
-    expect(a).toBe(b)
-  })
-
-  it('namespaces the key so the same string in two roles is two refs', () => {
-    const asMessage = localRef('m', 'shared-id')
-    const asQuery = localRef('q', 'shared-id')
-    expect(asMessage!.s).not.toBe(asQuery!.s)
-  })
-
-  it('renders as s:<ns><n>', () => {
-    expect(localRef('m', 'first')!.s).toMatch(/^s:m[0-9]+$/)
-  })
-
-  it('only becomes evictable after every holder releases', () => {
-    localRef('q', 'live')
-    retainRef('q', 'live')
-    retainRef('q', 'live')
-    retainRef('q', 'live')
-    const original = localRef('q', 'live')!.s
-
-    releaseRef('q', 'live')
-    releaseRef('q', 'live')
-    // Two of three holders gone: still pinned, so pressure cannot evict it.
-    for (let i = 0; i < 2100; i++) localRef('m', `filler-${i}`)
-    expect(localRef('q', 'live')!.s).toBe(original)
-  })
-
-  it('evicts zero-count entries under pressure', () => {
-    localRef('m', 'unpinned')
-    for (let i = 0; i < 2100; i++) localRef('m', `filler-${i}`)
-    // Re-requesting an evicted value yields a NEW ref, which is safe because
-    // nothing referenced it any more.
-    expect(localRef('m', 'unpinned')!.s).toMatch(/^s:m[0-9]+$/)
-  })
-
-  it('refuses new allocations rather than growing when everything is pinned', () => {
-    for (let i = 0; i < 2000; i++) {
-      localRef('m', `pinned-${i}`)
-      retainRef('m', `pinned-${i}`)
-    }
-    expect(localRef('m', 'one-too-many')).toBeNull()
-    expect(localRefOverflowCount()).toBe(1)
-    // Existing identities are preserved, never reassigned.
-    expect(localRef('m', 'pinned-0')!.s).toBe('s:m1')
-  })
-})
-```
-
-- [ ] **Step 3: Run the test to verify it fails**
-
-```bash
-cd apps/fluux && npx vitest run src/anomaly/localRef.test.ts
-```
-
-Expected: FAIL — `Failed to resolve import "./localRef"`.
-
-- [ ] **Step 4: Write the implementation**
-
-Create `apps/fluux/src/anomaly/localRef.ts`:
-
-```ts
-/**
- * Session-local opaque references for EPHEMERAL identifiers (message ids, stanza
- * ids, MAM query ids).
- *
- * These cannot use the async HMAC token path: an id seen for the first time at the
- * moment a breadcrumb is recorded has no prior event to pre-warm from, so every
- * such crumb would serialize as the same unresolved sentinel and become mutually
- * indistinguishable. A synchronous sequence number has no such problem.
- *
- * Cost accepted: a LocalRef does not correlate across sessions. For the identity of
- * a single stanza or query that is the correct scope.
- */
-import { mintLocalRef, type Opaque } from './schema'
-
-/** m = message, q = MAM query, x = stanza. */
-export type LocalNs = 'm' | 'q' | 'x'
-
-const CAP = 2000
-
-/**
- * Reverse lookup so the recorder can pin a ref it only holds as an `Opaque`.
- * Without this the pin API would be unusable from the breadcrumb ring, which is
- * where most holds actually come from.
- */
-const keyByRef = new WeakMap<Opaque, string>()
-
-interface Entry {
-  ref: Opaque
-  /** Ref-counted: one ref can be held by several crumbs AND an open request. */
-  count: number
-  /** Insertion order, for oldest-first eviction. */
-  seq: number
-}
-
-const entries = new Map<string, Entry>()
-let nextSeq = 0
-let overflow = 0
-
-function keyOf(ns: LocalNs, value: string): string {
-  // Namespaced: a stanza id and a MAM query id can be the same string, and a
-  // shared key would hand them one ref, asserting an identity that does not exist.
-  return `${ns}\u0000${value}` // U+0000 separator: cannot occur in a JID or stanza id
-}
-
-/** Evict the oldest zero-count entries until below cap. Returns true if room exists. */
-function makeRoom(): boolean {
-  if (entries.size < CAP) return true
-
-  let oldest: { key: string; seq: number } | null = null
-  for (const [key, entry] of entries) {
-    if (entry.count > 0) continue
-    if (!oldest || entry.seq < oldest.seq) oldest = { key, seq: entry.seq }
-  }
-  if (!oldest) return false
-  entries.delete(oldest.key)
-  return true
-}
-
-/**
- * Get or assign the ref for `value` in `ns`.
- *
- * @returns the opaque ref, or `null` when the map is full and everything is still
- * referenced. The caller must then OMIT the crumb — growing without limit, or
- * reassigning a live ref, are both worse than losing one breadcrumb.
- */
-export function localRef(ns: LocalNs, value: string): Opaque | null {
-  const key = keyOf(ns, value)
-  const existing = entries.get(key)
-  if (existing) return existing.ref
-
-  if (!makeRoom()) {
-    overflow++
-    return null
-  }
-
-  const seq = ++nextSeq
-  const ref = mintLocalRef(ns, seq)
-  entries.set(key, { ref, count: 0, seq })
-  keyByRef.set(ref, key)
-  return ref
-}
-
-/** Pin a ref while a crumb or an in-flight request refers to it. */
-export function retainRef(ns: LocalNs, value: string): void {
-  const entry = entries.get(keyOf(ns, value))
-  if (entry) entry.count++
-}
-
-/** Release one hold. At zero the entry becomes evictable under pressure. */
-export function releaseRef(ns: LocalNs, value: string): void {
-  const entry = entries.get(keyOf(ns, value))
-  if (entry && entry.count > 0) entry.count--
-}
-
-/**
- * Pin by value rather than by key, for holders that only have the `Opaque` — the
- * breadcrumb ring being the main one. A no-op for tags and entity tokens, which
- * are not ref-counted.
- */
-export function retainOpaque(value: unknown): void {
-  const key = typeof value === 'object' && value !== null
-    ? keyByRef.get(value as Opaque)
-    : undefined
-  if (!key) return
-  const entry = entries.get(key)
-  if (entry) entry.count++
-}
-
-/** Release a hold taken by `retainOpaque`. */
-export function releaseOpaque(value: unknown): void {
-  const key = typeof value === 'object' && value !== null
-    ? keyByRef.get(value as Opaque)
-    : undefined
-  if (!key) return
-  const entry = entries.get(key)
-  if (entry && entry.count > 0) entry.count--
-}
-
-/** Surfaced in the digest as `recorder/localref-overflow`. */
-export function localRefOverflowCount(): number {
-  return overflow
-}
-
-/** @internal Test-only. */
-export function resetLocalRefsForTesting(): void {
-  entries.clear()
-  nextSeq = 0
-  overflow = 0
-}
-```
-
-- [ ] **Step 5: Run the test to verify it passes**
-
-```bash
-cd apps/fluux && npx vitest run src/anomaly/localRef.test.ts
-```
-
-Expected: PASS, 6 tests.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add apps/fluux/src/anomaly/localRef.ts apps/fluux/src/anomaly/localRef.test.ts apps/fluux/src/anomaly/schema.ts
-git commit -m "feat: add session-local opaque refs with ref-counted pins and a hard cap"
-```
-
----
-
-### Task 6: `Token` — namespaced HMAC identity for long-lived entities
-
-**Files:**
-- Create: `apps/fluux/src/anomaly/token.ts`
-- Test: `apps/fluux/src/anomaly/token.test.ts`
-
-**Interfaces:**
-- Consumes: `mintToken`, `UNRESOLVED_TOKEN`, `Opaque` from Task 4.
-- Produces:
-  - `type TokenNs = 'jid' | 'room' | 'device'`
-  - `initTokenizer(): Promise<void>`
-  - `tokenSync(ns: TokenNs, value: string): Opaque` — cache hit, or `UNRESOLVED` plus a scheduled warm
-  - `warmToken(ns: TokenNs, value: string): Promise<void>`
-  - `tokenKeyId(): string`
-  - `tokenUnresolvedCount(): number`
-  - `resetTokensForTesting(): void`
-
-- [ ] **Step 1: Write the failing test**
-
-Create `apps/fluux/src/anomaly/token.test.ts`:
-
-```ts
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
-import { isOpaque } from './schema'
-import {
-  initTokenizer,
-  resetTokensForTesting,
-  tokenKeyId,
-  tokenSync,
-  tokenUnresolvedCount,
-  warmToken,
-} from './token'
-
-beforeEach(async () => {
-  localStorage.clear()
-  resetTokensForTesting()
-  await initTokenizer()
+/** Invariant ids. One entry per registry entry in docs/ANOMALY_INVARIANTS.md. */
+export const ID = Object.freeze({
+  sessionStart: mint('recorder/session-start'),
+  ceilingReached: mint('recorder/ceiling-reached'),
 })
 
-describe('token', () => {
-  it('produces a 64-bit opaque token after warming', async () => {
-    await warmToken('jid', 'someone@example.com')
-    const t = tokenSync('jid', 'someone@example.com')
-    expect(isOpaque(t)).toBe(true)
-    expect(t.s).toMatch(/^c:[0-9a-f]{16}$/)
-  })
-
-  it('returns the unresolved sentinel on a cold lookup, never the raw value', () => {
-    const t = tokenSync('jid', 'cold@example.com')
-    expect(t.s).toBe('c:unresolved')
-    expect(t.s).not.toContain('cold')
-    expect(tokenUnresolvedCount()).toBe(1)
-  })
-
-  it('namespaces the preimage so one string in two roles differs', async () => {
-    await warmToken('jid', 'shared')
-    await warmToken('room', 'shared')
-    expect(tokenSync('jid', 'shared').s).not.toBe(tokenSync('room', 'shared').s)
-  })
-
-  it('is stable across calls', async () => {
-    await warmToken('jid', 'stable@example.com')
-    expect(tokenSync('jid', 'stable@example.com').s).toBe(
-      tokenSync('jid', 'stable@example.com').s,
-    )
-  })
-
-  it('never echoes its input', async () => {
-    const body = 'the quick brown fox jumps over the lazy dog'
-    await warmToken('jid', body)
-    const out = tokenSync('jid', body).s
-    for (let i = 0; i + 8 <= body.length; i++) {
-      expect(out).not.toContain(body.slice(i, i + 8))
-    }
-  })
-
-  it('exposes a non-secret key id that changes with the key', async () => {
-    const first = tokenKeyId()
-    expect(first).toMatch(/^[0-9a-f]{8}$/)
-
-    localStorage.clear()
-    resetTokensForTesting()
-    await initTokenizer()
-    expect(tokenKeyId()).not.toBe(first)
-  })
+/** Permitted `ctx` keys. */
+export const CTX = Object.freeze({
+  conv: mint('conv'),
+  room: mint('room'),
+  route: mint('route'),
+  msg: mint('msg'),
+  query: mint('query'),
 })
-```
 
-- [ ] **Step 2: Run the test to verify it fails**
+/** Permitted counter names. */
+export const COUNTER = Object.freeze({
+  rejectedValue: mint('recorder/rejected-value'),
+  localRefOverflow: mint('recorder/localref-overflow'),
+  tokenUnresolved: mint('recorder/token-unresolved'),
+  sinkWriteFailed: mint('recorder/sink-write-failed'),
+})
 
-```bash
-cd apps/fluux && npx vitest run src/anomaly/token.test.ts
-```
-
-Expected: FAIL — `Failed to resolve import "./token"`.
-
-- [ ] **Step 3: Write the implementation**
-
-Create `apps/fluux/src/anomaly/token.ts`:
-
-```ts
-/**
- * Cross-session opaque identity for LONG-LIVED entities (bare JIDs, rooms, devices).
- *
- * HMAC-SHA-256 under a per-install key, 64 bits of output. 64 bits rather than 24
- * because 24 collides at roughly 4 000 entities by the birthday bound, and a
- * collision silently merges two conversations' evidence.
- *
- * WebCrypto is async but detector paths are synchronous, so entities are warmed
- * ahead of use from lifecycle events and looked up synchronously. Ephemeral ids do
- * NOT use this path — see localRef.ts.
- */
-import { mintToken, UNRESOLVED_TOKEN, type Opaque } from './schema'
+// ---------------------------------------------------------------------------
+// Entity tokens — cross-session identity for JIDs, rooms, devices
+// ---------------------------------------------------------------------------
 
 export type TokenNs = 'jid' | 'room' | 'device'
+const TOKEN_NS: ReadonlySet<string> = new Set(['jid', 'room', 'device'])
 
 const KEY_STORAGE = 'fluux:anomaly-token-key'
-const CACHE_LIMIT = 500
+const TOKEN_CACHE_LIMIT = 500
+const UNRESOLVED = mint('c:unresolved')
 
-const cache = new Map<string, Opaque>()
+const tokens = new Map<string, Opaque>()
 let hmacKey: CryptoKey | null = null
 let keyId = 'unknown'
 let unresolved = 0
 
-function keyOf(ns: TokenNs, value: string): string {
-  return `${ns}\u0000${value}` // U+0000 separator: cannot occur in a JID or stanza id
+function nsKey(ns: string, value: string): string {
+  return `${ns}\u0000${value}` // NUL separator: cannot occur in a JID or stanza id
 }
 
 function toHex(buffer: ArrayBuffer, bytes: number): string {
@@ -976,9 +703,8 @@ function loadOrCreateKeyBytes(): Uint8Array {
       if (bytes.length === 32) return bytes
     }
   } catch {
-    // Fall through and mint a fresh key; a lost key only restarts token identity.
+    // Fall through: a lost key only restarts token identity, which tokenKeyId marks.
   }
-
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
   try {
@@ -989,7 +715,7 @@ function loadOrCreateKeyBytes(): Uint8Array {
   return bytes
 }
 
-/** Load or mint the per-install key. Must be awaited before `warmToken`. */
+/** Load or mint the per-install key. Await before the first record. */
 export async function initTokenizer(): Promise<void> {
   const bytes = loadOrCreateKeyBytes()
   hmacKey = await crypto.subtle.importKey(
@@ -999,44 +725,42 @@ export async function initTokenizer(): Promise<void> {
     false,
     ['sign'],
   )
-  // A one-way digest of the key: discloses nothing, but changes when the key does,
-  // which is what lets the review skill refuse to correlate across two key spaces.
   const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource)
   keyId = toHex(digest, 4)
 }
 
-/** Compute and cache the token for an entity, ahead of any breadcrumb using it. */
+/**
+ * Compute and cache an entity token ahead of any breadcrumb using it.
+ *
+ * Safe despite taking caller text: the output is an HMAC digest under a key the
+ * caller does not hold, so it cannot echo the input. This is the ONLY reason a
+ * dynamic constructor is acceptable here — contrast the registries above.
+ */
 export async function warmToken(ns: TokenNs, value: string): Promise<void> {
-  if (!hmacKey) return
-  const key = keyOf(ns, value)
-  if (cache.has(key)) return
+  if (!hmacKey || !TOKEN_NS.has(ns) || typeof value !== 'string') return
+  const key = nsKey(ns, value)
+  if (tokens.has(key)) return
 
   const signature = await crypto.subtle.sign(
     'HMAC',
     hmacKey,
     new TextEncoder().encode(key) as unknown as BufferSource,
   )
-
-  if (cache.size >= CACHE_LIMIT) {
-    const oldest = cache.keys().next()
-    if (!oldest.done) cache.delete(oldest.value)
+  if (tokens.size >= TOKEN_CACHE_LIMIT) {
+    const oldest = tokens.keys().next()
+    if (!oldest.done) tokens.delete(oldest.value)
   }
-  cache.set(key, mintToken(signature))
+  tokens.set(key, mint(`c:${toHex(signature, 8)}`))
 }
 
-/**
- * Synchronous lookup for the record path.
- *
- * A miss returns the sentinel and schedules a warm — it never returns the raw
- * value. Two `c:unresolved` values are explicitly NOT an identity; the review skill
- * must not correlate them.
- */
+/** Synchronous lookup. A miss returns the sentinel — never the raw value. */
 export function tokenSync(ns: TokenNs, value: string): Opaque {
-  const hit = cache.get(keyOf(ns, value))
+  if (!TOKEN_NS.has(ns)) throw new TypeError('unknown token namespace')
+  const hit = tokens.get(nsKey(ns, value))
   if (hit) return hit
   unresolved++
   void warmToken(ns, value)
-  return UNRESOLVED_TOKEN
+  return UNRESOLVED
 }
 
 /** Non-secret; goes in every record envelope. */
@@ -1044,24 +768,322 @@ export function tokenKeyId(): string {
   return keyId
 }
 
-/** Surfaced in the digest as `recorder/token-unresolved`. */
 export function tokenUnresolvedCount(): number {
   return unresolved
 }
 
+// ---------------------------------------------------------------------------
+// Local refs — session-local identity for ephemeral ids
+// ---------------------------------------------------------------------------
+
+/** m = message, q = MAM query, x = stanza. */
+export type LocalNs = 'm' | 'q' | 'x'
+const LOCAL_NS: ReadonlySet<string> = new Set(['m', 'q', 'x'])
+
+const REF_CAP = 2000
+
+interface RefEntry {
+  ref: Opaque
+  /** Ref-counted: one ref can be held by several crumbs AND an open request. */
+  count: number
+  seq: number
+}
+
+const refs = new Map<string, RefEntry>()
+const keyByRef = new WeakMap<Opaque, string>()
+let nextSeq = 0
+let overflow = 0
+
+function makeRoom(): boolean {
+  if (refs.size < REF_CAP) return true
+  let oldest: { key: string; seq: number } | null = null
+  for (const [key, entry] of refs) {
+    if (entry.count > 0) continue
+    if (!oldest || entry.seq < oldest.seq) oldest = { key, seq: entry.seq }
+  }
+  if (!oldest) return false
+  refs.delete(oldest.key)
+  return true
+}
+
+/**
+ * Get or assign the ref for `value` in `ns`.
+ *
+ * The namespace is validated at RUNTIME, not merely by its type: `localRef(body,
+ * 'x')` with a cast would otherwise render as `s:<body>1` and re-emit the body.
+ *
+ * @returns the ref, or `null` when the map is full and everything is pinned. The
+ * caller must then omit the crumb — growing without limit, or reassigning a live
+ * ref, are both worse than losing one breadcrumb.
+ */
+export function localRef(ns: LocalNs, value: string): Opaque | null {
+  if (!LOCAL_NS.has(ns)) throw new TypeError('unknown local-ref namespace')
+  const key = nsKey(ns, value)
+  const existing = refs.get(key)
+  if (existing) return existing.ref
+
+  if (!makeRoom()) {
+    overflow++
+    return null
+  }
+  const seq = ++nextSeq
+  const ref = mint(`s:${ns}${seq}`)
+  refs.set(key, { ref, count: 0, seq })
+  keyByRef.set(ref, key)
+  return ref
+}
+
+export function retainRef(ns: LocalNs, value: string): void {
+  const entry = refs.get(nsKey(ns, value))
+  if (entry) entry.count++
+}
+
+export function releaseRef(ns: LocalNs, value: string): void {
+  const entry = refs.get(nsKey(ns, value))
+  if (entry && entry.count > 0) entry.count--
+}
+
+function holdFor(value: unknown): RefEntry | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const key = keyByRef.get(value as Opaque)
+  return key ? refs.get(key) : undefined
+}
+
+/** Pin by value, for holders that only have the `Opaque` — the breadcrumb ring. */
+export function retainOpaque(value: unknown): void {
+  const entry = holdFor(value)
+  if (entry) entry.count++
+}
+
+export function releaseOpaque(value: unknown): void {
+  const entry = holdFor(value)
+  if (entry && entry.count > 0) entry.count--
+}
+
+export function localRefOverflowCount(): number {
+  return overflow
+}
+
 /** @internal Test-only. */
-export function resetTokensForTesting(): void {
-  cache.clear()
+export function resetValuesForTesting(): void {
+  tokens.clear()
+  refs.clear()
   hmacKey = null
   keyId = 'unknown'
   unresolved = 0
+  nextSeq = 0
+  overflow = 0
 }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd apps/fluux && npx vitest run src/anomaly/token.test.ts
+cd apps/fluux && npx vitest run src/anomaly/values.test.ts
+```
+
+Expected: PASS, 11 tests. The adversarial case exercises every exported function with the body in
+both argument positions across six representations; if any export mints an `Opaque` containing the
+body or its hex encoding, it fails and names the function.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/anomaly/values.ts apps/fluux/src/anomaly/values.test.ts
+git commit -m "feat: add the anomaly value layer with closed registries and no minting escape hatch"
+```
+
+---
+
+### Task 5: Wire the value layer's namespaces into the app's domain
+
+**Files:**
+- Create: `apps/fluux/src/anomaly/identity.ts`
+- Test: `apps/fluux/src/anomaly/identity.test.ts`
+
+**Interfaces:**
+- Consumes: `tokenSync`, `warmToken`, `localRef`, `CTX` from Task 4.
+- Produces:
+  - `convToken(bareJid: string): Opaque`
+  - `messageRef(id: string): Opaque | null`
+  - `queryRef(id: string): Opaque | null`
+  - `warmConversation(bareJid: string): Promise<void>`
+
+A thin domain layer so detectors never call `tokenSync('jid', …)` with a hand-written namespace —
+one place to get the namespace right, and the place where a full JID is narrowed to a bare one
+before it reaches the value layer.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `apps/fluux/src/anomaly/identity.test.ts`:
+
+```ts
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest'
+import { initTokenizer, isOpaque, resetValuesForTesting } from './values'
+import { convToken, messageRef, queryRef, warmConversation } from './identity'
+
+beforeEach(async () => {
+  localStorage.clear()
+  resetValuesForTesting()
+  await initTokenizer()
+})
+
+describe('identity helpers', () => {
+  it('strips the resource before tokenising, so one contact is one token', async () => {
+    await warmConversation('someone@example.com/phone')
+    await warmConversation('someone@example.com/desktop')
+    expect(convToken('someone@example.com/phone').s).toBe(
+      convToken('someone@example.com/desktop').s,
+    )
+  })
+
+  it('never emits the local part or the domain', async () => {
+    await warmConversation('alice@example.com')
+    const s = convToken('alice@example.com').s
+    expect(s).not.toContain('alice')
+    expect(s).not.toContain('example')
+    expect(s).toMatch(/^c:[0-9a-f]{16}$/)
+  })
+
+  it('gives messages and queries distinct ref spaces', () => {
+    expect(isOpaque(messageRef('shared-id')!)).toBe(true)
+    expect(messageRef('shared-id')!.s).not.toBe(queryRef('shared-id')!.s)
+  })
+})
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+```bash
+cd apps/fluux && npx vitest run src/anomaly/identity.test.ts
+```
+
+Expected: FAIL — `Failed to resolve import "./identity"`.
+
+- [ ] **Step 3: Write the implementation**
+
+Create `apps/fluux/src/anomaly/identity.ts`:
+
+```ts
+/**
+ * Domain helpers over the value layer.
+ *
+ * Detectors call these rather than `tokenSync('jid', …)`, so the namespace is
+ * chosen in one place and a full JID is narrowed to a bare one before it reaches
+ * the tokenizer — otherwise the same contact on two devices would produce two
+ * tokens and read as two entities.
+ */
+import { localRef, tokenSync, warmToken, type Opaque } from './values'
+
+function bare(jid: string): string {
+  const slash = jid.indexOf('/')
+  return slash === -1 ? jid : jid.slice(0, slash)
+}
+
+/** Stable cross-session identity for a 1:1 conversation. */
+export function convToken(jid: string): Opaque {
+  return tokenSync('jid', bare(jid))
+}
+
+/** Warm a conversation's token ahead of any breadcrumb that will reference it. */
+export function warmConversation(jid: string): Promise<void> {
+  return warmToken('jid', bare(jid))
+}
+
+/** Session-local identity for a message. `null` under ref pressure. */
+export function messageRef(id: string): Opaque | null {
+  return localRef('m', id)
+}
+
+/** Session-local identity for a MAM query. `null` under ref pressure. */
+export function queryRef(id: string): Opaque | null {
+  return localRef('q', id)
+}
+```
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+```bash
+cd apps/fluux && npx vitest run src/anomaly/identity.test.ts
+```
+
+Expected: PASS, 3 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/anomaly/identity.ts apps/fluux/src/anomaly/identity.test.ts
+git commit -m "feat: add domain identity helpers over the anomaly value layer"
+```
+
+---
+
+### Task 6: Expose the build sentinel in the runtime
+
+**Files:**
+- Modify: `apps/fluux/src/anomaly/gate.ts`
+- Test: `apps/fluux/src/anomaly/gate.test.ts`
+
+**Interfaces:**
+- Consumes: `ANOMALY_BUILD_SENTINEL` from Task 1.
+- Produces: the sentinel string is reachable from app code, therefore present in the emitted
+  Dev bundle and absent from the production one.
+
+`gate.ts` exports the sentinel, but the only importer is `vite.config.ts`, which runs in **Node at
+build time** — that import puts nothing in the browser bundle. So the Dev-side CI assertion in
+Task 11 would look for a string that was never going to be there, and the production-side check
+would pass vacuously. The sentinel has to be referenced by code that actually ships.
+
+- [ ] **Step 1: Add the failing assertion**
+
+Append to `apps/fluux/src/anomaly/gate.test.ts`:
+
+```ts
+import { ANOMALY_BUILD_SENTINEL, markAnomalyBuild } from './gate'
+
+describe('build sentinel', () => {
+  it('is published on window so it lands in the emitted bundle', () => {
+    markAnomalyBuild()
+    expect(
+      (window as unknown as Record<string, unknown>).__fluuxAnomalyBuild,
+    ).toBe(ANOMALY_BUILD_SENTINEL)
+  })
+})
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+```bash
+cd apps/fluux && npx vitest run src/anomaly/gate.test.ts
+```
+
+Expected: FAIL — `markAnomalyBuild is not a function`.
+
+- [ ] **Step 3: Add the runtime marker**
+
+Append to `apps/fluux/src/anomaly/gate.ts`:
+
+```ts
+/**
+ * Publish the sentinel at runtime.
+ *
+ * Called from the gated install path, so the string is reachable from app code and
+ * therefore emitted into a Dev bundle and eliminated from a production one. Without
+ * this the sentinel lives only in `vite.config.ts`, which runs in Node at build
+ * time — the production check would pass vacuously and the Dev check could never
+ * pass at all.
+ */
+export function markAnomalyBuild(): void {
+  if (typeof window === 'undefined') return
+  ;(window as unknown as Record<string, unknown>).__fluuxAnomalyBuild = ANOMALY_BUILD_SENTINEL
+}
+```
+
+- [ ] **Step 4: Run it to verify it passes**
+
+```bash
+cd apps/fluux && npx vitest run src/anomaly/gate.test.ts
 ```
 
 Expected: PASS, 6 tests.
@@ -1069,8 +1091,8 @@ Expected: PASS, 6 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/fluux/src/anomaly/token.ts apps/fluux/src/anomaly/token.test.ts
-git commit -m "feat: add namespaced HMAC entity tokens with a non-secret key id"
+git add apps/fluux/src/anomaly/gate.ts apps/fluux/src/anomaly/gate.test.ts
+git commit -m "feat: publish the anomaly build sentinel at runtime so CI can observe it"
 ```
 
 ---
@@ -1082,11 +1104,18 @@ git commit -m "feat: add namespaced HMAC entity tokens with a non-secret key id"
 - Test: `apps/fluux/src/anomaly/serializer.test.ts`
 
 **Interfaces:**
-- Consumes: `isOpaque`, `Opaque`, `TAG` from Task 4.
+- Consumes: `isOpaque`, `Opaque`, `TAG`, `ID`, `CTX`, `COUNTER` from Task 4.
 - Produces:
-  - `interface AnomalyRecord { v: 1; t: string; sid: string; build: string; tokenKeyId: string; kind: 'anomaly'; id: string; sev: 'bug' | 'suspect' | 'drift'; expected?: Opaque | number | boolean | null; observed?: Opaque | number | boolean | null; ctx: Record<string, Opaque | number | boolean>; crumbs: Array<Array<Opaque | number | boolean>> }`
-  - `interface DigestRecord { v: 1; t: string; sid: string; build: string; tokenKeyId: string; kind: 'digest'; windowMs: number; counters: Record<string, number>; suppressed: Record<string, number> }`
   - `type Scalar = Opaque | number | boolean | null`
+  - `interface AnomalyRecord` — envelope (`v`, `t`, `sid`, `build`, `tokenKeyId`) plus
+    `kind: 'anomaly'`, `id: Opaque`, `sev`, optional `expected`/`observed: Scalar`,
+    `ctx: Array<[Opaque, Scalar]>`, `crumbs: Scalar[][]`, optional `trunc: boolean`
+  - `interface DigestRecord` — the same envelope plus `kind: 'digest'`, `windowMs: number`,
+    `counters: Array<[Opaque, number]>`, `suppressed: Array<[Opaque, number]>`
+
+  **Keys are opaque too.** `id`, every `ctx` key and every counter name is a registry constant, not
+  a validated string — a regex such as `/^[a-z][a-zA-Z0-9]{0,15}$/` accepts a short body like
+  `"hello"`, so form validation cannot close those positions.
   - `serialize(record: AnomalyRecord | DigestRecord): string | null` — `null` means rejected
   - `rejectedValueCount(): number`
   - `resetSerializerCountersForTesting(): void`
@@ -1097,7 +1126,7 @@ Create `apps/fluux/src/anomaly/serializer.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { TAG } from './schema'
+import { CTX, ID, TAG } from './values'
 import { rejectedValueCount, resetSerializerCountersForTesting, serialize } from './serializer'
 import type { AnomalyRecord } from './serializer'
 
@@ -1109,9 +1138,9 @@ function baseRecord(overrides: Partial<AnomalyRecord> = {}): AnomalyRecord {
     build: '0.17.2+abc1234',
     tokenKeyId: '3b91cc07',
     kind: 'anomaly',
-    id: 'test/example',
+    id: ID.sessionStart,
     sev: 'bug',
-    ctx: {},
+    ctx: [],
     crumbs: [],
     ...overrides,
   }
@@ -1119,7 +1148,7 @@ function baseRecord(overrides: Partial<AnomalyRecord> = {}): AnomalyRecord {
 
 describe('serialize', () => {
   it('emits a single JSON line for a valid record', () => {
-    const line = serialize(baseRecord({ ctx: { route: TAG.focus }, crumbs: [[TAG.msgIn, 3]] }))
+    const line = serialize(baseRecord({ ctx: [[CTX.route, TAG.focus]], crumbs: [[TAG.msgIn, 3]] }))
     expect(line).not.toBeNull()
     expect(line).not.toContain('\n')
     expect(JSON.parse(line!).ctx.route).toBe('focus')
@@ -1134,24 +1163,24 @@ describe('serialize', () => {
 
   it('rejects a primitive string in ctx even when it equals a tag', () => {
     resetSerializerCountersForTesting()
-    expect(serialize(baseRecord({ ctx: { route: 'focus' } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [['focus' as never, TAG.focus]] }))).toBeNull()
     expect(rejectedValueCount()).toBe(1)
   })
 
   it('rejects a primitive string shaped like a token', () => {
-    expect(serialize(baseRecord({ ctx: { conv: 'c:0123456789abcdef' } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.conv, 'c:0123456789abcdef' as never]] }))).toBeNull()
   })
 
   it('rejects a primitive string shaped like a local ref', () => {
-    expect(serialize(baseRecord({ ctx: { msg: 's:m41' } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.msg, 's:m41' as never]] }))).toBeNull()
   })
 
   it('rejects the unresolved sentinel arriving as a primitive', () => {
-    expect(serialize(baseRecord({ ctx: { conv: 'c:unresolved' } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.conv, 'c:unresolved' as never]] }))).toBeNull()
   })
 
   it('rejects a structural forgery', () => {
-    expect(serialize(baseRecord({ ctx: { conv: { s: 'c:0123456789abcdef' } } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.conv, { s: 'c:0123456789abcdef' } as never]] }))).toBeNull()
   })
 
   it('rejects a primitive string in a crumb', () => {
@@ -1164,14 +1193,14 @@ describe('serialize', () => {
 
   it('never emits a prefix of a rejected value', () => {
     const body = 'SECRET-BODY-CONTENT-THAT-MUST-NOT-LEAK'
-    expect(serialize(baseRecord({ ctx: { conv: body } as never }))).toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.conv, body as never]] }))).toBeNull()
   })
 
   // --- Bounds ---
 
   it('accepts numbers and booleans without wrapping', () => {
-    const line = serialize(baseRecord({ ctx: { count: 3, ok: true } }))
-    expect(JSON.parse(line!).ctx).toEqual({ count: 3, ok: true })
+    const line = serialize(baseRecord({ ctx: [[CTX.msg, 3], [CTX.query, true]] }))
+    expect(JSON.parse(line!).ctx).toEqual({ msg: 3, query: true })
   })
 
   it('caps crumbs at 50 per record', () => {
@@ -1184,8 +1213,8 @@ describe('serialize', () => {
     // The 8 KB cap is a backstop: crumbs are capped at 50 and opaque values are
     // short, so only a pathological ctx can reach it. Reaching it must reject, not
     // emit a partial record.
-    const ctx: Record<string, unknown> = {}
-    for (let i = 0; i < 600; i++) ctx[`k${i}`] = TAG.focus
+    const ctx: Array<[unknown, unknown]> = []
+    for (let i = 0; i < 600; i++) ctx.push([CTX.conv, TAG.focus])
     expect(serialize(baseRecord({ ctx: ctx as never }))).toBeNull()
   })
 
@@ -1193,12 +1222,12 @@ describe('serialize', () => {
 
   it('rejects a ctx key that is not a short identifier', () => {
     expect(
-      serialize(baseRecord({ ctx: { 'a message body with spaces': TAG.focus } as never })),
+      serialize(baseRecord({ ctx: [['a message body with spaces' as never, TAG.focus]] })),
     ).toBeNull()
   })
 
   it('accepts a conventional ctx key', () => {
-    expect(serialize(baseRecord({ ctx: { conv: TAG.focus } }))).not.toBeNull()
+    expect(serialize(baseRecord({ ctx: [[CTX.conv, TAG.focus]] }))).not.toBeNull()
   })
 })
 ```
@@ -1228,14 +1257,10 @@ Create `apps/fluux/src/anomaly/serializer.ts`:
  * a truncated body still discloses its prefix. A rejected record is a visible bug in
  * a detector; a truncated one is a silent leak.
  */
-import { isOpaque, type Opaque } from './schema'
+import { isOpaque, type Opaque } from './values'
 
 const MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
-/** ctx keys must be short identifiers — see the loop in `serialize`. */
-const CTX_KEY = /^[a-z][a-zA-Z0-9]{0,15}$/
-/** Counter and invariant-id keys: `family/name` or a dotted metric name. */
-const COUNTER_KEY = /^[a-z][a-zA-Z0-9]*([./-][a-zA-Z0-9]+)*$/
 
 export type Scalar = Opaque | number | boolean | null
 
@@ -1246,11 +1271,13 @@ export interface AnomalyRecord {
   build: string
   tokenKeyId: string
   kind: 'anomaly'
-  id: string
+  /** An ID registry constant, never a free string — see values.ts. */
+  id: Opaque
   sev: 'bug' | 'suspect' | 'drift'
   expected?: Scalar
   observed?: Scalar
-  ctx: Record<string, Scalar>
+  /** [CTX constant, value] pairs. Keys are opaque too. */
+  ctx: Array<[Opaque, Scalar]>
   crumbs: Scalar[][]
   trunc?: boolean
 }
@@ -1263,8 +1290,9 @@ export interface DigestRecord {
   tokenKeyId: string
   kind: 'digest'
   windowMs: number
-  counters: Record<string, number>
-  suppressed: Record<string, number>
+  /** [COUNTER or ID constant, value] pairs. */
+  counters: Array<[Opaque, number]>
+  suppressed: Array<[Opaque, number]>
 }
 
 let rejected = 0
@@ -1306,20 +1334,20 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
       // Subject to the same line cap as an anomaly record: a digest with a runaway
       // number of counter keys would otherwise write an unbounded line. Counter
       // names are developer-chosen, so validate them like ctx keys.
-      for (const key of [...Object.keys(record.counters), ...Object.keys(record.suppressed)]) {
-        if (!COUNTER_KEY.test(key)) throw new Error('invalid counter key')
-      }
-      const digestLine = JSON.stringify(record)
+      const digestLine = JSON.stringify({
+        ...record,
+        counters: Object.fromEntries(record.counters.map(([k, v]) => [unwrap(k), v])),
+        suppressed: Object.fromEntries(record.suppressed.map(([k, v]) => [unwrap(k), v])),
+      })
       return byteLength(digestLine) <= MAX_LINE_BYTES ? digestLine : null
     }
 
+    // Keys go through `unwrap` exactly like values, so a key must ALSO be a
+    // registry constant. A regex would have accepted a short body such as "hello"
+    // as a key name; provenance does not.
     const ctx: Record<string, string | number | boolean | null> = {}
-    for (const [key, value] of Object.entries(record.ctx)) {
-      // Keys are developer-chosen, not caller data — but nothing structurally stops
-      // a detector writing `{ [message.body]: ... }`, so constrain them to short
-      // identifiers. A body with spaces, punctuation or length cannot pass.
-      if (!CTX_KEY.test(key)) throw new Error('invalid ctx key')
-      ctx[key] = unwrap(value)
+    for (const [key, value] of record.ctx) {
+      ctx[String(unwrap(key))] = unwrap(value)
     }
 
     const crumbs = record.crumbs
@@ -1333,7 +1361,7 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
       build: record.build,
       tokenKeyId: record.tokenKeyId,
       kind: record.kind,
-      id: record.id,
+      id: unwrap(record.id),
       sev: record.sev,
       ctx,
       crumbs,
@@ -1376,7 +1404,7 @@ function byteLength(s: string): number {
 cd apps/fluux && npx vitest run src/anomaly/serializer.test.ts
 ```
 
-Expected: PASS, 15 tests.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1575,7 +1603,7 @@ Append to `apps/fluux/src/anomaly/sinks/tauri.ts`:
 
 ```ts
 import { writeFile } from '@tauri-apps/plugin-fs'
-import { homeDir } from '@tauri-apps/api/path'
+import { homeDir, localDataDir } from '@tauri-apps/api/path'
 import { platform } from '@tauri-apps/plugin-os'
 
 /**
@@ -1588,11 +1616,13 @@ import { platform } from '@tauri-apps/plugin-os'
  * Dev-only, so it is unambiguous even though `fluux.log` itself interleaves builds.
  */
 async function sidecarDir(): Promise<string> {
-  const home = await homeDir()
   const os = await platform()
-  if (os === 'macos') return `${home}/Library/Logs/com.processone.fluux`
-  if (os === 'windows') return `${home}/AppData/Roaming/com.processone.fluux/logs`
-  return `${home}/.local/share/com.processone.fluux/logs`
+  if (os === 'macos') return `${await homeDir()}/Library/Logs/com.processone.fluux`
+  // Everywhere else the Rust side uses `dirs::data_local_dir()`. `localDataDir()`
+  // is its exact JS counterpart: LOCAL AppData on Windows (not Roaming) and
+  // $XDG_DATA_HOME on Linux (not a hardcoded ~/.local/share). Hand-building those
+  // paths would diverge from `fluux.log` on both platforms.
+  return `${await localDataDir()}/com.processone.fluux/logs`
 }
 
 /** `anomalies.YYYY-MM-DD.jsonl`, daily-rotated to match `fluux.log`. */
@@ -1624,14 +1654,28 @@ Create `apps/fluux/src/anomaly/sinks/pluginFsWriter.test.ts`:
 ```ts
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const writeFile = vi.fn(async () => {})
+// `vi.mock` factories are hoisted above every import and above plain `const`
+// declarations, so a factory closing over an outer `const writeFile` throws
+// "Cannot access before initialization" before the suite even loads.
+// `vi.hoisted` is the supported way to share a mock with a hoisted factory.
+const { writeFile, platformName } = vi.hoisted(() => ({
+  writeFile: vi.fn(async () => {}),
+  platformName: { value: 'macos' },
+}))
+
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile }))
-vi.mock('@tauri-apps/api/path', () => ({ homeDir: async () => '/Users/test' }))
-vi.mock('@tauri-apps/plugin-os', () => ({ platform: async () => 'macos' }))
+vi.mock('@tauri-apps/api/path', () => ({
+  homeDir: async () => '/Users/test',
+  localDataDir: async () => '/Users/test/.local/share',
+}))
+vi.mock('@tauri-apps/plugin-os', () => ({ platform: async () => platformName.value }))
 
 import { createPluginFsWriter } from './tauri'
 
-beforeEach(() => writeFile.mockClear())
+beforeEach(() => {
+  writeFile.mockClear()
+  platformName.value = 'macos'
+})
 
 describe('createPluginFsWriter', () => {
   it('appends to the daily sidecar beside fluux.log', async () => {
@@ -1665,6 +1709,15 @@ describe('createPluginFsWriter', () => {
     expect(writeFile.mock.calls[0][0]).toContain('anomalies.2026-07-29.jsonl')
     expect(writeFile.mock.calls[1][0]).toContain('anomalies.2026-07-30.jsonl')
   })
+
+  it('uses localDataDir off macOS, matching dirs::data_local_dir on the Rust side', async () => {
+    platformName.value = 'linux'
+    const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
+    await write('x')
+    expect(writeFile.mock.calls[0][0]).toBe(
+      '/Users/test/.local/share/com.processone.fluux/logs/anomalies.2026-07-29.jsonl',
+    )
+  })
 })
 ```
 
@@ -1674,7 +1727,7 @@ describe('createPluginFsWriter', () => {
 cd apps/fluux && npx vitest run src/anomaly/sinks/pluginFsWriter.test.ts
 ```
 
-Expected: PASS, 3 tests.
+Expected: PASS, 4 tests.
 
 - [ ] **Step 7: Write the memory sink**
 
@@ -1714,7 +1767,7 @@ export function createMemorySink(): Sink {
 cd apps/fluux && npx vitest run src/anomaly/sinks/
 ```
 
-Expected: PASS, 8 tests (5 queue + 3 adapter).
+Expected: PASS, 9 tests (5 queue + 4 adapter).
 
 - [ ] **Step 9: Commit**
 
@@ -1736,9 +1789,9 @@ capability does not grant)."
 - Test: `apps/fluux/src/anomaly/recorder.test.ts`
 
 **Interfaces:**
-- Consumes: `Opaque`/`TAG` (Task 4), `localRefOverflowCount` (Task 5),
-  `tokenKeyId`/`tokenUnresolvedCount` (Task 6), `serialize`/`rejectedValueCount` (Task 7),
-  `Sink` (Task 8).
+- Consumes: the value layer from Task 4 (`TAG`, `ID`, `COUNTER`, `retainOpaque`/`releaseOpaque`,
+  `localRefOverflowCount`, `tokenKeyId`, `tokenUnresolvedCount`), `serialize`/`rejectedValueCount`
+  (Task 7), `Sink` (Task 8).
 - Produces:
   - `createRecorder(opts: { sink: Sink; now: () => number; build: string; sid: string }): Recorder`
   - `interface Recorder { crumb(parts: Scalar[]): void; record(input: { id: string; sev: 'bug'|'suspect'|'drift'; expected?: Scalar; observed?: Scalar; ctx?: Record<string, Scalar> }): void; count(key: string, by?: number): void; flushDigest(windowMs: number): void }`
@@ -1750,7 +1803,7 @@ Create `apps/fluux/src/anomaly/recorder.test.ts`:
 ```ts
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createRecorder } from './recorder'
-import { TAG } from './schema'
+import { COUNTER, CTX, ID, TAG } from './values'
 import type { Sink } from './sinks/tauri'
 
 function fakeSink(): Sink & { lines: string[] } {
@@ -1779,10 +1832,10 @@ describe('recorder', () => {
     const rec = make(sink)
     rec.crumb([TAG.msgIn, 1])
     rec.crumb([TAG.focus])
-    rec.record({ id: 'test/one', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
 
     const parsed = JSON.parse(sink.lines[0])
-    expect(parsed.id).toBe('test/one')
+    expect(parsed.id).toBe('recorder/session-start')
     expect(parsed.crumbs).toEqual([['msg:in', 1], ['focus']])
     expect(parsed.tokenKeyId).toBeDefined()
   })
@@ -1791,7 +1844,7 @@ describe('recorder', () => {
     const sink = fakeSink()
     const rec = make(sink)
     for (let i = 0; i < 150; i++) rec.crumb([TAG.msgIn, i])
-    rec.record({ id: 'test/ring', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
 
     const crumbs = JSON.parse(sink.lines[0]).crumbs
     expect(crumbs.length).toBe(50)
@@ -1802,11 +1855,11 @@ describe('recorder', () => {
   it('coalesces repeats of one id inside the cooldown', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    rec.record({ id: 'test/noisy', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
     clock = 30_000
-    rec.record({ id: 'test/noisy', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
     clock = 59_999
-    rec.record({ id: 'test/noisy', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
 
     expect(sink.lines.length).toBe(1)
   })
@@ -1814,20 +1867,20 @@ describe('recorder', () => {
   it('reports suppressed counts in the digest so coalescing hides no frequency', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    for (let i = 0; i < 48; i++) rec.record({ id: 'test/noisy', sev: 'bug' })
+    for (let i = 0; i < 48; i++) rec.record({ id: ID.sessionStart, sev: 'bug' })
     rec.flushDigest(300_000)
 
     const digest = JSON.parse(sink.lines[sink.lines.length - 1])
     expect(digest.kind).toBe('digest')
-    expect(digest.suppressed['test/noisy']).toBe(47)
+    expect(digest.suppressed['recorder/session-start']).toBe(47)
   })
 
   it('writes again once the cooldown expires', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    rec.record({ id: 'test/noisy', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
     clock = 60_001
-    rec.record({ id: 'test/noisy', sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
     expect(sink.lines.length).toBe(2)
   })
 
@@ -1836,7 +1889,7 @@ describe('recorder', () => {
     const rec = make(sink)
     for (let i = 0; i < 600; i++) {
       clock += 60_001
-      rec.record({ id: `test/id-${i % 3}`, sev: 'bug' })
+      rec.record({ id: ID.sessionStart, sev: 'bug' })
     }
 
     const last = JSON.parse(sink.lines[sink.lines.length - 1])
@@ -1847,12 +1900,12 @@ describe('recorder', () => {
   it('carries recorder health counters in the digest', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    rec.count('mam.queries', 3)
-    rec.count('mam.queries')
+    rec.count(COUNTER.tokenUnresolved, 3)
+    rec.count(COUNTER.tokenUnresolved)
     rec.flushDigest(300_000)
 
     const digest = JSON.parse(sink.lines[0])
-    expect(digest.counters['mam.queries']).toBe(4)
+    expect(digest.counters['recorder/token-unresolved']).toBe(4)
     expect(digest.counters['recorder/rejected-value']).toBeDefined()
     expect(digest.counters['recorder/localref-overflow']).toBeDefined()
     expect(digest.counters['recorder/token-unresolved']).toBeDefined()
@@ -1861,7 +1914,7 @@ describe('recorder', () => {
   it('does not write a rejected record but still counts it', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    rec.record({ id: 'test/bad', sev: 'bug', ctx: { conv: 'raw-string' as never } })
+    rec.record({ id: ID.sessionStart, sev: 'bug', ctx: [[CTX.conv, 'raw-string' as never]] })
     expect(sink.lines.length).toBe(0)
   })
 
@@ -1870,12 +1923,12 @@ describe('recorder', () => {
     const rec = make(sink)
 
     // Two rejections in window one.
-    rec.record({ id: 'a/x', sev: 'bug', ctx: { c: 'raw' as never } })
-    rec.record({ id: 'a/y', sev: 'bug', ctx: { c: 'raw' as never } })
+    rec.record({ id: ID.sessionStart, sev: 'bug', ctx: [[CTX.conv, 'raw' as never]] })
+    rec.record({ id: ID.ceilingReached, sev: 'bug', ctx: [[CTX.conv, 'raw' as never]] })
     rec.flushDigest(300_000)
 
     // One more in window two. Cumulative would report 3; the window saw 1.
-    rec.record({ id: 'a/z', sev: 'bug', ctx: { c: 'raw' as never } })
+    rec.record({ id: ID.sessionStart, sev: 'bug', ctx: [[CTX.conv, 'raw' as never]] })
     rec.flushDigest(300_000)
 
     const first = JSON.parse(sink.lines[0]).counters['recorder/rejected-value']
@@ -1889,7 +1942,7 @@ describe('recorder', () => {
     const rec = make(sink)
     for (let i = 0; i < 600; i++) {
       clock += 60_001
-      rec.record({ id: `test/id-${i % 3}`, sev: 'bug' })
+      rec.record({ id: ID.sessionStart, sev: 'bug' })
     }
     const afterRecords = sink.lines.length
 
@@ -1900,23 +1953,56 @@ describe('recorder', () => {
     expect(sink.lines.length).toBe(afterRecords)
   })
 
-  it('counts UTF-8 bytes, not UTF-16 code units, against the byte ceiling', () => {
-    // A multi-byte tag value would undercount with `line.length`, letting the
-    // 2 MB ceiling drift. Assert the accounting via the public surface: the byte
-    // ceiling must be reached no later than a pure-ASCII run of the same length.
+  it('never writes past the byte ceiling, counting the line about to be written', () => {
+    // Two defects at once: `line.length` counts UTF-16 code units rather than
+    // bytes, and a retrospective check lets the LAST line cross the cap. Assert the
+    // property that matters — total bytes on the sink never exceed the budget.
     const sink = fakeSink()
-    const rec = make(sink)
-    rec.crumb([TAG.msgIn, 1])
-    rec.record({ id: 'test/bytes', sev: 'bug' })
-    const line = sink.lines[0]
-    expect(new TextEncoder().encode(line).length).toBeGreaterThanOrEqual(line.length)
+    const rec = createRecorder({
+      sink,
+      now,
+      build: '0.17.2+abc',
+      sid: 'sid-1',
+      maxBytes: 4096, // small budget so the boundary is reachable in a test
+    })
+
+    for (let i = 0; i < 400; i++) {
+      clock += 60_001
+      rec.crumb([TAG.msgIn, i])
+      rec.record({ id: ID.sessionStart, sev: 'bug' })
+    }
+
+    const encoder = new TextEncoder()
+    const total = sink.lines.reduce((n, l) => n + encoder.encode(l).length, 0)
+    // The ceiling notice is force-written, so allow exactly one line of headroom.
+    const largest = Math.max(...sink.lines.map((l) => encoder.encode(l).length))
+    expect(total).toBeLessThanOrEqual(4096 + largest)
+    expect(sink.lines.length).toBeGreaterThan(1)
+  })
+
+  it('does not clear the window when the digest could not be written', () => {
+    // If the baselines advanced and the counters cleared on a failed emit, the
+    // window's data would be gone AND the next delta would be measured from a
+    // report that never existed.
+    const sink = fakeSink()
+    const rec = createRecorder({ sink, now, build: 'b', sid: 's', maxBytes: 1 })
+    rec.count(COUNTER.tokenUnresolved, 9)
+    rec.flushDigest(300_000)
+    expect(sink.lines.length).toBe(0)
+
+    // Room now available: the same window must still be reportable.
+    const roomy = fakeSink()
+    const rec2 = createRecorder({ sink: roomy, now, build: 'b', sid: 's' })
+    rec2.count(COUNTER.tokenUnresolved, 9)
+    rec2.flushDigest(300_000)
+    expect(JSON.parse(roomy.lines[0]).counters['recorder/token-unresolved']).toBe(9)
   })
 })
 
 describe('recorder ring pins local refs', () => {
   it('keeps a ref alive while it sits in the ring, and frees it on eviction', async () => {
-    const { localRef, resetLocalRefsForTesting, retainRef, releaseRef } = await import('./localRef')
-    resetLocalRefsForTesting()
+    const { localRef, resetValuesForTesting, retainRef, releaseRef } = await import('./values')
+    resetValuesForTesting()
 
     const sink = fakeSink()
     const rec = make(sink)
@@ -1966,30 +2052,32 @@ Create `apps/fluux/src/anomaly/recorder.ts`:
  * surfaced in the digest, so coalescing never hides frequency) and a session
  * ceiling that announces itself — a silent stop would read as a healthy day.
  */
-import { localRefOverflowCount, releaseOpaque, retainOpaque } from './localRef'
+import { COUNTER, localRefOverflowCount, releaseOpaque, retainOpaque, tokenKeyId, tokenUnresolvedCount, type Opaque } from './values'
 import type { Scalar } from './serializer'
 import { rejectedValueCount, serialize } from './serializer'
 import type { Sink } from './sinks/tauri'
-import { tokenKeyId, tokenUnresolvedCount } from './token'
 
 const RING_SIZE = 100
 const CRUMBS_PER_RECORD = 50
 const COOLDOWN_MS = 60_000
 const MAX_RECORDS = 500
-const MAX_BYTES = 2 * 1024 * 1024
+const DEFAULT_MAX_BYTES = 2 * 1024 * 1024
 
 export interface RecordInput {
-  id: string
+  /** An ID registry constant from values.ts. */
+  id: Opaque
   sev: 'bug' | 'suspect' | 'drift'
   expected?: Scalar
   observed?: Scalar
-  ctx?: Record<string, Scalar>
+  /** [CTX constant, value] pairs. */
+  ctx?: Array<[Opaque, Scalar]>
 }
 
 export interface Recorder {
   crumb(parts: Scalar[]): void
   record(input: RecordInput): void
-  count(key: string, by?: number): void
+  /** `key` is a COUNTER registry constant. */
+  count(key: Opaque, by?: number): void
   flushDigest(windowMs: number): void
 }
 
@@ -1999,14 +2087,19 @@ export interface RecorderOptions {
   now: () => number
   build: string
   sid: string
+  /** Overridable so the byte-ceiling boundary is reachable in a test. */
+  maxBytes?: number
 }
 
 export function createRecorder(opts: RecorderOptions): Recorder {
   const { sink, now, build, sid } = opts
+  const MAX_BYTES = opts.maxBytes ?? DEFAULT_MAX_BYTES
 
   const ring: Scalar[][] = []
-  const counters = new Map<string, number>()
-  const suppressed = new Map<string, number>()
+  // Keyed by the constant's string for lookup; the constant itself is kept so the
+  // serializer still receives an Opaque rather than a rebuilt string.
+  const counters = new Map<string, [Opaque, number]>()
+  const suppressed = new Map<string, [Opaque, number]>()
   const lastEmittedAt = new Map<string, number>()
 
   let recordsWritten = 0
@@ -2033,17 +2126,17 @@ export function createRecorder(opts: RecorderOptions): Recorder {
    * undercount and let the 2 MB ceiling drift.
    */
   function emit(line: string, force = false): boolean {
-    if (!force && atCeiling()) return false
+    const size = encoder.encode(line).length
+    // PROSPECTIVE: checking only what is already written lets the last line cross
+    // the cap, so a 2 MB budget could end up writing 2 MB + 8 KB. Ask whether THIS
+    // line fits before writing it.
+    if (!force && (recordsWritten + 1 > MAX_RECORDS || bytesWritten + size > MAX_BYTES)) {
+      return false
+    }
     sink.write(line)
     recordsWritten++
-    bytesWritten += encoder.encode(line).length
+    bytesWritten += size
     return true
-  }
-
-  function healthDelta(key: string, total: number): number {
-    const previous = lastHealth.get(key) ?? 0
-    lastHealth.set(key, total)
-    return total - previous
   }
 
   function announceCeiling(): void {
@@ -2056,9 +2149,9 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       build,
       tokenKeyId: tokenKeyId(),
       kind: 'anomaly',
-      id: 'recorder/ceiling-reached',
+      id: ID.ceilingReached,
       sev: 'drift',
-      ctx: {},
+      ctx: [],
       crumbs: [],
     })
     // Forced: this is the record that explains the silence, so it must land even
@@ -2089,9 +2182,11 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         return
       }
 
-      const last = lastEmittedAt.get(input.id)
+      const idKey = input.id.s
+      const last = lastEmittedAt.get(idKey)
       if (last !== undefined && now() - last < COOLDOWN_MS) {
-        suppressed.set(input.id, (suppressed.get(input.id) ?? 0) + 1)
+        const [, n] = suppressed.get(idKey) ?? [input.id, 0]
+        suppressed.set(idKey, [input.id, n + 1])
         return
       }
 
@@ -2106,7 +2201,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         sev: input.sev,
         ...(input.expected !== undefined ? { expected: input.expected } : {}),
         ...(input.observed !== undefined ? { observed: input.observed } : {}),
-        ctx: input.ctx ?? {},
+        ctx: input.ctx ?? [],
         crumbs: ring.slice(-CRUMBS_PER_RECORD),
       })
 
@@ -2114,12 +2209,13 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // than by writing something unsafe.
       if (!line) return
 
-      lastEmittedAt.set(input.id, now())
+      lastEmittedAt.set(idKey, now())
       emit(line)
     },
 
-    count(key: string, by = 1): void {
-      counters.set(key, (counters.get(key) ?? 0) + by)
+    count(key: Opaque, by = 1): void {
+      const [, n] = counters.get(key.s) ?? [key, 0]
+      counters.set(key.s, [key, n + by])
     },
 
     flushDigest(windowMs: number): void {
@@ -2128,30 +2224,55 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         return
       }
 
-      const all: Record<string, number> = Object.fromEntries(counters)
-      all['recorder/rejected-value'] = healthDelta('rejected', rejectedValueCount())
-      all['recorder/localref-overflow'] = healthDelta('overflow', localRefOverflowCount())
-      all['recorder/token-unresolved'] = healthDelta('unresolved', tokenUnresolvedCount())
-      all['recorder/sink-write-failed'] = healthDelta('sinkFailed', sink.failureCount())
+      // Health totals are read but NOT committed yet: if the digest fails to
+      // serialize or does not fit, advancing the baselines here would lose the
+      // whole window — the counters would be cleared and the next digest would
+      // report a delta measured from a report that was never written.
+      const health: Array<[Opaque, number]> = [
+        [COUNTER.rejectedValue, rejectedValueCount()],
+        [COUNTER.localRefOverflow, localRefOverflowCount()],
+        [COUNTER.tokenUnresolved, tokenUnresolvedCount()],
+        [COUNTER.sinkWriteFailed, sink.failureCount()],
+      ]
 
-      const line = serialize({
-        v: 1,
+      const all: Array<[Opaque, number]> = [...counters.values()]
+      for (const [constant, total] of health) {
+        all.push([constant, total - (lastHealth.get(constant.s) ?? 0)])
+      }
+
+      const envelope = {
+        v: 1 as const,
         t: new Date(now()).toISOString(),
         sid,
         build,
         tokenKeyId: tokenKeyId(),
-        kind: 'digest',
+        kind: 'digest' as const,
         windowMs,
-        counters: all,
-        suppressed: Object.fromEntries(suppressed),
-      })
+        suppressed: [...suppressed.values()],
+      }
+
+      // Shed WHOLE counter entries — smallest first, so the largest signals
+      // survive — until the line fits. A digest that simply vanished would look
+      // like a quiet window rather than a dropped one.
+      let entries = [...all].sort((a, b) => b[1] - a[1])
+      let line: string | null = null
+      while (entries.length > 0) {
+        line = serialize({ ...envelope, counters: entries })
+        if (line) break
+        entries = entries.slice(0, entries.length - 1)
+      }
+      if (!line) line = serialize({ ...envelope, counters: [] })
 
       // A digest is subject to the ceiling like any other record: it is a record,
       // and an unbounded digest stream is an unbounded file.
-      if (line) emit(line)
+      const written = line ? emit(line) : false
 
-      counters.clear()
-      suppressed.clear()
+      // Commit the window ONLY on a successful write.
+      if (written) {
+        health.forEach(([constant, total]) => lastHealth.set(constant.s, total))
+        counters.clear()
+        suppressed.clear()
+      }
     },
   }
 }
@@ -2163,7 +2284,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 cd apps/fluux && npx vitest run src/anomaly/recorder.test.ts
 ```
 
-Expected: PASS, 13 tests. The last one — `recorder ring pins local refs` — is the integration
+Expected: PASS, 14 tests. The last one — `recorder ring pins local refs` — is the integration
 assertion: the `localRef` unit tests in Task 5 can pass while the recorder never calls
 `retainOpaque`, so the system property would not exist despite green module tests.
 
@@ -2185,8 +2306,8 @@ git commit -m "feat: add the anomaly recorder with cooldown, ceiling and digest"
 - Test: `apps/fluux/src/anomaly/install.test.ts`
 
 **Interfaces:**
-- Consumes: `createRecorder` (Task 9), `createMemorySink`/`createTauriSink` (Task 8),
-  `initTokenizer` (Task 6).
+- Consumes: `createRecorder` (Task 9), the sinks (Task 8), `initTokenizer`/`ID` (Task 4),
+  `markAnomalyBuild` (Task 6).
 - Produces: `install(): () => void` — idempotent, returns full cleanup; `getRecorder(): Recorder | null`.
 
 `main.tsx` cannot host this: at `apps/fluux/src/main.tsx:141` there is no `client` — `XMPPProvider`
@@ -2238,17 +2359,38 @@ describe('install', () => {
     // on remount — so assert continuity of something the runtime actually holds.
     await whenReady()
     const cleanup1 = install()
-    getRecorder()!.count('probe.metric', 7)
+    getRecorder()!.count(COUNTER.tokenUnresolved, 7)
     cleanup1()
 
     const cleanup2 = install()
-    getRecorder()!.count('probe.metric', 5)
+    getRecorder()!.count(COUNTER.tokenUnresolved, 5)
     getRecorder()!.flushDigest(1000)
     cleanup2()
 
     const lines = (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
     const digest = JSON.parse(lines.filter((l) => JSON.parse(l).kind === 'digest').pop()!)
-    expect(digest.counters['probe.metric']).toBe(12)
+    expect(digest.counters['recorder/token-unresolved']).toBe(12)
+  })
+
+  it('announces the session exactly once across a StrictMode cycle', async () => {
+    // The emission belongs to the runtime, not to an attachment. If each install()
+    // attached its own `.then`, the cooldown would hide the second RECORD but still
+    // count a phantom `suppressed['recorder/session-start']`.
+    const cleanup1 = install()
+    cleanup1()
+    const cleanup2 = install()
+    await whenReady()
+    await Promise.resolve()
+
+    getRecorder()!.flushDigest(1000)
+    cleanup2()
+
+    const lines = (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+    const records = lines.map((l) => JSON.parse(l))
+    expect(records.filter((r) => r.id === 'recorder/session-start')).toHaveLength(1)
+
+    const digest = records.filter((r) => r.kind === 'digest').pop()
+    expect(digest.suppressed['recorder/session-start']).toBeUndefined()
   })
 
   it('does not write a record before the tokenizer holds its key', async () => {
@@ -2341,7 +2483,8 @@ import { isTauri } from '../utils/tauri'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { initTokenizer } from './token'
+import { markAnomalyBuild } from './gate'
+import { ID, initTokenizer } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
 
@@ -2363,6 +2506,7 @@ const sessionId =
 let recorder: Recorder | null = null
 let ready: Promise<void> | null = null
 let attachments = 0
+let sessionAnnounced = false
 let digestTimer: ReturnType<typeof setInterval> | null = null
 
 function runtime(): Recorder {
@@ -2396,6 +2540,21 @@ export function whenReady(): Promise<void> {
 }
 
 /**
+ * Emit the one session-start record, at most once per process.
+ *
+ * This belongs to the RUNTIME, not to an attachment. Attaching the `.then` inside
+ * `install()` fires it once per StrictMode attach; the per-id cooldown would hide
+ * the duplicate record but still increment
+ * `suppressed['recorder/session-start']`, so every Dev session would open with a
+ * phantom suppression that means nothing.
+ */
+function announceSessionOnce(rec: Recorder): void {
+  if (sessionAnnounced) return
+  sessionAnnounced = true
+  void whenReady().then(() => rec.record({ id: ID.sessionStart, sev: 'drift' }))
+}
+
+/**
  * Attach subscriptions and timers. Idempotent: a second call while already
  * attached is a no-op returning a cleanup for THIS caller only.
  *
@@ -2407,12 +2566,8 @@ export function install(): () => void {
 
   attachments++
   const rec = runtime()
-
-  void whenReady().then(() => {
-    // One safe, content-free record per session, so the Dev-side CI assertion
-    // (§7.2) has something real to find without waiting for a detector.
-    rec.record({ id: 'recorder/session-start', sev: 'drift' })
-  })
+  markAnomalyBuild()
+  announceSessionOnce(rec)
 
   digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
 
@@ -2437,6 +2592,7 @@ export function resetInstallForTesting(): void {
   recorder = null
   ready = null
   attachments = 0
+  sessionAnnounced = false
 }
 
 /** @internal Diagnostic: how many times install() actually attached. */
@@ -2497,7 +2653,7 @@ Then inside `<XMPPProvider ...>`, immediately before `<ThemeProvider>`, add:
 cd apps/fluux && npx vitest run src/anomaly/install.test.ts
 ```
 
-Expected: PASS, 7 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 8: Verify the app boots in demo mode**
 
@@ -2715,18 +2871,34 @@ function walk(dir) {
   return out
 }
 
-const offenders = walk(DIST).filter(
+const carriers = walk(DIST).filter(
   (file) => /\.(js|css|html)$/.test(file) && readFileSync(file, 'utf-8').includes(SENTINEL),
 )
 
-if (offenders.length > 0) {
-  console.error(
-    `FAIL: the anomaly gate sentinel survived into a production build:\n  ${offenders.join('\n  ')}`,
-  )
-  process.exit(1)
-}
+// Branch on the EXPECTED direction first. Checking "absent" unconditionally and
+// exiting would abort a Dev run before it ever reached the presence check — the
+// Dev build is supposed to contain the sentinel.
+const expectPresent = process.env.FLUUX_ANOMALY === '1'
 
-console.log('OK: no anomaly instrumentation in the production bundle.')
+if (expectPresent) {
+  if (carriers.length === 0) {
+    console.error(
+      'FAIL: the anomaly gate sentinel is ABSENT from a Dev build. The tree was ' +
+        'eliminated where it was supposed to run — check that FLUUX_ANOMALY reaches ' +
+        'vite (see apps/fluux/src/anomaly/gate.ts).',
+    )
+    process.exit(1)
+  }
+  console.log(`OK: anomaly instrumentation present in the Dev bundle (${carriers.length} asset(s)).`)
+} else {
+  if (carriers.length > 0) {
+    console.error(
+      `FAIL: the anomaly gate sentinel survived into a production build:\n  ${carriers.join('\n  ')}`,
+    )
+    process.exit(1)
+  }
+  console.log('OK: no anomaly instrumentation in the production bundle.')
+}
 ```
 
 - [ ] **Step 7: Verify both directions against real builds**
@@ -2745,33 +2917,65 @@ FLUUX_ANOMALY=1 npm run build:app
 Expected: build succeeds with the audit running in `expectPresent = true` mode and finding the
 modules. If it throws `expected the anomaly modules in this build`, the gate is not reaching Vite.
 
-- [ ] **Step 8: Add the Dev-direction sentinel assertion**
+- [ ] **Step 8: Add the Playwright smoke test the spec requires**
 
-The production script asserts absence. Absence also passes when the whole feature is missing, so
-the Dev direction must assert **presence** — that is the failure mode that already happened once
-with `import.meta.env.DEV`.
+The bundle checks prove the code is present. They do not prove it **runs** — spec §7.2 requires
+the Dev build to produce a real record.
 
-Append to `scripts/check-anomaly-elimination.mjs`, replacing the final `console.log` line:
+Create `scripts/e2e/anomaly-smoke.spec.ts`:
 
-```js
-if (process.env.FLUUX_ANOMALY === '1') {
-  const present = walk(DIST).some(
-    (file) => /\.js$/.test(file) && readFileSync(file, 'utf-8').includes(SENTINEL),
-  )
-  if (!present) {
-    console.error(
-      'FAIL: the anomaly gate sentinel is ABSENT from a Dev build. The tree was ' +
-        'eliminated where it was supposed to run — check that FLUUX_ANOMALY reaches vite.',
+```ts
+import { expect, test } from '@playwright/test'
+
+test('the Dev build emits exactly one session-start record', async ({ page }) => {
+  await page.goto('/demo.html?tutorial=false')
+
+  // The record is written after the tokenizer resolves its key, so poll rather
+  // than sampling once.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const lines = (window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies
+          if (!lines) return null
+          return lines
+            .map((l) => JSON.parse(l))
+            .filter((r) => r.id === 'recorder/session-start')
+        }),
+      { timeout: 10_000 },
     )
-    process.exit(1)
-  }
-  console.log('OK: anomaly instrumentation present in the Dev bundle.')
-} else {
-  console.log('OK: no anomaly instrumentation in the production bundle.')
-}
+    .toHaveLength(1)
+
+  const record = await page.evaluate(() =>
+    (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+      .map((l) => JSON.parse(l))
+      .find((r) => r.id === 'recorder/session-start'),
+  )
+
+  // tokenKeyId is the correlation boundary: "unknown" means the record was written
+  // before the tokenizer was ready and cannot be attributed to a token space.
+  expect(record.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
+  expect(record.sid).toBeTruthy()
+  expect(record.v).toBe(1)
+
+  // And the runtime sentinel, which is what the bundle check greps for.
+  expect(await page.evaluate(() => (window as never as Record<string, unknown>).__fluuxAnomalyBuild))
+    .toBe('fluux-anomaly-instrumentation-present')
+})
 ```
 
-- [ ] **Step 9: Add both checks to package.json**
+Register it in `playwright.e2e.config.ts` as its own project alongside `scroll-chromium`, matching
+`scripts/e2e/anomaly-smoke.spec.ts` and reusing the existing demo build fixture.
+
+- [ ] **Step 9: Run the smoke test**
+
+```bash
+npm run build:e2e && npx playwright test --config playwright.e2e.config.ts --grep anomaly
+```
+
+Expected: PASS. A failure here means the installer did not mount, or the tokenizer was not awaited.
+
+- [ ] **Step 10: Add both checks to package.json**
 
 In the root `package.json` `scripts`, after `"build:app"`, add:
 
@@ -2780,7 +2984,7 @@ In the root `package.json` `scripts`, after `"build:app"`, add:
     "check:anomaly:dev": "FLUUX_ANOMALY=1 npm run build:app && FLUUX_ANOMALY=1 node scripts/check-anomaly-elimination.mjs",
 ```
 
-- [ ] **Step 10: Install the assertions in CI**
+- [ ] **Step 11: Install the assertions in CI**
 
 A script nobody runs proves nothing. The `test` job in `.github/workflows/ci.yml` currently ends
 at lint plus the Zustand selector check. Add a step after `Lint App`:
@@ -2794,9 +2998,14 @@ at lint plus the Zustand selector check. Add a step after `Lint App`:
           # import.meta.env.DEV gate did before this work.
           npm run check:anomaly:prod
           npm run check:anomaly:dev
+
+      - name: Anomaly smoke test (the Dev build actually emits a record)
+        run: |
+          npm run build:e2e
+          npx playwright test --config playwright.e2e.config.ts --grep anomaly
 ```
 
-- [ ] **Step 11: Verify the CI step locally**
+- [ ] **Step 12: Verify the CI step locally**
 
 ```bash
 npm run check:anomaly:prod && npm run check:anomaly:dev
@@ -2806,10 +3015,10 @@ Expected: the first prints `OK: no anomaly instrumentation in the production bun
 prints `OK: anomaly instrumentation present in the Dev bundle.` Both must pass; if the second
 fails, the gate is not reaching Vite.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add apps/fluux/scripts/anomalyBuildAudit.ts apps/fluux/scripts/anomalyBuildAudit.test.ts apps/fluux/vite.config.ts apps/fluux/vitest.config.ts scripts/check-anomaly-elimination.mjs package.json .github/workflows/ci.yml
+git add apps/fluux/scripts/anomalyBuildAudit.ts apps/fluux/scripts/anomalyBuildAudit.test.ts apps/fluux/vite.config.ts apps/fluux/vitest.config.ts scripts/check-anomaly-elimination.mjs scripts/e2e/anomaly-smoke.spec.ts playwright.e2e.config.ts package.json .github/workflows/ci.yml
 git commit -m "test: assert the anomaly tree is eliminated in production and present in Dev"
 ```
 
@@ -2821,7 +3030,7 @@ git commit -m "test: assert the anomaly tree is eliminated in production and pre
 - Create: `docs/ANOMALY_INVARIANTS.md`
 
 **Interfaces:**
-- Consumes: the `id` convention from Task 9 (`family/name`).
+- Consumes: the `ID` registry from Task 4 — every entry here has a constant there, and vice versa.
 - Produces: the file the review skill loads instead of the codebase.
 
 - [ ] **Step 1: Write the registry**
