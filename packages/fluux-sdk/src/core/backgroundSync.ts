@@ -459,22 +459,19 @@ export function setupBackgroundSyncSideEffects(
       void (async () => {
         try {
           logInfo('Background sync: room catch-up (delayed 10s)')
-          const joinedMAMRooms = roomStore.getState().joinedRooms()
+          // Only rooms that confirmed a join during THIS fresh session are
+          // eligible: a `joined` flag rehydrated from persisted state is not
+          // proof of current membership (#1149). The active room is owned by
+          // roomSideEffects and read here, at pass time, so a room released
+          // during the 10s window still gets covered.
+          const activeRoomJid = roomStore.getState().activeRoomJid
+          const candidates = roomStore.getState().joinedRooms()
             .filter((room) => (
               room.supportsMAM &&
               !room.isQuickChat &&
-              room.jid !== roomStore.getState().activeRoomJid
+              room.jid !== activeRoomJid &&
+              freshSessionJoinedRooms.has(room.jid)
             ))
-          const candidates = joinedMAMRooms.filter((room) =>
-            freshSessionJoinedRooms.has(room.jid),
-          )
-          if (joinedMAMRooms.length === 0) {
-            await client.mam.catchUpAllRooms({
-              concurrency: 2,
-              exclude: roomStore.getState().activeRoomJid,
-              sessionStartTime,
-            })
-          }
           await executeWithConcurrency(
             candidates,
             async (room) => {
@@ -551,8 +548,8 @@ export function setupBackgroundSyncSideEffects(
   })
 
   // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync is
-  // needed for rooms already caught up to live. But the fresh-session room catch-up
-  // (`catchUpAllRooms`) never runs here, so a room NOT caught up to live this
+  // needed for rooms already caught up to live. But the delayed fresh-session room
+  // pass (Stage 4) never runs here, so a room NOT caught up to live this
   // session — an autojoined room the user never opened, or one whose forward
   // catch-up left an open gap (e.g. a flaky connection dropped before the 10s
   // fresh-session pass fired) — keeps an empty or stale sidebar preview until opened

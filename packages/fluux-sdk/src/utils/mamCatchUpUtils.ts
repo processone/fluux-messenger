@@ -235,7 +235,7 @@ export function selectCatchUpQuery(
 /**
  * Pick the joined rooms that need a MAM catch-up on SM resumption.
  *
- * The fresh-session background room catch-up (`catchUpAllRooms`) runs only on a
+ * The delayed fresh-session background room pass runs only on a
  * fresh `'online'` event, never on an SM `'resumed'` one. So a room not caught up
  * to live this session — an autojoined room the user never opened, or a room whose
  * forward catch-up left an open gap — keeps an empty or stale sidebar preview (and

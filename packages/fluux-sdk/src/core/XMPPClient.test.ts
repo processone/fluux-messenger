@@ -872,7 +872,7 @@ describe('XMPPClient', () => {
       expect(fetchBookmarksSpy).toHaveBeenCalled()
     })
 
-    it('should skip MAM catch-up but fetch bookmarks on SM resumption when disconnect duration is unknown', async () => {
+    it('should fetch bookmarks on SM resumption when disconnect duration is unknown', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-catchup')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -880,7 +880,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
@@ -903,12 +902,13 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Unknown disconnect duration → SM replay covers messages, fetch bookmarks only
-      expect(catchUpSpy).not.toHaveBeenCalled()
+      // Unknown disconnect duration → SM replay covers messages; bookmarks are PEP
+      // items SM cannot replay, so they are refreshed. (No MAM assertion: the
+      // lifecycle engine holds no MAM dependency, so it cannot query the archive.)
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 
-    it('should skip MAM catch-up on SM resumption for short disconnects', async () => {
+    it('should skip the bookmark fetch on SM resumption for short disconnects', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-short')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -916,7 +916,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Simulate a reconnect with short disconnect: set the disconnectedAtTimestamp
@@ -945,8 +944,8 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Short disconnect (30s < 120s threshold) → skip MAM catch-up and bookmarks
-      expect(catchUpSpy).not.toHaveBeenCalled()
+      // Short disconnect (30s < 120s threshold) → bookmarks cannot have drifted
+      // enough to be worth a PEP round-trip.
       expect(bookmarksSpy).not.toHaveBeenCalled()
     })
 
@@ -990,7 +989,7 @@ describe('XMPPClient', () => {
       expect(stores.room.hydratePreviewsFromCache).toHaveBeenCalled()
     })
 
-    it('should skip MAM catch-up but fetch bookmarks on SM resumption for long disconnects', async () => {
+    it('should fetch bookmarks on SM resumption for long disconnects', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-long')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -998,7 +997,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Simulate a reconnect with long disconnect (5 minutes ago)
@@ -1024,8 +1022,8 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Long disconnect (300s > 120s threshold) → SM replay covers messages, fetch bookmarks only
-      expect(catchUpSpy).not.toHaveBeenCalled()
+      // Long disconnect (300s > 120s threshold) → SM replay covers messages; refresh
+      // bookmarks in case another client changed them while we were away.
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 

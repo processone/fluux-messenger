@@ -1,7 +1,7 @@
 /**
  * MAM Background Catch-Up Tests
  *
- * Tests for catchUpAllConversations(), catchUpAllRooms(), and
+ * Tests for catchUpAllConversations(), catchUpRoom(), and
  * discoverNewConversationsFromRoster() which populate full message
  * history in the background after connecting.
  */
@@ -1263,94 +1263,11 @@ describe('MAM Background Catch-Up', () => {
     })
   })
 
-  describe('catchUpAllRooms', () => {
-    it('should do nothing when there are no joined rooms', async () => {
-      await connectClient()
-
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([])
-      mockXmppClientInstance.iqCaller.request.mockClear()
-
-      await xmppClient.mam.catchUpAllRooms()
-
-      expect(emitSDKSpy).not.toHaveBeenCalledWith(
-        'console:event',
-        expect.objectContaining({
-          message: expect.stringContaining('Background catch-up for'),
-        })
-      )
-    })
-
-    it('should skip rooms without MAM support', async () => {
-      await connectClient()
-
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-        { jid: 'room2@conference.example.com', supportsMAM: false, isQuickChat: false, joined: true, messages: [] },
-      ] as any)
-
-      const queriedRooms: string[] = []
-      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
-        if (iq?.attrs?.to) {
-          queriedRooms.push(iq.attrs.to)
-        }
-        return createFinResponse()
-      })
-
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
-      await waitForAsyncOps(20, 100)
-      await catchUpPromise
-
-      expect(queriedRooms).toContain('room1@conference.example.com')
-      expect(queriedRooms).not.toContain('room2@conference.example.com')
-    })
-
-    it('should skip Quick Chat rooms', async () => {
-      await connectClient()
-
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-        { jid: 'quickchat@conference.example.com', supportsMAM: true, isQuickChat: true, joined: true, messages: [] },
-      ] as any)
-
-      const queriedRooms: string[] = []
-      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
-        if (iq?.attrs?.to) {
-          queriedRooms.push(iq.attrs.to)
-        }
-        return createFinResponse()
-      })
-
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
-      await waitForAsyncOps(20, 100)
-      await catchUpPromise
-
-      expect(queriedRooms).toContain('room1@conference.example.com')
-      expect(queriedRooms).not.toContain('quickchat@conference.example.com')
-    })
-
+  describe('catchUpRoom (per-room forward cursor policy)', () => {
     it('should query with forward start filter for rooms with cached messages', async () => {
       await connectClient()
 
       const cachedTimestamp = new Date('2026-01-20T10:00:00.000Z')
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        {
-          jid: 'room1@conference.example.com',
-          supportsMAM: true,
-          isQuickChat: false,
-          joined: true,
-          nickname: 'me',
-          messages: [{
-            type: 'groupchat' as const,
-            id: 'msg-1',
-            roomJid: 'room1@conference.example.com',
-            from: 'room1@conference.example.com/sender',
-            body: 'Hello',
-            timestamp: cachedTimestamp,
-            isOutgoing: false,
-            isDelayed: false,
-          }],
-        },
-      ] as any)
 
       // getRoom is needed by queryRoomArchive for the nickname.
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
@@ -1358,7 +1275,7 @@ describe('MAM Background Catch-Up', () => {
         nickname: 'me',
       } as any)
 
-      // The forward cursor now comes from a PURE cache read (peek): catchUpRoom
+      // The forward cursor comes from a PURE cache read (peek): catchUpRoom
       // uses loadMessagesFromCache's RETURN value, not a store re-read.
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue([{
         type: 'groupchat' as const,
@@ -1373,7 +1290,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
+      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1393,10 +1310,6 @@ describe('MAM Background Catch-Up', () => {
     it('should query with before="" for rooms without cached messages', async () => {
       await connectClient()
 
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me', messages: [] },
-      ] as any)
-
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: 'room1@conference.example.com',
         nickname: 'me',
@@ -1404,7 +1317,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
+      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1416,79 +1329,6 @@ describe('MAM Background Catch-Up', () => {
         roomJid: 'room1@conference.example.com',
         direction: 'backward',
       }))
-    })
-
-    it('should respect concurrency limit', async () => {
-      await connectClient()
-
-      const rooms = Array.from({ length: 8 }, (_, i) => ({
-        jid: `room${i}@conference.example.com`,
-        supportsMAM: true,
-        isQuickChat: false,
-        joined: true,
-        messages: [],
-      }))
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue(rooms as any)
-
-      let maxConcurrent = 0
-      let currentConcurrent = 0
-
-      mockXmppClientInstance.iqCaller.request.mockImplementation(async () => {
-        currentConcurrent++
-        maxConcurrent = Math.max(maxConcurrent, currentConcurrent)
-        await new Promise(resolve => setTimeout(resolve, 10))
-        currentConcurrent--
-        return createFinResponse()
-      })
-
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms({ concurrency: 2 })
-      await waitForAsyncOps(100, 100)
-      await catchUpPromise
-
-      expect(maxConcurrent).toBeLessThanOrEqual(2)
-    })
-
-    it('should handle individual room errors gracefully', async () => {
-      await connectClient()
-
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-        { jid: 'room2@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-      ] as any)
-
-      let callCount = 0
-      mockXmppClientInstance.iqCaller.request.mockImplementation(async () => {
-        callCount++
-        if (callCount === 1) {
-          throw new Error('Network error')
-        }
-        return createFinResponse()
-      })
-
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
-      await waitForAsyncOps(30, 100)
-      await expect(catchUpPromise).resolves.not.toThrow()
-
-      expect(callCount).toBeGreaterThanOrEqual(2)
-    })
-
-    it('should emit console event on start', async () => {
-      await connectClient()
-
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-      ] as any)
-
-      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
-
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
-      await waitForAsyncOps(20, 100)
-      await catchUpPromise
-
-      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
-        message: 'Background catch-up for 1 room(s)',
-        category: 'sm',
-      })
     })
 
     it('uses the newest PRE-session message as the forward cursor, ignoring a live message from this session', async () => {
@@ -1507,9 +1347,6 @@ describe('MAM Background Catch-Up', () => {
         { type: 'groupchat', id: 'old', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/a', body: 'old', timestamp: monthOld, isOutgoing: false, isDelayed: false },
         { type: 'groupchat', id: 'live', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/b', body: 'live', timestamp: liveThisSession, isOutgoing: false, isDelayed: false },
       ]
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me', messages: roomMessages },
-      ] as any)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
       } as any)
@@ -1518,7 +1355,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
       const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms({ sessionStartTime })
+      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com', sessionStartTime)
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1535,9 +1372,6 @@ describe('MAM Background Catch-Up', () => {
       const roomMessages = [
         { type: 'groupchat', id: 'm1', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/a', body: 'hi', timestamp: newest, isOutgoing: false, isDelayed: false },
       ]
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me', messages: roomMessages },
-      ] as any)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
       } as any)
@@ -1546,7 +1380,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
       const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
+      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1556,30 +1390,16 @@ describe('MAM Background Catch-Up', () => {
       }))
     })
 
-    it('should skip excluded room', async () => {
+    it('does nothing while the connection is not online', async () => {
       await connectClient()
 
-      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
-        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-        { jid: 'room2@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-        { jid: 'room3@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
-      ] as any)
+      vi.mocked(mockStores.connection.getStatus).mockReturnValue('disconnected')
+      mockXmppClientInstance.iqCaller.request.mockClear()
 
-      const queriedRooms: string[] = []
-      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
-        if (iq?.attrs?.to) {
-          queriedRooms.push(iq.attrs.to)
-        }
-        return createFinResponse()
-      })
+      await xmppClient.mam.catchUpRoom('room1@conference.example.com')
 
-      const catchUpPromise = xmppClient.mam.catchUpAllRooms({ exclude: 'room2@conference.example.com' })
-      await waitForAsyncOps(30, 100)
-      await catchUpPromise
-
-      expect(queriedRooms).toContain('room1@conference.example.com')
-      expect(queriedRooms).not.toContain('room2@conference.example.com')
-      expect(queriedRooms).toContain('room3@conference.example.com')
+      expect(mockStores.room.loadMessagesFromCache).not.toHaveBeenCalled()
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
     })
   })
 

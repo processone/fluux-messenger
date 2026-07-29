@@ -1350,59 +1350,11 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Background catch-up for all joined MAM-enabled rooms.
-   *
-   * After being offline, this fetches the full message history for all rooms
-   * so messages are ready when the user opens them.
-   *
-   * Only processes rooms that are joined, support MAM, and are not Quick Chat rooms.
-   * Uses forward queries for efficiency.
-   *
-   * @param options - Optional configuration
-   * @param options.concurrency - Maximum parallel requests (default: 2)
-   * @param options.exclude - Room JID to skip (e.g., the active room already handled by side effects)
-   * @param options.sessionStartTime - Epoch ms when the current session connected. When
-   *   provided, the forward cursor is the newest message *before* this time, so a live
-   *   message arriving during the catch-up window can't poison the cursor and silently
-   *   skip the offline gap. Omit to fall back to the global newest message.
-   */
-  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
-    const { concurrency = 2, exclude, sessionStartTime } = options
-    const joinedRooms = this.deps.stores?.room.joinedRooms() || []
-
-    // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
-    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat && (!exclude || r.jid !== exclude))
-    if (mamRooms.length === 0) return
-
-    logInfo(`Background catch-up for ${mamRooms.length} room(s)`)
-
-    this.deps.emitSDK('console:event', {
-      message: `Background catch-up for ${mamRooms.length} room(s)`,
-      category: 'sm',
-    })
-
-    await executeWithConcurrency(
-      mamRooms,
-      async (room) => {
-        try {
-          await this.catchUpRoom(room.jid, sessionStartTime)
-        } catch (_error) {
-          // Silently ignore — individual failures shouldn't affect others
-        }
-      },
-      concurrency
-    )
-
-    logInfo(`Background catch-up for ${mamRooms.length} room(s) — complete`)
-  }
-
-  /**
    * Forward catch-up for a single joined room (cache-aware, shared cursor policy).
    *
-   * Extracted so both the bulk `catchUpAllRooms()` pass and the late-MAM retry
-   * (a room whose disco resolves `supportsMAM` AFTER the initial background pass)
-   * use identical logic. The caller is responsible for filtering (joined, MAM,
-   * non-Quick-Chat, not the active room).
+   * The caller owns room selection and fan-out (joined, MAM, non-Quick-Chat, not
+   * the active room, confirmed join this session); `backgroundSync` runs the
+   * fresh-session pass and the SM-resume seed on top of this.
    *
    * @param roomJid - Room JID to catch up
    * @param sessionStartTime - Epoch ms of the current session; forward cursor
@@ -1580,7 +1532,7 @@ export class MAM extends BaseModule {
   /**
    * Force a full MAM catch-up for all joined rooms over a given time window.
    *
-   * Unlike `catchUpAllRooms()` which starts from the newest cached message,
+   * Unlike `catchUpRoom()` which starts from the newest cached message,
    * this method queries from a fixed start date (default: 45 days ago) to
    * fill any gaps left by previous incomplete catch-ups. The store's merge
    * logic deduplicates messages that already exist.
@@ -1770,7 +1722,7 @@ export class MAM extends BaseModule {
   async fetchPreviewForRoom(roomJid: string): Promise<void> {
     try {
       // Cache-first: try loading preview from IndexedDB before making a network query.
-      // Background catch-up (catchUpAllRooms) will correct the preview later if stale.
+      // The delayed background room catch-up will correct the preview later if stale.
       const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
       if (cached) return
 

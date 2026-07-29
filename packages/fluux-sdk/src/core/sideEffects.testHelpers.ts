@@ -45,7 +45,6 @@ export function createMockClient() {
       refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
       refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
       catchUpAllConversations: vi.fn().mockResolvedValue(undefined),
-      catchUpAllRooms: vi.fn().mockResolvedValue(undefined),
       catchUpRoom: vi.fn().mockResolvedValue(undefined),
       catchUpConversationHistory: vi.fn().mockResolvedValue(undefined),
       catchUpRoomHistory: vi.fn().mockResolvedValue(undefined),

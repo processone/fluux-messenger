@@ -358,7 +358,28 @@ describe('setupBackgroundSyncSideEffects', () => {
 
     afterEach(() => {
       vi.useRealTimers()
+      roomStore.getState().setActiveRoom(null)
+      roomStore.getState().reset()
     })
+
+    const addRoom = (
+      jid: string,
+      overrides: { supportsMAM?: boolean; isQuickChat?: boolean; joined?: boolean } = {},
+    ) =>
+      roomStore.getState().addRoom({
+        jid, name: jid, nickname: 'me', joined: true, isBookmarked: true, supportsMAM: true,
+        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+        ...overrides,
+      })
+
+    /** Confirm the current-session join the fresh-session room pass requires. */
+    const confirmJoin = (jid: string) =>
+      mockClient._emitSDK('room:joined', { roomJid: jid, joined: true })
+
+    const caughtUpRooms = () =>
+      (mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mock.calls
+        .map(([jid]) => jid as string)
+        .sort()
 
     it('should trigger catchUpAllConversations with concurrency 2', async () => {
       ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
@@ -383,7 +404,19 @@ describe('setupBackgroundSyncSideEffects', () => {
       )
     })
 
-    it('should trigger catchUpAllRooms after a delay', async () => {
+    it('catches up rooms joined this session after the delay', async () => {
+      // The delayed pass covers exactly the rooms that confirmed a join during
+      // THIS fresh session and are not otherwise owned: not the active room
+      // (roomSideEffects owns it), not Quick Chat rooms, not MAM-less rooms, and
+      // not a room whose `joined` flag merely hydrated from persisted state (#1149).
+      addRoom('active@conference.example.com')
+      addRoom('a@conference.example.com')
+      addRoom('b@conference.example.com')
+      addRoom('quick@conference.example.com', { isQuickChat: true })
+      addRoom('nomam@conference.example.com', { supportsMAM: false })
+      addRoom('hydrated@conference.example.com') // joined in the store, never confirmed this session
+      roomStore.getState().setActiveRoom('active@conference.example.com')
+
       connectionStore.getState().setServerInfo({
         identities: [],
         domain: 'example.com',
@@ -394,17 +427,36 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      for (const jid of [
+        'active@conference.example.com',
+        'a@conference.example.com',
+        'b@conference.example.com',
+        'quick@conference.example.com',
+        'nomam@conference.example.com',
+      ]) {
+        confirmJoin(jid)
+      }
 
       await vi.advanceTimersByTimeAsync(1_000)
-      expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+      await vi.waitFor(() => {
+        expect(caughtUpRooms()).toEqual([
+          'a@conference.example.com',
+          'b@conference.example.com',
+        ])
+      })
       // Must pass the session-start time so the forward cursor excludes live
       // messages that arrive during the 10s catch-up window (silent-gap fix).
-      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
-        expect.objectContaining({ concurrency: 2, sessionStartTime: expect.any(Number) })
+      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        'a@conference.example.com',
+        expect.any(Array),
+        expect.objectContaining({
+          sessionStartTime: expect.any(Number),
+          stitchReadPointer: true,
+        }),
       )
     })
 
@@ -435,6 +487,8 @@ describe('setupBackgroundSyncSideEffects', () => {
     })
 
     it('retries pending decrypts again after room catch-up completes', async () => {
+      addRoom('room@conference.example.com')
+
       connectionStore.getState().setServerInfo({
         identities: [],
         domain: 'example.com',
@@ -445,6 +499,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      confirmJoin('room@conference.example.com')
 
       // Conversation catch-up settles first and triggers its own retry.
       await vi.waitFor(() => {
@@ -460,7 +515,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       // retry so room messages stashed during that later pass also self-heal in-session.
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
       await vi.waitFor(() => {
         expect(
@@ -470,6 +525,8 @@ describe('setupBackgroundSyncSideEffects', () => {
     })
 
     it('should cancel room catch-up timer on disconnect', async () => {
+      addRoom('room@conference.example.com')
+
       connectionStore.getState().setServerInfo({
         identities: [],
         domain: 'example.com',
@@ -480,17 +537,19 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      confirmJoin('room@conference.example.com')
 
       await vi.advanceTimersByTimeAsync(5_000)
       connectionStore.getState().setStatus('disconnected')
 
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should re-trigger catch-up on reconnect', async () => {
       ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+      addRoom('room@conference.example.com')
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -502,31 +561,37 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      confirmJoin('room@conference.example.com')
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setStatus('disconnected')
 
       simulateFreshSession(mockClient)
+      confirmJoin('room@conference.example.com')
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
       })
 
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(2)
+        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(2)
       })
     })
 
-    it('should pass exclude with activeRoomJid to catchUpAllRooms', async () => {
-      // Set active room before connecting
-      roomStore.getState().setActiveRoom('room@conference.example.com')
+    it('reads the active room at pass time, not at trigger time', async () => {
+      // The room active when sync starts can stop being active before the delayed
+      // pass fires. Exclusion must follow the room that is active THEN: the room
+      // released in the meantime still needs its catch-up.
+      addRoom('first@conference.example.com')
+      addRoom('second@conference.example.com')
+      roomStore.getState().setActiveRoom('first@conference.example.com')
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -538,17 +603,18 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
+      confirmJoin('first@conference.example.com')
+      confirmJoin('second@conference.example.com')
+
+      // User switches rooms during the 10s window.
+      await vi.advanceTimersByTimeAsync(5_000)
+      roomStore.getState().setActiveRoom('second@conference.example.com')
 
       await vi.advanceTimersByTimeAsync(10_000)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
-          expect.objectContaining({ exclude: 'room@conference.example.com' })
-        )
+        expect(caughtUpRooms()).toEqual(['first@conference.example.com'])
       })
-
-      // Clean up
-      roomStore.getState().setActiveRoom(null)
     })
 
     it('does not catch up a newly active room without a current-session join', async () => {
@@ -581,7 +647,6 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setActiveRoom('b@conference.example.com')
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
       expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       roomStore.getState().reset()
     })
@@ -596,23 +661,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         roomStore.getState(),
         'loadMessagesFromCache',
       ).mockReturnValue(cache)
-      vi.mocked(mockClient.mam.catchUpAllRooms).mockImplementation(async ({
-        exclude,
-        sessionStartTime,
-      } = {}) => {
-        for (const room of roomStore.getState().joinedRooms()) {
-          if (!room.supportsMAM || room.isQuickChat || room.jid === exclude) continue
-          const messages = await roomStore.getState().loadMessagesFromCache(
-            room.jid,
-            { limit: 100, peek: true },
-          )
-          await mockClient.mam.catchUpRoomHistory(
-            room.jid,
-            messages,
-            { sessionStartTime, stitchReadPointer: true },
-          )
-        }
-      })
       for (const jid of ['a@conference.example.com', 'b@conference.example.com']) {
         roomStore.getState().addRoom({
           jid,
@@ -1574,7 +1622,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       cleanup = setupBackgroundSyncSideEffects(mockClient)
       simulateFreshSession(mockClient)
 
-      // MAM resolves BEFORE the 10s pass — covered by catchUpAllRooms, not the watcher.
+      // MAM resolves BEFORE the 10s pass — covered by that pass, not the watcher.
       await vi.advanceTimersByTimeAsync(2_000)
       roomStore.getState().updateRoom('early@conference.example.com', { supportsMAM: true })
       await vi.advanceTimersByTimeAsync(100)
