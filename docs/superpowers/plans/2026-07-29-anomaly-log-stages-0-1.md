@@ -12,8 +12,11 @@ membership; records are bounded by a per-id cooldown and a session ceiling; writ
 single-flight queue to a JSONL sidecar via `plugin-fs` `writeFile`. A Rollup build-audit plugin
 fails the production build if any module under `src/anomaly/` survives.
 
-**Tech Stack:** TypeScript, Vite 7 (Rollup), Vitest (happy-dom), React 19, `@tauri-apps/plugin-fs`
-2.5.1, WebCrypto (HMAC-SHA-256).
+**Tech Stack:** TypeScript, **Vite 8 (Rolldown)**, Vitest (happy-dom), React 19,
+`@tauri-apps/plugin-fs` ^2.2.0, `@tauri-apps/plugin-os` ^2.3.2, WebCrypto (HMAC-SHA-256).
+
+> Rolldown, not Rollup: the `generateBundle` hook and `chunk.modules` used by the build audit
+> (Task 11) exist in both, but do not assume Rollup-only plugin APIs elsewhere.
 
 ## Global Constraints
 
@@ -415,12 +418,36 @@ describe('opaque values', () => {
     expect(isOpaque(Object.freeze({ s: 'focus' }))).toBe(false)
   })
 
-  it('exposes no function that builds a tag from a runtime string', async () => {
-    const mod = await import('./schema')
-    const suspects = Object.entries(mod).filter(
-      ([name, value]) => typeof value === 'function' && /^tag$/i.test(name),
-    )
-    expect(suspects).toEqual([])
+  it('exposes NO function that turns an arbitrary string into an Opaque', async () => {
+    // The provenance guarantee is only as strong as the narrowest entry point. Any
+    // exported `(s: string) => Opaque` — however documented — lets a detector mint
+    // an opaque value from a message body, and the serializer would then accept it.
+    const mod = (await import('./schema')) as Record<string, unknown>
+    for (const [name, value] of Object.entries(mod)) {
+      if (typeof value !== 'function') continue
+      let result: unknown
+      try {
+        result = (value as (x: unknown) => unknown)('a message body')
+      } catch {
+        continue // Rejected the string outright: that is the correct behaviour.
+      }
+      expect(
+        isOpaque(result),
+        `${name}() minted an Opaque from a caller-supplied string`,
+      ).toBe(false)
+    }
+  })
+
+  it('mints a token only from digest bytes', async () => {
+    const { mintToken } = await import('./schema')
+    const token = mintToken(new Uint8Array([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4]).buffer)
+    expect(token.s).toBe('c:deadbeef01020304')
+  })
+
+  it('mints a local ref only from a namespace and an integer', async () => {
+    const { mintLocalRef } = await import('./schema')
+    expect(mintLocalRef('m', 41).s).toBe('s:m41')
+    expect(() => mintLocalRef('m', 1.5)).toThrow()
   })
 
   it('freezes the TAG record', () => {
@@ -505,7 +532,7 @@ export type Tag = (typeof TAG)[keyof typeof TAG]
 cd apps/fluux && npx vitest run src/anomaly/schema.test.ts
 ```
 
-Expected: PASS, 6 tests.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -523,28 +550,56 @@ git commit -m "feat: add opaque anomaly record values with WeakSet provenance"
 - Test: `apps/fluux/src/anomaly/localRef.test.ts`
 
 **Interfaces:**
-- Consumes: `Opaque`, `isOpaque` from Task 4 (via a new internal export `makeOpaqueInternal`).
+- Consumes: `Opaque`, `mintLocalRef` from Task 4.
 - Produces:
   - `type LocalNs = 'm' | 'q' | 'x'` (message, MAM query, stanza)
   - `localRef(ns: LocalNs, value: string): Opaque | null` — `null` means overflow
   - `retainRef(ns: LocalNs, value: string): void`
   - `releaseRef(ns: LocalNs, value: string): void`
+  - `retainOpaque(value: unknown): void` / `releaseOpaque(value: unknown): void` — pin by value,
+    used by the recorder's ring (Task 9); a no-op for tags and tokens
   - `localRefOverflowCount(): number`
   - `resetLocalRefsForTesting(): void`
 
-- [ ] **Step 1: Export the internal constructor from `schema.ts`**
+- [ ] **Step 1: Add the specialised constructors to `schema.ts`**
 
 Add to `apps/fluux/src/anomaly/schema.ts`, below `isOpaque`:
 
 ```ts
 /**
- * @internal Construct an opaque value from a DERIVED string (an HMAC digest or a
- * sequence number). Never call this with caller data — see the module comment.
- * Exported only for `token.ts` and `localRef.ts`, which live behind the same gate.
+ * Specialised constructors.
+ *
+ * There is deliberately NO exported `string -> Opaque` function. A generic one —
+ * even marked `@internal` — is a runtime hole: `@internal` is a doc convention that
+ * TypeScript erases, so a detector could call it with `message.body` and mint an
+ * `Opaque` the serializer would accept. Each constructor below therefore takes
+ * non-string, structurally-constrained input and performs the formatting itself,
+ * so no caller-supplied text can reach an opaque value.
  */
-export function makeDerivedOpaque(s: string): Opaque {
-  return makeOpaque(s)
+
+/**
+ * Mint an entity token from an HMAC digest. Takes bytes, never a string.
+ *
+ * The instanceof check is load-bearing, not defensive style: `new Uint8Array(str)`
+ * silently yields a zero-length array rather than throwing, so without it a string
+ * argument would mint a valid — if empty — Opaque instead of being rejected.
+ */
+export function mintToken(digest: ArrayBuffer): Opaque {
+  if (!(digest instanceof ArrayBuffer)) throw new TypeError('mintToken requires an ArrayBuffer')
+  const hex = Array.from(new Uint8Array(digest).slice(0, 8))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return makeOpaque(`c:${hex}`)
 }
+
+/** Mint a session-local ref. Takes a one-character namespace and a number. */
+export function mintLocalRef(ns: 'm' | 'q' | 'x', seq: number): Opaque {
+  if (!Number.isInteger(seq) || seq < 0) throw new Error('localRef seq must be a non-negative integer')
+  return makeOpaque(`s:${ns}${seq}`)
+}
+
+/** The sentinel for an entity token requested before it was warmed. */
+export const UNRESOLVED_TOKEN: Opaque = makeOpaque('c:unresolved')
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -642,12 +697,19 @@ Create `apps/fluux/src/anomaly/localRef.ts`:
  * Cost accepted: a LocalRef does not correlate across sessions. For the identity of
  * a single stanza or query that is the correct scope.
  */
-import { makeDerivedOpaque, type Opaque } from './schema'
+import { mintLocalRef, type Opaque } from './schema'
 
 /** m = message, q = MAM query, x = stanza. */
 export type LocalNs = 'm' | 'q' | 'x'
 
 const CAP = 2000
+
+/**
+ * Reverse lookup so the recorder can pin a ref it only holds as an `Opaque`.
+ * Without this the pin API would be unusable from the breadcrumb ring, which is
+ * where most holds actually come from.
+ */
+const keyByRef = new WeakMap<Opaque, string>()
 
 interface Entry {
   ref: Opaque
@@ -664,7 +726,7 @@ let overflow = 0
 function keyOf(ns: LocalNs, value: string): string {
   // Namespaced: a stanza id and a MAM query id can be the same string, and a
   // shared key would hand them one ref, asserting an identity that does not exist.
-  return `${ns} ${value}`
+  return `${ns}\u0000${value}` // U+0000 separator: cannot occur in a JID or stanza id
 }
 
 /** Evict the oldest zero-count entries until below cap. Returns true if room exists. */
@@ -699,8 +761,9 @@ export function localRef(ns: LocalNs, value: string): Opaque | null {
   }
 
   const seq = ++nextSeq
-  const ref = makeDerivedOpaque(`s:${ns}${seq}`)
+  const ref = mintLocalRef(ns, seq)
   entries.set(key, { ref, count: 0, seq })
+  keyByRef.set(ref, key)
   return ref
 }
 
@@ -713,6 +776,30 @@ export function retainRef(ns: LocalNs, value: string): void {
 /** Release one hold. At zero the entry becomes evictable under pressure. */
 export function releaseRef(ns: LocalNs, value: string): void {
   const entry = entries.get(keyOf(ns, value))
+  if (entry && entry.count > 0) entry.count--
+}
+
+/**
+ * Pin by value rather than by key, for holders that only have the `Opaque` — the
+ * breadcrumb ring being the main one. A no-op for tags and entity tokens, which
+ * are not ref-counted.
+ */
+export function retainOpaque(value: unknown): void {
+  const key = typeof value === 'object' && value !== null
+    ? keyByRef.get(value as Opaque)
+    : undefined
+  if (!key) return
+  const entry = entries.get(key)
+  if (entry) entry.count++
+}
+
+/** Release a hold taken by `retainOpaque`. */
+export function releaseOpaque(value: unknown): void {
+  const key = typeof value === 'object' && value !== null
+    ? keyByRef.get(value as Opaque)
+    : undefined
+  if (!key) return
+  const entry = entries.get(key)
   if (entry && entry.count > 0) entry.count--
 }
 
@@ -753,7 +840,7 @@ git commit -m "feat: add session-local opaque refs with ref-counted pins and a h
 - Test: `apps/fluux/src/anomaly/token.test.ts`
 
 **Interfaces:**
-- Consumes: `makeDerivedOpaque`, `Opaque` from Task 4.
+- Consumes: `mintToken`, `UNRESOLVED_TOKEN`, `Opaque` from Task 4.
 - Produces:
   - `type TokenNs = 'jid' | 'room' | 'device'`
   - `initTokenizer(): Promise<void>`
@@ -859,14 +946,12 @@ Create `apps/fluux/src/anomaly/token.ts`:
  * ahead of use from lifecycle events and looked up synchronously. Ephemeral ids do
  * NOT use this path — see localRef.ts.
  */
-import { makeDerivedOpaque, type Opaque } from './schema'
+import { mintToken, UNRESOLVED_TOKEN, type Opaque } from './schema'
 
 export type TokenNs = 'jid' | 'room' | 'device'
 
 const KEY_STORAGE = 'fluux:anomaly-token-key'
 const CACHE_LIMIT = 500
-
-const UNRESOLVED = makeDerivedOpaque('c:unresolved')
 
 const cache = new Map<string, Opaque>()
 let hmacKey: CryptoKey | null = null
@@ -874,7 +959,7 @@ let keyId = 'unknown'
 let unresolved = 0
 
 function keyOf(ns: TokenNs, value: string): string {
-  return `${ns} ${value}`
+  return `${ns}\u0000${value}` // U+0000 separator: cannot occur in a JID or stanza id
 }
 
 function toHex(buffer: ArrayBuffer, bytes: number): string {
@@ -936,7 +1021,7 @@ export async function warmToken(ns: TokenNs, value: string): Promise<void> {
     const oldest = cache.keys().next()
     if (!oldest.done) cache.delete(oldest.value)
   }
-  cache.set(key, makeDerivedOpaque(`c:${toHex(signature, 8)}`))
+  cache.set(key, mintToken(signature))
 }
 
 /**
@@ -951,7 +1036,7 @@ export function tokenSync(ns: TokenNs, value: string): Opaque {
   if (hit) return hit
   unresolved++
   void warmToken(ns, value)
-  return UNRESOLVED
+  return UNRESOLVED_TOKEN
 }
 
 /** Non-secret; goes in every record envelope. */
@@ -1149,6 +1234,8 @@ const MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
 /** ctx keys must be short identifiers — see the loop in `serialize`. */
 const CTX_KEY = /^[a-z][a-zA-Z0-9]{0,15}$/
+/** Counter and invariant-id keys: `family/name` or a dotted metric name. */
+const COUNTER_KEY = /^[a-z][a-zA-Z0-9]*([./-][a-zA-Z0-9]+)*$/
 
 export type Scalar = Opaque | number | boolean | null
 
@@ -1216,7 +1303,14 @@ function unwrap(value: unknown): string | number | boolean | null {
 export function serialize(record: AnomalyRecord | DigestRecord): string | null {
   try {
     if (record.kind === 'digest') {
-      return JSON.stringify(record)
+      // Subject to the same line cap as an anomaly record: a digest with a runaway
+      // number of counter keys would otherwise write an unbounded line. Counter
+      // names are developer-chosen, so validate them like ctx keys.
+      for (const key of [...Object.keys(record.counters), ...Object.keys(record.suppressed)]) {
+        if (!COUNTER_KEY.test(key)) throw new Error('invalid counter key')
+      }
+      const digestLine = JSON.stringify(record)
+      return byteLength(digestLine) <= MAX_LINE_BYTES ? digestLine : null
     }
 
     const ctx: Record<string, string | number | boolean | null> = {}
@@ -1471,7 +1565,118 @@ export function createTauriSink(writeLine: (line: string) => Promise<void>): Sin
 }
 ```
 
-- [ ] **Step 4: Write the memory sink**
+- [ ] **Step 4: Write the real plugin-fs adapter**
+
+`createTauriSink` takes an injected writer so the queue semantics are testable; this is the writer
+production passes it. Without it the sink is an abstraction with no implementation, and stage 1
+would ship nothing that actually reaches disk.
+
+Append to `apps/fluux/src/anomaly/sinks/tauri.ts`:
+
+```ts
+import { writeFile } from '@tauri-apps/plugin-fs'
+import { homeDir } from '@tauri-apps/api/path'
+import { platform } from '@tauri-apps/plugin-os'
+
+/**
+ * Resolve the sidecar directory, mirroring the Rust log-dir logic in
+ * `src-tauri/src/main.rs:1444` so the JSONL lands beside `fluux.log` — the
+ * directory already reachable from the app menu and the tray.
+ *
+ * Note the Rust side hardcodes `com.processone.fluux` regardless of bundle
+ * identifier, so the Dev build writes here too. That is intentional: the sidecar is
+ * Dev-only, so it is unambiguous even though `fluux.log` itself interleaves builds.
+ */
+async function sidecarDir(): Promise<string> {
+  const home = await homeDir()
+  const os = await platform()
+  if (os === 'macos') return `${home}/Library/Logs/com.processone.fluux`
+  if (os === 'windows') return `${home}/AppData/Roaming/com.processone.fluux/logs`
+  return `${home}/.local/share/com.processone.fluux/logs`
+}
+
+/** `anomalies.YYYY-MM-DD.jsonl`, daily-rotated to match `fluux.log`. */
+function fileNameFor(date: Date): string {
+  return `anomalies.${date.toISOString().slice(0, 10)}.jsonl`
+}
+
+/**
+ * Production writer: append one newline-terminated line.
+ *
+ * `writeFile`, NOT `writeTextFile` — they are different Tauri commands with
+ * different permissions (`plugin:fs|write_file` vs `plugin:fs|write_text_file`),
+ * and only the former is granted by the existing `fs:allow-write-file` entry. Using
+ * `writeTextFile` would require widening `capabilities/default.json`, which applies
+ * to the production app.
+ */
+export function createPluginFsWriter(now: () => Date = () => new Date()) {
+  return async (line: string): Promise<void> => {
+    const path = `${await sidecarDir()}/${fileNameFor(now())}`
+    await writeFile(path, new TextEncoder().encode(`${line}\n`), { append: true })
+  }
+}
+```
+
+- [ ] **Step 5: Write the adapter's integration test**
+
+Create `apps/fluux/src/anomaly/sinks/pluginFsWriter.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const writeFile = vi.fn(async () => {})
+vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile }))
+vi.mock('@tauri-apps/api/path', () => ({ homeDir: async () => '/Users/test' }))
+vi.mock('@tauri-apps/plugin-os', () => ({ platform: async () => 'macos' }))
+
+import { createPluginFsWriter } from './tauri'
+
+beforeEach(() => writeFile.mockClear())
+
+describe('createPluginFsWriter', () => {
+  it('appends to the daily sidecar beside fluux.log', async () => {
+    const write = createPluginFsWriter(() => new Date('2026-07-29T11:47:02Z'))
+    await write('{"kind":"anomaly"}')
+
+    expect(writeFile).toHaveBeenCalledTimes(1)
+    const [path, bytes, options] = writeFile.mock.calls[0]
+    expect(path).toBe('/Users/test/Library/Logs/com.processone.fluux/anomalies.2026-07-29.jsonl')
+    expect(options).toEqual({ append: true })
+    expect(new TextDecoder().decode(bytes as Uint8Array)).toBe('{"kind":"anomaly"}\n')
+  })
+
+  it('terminates every line so records cannot be concatenated', async () => {
+    const write = createPluginFsWriter(() => new Date('2026-07-29T00:00:00Z'))
+    await write('a')
+    await write('b')
+    const written = writeFile.mock.calls.map((c) =>
+      new TextDecoder().decode(c[1] as Uint8Array),
+    )
+    expect(written).toEqual(['a\n', 'b\n'])
+  })
+
+  it('rolls the filename over at the day boundary', async () => {
+    let clock = new Date('2026-07-29T23:59:59Z')
+    const write = createPluginFsWriter(() => clock)
+    await write('before')
+    clock = new Date('2026-07-30T00:00:01Z')
+    await write('after')
+
+    expect(writeFile.mock.calls[0][0]).toContain('anomalies.2026-07-29.jsonl')
+    expect(writeFile.mock.calls[1][0]).toContain('anomalies.2026-07-30.jsonl')
+  })
+})
+```
+
+- [ ] **Step 6: Run the adapter test**
+
+```bash
+cd apps/fluux && npx vitest run src/anomaly/sinks/pluginFsWriter.test.ts
+```
+
+Expected: PASS, 3 tests.
+
+- [ ] **Step 7: Write the memory sink**
 
 Create `apps/fluux/src/anomaly/sinks/memory.ts`:
 
@@ -1503,19 +1708,23 @@ export function createMemorySink(): Sink {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 8: Run the tests to verify they pass**
 
 ```bash
-cd apps/fluux && npx vitest run src/anomaly/sinks/tauri.test.ts
+cd apps/fluux && npx vitest run src/anomaly/sinks/
 ```
 
-Expected: PASS, 5 tests.
+Expected: PASS, 8 tests (5 queue + 3 adapter).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/fluux/src/anomaly/sinks/
-git commit -m "feat: add anomaly sinks with a non-poisoning single-flight write queue"
+git commit -m "feat: add anomaly sinks with a non-poisoning single-flight write queue
+
+Includes the plugin-fs adapter that writes the daily JSONL sidecar with
+writeFile (not writeTextFile — a different Tauri command that the existing
+capability does not grant)."
 ```
 
 ---
@@ -1655,7 +1864,84 @@ describe('recorder', () => {
     rec.record({ id: 'test/bad', sev: 'bug', ctx: { conv: 'raw-string' as never } })
     expect(sink.lines.length).toBe(0)
   })
+
+  it('reports health counters as per-window deltas, not running totals', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+
+    // Two rejections in window one.
+    rec.record({ id: 'a/x', sev: 'bug', ctx: { c: 'raw' as never } })
+    rec.record({ id: 'a/y', sev: 'bug', ctx: { c: 'raw' as never } })
+    rec.flushDigest(300_000)
+
+    // One more in window two. Cumulative would report 3; the window saw 1.
+    rec.record({ id: 'a/z', sev: 'bug', ctx: { c: 'raw' as never } })
+    rec.flushDigest(300_000)
+
+    const first = JSON.parse(sink.lines[0]).counters['recorder/rejected-value']
+    const second = JSON.parse(sink.lines[1]).counters['recorder/rejected-value']
+    expect(first).toBe(2)
+    expect(second).toBe(1)
+  })
+
+  it('applies the ceiling to digests too', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    for (let i = 0; i < 600; i++) {
+      clock += 60_001
+      rec.record({ id: `test/id-${i % 3}`, sev: 'bug' })
+    }
+    const afterRecords = sink.lines.length
+
+    rec.flushDigest(300_000)
+    rec.flushDigest(300_000)
+
+    // A digest is a record. Past the ceiling it must not keep appending.
+    expect(sink.lines.length).toBe(afterRecords)
+  })
+
+  it('counts UTF-8 bytes, not UTF-16 code units, against the byte ceiling', () => {
+    // A multi-byte tag value would undercount with `line.length`, letting the
+    // 2 MB ceiling drift. Assert the accounting via the public surface: the byte
+    // ceiling must be reached no later than a pure-ASCII run of the same length.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.crumb([TAG.msgIn, 1])
+    rec.record({ id: 'test/bytes', sev: 'bug' })
+    const line = sink.lines[0]
+    expect(new TextEncoder().encode(line).length).toBeGreaterThanOrEqual(line.length)
+  })
 })
+
+describe('recorder ring pins local refs', () => {
+  it('keeps a ref alive while it sits in the ring, and frees it on eviction', async () => {
+    const { localRef, resetLocalRefsForTesting, retainRef, releaseRef } = await import('./localRef')
+    resetLocalRefsForTesting()
+
+    const sink = fakeSink()
+    const rec = make(sink)
+
+    // One ref held by TWO crumbs and one in-flight request.
+    const ref = localRef('q', 'query-1')!
+    retainRef('q', 'query-1') // the "request is open" hold
+    rec.crumb([TAG.mamQuery, ref])
+    rec.crumb([TAG.mamResult, ref])
+
+    // Push the two crumbs out of the ring, releasing two of the three holds.
+    for (let i = 0; i < RING_OVERFLOW; i++) rec.crumb([TAG.msgIn, i])
+
+    // Still pinned by the open request, so pressure cannot reassign its identity.
+    for (let i = 0; i < 2100; i++) localRef('m', `filler-${i}`)
+    expect(localRef('q', 'query-1')!.s).toBe(ref.s)
+
+    // Request completes: last hold gone, now evictable.
+    releaseRef('q', 'query-1')
+    for (let i = 0; i < 2100; i++) localRef('m', `more-${i}`)
+    expect(localRef('q', 'query-1')!.s).not.toBe(ref.s)
+  })
+})
+
+const RING_OVERFLOW = 120
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1680,7 +1966,7 @@ Create `apps/fluux/src/anomaly/recorder.ts`:
  * surfaced in the digest, so coalescing never hides frequency) and a session
  * ceiling that announces itself — a silent stop would read as a healthy day.
  */
-import { localRefOverflowCount } from './localRef'
+import { localRefOverflowCount, releaseOpaque, retainOpaque } from './localRef'
 import type { Scalar } from './serializer'
 import { rejectedValueCount, serialize } from './serializer'
 import type { Sink } from './sinks/tauri'
@@ -1727,14 +2013,37 @@ export function createRecorder(opts: RecorderOptions): Recorder {
   let bytesWritten = 0
   let ceilingAnnounced = false
 
+  // Health counters are CUMULATIVE totals at their source, but each digest describes
+  // one window. Reporting the totals would double-count every window after the
+  // first. Store the last reported value and emit the delta.
+  const lastHealth = new Map<string, number>()
+
+  const encoder = new TextEncoder()
+
   function atCeiling(): boolean {
     return recordsWritten >= MAX_RECORDS || bytesWritten >= MAX_BYTES
   }
 
-  function emit(line: string): void {
+  /**
+   * The ONLY path to the sink. Every record — anomaly, digest, ceiling notice —
+   * goes through here, so the ceiling and the byte accounting cannot be bypassed by
+   * adding a new record kind later.
+   *
+   * `line.length` counts UTF-16 code units, not bytes; a multi-byte character would
+   * undercount and let the 2 MB ceiling drift.
+   */
+  function emit(line: string, force = false): boolean {
+    if (!force && atCeiling()) return false
     sink.write(line)
     recordsWritten++
-    bytesWritten += line.length
+    bytesWritten += encoder.encode(line).length
+    return true
+  }
+
+  function healthDelta(key: string, total: number): number {
+    const previous = lastHealth.get(key) ?? 0
+    lastHealth.set(key, total)
+    return total - previous
   }
 
   function announceCeiling(): void {
@@ -1752,16 +2061,26 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       ctx: {},
       crumbs: [],
     })
-    if (line) {
-      sink.write(line)
-      recordsWritten++
-    }
+    // Forced: this is the record that explains the silence, so it must land even
+    // though the ceiling has been reached.
+    if (line) emit(line, true)
   }
 
   return {
     crumb(parts: Scalar[]): void {
+      // Pin every LocalRef this crumb carries, so the ref cannot be evicted and
+      // reassigned while the ring can still surface it. `retainOpaque` is a no-op
+      // for tags and entity tokens. Without this the localRef module's own tests
+      // pass while the SYSTEM property — a ref stays stable as long as anything can
+      // refer to it — does not exist.
+      for (const part of parts) retainOpaque(part)
+
       ring.push(parts)
-      if (ring.length > RING_SIZE) ring.shift()
+
+      if (ring.length > RING_SIZE) {
+        const evicted = ring.shift()
+        if (evicted) for (const part of evicted) releaseOpaque(part)
+      }
     },
 
     record(input: RecordInput): void {
@@ -1804,11 +2123,16 @@ export function createRecorder(opts: RecorderOptions): Recorder {
     },
 
     flushDigest(windowMs: number): void {
+      if (atCeiling()) {
+        announceCeiling()
+        return
+      }
+
       const all: Record<string, number> = Object.fromEntries(counters)
-      all['recorder/rejected-value'] = rejectedValueCount()
-      all['recorder/localref-overflow'] = localRefOverflowCount()
-      all['recorder/token-unresolved'] = tokenUnresolvedCount()
-      all['recorder/sink-write-failed'] = sink.failureCount()
+      all['recorder/rejected-value'] = healthDelta('rejected', rejectedValueCount())
+      all['recorder/localref-overflow'] = healthDelta('overflow', localRefOverflowCount())
+      all['recorder/token-unresolved'] = healthDelta('unresolved', tokenUnresolvedCount())
+      all['recorder/sink-write-failed'] = healthDelta('sinkFailed', sink.failureCount())
 
       const line = serialize({
         v: 1,
@@ -1821,6 +2145,9 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         counters: all,
         suppressed: Object.fromEntries(suppressed),
       })
+
+      // A digest is subject to the ceiling like any other record: it is a record,
+      // and an unbounded digest stream is an unbounded file.
       if (line) emit(line)
 
       counters.clear()
@@ -1836,7 +2163,9 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 cd apps/fluux && npx vitest run src/anomaly/recorder.test.ts
 ```
 
-Expected: PASS, 8 tests.
+Expected: PASS, 13 tests. The last one — `recorder ring pins local refs` — is the integration
+assertion: the `localRef` unit tests in Task 5 can pass while the recorder never calls
+`retainOpaque`, so the system property would not exist despite green module tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1872,7 +2201,13 @@ Create `apps/fluux/src/anomaly/install.test.ts`:
 ```ts
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getRecorder, install, installCount, resetInstallForTesting } from './install'
+import {
+  getRecorder,
+  install,
+  installCount,
+  resetInstallForTesting,
+  whenReady,
+} from './install'
 
 beforeEach(() => {
   localStorage.clear()
@@ -1897,6 +2232,37 @@ describe('install', () => {
     cleanup2()
   })
 
+  it('preserves recorder STATE across a StrictMode cycle, not just the session id', async () => {
+    // A stable sessionId proves only that the id lives at module scope. If cleanup
+    // destroyed the recorder, counters, cooldowns and the ring would silently reset
+    // on remount — so assert continuity of something the runtime actually holds.
+    await whenReady()
+    const cleanup1 = install()
+    getRecorder()!.count('probe.metric', 7)
+    cleanup1()
+
+    const cleanup2 = install()
+    getRecorder()!.count('probe.metric', 5)
+    getRecorder()!.flushDigest(1000)
+    cleanup2()
+
+    const lines = (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+    const digest = JSON.parse(lines.filter((l) => JSON.parse(l).kind === 'digest').pop()!)
+    expect(digest.counters['probe.metric']).toBe(12)
+  })
+
+  it('does not write a record before the tokenizer holds its key', async () => {
+    install()
+    await whenReady()
+    const lines = (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+    const start = lines.map((l) => JSON.parse(l)).find((r) => r.id === 'recorder/session-start')
+    expect(start).toBeDefined()
+    // tokenKeyId is the correlation boundary; "unknown" makes the record
+    // unattributable to a token space.
+    expect(start.tokenKeyId).not.toBe('unknown')
+    expect(start.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
+  })
+
   it('is idempotent — a second install without cleanup does not double-register', () => {
     const cleanup1 = install()
     const cleanup2 = install()
@@ -1918,10 +2284,12 @@ describe('install', () => {
     cleanup2()
   })
 
-  it('clears the recorder after cleanup', () => {
+  it('keeps the runtime alive after cleanup, detaching only subscriptions', () => {
     const cleanup = install()
+    const before = getRecorder()
     cleanup()
-    expect(getRecorder()).toBeNull()
+    // Deliberately NOT null: destroying it is what would reset the bounds.
+    expect(getRecorder()).toBe(before)
   })
 })
 ```
@@ -1969,54 +2337,89 @@ Create `apps/fluux/src/anomaly/install.ts`:
  *
  * Stage 1 registers NO detectors. This establishes the contract they will attach to.
  */
+import { isTauri } from '../utils/tauri'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
+import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
 import { initTokenizer } from './token'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
 
-// Module-level: survives the StrictMode remount by construction.
+// ---------------------------------------------------------------------------
+// The RUNTIME is a module-level singleton, created once and NEVER torn down.
+//
+// React.StrictMode runs effects install -> cleanup -> install on mount. If cleanup
+// destroyed the recorder, the second install would rebuild the counters, cooldown
+// map and breadcrumb ring — so a remount would silently reset every bound the
+// design relies on, and the session would keep its id while losing its state. Only
+// SUBSCRIPTIONS are attached and detached; the runtime outlives them.
+// ---------------------------------------------------------------------------
+
 const sessionId =
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `sid-${Date.now()}`
 
 let recorder: Recorder | null = null
-let installs = 0
+let ready: Promise<void> | null = null
+let attachments = 0
 let digestTimer: ReturnType<typeof setInterval> | null = null
+
+function runtime(): Recorder {
+  if (!recorder) {
+    recorder = createRecorder({
+      sink: isTauri()
+        ? createTauriSink(createPluginFsWriter())
+        : createMemorySink(),
+      now: () => Date.now(),
+      build: `${__APP_VERSION__}+${__GIT_COMMIT__}`,
+      sid: sessionId,
+    })
+  }
+  return recorder
+}
 
 export function getRecorder(): Recorder | null {
   return recorder
 }
 
 /**
- * Register the anomaly system. Idempotent: a second call while already installed
- * is a no-op that returns a cleanup for THIS caller only.
+ * Resolves once the tokenizer holds its key.
  *
- * @returns cleanup that fully unsubscribes every listener and timer.
+ * Awaited before the first record, because a record written earlier would carry
+ * `tokenKeyId: "unknown"` — and `tokenKeyId` is the correlation boundary, so an
+ * unattributable record is worse than a late one.
+ */
+export function whenReady(): Promise<void> {
+  if (!ready) ready = initTokenizer()
+  return ready
+}
+
+/**
+ * Attach subscriptions and timers. Idempotent: a second call while already
+ * attached is a no-op returning a cleanup for THIS caller only.
+ *
+ * @returns cleanup that detaches everything this call attached. It does NOT
+ * destroy the runtime — see the block comment above.
  */
 export function install(): () => void {
-  if (recorder) return () => {}
+  if (digestTimer) return () => {}
 
-  installs++
-  void initTokenizer()
+  attachments++
+  const rec = runtime()
 
-  // Stage 1 uses the memory sink everywhere. The Tauri sidecar sink is wired in
-  // the stage that first produces records worth persisting.
-  recorder = createRecorder({
-    sink: createMemorySink(),
-    now: () => Date.now(),
-    build: `${__APP_VERSION__}+${__GIT_COMMIT__}`,
-    sid: sessionId,
+  void whenReady().then(() => {
+    // One safe, content-free record per session, so the Dev-side CI assertion
+    // (§7.2) has something real to find without waiting for a detector.
+    rec.record({ id: 'recorder/session-start', sev: 'drift' })
   })
 
-  const active = recorder
-  digestTimer = setInterval(() => active.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
+  digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
 
   const onHide = () => {
     // Best effort: the WebView gives no guarantee that async I/O completes during
     // teardown, so a missing trailing digest is normal and never a signal.
-    if (document.visibilityState === 'hidden') active.flushDigest(DIGEST_INTERVAL_MS)
+    if (document.visibilityState === 'hidden') rec.flushDigest(DIGEST_INTERVAL_MS)
   }
   document.addEventListener('visibilitychange', onHide)
 
@@ -2024,21 +2427,21 @@ export function install(): () => void {
     document.removeEventListener('visibilitychange', onHide)
     if (digestTimer) clearInterval(digestTimer)
     digestTimer = null
-    recorder = null
   }
 }
 
-/** @internal Test-only. */
+/** @internal Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
   if (digestTimer) clearInterval(digestTimer)
   digestTimer = null
   recorder = null
-  installs = 0
+  ready = null
+  attachments = 0
 }
 
-/** @internal Diagnostic for the StrictMode test. */
+/** @internal Diagnostic: how many times install() actually attached. */
 export function installCount(): number {
-  return installs
+  return attachments
 }
 ```
 
@@ -2094,7 +2497,7 @@ Then inside `<XMPPProvider ...>`, immediately before `<ThemeProvider>`, add:
 cd apps/fluux && npx vitest run src/anomaly/install.test.ts
 ```
 
-Expected: PASS, 5 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 8: Verify the app boots in demo mode**
 
@@ -2105,10 +2508,12 @@ npm run build:sdk && npm run dev
 Open `http://localhost:5173/demo.html`, then in the browser console:
 
 ```js
-window.__fluuxAnomalies
+window.__fluuxAnomalies.map(JSON.parse).filter(r => r.id === 'recorder/session-start')
 ```
 
-Expected: an array (empty — stage 1 has no detectors). Its existence proves the installer mounted.
+Expected: **exactly one** record, with a `tokenKeyId` matching `/^[0-9a-f]{8}$/` — not `unknown`.
+An empty array means the installer did not mount or the tokenizer was not awaited; either way the
+Dev-side CI assertion in Task 11 would fail.
 
 - [ ] **Step 9: Commit**
 
@@ -2125,6 +2530,8 @@ git commit -m "feat: mount the anomaly installer inside XMPPProvider"
 - Create: `apps/fluux/scripts/anomalyBuildAudit.ts`
 - Modify: `apps/fluux/vite.config.ts` (plugins array)
 - Create: `scripts/check-anomaly-elimination.mjs`
+- Modify: `.github/workflows/ci.yml` (the `test` job, after `Lint App`)
+- Modify: root `package.json` (`scripts`)
 - Test: `apps/fluux/scripts/anomalyBuildAudit.test.ts`
 
 **Interfaces:**
@@ -2338,18 +2745,71 @@ FLUUX_ANOMALY=1 npm run build:app
 Expected: build succeeds with the audit running in `expectPresent = true` mode and finding the
 modules. If it throws `expected the anomaly modules in this build`, the gate is not reaching Vite.
 
-- [ ] **Step 8: Add the check to package.json**
+- [ ] **Step 8: Add the Dev-direction sentinel assertion**
+
+The production script asserts absence. Absence also passes when the whole feature is missing, so
+the Dev direction must assert **presence** — that is the failure mode that already happened once
+with `import.meta.env.DEV`.
+
+Append to `scripts/check-anomaly-elimination.mjs`, replacing the final `console.log` line:
+
+```js
+if (process.env.FLUUX_ANOMALY === '1') {
+  const present = walk(DIST).some(
+    (file) => /\.js$/.test(file) && readFileSync(file, 'utf-8').includes(SENTINEL),
+  )
+  if (!present) {
+    console.error(
+      'FAIL: the anomaly gate sentinel is ABSENT from a Dev build. The tree was ' +
+        'eliminated where it was supposed to run — check that FLUUX_ANOMALY reaches vite.',
+    )
+    process.exit(1)
+  }
+  console.log('OK: anomaly instrumentation present in the Dev bundle.')
+} else {
+  console.log('OK: no anomaly instrumentation in the production bundle.')
+}
+```
+
+- [ ] **Step 9: Add both checks to package.json**
 
 In the root `package.json` `scripts`, after `"build:app"`, add:
 
 ```json
-    "check:anomaly": "npm run build:app && node scripts/check-anomaly-elimination.mjs",
+    "check:anomaly:prod": "npm run build:app && node scripts/check-anomaly-elimination.mjs",
+    "check:anomaly:dev": "FLUUX_ANOMALY=1 npm run build:app && FLUUX_ANOMALY=1 node scripts/check-anomaly-elimination.mjs",
 ```
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Install the assertions in CI**
+
+A script nobody runs proves nothing. The `test` job in `.github/workflows/ci.yml` currently ends
+at lint plus the Zustand selector check. Add a step after `Lint App`:
+
+```yaml
+      - name: Anomaly instrumentation is eliminated in production and present in Dev
+        run: |
+          # Two builds, two directions. The production direction protects users; the
+          # Dev direction catches a silent regression to "eliminated everywhere,
+          # including where it was supposed to run" — which is exactly what the
+          # import.meta.env.DEV gate did before this work.
+          npm run check:anomaly:prod
+          npm run check:anomaly:dev
+```
+
+- [ ] **Step 11: Verify the CI step locally**
 
 ```bash
-git add apps/fluux/scripts/anomalyBuildAudit.ts apps/fluux/scripts/anomalyBuildAudit.test.ts apps/fluux/vite.config.ts apps/fluux/vitest.config.ts scripts/check-anomaly-elimination.mjs package.json
+npm run check:anomaly:prod && npm run check:anomaly:dev
+```
+
+Expected: the first prints `OK: no anomaly instrumentation in the production bundle.`, the second
+prints `OK: anomaly instrumentation present in the Dev bundle.` Both must pass; if the second
+fails, the gate is not reaching Vite.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add apps/fluux/scripts/anomalyBuildAudit.ts apps/fluux/scripts/anomalyBuildAudit.test.ts apps/fluux/vite.config.ts apps/fluux/vitest.config.ts scripts/check-anomaly-elimination.mjs package.json .github/workflows/ci.yml
 git commit -m "test: assert the anomaly tree is eliminated in production and present in Dev"
 ```
 
@@ -2451,8 +2911,19 @@ git commit -m "docs: add the anomaly invariant registry"
 | Unit | `cd apps/fluux && npx vitest run src/anomaly scripts/anomalyBuildAudit.test.ts` | Tasks 4–11 |
 | Scroll | `npm run test:scroll` | Task 3 (the migrated probes) |
 | E2E build | `npm run build:e2e` | Task 2 |
-| Elimination | `npm run check:anomaly` | Task 11, production direction |
-| Dev presence | `FLUUX_ANOMALY=1 npm run build:app` | Task 11, Dev direction |
+| Elimination | `npm run check:anomaly:prod` | Task 11, production direction |
+| Dev presence | `npm run check:anomaly:dev` | Task 11, Dev direction |
+| CI | both of the above, wired into the `test` job | Task 11 Step 10 |
 | Standard | `npm test && npm run typecheck && npm run lint` | Everything |
 
-No Cargo work: stages 0–1 add no native code and no capability entry.
+No Cargo work and no capability entry: stages 0–1 add no native code, and the sidecar uses
+`writeFile` under the `fs:allow-write-file` grant that already exists.
+
+## What stage 1 deliberately does NOT include
+
+- **Detectors.** No invariant is evaluated. The only record produced is
+  `recorder/session-start`, which exists so the Dev-side CI assertion has a real artifact.
+- **Retention.** Pruning lives in `/fluux-anomaly-review` (stage 4), because a startup sweep
+  would need `fs:allow-read-dir` and `fs:allow-remove` — both of which would widen the production
+  capability surface.
+- **Any SDK change.** The four seams are stage 5.
