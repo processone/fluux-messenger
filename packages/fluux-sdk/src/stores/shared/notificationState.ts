@@ -21,7 +21,14 @@
  */
 
 import { advance, makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
-import { isRenderableStoredMessage, pointerlessDefers, type RenderabilityCheckFields } from './readState'
+import {
+  compareOrder,
+  computeFloor,
+  isRenderableStoredMessage,
+  makeArchiveOrderKey,
+  type OrderPosition,
+  type RenderabilityCheckFields,
+} from './readState'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,12 +140,20 @@ export interface MessageReceivedOptions {
  * Compute new notification state when a message arrives.
  *
  * Rules:
- * - Outgoing message: clear unread + mentions, advance the pointer, clear marker
- * - Delayed/historical: no changes (preserve existing state)
- * - Incoming + user sees message: no unread increment, advance the pointer
+ * - Delayed/historical: no changes (preserve existing state) unless treatDelayedAsNew
+ * - Incoming or outgoing + user sees message: no unread, advance the pointer
  * - Incoming + user doesn't see + entity active + window hidden: set marker if not set
- * - Incoming + user doesn't see + entity not active: increment unread (only when
- *   the message is renderable — see `isRenderableStoredMessage`), don't set marker
+ * - Incoming + user doesn't see + entity not active: increment unread (renderable only)
+ * - Outgoing: never increments unread or mentions, and always clears the divider on the
+ *   branches it reaches
+ *
+ * There is NO outgoing early return (read-state PR C, D1). "I sent this, so I must have
+ * read up to here" is an inference, and `isOutgoing` is true for a carbon from another
+ * device and for a nick-misattributed MUC reflection — the vector #1081 exists to close.
+ * An outgoing message now advances the pointer only via `userSeesMessage`, i.e. for the
+ * same reason any VISIBLE message does. Note the consequence for a DELAYED outgoing
+ * message: it returns at the delayed guard, so a MUC history replay of our own message no
+ * longer dismisses the divider (deliberate — see the spec's D1 table).
  *
  * "User sees message" (Task 11) requires all three of: the entity is active,
  * the window is visible/focused, AND the viewport is demonstrably at the live
@@ -160,16 +175,6 @@ export function onMessageReceived(
   const { incrementUnread = true, incrementMentions = false, treatDelayedAsNew = false } = options ?? {}
   const userSeesMessage = ctx.isActive && ctx.windowVisible && ctx.viewportAtLiveEdge === true
 
-  // Outgoing message: user is actively engaging, clear notification state
-  if (msg.isOutgoing) {
-    return {
-      unreadCount: 0,
-      mentionsCount: 0,
-      readPointer: advance(state.readPointer, makeReadPointer(msg, kind)),
-      firstNewMessageId: undefined,
-    }
-  }
-
   // Delayed/historical: preserve existing state unchanged
   // Exception: treatDelayedAsNew allows delayed messages to be treated as new
   // (used for 1:1 offline delivery where isDelayed means "sent while offline")
@@ -186,7 +191,7 @@ export function onMessageReceived(
       unreadCount: 0,
       mentionsCount: 0,
       readPointer: advance(state.readPointer, makeReadPointer(msg, kind)),
-      firstNewMessageId: state.firstNewMessageId,
+      firstNewMessageId: msg.isOutgoing ? undefined : state.firstNewMessageId,
     }
   }
 
@@ -199,12 +204,16 @@ export function onMessageReceived(
   // false` for them — their contribution comes entirely from the transient
   // overlay (`stores/shared/transientUnread.ts`), wired at the chatStore/
   // roomStore call sites, so it is never double-counted here.
-  const newUnreadCount = incrementUnread && isRenderableStoredMessage(msg) ? state.unreadCount + 1 : state.unreadCount
-  const newMentionsCount = incrementMentions ? state.mentionsCount + 1 : state.mentionsCount
+  const newUnreadCount =
+    incrementUnread && !msg.isOutgoing && isRenderableStoredMessage(msg)
+      ? state.unreadCount + 1
+      : state.unreadCount
+  const newMentionsCount = incrementMentions && !msg.isOutgoing ? state.mentionsCount + 1 : state.mentionsCount
 
   // Set marker if: entity is active AND window hidden AND no existing marker
-  const newFirstNewMessageId =
-    ctx.isActive && !ctx.windowVisible && !state.firstNewMessageId
+  const newFirstNewMessageId = msg.isOutgoing
+    ? undefined
+    : ctx.isActive && !ctx.windowVisible && !state.firstNewMessageId
       ? msg.id
       : state.firstNewMessageId
 
@@ -254,167 +263,66 @@ export function isUnseenIncomingMessage(
 }
 
 /**
- * Compute new notification state when user opens/activates an entity.
+ * Compute new notification state when the user opens/activates an entity.
  *
- * Scans messages to find the first unseen message (after the read pointer)
- * and sets the marker, resuming the read pointer to a resume-consistent
- * position within the loaded slice. Does NOT zero unreadCount (read-state PR
- * B, final whole-branch-review FIX 2) — activating an entity is not the same
- * event as reading it; the canonical count is derived from the archive and
- * converges to 0 only via genuine live-edge convergence (Task 11). See the
- * comment on the return statement for the full rationale.
+ * The divider is **the first message the canonical count would count** (read-state
+ * PR C, D5): incoming, renderable, and strictly after the read boundary in
+ * `(timestamp, archiveOrderKey)` order. Sharing the count's exact predicate AND
+ * its exact floor is what makes "the divider labels the count" true by
+ * construction rather than by coincidence — see `countUnreadInArchive`.
  *
- * The marker is placed at the first incoming message after the read pointer's
- * position. Whether a delayed message qualifies depends on `treatDelayedAsNew`,
- * mirroring `onMessageReceived`. Both 1:1 chats and rooms now pass `true` —
- * `isDelayed` means "delivered while offline" (1:1) or "MAM/MUC history replay"
- * (rooms), and either way it counts as new relative to the read pointer, so the
- * divider is unified across chats and rooms. A fresh join/conversation with no
- * prior read state has nothing to resume from — the fresh-entity guard (see
- * `recomputeCountsFromPointer` and the activation call sites) keeps that case
- * marker-free rather than `treatDelayedAsNew` doing it.
+ * `isDelayed` plays no part: with a timestamp floor, a delayed message after the
+ * boundary simply IS new. That is why this function no longer takes
+ * `treatDelayedAsNew` (the live arrival paths still do — chat and room genuinely
+ * differ there; see `onMessageReceived`).
+ *
+ * This function NEVER moves the read pointer and never changes `unreadCount`.
+ * The old fallback ladder — a `lastReadAt` timestamp probe, an Nth-from-end
+ * placement driven by `unreadCount`, and a resume-preserving snap — is gone. All
+ * of it existed because the pointer could not be located outside the resident
+ * slice, which a persisted `archiveOrderKey` now solves, and the snap was a
+ * pointer write inside a function whose job is to place a divider.
+ *
+ * With neither a pointer nor a `historyFloor` there is no boundary, so there is
+ * no divider — the same stand-down the count makes when `computeFloor` yields
+ * nothing.
  */
 export function onActivate(
   state: EntityNotificationState,
   messages: NotificationMessage[],
-  kind: 'chat' | 'room',
-  options?: { treatDelayedAsNew?: boolean }
+  kind: 'chat' | 'room'
 ): EntityNotificationState {
-  const { treatDelayedAsNew = false } = options ?? {}
-  // A message qualifies as a "new" marker candidate when it's incoming and either
-  // we treat delayed messages as new (1:1) or it isn't a delayed/history message.
-  const isNewCandidate = (msg: NotificationMessage) =>
-    !msg.isOutgoing && (treatDelayedAsNew || !msg.isDelayed)
+  const floor = computeFloor(state.readPointer, state.historyFloor)
 
   let firstNewMessageId: string | undefined = undefined
-  let updatedSeenMessageId = state.readPointer?.messageId
+  if (floor) {
+    const floorPos: OrderPosition = state.readPointer
+      ? { timestamp: state.readPointer.timestamp.getTime(), archiveOrderKey: state.readPointer.archiveOrderKey }
+      : { timestamp: floor.getTime() }
 
-  if (state.readPointer && messages.length > 0) {
-    // Find the position of the message the pointer names
-    const lastSeenIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
-
-    if (lastSeenIdx !== -1) {
-      // Scan forward from the read pointer to find first unseen incoming message
-      for (let i = lastSeenIdx + 1; i < messages.length; i++) {
-        const msg = messages[i]
-        if (isNewCandidate(msg)) {
-          firstNewMessageId = msg.id
-          break
-        }
+    for (const m of messages) {
+      if (m.isOutgoing) continue
+      if (!isRenderableStoredMessage(m)) continue
+      const pos: OrderPosition = {
+        timestamp: m.timestamp.getTime(),
+        archiveOrderKey: makeArchiveOrderKey(m, kind),
       }
-    } else {
-      // The pointer's message is not in the loaded slice — it's older than what
-      // was loaded (e.g. cache loaded the latest 100 of 500+ messages). Fall back
-      // to the pointer's own timestamp to place the marker within the slice.
-      const fallbackReadAt = state.readPointer.timestamp
-
-      // Only usable if it's a real timestamp (not epoch). Epoch is the historic
-      // "no prior read time" sentinel — it would match the very first message in
-      // the array, placing the marker far too early.
-      const hasUsableReadAt = fallbackReadAt.getTime() > 0
-
-      if (hasUsableReadAt) {
-        const firstNew = messages.find(
-          (msg) => msg.timestamp > fallbackReadAt && isNewCandidate(msg)
-        )
-        if (firstNew) {
-          firstNewMessageId = firstNew.id
-        }
-      } else if (state.unreadCount > 0) {
-        // No usable pointer timestamp — use unreadCount to place the marker at
-        // the Nth message from the end (counting only incoming candidates).
-        let remaining = state.unreadCount
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const m = messages[i]
-          if (isNewCandidate(m)) {
-            remaining--
-            if (remaining === 0) {
-              firstNewMessageId = m.id
-              break
-            }
-          }
-        }
-        // If we ran out of messages before exhausting unreadCount,
-        // place marker at the first incoming new-candidate message.
-        if (remaining > 0) {
-          const firstIncoming = messages.find(isNewCandidate)
-          if (firstIncoming) {
-            firstNewMessageId = firstIncoming.id
-          }
-        }
-      }
-
-      // Resume-preserving pointer placement: snap the pointer to the message
-      // just BEFORE the derived divider so viewport advance works inside this
-      // slice. Snapping to the NEWEST (previous behavior) destroyed the resume
-      // point whenever the backlog was deeper than the loaded window. When no
-      // divider could be derived there is nothing to resume — snap to newest
-      // as before so the stale-fallback doesn't repeat forever.
-      if (firstNewMessageId) {
-        const dividerIdx = messages.findIndex((m) => m.id === firstNewMessageId)
-        if (dividerIdx > 0) updatedSeenMessageId = messages[dividerIdx - 1].id
-        // dividerIdx === 0: whole slice is unread — keep the old pointer;
-        // onMessageSeen's atLiveEdge escape hatch prevents a stuck pointer.
-      } else {
-        const lastMsg = messages[messages.length - 1]
-        if (lastMsg) updatedSeenMessageId = lastMsg.id
-      }
-    }
-  } else if (!state.readPointer && state.unreadCount > 0 && messages.length > 0) {
-    // Brand-new conversation: no read position at all.
-    // Use unreadCount to place marker N incoming messages from the end.
-    let remaining = state.unreadCount
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i]
-      if (isNewCandidate(m)) {
-        remaining--
-        if (remaining === 0) {
-          firstNewMessageId = m.id
-          break
-        }
-      }
-    }
-    if (remaining > 0) {
-      const firstIncoming = messages.find(isNewCandidate)
-      if (firstIncoming) {
-        firstNewMessageId = firstIncoming.id
+      if (compareOrder(pos, floorPos) > 0) {
+        firstNewMessageId = m.id
+        break
       }
     }
   }
 
-  // Resolve the position derived above to a pointer (#1081). When the id
-  // resolves nowhere in this slice the position did not move — it is the
-  // caller's stale pointer — so that pointer, equally stale, is kept.
-  const pointerMessage = updatedSeenMessageId
-    ? messages.find((m) => m.id === updatedSeenMessageId)
-    : undefined
-  const updatedPointer = pointerMessage ? makeReadPointer(pointerMessage, kind) : state.readPointer
-
-  // The read position is the pointer above and nothing else — there is no
-  // separate "when I last activated" timestamp to stamp with the newest loaded
-  // message, which is what used to let the two fields disagree about where the
-  // user had actually read to.
-  //
-  // unreadCount is DELIBERATELY left unchanged (read-state PR B, final
-  // whole-branch-review FIX 2). Activation used to force it to 0 unconditionally,
-  // as if merely opening an entity were equivalent to reading it. It is not: the
-  // one canonical count is derived exclusively from the archive
-  // (recomputeUnreadForConversation / recomputeUnreadForRoom) and converges to 0
-  // only through Task 11's live-edge convergence — an incoming message's pointer
-  // advance in `onMessageReceived`, gated on a real, current-generation
-  // viewport-at-live-edge signal. Forcing 0 here raced ahead of that: it could
-  // zero the badge while snapping the pointer only to just-before-the-divider
-  // (see the resume-preserving placement above), leaving a "New messages"
-  // divider marking genuinely unread messages sitting right next to a count of
-  // 0 — and, since Task 12 removed the resident-derived counts that used to
-  // paper over the mismatch, no surface anywhere showed the real number.
-  // mentionsCount stays zeroed here: PR B scoped the archive derivation to
-  // unreadCount only (mentions are out of scope — see Task 4R), and clearing
-  // the @-mention badge on open is pre-existing, unrelated behavior.
+  // mentionsCount stays zeroed here: clearing the @-mention badge on open is
+  // pre-existing behaviour, unrelated to the read pointer. unreadCount is
+  // DELIBERATELY left unchanged — the canonical count is archive-derived and
+  // converges to 0 only through genuine live-edge convergence (PR B, FIX 2).
   return {
     unreadCount: state.unreadCount,
     mentionsCount: 0,
-    readPointer: updatedPointer,
+    readPointer: state.readPointer,
+    historyFloor: state.historyFloor,
     firstNewMessageId,
   }
 }
@@ -436,35 +344,31 @@ export function onDeactivate(
 }
 
 /**
- * Compute new notification state when entity is explicitly marked as read.
+ * Compute new notification state when an entity is explicitly marked as read.
  *
- * Clears unreadCount and mentionsCount.
- * Preserves firstNewMessageId — the marker has a separate lifecycle
- * (set on activate, cleared on deactivate or explicit clear).
+ * Clears unreadCount and mentionsCount. Preserves firstNewMessageId — the marker
+ * has a separate lifecycle (set on activate, cleared on deactivate or explicit
+ * clear).
  *
- * When `advanceSeenTo` is supplied, the read pointer is advanced to it. Callers
- * pass the newest MESSAGE ONLY when the user has genuinely caught up to it (the
- * loaded window is at the live edge) — this is what lets the XEP-0490
- * publisher, which watches the read position, sync the read marker to other
- * devices. Omitting it (the scrolled-into-history case) clears the local badge
- * without publishing a read position past what the user actually saw. The
- * advance is forward-only in practice because the caller only ever supplies the
- * tail of a live-edge window (>= the current pointer).
+ * The pointer advances to the newest loaded message ONLY when the loaded window
+ * and the current-generation viewport are both at the live edge. Otherwise the
+ * counts clear but the position stays where the user actually read, so the
+ * XEP-0490 publisher never speaks past what they saw.
  *
- * `advanceSeenTo` is the message rather than its id (#1081): the id and the
- * timestamp of one read position are written together or not at all, and taking
- * them as one argument makes a half-write unrepresentable.
+ * Picking the message from the two independent live-edge facts is this
+ * function's job (read-state PR C, D8).
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
+  messages: Array<PointerSource>,
   kind: 'chat' | 'room',
-  advanceSeenTo?: PointerSource
+  options: { windowAtLiveEdge: boolean; viewportAtLiveEdge: boolean }
 ): EntityNotificationState {
-  // Skip update if nothing to change (prevents unnecessary state updates).
-  // Marking read no longer stamps a wall-clock/newest-message timestamp, so a
-  // repeat mark-as-read on an already-read entity is now genuinely a no-op and
-  // returns the same reference.
-  const seenUnchanged = advanceSeenTo === undefined || advanceSeenTo.id === state.readPointer?.messageId
+  const newest =
+    options.windowAtLiveEdge && options.viewportAtLiveEdge
+      ? messages[messages.length - 1]
+      : undefined
+  const seenUnchanged = newest === undefined || newest.id === state.readPointer?.messageId
   if (state.unreadCount === 0 && state.mentionsCount === 0 && seenUnchanged) {
     return state
   }
@@ -472,9 +376,7 @@ export function onMarkAsRead(
     ...state,
     unreadCount: 0,
     mentionsCount: 0,
-    // No extra forward-only guard: the caller owns the "the user is caught up
-    // to this message" call, and the pointer moves whole or not at all.
-    readPointer: advanceSeenTo ? makeReadPointer(advanceSeenTo, kind) : state.readPointer,
+    readPointer: newest ? makeReadPointer(newest, kind) : state.readPointer,
   }
 }
 
@@ -533,6 +435,12 @@ export function onWindowBecameVisible(
  * moving on a fabricated timestamp would push a forward-only floor past unread
  * messages for good.
  *
+ * A KEYED current pointer (carries `archiveOrderKey`) is ordered by archive
+ * POSITION via `compareOrder`, not by array index — its position is provable
+ * without being resident in `messages` (PR C, D4). The off-slice guard and the
+ * `atLiveEdge` escape hatch below apply only to a KEYLESS (migrated) pointer,
+ * whose bare timestamp cannot certify a position.
+ *
  * @param state - Current notification state
  * @param messageId - ID of the message that became visible
  * @param messages - Full messages array, for ordering and for the timestamp the
@@ -558,157 +466,31 @@ export function onMessageSeen(
   // No read position yet: any resolvable message is an advancement.
   if (!state.readPointer) return advanced()
 
-  // Find the current position to compare ordering
-  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
+  // Keyed pointer: compare archive POSITIONS. The pointer no longer has to be
+  // resident, and a same-millisecond sibling that sorts after it is a genuine
+  // advance. Safe against the resident array because PR B gave
+  // `messageArrayUtils` the same `compareOrder` tie-break, so array index and
+  // archive order agree.
+  if (state.readPointer.archiveOrderKey) {
+    const target = messages[newIdx]
+    return compareOrder(
+      { timestamp: target.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(target, kind) },
+      { timestamp: state.readPointer.timestamp.getTime(), archiveOrderKey: state.readPointer.archiveOrderKey }
+    ) > 0
+      ? advanced()
+      : state
+  }
 
-  // If the current pointer is not in the loaded messages array (stale/trimmed),
-  // don't update — the stale position is resolved properly on the next
-  // onActivate. Without this guard, any visible message would "win" against -1,
-  // potentially regressing the pointer to an earlier position.
+  // Keyless (migrated) pointer: its timestamp proves nothing about its position,
+  // so keep ordering by index — including the off-slice guard and the live-edge
+  // escape hatch that stops it getting stuck.
+  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
   if (currentIdx === -1) {
-    // Unresolvable pointer (older than the slice, or evicted). Viewing the
-    // NEWEST message while the window is at the live edge is an unambiguous
-    // maximum — advancing cannot regress. Off the live edge the slice's last
-    // message may be older than the pointer, so stay guarded.
     if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
     return state
   }
-
-  // Only advance forward
   if (newIdx > currentIdx) return advanced()
-
   return state
-}
-
-/** Options for {@link recomputeCountsFromPointer}. */
-export interface RecomputeCountsOptions {
-  /** Count `isMention` messages into mentionsCount (rooms). */
-  countMentions?: boolean
-  /**
-   * True when an XEP-0490 marker for this entity is stashed but not yet resolved
-   * (`pendingRemoteDisplayedStanzaId`). Such an entity has a read position — we
-   * simply cannot express it as a local message id yet — so the fresh-entity
-   * guard below must NOT claim it is caught up. See {@link recomputeCountsFromPointer}.
-   */
-  hasPendingRemoteMarker?: boolean
-  /**
-   * True when this entity still holds pre-#1081 legacy read state that the
-   * migration has not resolved into a `readPointer` yet. Same category as
-   * {@link hasPendingRemoteMarker}: a read position exists, we simply cannot
-   * express it as a local message id yet — so the fresh-entity guard below must
-   * NOT claim it is caught up. See {@link recomputeCountsFromPointer}.
-   */
-  hasUnmigratedLegacyReadState?: boolean
-}
-
-/**
- * Recompute unreadCount/mentionsCount from the persisted read pointer against
- * a freshly merged message slice (sorted oldest → newest). Used by MAM
- * catch-up hydration and inbound XEP-0490 marker handling — never by the live
- * message path (onMessageReceived owns incremental counting).
- *
- * Fresh-entity guard: an entity with NO read pointer is caught up — the pointer
- * snaps to the newest message and counts stay zero. History replay of a newly
- * joined room, or a new device with no MDS position, never manufactures unread
- * debt.
- *
- * The guard does NOT apply while an XEP-0490 marker is still pending
- * (`hasPendingRemoteMarker`). On a fresh instance the marker from the user's
- * other client always arrives before the room has any messages to resolve it
- * against, so it sits stashed while this runs. Snapping the pointer to newest
- * then would put it PAST the marker, and the fold that follows is forward-only —
- * silently discarding the position the user actually left off at. Leaving the
- * state untouched lets that fold resolve the marker and the counts follow.
- *
- * Nor does it apply while pre-#1081 legacy read state is still waiting to be
- * migrated (`hasUnmigratedLegacyReadState`). That state exists precisely because
- * the message cache could not resolve the position YET — and MAM catch-up, which
- * is what calls this, is exactly what fills the cache, so arriving here right
- * after a failed probe is the expected sequel rather than a corner case.
- * Snapping now writes a pointer at the newest message, which retires the legacy
- * values from disk and, being forward-only, beats the correct older pointer the
- * migration would have produced on its next attempt. Leaving the state untouched
- * lets that attempt happen.
- *
- * An outgoing message inside the counted range is a read boundary (the user
- * replied, here or on another device): counting restarts after the last one
- * and the pointer advances to it.
- */
-export function recomputeCountsFromPointer(
-  state: EntityNotificationState,
-  messages: NotificationMessage[],
-  kind: 'chat' | 'room',
-  options?: RecomputeCountsOptions
-): EntityNotificationState {
-  const {
-    countMentions = false,
-    hasPendingRemoteMarker = false,
-    hasUnmigratedLegacyReadState = false,
-  } = options ?? {}
-  if (messages.length === 0) return state
-  if (pointerlessDefers(state.readPointer, state.unreadCount)) return state
-
-  if (!state.readPointer) {
-    // An unresolved remote marker IS read state — defer to the fold that will
-    // resolve it rather than claiming this entity is caught up.
-    if (hasPendingRemoteMarker) return state
-    // So is un-migrated legacy read state — defer to the migration's next attempt.
-    if (hasUnmigratedLegacyReadState) return state
-    const newest = messages[messages.length - 1]
-    return {
-      ...state,
-      unreadCount: 0,
-      mentionsCount: 0,
-      readPointer: makeReadPointer(newest, kind),
-    }
-  }
-
-  let startIdx: number
-  const pointerIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
-  if (pointerIdx !== -1) {
-    startIdx = pointerIdx + 1
-  } else {
-    const readAt = state.readPointer.timestamp
-    if (readAt.getTime() > 0) {
-      const idx = messages.findIndex((m) => m.timestamp > readAt)
-      startIdx = idx === -1 ? messages.length : idx
-    } else {
-      // Pointer resolves nowhere and its timestamp is the epoch sentinel: the
-      // slice is entirely past the read horizon — count it all (a lower bound).
-      startIdx = 0
-    }
-  }
-
-  let newReadPointer = state.readPointer
-  for (let i = messages.length - 1; i >= startIdx; i--) {
-    if (messages[i].isOutgoing) {
-      newReadPointer = makeReadPointer(messages[i], kind)
-      startIdx = i + 1
-      break
-    }
-  }
-
-  let unread = 0
-  let mentions = 0
-  for (let i = startIdx; i < messages.length; i++) {
-    const m = messages[i]
-    if (m.isOutgoing) continue
-    unread++
-    if (countMentions && m.isMention) mentions++
-  }
-
-  const mentionsOut = countMentions ? mentions : state.mentionsCount
-  // `newReadPointer` starts as `state.readPointer` and is only ever replaced by
-  // a freshly built object, so reference identity is exactly "did it move".
-  if (unread === state.unreadCount && mentionsOut === state.mentionsCount && newReadPointer === state.readPointer) {
-    return state
-  }
-  return {
-    ...state,
-    unreadCount: unread,
-    mentionsCount: mentionsOut,
-    readPointer: newReadPointer,
-  }
 }
 
 // ---------------------------------------------------------------------------

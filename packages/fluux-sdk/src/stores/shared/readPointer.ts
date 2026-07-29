@@ -15,7 +15,7 @@
  * All functions here are pure.
  */
 
-import { makeArchiveOrderKey, isValidArchiveOrderKey, type ArchiveOrderKey } from './readState'
+import { compareOrder, makeArchiveOrderKey, isValidArchiveOrderKey, type ArchiveOrderKey } from './readState'
 
 /**
  * Where the user has read to. Written atomically or not at all.
@@ -80,15 +80,38 @@ export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): 
 /**
  * Is `candidate` strictly further along than `current`?
  *
- * Equal timestamps are NOT an advance, even with a different id. Two messages
- * can share a millisecond (MAM archives routinely do), and treating a
- * same-instant sibling as progress would make the XEP-0490 publisher re-assert a
- * position it already published, forever. Refusing to advance there under-counts
- * at worst, which is the recoverable direction.
+ * Timestamp first. A same-millisecond tie is broken by the archive order key —
+ * but ONLY when both sides carry one (read-state PR C, D2). A key is what
+ * certifies that a pointer's timestamp is its named message's own: pointers
+ * built by `makeReadPointer` always have one, while a pointer migrated from the
+ * pre-#1081 `lastSeenMessageId` + `lastReadAt` pair carries `lastReadAt` and no
+ * key at all.
+ *
+ * Do NOT simplify this to `compareOrder(candidate, current) > 0`. `compareOrder`
+ * sorts a MISSING key FIRST, which is the safe direction for a FLOOR
+ * (under-advance -> over-count) and the UNSAFE direction for a POINTER: it would
+ * let any keyed candidate overtake a migrated keyless pointer sharing its
+ * millisecond, advancing a forward-only position past messages nothing has
+ * proven were read. Same comparator, inverted safety. When either side is
+ * keyless we fall back to strict millisecond comparison — today's behaviour,
+ * preserved exactly where the position is not provable.
  */
 export function isAhead(candidate: ReadPointer, current: ReadPointer | undefined): boolean {
   if (!current) return true
-  return candidate.timestamp.getTime() > current.timestamp.getTime()
+  const candidateMs = candidate.timestamp.getTime()
+  const currentMs = current.timestamp.getTime()
+  if (candidateMs !== currentMs) return candidateMs > currentMs
+
+  const candidateKey = candidate.archiveOrderKey
+  const currentKey = current.archiveOrderKey
+  if (!candidateKey || !currentKey) return false
+
+  return (
+    compareOrder(
+      { timestamp: candidateMs, archiveOrderKey: candidateKey },
+      { timestamp: currentMs, archiveOrderKey: currentKey }
+    ) > 0
+  )
 }
 
 /**

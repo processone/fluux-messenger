@@ -361,15 +361,23 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
   })
 
-  // The reviewer's control (requirement 1, mirrored from Task 7): the legacy
-  // pass runs — and its OWN pointer-advance guard fires (an outgoing message
-  // moves the pointer) — and its would-be COUNT differs sharply from the
-  // persisted one (2 vs 5). The persisted value must survive untouched
-  // because coverage is not proven.
-  it('CRITICAL: not caught up defers, and the persisted count survives even though recomputeCountsFromPointer ran and moved the pointer', async () => {
+  // The reviewer's control (requirement 1, mirrored from Task 7), rewritten
+  // for PR C's D6 deletion. It used to prove "the count is discarded" by
+  // showing the legacy guard pass moved the POINTER while the count stayed
+  // put; that pass no longer exists, so the control is rebuilt around the
+  // surviving mechanism: coverage IS seeded and resolvable and the archive IS
+  // populated, so the ONLY thing deferring this recount is the caught-up gate.
+  // Remove that gate and the derivation lands a sharply different 2 (u1, u2
+  // after 'p0'; the outgoing 'out1' never counts) over the trusted 5 — so 5
+  // surviving is evidence, not an absence of activity. The pointer assertion
+  // is the D6 half: in a MUC `isOutgoing` is attributed by nick, and an
+  // outgoing message in the counted range must no longer drag the
+  // forward-only read position onto itself.
+  it('CRITICAL: not caught up defers, the persisted count survives, and the recount never moves the pointer onto an outgoing message', async () => {
     await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
-      archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied — advances the pointer
+      archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied from another device
       archiveMsg('u1', 1002),
       archiveMsg('u2', 1003),
     ])
@@ -377,15 +385,18 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       unreadCount: 5, // the persisted/trusted value
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
-    // Deliberately NOT caught up (default mamQueryStates), and no coverage record.
+    // Coverage IS proven and resolvable — but mamQueryStates is left at its
+    // default (NOT caught up to live), so the caught-up gate is the single
+    // reason this recount defers.
+    roomStore.setState((state) => {
+      const roomCoverage = new Map(state.roomCoverage)
+      roomCoverage.set(ROOM, { bottomId: 'anchor-stanza' })
+      return { roomCoverage }
+    })
 
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
-    // The legacy guard pass DID run and DID advance the pointer to 'out1'
-    // (the reply) — that pointer-advance guard behavior is kept. Its own
-    // count over the post-out1 slice (u1, u2) would be 2, not 5 — that
-    // would-be count is discarded; the persisted 5 survives.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('out1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(5)
   })
 
@@ -633,51 +644,48 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(6)
   })
 
-  it('rejects a guard-pass pointer write after the account scope changes', async () => {
+  // Was 'rejects a guard-pass pointer write after the account scope changes',
+  // which blocked on the guard pass's cache read. That read is gone with the
+  // guard pass (PR C, D6), so the same invariant — a derivation computed under
+  // one account must never commit into another's state — is now pinned on the
+  // remaining await, the archive count. Nothing else about the recount context
+  // changes across the swap here (no switchAccount, so the cache epoch, the
+  // recount version, the input version and the pointer are all identical),
+  // which makes the storage-scope term of `recountContextIsCurrent` the single
+  // load-bearing guard: drop it and the account-A result of 55 overwrites 7.
+  it('rejects a recount commit after the account scope changes', async () => {
     const accountA = 'account-a@example.com'
     const accountB = 'account-b@example.com'
 
     setStorageScopeJid(accountA)
     roomStore.getState().switchAccount(accountA)
     roomStore.getState().addRoom(createRoom(ROOM))
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+    ])
+    setMeta({
+      unreadCount: 7,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
 
-    let releaseSlice!: (messages: RoomMessage[]) => void
-    vi.mocked(messageCache.getRoomMessages).mockImplementationOnce(
-      () => new Promise((resolve) => { releaseSlice = resolve })
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
     )
 
     const stale = roomStore.getState().recomputeUnreadForRoom(ROOM)
-    await vi.waitFor(() => expect(releaseSlice).toBeDefined())
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
 
+    // The account scope moves on while the archive read is in flight.
     setStorageScopeJid(accountB)
-    roomStore.getState().switchAccount(accountB)
-    roomStore.getState().addRoom(createRoom(ROOM))
-    const accountBPointer = {
-      messageId: 'account-b-pointer',
-      timestamp: new Date(100),
-      archiveOrderKey: { kind: 'room' as const, from: `${ROOM}/alice`, id: 'account-b-pointer' },
-    }
-    roomStore.setState((state) => {
-      const roomMeta = new Map(state.roomMeta)
-      roomMeta.set(ROOM, { ...roomMeta.get(ROOM)!, unreadCount: 7, readPointer: accountBPointer })
-      const rooms = new Map(state.rooms)
-      rooms.set(ROOM, { ...rooms.get(ROOM)!, unreadCount: 7, readPointer: accountBPointer })
-      const runtime = state.roomRuntime.get(ROOM)
-      if (!runtime) throw new Error('room runtime missing')
-      const roomRuntime = new Map(state.roomRuntime)
-      roomRuntime.set(ROOM, { ...runtime, messages: [archiveMsg('account-b-current', 150)] })
-      return { roomMeta, rooms, roomRuntime }
-    })
 
-    await roomStore.getState().recomputeUnreadForRoom(ROOM)
-
-    releaseSlice([archiveMsg('account-a-outgoing', 1000, { isOutgoing: true })])
+    releaseCount({ unread: 55 })
     await stale
 
     expect(getStorageScopeJid()).toBe(accountB)
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBe(accountBPointer)
-    expect(roomStore.getState().rooms.get(ROOM)?.readPointer).toBe(accountBPointer)
   })
 
   // final-fix-2: the race the re-reviewer flagged, room twin of
@@ -740,27 +748,41 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // divider rederivation
   // ---------------------------------------------------------------------
 
+  /** Park a stale divider marker on the ACTIVE room, with `messages` resident. */
+  function seedActiveWithStaleMarker(messages: RoomMessage[]): void {
+    roomStore.setState((state) => {
+      const markers = new Map(state.firstNewMessageMarkers)
+      markers.set(ROOM, 'stale-marker-id')
+      const runtime = new Map(state.roomRuntime)
+      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
+      return { firstNewMessageMarkers: markers, activeRoomJid: ROOM, roomRuntime: runtime }
+    })
+  }
+
+  // Rewritten for PR C, D6: the rederivation scans the RESIDENT array now
+  // (the guard pass's cache-window read went with the guard pass), so this
+  // test drives the path that actually reaches it — an `allowActive` recount
+  // on the ACTIVE room. That is the only path in production: a marker survives
+  // only while an entity is active (deactivation deletes it), and both
+  // allowActive triggers follow a pointer advance. The seeded marker is a
+  // distinct stale id, so 'u1' can only come from a real rederivation.
   it('a remote advance rederives the divider to the new boundary', async () => {
-    await messageCache.saveRoomMessages([
-      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
-      archiveMsg('p0', 1000),
-      archiveMsg('u1', 1001),
-    ])
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    const u1 = archiveMsg('u1', 1001)
+    await messageCache.saveRoomMessages([anchor, p0, u1])
     setMeta({
       unreadCount: 99,
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
-    // A stale marker left over from a previous activation.
-    roomStore.setState((state) => {
-      const markers = new Map(state.firstNewMessageMarkers)
-      markers.set(ROOM, 'stale-marker-id')
-      return { firstNewMessageMarkers: markers }
-    })
+    seedActiveWithStaleMarker([anchor, p0, u1])
 
-    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+    await roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
 
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    // The count is re-derived too (u1), not left at the stale 99.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
   })
 
   it('keeps the ACTIVE room\'s divider when the pointer has caught up to the newest message', async () => {
@@ -799,11 +821,14 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
   })
 
+  // A BACKGROUND room with a RESIDENT array deliberately, so the deletion is a
+  // real "nothing sits after the boundary" answer rather than the vacuous one an
+  // empty slice always gives. Retiring a stale marker is the background half of
+  // the rule the two tests above pin for the active half.
   it('deletes the divider marker when the derived count is zero', async () => {
-    await messageCache.saveRoomMessages([
-      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
-      archiveMsg('p0', 1000),
-    ])
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    await messageCache.saveRoomMessages([anchor, p0])
     setMeta({
       unreadCount: 99,
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
@@ -812,7 +837,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
       markers.set(ROOM, 'stale-marker-id')
-      return { firstNewMessageMarkers: markers }
+      const runtime = new Map(state.roomRuntime)
+      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages: [anchor, p0] })
+      return { firstNewMessageMarkers: markers, activeRoomJid: null, roomRuntime: runtime }
     })
 
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
@@ -1145,6 +1172,178 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await vi.waitFor(() => {
         expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
       }, { timeout: 2000 })
+    })
+  })
+
+  // ---------------------------------------------------------------------
+  // PR C, D6: the pointer-writing recount (recomputeCountsFromPointer) is
+  // gone. Both of its pointer effects — the fresh-entity snap and the
+  // outgoing-boundary advance — were heuristics that could move the
+  // forward-only read pointer past messages the user never saw. In a MUC the
+  // outgoing-boundary advance is the worse of the two: `isOutgoing`
+  // misattribution (nick reuse, multi-session) destroys the read position.
+  // ---------------------------------------------------------------------
+
+  describe('the guard pass no longer writes the pointer (PR C, D6)', () => {
+    // The MERGE schedules its recount fire-and-forget (`void get().recompute...`),
+    // so asserting the pointer straight after the merge resolves proves NOTHING —
+    // the guard pass may not have run yet, and a count seeded at 0 that is still 0
+    // is not evidence either. Drive the recount explicitly and await it, THEN
+    // assert. Both assertions below are chosen so a surviving guard pass changes
+    // them.
+    it('a forward merge + recount does NOT snap a fresh room pointer to the newest message', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('h1', 600),
+        archiveMsg('h2', 700),
+      ])
+      // Fresh entity: no pointer, and history predating its creation watermark.
+      setMeta({ unreadCount: 0, mentionsCount: 4, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      roomStore.getState().mergeRoomMAMMessages(
+        ROOM,
+        [archiveMsg('h1', 600), archiveMsg('h2', 700)],
+        { first: 'h1', last: 'h2' },
+        true,
+        'forward'
+      )
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      // A surviving fresh-entity snap would put this at 'h2'.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBeUndefined()
+      // No unreadCount assertion here: seeded at 0 and asserting 0 can't tell
+      // "floored correctly at the creation watermark" apart from "deferred and
+      // touched nothing" — the sibling test below ("messages arriving after
+      // creation…", seeded 0, asserts 2) is the one that actually exercises the
+      // historyFloor-derived count.
+      // Requirement 2: an archive recount never writes mentionsCount.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+    })
+
+    // The OTHER two call sites: the guard pass inside the derivation itself.
+    // Reached with no merge at all, so it needs its own control.
+    it('the recount itself does NOT snap a fresh room pointer to the newest message', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('h1', 600),
+        archiveMsg('h2', 700),
+      ])
+      setMeta({ unreadCount: 0, mentionsCount: 4, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toBeUndefined()
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+    })
+
+    it('the recount itself does NOT advance the pointer to an outgoing message', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+        archiveMsg('mine', 1200, { isOutgoing: true }),
+        archiveMsg('u2', 1300),
+      ])
+      setMeta({
+        unreadCount: 3,
+        mentionsCount: 4,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      // A surviving outgoing-boundary advance would put this at 'mine' and drop
+      // the count to 1 by swallowing u1.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+    })
+
+    it('a forward merge does NOT advance the pointer to an outgoing message', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+        archiveMsg('mine', 1200, { isOutgoing: true }),
+        archiveMsg('u2', 1300),
+        archiveMsg('u3', 1400),
+      ])
+      setMeta({
+        unreadCount: 4,
+        mentionsCount: 4,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      roomStore.getState().mergeRoomMAMMessages(
+        ROOM,
+        [archiveMsg('mine', 1200, { isOutgoing: true })],
+        { first: 'mine', last: 'mine' },
+        true,
+        'forward'
+      )
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      // The reply came from another device. Nothing here is evidence we read u1.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+    })
+
+    it('messages arriving after creation and merged during catch-up count as unread', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('n1', 2000),
+        archiveMsg('n2', 3000),
+      ])
+      setMeta({ unreadCount: 0, mentionsCount: 4, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      roomStore.getState().mergeRoomMAMMessages(
+        ROOM,
+        [archiveMsg('n1', 2000), archiveMsg('n2', 3000)],
+        { first: 'n1', last: 'n2' },
+        true,
+        'forward'
+      )
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
+    })
+
+    // Carried from PR B: the race the no-mistakes gate's round-2 fix already
+    // closed. This PIN proves the input-version guard is load-bearing, so a later
+    // refactor cannot quietly drop it.
+    it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
+      await messageCache.saveRoomMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+      ])
+      setMeta({
+        unreadCount: 1,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      // Let the recount reach its archive read, then land an arrival that raises
+      // the count WITHOUT moving the pointer — the case the pointer-identity
+      // guard alone cannot see.
+      vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(async (jid, args) => {
+        const actual = await vi.importActual<typeof import('../utils/messageCache')>('../utils/messageCache')
+        const res = await actual.countRoomUnreadInArchive(jid, args)
+        roomStore.getState().addMessage(ROOM, archiveMsg('u2', 1200))
+        return res
+      })
+
+      await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+      // The stale snapshot said 1; the arrival made it 2. 2 must win.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
     })
   })
 

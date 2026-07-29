@@ -205,9 +205,24 @@ export function setupMdsSideEffects(
    * Is this entity's archive complete enough to speak for the user?
    *
    * Mirrors Gajim's `if not MAM.is_catch_up_finished(contact): return` guard.
-   * A read position derived mid-catch-up is computed against a partial window,
-   * and MDS positions are forward-only — publishing a wrong one makes every
-   * other device adopt it and leaves the real position unrecoverable.
+   *
+   * The original reason — "a read position derived mid-catch-up is computed
+   * against a partial window" — no longer applies: catch-up stopped being a
+   * pointer writer in read-state PR C, so no position originates here any more.
+   *
+   * The gate stays as a PUBLISH-SIDE backstop, which is a different and still
+   * valid job. Every local writer that remains (viewport, remote marker,
+   * mark-read) can fire while the archive is incomplete. A publish here reaches
+   * this account's other devices too: `publishDisplayed` writes the XEP-0490 PEP
+   * node, which pushes to every subscribed resource, and a peer's marker (or our
+   * own echoed back) arrives locally as `read:displayed-synced` below. What a
+   * receiving client DOES with that marker is its own decision, not a protocol
+   * guarantee — but THIS client applies an inbound marker forward-only
+   * (`resolveAdvance` in `readMarkerSync.ts`), so a too-far-ahead position we
+   * publish from a partial archive cannot be walked back here once it returns to
+   * us as a remote notify. Speaking for the user from an archive we know is
+   * partial is the one thing this gate prevents, independently of where the
+   * position came from.
    *
    * A failed query is not trustworthy even when it is no longer loading and
    * has not completed before. A later successful merge clears the error and

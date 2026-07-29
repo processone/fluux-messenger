@@ -304,10 +304,9 @@ describe('post-rehydrate readPointer backfill', () => {
 // several cases (an id the cache never stored, a timestamp older than every
 // cached message, a single failed IndexedDB open, which returns null for every
 // conversation in flight), and a conversation left with neither a pointer nor
-// the values to rebuild one hits the fresh-entity branch of
-// `recomputeCountsFromPointer`: pointer snapped to newest, counts zeroed, unread
-// history silently marked read. The pointer is forward-only, so that is
-// permanent.
+// the values to rebuild one falls back to counting from its `historyFloor`
+// creation watermark — silently treating everything older than the restore as
+// read. The values on disk are the only way back, so they have to survive.
 // ---------------------------------------------------------------------------
 const LATE = 'late@example.com'
 
@@ -444,18 +443,19 @@ describe('unmigrated legacy read state survives the persist', () => {
 // Protecting the disk is not enough — the SESSION can fabricate a pointer too.
 //
 // A failed probe leaves the conversation pointerless in memory. Reconnect
-// catch-up then reaches mergeMAMMessages' background hydration, which hands
-// `readPointer: undefined` to recomputeCountsFromPointer — and the fresh-entity
-// guard reads that as "brand new, caught up": pointer snapped to the newest
-// message, counts zeroed. The caller writes it into both maps, the persist that
-// follows sees a truthy readPointer and stops re-emitting the legacy pair, and
-// forward-only means the correct older pointer could never win afterwards.
+// catch-up then reaches mergeMAMMessages' background hydration, which used to
+// read `readPointer: undefined` as "brand new, caught up" and snap the pointer
+// to the newest merged message. The caller wrote it into both maps, the persist
+// that followed saw a truthy readPointer and stopped re-emitting the legacy
+// pair, and forward-only meant the correct older pointer could never win
+// afterwards.
 //
 // This is the EXPECTED sequel to a failed probe, not a corner case: the probe
 // fails because the cache cannot resolve the position yet, and MAM catch-up is
-// precisely what fills the cache. So the guard stands down for a conversation
-// the migration still owes a pointer to — the same treatment
-// `hasPendingRemoteMarker` gets (#1076).
+// precisely what fills the cache. PR C, D6 deleted that snap entirely (no
+// merge and no recount writes the pointer any more), so these tests now pin the
+// unconditional form of the same guarantee — the un-migrated conversation, and
+// a genuinely fresh one alongside it, both come through pointerless.
 // ---------------------------------------------------------------------------
 const FRESH = 'fresh@example.com'
 
@@ -507,11 +507,16 @@ describe('catch-up hydration does not fabricate a pointer over un-migrated read 
     await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ messageId: 'l1', timestamp: at(1500) }), { timeout: 2000 })
   })
 
-  // Control: the stand-down is per-conversation, not a blanket disable. FRESH is
-  // restored from the same blob, in the same session, with no legacy read state
-  // — it must still be caught up, or every never-read conversation would report
-  // its whole archive as unread.
-  it('still snaps a genuinely fresh conversation and reports zero unread', async () => {
+  // Control, inverted by PR C, D6. It used to assert that a conversation with
+  // NO legacy read state still got the fresh-entity snap — proving the
+  // per-conversation legacy stand-down was not a blanket disable. Both the snap
+  // and that stand-down are deleted now (D6 and Task 6b), so the control's job
+  // is the complement: FRESH carries no un-migrated read state at all, and it
+  // still comes out of the merge pointerless. This is what keeps "pointerless"
+  // from being an artefact of LATE's legacy state — a future change that
+  // re-introduced a snap for entities the migration has nothing to say about
+  // would pass the LATE test above and fail here.
+  it('a conversation with no legacy read state is left pointerless too, not snapped', async () => {
     persistConversations([
       [LATE, { lastReadAt: at(1800).toISOString() }],
       [FRESH, {}],
@@ -523,7 +528,8 @@ describe('catch-up hydration does not fabricate a pointer over un-migrated read 
 
     chatStore.getState().mergeMAMMessages(FRESH, archivePage(FRESH, 'f', [1500, 2500, 3500]), {}, true, 'forward')
 
-    expect(pointerOf(FRESH)).toMatchObject({ messageId: 'f3', timestamp: at(3500) })
+    expect(pointerOf(FRESH)).toBeUndefined()
+    expect(chatStore.getState().conversations.get(FRESH)?.readPointer).toBeUndefined()
     expect(chatStore.getState().conversationMeta.get(FRESH)?.unreadCount).toBe(0)
     // The other conversation in the same blob is untouched, which is what makes
     // this a control rather than two independent runs.

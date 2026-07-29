@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
-import type { Room, RoomMessage } from '../core/types'
+import type { Room, RoomMessage, RoomMetadata } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { createRoom, createMessage } from './roomStore.testHelpers'
+import { makeReadPointer } from './shared/readPointer'
 import {
   flush as flushThrottledStorage,
   _resetForTesting as _resetThrottledStorageForTesting,
@@ -1096,19 +1097,52 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
     })
 
-    it('should clear unread count when sending outgoing message', () => {
+    // PR C, D1: the outgoing early return is gone — an outgoing message only
+    // clears unread state via `userSeesMessage`, same as any visible message.
+    // "Sending a message" only means something as evidence of reading when the
+    // room is genuinely active AND at the live edge, so the fixture must drive
+    // that through the real activation path (raw `setState` never begins a
+    // viewport generation, so a report against it would be rejected as stale).
+    it('should clear unread count when sending outgoing message while active at the live edge', () => {
       // Room starts with unread messages
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 5,
         mentionsCount: 2,
       }))
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      // `setActiveRoom` -> `activateRoom` synchronously runs `onActivate`, which
+      // unconditionally zeroes `mentionsCount` (clearing the mention badge on
+      // open is pre-existing, unrelated behaviour — see notificationState.ts).
+      // Re-seed a nonzero value here, after activation and before the message,
+      // so that zeroing can't masquerade as the effect this test is pinning.
+      // (No public setter touches only `mentionsCount`; mutate both `rooms` and
+      // `roomMeta` directly, mirroring how the store itself keeps them in sync.)
+      {
+        const jid = 'test@conference.example.com'
+        const { rooms, roomMeta } = roomStore.getState()
+        const room = rooms.get(jid)
+        const meta = roomMeta.get(jid)
+        if (!room || !meta) throw new Error('expected room/meta to exist after setActiveRoom')
+        const newRooms = new Map(rooms)
+        newRooms.set(jid, { ...room, mentionsCount: 2 })
+        const newMeta = new Map(roomMeta)
+        newMeta.set(jid, { ...meta, mentionsCount: 2 })
+        roomStore.setState({ rooms: newRooms, roomMeta: newMeta })
+      }
+      reportAtLiveEdge('test@conference.example.com')
 
       // Send an outgoing message
       const message = createMessage('msg1', 'test@conference.example.com', 'me', 'My reply', true)
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      // Sending a message clears unread state - user is engaging with the room
+      // Sending a message clears unread state - user is engaging with the room.
+      // This pins the `userSeesMessage` branch's unconditional mentions-clear
+      // (notificationState.ts `onMessageReceived`, the `userSeesMessage` return).
+      // It does NOT prove the `!msg.isOutgoing` guard on `newMentionsCount` in the
+      // final/unseen branch — that guard is covered separately by
+      // 'never increments mentions for an outgoing message' in
+      // notificationState.test.ts.
       expect(room?.unreadCount).toBe(0)
       expect(room?.mentionsCount).toBe(0)
     })
@@ -1129,6 +1163,11 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 7,
       }))
+      // PR C, D1: only reaches `userSeesMessage` — and so only advances the
+      // pointer/clears the count — once the room is genuinely active at the
+      // live edge (real activation path, not raw `setState`).
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
 
       const message = createMessage('msg-outgoing', 'test@conference.example.com', 'me', 'My reply', true)
       roomStore.getState().addMessage('test@conference.example.com', message)
@@ -1139,6 +1178,48 @@ describe('roomStore', () => {
       expect(room?.readPointer?.messageId).toBe('msg-outgoing')
       expect(meta?.unreadCount).toBe(0)
       expect(meta?.readPointer?.messageId).toBe('msg-outgoing')
+    })
+
+    // PR C, D1 — the NEGATIVE control for the two tests above, and the vector
+    // #1081 exists to close. `isOutgoing` in a MUC is attributed by NICK, so a
+    // reflection of somebody else's message (or of our own message sent from
+    // another device) can arrive flagged outgoing at a room the user is not
+    // even looking at. Before D1, `onMessageReceived`'s outgoing early return
+    // read that as "I sent this, so I have read up to here": it zeroed the
+    // count and dragged the forward-only pointer onto the reflection, past
+    // everything genuinely unread — permanently.
+    //
+    // Store-level on purpose: `isActive` / `windowVisible` / `viewportAtLiveEdge`
+    // are supplied HERE, not by the pure function, so a wiring regression that
+    // handed `onMessageReceived` a "user sees it" context for a backgrounded
+    // room would leave every notificationState test green.
+    it('does NOT move the read pointer or clear unread for a nick-misattributed reflection at a BACKGROUNDED room', () => {
+      const jid = 'test@conference.example.com'
+      const priorSeen = { id: 'prior-seen', timestamp: new Date('2024-01-15T09:00:00Z') }
+      roomStore.getState().addRoom(createRoom(jid, {
+        unreadCount: 4,
+        readPointer: makeReadPointer({ ...priorSeen, from: `${jid}/alice` }, 'room'),
+      }))
+      // Backgrounded: never activated, so `isActive` is false. Deliberately NOT
+      // driven by a raw `setState({ activeRoomJid })` — the real store action is
+      // what begins a viewport generation, and this fixture's whole point is
+      // that no such generation exists for this room.
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+
+      // The reflection is NEWER than the seeded pointer, so nothing but D1
+      // itself stops it: the forward-only guard would happily let it through.
+      roomStore.getState().addMessage(jid, createMessage(
+        'reflected-from-another-device', jid, 'me', 'sent from my phone', true,
+        new Date('2024-01-15T10:00:00Z')
+      ))
+
+      const room = roomStore.getState().rooms.get(jid)
+      const meta = roomStore.getState().roomMeta.get(jid)
+      // Both assertions are reversals: pre-D1 these were 'reflected-from-another-device' and 0.
+      expect(meta?.readPointer?.messageId).toBe('prior-seen')
+      expect(meta?.unreadCount).toBe(4)
+      expect(room?.readPointer?.messageId).toBe('prior-seen')
+      expect(room?.unreadCount).toBe(4)
     })
 
     it('should not increment unread count for delayed (historical) messages', () => {
@@ -1782,6 +1863,12 @@ describe('roomStore', () => {
         ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello'),
         timestamp: msgTimestamp,
       })
+      // Task 11: the pointer advance now also requires viewport evidence that the
+      // reader is genuinely at the live edge. Activate through the REAL store action
+      // (sole caller of beginViewportGeneration) so the report lands on the current
+      // generation — a raw setState would leave it stale and silently ignored.
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
 
       roomStore.getState().markAsRead('test@conference.example.com')
 
@@ -1821,6 +1908,11 @@ describe('roomStore', () => {
         timestamp: msgTimestamp,
       })
 
+      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // precondition of the advance (see the fixture note above).
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
+
       // markAsRead should advance the pointer onto the new message
       roomStore.getState().markAsRead('test@conference.example.com')
 
@@ -1840,6 +1932,11 @@ describe('roomStore', () => {
         ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello'),
         timestamp: msgTimestamp,
       })
+
+      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // precondition of the advance (see the fixture note above).
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      reportAtLiveEdge('test@conference.example.com')
 
       // First call - should update state (unreadCount > 0)
       roomStore.getState().markAsRead('test@conference.example.com')
@@ -2226,6 +2323,75 @@ describe('roomStore', () => {
     })
   })
 
+  // Twin of chatStore's "floor-derived divider plumbing" suite (read-state PR C,
+  // D5). Both controls use a POINTERLESS room, because `computeFloor` is
+  // pointer-wins and a pointer would make the deliberate break inert.
+  describe('floor-derived divider plumbing (PR C, D5)', () => {
+    const RJID = 'floor@conference.example.com'
+    const rmsg = (id: string, ts: number): RoomMessage =>
+      createMessage(id, RJID, 'alice', 'hi', false, new Date(ts))
+
+    /** Pointerless meta whose ONLY boundary is the join watermark. */
+    function seedPointerlessFloor(jid: string, messages: RoomMessage[]): void {
+      roomStore.setState((s) => {
+        const roomMeta = new Map(s.roomMeta)
+        const existing = roomMeta.get(jid)
+        const meta: RoomMetadata = {
+          ...(existing ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
+          unreadCount: 2,
+          readPointer: undefined,
+          historyFloor: new Date(2000),
+        }
+        roomMeta.set(jid, meta)
+
+        const roomRuntime = new Map(s.roomRuntime)
+        const runtime = roomRuntime.get(jid)
+        if (runtime) roomRuntime.set(jid, { ...runtime, messages })
+
+        const rooms = new Map(s.rooms)
+        const room = rooms.get(jid)
+        if (room) rooms.set(jid, { ...room, messages, readPointer: undefined, historyFloor: new Date(2000) })
+
+        return { roomMeta, roomRuntime, rooms }
+      })
+    }
+
+    // `unreadCount` is deliberately 2 while THREE messages sit after the floor:
+    // the divider is no longer positioned by counting back N from the end (the
+    // deleted ladder would answer 'm3' here), so a stale count must not move it.
+    it('activation positions a pointerless room divider from historyFloor', () => {
+      roomStore.getState().addRoom(createRoom(RJID))
+      seedPointerlessFloor(RJID, [rmsg('m1', 1000), rmsg('m2', 2000), rmsg('m3', 3000), rmsg('m4', 4000)])
+
+      // The REAL activation path — a raw setState never begins a viewport
+      // generation and never runs the notification transition.
+      roomStore.getState().setActiveRoom(RJID)
+
+      // m2 shares the floor's exact millisecond and still counts as after it
+      // (a keyless floor sorts first) — the same rule the count uses.
+      expect(roomStore.getState().roomMeta.get(RJID)?.readPointer).toBeUndefined()
+      expect(roomStore.getState().firstNewMessageMarkers.get(RJID)).toBe('m2')
+    })
+
+    it('resync repositions a pointerless room divider using historyFloor', () => {
+      const JID = 'floor-resync@conference.example.com'
+      roomStore.getState().addRoom(createRoom(JID))
+      seedPointerlessFloor(JID, [
+        createMessage('m1', JID, 'alice', 'hi', false, new Date(1000)),
+        createMessage('m2', JID, 'alice', 'hi', false, new Date(2000)),
+        createMessage('m3', JID, 'alice', 'hi', false, new Date(3000)),
+      ])
+      // Parked on the WRONG message, so the assertion is a reversal, not a no-op.
+      roomStore.setState((s) => ({
+        firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(JID, 'm3'),
+      }))
+
+      roomStore.getState().resyncDividerToReadPointer(JID)
+
+      expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m2')
+    })
+  })
+
   describe('activateRoom', () => {
     afterEach(() => {
       // Restore the factory default so later tests get a clean resolved-[] mock
@@ -2339,13 +2505,23 @@ describe('roomStore', () => {
       // ('msg-150') — the reader left off deep in history. Seeding
       // roomMeta.readPointer directly mimics a persisted read pointer
       // from a prior session (no live activation has run yet in this test).
+      // KEYED, as every persisted pointer is: `makeReadPointer` always writes
+      // the archive order key and `deserializeReadPointer` reads it back.
+      // Without it the pointer cannot certify its own position, and the message
+      // it NAMES sorts after the boundary (a missing key sorts first — see
+      // `compareOrder`), so the divider would correctly-but-conservatively land
+      // on msg-150 itself.
       const roomJid = 'test@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
       roomStore.setState((state) => {
         const meta = new Map(state.roomMeta)
         meta.set(roomJid, {
           ...meta.get(roomJid)!,
-          readPointer: { messageId: 'msg-150', timestamp: new Date(150 * 60_000) },
+          readPointer: {
+            messageId: 'msg-150',
+            timestamp: new Date(150 * 60_000),
+            archiveOrderKey: { kind: 'room', from: `${roomJid}/alice`, id: 'msg-150' },
+          },
         })
         return { roomMeta: meta }
       })
@@ -4496,7 +4672,13 @@ describe('roomStore', () => {
       expect(room?.mentionsCount).toBe(2)
     })
 
-    it('forward merge into a room with NO read state snaps the pointer (fresh-join guard)', () => {
+    // Was 'snaps the pointer (fresh-join guard)'. PR C, D6 deleted that snap:
+    // a merge inferring "you have read everything I just downloaded" writes the
+    // forward-only pointer past history the user never saw, and there is no way
+    // back. A pointerless room now counts from its `historyFloor` creation
+    // watermark instead, so backfilled history older than the join still
+    // contributes nothing — without touching the read position.
+    it('forward merge into a room with NO read state leaves it pointerless (no fresh-join snap)', () => {
       // No readPointer seeded — fresh room, never read.
       const mamMessages: RoomMessage[] = [
         {
@@ -4539,7 +4721,8 @@ describe('roomStore', () => {
       const meta = roomStore.getState().roomMeta.get(roomJid)
       expect(meta?.unreadCount).toBe(0)
       expect(meta?.mentionsCount).toBe(0)
-      expect(meta?.readPointer?.messageId).toBe('f3')
+      expect(meta?.readPointer).toBeUndefined()
+      expect(roomStore.getState().rooms.get(roomJid)?.readPointer).toBeUndefined()
     })
 
     it('backward merge does not touch counts', () => {
@@ -6120,6 +6303,11 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
 
   beforeEach(() => {
     _resetStorageScopeForTesting()
+    // Room read state is durable (#1081): wiping roomMeta below is not enough,
+    // or the next addRoom restores the PREVIOUS test's pointer from storage —
+    // every test in this suite reuses the same ROOM jid, so the fresh-join case
+    // would silently run with the read position the case above it left behind.
+    _resetRoomReadStateForTesting()
     roomStore.setState({
       rooms: new Map(),
       roomEntities: new Map(),
@@ -6130,6 +6318,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       mamQueryStates: new Map(),
       roomGaps: new Map(),
       roomCoverage: new Map(),
+      firstNewMessageMarkers: new Map(),
     })
     vi.clearAllMocks()
     // clearAllMocks does NOT reset implementations: a test that mocks a
@@ -6163,13 +6352,16 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
 
   function activateWith(messages: RoomMessage[], seenMessageId: string, unreadCount: number) {
     roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages, unreadCount }))
-    const seenMsg = messages.find((m) => m.id === seenMessageId)
+    const seenMsg = messages.find((m) => m.id === seenMessageId)!
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(ROOM)!
       meta.set(ROOM, {
         ...existing,
-        readPointer: { messageId: seenMessageId, timestamp: seenMsg?.timestamp ?? new Date(0) },
+        // KEYED, as every pointer `makeReadPointer` writes is — the divider is
+        // derived by archive POSITION now, and a keyless pointer cannot certify
+        // its own (it would land the divider on the seen message itself).
+        readPointer: makeReadPointer(seenMsg, 'room'),
       })
       return { roomMeta: meta }
     })
@@ -6177,12 +6369,23 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     return roomStore.getState().firstNewMessageMarkers.get(ROOM)
   }
 
+  /**
+   * The read message, timestamped EXPLICITLY and before the history below.
+   * `createMessage`'s default `new Date()` would make the "already read" message
+   * the NEWEST in the fixture while sitting first in the array — an ordering the
+   * resident array never has in production (PR B gave `messageArrayUtils` the
+   * same `compareOrder` tie-break, so index order and archive order agree).
+   */
+  const seenMsg = (): RoomMessage =>
+    createMessage('seen', ROOM, 'alice', 'seen message', false, new Date('2025-01-15T09:00:00Z'))
+
   it('places the divider on delayed history after lastSeen (unified with chats)', () => {
-    // Reuse the existing test's setup verbatim, but expect a marker: rooms now
-    // treat delayed (MAM/history-replay) messages as new, same as chats.
+    // Rooms treat delayed (MAM/history-replay) messages exactly as chats do:
+    // `isDelayed` plays no part at all, only the position relative to the
+    // read boundary (PR C, D8).
     const marker = activateWith(
       [
-        createMessage('seen', ROOM, 'alice', 'seen message'),
+        seenMsg(),
         delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
         delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
       ],
@@ -6193,8 +6396,10 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
   })
 
   it('fresh join (no read state) derives no marker from delayed history', () => {
-    // Same setup WITHOUT seeding a readPointer or unreadCount — the
-    // fresh-entity path has nothing to resume from, so no marker is derived.
+    // Same setup WITHOUT seeding a readPointer or unreadCount. `addRoom` stamps
+    // the join watermark at "now", and the replayed history predates it, so
+    // nothing sits after the boundary — that watermark, not `isDelayed`, is
+    // what keeps a fresh join marker-free (PR C, D5/D8).
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
       messages: [
@@ -6210,8 +6415,10 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
   it('still sets the marker on a genuinely new live (non-delayed) message', () => {
     const marker = activateWith(
       [
-        createMessage('seen', ROOM, 'alice', 'seen message'),
-        createMessage('live', ROOM, 'bob', 'live message'), // isDelayed defaults to false
+        seenMsg(),
+        // isDelayed defaults to false; timestamped explicitly so the array is
+        // in archive order (see seenMsg above).
+        createMessage('live', ROOM, 'bob', 'live message', false, new Date('2025-01-15T10:00:00Z')),
       ],
       'seen',
       1

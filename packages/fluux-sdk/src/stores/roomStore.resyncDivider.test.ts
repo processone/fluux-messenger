@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
+import { makeReadPointer } from './shared/readPointer'
 
 const JID = 'room@conference.example.com'
 
@@ -20,9 +21,11 @@ function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): 
 
 function seed(opts: { lastSeen: string | undefined; marker: string | undefined; messages: RoomMessage[] }) {
   const seenMsg = opts.messages.find((m) => m.id === opts.lastSeen)
-  const readPointer = opts.lastSeen
-    ? { messageId: opts.lastSeen, timestamp: seenMsg?.timestamp ?? new Date(2024, 0, 1, 12, 0) }
-    : undefined
+  // KEYED, exactly as `makeReadPointer` writes every pointer: the divider is
+  // derived by archive POSITION, and a keyless pointer cannot certify its own
+  // (a missing key sorts first, so the message it NAMES would sort after the
+  // boundary and take the divider itself).
+  const readPointer = seenMsg ? makeReadPointer(seenMsg, 'room') : undefined
   const rooms = new Map()
   rooms.set(JID, {
     jid: JID,

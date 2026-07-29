@@ -9,7 +9,8 @@
 
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
-import type { ReadPointer } from './readPointer'
+import { compareOrder, makeArchiveOrderKey } from './readState'
+import { makeReadPointer, type ReadPointer } from './readPointer'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
 export interface ReadMarkerMeta {
@@ -52,87 +53,94 @@ export type RemoteDisplayedResolution =
       firstNewMessageId: string | undefined
     }
 
-export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaId?: string }>(
-  meta: ReadMarkerMeta,
+/**
+ * Decide whether the remote marker `match` is a forward advance over `current`.
+ *
+ * Three branches (read-state PR C, D3), because the no-pointer case is NOT the
+ * same as the keyless one:
+ *
+ * - **No pointer** — any resolvable marker is an advance. This is what the code
+ *   did before PR C (an undefined pointer made the residency check vacuously
+ *   true, so `onMessageSeen` took its own no-pointer path); it is preserved
+ *   explicitly so it cannot be lost by refactoring.
+ * - **Keyed pointer** — decide by archive position, with no residency
+ *   requirement. The key certifies that the pointer's timestamp is its named
+ *   message's own, which is exactly the guarantee the old comment here said we
+ *   lacked.
+ * - **Keyless (migrated) pointer** — its timestamp is `lastReadAt`, which can
+ *   sit on EITHER side of the message it names, so nothing is provable from it.
+ *   Keep the resident-index path, and stash when the pointer is off-slice.
+ */
+function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
+  current: ReadPointer | undefined,
+  match: T,
   messages: T[],
+  meta: ReadMarkerMeta,
   currentFirstNewMessageId: string | undefined,
-  stanzaId: string,
-  kind: 'chat' | 'room',
-  options: { isActive: boolean; treatDelayedAsNew?: boolean }
-): RemoteDisplayedResolution {
-  const match = messages.find((m) => m.stanzaId === stanzaId)
-  if (!match) return { kind: 'stash-pending' }
+  kind: 'chat' | 'room'
+): ReadPointer | 'no-advance' | 'undecidable' {
+  if (!current) return makeReadPointer(match, kind)
 
-  // `onMessageSeen` orders positions BY INDEX, so it needs BOTH ends in this
-  // slice. When the message the local pointer names is absent it refuses to
-  // advance — it cannot prove the marker is ahead rather than behind. That is an
-  // undecided comparison, not an "already read" verdict, and it is reachable on
-  // every fresh session: the forward catch-up merges only the newest MAM page,
-  // so the marker's message is in it while the pointer's is still on disk.
-  // Letting it fall through to the index comparator would report
-  // `unchanged`/`clear-pending` and drop the remote position for good.
-  //
-  const localPointerId = meta.readPointer?.messageId
-  const pointerInSlice =
-    localPointerId === undefined || messages.some((m) => m.id === localPointerId)
-
-  if (!pointerInSlice) {
-    // Timestamps settle NEITHER direction, so nothing is decided here.
-    //
-    // `migrateReadPointer` copies the pre-#1081 `lastSeenMessageId` +
-    // `lastReadAt` pair through unchanged, and that `lastReadAt` meant
-    // "timestamp of the newest LOADED message when I last activated" — not the
-    // timestamp of the message actually read up to. A migrated pointer's
-    // timestamp can therefore sit on EITHER side of the message it names, which
-    // breaks both comparisons: a strictly-older marker may still be a valid
-    // forward advance (discarding it loses a real cross-device read), and a
-    // strictly-newer one may sit behind the true position (advancing to it
-    // regresses a forward-only pointer, unrecoverably).
-    //
-    // Note that the `ReadPointer` doc comment claiming `lastReadAt` "is at or
-    // behind the named message" contradicts `migrateReadPointer`'s own comment.
-    // Do not build ordering on either statement until one is proven.
-    //
-    // Accepted cost: a marker the pointer is already past stays pending and
-    // re-folds on each activation. That is churn, not data loss — the safe
-    // direction to err in, given the alternative is dropping a read position.
-    return { kind: 'stash-pending' }
+  if (current.archiveOrderKey) {
+    const ahead =
+      compareOrder(
+        { timestamp: match.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(match, kind) },
+        { timestamp: current.timestamp.getTime(), archiveOrderKey: current.archiveOrderKey }
+      ) > 0
+    return ahead ? makeReadPointer(match, kind) : 'no-advance'
   }
 
-  // Forward-only advance using the shared comparator (compares by index).
+  if (!messages.some((m) => m.id === current.messageId)) return 'undecidable'
+
   const updated = notifState.onMessageSeen(
     {
       unreadCount: meta.unreadCount,
       mentionsCount: meta.mentionsCount,
-      readPointer: meta.readPointer,
+      readPointer: current,
       firstNewMessageId: currentFirstNewMessageId,
     },
     match.id,
     messages,
     kind
   )
+  const next = updated.readPointer
+  return next && next.messageId !== current.messageId ? next : 'no-advance'
+}
 
-  // An advance always lands on `match` — `onMessageSeen` only ever moves to the
-  // id it was given, and only when that id is present in `messages`, which
-  // `match` is by construction (it came from `messages.find(...)` above).
-  const readPointer = updated.readPointer
-  if (!readPointer || readPointer.messageId === meta.readPointer?.messageId) {
+export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaId?: string }>(
+  meta: ReadMarkerMeta,
+  messages: T[],
+  currentFirstNewMessageId: string | undefined,
+  stanzaId: string,
+  kind: 'chat' | 'room',
+  options: { isActive: boolean }
+): RemoteDisplayedResolution {
+  const match = messages.find((m) => m.stanzaId === stanzaId)
+  if (!match) return { kind: 'stash-pending' }
+
+  const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageId, kind)
+  if (outcome === 'undecidable') return { kind: 'stash-pending' }
+  if (outcome === 'no-advance') {
     return meta.pendingRemoteDisplayedStanzaId === undefined
       ? { kind: 'unchanged' }
       : { kind: 'clear-pending' }
   }
+  const readPointer = outcome
 
   if (!options.isActive) {
     return { kind: 'advanced', readPointer }
   }
 
   // Recompute the divider from the advanced position (reuses onActivate's
-  // forward scan). Both callers pass treatDelayedAsNew: chats because delayed
-  // means offline delivery, rooms because delayed history after the pointer
-  // is unread (unified divider semantics). If the pointer caught up, keep the
-  // active visit's parked divider: pointer reconciliation must not retire the
-  // anchor before the reader can inspect it. Explicit read-through, mark-read,
-  // and deactivation paths own clearing it.
+  // forward scan). No `historyFloor` is threaded here, deliberately: this branch
+  // is reached only after an advance, so `readPointer` is always defined and
+  // `computeFloor` is pointer-wins — a floor would be a field no code path could
+  // read (read-state PR C, D5).
+  //
+  // If the pointer caught up and the scan finds no new boundary, keep the active
+  // visit's parked divider (`divider ?? currentFirstNewMessageId` below): pointer
+  // reconciliation must not retire the anchor before the reader can inspect it.
+  // Explicit read-through, mark-read, and deactivation paths own clearing it.
   const divider = notifState.onActivate(
     {
       unreadCount: 0,
@@ -141,8 +149,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
       firstNewMessageId: undefined,
     },
     messages,
-    kind,
-    options.treatDelayedAsNew ? { treatDelayedAsNew: true } : undefined
+    kind
   ).firstNewMessageId
 
   return {

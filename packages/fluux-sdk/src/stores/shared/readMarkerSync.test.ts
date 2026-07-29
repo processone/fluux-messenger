@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
 import type { NotificationMessage } from './notificationState'
+import { makeReadPointer } from './readPointer'
 
 /**
  * XEP-0490 remote-read-position resolution — the state machine that both
@@ -9,8 +10,13 @@ import type { NotificationMessage } from './notificationState'
 
 type TestMsg = NotificationMessage & { stanzaId?: string }
 
+/**
+ * `body` is non-empty so each fixture is an ordinary RENDERABLE message: the
+ * divider now shares `countUnreadInArchive`'s eligibility predicate, which skips
+ * rows with nothing to display (see `isRenderableStoredMessage`).
+ */
 function msg(id: string, iso: string, extra: Partial<TestMsg> = {}): TestMsg {
-  return { id, timestamp: new Date(iso), isOutgoing: false, stanzaId: `arch-${id}`, ...extra }
+  return { id, timestamp: new Date(iso), isOutgoing: false, body: 'hi', stanzaId: `arch-${id}`, ...extra }
 }
 
 const messages: TestMsg[] = [
@@ -314,6 +320,93 @@ describe('resolveRemoteDisplayed', () => {
     expect(readPointer.messageId).toBe('m3')
     expect(firstNewMessageId).toBe('m4')
     expect(pending).toBeUndefined()
+  })
+})
+
+describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
+  const msg = (id: string, ms: number, stanzaId?: string) => ({
+    id, timestamp: new Date(ms), isOutgoing: false, body: 'x', ...(stanzaId ? { stanzaId } : {}),
+  })
+
+  // Branch 1 — REGRESSION GUARD. This works today and must keep working.
+  it('advances to the marker when there is no local pointer at all', () => {
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 3, mentionsCount: 0, readPointer: undefined },
+      [msg('m1', 1000), msg('m2', 2000, 's2')],
+      undefined, 's2', 'chat', { isActive: false }
+    )
+    expect(r.kind).toBe('advanced')
+    expect(r.kind === 'advanced' && r.readPointer.messageId).toBe('m2')
+  })
+
+  // Branch 2 — the widening. The local pointer's message is NOT in the slice.
+  it('advances a KEYED pointer by position even when the pointer is absent from the slice', () => {
+    const pointer = makeReadPointer({ id: 'old', timestamp: new Date(500) }, 'chat')
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 3, mentionsCount: 0, readPointer: pointer },
+      [msg('m2', 2000, 's2')],
+      undefined, 's2', 'chat', { isActive: false }
+    )
+    expect(r.kind).toBe('advanced')
+    expect(r.kind === 'advanced' && r.readPointer.messageId).toBe('m2')
+  })
+
+  it('does NOT advance a KEYED pointer when the marker is behind it', () => {
+    const pointer = makeReadPointer({ id: 'new', timestamp: new Date(9000) }, 'chat')
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 0, mentionsCount: 0, readPointer: pointer },
+      [msg('m2', 2000, 's2')],
+      undefined, 's2', 'chat', { isActive: false }
+    )
+    expect(r.kind).toBe('unchanged')
+  })
+
+  it('clears a stale pending mark when a KEYED pointer is already past the marker', () => {
+    const pointer = makeReadPointer({ id: 'new', timestamp: new Date(9000) }, 'chat')
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 0, mentionsCount: 0, readPointer: pointer, pendingRemoteDisplayedStanzaId: 's2' },
+      [msg('m2', 2000, 's2')],
+      undefined, 's2', 'chat', { isActive: false }
+    )
+    expect(r.kind).toBe('clear-pending')
+  })
+
+  // Branch 3 — CONTROL. A migrated keyless pointer's timestamp is `lastReadAt`,
+  // which can sit on either side of the message it names, so its position is
+  // NOT provable and must keep stashing.
+  it('stashes a KEYLESS pointer that is absent from the slice', () => {
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 3, mentionsCount: 0, readPointer: { messageId: 'old', timestamp: new Date(500) } },
+      [msg('m2', 2000, 's2')],
+      undefined, 's2', 'chat', { isActive: false }
+    )
+    expect(r.kind).toBe('stash-pending')
+  })
+
+  it('room: breaks a same-millisecond marker tie on (from, id)', () => {
+    const pointer = makeReadPointer({ id: 'm9', from: 'r@c/alice', timestamp: new Date(1000) }, 'room')
+    const match = { id: 'm1', from: 'r@c/bob', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
+      [match], undefined, 's1', 'room', { isActive: false }
+    )
+    expect(r.kind).toBe('advanced')
+  })
+
+  // NEGATIVE POLARITY for the tie-break above, which on its own proves nothing:
+  // a key-blind `>=` on timestamps alone also reports 'advanced' there. Here the
+  // marker sorts BEFORE the pointer at the same millisecond ('alice' < 'bob'),
+  // so only the (from, id) tie-break can refuse it — and refusing is what keeps
+  // the position forward-only: `resolveAdvance` builds the advanced pointer
+  // directly, never through `advance()`, and the stores commit it as-is.
+  it('room: refuses a same-millisecond marker that sorts BEFORE the pointer', () => {
+    const pointer = makeReadPointer({ id: 'm9', from: 'r@c/bob', timestamp: new Date(1000) }, 'room')
+    const match = { id: 'm1', from: 'r@c/alice', timestamp: new Date(1000), isOutgoing: false, body: 'x', stanzaId: 's1' }
+    const r = resolveRemoteDisplayed(
+      { unreadCount: 1, mentionsCount: 0, readPointer: pointer },
+      [match], undefined, 's1', 'room', { isActive: false }
+    )
+    expect(r.kind).toBe('unchanged')
   })
 })
 

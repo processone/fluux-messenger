@@ -69,15 +69,6 @@ export const MAM_POINTER_STITCH_MAX_PAGES = 10
  *  margin absorbs leading id-less rows (own-sent never archived). */
 export const MAM_POINTER_SEED_PROBE_LIMIT = 25
 
-/** Newest-N cache window for the EXACT badge recount after a XEP-0490 pointer
- *  resolves on a non-resident entity. The per-page recount inside the merge
- *  only sees the final page; the exact recount re-reads from IndexedDB a slice
- *  sized to everything one catch-up pass can have downloaded above the pointer:
- *  a fetch-latest page + a full pointer-stitch walk, plus one fetch-latest page
- *  of slack for live messages that landed during the walk. */
-export const MAM_POINTER_RECOUNT_CACHE_LIMIT =
-  MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
-
 // ============================================================================
 // Functions
 // ============================================================================

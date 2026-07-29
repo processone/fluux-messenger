@@ -6,6 +6,7 @@ import {
   serializeReadPointer,
   deserializeReadPointer,
 } from './readPointer'
+import type { ReadPointer } from './readPointer'
 
 const at = (ms: number) => new Date(ms)
 
@@ -41,12 +42,46 @@ describe('isAhead', () => {
     expect(isAhead(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'), current)).toBe(false)
   })
 
-  // Control: a `>=` implementation passes every test above and fails this one.
-  // Equal timestamps must NOT advance — a same-instant sibling is not progress,
-  // and treating it as one makes the MDS publisher re-assert forever.
-  it('is NOT ahead when the timestamp is equal but the id differs', () => {
+  it('breaks a same-millisecond tie when BOTH pointers are keyed (chat: id order)', () => {
     const current = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
-    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat'), current)).toBe(false)
+    const candidate = makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat')
+    expect(isAhead(candidate, current)).toBe(true)
+  })
+
+  it('is NOT ahead when both are keyed and the candidate sorts LOWER at the same ms', () => {
+    const current = makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat')
+    const candidate = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    expect(isAhead(candidate, current)).toBe(false)
+  })
+
+  it('breaks a room tie on (from, id), not id alone', () => {
+    const current = makeReadPointer({ id: 'm9', from: 'r@c/alice', timestamp: at(1000) }, 'room')
+    const candidate = makeReadPointer({ id: 'm1', from: 'r@c/bob', timestamp: at(1000) }, 'room')
+    // 'bob' > 'alice' wins even though 'm1' < 'm9'.
+    expect(isAhead(candidate, current)).toBe(true)
+  })
+
+  // CONTROL for the polarity inversion. compareOrder sorts a MISSING key FIRST,
+  // which is safe for a floor (under-advance -> over-count) and UNSAFE for a
+  // pointer: it would let any keyed candidate overtake a migrated keyless
+  // pointer at the same millisecond. A naive `compareOrder(candidate, current) > 0`
+  // implementation passes every test above and fails these two.
+  it('is NOT ahead at an equal ms when the CURRENT pointer is keyless (migrated)', () => {
+    const current: ReadPointer = { messageId: 'legacy', timestamp: at(1000) }
+    const candidate = makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat')
+    expect(isAhead(candidate, current)).toBe(false)
+  })
+
+  it('is NOT ahead at an equal ms when the CANDIDATE is keyless', () => {
+    const current = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    const candidate: ReadPointer = { messageId: 'legacy', timestamp: at(1000) }
+    expect(isAhead(candidate, current)).toBe(false)
+  })
+
+  it('still compares by millisecond when a keyless pointer is genuinely older/newer', () => {
+    const current: ReadPointer = { messageId: 'legacy', timestamp: at(1000) }
+    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(2000) }, 'chat'), current)).toBe(true)
+    expect(isAhead(makeReadPointer({ id: 'm2', timestamp: at(500) }, 'chat'), current)).toBe(false)
   })
 })
 

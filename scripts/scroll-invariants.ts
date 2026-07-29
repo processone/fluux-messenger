@@ -2596,7 +2596,7 @@ test.describe('Jump-to-last-read pill', () => {
       const store = (window as any).__roomStore
       const s = store.getState()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; timestamp: Date; isOutgoing?: boolean }[]
+      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; from?: string; timestamp: Date; isOutgoing?: boolean }[]
       // First unread after the pointer must exist and be incoming — find the last incoming message
       // and put the pointer immediately before it, so resyncDividerToReadPointer lands on it.
       let targetIdx = -1
@@ -2607,8 +2607,16 @@ test.describe('Jump-to-last-read pill', () => {
       const dividerId = msgs[dIdx].id
       const pointerId = msgs[pIdx].id
       const expectedTargetId = msgs[targetIdx].id
-      // One read position, written whole: id plus the named message's own timestamp (#1081).
-      const readPointer = { messageId: pointerId, timestamp: msgs[pIdx].timestamp }
+      // One read position, written whole: id, the named message's own timestamp, and the archive
+      // order key (#1081) — the literal shape `makeReadPointer` writes. The key is not optional
+      // decoration here: every stress-room message shares one millisecond, so a KEYLESS pointer
+      // cannot certify its position at all and the divider correctly falls back to "the whole
+      // slice is after the boundary". Only a migrated pre-#1081 pointer is ever keyless.
+      const readPointer = {
+        messageId: pointerId,
+        timestamp: msgs[pIdx].timestamp,
+        archiveOrderKey: { kind: 'room', from: msgs[pIdx].from ?? '', id: pointerId },
+      }
       const roomMeta = new Map(s.roomMeta)
       const meta = roomMeta.get(jid)
       if (meta) roomMeta.set(jid, { ...meta, readPointer })
@@ -2625,13 +2633,17 @@ test.describe('Jump-to-last-read pill', () => {
 
     // Genuine (non-programmatic) user scroll-up to near the top: the viewport bottom is now well
     // above the advanced pointer, so the snap fires and repositions the divider to the read spot.
-    // (The reactive plant above may already snap it in the demo; this scroll guarantees the trigger
-    // path runs. Either way we assert the observable END state: the divider tracks the pointer.)
-    await page.evaluate(() => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      if (s) s.scrollTop = 400
-    })
-    await page.waitForTimeout(800)
+    // A REAL wheel gesture, not `scrollTop = n`: this room opens parked at the live edge (nothing
+    // after its join watermark is unread), and the bottom-stick re-assert simply undoes a
+    // programmatic scroll there — the viewport observer then never reports a row above the
+    // pointer and the snap has no reason to fire. Mirrors invariant-9's reliable scroll-up.
+    const listBox = await page.locator('[data-message-list]').first().boundingBox()
+    if (listBox) await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2)
+    for (let i = 0; i < 4; i++) {
+      await page.mouse.wheel(0, -1200)
+      await page.waitForTimeout(350)
+    }
+    await page.waitForTimeout(1000)
 
     const after = await page.evaluate(([jid, dividerId]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

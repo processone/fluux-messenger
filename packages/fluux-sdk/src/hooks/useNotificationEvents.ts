@@ -29,10 +29,11 @@ export interface NotificationEventHandlers {
 
   /**
    * Called when a conversation's unreadCount drops from >0 to 0 — i.e. it was
-   * read. This fires regardless of cause: a local read, a message sent from
-   * another device (sent carbon), or a synced cross-device read marker (MDS).
+   * read. This fires regardless of how the store established the transition,
+   * including a local read or a synced cross-device read marker (MDS).
    * Consumers use it to dismiss a delivered native notification that the
-   * navigation/focus paths would otherwise leave behind.
+   * navigation/focus paths would otherwise leave behind. A sent carbon alone
+   * is not read evidence and does not advance the read pointer.
    * @param conversationId - The conversation that became read
    */
   onConversationRead?: (conversationId: string) => void
@@ -163,9 +164,9 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       for (const conv of conversations) {
         const prevConv = prevConversations.find(c => c.id === conv.id)
 
-        // Read transition: unreadCount dropped from >0 to 0 (local read, sent
-        // carbon from another device, or a synced MDS marker). Fire so the
-        // consumer can dismiss a lingering native notification.
+        // Read transition: unreadCount dropped from >0 to 0 (for example, a
+        // local read or a synced MDS marker). Fire so the consumer can dismiss
+        // a lingering native notification.
         if (
           onConversationRead &&
           prevConv &&

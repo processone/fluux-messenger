@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { chatStore, _resetChatArchiveSavesForTesting } from './chatStore'
-import type { Message, Conversation } from '../core/types'
+import type { Message, Conversation, ConversationMetadata } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid, getStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
@@ -253,8 +253,10 @@ describe('chatStore', () => {
 
     it('defers (leaves the stale count untouched) when the conversation is not resident and coverage is not proven', async () => {
       const read = withId(createMessage(cid, 'read'), 'm-read', '2026-06-10T00:00:00Z')
-      const realUnread = withId(createMessage(cid, 'still unread'), 'm-real', '2026-06-10T00:02:00Z')
-      vi.mocked(messageCache.getMessages).mockResolvedValueOnce([read, realUnread])
+      // No `getMessages` seed: since PR C, D6 deleted the pointer-writing guard
+      // pass, this derivation never reads the cache window at all — it goes
+      // straight to the coverage gate. A `mockResolvedValueOnce` here would now
+      // survive unconsumed and leak into the next test that calls getMessages.
       chatStore.getState().addConversation(createConversation(cid))
       chatStore.setState((s) => {
         const conversationMeta = new Map(s.conversationMeta)
@@ -981,6 +983,86 @@ describe('chatStore', () => {
     })
   })
 
+  // The divider is the first message the canonical count would count, derived
+  // from the read BOUNDARY (`computeFloor`) rather than from a resident-slice
+  // ladder (read-state PR C, D5). These two controls cover the chat store's two
+  // plumbed `historyFloor` sites; both use a POINTERLESS conversation, because
+  // `computeFloor` is pointer-wins and a pointer would make the break inert.
+  describe('floor-derived divider plumbing (PR C, D5)', () => {
+    const floorMsg = (cid: string, id: string, ts: number): Message => ({
+      type: 'chat',
+      id,
+      conversationId: cid,
+      from: cid,
+      body: 'hi',
+      timestamp: new Date(ts),
+      isOutgoing: false,
+    })
+
+    // `unreadCount` is deliberately 2 while THREE messages sit after the floor:
+    // the divider is no longer positioned by counting back N from the end (the
+    // deleted ladder would answer 'm3' here), so a stale count must not move it.
+    it('activation positions a pointerless conversation divider from historyFloor', () => {
+      const CID = 'floor-activate@example.com'
+      chatStore.getState().addConversation({
+        id: CID,
+        name: CID,
+        type: 'chat',
+        unreadCount: 2,
+        historyFloor: new Date(2000),
+      })
+      chatStore.setState((s) => ({
+        messages: new Map(s.messages).set(CID, [
+          floorMsg(CID, 'm1', 1000),
+          floorMsg(CID, 'm2', 2000),
+          floorMsg(CID, 'm3', 3000),
+          floorMsg(CID, 'm4', 4000),
+        ]),
+      }))
+      // The REAL activation path — a raw setState never begins a viewport
+      // generation and never runs the notification transition.
+      chatStore.getState().setActiveConversation(CID)
+
+      // m2 shares the floor's exact millisecond and still counts as after it
+      // (a keyless floor sorts first) — the same rule the count uses.
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
+    })
+
+    it('resync repositions a pointerless conversation divider using historyFloor', () => {
+      const CID = 'carol@example.com'
+      const msg = (id: string, ts: number): Message => floorMsg(CID, id, ts)
+
+      chatStore.getState().addConversation({ id: CID, name: CID, type: 'chat', unreadCount: 0 })
+      chatStore.setState((s) => {
+        // Pointerless meta whose ONLY boundary is the creation watermark.
+        // Typed explicitly rather than cast: `as never` would hide exactly the
+        // field-shape mistakes this fixture depends on being right.
+        const conversationMeta = new Map(s.conversationMeta)
+        const meta: ConversationMetadata = {
+          ...(conversationMeta.get(CID) ?? { unreadCount: 0 }),
+          unreadCount: 2,
+          readPointer: undefined,
+          historyFloor: new Date(2000),
+        }
+        conversationMeta.set(CID, meta)
+        return {
+          conversationMeta,
+          // resyncDividerToReadPointer scans the RESIDENT array.
+          messages: new Map(s.messages).set(CID, [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]),
+          // Parked on the WRONG message, so the assertion is a reversal, not a no-op.
+          firstNewMessageMarkers: new Map(s.firstNewMessageMarkers).set(CID, 'm3'),
+        }
+      })
+
+      chatStore.getState().resyncDividerToReadPointer(CID)
+
+      // m2 shares the floor's exact millisecond and must still count as after it
+      // (a keyless floor sorts first) — the same rule the count uses.
+      expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
+    })
+  })
+
   describe('activateConversation', () => {
     afterEach(() => {
       // Restore the factory default so later tests get a clean resolved-[] mock
@@ -1086,14 +1168,23 @@ describe('chatStore', () => {
       // loadMessagesFromCache) does NOT contain the message the read pointer
       // names ('msg-150') — the reader left off deep in history. Seeding
       // conversationMeta.readPointer directly mimics a persisted read pointer
-      // from a prior session (no live activation has run yet here).
+      // from a prior session (no live activation has run yet here). KEYED, as
+      // every persisted pointer is: `makeReadPointer` always writes the archive
+      // order key and `deserializeReadPointer` reads it back. Without it the
+      // pointer cannot certify its own position, and the message it NAMES sorts
+      // after the boundary (a missing key sorts first — see `compareOrder`), so
+      // the divider would correctly-but-conservatively land on msg-150 itself.
       const A = 'alice@example.com'
       chatStore.getState().addConversation(createConversation(A))
       chatStore.setState((state) => {
         const meta = new Map(state.conversationMeta)
         meta.set(A, {
           ...meta.get(A)!,
-          readPointer: { messageId: 'msg-150', timestamp: new Date(150 * 60_000) },
+          readPointer: {
+            messageId: 'msg-150',
+            timestamp: new Date(150 * 60_000),
+            archiveOrderKey: { kind: 'chat', id: 'msg-150' },
+          },
         })
         return { conversationMeta: meta }
       })
@@ -1226,6 +1317,53 @@ describe('chatStore', () => {
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(0)
+    })
+
+    // PR C, D1 — the negative control the store layer was missing entirely.
+    // `isOutgoing` is true for a CARBON of a message we sent from another
+    // device, and before D1 `onMessageReceived` returned early for any outgoing
+    // message: it zeroed the count and dragged the forward-only read pointer
+    // onto the carbon, past everything genuinely unread. "I sent this, so I
+    // must have read up to here" is an inference, and an inference is not
+    // something a forward-only, unrecoverable position may be moved on.
+    //
+    // Store-level on purpose: `isActive` / `windowVisible` / `viewportAtLiveEdge`
+    // and the `incrementUnread` decision all come from HERE, not from the pure
+    // function, so a wiring regression handing `onMessageReceived` a "user sees
+    // it" context for a backgrounded conversation would leave every
+    // notificationState test green.
+    it('does NOT move the read pointer or clear unread for a carbon of our own message at a BACKGROUNDED conversation', () => {
+      const id = 'alice@example.com'
+      chatStore.getState().addConversation({
+        ...createConversation(id),
+        unreadCount: 4,
+        readPointer: { messageId: 'prior-seen', timestamp: new Date('2025-01-15T09:00:00Z') },
+      })
+      // Backgrounded: never activated, so `isActive` is false. Deliberately NOT
+      // a raw `setState({ activeConversationId })` — `setActiveConversation` is
+      // what begins a viewport generation, and this fixture's whole point is
+      // that no such generation exists for this conversation.
+      expect(chatStore.getState().activeConversationId).toBeNull()
+
+      // The carbon is NEWER than the seeded pointer, so nothing but D1 itself
+      // stops it: the forward-only guard would let it through unopposed.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'carbon-from-my-phone',
+        conversationId: id,
+        from: 'me@example.com',
+        body: 'sent from my phone',
+        timestamp: new Date('2025-01-15T10:00:00Z'),
+        isOutgoing: true,
+      })
+
+      const conv = chatStore.getState().conversations.get(id)
+      const meta = chatStore.getState().conversationMeta.get(id)
+      // Both assertions are reversals: pre-D1 these were 'carbon-from-my-phone' and 0.
+      expect(meta?.readPointer?.messageId).toBe('prior-seen')
+      expect(meta?.unreadCount).toBe(4)
+      expect(conv?.readPointer?.messageId).toBe('prior-seen')
+      expect(conv?.unreadCount).toBe(4)
     })
 
     it('should increment unreadCount for delayed messages (offline delivery)', () => {
@@ -1849,6 +1987,12 @@ describe('chatStore', () => {
         timestamp: messageTimestamp,
         isOutgoing: false,
       })
+      // Task 11: the pointer advance now also requires viewport evidence that the
+      // reader is genuinely at the live edge. Activate through the REAL store action
+      // (sole caller of beginViewportGeneration) so the report lands on the current
+      // generation — a raw setState would leave it stale and silently ignored.
+      chatStore.getState().setActiveConversation('alice@example.com')
+      reportAtLiveEdge('alice@example.com')
 
       chatStore.getState().markAsRead('alice@example.com')
 
@@ -1894,6 +2038,11 @@ describe('chatStore', () => {
         isOutgoing: false,
       })
 
+      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // precondition of the advance (see the fixture note above).
+      chatStore.getState().setActiveConversation('alice@example.com')
+      reportAtLiveEdge('alice@example.com')
+
       // markAsRead should advance the pointer onto the new message
       chatStore.getState().markAsRead('alice@example.com')
 
@@ -1918,6 +2067,11 @@ describe('chatStore', () => {
         timestamp: messageTimestamp,
         isOutgoing: false,
       })
+
+      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // precondition of the advance (see the fixture note above).
+      chatStore.getState().setActiveConversation('alice@example.com')
+      reportAtLiveEdge('alice@example.com')
 
       // First call - should update state (unreadCount > 0)
       chatStore.getState().markAsRead('alice@example.com')
@@ -3807,7 +3961,13 @@ describe('chatStore', () => {
       expect(conv?.unreadCount).toBe(5)
     })
 
-    it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
+    // Was 'snaps the pointer (fresh-join guard)'. PR C, D6 deleted that snap:
+    // a merge inferring "you have read everything I just downloaded" writes the
+    // forward-only pointer past history the user never saw, and there is no way
+    // back. A pointerless conversation now counts from its `historyFloor`
+    // creation watermark instead, so backfilled history older than the entity
+    // still contributes nothing — without touching the read position.
+    it('forward merge into a conversation with NO read state leaves it pointerless (no fresh-join snap)', () => {
       // No readPointer seeded — fresh conversation, never read.
       const mamMessages: Message[] = [
         {
@@ -3846,7 +4006,8 @@ describe('chatStore', () => {
 
       const meta = chatStore.getState().conversationMeta.get(conversationId)
       expect(meta?.unreadCount).toBe(0)
-      expect(meta?.readPointer?.messageId).toBe('f3')
+      expect(meta?.readPointer).toBeUndefined()
+      expect(chatStore.getState().conversations.get(conversationId)?.readPointer).toBeUndefined()
     })
   })
 

@@ -41,11 +41,21 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
  *
  * `timestamp` defaults to `new Date()` for the existing call sites, but pass it
  * EXPLICITLY whenever a test advances a read pointer across two messages.
- * `isAhead` (shared/readPointer.ts:63) treats equal timestamps as NOT an
- * advance — deliberately, since MAM archives routinely put siblings in one
- * millisecond — and under fake timers `new Date()` returns the same instant
- * every call. Two same-instant messages make the second `advanceReadPointer` a
- * silent no-op that never persists.
+ *
+ * NOT because a same-millisecond pair can never advance — read-state PR C
+ * (task 1) changed exactly that. Two KEYED positions sharing a millisecond now
+ * break the tie on the archive order key: `isAhead`
+ * (shared/readPointer.ts, ~line 99) does it, and `advanceReadPointer` routes
+ * through `onMessageSeen`'s keyed `compareOrder`, which does it too. The bare
+ * "equal timestamps are NOT an advance" rule now applies ONLY when either side
+ * is KEYLESS — i.e. a pointer migrated from the pre-#1081 `lastSeenMessageId` +
+ * `lastReadAt` pair, whose timestamp cannot certify its own position.
+ *
+ * The reason to be explicit is that the ROOM tie-break is `(from, id)`. Under
+ * fake timers `new Date()` returns the same instant every call, so the order of
+ * two same-instant messages is then decided by sender JID and, for one sender,
+ * by LEXICOGRAPHIC id — 'msg-10' sorts before 'msg-2'. Distinct timestamps keep
+ * the fixture's intended order the one the pointer actually sees.
  */
 export function createMessage(
   id: string,

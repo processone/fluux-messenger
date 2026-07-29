@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { chatStore } from './chatStore'
 import type { Message } from '../core'
+import { makeReadPointer } from './shared/readPointer'
 
 const CID = 'alice@example.com'
 
@@ -23,9 +24,11 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
   const seenMsg = opts.messages.find((m) => m.id === opts.lastSeen)
   meta.set(CID, {
     unreadCount: 0,
-    readPointer: opts.lastSeen
-      ? { messageId: opts.lastSeen, timestamp: seenMsg?.timestamp ?? new Date(2024, 0, 1, 12, 0) }
-      : undefined,
+    // KEYED, exactly as `makeReadPointer` writes every pointer: the divider is
+    // derived by archive POSITION, and a keyless pointer cannot certify its own
+    // (a missing key sorts first, so the message it NAMES would sort after the
+    // boundary and take the divider itself).
+    readPointer: seenMsg ? makeReadPointer(seenMsg, 'chat') : undefined,
   })
   const messages = new Map()
   messages.set(CID, opts.messages)

@@ -7,7 +7,6 @@ import {
   buildCatchUpStartTime,
   isConnectionError,
   oldestMessageWithStanzaId,
-  MAM_POINTER_RECOUNT_CACHE_LIMIT,
   MAM_POINTER_STITCH_MAX_PAGES,
   MAM_POINTER_SEED_PROBE_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
@@ -349,12 +348,6 @@ describe('MAM constants', () => {
     expect(MAM_CATCHUP_FORWARD_BAIL_PAGES).toBe(3)
     expect(MAM_POINTER_STITCH_MAX_PAGES).toBe(10)
     expect(MAM_POINTER_SEED_PROBE_LIMIT).toBe(25)
-  })
-
-  it('sizes the exact-recount window to everything one catch-up pass can download', () => {
-    expect(MAM_POINTER_RECOUNT_CACHE_LIMIT).toBe(
-      MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
-    )
   })
 })
 

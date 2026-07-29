@@ -772,9 +772,9 @@ describe('useNotificationEvents', () => {
     })
   })
 
-  // Read-transition signal: fires when an entity's unreadCount drops from >0 to
-  // 0 for ANY reason — local read, a sent carbon from another device (mobile),
-  // or a synced MDS read marker. Consumers use it to dismiss a delivered native
+  // Read-transition signal: fires whenever the store establishes that an
+  // entity's unreadCount dropped from >0 to 0, including a local read or a
+  // synced MDS read marker. Consumers use it to dismiss a delivered native
   // notification that the navigation/focus paths would otherwise miss.
   describe('entity read → dismiss signal', () => {
     it('fires onConversationRead when a conversation unreadCount drops from >0 to 0', () => {
@@ -798,7 +798,7 @@ describe('useNotificationEvents', () => {
       })
       expect(onConversationRead).not.toHaveBeenCalled()
 
-      // Read elsewhere (e.g. reply sent from mobile → sent carbon) clears unread.
+      // Simulate a synced MDS read marker clearing unread.
       act(() => {
         mockConversations.set('alice@example.com', {
           ...mockConversations.get('alice@example.com'),

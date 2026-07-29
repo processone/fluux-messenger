@@ -364,11 +364,11 @@ export function useDesktopNotifications(): void {
     await showConversationNotification(conv, message)
   }
 
-  // Dismiss the native notification when an entity is read — including reads
-  // that the navigation/focus paths never see: a reply sent from another device
-  // (sent carbon) or a synced cross-device read marker (MDS). Also drop any
-  // still-buffered catch-up notification so the post-reconnect flush does not
-  // re-post a banner for a conversation the user has since read/opened.
+  // Dismiss the native notification when an entity is read — including a
+  // synced cross-device read marker (MDS), which the navigation/focus paths
+  // never see. Also drop any still-buffered catch-up notification so the
+  // post-reconnect flush does not re-post a banner for a conversation the user
+  // has since read/opened.
   const handleConversationRead = (conversationId: string) => {
     coalescerRef.current.delete(conversationId)
     void dismissNotification('conversation', conversationId)

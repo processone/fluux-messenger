@@ -15,6 +15,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { chatStore } from './chatStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
 import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
+import { _resetForTesting as _resetThrottledStorageForTesting } from './shared/throttledStorage'
 import type { Message, Conversation } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -307,44 +308,125 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // deferred
   // ---------------------------------------------------------------------
 
-  it('un-migrated legacy read state defers even when the archive is fully caught up and covered', async () => {
-    // Drive the real #1081 migration path: persist a legacy lastSeenMessageId
-    // that the cache does NOT hold, so migrateReadPointer resolves to
-    // undefined and the conversation stays registered as un-migrated.
+  /**
+   * Drive the real #1081 migration path: persist a legacy `lastSeenMessageId`
+   * the cache does NOT hold, so `migrateReadPointer` resolves to undefined and
+   * the conversation stays registered as un-migrated for the whole session.
+   * `persistedUnread` is what the blob (and therefore the restored meta) carries.
+   */
+  async function rehydrateWithStuckLegacyReadState(persistedUnread: number): Promise<void> {
     localStorage.setItem(
       'xmpp-chat-storage',
       JSON.stringify({
         state: {
           conversationEntities: [[CID, { id: CID, name: CID, type: 'chat' }]],
-          conversationMeta: [[CID, { unreadCount: 0, lastSeenMessageId: 'ghost-not-in-cache' }]],
-          conversations: [[CID, { id: CID, name: CID, type: 'chat', unreadCount: 0, lastSeenMessageId: 'ghost-not-in-cache' }]],
+          conversationMeta: [[CID, { unreadCount: persistedUnread, lastSeenMessageId: 'ghost-not-in-cache' }]],
+          conversations: [[CID, { id: CID, name: CID, type: 'chat', unreadCount: persistedUnread, lastSeenMessageId: 'ghost-not-in-cache' }]],
           archivedConversations: [],
         },
       })
     )
     await chatStore.persist.rehydrate()
     // Let the fire-and-forget migration attempt (and the cold-start recount
-    // trigger) run to completion; migration cannot resolve 'ghost-not-in-cache'.
+    // trigger) run to completion; migration cannot resolve 'ghost-not-in-cache',
+    // so the entry is left in `pending` — the permanently-stuck shape.
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+  }
 
-    // Overwrite to a known sentinel right before the controlled call under
-    // test, so any earlier background churn can't be mistaken for THIS
-    // assertion. A readPointer AND a genuinely resolvable, caught-up coverage
-    // record are ALSO seeded (the activation-races-the-backfill case: the
-    // entry can still be registered in unmigratedLegacyReadState after a
-    // readPointer already exists from other activity) so this test is
-    // specific to hasUnmigratedLegacyReadState — without a real pointer +
-    // proven coverage, pointerlessDefers or the coverage gate would
-    // independently defer too, and a broken hasUnmigratedLegacyReadState
-    // check would go undetected.
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
+  // Rewritten for PR C, Task 6b: this used to assert the count FROZE at its
+  // persisted value while the legacy migration stayed unresolved. That
+  // stand-down (`hasUnmigratedLegacyReadState`) is deleted — it was introduced
+  // against a recount that could WRITE the pointer, and D6 deleted that pass, so
+  // all it did afterwards was suppress a count that IS grounded in a real
+  // pointer, for the rest of the session.
+  //
+  // Nothing else in the chain can produce the asserted 2: the pointer is real
+  // (so neither `pointerlessDefers` check fires and `computeFloor` has a floor),
+  // `pendingRemoteDisplayedStanzaId` is unset, the conversation is not active,
+  // and coverage is caught-up AND resolvable to a row BELOW the floor. Any
+  // surviving defer would leave the sharply different persisted 7 in place.
+  it('un-migrated legacy read state no longer freezes the count once a real pointer exists', async () => {
+    await rehydrateWithStuckLegacyReadState(0)
+
+    // The activation-races-the-backfill case: the entry is still registered in
+    // unmigratedLegacyReadState, but a direct path (activation, markAsRead,
+    // XEP-0490) has since written a REAL pointer. Overwritten right before the
+    // controlled call so earlier background churn can't be mistaken for this
+    // assertion.
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+      archiveMsg('u1', 1001),
+      archiveMsg('u2', 1002),
+    ])
     seedCoverage('anchor-stanza')
-    setMeta({ unreadCount: 9, readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } } })
+    setMeta({ unreadCount: 7, readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } } })
 
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
-    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(9)
+    // u1 and u2 are the only rows strictly after the pointer — a reversal of
+    // the stale 7, not a restatement of it.
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(2)
+    // The recount still never touches the read position it counted against.
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('p0')
+  })
+
+  // Task 6b, residual state (a): pointerless, migration outstanding, persisted
+  // count 0. The derivation counts from `historyFloor`, which for a pre-#1081
+  // conversation is either absent (deferred by `if (!floor) return`) or stamped
+  // at its first post-upgrade re-add — never BEHIND the legacy read position —
+  // so the commit can only RAISE the badge. Seeded 0, asserted 3: never 0 → 0.
+  //
+  // The only defer that could apply here is the one being removed:
+  // `pointerlessDefers` needs a nonzero persisted count (it is 0), the floor
+  // exists, coverage is caught-up and resolves below the floor, and the
+  // conversation is not active.
+  it('un-migrated legacy read state with a zero persisted count now raises the badge from the archive', async () => {
+    await rehydrateWithStuckLegacyReadState(0)
+
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('m1', 1000),
+      archiveMsg('m2', 1001),
+      archiveMsg('m3', 1002),
+    ])
+    seedCoverage('anchor-stanza')
+    setMeta({ unreadCount: 0, readPointer: undefined, historyFloor: new Date(500) })
+
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(3)
+    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(3)
+    // Still pointerless: raising the badge must not invent a read position.
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+  })
+
+  // Task 6b control: retiring the legacy stand-down must NOT open the pointerless
+  // path it used to overlap with. Same stuck-migration fixture as the two tests
+  // above — the only difference is the nonzero persisted count, which is exactly
+  // what `pointerlessDefers` exists to protect. Neutralise that check and this
+  // lands the archive-derived 3 over the trusted 6.
+  it('un-migrated legacy read state with a NONZERO persisted count still defers via pointerlessDefers', async () => {
+    await rehydrateWithStuckLegacyReadState(6)
+
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('m1', 1000),
+      archiveMsg('m2', 1001),
+      archiveMsg('m3', 1002),
+    ])
+    seedCoverage('anchor-stanza')
+    setMeta({ unreadCount: 6, readPointer: undefined, historyFloor: new Date(500) })
+
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+    // Assert the mechanism, not just the outcome: pointerlessDefers must stop
+    // the derivation before it ever reads the archive, not merely produce a
+    // count that happens to match the seed.
+    expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
   })
 
   it('a pointerless entity with a nonzero persisted count defers rather than trusting a zero derivation', async () => {
@@ -361,18 +443,22 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
   })
 
-  // The reviewer's control (requirement 1): the legacy pass runs — and its
-  // OWN pointer-advance guard fires (an outgoing message moves the pointer,
-  // exactly the effect Task 7 must keep) — and its would-be COUNT differs
-  // sharply from the persisted one (2 vs 5). The persisted value must survive
-  // untouched because coverage is not proven. This is the strong form of the
-  // control: it is not enough for legacy.readPointer to stay unchanged (which
-  // would make "discard the count" trivially true by construction); the
-  // pointer must actually move while the count still does not commit.
-  it('CRITICAL: not caught up defers, and the persisted count survives even though recomputeCountsFromPointer ran and moved the pointer', async () => {
+  // The reviewer's control (requirement 1), rewritten for PR C's D6 deletion.
+  // It used to prove "the count is discarded" by showing the legacy guard pass
+  // moved the POINTER while the count stayed put; that pass no longer exists,
+  // so the control is rebuilt around the surviving mechanism: coverage IS
+  // seeded and resolvable and the archive IS populated, so the ONLY thing
+  // deferring this recount is the caught-up gate. Remove that gate and the
+  // derivation lands a sharply different 2 (u1, u2 after 'p0'; the outgoing
+  // 'out1' never counts) over the trusted 5 — so 5 surviving is evidence, not
+  // an absence of activity. The pointer assertion is the D6 half: an outgoing
+  // message sitting in the counted range must NOT drag the read position onto
+  // itself any more.
+  it('CRITICAL: not caught up defers, the persisted count survives, and the recount never moves the pointer onto an outgoing message', async () => {
     await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
-      archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied — advances the pointer
+      archiveMsg('out1', 1001, { isOutgoing: true }), // the user replied from another device
       archiveMsg('u1', 1002),
       archiveMsg('u2', 1003),
     ])
@@ -380,15 +466,18 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       unreadCount: 5, // the persisted/trusted value
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
     })
-    // Deliberately NOT caught up (default mamQueryStates), and no coverage record.
+    // Coverage IS proven and resolvable — but mamQueryStates is left at its
+    // default (NOT caught up to live), so the caught-up gate is the single
+    // reason this recount defers.
+    chatStore.setState((state) => {
+      const conversationCoverage = new Map(state.conversationCoverage)
+      conversationCoverage.set(CID, { bottomId: 'anchor-stanza' })
+      return { conversationCoverage }
+    })
 
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
-    // The legacy guard pass DID run and DID advance the pointer to 'out1'
-    // (the reply) — that pointer-advance guard behavior is kept. Its own
-    // count over the post-out1 slice (u1, u2) would be 2, not 5 — that
-    // would-be count is discarded; the persisted 5 survives.
-    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('out1')
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('p0')
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(5)
   })
 
@@ -630,49 +719,71 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(6)
   })
 
-  it('rejects a guard-pass pointer write after the account scope changes', async () => {
+  // Was 'rejects a guard-pass pointer write after the account scope changes',
+  // which blocked on the guard pass's cache read. That read is gone with the
+  // guard pass (PR C, D6), so the same invariant — a derivation computed under
+  // one account must never commit into another's state — is now pinned on the
+  // remaining await, the archive count. Nothing else about the recount context
+  // changes across the swap here (no switchAccount, so the cache epoch, the
+  // recount version, the input version and the pointer are all identical),
+  // which makes the storage-scope term of `recountContextIsCurrent` the single
+  // load-bearing guard: drop it and the account-A result of 55 overwrites 7.
+  it('rejects a recount commit after the account scope changes', async () => {
     const accountA = 'account-a@example.com'
     const accountB = 'account-b@example.com'
 
     setStorageScopeJid(accountA)
+    // Isolation, not decoration. `switchAccount` flushes the pending persist
+    // window and REHYDRATES the new account from storage, and a rehydrated
+    // conversation list schedules one archive recount per restored conversation
+    // on a macrotask (`scheduleColdStartRecounts`). Left unbounded, that
+    // deferred recount lands in the middle of the race this test measures: it
+    // consumes the `countUnreadInArchive` mock armed below, and commits its own
+    // archive-derived count over the seeded 7 — an intermittent `expected +0 to
+    // be 7`. The seed for it is this suite's own `beforeEach` (reset +
+    // addConversation), whose still-open persist window `switchAccount` flushes
+    // and then migrates into account A. Drop that window and the blob it would
+    // restore from, so the switch has nothing to rehydrate and schedules no
+    // recount at all. The `toHaveBeenCalledTimes(1)` control below fails if this
+    // ever stops holding.
+    _resetThrottledStorageForTesting()
+    localStorageMock.clear()
     chatStore.getState().switchAccount(accountA)
+    // Deterministic proof the isolation held: account A rehydrated nothing, so
+    // no cold-start recount was scheduled. Drop the two lines above and this
+    // fails every run — the switch migrates the beforeEach conversation in.
+    expect(localStorage.getItem(`xmpp-chat-storage:${accountA}`) ?? '').not.toContain(CID)
     chatStore.getState().addConversation(createConversation(CID))
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+    ])
+    setMeta({
+      unreadCount: 7,
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
 
-    let releaseSlice!: (messages: Message[]) => void
-    vi.mocked(messageCache.getMessages).mockImplementationOnce(
-      () => new Promise((resolve) => { releaseSlice = resolve })
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
     )
 
     const stale = chatStore.getState().recomputeUnreadForConversation(CID)
-    await vi.waitFor(() => expect(releaseSlice).toBeDefined())
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
 
+    // The account scope moves on while the archive read is in flight.
     setStorageScopeJid(accountB)
-    chatStore.getState().switchAccount(accountB)
-    chatStore.getState().addConversation(createConversation(CID))
-    const accountBPointer = {
-      messageId: 'account-b-pointer',
-      timestamp: new Date(100),
-      archiveOrderKey: { kind: 'chat' as const, id: 'account-b-pointer' },
-    }
-    chatStore.setState((state) => {
-      const conversationMeta = new Map(state.conversationMeta)
-      conversationMeta.set(CID, { ...conversationMeta.get(CID)!, unreadCount: 7, readPointer: accountBPointer })
-      const conversations = new Map(state.conversations)
-      conversations.set(CID, { ...conversations.get(CID)!, unreadCount: 7, readPointer: accountBPointer })
-      const messages = new Map(state.messages)
-      messages.set(CID, [archiveMsg('account-b-current', 150)])
-      return { conversationMeta, conversations, messages }
-    })
 
-    await chatStore.getState().recomputeUnreadForConversation(CID)
-
-    releaseSlice([archiveMsg('account-a-outgoing', 1000, { isOutgoing: true })])
+    releaseCount({ unread: 55 })
     await stale
 
     expect(getStorageScopeJid()).toBe(accountB)
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(7)
-    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBe(accountBPointer)
-    expect(chatStore.getState().conversations.get(CID)?.readPointer).toBe(accountBPointer)
+    // Control for the isolation above: `stale` is the ONLY archive count this
+    // test may produce. A second one means a deferred recount slipped in, which
+    // is exactly how the seeded 7 used to get overwritten with a real 0.
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
   })
 
   // final-fix-2: the race the re-reviewer flagged. An `allowActive` recompute
@@ -738,27 +849,41 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // divider rederivation
   // ---------------------------------------------------------------------
 
+  // Rewritten for PR C, D6: the rederivation scans the RESIDENT array now
+  // (the guard pass's cache-window read went with the guard pass), so this
+  // test drives the path that actually reaches it — an `allowActive` recount
+  // on the ACTIVE conversation. That is the only path in production: a marker
+  // survives only while an entity is active (deactivation deletes it), and
+  // both allowActive triggers follow a pointer advance. The seeded marker is a
+  // distinct stale id, so 'u1' can only come from a real rederivation.
   it('a remote advance rederives the divider to the new boundary', async () => {
-    await messageCache.saveMessages([
-      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
-      archiveMsg('p0', 1000),
-      archiveMsg('u1', 1001),
-    ])
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    const u1 = archiveMsg('u1', 1001)
+    await messageCache.saveMessages([anchor, p0, u1])
     setMeta({
       unreadCount: 99,
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
-    // A stale marker left over from a previous activation.
+    // A stale marker left over from before the boundary moved, on the ACTIVE
+    // conversation (the only entity that keeps both a marker and a resident
+    // array).
     chatStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
       markers.set(CID, 'stale-marker-id')
-      return { firstNewMessageMarkers: markers }
+      return {
+        firstNewMessageMarkers: markers,
+        activeConversationId: CID,
+        messages: new Map([[CID, [anchor, p0, u1]]]),
+      }
     })
 
-    await chatStore.getState().recomputeUnreadForConversation(CID)
+    await chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
 
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
+    // The count is re-derived too (u1), not left at the stale 99.
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
   })
 
   it('keeps the ACTIVE conversation\'s divider when the pointer has caught up to the newest message', async () => {
@@ -828,11 +953,14 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
   })
 
+  // A BACKGROUND conversation with a RESIDENT array deliberately, so the
+  // deletion is a real "nothing sits after the boundary" answer rather than the
+  // vacuous one an empty slice always gives. Retiring a stale marker is the
+  // background half of the rule the two tests above pin for the active half.
   it('deletes the divider marker when the derived count is zero', async () => {
-    await messageCache.saveMessages([
-      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
-      archiveMsg('p0', 1000),
-    ])
+    const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
+    const p0 = archiveMsg('p0', 1000)
+    await messageCache.saveMessages([anchor, p0])
     setMeta({
       unreadCount: 99,
       readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
@@ -841,7 +969,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     chatStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
       markers.set(CID, 'stale-marker-id')
-      return { firstNewMessageMarkers: markers }
+      return {
+        firstNewMessageMarkers: markers,
+        activeConversationId: null,
+        messages: new Map([[CID, [anchor, p0]]]),
+      }
     })
 
     await chatStore.getState().recomputeUnreadForConversation(CID)
@@ -1165,6 +1297,168 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       await vi.waitFor(() => {
         expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
       }, { timeout: 2000 })
+    })
+  })
+
+  // ---------------------------------------------------------------------
+  // PR C, D6: the pointer-writing recount (recomputeCountsFromPointer) is
+  // gone. Both of its pointer effects — the fresh-entity snap and the
+  // outgoing-boundary advance — were heuristics that could move the
+  // forward-only read pointer past messages the user never saw.
+  // ---------------------------------------------------------------------
+
+  describe('the guard pass no longer writes the pointer (PR C, D6)', () => {
+    // The MERGE schedules its recount fire-and-forget (`void get().recompute...`),
+    // so asserting the pointer straight after the merge resolves proves NOTHING —
+    // the guard pass may not have run yet, and a count seeded at 0 that is still 0
+    // is not evidence either. Drive the recount explicitly and await it, THEN
+    // assert. Both assertions below are chosen so a surviving guard pass changes
+    // them.
+    it('a forward merge + recount does NOT snap a fresh conversation pointer to the newest message', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('h1', 600),
+        archiveMsg('h2', 700),
+      ])
+      // Fresh entity: no pointer, and history predating its creation watermark.
+      setMeta({ unreadCount: 0, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      chatStore.getState().mergeMAMMessages(
+        CID,
+        [archiveMsg('h1', 600), archiveMsg('h2', 700)],
+        { first: 'h1', last: 'h2' },
+        true,
+        'forward'
+      )
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      // A surviving fresh-entity snap would put this at 'h2'.
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+      // No unreadCount assertion here: seeded at 0 and asserting 0 can't tell
+      // "floored correctly at the creation watermark" apart from "deferred and
+      // touched nothing" — the sibling test below ("messages arriving after
+      // creation…", seeded 0, asserts 2) is the one that actually exercises the
+      // historyFloor-derived count.
+    })
+
+    // The OTHER two call sites: the guard pass inside the derivation itself.
+    // Reached with no merge at all, so it needs its own control.
+    it('the recount itself does NOT snap a fresh conversation pointer to the newest message', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('h1', 600),
+        archiveMsg('h2', 700),
+      ])
+      setMeta({ unreadCount: 0, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
+    })
+
+    it('the recount itself does NOT advance the pointer to an outgoing message', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+        archiveMsg('mine', 1200, { isOutgoing: true }),
+        archiveMsg('u2', 1300),
+      ])
+      setMeta({
+        unreadCount: 3,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      // A surviving outgoing-boundary advance would put this at 'mine' and drop
+      // the count to 1 by swallowing u1.
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('p0')
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+    })
+
+    it('a forward merge does NOT advance the pointer to an outgoing message', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+        archiveMsg('mine', 1200, { isOutgoing: true }),
+        archiveMsg('u2', 1300),
+        archiveMsg('u3', 1400),
+      ])
+      setMeta({
+        unreadCount: 4,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      chatStore.getState().mergeMAMMessages(
+        CID,
+        [archiveMsg('mine', 1200, { isOutgoing: true })],
+        { first: 'mine', last: 'mine' },
+        true,
+        'forward'
+      )
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      // The reply came from another device. Nothing here is evidence we read u1.
+      expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.messageId).toBe('p0')
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(3)
+    })
+
+    it('messages arriving after creation and merged during catch-up count as unread', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('n1', 2000),
+        archiveMsg('n2', 3000),
+      ])
+      setMeta({ unreadCount: 0, readPointer: undefined, historyFloor: new Date(1000) })
+      seedCoverage('anchor-stanza')
+
+      chatStore.getState().mergeMAMMessages(
+        CID,
+        [archiveMsg('n1', 2000), archiveMsg('n2', 3000)],
+        { first: 'n1', last: 'n2' },
+        true,
+        'forward'
+      )
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+    })
+
+    // Carried from PR B: the race the no-mistakes gate's round-2 fix already
+    // closed. This PIN proves the input-version guard is load-bearing, so a later
+    // refactor cannot quietly drop it.
+    it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
+      await messageCache.saveMessages([
+        archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+        archiveMsg('p0', 1000),
+        archiveMsg('u1', 1100),
+      ])
+      setMeta({
+        unreadCount: 1,
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'chat', id: 'p0' } },
+      })
+      seedCoverage('anchor-stanza')
+
+      // Let the recount reach its archive read, then land an arrival that raises
+      // the count WITHOUT moving the pointer — the case the pointer-identity
+      // guard alone cannot see.
+      vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(async (id, args) => {
+        const actual = await vi.importActual<typeof import('../utils/messageCache')>('../utils/messageCache')
+        const res = await actual.countUnreadInArchive(id, args)
+        chatStore.getState().addMessage(archiveMsg('u2', 1200))
+        return res
+      })
+
+      await chatStore.getState().recomputeUnreadForConversation(CID)
+
+      // The stale snapshot said 1; the arrival made it 2. 2 must win.
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
     })
   })
 

@@ -5,6 +5,13 @@ import type { Room, RoomMessage } from '../core/types/room'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import { connectionStore } from './connectionStore'
+import { makeReadPointer, type ReadPointer } from './shared/readPointer'
+import {
+  _clearAllViewportEvidenceForTesting,
+  currentViewportGeneration,
+  reportViewport,
+} from './shared/viewportEvidence'
+import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage (required because roomStore uses persist middleware)
 const localStorageMock = (() => {
@@ -60,11 +67,18 @@ function rmsg(id: string, stanzaId: string, t: number): RoomMessage {
   } as RoomMessage
 }
 
-/** The read pointer naming `id`, carrying that message's own timestamp (#1081). */
-function pointerIn(messages: RoomMessage[], id: string): { messageId: string; timestamp: Date } {
+/**
+ * The read pointer naming `id`, carrying that message's own timestamp (#1081).
+ *
+ * KEYED, exactly as `makeReadPointer` writes every pointer: the divider and the
+ * unread count are derived by archive POSITION, and a keyless pointer cannot
+ * certify its own (a missing key sorts first, so the message it NAMES would
+ * sort after the boundary and take the divider itself).
+ */
+function pointerIn(messages: RoomMessage[], id: string): ReadPointer {
   const found = messages.find((m) => m.id === id)
   if (!found) throw new Error(`pointerIn: no message ${id} in the seeded slice`)
-  return { messageId: found.id, timestamp: found.timestamp }
+  return makeReadPointer(found, 'room')
 }
 
 /**
@@ -100,17 +114,29 @@ function seedRoom(
   }
   roomStore.getState().addRoom(room)
   if (seenMessageId !== undefined) {
-    const timestamp = pointerTimestamp ?? pointerIn(messages, seenMessageId).timestamp
+    // A pointer resolved from a resident message is KEYED, as `makeReadPointer`
+    // always writes it. An explicit `pointerTimestamp` is the opposite case by
+    // construction — a position we cannot locate in this slice, i.e. the
+    // migrated shape — so it stays keyless.
+    const readPointer: ReadPointer = pointerTimestamp
+      ? { messageId: seenMessageId, timestamp: pointerTimestamp }
+      : pointerIn(messages, seenMessageId)
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
       const existing = meta.get(jid)!
-      meta.set(jid, {
-        ...existing,
-        readPointer: { messageId: seenMessageId, timestamp },
-      })
+      meta.set(jid, { ...existing, readPointer })
       return { roomMeta: meta }
     })
   }
+}
+
+function reportRoomViewport(jid: string, evidence: 'at-edge' | 'away'): void {
+  const key = {
+    accountScope: getStorageScopeJid() ?? '',
+    kind: 'room' as const,
+    entityId: jid,
+  }
+  reportViewport(key, currentViewportGeneration(key), evidence)
 }
 
 describe('roomStore.applyRemoteDisplayed', () => {
@@ -167,6 +193,43 @@ describe('roomStore.applyRemoteDisplayed', () => {
     const after = roomStore.getState().roomMeta.get(ROOM)
     expect(after?.pendingRemoteDisplayedStanzaId).toBe(undefined)
     expect(after?.readPointer?.messageId).toBe('m2')
+  })
+
+  // PR C, D3 widening — at the store layer, where it actually bites. The store
+  // CHOOSES the array: `mergeRoomMAMMessages` hands `applyRemoteDisplayed` a
+  // single trimmed MAM page (`mergedForMarker`, roomStore.ts:3972), and the
+  // pointer's own message need not be in it. Before D3 that was undecidable and
+  // the marker stayed stashed for the activation fold; now a KEYED pointer is
+  // ordered by archive POSITION against a page it was never orderable against.
+  // Only a store-level test exercises that page-choosing call site.
+  it('advances a KEYED pointer that is absent from the merged page, against that page', () => {
+    const mergedPage = [rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
+    // Backgrounded room: no resident messages (memory windowing evicted them).
+    seedRoom(ROOM, [])
+    const offSlice = rmsg('m0', 's0', 0)
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      const existing = meta.get(ROOM)!
+      meta.set(ROOM, {
+        ...existing,
+        unreadCount: 5,
+        // KEYED, naming a message that is NOT in the merged page.
+        readPointer: makeReadPointer(offSlice, 'room'),
+        pendingRemoteDisplayedStanzaId: 's3',
+      })
+      return { roomMeta: meta }
+    })
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's3', mergedPage)
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.readPointer?.messageId).toBe('m3')
+    // Resolved, so the high-water mark is retired rather than left to re-fire.
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    // The count is NOT this page's own tally (which would be 1: m4 alone). It
+    // stays archive-derived, and with no coverage/MAM state seeded that
+    // derivation defers, so the stale 5 survives.
+    expect(meta?.unreadCount).toBe(5)
   })
 
   // Fresh-session seed race (MUC): the room is activated (divider derived from the
@@ -739,6 +802,7 @@ describe('roomStore — new-message divider is session-only', () => {
 
 describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
   beforeEach(() => {
+    _clearAllViewportEvidenceForTesting()
     _resetStorageScopeForTesting()
     _resetRoomReadStateForTesting()
     roomStore.setState({
@@ -764,6 +828,8 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
       m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 2 })
       return { roomMeta: m }
     })
+    roomStore.getState().setActiveRoom(ROOM)
+    reportRoomViewport(ROOM, 'at-edge')
 
     roomStore.getState().markAsRead(ROOM)
 
@@ -783,6 +849,24 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
       rt.set(ROOM, { ...rt.get(ROOM)!, windowAtLiveEdge: false })
       return { roomMeta: m, roomRuntime: rt }
     })
+    roomStore.getState().setActiveRoom(ROOM)
+    reportRoomViewport(ROOM, 'at-edge')
+
+    roomStore.getState().markAsRead(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+  })
+
+  it('does NOT advance the read pointer when the viewport is away from the live edge', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 2 })
+      return { roomMeta: m }
+    })
+    roomStore.getState().setActiveRoom(ROOM)
+    reportRoomViewport(ROOM, 'away')
 
     roomStore.getState().markAsRead(ROOM)
 
@@ -917,16 +1001,22 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
   })
 
-  // Control: a genuinely fresh room with NO remote marker must still be treated as
-  // caught up, or every new join would manufacture unread debt from its history.
-  it('still treats a fresh room with no remote marker as caught up', () => {
+  // Control for the test above, inverted by PR C, D6. It used to assert that
+  // WITHOUT a pending marker the merge snapped the pointer to 'm10' — proving
+  // the marker check was what suppressed the snap. That snap is deleted, so the
+  // control now proves the complement, which is the stronger statement: the
+  // merge writes no pointer for anyone, so the 'm3' the sibling test observes
+  // can only have come from the marker fold. A fresh join still manufactures no
+  // unread debt from its history — the `historyFloor` creation watermark, not a
+  // fabricated pointer, is what holds that line now.
+  it('a fresh room with no remote marker gets no pointer from the merge either', () => {
     seedRoom(ROOM, [])
 
     roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.unreadCount).toBe(0)
-    expect(meta?.readPointer?.messageId).toBe('m10')
+    expect(meta?.readPointer).toBeUndefined()
   })
 })
 

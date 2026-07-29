@@ -129,10 +129,10 @@ describe('StateSnapshot', () => {
 
     // The read position rides in the snapshot as a `readPointer` (#1081),
     // replacing the `lastReadAt` this case used to assert. A snapshot that
-    // dropped it would restore rooms with NO read position, and
-    // recomputeCountsFromPointer treats a pointerless entity as fresh — pointer
-    // snapped to newest, unread history silently marked read, permanently
-    // (forward-only).
+    // dropped it would restore rooms with NO read position at all, and a
+    // pointerless room then counts from its `historyFloor` creation watermark
+    // instead — so history older than the restore is silently treated as read.
+    // The pointer is forward-only, so that is permanent.
     it('restores rooms with occupants, selfOccupant, subject and read pointer', async () => {
       const readAt = new Date('2026-04-21T08:30:00Z')
       adapterData.store.set('user@example.com', {

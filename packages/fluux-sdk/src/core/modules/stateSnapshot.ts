@@ -85,9 +85,9 @@ interface SerializedRoom {
   /**
    * Where the user has read to (#1081), replacing the `lastReadAt` this shape
    * used to carry. A snapshot without it restores rooms with no read position at
-   * all, and `recomputeCountsFromPointer` treats a pointerless entity as fresh:
-   * pointer snapped to the newest message, counts zeroed, unread history
-   * silently marked read. The pointer is forward-only, so that is permanent.
+   * all, and a pointerless room then counts from its `historyFloor` creation
+   * watermark instead — so history older than the restore is silently treated as
+   * read. The pointer is forward-only, so that is permanent.
    */
   readPointer?: SerializedReadPointer
   messages: SerializedRoomMessage[]

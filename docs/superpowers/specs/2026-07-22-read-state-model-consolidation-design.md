@@ -1,7 +1,9 @@
 # Read-state model consolidation: derived counts, one cache-resolved pointer
 
 **Date:** 2026-07-22
-**Status:** Design approved, pending spec review
+**Status:** Implemented on the #1081 PR stack branches. The
+[PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md)
+owns the final writer scope.
 **Issue:** [#1081](https://github.com/processone/fluux-messenger/issues/1081)
 **Follows:** #1076 / [#1080](https://github.com/processone/fluux-messenger/pull/1080)
 
@@ -227,7 +229,7 @@ Triggers:
 
 - rehydrate / app start (batched, per entity)
 - a forward MAM merge for that entity
-- a pointer advance (any of the four writers)
+- a read-pointer advance
 - an inbound XEP-0490 marker that advanced the pointer
 - a deferred-decrypt drop or retraction that changes what is countable
 - a transient-overlay mutation that changes the projection
@@ -249,8 +251,9 @@ addendum](2026-07-23-read-state-unread-count-single-source-acceptance.md). PR B 
 `resolveRemoteDisplayed`'s `advanced-with-divider` result as the reconciliation signal; inactive
 entities rederive on activation.
 
-**Publish path.** `resolveSeenStanzaId` resolves via the cache instead of
-resident-slice-plus-`lastMessage`-fallback, closing its silent `return undefined` drop.
+**Publish path.** Cache-resolution of `resolveSeenStanzaId` is outside this stack; the
+[PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md)
+owns the follow-up constraints.
 
 ## Deletions
 
@@ -261,10 +264,10 @@ This is where the payoff is.
 | `recomputeCountsFromPointer` (whole function) | Counting half moves to `readState`; the outgoing-boundary pointer write is the heuristic this issue is about |
 | `onActivate`'s fallback ladder — `lastReadAt` branch, Nth-from-end branch, brand-new-conversation branch, resume-preserving snap (~120 lines) | All of it exists because the pointer could not resolve in the resident slice |
 | `onMarkAsRead`'s `advanceSeenTo` parameter | Mark-read becomes a first-class pointer writer, not an optional side channel |
-| `onMessageSeen`'s `currentIdx === -1` guard + `atLiveEdge` escape hatch | There is no unresolvable pointer any more |
+| `onMessageSeen`'s off-slice-pointer handling | Superseded; the [PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md) owns the keyed and keyless behavior |
 | `MAM_POINTER_RECOUNT_CACHE_LIMIT` + its two remaining consumers | PR C retires these with `recomputeCountsFromPointer`; PR B keeps them because they still feed its non-resident pointer-advance path |
-| `resolveRemoteDisplayed`'s `advanced-with-divider` kind | PR C can collapse this once the divider derives directly from the boundary; PR B still uses it to update the active divider without scrolling the reader |
-| the `treatDelayedAsNew` option, everywhere | Moot once the floor is a timestamp: a delayed message timestamped after the floor simply *is* new. It only existed to paper over id-position comparison, and both stores already pass `true` |
+| `resolveRemoteDisplayed`'s divider reconciliation | Superseded; the [PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md) owns the final behavior |
+| `treatDelayedAsNew` cleanup | Superseded; the [PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md) owns its final scope |
 | `apps/fluux/src/utils/newMessagesMarker.ts` + its test | Dead code — referenced only by its own test file |
 
 ### The four #1080 gates, re-examined
@@ -381,11 +384,9 @@ pure floor/predicate logic lives in `readState.ts`; `recomputeCountsFromPointer`
 a pointer/guard writer whose count output is ignored. PR B **changes
 where the count comes from**; PR C removes the pointer writes.
 
-**PR C — the writers.** Pointer reduced to the four writers; `onActivate`'s ladder
-deleted; `recomputeCountsFromPointer` and its guards deleted (the derivation no longer
-needs its count, so only its pointer-writes remain to remove); divider derived from the
-floor; gate 3 removed and gate 4 re-justified; `resolveSeenStanzaId` cache-resolved; dead
-code removed.
+**PR C — writer restriction.** Superseded by the
+[PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md),
+which owns the final scope and decisions against the merged PR B code.
 
 ## PR B — reconciled design (post-PR-A, assuming B0)
 
@@ -494,13 +495,9 @@ row = one position, and everything below needs no dedup:
   The comparator orders structurally (timestamp, then the key's fields), so no string-ordering
   assumption is load-bearing. This is the one point where the total order reaches back into
   PR A's data model.
-- **`isAhead` is left ms-only for PR C, which then aligns it to this same total order.** The
-  count and the resident advance do not route through `isAhead` (it drives `advance()` for
-  the MDS regressive-publish guard), so through PR B leaving it strict only means a
-  *published* marker won't cross a same-ms run — a bounded under-advance in the safe
-  direction. PR C aligns `isAhead` and the XEP-0490 comparison to `(timestamp, archiveOrderKey)`
-  as part of its writer work (persisting `archiveOrderKey` in PR B is what makes that possible);
-  this is a deferral of the edit, not of the decision.
+- **`isAhead` and XEP-0490 ordering.** Superseded; the
+  [PR C writer-restriction design](2026-07-28-read-state-c-writer-restriction-design.md)
+  owns the keyed comparison and conservative keyless fallback.
 
 Tests must cover several incoming **and** outgoing messages sharing one millisecond, chat
 and room: the badge counts the same-ms unread, and the pointer advances through the run

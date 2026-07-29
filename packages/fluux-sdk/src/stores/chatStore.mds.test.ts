@@ -10,8 +10,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import { connectionStore } from './connectionStore'
+import { makeReadPointer, type ReadPointer } from './shared/readPointer'
 import { chatSelectors } from './chatSelectors'
 import type { Message, ConversationEntity, ConversationMetadata } from '../core/types/chat'
+import {
+  _clearAllViewportEvidenceForTesting,
+  currentViewportGeneration,
+  reportViewport,
+} from './shared/viewportEvidence'
+import { getStorageScopeJid } from '../utils/storageScope'
 
 // Mock messageCache: the deep-pointer activation tests need getMessagesAround to
 // return a controlled around-slice; everything else is a harmless stub.
@@ -51,9 +58,30 @@ function timeFor(id: string): Date {
   return new Date(BASE_TIME + (Number(id.replace(/\D/g, '')) || 0) * 1000)
 }
 
-/** The read pointer naming `id`, carrying that message's own timestamp. */
-function pointerAt(id: string): { messageId: string; timestamp: Date } {
-  return { messageId: id, timestamp: timeFor(id) }
+/**
+ * The read pointer naming `id`, carrying that message's own timestamp.
+ *
+ * KEYED, exactly as `makeReadPointer` writes every pointer: the divider and the
+ * unread count are derived by archive POSITION, and a keyless pointer cannot
+ * certify its own (a missing key sorts first, so the message it NAMES would
+ * sort after the boundary and take the divider itself).
+ */
+function pointerAt(id: string): ReadPointer {
+  return makeReadPointer({ id, timestamp: timeFor(id) }, 'chat')
+}
+
+/**
+ * The read pointer naming `id` WITHIN `messages` — for the fixtures below that
+ * override timestamps with a local `timed()` helper, where `pointerAt`'s
+ * id-derived timestamp would disagree with the message's own. A pointer's
+ * timestamp must BE its named message's own (#1081), and the divider is now
+ * derived from that position rather than from the array index, so a disagreeing
+ * pair no longer passes unnoticed.
+ */
+function pointerIn(messages: Message[], id: string): ReadPointer {
+  const found = messages.find((m) => m.id === id)
+  if (!found) throw new Error(`pointerIn: no message ${id} in the seeded slice`)
+  return makeReadPointer(found, 'chat')
 }
 
 // Minimal Message factory — only the fields used by applyRemoteDisplayed.
@@ -97,6 +125,15 @@ function seedConversation(cid: string, meta: ConversationMetadata): void {
     conversationMeta: new Map(state.conversationMeta).set(cid, meta),
     conversations: new Map(state.conversations).set(cid, { ...entity, ...meta }),
   }))
+}
+
+function reportChatViewport(cid: string, evidence: 'at-edge' | 'away'): void {
+  const key = {
+    accountScope: getStorageScopeJid() ?? '',
+    kind: 'chat' as const,
+    entityId: cid,
+  }
+  reportViewport(key, currentViewportGeneration(key), evidence)
 }
 
 describe('chatStore.applyRemoteDisplayed', () => {
@@ -197,6 +234,38 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(3)
     // The combined conversations mirror is kept coherent with conversationMeta.
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(3)
+  })
+
+  // PR C, D3 widening — at the store layer, where it actually bites. The store
+  // CHOOSES the array: `mergeMAMMessages` hands `applyRemoteDisplayed` a single
+  // trimmed MAM page (`mergedForMarker`, chatStore.ts:2954), and the pointer's
+  // own message need not be in it. Before D3 that was `undefined`/undecidable and
+  // the marker stayed stashed for the activation fold; now a KEYED pointer is
+  // ordered by archive POSITION against a page it was never orderable against.
+  // Only a store-level test exercises that page-choosing call site.
+  it('advances a KEYED pointer that is absent from the merged page, against that page', () => {
+    const cid = 'juliet@capulet.example'
+    // The merged page: m2..m4. The local pointer names m0, which is NOT in it.
+    const mergedPage = [msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+    seedConversation(cid, {
+      unreadCount: 5,
+      readPointer: pointerAt('m0'),
+      pendingRemoteDisplayedStanzaId: 's3',
+    })
+    // No resident messages at all — a backgrounded conversation, exactly as the
+    // merge path finds it.
+    expect(chatStore.getState().messages.get(cid)).toBeUndefined()
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's3', mergedPage)
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.readPointer?.messageId).toBe('m3')
+    // Resolved, so the high-water mark is retired rather than left to re-fire.
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    // The count is NOT this page's own tally (which would be 1: m4 alone). It
+    // stays archive-derived, and with no coverage/MAM state seeded that
+    // derivation defers, so the stale 5 survives — see the non-active test above.
+    expect(meta?.unreadCount).toBe(5)
   })
 
   // Multi-page background walk: the pointer resolves against only the FINAL
@@ -349,7 +418,10 @@ describe('chatStore.applyRemoteDisplayed', () => {
 })
 
 describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
-  beforeEach(() => chatStore.getState().reset())
+  beforeEach(() => {
+    _clearAllViewportEvidenceForTesting()
+    chatStore.getState().reset()
+  })
 
   // At the live edge the newest loaded message IS the true newest; clearing the
   // badge means the user caught up to it, so the read pointer must advance for the
@@ -358,6 +430,8 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
+    chatStore.getState().setActiveConversation(cid)
+    reportChatViewport(cid, 'at-edge')
 
     chatStore.getState().markAsRead(cid)
 
@@ -373,11 +447,26 @@ describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
     seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
+    chatStore.getState().setActiveConversation(cid)
+    reportChatViewport(cid, 'at-edge')
     chatStore.setState((state) => {
       const newEdge = new Map(state.windowAtLiveEdge)
       newEdge.set(cid, false)
       return { windowAtLiveEdge: newEdge }
     })
+
+    chatStore.getState().markAsRead(cid)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+  })
+
+  it('does NOT advance the read pointer when the viewport is away from the live edge', () => {
+    const cid = 'juliet@capulet.example'
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    seedConversation(cid, { unreadCount: 2, readPointer: pointerAt('m1') })
+    chatStore.getState().setActiveConversation(cid)
+    reportChatViewport(cid, 'away')
 
     chatStore.getState().markAsRead(cid)
 
@@ -644,7 +733,11 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     const messages = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4)]
     seedMessages(cid, messages)
-    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's0' })
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerIn(messages, 'm2'),
+      pendingRemoteDisplayedStanzaId: 's0',
+    })
 
     await chatStore.getState().activateConversation(cid)
 
@@ -663,8 +756,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const cid = 'confirmed@capulet.example'
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
-    seedMessages(cid, [timed('m1', 's1', 1), timed('m2', 's2', 2)])
-    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1') })
+    const messages = [timed('m1', 's1', 1), timed('m2', 's2', 2)]
+    seedMessages(cid, messages)
+    seedConversation(cid, { unreadCount: 0, readPointer: pointerIn(messages, 'm1') })
 
     await chatStore.getState().activateConversation(cid)
 
@@ -693,7 +787,11 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
     const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m5', 's5', 5)]
     seedMessages(cid, loaded)
-    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m2'), pendingRemoteDisplayedStanzaId: 's4' })
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerIn(loaded, 'm2'),
+      pendingRemoteDisplayedStanzaId: 's4',
+    })
 
     await chatStore.getState().activateConversation(cid)
     // Provisional divider from the stale local pointer (m2 → m3).
@@ -716,7 +814,11 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
     const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3)]
     seedMessages(cid, loaded)
-    seedConversation(cid, { unreadCount: 0, readPointer: pointerAt('m1'), pendingRemoteDisplayedStanzaId: 's9' })
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerIn(loaded, 'm1'),
+      pendingRemoteDisplayedStanzaId: 's9',
+    })
 
     await chatStore.getState().activateConversation(cid)
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
@@ -797,15 +899,20 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(5)
   })
 
-  // Control: no remote marker ⇒ a fresh conversation is still caught up.
-  it('still treats a fresh conversation with no remote marker as caught up', () => {
+  // Control for the test above, inverted by PR C, D6. It used to assert that
+  // WITHOUT a pending marker the merge snapped the pointer to 'm10' — proving
+  // the marker check was what suppressed the snap. That snap is deleted, so the
+  // control now proves the complement, which is the stronger statement: the
+  // merge writes no pointer for anyone, so the 'm3' the sibling test observes
+  // can only have come from the marker fold.
+  it('a fresh conversation with no remote marker gets no pointer from the merge either', () => {
     seedFreshConversation()
 
     chatStore.getState().mergeMAMMessages(cid, archive(), {}, true, 'forward')
 
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.unreadCount).toBe(0)
-    expect(meta?.readPointer?.messageId).toBe('m10')
+    expect(meta?.readPointer).toBeUndefined()
   })
 })
 
