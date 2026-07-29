@@ -234,7 +234,7 @@ One envelope, two kinds. Short flat keys, so a day's file stays small enough to 
 
 ```jsonc
 { "v":1, "t":"2026-07-29T11:50:00Z", "sid":"9f2c1a04-...", "build":"0.17.2+5abd37a",
-  "kind":"digest", "windowMs":300000,
+  "kind":"digest", "windowMs":300000, "tokenKeyId":"3b91cc07",
   "counters":{ "mam.queries":108, "mam.rowsRetained":340, "mam.pagesEmpty":4,
                "room.joins":10, "render.MessageList":1840, "scroll.writes":96 },
   "suppressed":{ "scroll/reassert-nonconverging":47 } }
@@ -270,6 +270,27 @@ invariant would otherwise append without limit, each record duplicating 50 crumb
 | **Session ceiling** | 500 records or 2 MB, whichever comes first. On hit, write one final `recorder/ceiling-reached` record and stop. A silent stop would read as a healthy day |
 | **Write discipline** | Single-flight queue; max 8 KB per line; over-limit records **drop whole crumbs, then whole optional fields**, and set `"trunc":true`. Strings are never shortened — §4.4 rejects a disallowed string outright rather than emitting a prefix of it. Newlines are rejected in every string value (a newline would forge a second JSONL record) |
 
+#### Write-queue failure semantics
+
+A naive single-flight chain (`q = q.then(write)`) **poisons itself**: one rejected write propagates
+rejection to every subsequent link, so a single transient I/O error silently ends logging for the
+rest of the session — and the log would look like a healthy quiet day. Required behaviour:
+
+- Every link absorbs its own failure (`q = q.then(write).catch(absorb)`). A failed write is dropped;
+  the queue continues.
+- Failures increment an in-memory `recorder/sink-write-failed` counter surfaced in the next digest.
+- **Failures are also mirrored to `console.warn`.** If the sink is broken, the digest reporting the
+  breakage cannot be written either — the prose log is the only channel that still works, and this
+  is the one place the two logs must overlap.
+- After 10 consecutive failures the sink disables itself for the session, emitting one final
+  `console.warn`. A permanently failing path (disk full, revoked permission) must not burn a write
+  attempt per record.
+
+**Flush on `visibilitychange` / exit is best effort.** The WebView gives no guarantee that
+asynchronous I/O completes during teardown, so the final digest may be lost. The review skill must
+therefore treat a missing trailing digest as normal, not as a signal, and never infer session length
+from its absence.
+
 ### 4.4 Privacy by construction
 
 A sample-based redaction test cannot stop a future detector from logging a body — it only tests the
@@ -282,7 +303,7 @@ field — `expected`, `observed`, crumb values, **and every value in `ctx`** —
 
 - be a member of the runtime `Tag` allowlist (a frozen `Set` in `schema.ts`, the same source the
   `Tag` type is derived from), or
-- match the opaque-token pattern `/^c:[0-9a-f]{16}$/`.
+- match the opaque-token pattern `/^c:(?:[0-9a-f]{16}|unresolved)$/`.
 
 Anything else **rejects the whole record** and increments a `recorder/rejected-value` counter in the
 digest. It is not truncated. Truncation was the flaw in the previous revision: a 64-character cap on
@@ -290,19 +311,38 @@ an accidentally-supplied body still emits the first 64 characters of that body, 
 the leak the rule exists to prevent. A rejected record is a visible bug in a detector; a truncated
 one is a silent disclosure.
 
-**Opaque entity tokens.** `Token` is produced solely by `token(bareJid)` — HMAC-SHA-256 of the bare
-JID under a per-install key, rendered as `c:` + **16 hex chars (64 bits)**. Six hex characters was
-24 bits, which collides at roughly 4 000 distinct entities by the birthday bound — plausible over a
-long-lived install, and a collision silently merges two conversations' evidence.
+**Opaque tokens are namespaced.** JIDs are not the only identifiers these records carry — MAM
+breadcrumbs will hold `queryId`, message ids and stanza ids. A single-purpose `token(bareJid)` would
+either leave those raw or silently mix identifier spaces, so the constructor is:
+
+```ts
+token(ns: 'jid' | 'message' | 'mam-query' | 'room' | 'device', value: string): Token
+```
+
+HMAC-SHA-256 over `ns + '\0' + value` under a per-install key, rendered as `c:` + **16 hex chars
+(64 bits)**. The namespace is part of the preimage, so the same string in two roles yields two
+tokens and cannot produce a spurious correlation. Six hex characters would have been 24 bits, which
+collides at roughly 4 000 distinct entities by the birthday bound — plausible over a long-lived
+install, and a collision silently merges two conversations' evidence.
 
 - **Key persistence:** 32 random bytes from `crypto.getRandomValues`, generated once and stored in
   `localStorage` under `fluux:anomaly-token-key`. Never derived from account identity, so the token
-  space cannot be reversed by guessing JIDs against a known salt. Losing the key simply restarts
-  token identity; the review skill treats a key change as a session boundary.
-- **Async tokenization:** WebCrypto HMAC is async, but `record()` is called from synchronous
-  detector paths. Tokens are therefore resolved **inside the single-flight write queue** (§4.3),
-  which is already async, and memoized in a bounded LRU (`Map`, 500 entries) keyed by bare JID.
-  A record carries the bare JID only inside the queue, never in the emitted line.
+  space cannot be reversed by guessing JIDs against a known salt.
+- **`tokenKeyId` in every digest.** The first 8 hex chars of SHA-256 of the key — a one-way digest,
+  so it discloses nothing. Without it, a key rotation or a cleared `localStorage` produces a second,
+  disjoint token space that looks identical to the first, and a review spanning the boundary would
+  read two different conversations as one. The review skill treats a `tokenKeyId` change as a hard
+  correlation boundary and refuses to join records across it.
+- **Raw identifiers never enter a record object.** Not in the breadcrumb ring, not in a generic
+  record field, and **not transiently inside the write queue**. Tokenization happens at the
+  *call site*, before any value is handed to `record()`.
+- **Sync lookup, async pre-warm.** WebCrypto is async but detector paths are synchronous, so a
+  background tokenizer subscribes to conversation, roster, room and MAM-query lifecycle events and
+  populates a bounded LRU (`Map`, 500 entries, keyed by `ns + '\0' + value`) *ahead of use*. Crumb
+  recording does a synchronous `Map.get`. A miss emits the reserved sentinel `c:unresolved` — never
+  the raw value — and schedules tokenization so later crumbs resolve. Misses are counted as
+  `recorder/token-unresolved` in the digest, so a systematically cold cache is visible rather than
+  quietly degrading evidence quality.
 
 **Recursive serialization limits.** Max depth 2, max 50 array entries, applied in the serializer —
 belt-and-braces against a malformed record shape, not the privacy mechanism itself.
@@ -323,6 +363,21 @@ the second assertion is what would have caught the previous revision's truncatio
 | `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts:89`) | bug | 3 |
 | `unread-survives-focus` | active + focused + at live edge for >2s, yet `unreadCount > 0` | bug | 3 |
 | `badge-vs-pointer` | archive-derived recount vs displayed count | bug | **5 — blocked** |
+
+**Generation resets for `pointer-regression`.** "Forward-only" holds *within* one store generation.
+Several normal transitions legitimately move a pointer backwards or replace it wholesale, and a
+detector that ignores them would fire on routine behaviour and be deleted under §6.1. The detector
+therefore keys its last-seen state on a **generation identity** — account/storage scope, hydration
+epoch, and cache epoch — and:
+
+- **resets** whenever that identity changes (account switch, rehydration, store reset);
+- **ignores the first observation** in each generation, having no predecessor to compare against;
+- **accepts an identical rewrite** — the same pointer written twice is idempotence, not regression.
+  Only a strictly-behind pointer within one generation is an anomaly.
+
+The generation identity is available from the same signals the real recount already guards on
+(`chatStore.ts:2478`, `recountContextIsCurrent`), so the detector observes the product's own notion
+of currency rather than inventing a parallel one.
 
 **Why `badge-vs-pointer` is deferred.** The original design proposed
 `recomputeCountsFromPointer` (`stores/shared/notificationState.ts:637`) as an oracle. That is not
@@ -416,10 +471,35 @@ Two further requirements, without which a rate is still misleading:
 Three read-only additions to the SDK public API, each useful beyond this system:
 
 1. **`onApplicationStanzaOut(handler)`** — outbound application stanzas only.
-2. **A MAM outcome seam** emitting `{ queryId, returned, retained, dropped }` once a page has been
-   merged into the cache. Unblocks `mam-page-yield` (§5.2).
-3. **A read-only unread diagnostic** returning the archive-derived count with the same coverage
-   gating as the real recount, without mutating store state. Unblocks `badge-vs-pointer` (§5.1).
+2. **A MAM outcome seam** emitting, once a page has been merged into the cache:
+
+   ```ts
+   { queryId: Token, outcome: 'durable' | 'partial' | 'failed',
+     returned: number, retained: number, dropped: number }
+   ```
+
+   The three-way `outcome` matters: a page that returned rows but failed to persist is not the same
+   event as one that persisted nothing because everything was a duplicate, and a `mam-page-yield`
+   detector that collapsed them would report a storage failure as a deduplication win. Unblocks
+   §5.2.
+
+3. **A read-only unread diagnostic** returning the archive-derived count without mutating store
+   state:
+
+   ```ts
+   { status: 'exact' | 'deferred' | 'stale', count?: number, inputs: InputVersions }
+   ```
+
+   Only `exact` may be compared against the displayed badge. `deferred` means the coverage gate
+   declined (the real recount would also have declined), and `stale` means the inputs moved during
+   computation — neither is evidence of a bug, and treating either as a mismatch would make the
+   detector fire during ordinary catch-up.
+
+   `inputs` carries the identity and version of everything the count was computed against, and the
+   detector **re-verifies them after the comparison** before recording. This mirrors the product's
+   own `recountContextIsCurrent()` re-check at `chatStore.ts:2478`, which exists because the inputs
+   can move mid-computation; a detector without the same re-check would report that race as an
+   anomaly. Unblocks `badge-vs-pointer` (§5.1).
 
 **Why `onApplicationStanzaOut` and not `onStanzaOut`.** Several connection-level sends bypass
 `XMPPClient.sendIQ` (`core/XMPPClient.ts:1784`) and go straight to the transport — the keepalive
@@ -492,6 +572,12 @@ Additionally required:
   to today's (§5.3).
 - **Boundedness tests** — cooldown coalescing, ceiling stop with its final record, 8 KB truncation
   order, newline rejection (§4.3).
+- **Queue-poisoning test** — a rejected write must not prevent the next N writes from succeeding,
+  and must surface on `console.warn` plus the failure counter (§4.3).
+- **Generation-reset test** — account switch, rehydration, and an identical pointer rewrite each
+  produce **no** anomaly from `pointer-regression`; only a strictly-behind pointer within one
+  generation does (§5.1). This is a control test in the §7.1 sense: the transitions it covers are
+  exactly the ones a naive implementation would report.
 
 ### 7.2 Paired CI assertions
 
