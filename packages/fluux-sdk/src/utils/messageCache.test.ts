@@ -1475,12 +1475,23 @@ describe('countUnreadInArchive (chat)', () => {
     expect(res).toEqual({ unread: 1 })
   })
 
-  it('saturates unread at unreadCap', async () => {
+  it('saturates unread at unreadCap and stops the walk there', async () => {
+    // `unreadCap` is freely parameterized, so the invariant needs rows > cap —
+    // not a large archive. Ten rows against a cap of five: without the cursor
+    // `break` this counts 10.
     await messageCache.saveMessages(
-      Array.from({ length: 1200 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
+      Array.from({ length: 10 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
     )
-    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 999 })
-    expect(res!.unread).toBe(999)
+    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 5 })
+    expect(res!.unread).toBe(5)
+  })
+
+  it('does not saturate below unreadCap — reports the true count when rows < cap', async () => {
+    await messageCache.saveMessages(
+      Array.from({ length: 3 }, (_, i) => createMockMessage(CONV, { id: `m${i}`, timestamp: new Date(1000 + i), isOutgoing: false }))
+    )
+    const res = await messageCache.countUnreadInArchive(CONV, { floor: new Date(0), unreadCap: 5 })
+    expect(res!.unread).toBe(3)
   })
 
   it('missing archiveOrderKey falls back to strict-after-timestamp (over-counts, safe)', async () => {
@@ -1583,6 +1594,26 @@ describe('countRoomUnreadInArchive (room)', () => {
     // as "after" an unresolved pointer position; m3 counts regardless of the key.
     const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { timestamp: t } })
     expect(res).toEqual({ unread: 3 })
+  })
+
+  it('saturates unread at unreadCap and stops the walk there', async () => {
+    await messageCache.saveRoomMessages(
+      Array.from({ length: 10 }, (_, i) =>
+        createMockRoomMessage(ROOM, { id: `m${i}`, from: `${ROOM}/alice`, timestamp: new Date(1000 + i), isOutgoing: false })
+      )
+    )
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 5 })
+    expect(res!.unread).toBe(5)
+  })
+
+  it('does not saturate below unreadCap — reports the true count when rows < cap', async () => {
+    await messageCache.saveRoomMessages(
+      Array.from({ length: 3 }, (_, i) =>
+        createMockRoomMessage(ROOM, { id: `m${i}`, from: `${ROOM}/alice`, timestamp: new Date(1000 + i), isOutgoing: false })
+      )
+    )
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: new Date(0), unreadCap: 5 })
+    expect(res!.unread).toBe(3)
   })
 
   it('returns null on IndexedDB error', async () => {
