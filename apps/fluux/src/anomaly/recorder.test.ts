@@ -271,39 +271,177 @@ describe('the session ceiling', () => {
 })
 
 describe('digest atomicity', () => {
-  it('preserves the SAME window when a digest could not be written', () => {
-    // The limit is raised on the SAME recorder. A second recorder would prove
-    // nothing about the first one's state, which is exactly what is at stake: if
-    // the baselines advanced and the counters cleared on a failed emit, the
-    // window's data would be gone AND the next delta would be measured from a
-    // report that never existed.
+  // The window must survive a flush that failed WITHOUT the budget being reached.
+  // A budget refusal is terminal by design, so the probe here is a SERIALIZATION
+  // failure — the recorder keeps running and the data must still be reportable.
+  it('preserves the SAME window when a digest could not be built', () => {
     const sink = fakeSink()
-    let budget = 1
-    const rec = make(sink, () => budget)
+    const rec = make(sink)
 
     rec.count(METRIC.mamQueries, 9)
-    rec.flushDigest(300_000)
+    rec.flushDigest(Number.NaN) // rejected by the serializer
     expect(digests(sink)).toHaveLength(0)
 
-    budget = 1024 * 1024
     rec.flushDigest(300_000)
-
     expect(digests(sink)[0].counters['mam.queries']).toBe(9)
   })
 
   it('does not advance a health baseline on a failed flush', () => {
     const sink = fakeSink()
-    let budget = 1
-    const rec = make(sink, () => budget)
+    const rec = make(sink)
 
     rec.record({ id: ID.sessionStart, sev: 'bug', ctx: [[CTX.conv, 'raw' as never]] })
-    rec.flushDigest(300_000)
+    rec.flushDigest(Number.NaN)
     expect(digests(sink)).toHaveLength(0)
 
-    budget = 1024 * 1024
     rec.flushDigest(300_000)
     // Still 1: the failed flush must not have consumed the rejection.
     expect(digests(sink)[0].counters['recorder/rejected-value']).toBe(1)
+  })
+
+  it('does NOT announce the ceiling when a digest merely failed to build', () => {
+    // A malformed digest is not a budget event. Claiming the ceiling here would
+    // say the recorder had stopped when nothing was exhausted.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.flushDigest(Number.NaN)
+    expect(parsed(sink)).toHaveLength(0)
+
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    expect(parsed(sink)).toHaveLength(1)
+  })
+
+  it('rejects a non-finite window rather than writing it', () => {
+    const sink = fakeSink()
+    make(sink).flushDigest('SECRET-WINDOW' as never)
+    expect(sink.lines.join()).not.toContain('SECRET-WINDOW')
+    expect(sink.lines).toHaveLength(0)
+  })
+})
+
+describe('inputs cannot bypass the runtime guards', () => {
+  const BODY = 'SECRET-BODY-abcdefghij'
+
+  it('rejects a repeat carrying a raw value instead of counting it as suppressed', () => {
+    // The cooldown used to run BEFORE serialization, so a repeat with a body was
+    // filed as a suppression and never reached the rejected-value counter.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    rec.record({ id: ID.sessionStart, sev: 'bug', ctx: [[BODY as never, TAG.focus]] })
+    rec.flushDigest(300_000)
+    expect(digests(sink)[0].counters['recorder/rejected-value']).toBe(1)
+    expect(digests(sink)[0].suppressed['recorder/session-start']).toBeUndefined()
+  })
+
+  it('cannot have its suppressed map poisoned by a forged id', () => {
+    // A forgery whose `.s` matched a real id used to be stored as a suppressed key,
+    // which then failed to serialize and took the whole digest down with it —
+    // producing a false ceiling-reached into the bargain.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    rec.record({ id: { s: 'recorder/session-start' } as never, sev: 'bug' })
+    rec.flushDigest(300_000)
+
+    expect(digests(sink)).toHaveLength(1)
+    expect(parsed(sink).some((r) => r.id === 'recorder/ceiling-reached')).toBe(false)
+  })
+
+  it('copies the crumb, so a later mutation cannot rewrite the ring', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    const parts = [TAG.msgIn, 1]
+    rec.crumb(parts)
+    parts[1] = BODY as never
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+
+    expect(sink.lines.join()).not.toContain(BODY)
+    expect(sink.lines).toHaveLength(1)
+  })
+
+  it('drops a crumb carrying an inadmissible entry rather than storing it', () => {
+    // An unvalidated entry would sit in the ring and poison every record that
+    // attached it, long after the call that added it.
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.crumb([TAG.msgIn, BODY as never])
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    expect(parsed(sink)[0].crumbs).toEqual([])
+  })
+
+  it('bounds the width of a stored crumb', () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    rec.crumb(Array.from({ length: 400 }, () => TAG.msgIn))
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    expect(parsed(sink)[0].crumbs[0]).toHaveLength(50)
+  })
+
+  it.each([
+    ['a non-counter constant', () => ID.sessionStart, 1],
+    ['a ctx key', () => CTX.conv, 1],
+    ['a tag', () => TAG.focus, 1],
+  ])('refuses count() with %s', (_label, key, by) => {
+    expect(() => make(fakeSink()).count((key() as unknown) as never, by)).toThrow()
+  })
+
+  it.each([Infinity, -Infinity, NaN])('refuses a %s increment', (by) => {
+    expect(() => make(fakeSink()).count(METRIC.probe, by)).toThrow(/finite/)
+  })
+
+  it.each([
+    ['Infinity', () => Infinity],
+    ['a larger finite budget', () => 1e12],
+    ['NaN', () => NaN],
+    ['zero', () => 0],
+  ])('ignores a maxBytes override of %s — the budget can only be lowered', (_label, budget) => {
+    const sink = fakeSink()
+    const rec = make(sink, budget)
+    for (let i = 0; i < 60; i++) rec.crumb(Array.from({ length: 50 }, () => TAG.msgIn))
+    for (let i = 0; i < 600; i++) {
+      clock += 60_001
+      rec.record({ id: ID.sessionStart, sev: 'bug' })
+    }
+    const total = sink.lines.reduce((n, l) => n + new TextEncoder().encode(l).length + 1, 0)
+    expect(total).toBeLessThanOrEqual(2 * 1024 * 1024 + 8193)
+  })
+
+  it('becomes terminal once the budget refuses a write', () => {
+    // Announcing alone was not enough: a single line too large for the remaining
+    // budget produced a ceiling-reached record while the recorder kept writing, so
+    // the log claimed it had stopped and had not.
+    const sink = fakeSink()
+    const rec = make(sink, () => 4096)
+    for (let i = 0; i < 60; i++) rec.crumb(Array.from({ length: 50 }, () => TAG.msgIn))
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+
+    const after = sink.lines.length
+    expect(parsed(sink).some((r) => r.id === 'recorder/ceiling-reached')).toBe(true)
+
+    rec.flushDigest(300_000)
+    clock += 60_001
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+    expect(sink.lines).toHaveLength(after)
+  })
+
+  it('counts the newline the sink appends against the budget', () => {
+    // A record line is 177 bytes and MAX_RECORDS is 500, so any budget under
+    // ~88 KB is the binding constraint rather than the record count — which is
+    // what makes the one-byte-per-record drift observable at all. At 80 KB the
+    // difference is about 2 records, well outside the single-line headroom the
+    // forced ceiling notice needs.
+    const budget = 80_000
+    const sink = fakeSink()
+    const rec = make(sink, () => budget)
+    for (let i = 0; i < 600; i++) {
+      clock += 60_001
+      rec.record({ id: ID.sessionStart, sev: 'bug' })
+    }
+
+    const onDisk = sink.lines.reduce((n, l) => n + new TextEncoder().encode(l).length + 1, 0)
+    // Only the forced ceiling notice may exceed the budget.
+    expect(onDisk).toBeLessThanOrEqual(budget + 200)
   })
 })
 

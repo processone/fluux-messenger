@@ -175,6 +175,11 @@ export function serialize(
   try {
     if (record.kind === 'digest') {
       assertNoUnknownKeys(record, DIGEST_KEYS)
+      // `windowMs` is a plain number on the record, so its type is erased by any
+      // cast — the same threat as `sev`. It reaches the line verbatim otherwise.
+      if (!Number.isFinite(record.windowMs) || record.windowMs <= 0) {
+        throw new Error('invalid windowMs')
+      }
       // Built field by field, NEVER spread: a spread emits any unexpected property
       // verbatim, which is exactly how a body would reach the log.
       const line = JSON.stringify({
