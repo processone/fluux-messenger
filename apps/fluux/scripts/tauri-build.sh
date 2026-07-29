@@ -72,6 +72,12 @@ done
 # Apply the dev identity override to every `tauri build` invocation below.
 EXTRA_ARGS+=(--config "$DEV_CONF")
 
+# Local builds carry the anomaly instrumentation. `tauri build` runs the
+# PRODUCTION vite build via beforeBuildCommand, so import.meta.env.DEV is false
+# here — this variable is the only thing that distinguishes "Fluux Messenger Dev"
+# from a release build. See apps/fluux/src/anomaly/gate.ts.
+export FLUUX_ANOMALY=1
+
 # Sign local builds with a stable identity when one is available, so the macOS
 # notification grant survives Rust rebuilds. Ad-hoc signing (the default when no
 # identity is set) re-pins the grant to the binary's CDHash, so every Rust

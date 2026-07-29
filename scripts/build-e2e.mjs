@@ -32,9 +32,9 @@ const APP = join(ROOT, 'apps', 'fluux')
 const DIST = join(APP, 'dist')
 
 /**
- * Seams installed behind `import.meta.env.DEV` in MessageList.tsx, and used by
- * scripts/scroll-invariants.ts. These specifically discriminate a development build from
- * a production one — the other `__fluux*` globals are installed unconditionally and
+ * Seams installed behind `__FLUUX_ANOMALY__` in MessageList.tsx, and used by
+ * scripts/scroll-invariants.ts. These specifically discriminate a gated build from
+ * an ungated one — the other `__fluux*` globals are installed unconditionally and
  * survive a production build, so asserting those would prove nothing.
  */
 const DEV_ONLY_SEAMS = ['__fluuxGetVirtOffset', '__fluuxTriggerLoadOlder', '__fluuxTriggerMediaLoad']
@@ -42,7 +42,14 @@ const DEV_ONLY_SEAMS = ['__fluuxGetVirtOffset', '__fluuxTriggerLoadOlder', '__fl
 const build = spawnSync('npx', ['vite', 'build'], {
   cwd: APP,
   stdio: 'inherit',
-  env: { ...process.env, FLUUX_E2E_BUILD: '1', NODE_ENV: 'development' },
+  env: {
+    ...process.env,
+    FLUUX_E2E_BUILD: '1',
+    NODE_ENV: 'development',
+    // The harness seams below are gated on __FLUUX_ANOMALY__, not on
+    // import.meta.env.DEV. See apps/fluux/src/anomaly/gate.ts.
+    FLUUX_ANOMALY: '1',
+  },
 })
 
 if (build.status !== 0) {
@@ -72,7 +79,8 @@ const missing = DEV_ONLY_SEAMS.filter(seam => !bundle.includes(seam))
 if (missing.length > 0) {
   fail(
     `the bundle is missing ${missing.length} of ${DEV_ONLY_SEAMS.length} dev-only harness seam(s): ${missing.join(', ')}.\n` +
-      'This means import.meta.env.DEV resolved false — check that NODE_ENV=development reaches vite.\n' +
+      'This means the gate resolved false — check that FLUUX_ANOMALY=1 reaches vite\n' +
+      '(see apps/fluux/src/anomaly/gate.ts).\n' +
       'Without these the e2e suites fail deep inside unrelated assertions.',
   )
 }

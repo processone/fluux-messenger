@@ -6,6 +6,7 @@ import { execSync } from 'child_process'
 import { readFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
 import { createRequire } from 'module'
+import { resolveAnomalyGate } from './src/anomaly/gate'
 
 // Resolve packages via Node's module resolution (walks up parent dirs) instead of
 // a hardcoded ../../node_modules path. The latter assumes apps/fluux sits directly
@@ -48,7 +49,7 @@ const appVersion = getVersion()
  */
 const isE2EBuild = process.env.FLUUX_E2E_BUILD === '1'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [
     react(),
@@ -149,6 +150,9 @@ export default defineConfig({
     // Inject version info at build time
     __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_COMMIT__: JSON.stringify(gitCommit),
+    // Anomaly instrumentation gate. A build-time literal, so the guarded tree is
+    // dead-code eliminated in release. See src/anomaly/gate.ts for the matrix.
+    __FLUUX_ANOMALY__: JSON.stringify(resolveAnomalyGate(mode, process.env)),
   },
   optimizeDeps: {
     exclude: ['@fluux/sdk'], // Don't pre-bundle local SDK so changes are picked up
@@ -206,4 +210,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

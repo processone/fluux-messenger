@@ -491,10 +491,14 @@ export function MessageList<T extends BaseMessage>({
   }
   const getTopDate = useCallback(() => getTopVisibleDateRef.current(), [])
 
-  // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
+  // Expose virtualizer offset lookup for Playwright test assertions (invariant-1).
   // Allows tests to check anchor position without requiring the row to be in the DOM window.
+  //
+  // Gated on __FLUUX_ANOMALY__, NOT import.meta.env.DEV: `tauri build` runs the
+  // production vite build, so DEV is false in the packaged "Fluux Messenger Dev"
+  // bundle and this probe never installed there. See src/anomaly/gate.ts.
   useEffect(() => {
-    if (!import.meta.env.DEV || !activeVirtualizer || typeof window === 'undefined') return
+    if (!__FLUUX_ANOMALY__ || !activeVirtualizer || typeof window === 'undefined') return
 
     const devWindow = window as unknown as Record<string, unknown>
     const getVirtOffset = (id: string) => activeVirtualizer.getOffsetForMessageId(id)
@@ -645,11 +649,13 @@ export function MessageList<T extends BaseMessage>({
     }
   }, [requestMessageTarget, scrollToBottom, staticMode])
 
-  // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
-  // so tests can fire it without scrolling to 0, which would change findAnchorElement's
+  // Expose the full load-earlier trigger (saves anchor + calls onScrollToTop) so
+  // tests can fire it without scrolling to 0, which would change findAnchorElement's
   // anchor to firstMessageId instead of the actual top-visible message at that scrollTop.
+  //
+  // Gated on __FLUUX_ANOMALY__ — see the note on the offset probe above.
   useEffect(() => {
-    if (!import.meta.env.DEV || typeof window === 'undefined') return
+    if (!__FLUUX_ANOMALY__ || typeof window === 'undefined') return
 
     const devWindow = window as unknown as Record<string, unknown>
     devWindow.__fluuxTriggerLoadOlder = handleLoadEarlier
