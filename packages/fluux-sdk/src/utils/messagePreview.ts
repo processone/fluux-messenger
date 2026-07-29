@@ -166,19 +166,19 @@ export function stripMessageStyling(text: string): string {
 
   // Strip Markdown-style bold (**text**) - must come before single asterisk
   // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
-  result = result.replace(/(?<=^|[\s\p{P}])\*\*([^\s*](?:[^*]*[^\s*])?)\*\*(?=$|[\s\p{P}])/gu, '$1')
+  result = result.replace(/(?<=^|[\s\p{P}\u0000])\*\*([^\s*](?:[^*]*[^\s*])?)\*\*(?=$|[\s\p{P}\u0000])/gu, '$1')
 
   // Strip XEP-0393 bold (*text*)
-  result = result.replace(/(?<=^|[\s\p{P}])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}])/gu, '$1')
+  result = result.replace(/(?<=^|[\s\p{P}\u0000])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}\u0000])/gu, '$1')
 
   // Strip italic (_text_)
-  result = result.replace(/(?<=^|[\s\p{P}])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}])/gu, '$1')
+  result = result.replace(/(?<=^|[\s\p{P}\u0000])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}\u0000])/gu, '$1')
 
   // Strip Markdown-style strikethrough (~~text~~) - must come before single tilde
-  result = result.replace(/(?<=^|[\s\p{P}])~~([^\s~](?:[^~]*[^\s~])?)~~(?=$|[\s\p{P}])/gu, '$1')
+  result = result.replace(/(?<=^|[\s\p{P}\u0000])~~([^\s~](?:[^~]*[^\s~])?)~~(?=$|[\s\p{P}\u0000])/gu, '$1')
 
   // Strip XEP-0393 strikethrough (~text~)
-  result = result.replace(/(?<=^|[\s\p{P}])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}])/gu, '$1')
+  result = result.replace(/(?<=^|[\s\p{P}\u0000])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}\u0000])/gu, '$1')
 
   // Restore the protected code contents verbatim, in a single pass so restored
   // text is never rescanned.

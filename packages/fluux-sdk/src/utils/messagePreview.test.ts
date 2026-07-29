@@ -370,6 +370,26 @@ describe('messagePreview', () => {
           .toBe('bold then *literal* then italic')
       })
 
+      it('should strip styling directly before a fenced code block', () => {
+        expect(stripMessageStyling('*bold*```\ncode\n```')).toBe('boldcode')
+      })
+
+      it('should strip styling directly after a fenced code block', () => {
+        expect(stripMessageStyling('```\ncode\n```*bold*')).toBe('codebold')
+      })
+
+      it('should strip styling directly before an inline code span', () => {
+        expect(stripMessageStyling('*bold*`code`')).toBe('boldcode')
+      })
+
+      it('should strip styling directly after an inline code span', () => {
+        expect(stripMessageStyling('`code`*bold*')).toBe('codebold')
+      })
+
+      it('should strip non-asterisk styling directly beside inline code', () => {
+        expect(stripMessageStyling('_before_`code`_after_')).toBe('beforecodeafter')
+      })
+
       it('should keep a heading marker inside a fenced code block', () => {
         expect(stripMessageStyling('```\n# not a heading\n```')).toBe('# not a heading')
       })
