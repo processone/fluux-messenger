@@ -2863,6 +2863,15 @@ git commit -m "feat: mount the anomaly installer inside XMPPProvider"
 - Produces: `anomalyBuildAudit(enabled: boolean): Plugin` — throws during `generateBundle` when
   the expectation is violated in either direction.
 
+**Why this task is what makes the gate a guarantee rather than a convention.** The shared
+`resolveAnomalyGate` landed in #1167 stops `vite.config.ts` and `vitest.config.ts` disagreeing about
+the matrix — but that is all it does. `tauri-build.sh` and `build-e2e.mjs` each opt in
+*independently* by exporting `FLUUX_ANOMALY=1`, and nothing verifies that either still does. A
+refactor dropping the export from `tauri-build.sh` would silently return the packaged Dev bundle to
+the pre-#1167 state, where the probes never installed and no test noticed. `build-e2e.mjs`
+self-checks its own output; the Dev bundle has no equivalent until this task lands. Until then the
+elimination evidence recorded in #1167 is a manual measurement, not an enforced property.
+
 Vite emits no bundler manifest here — the `manifest` at `apps/fluux/vite.config.ts:79` is the
 **PWA web-app manifest** inside `VitePWA({...})`, unrelated to the module graph. The audit
 therefore inspects `chunk.modules`, which is strictly stronger than matching chunk filenames: a
