@@ -114,7 +114,10 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
  * never forge a placeholder and capture or corrupt the surrounding text.
  */
 const CODE_PLACEHOLDER = '\u0000'
+// NUL is the deliberate placeholder delimiter; message input is sanitized below.
+// eslint-disable-next-line no-control-regex
 const CODE_FENCE_PLACEHOLDER_REGEX = /(\u0000f\d+\u0000)/g
+// eslint-disable-next-line no-control-regex
 const CODE_PLACEHOLDER_REGEX = /\u0000f(\d+)\u0000|`\u0000i(\d+)\u0000`/g
 
 /** Fenced code blocks, matching the renderer's ```lang\n ... ``` pattern. */
@@ -149,7 +152,7 @@ export function stripMessageStyling(text: string): string {
   if (!text) return text
 
   // Drop any NUL characters so the placeholder sentinel cannot be forged.
-  let result = text.replace(/\u0000/g, '')
+  let result = text.split(CODE_PLACEHOLDER).join('')
 
   const codeSpans: string[] = []
   const protectCode = (content: string, kind: 'fence' | 'inline'): string => {
