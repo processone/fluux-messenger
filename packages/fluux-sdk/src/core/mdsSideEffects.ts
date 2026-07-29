@@ -493,7 +493,7 @@ export function setupMdsSideEffects(
     currentSessionConfirmedNodeJids.clear()
     void (async () => {
       const seedStartedAtRevision = nodeRevision
-      let result: DisplayedMarkerFetchResult = { status: 'unknown' }
+      let result: DisplayedMarkerFetchResult
       try {
         result = await client.mds.fetchAllDisplayedResult()
       } catch {

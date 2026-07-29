@@ -62,8 +62,8 @@ export function parseMdsItems(itemsEl: Element): DisplayedMarker[] {
  *
  * Publishes/fetches the per-conversation last-displayed stanza-id to the private
  * PEP node `urn:xmpp:mds:displayed:0` (item id = conversation bare JID, payload =
- * an XEP-0333 `<displayed/>`). Request/response only — incoming `+notify` events
- * are handled in PubSub.
+ * an XEP-0490 `<displayed/>` wrapper containing an XEP-0359 `<stanza-id/>`).
+ * Request/response only — incoming `+notify` events are handled in PubSub.
  */
 export class Mds {
   private deps: ModuleDependencies
