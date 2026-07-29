@@ -114,6 +114,7 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
  * never forge a placeholder and capture or corrupt the surrounding text.
  */
 const CODE_PLACEHOLDER = '\u0000'
+const CODE_PLACEHOLDER_REGEX = /\u0000f(\d+)\u0000|`\u0000i(\d+)\u0000`/g
 
 /** Fenced code blocks, matching the renderer's ```lang\n ... ``` pattern. */
 const CODE_FENCE_REGEX = /```(\w*)\n?([\s\S]*?)```/g
@@ -150,15 +151,16 @@ export function stripMessageStyling(text: string): string {
   let result = text.replace(/\u0000/g, '')
 
   const codeSpans: string[] = []
-  const protectCode = (content: string): string => {
+  const protectCode = (content: string, kind: 'fence' | 'inline'): string => {
     const index = codeSpans.push(content) - 1
-    return `${CODE_PLACEHOLDER}${index}${CODE_PLACEHOLDER}`
+    const placeholder = `${CODE_PLACEHOLDER}${kind[0]}${index}${CODE_PLACEHOLDER}`
+    return kind === 'fence' ? placeholder : `\`${placeholder}\``
   }
 
   // Protect fenced code blocks first (the renderer also handles them before
   // inline styling), then inline code spans in what remains.
-  result = result.replace(CODE_FENCE_REGEX, (_match, _lang, content: string) => protectCode(content.trim()))
-  result = result.replace(INLINE_CODE_REGEX, match => protectCode(match.slice(1, -1)))
+  result = result.replace(CODE_FENCE_REGEX, (_match, _lang, content: string) => protectCode(content.trim(), 'fence'))
+  result = result.replace(INLINE_CODE_REGEX, match => protectCode(match.slice(1, -1), 'inline'))
 
   // Strip heading markers (# Title, ## Title, ### Title, #### Title)
   // Must be at start of line, followed by space
@@ -184,8 +186,9 @@ export function stripMessageStyling(text: string): string {
   // text is never rescanned.
   if (codeSpans.length > 0) {
     result = result.replace(
-      new RegExp(`${CODE_PLACEHOLDER}(\\d+)${CODE_PLACEHOLDER}`, 'g'),
-      (_match, index: string) => codeSpans[Number(index)]
+      CODE_PLACEHOLDER_REGEX,
+      (_match, fenceIndex: string | undefined, inlineIndex: string | undefined) =>
+        codeSpans[Number(fenceIndex ?? inlineIndex)]
     )
   }
 

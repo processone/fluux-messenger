@@ -1186,6 +1186,12 @@ describe('preview / renderer parity for code spans', () => {
     '*bold* then `*literal*` then _italic_',
     'Run `npm install` now',
     '```\n*not bold* and _not italic_\n```',
+    '*bold*```\ncode\n```',
+    '```\ncode\n```*bold*',
+    '_before_```\ncode\n```_after_',
+    '*bold*`code`',
+    '`code`*bold*',
+    '_before_`code`_after_',
   ]
 
   it.each(cases)('preview matches rendered text for %j', (body) => {

@@ -378,16 +378,20 @@ describe('messagePreview', () => {
         expect(stripMessageStyling('```\ncode\n```*bold*')).toBe('codebold')
       })
 
-      it('should strip styling directly before an inline code span', () => {
-        expect(stripMessageStyling('*bold*`code`')).toBe('boldcode')
+      it('should strip non-asterisk styling directly beside a fenced code block', () => {
+        expect(stripMessageStyling('_before_```\ncode\n```_after_')).toBe('beforecodeafter')
       })
 
-      it('should strip styling directly after an inline code span', () => {
-        expect(stripMessageStyling('`code`*bold*')).toBe('codebold')
+      it('should keep styling literal directly before an inline code span', () => {
+        expect(stripMessageStyling('*bold*`code`')).toBe('*bold*code')
       })
 
-      it('should strip non-asterisk styling directly beside inline code', () => {
-        expect(stripMessageStyling('_before_`code`_after_')).toBe('beforecodeafter')
+      it('should keep styling literal directly after an inline code span', () => {
+        expect(stripMessageStyling('`code`*bold*')).toBe('code*bold*')
+      })
+
+      it('should keep non-asterisk styling literal directly beside inline code', () => {
+        expect(stripMessageStyling('_before_`code`_after_')).toBe('_before_code_after_')
       })
 
       it('should keep a heading marker inside a fenced code block', () => {
