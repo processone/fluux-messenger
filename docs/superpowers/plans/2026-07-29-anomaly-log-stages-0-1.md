@@ -422,7 +422,10 @@ import {
   CTX,
   ID,
   initTokenizer,
+  isKind,
   isOpaque,
+  METRIC,
+  VALUE_KINDS,
   localRef,
   localRefOverflowCount,
   releaseRef,
@@ -455,7 +458,37 @@ describe('registries', () => {
   })
 
   it('freezes every registry', () => {
-    for (const registry of [TAG, ID, CTX, COUNTER]) expect(Object.isFrozen(registry)).toBe(true)
+    for (const registry of [TAG, ID, CTX, COUNTER, METRIC]) {
+      expect(Object.isFrozen(registry)).toBe(true)
+    }
+  })
+
+  it('separates categories, so constants are not interchangeable', () => {
+    expect(isKind(ID.sessionStart, 'id')).toBe(true)
+    expect(isKind(TAG.focus, 'id')).toBe(false)
+    expect(isKind(CTX.conv, 'ctx')).toBe(true)
+    expect(isKind(CTX.conv, 'counter')).toBe(false)
+    expect(isKind(COUNTER.rejectedValue, 'counter')).toBe(true)
+    expect(isKind(TAG.focus, ...VALUE_KINDS)).toBe(true)
+    expect(isKind(ID.sessionStart, ...VALUE_KINDS)).toBe(false)
+  })
+})
+
+describe('ID registry and the invariant registry document agree', () => {
+  it('has one docs entry per ID constant and vice versa', async () => {
+    // Parity is NOT "by construction": ID and docs/ANOMALY_INVARIANTS.md are two
+    // independent files. An earlier draft of this plan already shipped
+    // ID.sessionStart with no matching row in the document. Only a test closes it.
+    const fs = await import('node:fs/promises')
+    const doc = await fs.readFile(
+      new URL('../../../../docs/ANOMALY_INVARIANTS.md', import.meta.url),
+      'utf-8',
+    )
+    const documented = new Set(doc.match(/`(recorder\/[a-z-]+|[a-z-]+\/[a-z-]+)`/g)?.map((m) => m.slice(1, -1)) ?? [])
+    const declared = new Set(Object.values(ID).map((c) => c.s))
+
+    for (const id of declared) expect(documented, `${id} is not in the registry doc`).toContain(id)
+    for (const id of documented) expect(declared, `${id} has no ID constant`).toContain(id)
   })
 })
 
@@ -464,46 +497,59 @@ describe('no export can turn caller data into an Opaque', () => {
   // this design, so these are regression tests, not hypotheticals.
   const BODY = 'SECRET-BODY-abcdefghijklmnop'
 
-  it('resists every export called with the body in every argument position', async () => {
+  it('resists a targeted call of every dynamic constructor with a real body', async () => {
+    // The generic sweep below cannot supply a VALID companion argument, so it never
+    // actually reaches `tokenSync('jid', BODY)` or `localRef('m', BODY)` — the two
+    // calls that matter most. Those are enumerated explicitly, and the async ones
+    // are awaited so the assertion runs after the value exists.
+    await warmToken('jid', BODY)
+    await warmToken('room', BODY)
+    await warmToken('device', BODY)
+
+    const produced: string[] = [
+      tokenSync('jid', BODY).s,
+      tokenSync('room', BODY).s,
+      tokenSync('device', BODY).s,
+      localRef('m', BODY)!.s,
+      localRef('q', BODY)!.s,
+      localRef('x', BODY)!.s,
+    ]
+
+    const hex = Array.from(new TextEncoder().encode(BODY))
+      .map((x) => x.toString(16).padStart(2, '0'))
+      .join('')
+
+    for (const s of produced) {
+      for (let i = 0; i + 6 <= BODY.length; i++) {
+        expect(s.includes(BODY.slice(i, i + 6)), `leaked body: ${s}`).toBe(false)
+      }
+      expect(s.includes(hex.slice(0, 12)), `leaked hex body: ${s}`).toBe(false)
+    }
+  })
+
+  it('resists a generic sweep of every export, awaiting any promise it returns', async () => {
+    // Breadth to catch an export added later without a targeted case. Single-argument
+    // calls only — a second argument cannot be guessed validly — and every returned
+    // promise is awaited so a rejection is not mistaken for a pass.
     const mod = (await import('./values')) as Record<string, unknown>
     const encoded = new TextEncoder().encode(BODY)
-    const candidates: unknown[] = [
-      BODY,
-      encoded,
-      encoded.buffer,
-      { s: BODY },
-      { toString: () => BODY },
-      [BODY],
-    ]
+    const candidates: unknown[] = [BODY, encoded, encoded.buffer, { s: BODY }, [BODY]]
 
     for (const [name, fn] of Object.entries(mod)) {
       if (typeof fn !== 'function') continue
-      for (const a of candidates) {
-        for (const b of [undefined, 1, BODY, ...candidates]) {
-          let out: unknown
-          try {
-            out = (fn as (...args: unknown[]) => unknown)(a, b)
-          } catch {
-            continue // Rejecting is the correct behaviour.
-          }
-          if (!isOpaque(out)) continue
-          // It minted something. That is only acceptable if the result cannot
-          // carry any of the body.
-          const s = (out as { s: string }).s
-          for (let i = 0; i + 6 <= BODY.length; i++) {
-            expect(
-              s.includes(BODY.slice(i, i + 6)),
-              `${name}() leaked body content into an Opaque: ${s}`,
-            ).toBe(false)
-          }
-          // Nor its hex encoding, which is how a raw-bytes minter leaks.
-          const hex = Array.from(encoded)
-            .map((x) => x.toString(16).padStart(2, '0'))
-            .join('')
-          expect(
-            s.includes(hex.slice(0, 12)),
-            `${name}() leaked hex-encoded body into an Opaque: ${s}`,
-          ).toBe(false)
+      if (name === 'initTokenizer') continue // stateful; exercised in its own suite
+      for (const arg of candidates) {
+        let out: unknown
+        try {
+          out = (fn as (a: unknown) => unknown)(arg)
+          if (out instanceof Promise) out = await out
+        } catch {
+          continue // Rejecting is the correct behaviour.
+        }
+        if (!isOpaque(out)) continue
+        const s = (out as { s: string }).s
+        for (let i = 0; i + 6 <= BODY.length; i++) {
+          expect(s.includes(BODY.slice(i, i + 6)), `${name}() leaked body: ${s}`).toBe(false)
         }
       }
     }
@@ -602,23 +648,44 @@ Create `apps/fluux/src/anomaly/values.ts`:
 // Opaque values
 // ---------------------------------------------------------------------------
 
-const OPAQUE = new WeakSet<object>()
+/**
+ * Provenance carries a CATEGORY, not just membership.
+ *
+ * A single WeakSet would make every constant interchangeable: `TAG.focus` could be
+ * used as an invariant id, a token as a ctx key, a LocalRef as a counter name. That
+ * leaks nothing, but it dissolves the registries' meaning and the parity between
+ * `ID` and docs/ANOMALY_INVARIANTS.md — so the serializer must be able to ask
+ * "is this an id?", not merely "did we make this?".
+ */
+export type Kind = 'tag' | 'id' | 'ctx' | 'counter' | 'token' | 'ref'
+
+const KIND = new WeakMap<object, Kind>()
 
 export interface Opaque {
   readonly s: string
 }
 
 /** Module private. Never exported, directly or via a wrapper taking free text. */
-function mint(s: string): Opaque {
+function mint(s: string, kind: Kind): Opaque {
   const value = Object.freeze({ s })
-  OPAQUE.add(value)
+  KIND.set(value, kind)
   return value
 }
 
 /** True only for a value this module constructed. Not structural. */
 export function isOpaque(v: unknown): v is Opaque {
-  return typeof v === 'object' && v !== null && OPAQUE.has(v as object)
+  return typeof v === 'object' && v !== null && KIND.has(v as object)
 }
+
+/** True only for a value this module constructed WITH one of `kinds`. */
+export function isKind(v: unknown, ...kinds: Kind[]): v is Opaque {
+  if (typeof v !== 'object' || v === null) return false
+  const kind = KIND.get(v as object)
+  return kind !== undefined && kinds.includes(kind)
+}
+
+/** The categories admissible as a record VALUE (as opposed to a key or an id). */
+export const VALUE_KINDS: Kind[] = ['tag', 'token', 'ref']
 
 // ---------------------------------------------------------------------------
 // Closed registries
@@ -632,42 +699,60 @@ export function isOpaque(v: unknown): v is Opaque {
 
 /** Breadcrumb and field tags. */
 export const TAG = Object.freeze({
-  focus: mint('focus'),
-  blur: mint('blur'),
-  msgIn: mint('msg:in'),
-  msgOut: mint('msg:out'),
-  ptrAdvance: mint('ptr:advance'),
-  activate: mint('activate'),
-  deactivate: mint('deactivate'),
-  scrollWrite: mint('scroll:write'),
-  mamQuery: mint('mam:query'),
-  mamResult: mint('mam:result'),
-  ahead: mint('ahead'),
-  behind: mint('behind'),
+  focus: mint('focus', 'tag'),
+  blur: mint('blur', 'tag'),
+  msgIn: mint('msg:in', 'tag'),
+  msgOut: mint('msg:out', 'tag'),
+  ptrAdvance: mint('ptr:advance', 'tag'),
+  activate: mint('activate', 'tag'),
+  deactivate: mint('deactivate', 'tag'),
+  scrollWrite: mint('scroll:write', 'tag'),
+  mamQuery: mint('mam:query', 'tag'),
+  mamResult: mint('mam:result', 'tag'),
+  ahead: mint('ahead', 'tag'),
+  behind: mint('behind', 'tag'),
 })
 
 /** Invariant ids. One entry per registry entry in docs/ANOMALY_INVARIANTS.md. */
 export const ID = Object.freeze({
-  sessionStart: mint('recorder/session-start'),
-  ceilingReached: mint('recorder/ceiling-reached'),
+  sessionStart: mint('recorder/session-start', 'id'),
+  ceilingReached: mint('recorder/ceiling-reached', 'id'),
 })
 
 /** Permitted `ctx` keys. */
 export const CTX = Object.freeze({
-  conv: mint('conv'),
-  room: mint('room'),
-  route: mint('route'),
-  msg: mint('msg'),
-  query: mint('query'),
+  conv: mint('conv', 'ctx'),
+  room: mint('room', 'ctx'),
+  route: mint('route', 'ctx'),
+  msg: mint('msg', 'ctx'),
+  query: mint('query', 'ctx'),
 })
 
-/** Permitted counter names. */
+/**
+ * Counter names reserved for the recorder's own health. `count()` REFUSES these:
+ * the digest adds them itself, and an application counter sharing a key would be
+ * silently overwritten by the health delta when the pairs are folded into an object.
+ */
 export const COUNTER = Object.freeze({
-  rejectedValue: mint('recorder/rejected-value'),
-  localRefOverflow: mint('recorder/localref-overflow'),
-  tokenUnresolved: mint('recorder/token-unresolved'),
-  sinkWriteFailed: mint('recorder/sink-write-failed'),
+  rejectedValue: mint('recorder/rejected-value', 'counter'),
+  localRefOverflow: mint('recorder/localref-overflow', 'counter'),
+  tokenUnresolved: mint('recorder/token-unresolved', 'counter'),
+  sinkWriteFailed: mint('recorder/sink-write-failed', 'counter'),
 })
+
+/** Counter names available to application code and detectors. */
+export const METRIC = Object.freeze({
+  mamQueries: mint('mam.queries', 'counter'),
+  mamRowsRetained: mint('mam.rowsRetained', 'counter'),
+  roomJoins: mint('room.joins', 'counter'),
+  scrollWrites: mint('scroll.writes', 'counter'),
+  probe: mint('probe.metric', 'counter'),
+})
+
+/** @internal The reserved set, enforced by `count()`. */
+export const RESERVED_COUNTERS: ReadonlySet<string> = new Set(
+  Object.values(COUNTER).map((c) => c.s),
+)
 
 // ---------------------------------------------------------------------------
 // Entity tokens — cross-session identity for JIDs, rooms, devices
@@ -678,7 +763,7 @@ const TOKEN_NS: ReadonlySet<string> = new Set(['jid', 'room', 'device'])
 
 const KEY_STORAGE = 'fluux:anomaly-token-key'
 const TOKEN_CACHE_LIMIT = 500
-const UNRESOLVED = mint('c:unresolved')
+const UNRESOLVED = mint('c:unresolved', 'token')
 
 const tokens = new Map<string, Opaque>()
 let hmacKey: CryptoKey | null = null
@@ -750,7 +835,7 @@ export async function warmToken(ns: TokenNs, value: string): Promise<void> {
     const oldest = tokens.keys().next()
     if (!oldest.done) tokens.delete(oldest.value)
   }
-  tokens.set(key, mint(`c:${toHex(signature, 8)}`))
+  tokens.set(key, mint(`c:${toHex(signature, 8)}`, 'token'))
 }
 
 /** Synchronous lookup. A miss returns the sentinel — never the raw value. */
@@ -827,7 +912,7 @@ export function localRef(ns: LocalNs, value: string): Opaque | null {
     return null
   }
   const seq = ++nextSeq
-  const ref = mint(`s:${ns}${seq}`)
+  const ref = mint(`s:${ns}${seq}`, 'ref')
   refs.set(key, { ref, count: 0, seq })
   keyByRef.set(ref, key)
   return ref
@@ -882,9 +967,12 @@ export function resetValuesForTesting(): void {
 cd apps/fluux && npx vitest run src/anomaly/values.test.ts
 ```
 
-Expected: PASS, 11 tests. The adversarial case exercises every exported function with the body in
-both argument positions across six representations; if any export mints an `Opaque` containing the
-body or its hex encoding, it fails and names the function.
+Expected: PASS, 15 tests. Two of them carry the weight: the **targeted** case calls every dynamic
+constructor with a real body and a valid companion argument (`tokenSync('jid', BODY)`,
+`localRef('m', BODY)`, each `warmToken` awaited), and the **generic sweep** covers any export added
+later, awaiting anything that returns a promise. A parity test compares the `ID` registry against
+`docs/ANOMALY_INVARIANTS.md` in both directions — an earlier draft shipped `ID.sessionStart` with
+no matching row, which is exactly the drift a "by construction" claim cannot prevent.
 
 - [ ] **Step 5: Commit**
 
@@ -1257,7 +1345,7 @@ Create `apps/fluux/src/anomaly/serializer.ts`:
  * a truncated body still discloses its prefix. A rejected record is a visible bug in
  * a detector; a truncated one is a silent leak.
  */
-import { isOpaque, type Opaque } from './values'
+import { isKind, isOpaque, VALUE_KINDS, type Kind, type Opaque } from './values'
 
 const MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
@@ -1307,19 +1395,26 @@ export function resetSerializerCountersForTesting(): void {
   rejected = 0
 }
 
-/** Convert one constrained value, or throw to reject the whole record. */
-function unwrap(value: unknown): string | number | boolean | null {
+/**
+ * Convert one constrained value, or throw to reject the whole record.
+ *
+ * `kinds` is the set of categories admissible IN THIS POSITION. Passing an `id`
+ * where a ctx key belongs, or a tag where an id belongs, is rejected — membership
+ * alone would make every constant interchangeable and dissolve the registries.
+ */
+function unwrap(value: unknown, ...kinds: Kind[]): string | number | boolean | null {
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    if (kinds.length && !kinds.includes('tag')) throw new Error('scalar in a key position')
     return value as number | boolean | null
   }
-  if (isOpaque(value)) {
+  if (kinds.length ? isKind(value, ...kinds) : isOpaque(value)) {
     const s = (value as Opaque).s
     // A newline would forge a second JSONL record. Constructors cannot produce one,
     // so this is a belt-and-braces check rather than the primary defence.
     if (s.includes('\n') || s.includes('\r')) throw new Error('newline in opaque value')
     return s
   }
-  throw new Error('non-opaque value in a constrained field')
+  throw new Error('value has the wrong provenance or category for this position')
 }
 
 /**
@@ -1336,8 +1431,10 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
       // names are developer-chosen, so validate them like ctx keys.
       const digestLine = JSON.stringify({
         ...record,
-        counters: Object.fromEntries(record.counters.map(([k, v]) => [unwrap(k), v])),
-        suppressed: Object.fromEntries(record.suppressed.map(([k, v]) => [unwrap(k), v])),
+        // Counter names must be counter constants; `suppressed` is keyed by
+        // INVARIANT ID, so it takes the id category instead.
+        counters: Object.fromEntries(record.counters.map(([k, v]) => [unwrap(k, 'counter'), v])),
+        suppressed: Object.fromEntries(record.suppressed.map(([k, v]) => [unwrap(k, 'id'), v])),
       })
       return byteLength(digestLine) <= MAX_LINE_BYTES ? digestLine : null
     }
@@ -1347,12 +1444,12 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
     // as a key name; provenance does not.
     const ctx: Record<string, string | number | boolean | null> = {}
     for (const [key, value] of record.ctx) {
-      ctx[String(unwrap(key))] = unwrap(value)
+      ctx[String(unwrap(key, 'ctx'))] = unwrap(value, ...VALUE_KINDS)
     }
 
     const crumbs = record.crumbs
       .slice(0, MAX_ARRAY)
-      .map((crumb) => crumb.slice(0, MAX_ARRAY).map(unwrap))
+      .map((crumb) => crumb.slice(0, MAX_ARRAY).map((v) => unwrap(v, ...VALUE_KINDS)))
 
     const out: Record<string, unknown> = {
       v: record.v,
@@ -1361,13 +1458,13 @@ export function serialize(record: AnomalyRecord | DigestRecord): string | null {
       build: record.build,
       tokenKeyId: record.tokenKeyId,
       kind: record.kind,
-      id: unwrap(record.id),
+      id: unwrap(record.id, 'id'),
       sev: record.sev,
       ctx,
       crumbs,
     }
-    if (record.expected !== undefined) out.expected = unwrap(record.expected)
-    if (record.observed !== undefined) out.observed = unwrap(record.observed)
+    if (record.expected !== undefined) out.expected = unwrap(record.expected, ...VALUE_KINDS)
+    if (record.observed !== undefined) out.observed = unwrap(record.observed, ...VALUE_KINDS)
 
     let line = JSON.stringify(out)
     if (byteLength(line) <= MAX_LINE_BYTES) return line
@@ -1803,7 +1900,7 @@ Create `apps/fluux/src/anomaly/recorder.test.ts`:
 ```ts
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createRecorder } from './recorder'
-import { COUNTER, CTX, ID, TAG } from './values'
+import { COUNTER, CTX, ID, METRIC, TAG } from './values'
 import type { Sink } from './sinks/tauri'
 
 function fakeSink(): Sink & { lines: string[] } {
@@ -1900,15 +1997,35 @@ describe('recorder', () => {
   it('carries recorder health counters in the digest', () => {
     const sink = fakeSink()
     const rec = make(sink)
-    rec.count(COUNTER.tokenUnresolved, 3)
-    rec.count(COUNTER.tokenUnresolved)
+    rec.count(METRIC.mamQueries, 3)
+    rec.count(METRIC.mamQueries)
     rec.flushDigest(300_000)
 
     const digest = JSON.parse(sink.lines[0])
-    expect(digest.counters['recorder/token-unresolved']).toBe(4)
+    expect(digest.counters['mam.queries']).toBe(4)
     expect(digest.counters['recorder/rejected-value']).toBeDefined()
     expect(digest.counters['recorder/localref-overflow']).toBeDefined()
     expect(digest.counters['recorder/token-unresolved']).toBeDefined()
+  })
+
+  it('announces the ceiling when a prospective refusal blocks a record', () => {
+    // emit() now returns false BEFORE writing, so bytesWritten does not move and
+    // atCeiling() stays false. Without an explicit announce the recorder would go
+    // quiet with no record explaining why.
+    const sink = fakeSink()
+    let budget = 1
+    const rec = createRecorder({ sink, now, build: 'b', sid: 's', maxBytes: () => budget })
+    rec.record({ id: ID.sessionStart, sev: 'bug' })
+
+    const ids = sink.lines.map((l) => JSON.parse(l).id)
+    expect(ids).toContain('recorder/ceiling-reached')
+  })
+
+  it('refuses a reserved counter name instead of silently losing the value', () => {
+    // The digest appends the health counters under these names; an application
+    // counter sharing one would be overwritten by the health delta on fold.
+    const rec = make(fakeSink())
+    expect(() => rec.count(COUNTER.tokenUnresolved, 5)).toThrow(/reserved/)
   })
 
   it('does not write a rejected record but still counts it', () => {
@@ -1963,7 +2080,7 @@ describe('recorder', () => {
       now,
       build: '0.17.2+abc',
       sid: 'sid-1',
-      maxBytes: 4096, // small budget so the boundary is reachable in a test
+      maxBytes: () => 4096, // small budget so the boundary is reachable in a test
     })
 
     for (let i = 0; i < 400; i++) {
@@ -1980,22 +2097,29 @@ describe('recorder', () => {
     expect(sink.lines.length).toBeGreaterThan(1)
   })
 
-  it('does not clear the window when the digest could not be written', () => {
-    // If the baselines advanced and the counters cleared on a failed emit, the
+  it('preserves the SAME window when a digest could not be written', () => {
+    // The limit is raised on the SAME recorder. Building a second recorder would
+    // prove nothing about the first one's state, which is exactly what is at stake:
+    // if the baselines advanced and the counters cleared on a failed emit, the
     // window's data would be gone AND the next delta would be measured from a
     // report that never existed.
     const sink = fakeSink()
-    const rec = createRecorder({ sink, now, build: 'b', sid: 's', maxBytes: 1 })
-    rec.count(COUNTER.tokenUnresolved, 9)
-    rec.flushDigest(300_000)
-    expect(sink.lines.length).toBe(0)
+    let budget = 1
+    const rec = createRecorder({ sink, now, build: 'b', sid: 's', maxBytes: () => budget })
 
-    // Room now available: the same window must still be reportable.
-    const roomy = fakeSink()
-    const rec2 = createRecorder({ sink: roomy, now, build: 'b', sid: 's' })
-    rec2.count(COUNTER.tokenUnresolved, 9)
-    rec2.flushDigest(300_000)
-    expect(JSON.parse(roomy.lines[0]).counters['recorder/token-unresolved']).toBe(9)
+    rec.count(METRIC.mamQueries, 9)
+    rec.flushDigest(300_000)
+    const afterFailure = sink.lines.filter((l) => JSON.parse(l).kind === 'digest')
+    expect(afterFailure).toHaveLength(0)
+
+    budget = 1024 * 1024
+    rec.flushDigest(300_000)
+
+    const digest = JSON.parse(
+      sink.lines.filter((l) => JSON.parse(l).kind === 'digest').pop()!,
+    )
+    // The 9 events from the FIRST window survived the failed flush.
+    expect(digest.counters['mam.queries']).toBe(9)
   })
 })
 
@@ -2052,7 +2176,17 @@ Create `apps/fluux/src/anomaly/recorder.ts`:
  * surfaced in the digest, so coalescing never hides frequency) and a session
  * ceiling that announces itself — a silent stop would read as a healthy day.
  */
-import { COUNTER, localRefOverflowCount, releaseOpaque, retainOpaque, tokenKeyId, tokenUnresolvedCount, type Opaque } from './values'
+import {
+  COUNTER,
+  ID,
+  localRefOverflowCount,
+  releaseOpaque,
+  RESERVED_COUNTERS,
+  retainOpaque,
+  tokenKeyId,
+  tokenUnresolvedCount,
+  type Opaque,
+} from './values'
 import type { Scalar } from './serializer'
 import { rejectedValueCount, serialize } from './serializer'
 import type { Sink } from './sinks/tauri'
@@ -2087,13 +2221,17 @@ export interface RecorderOptions {
   now: () => number
   build: string
   sid: string
-  /** Overridable so the byte-ceiling boundary is reachable in a test. */
-  maxBytes?: number
+  /**
+   * Byte budget. A function, not a number, so a test can raise the limit and retry
+   * on the SAME recorder instance — which is the only way to assert that a failed
+   * flush preserved its window.
+   */
+  maxBytes?: () => number
 }
 
 export function createRecorder(opts: RecorderOptions): Recorder {
   const { sink, now, build, sid } = opts
-  const MAX_BYTES = opts.maxBytes ?? DEFAULT_MAX_BYTES
+  const maxBytes = opts.maxBytes ?? (() => DEFAULT_MAX_BYTES)
 
   const ring: Scalar[][] = []
   // Keyed by the constant's string for lookup; the constant itself is kept so the
@@ -2114,7 +2252,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
   const encoder = new TextEncoder()
 
   function atCeiling(): boolean {
-    return recordsWritten >= MAX_RECORDS || bytesWritten >= MAX_BYTES
+    return recordsWritten >= MAX_RECORDS || bytesWritten >= maxBytes()
   }
 
   /**
@@ -2130,7 +2268,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
     // PROSPECTIVE: checking only what is already written lets the last line cross
     // the cap, so a 2 MB budget could end up writing 2 MB + 8 KB. Ask whether THIS
     // line fits before writing it.
-    if (!force && (recordsWritten + 1 > MAX_RECORDS || bytesWritten + size > MAX_BYTES)) {
+    if (!force && (recordsWritten + 1 > MAX_RECORDS || bytesWritten + size > maxBytes())) {
       return false
     }
     sink.write(line)
@@ -2209,11 +2347,25 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // than by writing something unsafe.
       if (!line) return
 
+      // A prospective refusal means nothing was written, so `atCeiling()` would
+      // stay false and the explanatory record would never appear. Announce here,
+      // and only advance the cooldown clock on a real write — otherwise a refused
+      // record would suppress its own retry.
+      if (!emit(line)) {
+        announceCeiling()
+        return
+      }
       lastEmittedAt.set(idKey, now())
-      emit(line)
     },
 
     count(key: Opaque, by = 1): void {
+      // The digest appends the recorder's own health counters under these names. An
+      // application counter sharing one would be silently overwritten by the health
+      // delta when the pairs are folded into an object — a wrong number rather than
+      // a visible error.
+      if (RESERVED_COUNTERS.has(key.s)) {
+        throw new Error(`${key.s} is reserved for recorder health; use a METRIC constant`)
+      }
       const [, n] = counters.get(key.s) ?? [key, 0]
       counters.set(key.s, [key, n + by])
     },
@@ -2266,6 +2418,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       // A digest is subject to the ceiling like any other record: it is a record,
       // and an unbounded digest stream is an unbounded file.
       const written = line ? emit(line) : false
+      if (!written) announceCeiling()
 
       // Commit the window ONLY on a successful write.
       if (written) {
@@ -2284,7 +2437,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
 cd apps/fluux && npx vitest run src/anomaly/recorder.test.ts
 ```
 
-Expected: PASS, 14 tests. The last one — `recorder ring pins local refs` — is the integration
+Expected: PASS, 16 tests (15 recorder + 1 ring-pin integration). The last one — `recorder ring pins local refs` — is the integration
 assertion: the `localRef` unit tests in Task 5 can pass while the recorder never calls
 `retainOpaque`, so the system property would not exist despite green module tests.
 
@@ -2329,6 +2482,7 @@ import {
   resetInstallForTesting,
   whenReady,
 } from './install'
+import { METRIC } from './values'
 
 beforeEach(() => {
   localStorage.clear()
@@ -2359,17 +2513,17 @@ describe('install', () => {
     // on remount — so assert continuity of something the runtime actually holds.
     await whenReady()
     const cleanup1 = install()
-    getRecorder()!.count(COUNTER.tokenUnresolved, 7)
+    getRecorder()!.count(METRIC.probe, 7)
     cleanup1()
 
     const cleanup2 = install()
-    getRecorder()!.count(COUNTER.tokenUnresolved, 5)
+    getRecorder()!.count(METRIC.probe, 5)
     getRecorder()!.flushDigest(1000)
     cleanup2()
 
     const lines = (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
     const digest = JSON.parse(lines.filter((l) => JSON.parse(l).kind === 'digest').pop()!)
-    expect(digest.counters['recorder/token-unresolved']).toBe(12)
+    expect(digest.counters['probe.metric']).toBe(12)
   })
 
   it('announces the session exactly once across a StrictMode cycle', async () => {
@@ -2964,13 +3118,26 @@ test('the Dev build emits exactly one session-start record', async ({ page }) =>
 })
 ```
 
-Register it in `playwright.e2e.config.ts` as its own project alongside `scroll-chromium`, matching
-`scripts/e2e/anomaly-smoke.spec.ts` and reusing the existing demo build fixture.
+Register it in `playwright.e2e.config.ts` as a project named **`anomaly-chromium`**, alongside
+`scroll-chromium`, matching `scripts/e2e/anomaly-smoke.spec.ts` and reusing the existing demo build
+fixture. Add it to whatever project list `npm run test:e2e` runs.
+
+**It belongs to the `e2e-scroll` job, not `test`.** The `test` job installs neither Playwright
+browsers nor their system dependencies; `e2e-scroll` already caches and installs both. Add to that
+job, after its existing Playwright step:
+
+```yaml
+      - name: Anomaly smoke (the Dev build actually emits a record)
+        run: npx playwright test --config playwright.e2e.config.ts --project=anomaly-chromium
+```
+
+`--project=anomaly-chromium` rather than `--grep anomaly`: a project is a declared, deterministic
+selection, whereas a grep silently matches nothing if a title changes and reports success.
 
 - [ ] **Step 9: Run the smoke test**
 
 ```bash
-npm run build:e2e && npx playwright test --config playwright.e2e.config.ts --grep anomaly
+npm run build:e2e && npx playwright test --config playwright.e2e.config.ts --project=anomaly-chromium
 ```
 
 Expected: PASS. A failure here means the installer did not mount, or the tokenizer was not awaited.
@@ -2999,10 +3166,6 @@ at lint plus the Zustand selector check. Add a step after `Lint App`:
           npm run check:anomaly:prod
           npm run check:anomaly:dev
 
-      - name: Anomaly smoke test (the Dev build actually emits a record)
-        run: |
-          npm run build:e2e
-          npx playwright test --config playwright.e2e.config.ts --grep anomaly
 ```
 
 - [ ] **Step 12: Verify the CI step locally**
@@ -3068,6 +3231,7 @@ These describe the recorder itself, not the app.
 
 | id / counter | Meaning | What to do |
 |---|---|---|
+| `recorder/session-start` | One per session, written once the tokenizer holds its key | Its absence means the runtime never installed. Its `tokenKeyId` opens the session's token space |
 | `recorder/ceiling-reached` | 500 records or 2 MB in one session; recording stopped | Something fired in a loop. Find the last repeated `id` before it |
 | `recorder/rejected-value` | A detector passed a non-opaque value; the record was dropped | A detector bug. The value never reached disk, but the evidence is lost |
 | `recorder/localref-overflow` | The 2 000-ref map was full and all refs pinned; a crumb was omitted | Usually a leak: something is retaining refs without releasing |
