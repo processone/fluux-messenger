@@ -21,6 +21,25 @@ import { isKind, isRecordValue, type Kind, type Opaque } from './values'
 const DEFAULT_MAX_LINE_BYTES = 8192
 const MAX_ARRAY = 50
 
+/** The only admissible severities. Validated at runtime, not merely typed. */
+const SEVERITIES: ReadonlySet<string> = new Set(['bug', 'suspect', 'drift'])
+
+/**
+ * Exact key sets per record kind.
+ *
+ * A record is rejected when it carries a key not listed here. The anomaly path
+ * builds its output field by field and would silently drop an extra property, but
+ * silence hides the detector bug that produced it; the digest path previously
+ * spread the record and emitted such a property verbatim. One rule for both.
+ */
+const ANOMALY_KEYS: ReadonlySet<string> = new Set([
+  'v', 't', 'sid', 'build', 'tokenKeyId', 'kind', 'id', 'sev', 'expected', 'observed', 'ctx',
+  'crumbs', 'trunc',
+])
+const DIGEST_KEYS: ReadonlySet<string> = new Set([
+  'v', 't', 'sid', 'build', 'tokenKeyId', 'kind', 'windowMs', 'counters', 'suppressed',
+])
+
 /** A value admissible in a record VALUE position. */
 export type Scalar = Opaque | number | boolean | null
 
@@ -59,6 +78,10 @@ export interface SerializeOptions {
    * Byte cap for one line. Overridable so the shed-and-reject path is reachable in
    * a test: with the closed registries, a digest cannot realistically approach the
    * production cap, and an untestable backstop is one nobody knows is broken.
+   *
+   * It can only ever LOWER the cap. A test hook that could raise or remove a
+   * privacy-adjacent bound is a way to disable it in production by mistake, so a
+   * non-finite, non-positive, or larger value falls back to the default.
    */
   maxLineBytes?: number
 }
@@ -80,6 +103,20 @@ export function resetSerializerCountersForTesting(): void {
 
 function byteLength(s: string): number {
   return new TextEncoder().encode(s).length
+}
+
+/** Clamp the override so it can only tighten the bound, never loosen it. */
+function resolveMaxLineBytes(requested: number | undefined): number {
+  if (requested === undefined) return DEFAULT_MAX_LINE_BYTES
+  if (!Number.isFinite(requested) || requested <= 0) return DEFAULT_MAX_LINE_BYTES
+  return Math.min(requested, DEFAULT_MAX_LINE_BYTES)
+}
+
+/** Reject a record carrying any key outside its kind's exact set. */
+function assertNoUnknownKeys(record: object, allowed: ReadonlySet<string>): void {
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) throw new Error(`unknown record property: ${key}`)
+  }
 }
 
 /**
@@ -110,6 +147,12 @@ function pairsToObject(
   keyPosition: Position,
   valuePosition: Position,
 ): Record<string, string | number | boolean | null> {
+  // Bound the walk BEFORE it starts. Repeated keys collapse into a small object,
+  // so the byte cap cannot catch a pathological pair list — and with the closed
+  // registries there are only a handful of legal keys, so exceeding the limit can
+  // only mean a detector bug worth surfacing.
+  if (pairs.length > MAX_ARRAY) throw new Error('too many pairs for one record')
+
   const out: Record<string, string | number | boolean | null> = {}
   for (const [key, value] of pairs) {
     out[String(unwrap(key, keyPosition))] = unwrap(value, valuePosition)
@@ -127,18 +170,32 @@ export function serialize(
   record: AnomalyRecord | DigestRecord,
   options: SerializeOptions = {},
 ): string | null {
-  const maxLineBytes = options.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES
+  const maxLineBytes = resolveMaxLineBytes(options.maxLineBytes)
 
   try {
     if (record.kind === 'digest') {
+      assertNoUnknownKeys(record, DIGEST_KEYS)
+      // Built field by field, NEVER spread: a spread emits any unexpected property
+      // verbatim, which is exactly how a body would reach the log.
       const line = JSON.stringify({
-        ...record,
+        v: record.v,
+        t: record.t,
+        sid: record.sid,
+        build: record.build,
+        tokenKeyId: record.tokenKeyId,
+        kind: record.kind,
+        windowMs: record.windowMs,
         counters: pairsToObject(record.counters, 'counter', 'value'),
         // `suppressed` is keyed by invariant id, not by counter name.
         suppressed: pairsToObject(record.suppressed, 'id', 'value'),
       })
       return byteLength(line) <= maxLineBytes ? line : null
     }
+
+    assertNoUnknownKeys(record, ANOMALY_KEYS)
+    // `sev` reaches the serializer straight from a detector, so its union type is
+    // erased by any cast. Check it like any other untrusted value.
+    if (!SEVERITIES.has(record.sev)) throw new Error('invalid severity')
 
     const ctx = pairsToObject(record.ctx, 'ctx', 'value')
     const crumbs = record.crumbs

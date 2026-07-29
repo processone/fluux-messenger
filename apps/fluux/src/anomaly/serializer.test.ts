@@ -168,6 +168,37 @@ describe('provenance: categories are not interchangeable', () => {
   })
 })
 
+describe('record shape is closed', () => {
+  const BODY = 'SECRET-BODY-abcdefghijklmnop'
+
+  it('rejects a digest carrying an unexpected property', () => {
+    // The digest path used to spread the record, so any extra property was emitted
+    // verbatim — a body reaching the log through the object's SHAPE rather than
+    // through one of its values.
+    expect(serialize({ ...digest(), accidentalBody: BODY } as never)).toBeNull()
+  })
+
+  it('rejects an anomaly carrying an unexpected property', () => {
+    // The anomaly path builds its output field by field and would silently drop
+    // this, but silence hides the detector bug that produced it.
+    expect(serialize({ ...anomaly(), accidentalBody: BODY } as never)).toBeNull()
+  })
+
+  it.each([
+    ['a body', BODY],
+    ['an empty string', ''],
+    ['a plausible-looking level', 'error'],
+    ['a number', 3],
+  ])('rejects %s as the severity', (_label, sev) => {
+    // `sev` arrives straight from a detector; its union type is erased by any cast.
+    expect(serialize(anomaly({ sev: sev as never }))).toBeNull()
+  })
+
+  it.each(['bug', 'suspect', 'drift'])('accepts the severity %s', (sev) => {
+    expect(serialize(anomaly({ sev: sev as never }))).not.toBeNull()
+  })
+})
+
 describe('bounds', () => {
   it('caps the crumb array and each crumb at 50 entries', () => {
     const crumbs = Array.from({ length: 400 }, () => [TAG.msgIn, 1])
@@ -203,4 +234,36 @@ describe('bounds', () => {
   it('rejects a digest that cannot be made to fit', () => {
     expect(serialize(digest({ counters: [[METRIC.mamQueries, 1]] }), { maxLineBytes: 40 })).toBeNull()
   })
+
+  it.each([
+    ['Infinity', Infinity],
+    ['a larger finite value', 1_000_000],
+    ['NaN', NaN],
+    ['zero', 0],
+    ['a negative value', -1],
+  ])('ignores a maxLineBytes override of %s — the cap can only be lowered', (_label, value) => {
+    const crumbs = Array.from({ length: 50 }, () => Array.from({ length: 50 }, () => TAG.msgIn))
+    const line = serialize(anomaly({ crumbs }), { maxLineBytes: value })
+    expect(line).not.toBeNull()
+    expect(new TextEncoder().encode(line!).length).toBeLessThanOrEqual(8192)
+  })
+
+  it('bounds the ctx, counter and suppressed walks, not only the crumbs', () => {
+    // Repeated keys collapse into a small object, so the byte cap cannot catch a
+    // pathological pair list — the walk itself has to be bounded.
+    const many = <T,>(pair: T) => Array.from({ length: MAX_PAIRS + 1 }, () => pair)
+    expect(serialize(anomaly({ ctx: many([CTX.conv, TAG.focus]) as never }))).toBeNull()
+    expect(serialize(digest({ counters: many([METRIC.mamQueries, 1]) as never }))).toBeNull()
+    expect(serialize(digest({ suppressed: many([ID.sessionStart, 1]) as never }))).toBeNull()
+  })
+
+  it('accepts a pair list exactly at the limit', () => {
+    // The control: proves the rejection above is the LIMIT firing, not the pairs
+    // being invalid for some other reason.
+    const atLimit = Array.from({ length: MAX_PAIRS }, () => [CTX.conv, TAG.focus])
+    expect(serialize(anomaly({ ctx: atLimit as never }))).not.toBeNull()
+  })
 })
+
+/** Mirrors MAX_ARRAY in serializer.ts. */
+const MAX_PAIRS = 50
