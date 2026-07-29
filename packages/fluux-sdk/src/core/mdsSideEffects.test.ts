@@ -262,9 +262,12 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
-    // Conversation already exists with a settled local read position at m1 before
-    // the side effect starts, so the fresh-session seed snapshots m1 as the last
-    // considered position (no spurious publish for the existing position).
+    // Conversation already exists with a SETTLED local read position at m1: the
+    // node holds that same position, so the seed has nothing left to publish for
+    // it and the test isolates the echo of the s2 marker that follows.
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1' }])
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
     seedMeta(cid, 'm1')
 
@@ -294,6 +297,11 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // Seed the room (rooms + roomRuntime + roomMeta) so isRoom()/routing works.
+    // The node already holds the settled position m1/s1, so the only publish the
+    // test can observe is the m2 advance below.
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's1' }])
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
@@ -369,8 +377,11 @@ describe('setupMdsSideEffects', () => {
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
-    // Known room with a settled local read position at m1 before the side effect
-    // starts, so the seed snapshots m1 as the last considered position.
+    // Known room with a SETTLED local read position at m1 — the node holds that
+    // same position, so the seed has nothing left to publish for it.
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's1' }])
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
 
     const cleanup = setupMdsSideEffects(client as never)
@@ -585,6 +596,193 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     cleanup()
+  })
+
+  // #1145: the fresh-session seed used to clear `lastConsideredSeenId` and then
+  // immediately re-fill it from the current read pointers, re-recording a position
+  // that was never published as already handled. consider() then short-circuited
+  // on it for the whole session, and only a FURTHER local read advance could ever
+  // recover it — so the user's other devices never learned the position.
+  it('publishes a read position left unpublished by the previous session, with no further read advance', async () => {
+    const cid = 'juliet@capulet.example'
+
+    // --- Session 1: the position advances but never resolves to a stanza-id, so
+    // it is never published (the #1142 shape, now retried rather than silenced).
+    const first = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    seedMeta(cid)
+    seedMessages(cid, [msg('m2', undefined)])
+
+    const stopFirst = setupMdsSideEffects(first as never)
+    first._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    patchMeta(cid, { readPointer: pointerAt('m2') })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(first.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    connectionStore.setState({ status: 'offline' } as never)
+    stopFirst()
+
+    // --- Session 2 (restart): the read pointer survives in localStorage, and the
+    // reloaded slice now names a stanza-id for it. The node still holds an OLDER
+    // marker for this conversation, which is the ordinary shape once any position
+    // has ever been published — the seed must not treat that as "handled".
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    const second = makeClient()
+    second.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    const stopSecond = setupMdsSideEffects(second as never)
+    second._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // No local read advance happened in session 2 — the seed itself must publish.
+    expect(second.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(second.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    stopSecond()
+  })
+
+  // #1145, the other half: dropping the seed snapshot must NOT open a regressive
+  // publish. The seed's applyRemoteDisplayed resolves as `stash-pending` when the
+  // loaded slice cannot order the node's marker against the local pointer, and the
+  // local pointer may then be BEHIND the node. MDS positions are forward-only, so
+  // publishing there would move every other device backward unrecoverably.
+  it('does not publish a local position while the node holds a marker it cannot order (stash-pending)', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    // The node is ahead at s9, whose message is NOT in the loaded slice → the seed
+    // can only stash it as pendingRemoteDisplayedStanzaId.
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's9' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    seedMessages(cid, [msg('m1', 's1')])
+    seedMeta(cid, 'm1')
+    // Active, so the merge below keeps a resident array (memory windowing evicts
+    // every other conversation's) and can resolve the stashed marker.
+    chatStore.setState({ activeConversationId: cid })
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // Publishing s1 here would walk every other device back from s9 to s1.
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // It is a HOLD, not a silence: once the merge brings s9 into the slice the
+    // marker resolves, the pointer advances onto it, and there is nothing to send…
+    chatStore.getState().mergeMAMMessages(
+      cid,
+      [msg('m1', 's1'), msg('m9', 's9'), msg('m10', 's10')],
+      {},
+      true,
+      'forward'
+    )
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // …and a genuine advance past the node's position publishes normally.
+    chatStore.getState().advanceReadPointer(cid, 'm10')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's10', 'romeo@montague.example')
+    cleanup()
+  })
+
+  // Same protection for a marker that stashes AFTER the seed: a peer device
+  // publishes a position we cannot order, and our own (behind) position must not
+  // be published over it on the next metadata change.
+  it('does not publish over a live remote marker it cannot order', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // The empty node learns our position m1/s1 from the seed sweep.
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+
+    // A peer device publishes s9, off-slice → the binding can only stash it.
+    chatStore.getState().applyRemoteDisplayed(cid, 's9')
+    client._emit('read:displayed-synced', { conversationId: cid, stanzaId: 's9' })
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+
+    // A local advance to m2 is still BEHIND s9, and nothing here can prove
+    // otherwise — publishing it would regress the peer.
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  // Cold-start burst shape (#1145). The seed's sweep is what makes an unpublished
+  // position recoverable, so its cost is one publish IQ per entity whose position
+  // the node does NOT already hold — and nothing for the ones it does. That is
+  // what keeps the burst a one-time migration rather than a per-launch cost:
+  // after the first pass the node holds every marker and the next start sweeps
+  // for free. `doPublish` awaits each IQ in turn, so these are serial, never a
+  // concurrent flood.
+  it('sweeps a cold-start roster with one publish per position the node lacks', async () => {
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Five conversations, each read to its newest message. No resident arrays —
+    // memory windowing is the realistic cold-start shape, so the pointers resolve
+    // through the lastMessage preview.
+    const jids = Array.from({ length: 5 }, (_, i) => `contact${i}@example.com`)
+    chatStore.setState((state) => {
+      const meta = new Map(state.conversationMeta)
+      const convs = new Map(state.conversations)
+      for (const cid of jids) {
+        const newest = { ...msg('m2', `${cid}-s2`), id: `${cid}-m2`, conversationId: cid }
+        const readPointer = { messageId: newest.id, timestamp: newest.timestamp }
+        meta.set(cid, { unreadCount: 0, readPointer, lastMessage: newest } as never)
+        convs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer } as never)
+      }
+      return { conversationMeta: meta, conversations: convs }
+    })
+
+    // The node already holds the first two positions.
+    client.mds.fetchAllDisplayed = vi.fn().mockResolvedValue(
+      jids.slice(0, 2).map((cid) => ({ conversationJid: cid, stanzaId: `${cid}-s2` }))
+    )
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    const published = client.mds.publishDisplayed.mock.calls.map((c) => c[0])
+    expect(published.sort()).toEqual(jids.slice(2))
+
+    // Second start against the now-complete node: nothing left to publish.
+    cleanup()
+    client.mds.publishDisplayed.mockClear()
+    client.mds.fetchAllDisplayed = vi.fn().mockResolvedValue(
+      jids.map((cid) => ({ conversationJid: cid, stanzaId: `${cid}-s2` }))
+    )
+    const restarted = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    restarted()
   })
 
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {

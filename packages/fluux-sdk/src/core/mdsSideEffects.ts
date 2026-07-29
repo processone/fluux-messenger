@@ -16,9 +16,10 @@
  * roomStore.rooms gains that JID (bookmark loaded later in the same session).
  *
  * localStorage remains the durable source for read positions, but pending
- * in-memory work is DROPPED on disconnect. A later genuine read advance can
- * publish; fresh-session seeding intentionally snapshots the current pointer
- * and is not a general retry queue.
+ * in-memory work is DROPPED on disconnect. The fresh-session seed therefore
+ * re-considers every entity once publishing is armed, so a position the previous
+ * session never managed to publish is retried without waiting for a further
+ * local read advance (#1145).
  *
  * @module Core/MdsSideEffects
  */
@@ -112,6 +113,52 @@ export function setupMdsSideEffects(
       ? roomStore.getState().roomRuntime.get(jid)?.messages ?? []
       : chatStore.getState().messages.get(jid) || []
     return messages.findIndex((m) => m.stanzaId === stanzaId)
+  }
+
+  /**
+   * The remote marker this entity has STASHED, if any.
+   *
+   * `readMarkerSync` records `pendingRemoteDisplayedStanzaId` exactly when the
+   * loaded slice could not order an incoming XEP-0490 marker against the local
+   * read pointer, so a value here means "the node may be ahead of us and we
+   * cannot tell".
+   */
+  function pendingRemoteDisplayed(jid: string): string | undefined {
+    return isRoom(jid)
+      ? roomStore.getState().roomMeta.get(jid)?.pendingRemoteDisplayedStanzaId
+      : chatStore.getState().conversationMeta.get(jid)?.pendingRemoteDisplayedStanzaId
+  }
+
+  /**
+   * What to do with a resolved local position for `jid`:
+   *
+   * - `publish` — strictly ahead of what we believe the node holds, or the node
+   *   holds nothing for this JID (nothing there to regress).
+   * - `skip` — at or behind the node; handled, nothing to send.
+   * - `retry` — we cannot PROVE the position is not regressive. The caller must
+   *   leave it unhandled so a later merge or activation fold re-considers it.
+   *
+   * The last case is the whole point of this helper. When either side is off the
+   * loaded slice, index order proves nothing, and MDS positions are forward-only:
+   * publishing a position that happens to be BEHIND the node moves every other
+   * device backward, unrecoverably. What still makes an off-slice node value safe
+   * to overwrite is that we have ORDERED it against our pointer at some point:
+   * `applyRemoteDisplayed` is forward-only, so a marker it RESOLVED left our
+   * pointer at or past it, and the local pointer only ever advances from there —
+   * the same forward-only local marker the exact-equal skip in `doPublish` relies
+   * on. A marker it could NOT order is still stashed on the entity, and that is
+   * the one value we must never publish over.
+   */
+  function publishDecision(jid: string, stanzaId: string): 'publish' | 'skip' | 'retry' {
+    const nodeId = lastKnownNodeStanzaId.get(jid)
+    if (!nodeId) return 'publish'
+
+    const candidateIdx = indexOfStanza(jid, stanzaId)
+    const nodeIdx = indexOfStanza(jid, nodeId)
+    if (candidateIdx !== -1 && nodeIdx !== -1) {
+      return candidateIdx > nodeIdx ? 'publish' : 'skip'
+    }
+    return pendingRemoteDisplayed(jid) === nodeId ? 'retry' : 'publish'
   }
 
   /** Resolve the stanza-id of the message a conversation's/room's read pointer names. */
@@ -264,23 +311,19 @@ export function setupMdsSideEffects(
     // (#1142). The key means "this position is handled", not "we have seen it".
     if (!stanzaId) return
 
-    // Resolved → handled from here on, whether we enqueue below or decide the
-    // node is already at/ahead of it (a verdict that cannot flip: message order
-    // within a slice is stable).
-    lastConsideredSeenId.set(jid, seenId)
+    // No regressive publish: only publish when we can show the position is not
+    // behind what we believe is already on the node for this JID.
+    const decision = publishDecision(jid, stanzaId)
+    // Unprovable → leave the de-dup key UNCOMMITTED (same contract as the
+    // unresolved case above), so the merge or activation fold that resolves the
+    // stashed marker re-considers this position instead of silencing it.
+    if (decision === 'retry') return
 
-    // No regressive publish: only publish if strictly ahead (by message index)
-    // of what we believe is already on the node for this JID.
-    const nodeId = lastKnownNodeStanzaId.get(jid)
-    if (nodeId) {
-      const candidateIdx = indexOfStanza(jid, stanzaId)
-      const nodeIdx = indexOfStanza(jid, nodeId)
-      // When nodeIdx === -1 the node's high-water message is outside the loaded
-      // window, so we can't prove the candidate is ahead — publish optimistically
-      // and rely on the local marker being forward-only. A later genuine read
-      // advance supersedes any rare backward node move.
-      if (candidateIdx !== -1 && nodeIdx !== -1 && candidateIdx <= nodeIdx) return
-    }
+    // Resolved AND ordered → handled from here on, whether we enqueue below or
+    // decide the node is already at/ahead of it (a verdict that cannot flip:
+    // message order within a slice is stable).
+    lastConsideredSeenId.set(jid, seenId)
+    if (decision === 'skip') return
 
     dirty.add(jid, stanzaId)
     schedulePublish()
@@ -465,20 +508,29 @@ export function setupMdsSideEffects(
       dirty.drop()
       dirty.open()
 
-      // Snapshot the current per-JID read positions (both stores) so the seed
-      // isn't republished; only later advances past these will enqueue.
+      // A fresh session starts with NOTHING recorded as handled.
+      //
+      // This used to re-snapshot the current pointers from both stores, which
+      // re-recorded an UNPUBLISHED position as handled: consider() then
+      // short-circuited on it for the whole session, and only a further local
+      // read advance could ever recover it (#1145). The seed does not need that
+      // snapshot to avoid republishing itself — `lastKnownNodeStanzaId` was just
+      // set for every node marker, so publishDecision() answers `skip` for a
+      // position the node already holds and `retry` for one it holds a marker we
+      // could not order against.
       lastConsideredSeenId.clear()
-      for (const [jid, meta] of chatStore.getState().conversationMeta) {
-        lastConsideredSeenId.set(jid, meta.readPointer?.messageId)
-      }
-      for (const [jid, meta] of roomStore.getState().roomMeta) {
-        lastConsideredSeenId.set(jid, meta.readPointer?.messageId)
-      }
 
       syncEnabled = true
       // Rebuild the delete-detection baseline to the current live set so the
       // fresh-session population is never seen as deletions.
       trackedJids = liveJids()
+      // Sweep once now that publishing is armed. Every entity is re-considered
+      // against the freshly seeded node state, so a position the previous session
+      // never managed to publish goes out now instead of waiting for incidental
+      // store churn to happen to re-consider it. Positions the node already holds
+      // cost nothing here — publishDecision() skips them without an IQ.
+      considerConversations()
+      considerRooms()
       logInfo('MDS: seeded read positions and enabled publishing')
     })()
   })
