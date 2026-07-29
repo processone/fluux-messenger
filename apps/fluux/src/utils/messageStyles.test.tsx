@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
+import { formatMessagePreview } from '@fluux/sdk'
 import { renderStyledMessage, renderQuotePreview } from './messageStyles'
 
 describe('renderStyledMessage', () => {
@@ -1165,5 +1166,29 @@ describe('renderQuotePreview', () => {
     const container = renderPreview('just a normal reply')
     expect(container.querySelector('blockquote')).toBeFalsy()
     expect(container.textContent).toBe('just a normal reply')
+  })
+})
+
+describe('preview / renderer parity for code spans', () => {
+  // The conversation-list preview and the rendered body must agree on what a
+  // code span contains: markup inside a code span stays literal in both.
+  const renderedText = (text: string) => {
+    const { container } = render(<div>{renderStyledMessage(text)}</div>)
+    return container.textContent
+  }
+
+  const cases = [
+    '`*x*`',
+    '`_x_`',
+    '`~x~`',
+    '`~~x~~`',
+    '`**x**`',
+    '*bold* then `*literal*` then _italic_',
+    'Run `npm install` now',
+    '```\n*not bold* and _not italic_\n```',
+  ]
+
+  it.each(cases)('preview matches rendered text for %j', (body) => {
+    expect(formatMessagePreview({ body })).toBe(renderedText(body))
   })
 })

@@ -329,6 +329,70 @@ describe('messagePreview', () => {
     it('should strip heading combined with other markup', () => {
       expect(stripMessageStyling('# *Bold Title*')).toBe('Bold Title')
     })
+
+    describe('code spans keep their contents literal', () => {
+      it('should keep XEP-0393 bold markers inside an inline code span', () => {
+        expect(stripMessageStyling('`*not bold*`')).toBe('*not bold*')
+      })
+
+      it('should keep Markdown bold markers inside an inline code span', () => {
+        expect(stripMessageStyling('`**not bold**`')).toBe('**not bold**')
+      })
+
+      it('should keep italic markers inside an inline code span', () => {
+        expect(stripMessageStyling('`_not italic_`')).toBe('_not italic_')
+      })
+
+      it('should keep XEP-0393 strikethrough markers inside an inline code span', () => {
+        expect(stripMessageStyling('`~not struck~`')).toBe('~not struck~')
+      })
+
+      it('should keep Markdown strikethrough markers inside an inline code span', () => {
+        expect(stripMessageStyling('`~~not struck~~`')).toBe('~~not struck~~')
+      })
+
+      it('should keep combined markers inside an inline code span', () => {
+        expect(stripMessageStyling('`*a* _b_ ~~c~~`')).toBe('*a* _b_ ~~c~~')
+      })
+
+      it('should keep markup inside a fenced code block literal', () => {
+        expect(stripMessageStyling('```\n*not bold* and _not italic_\n```'))
+          .toBe('*not bold* and _not italic_')
+      })
+
+      it('should keep markup inside a fenced code block with a language tag', () => {
+        expect(stripMessageStyling('```js\nconst a = `*x*`\n```'))
+          .toBe('const a = `*x*`')
+      })
+
+      it('should strip markup outside a code span but not inside it', () => {
+        expect(stripMessageStyling('*bold* then `*literal*` then _italic_'))
+          .toBe('bold then *literal* then italic')
+      })
+
+      it('should keep a heading marker inside a fenced code block', () => {
+        expect(stripMessageStyling('```\n# not a heading\n```')).toBe('# not a heading')
+      })
+
+      it('should leave a lone backtick untouched', () => {
+        expect(stripMessageStyling('a ` b')).toBe('a ` b')
+      })
+
+      it('should still strip markup around an unmatched backtick', () => {
+        expect(stripMessageStyling('*bold* ` unmatched')).toBe('bold ` unmatched')
+      })
+
+      it('should not let a body forge the internal placeholder sentinel', () => {
+        // The sentinel is a NUL-delimited token; a body that contains NUL characters
+        // (or text that mimics the token) must not be able to capture a code span.
+        const forged = '\u0000c0\u0000 `*x*` \u0000c1\u0000'
+        expect(stripMessageStyling(forged)).toBe('c0 *x* c1')
+      })
+
+      it('should not corrupt output for a body that looks like a placeholder token', () => {
+        expect(stripMessageStyling('c0 and `*x*`')).toBe('c0 and *x*')
+      })
+    })
   })
 
   describe('stripReplyQuote', () => {

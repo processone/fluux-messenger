@@ -109,6 +109,23 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
 }
 
 /**
+ * Sentinel used to stand in for extracted code spans while the styling passes
+ * run. NUL characters are stripped from the input first, so a message body can
+ * never forge a placeholder and capture or corrupt the surrounding text.
+ */
+const CODE_PLACEHOLDER = '\u0000'
+
+/** Fenced code blocks, matching the renderer's ```lang\n ... ``` pattern. */
+const CODE_FENCE_REGEX = /```(\w*)\n?([\s\S]*?)```/g
+
+/**
+ * Inline code spans, matching the renderer's `code` alternative including its
+ * XEP-0393 word-boundary requirements. The renderer parses line by line, so a
+ * span never spans a newline here either.
+ */
+const INLINE_CODE_REGEX = /(?<=^|[\s\p{P}])`[^`\n]+`(?=$|[\s\p{P}])/gu
+
+/**
  * Strip message styling markup from text.
  *
  * Supports both XEP-0393 Message Styling and Markdown patterns:
@@ -117,21 +134,35 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
  * - `~~strikethrough~~` (Markdown) or `~strikethrough~` (XEP-0393) → `strikethrough`
  * - `` `code` `` → `code`
  *
+ * Code spans and fenced code blocks lose their delimiters but keep their
+ * contents literal, matching what the message renderer displays: `` `*x*` ``
+ * previews as `*x*`, not `x`. They are extracted to placeholders before the
+ * style passes run and restored afterwards, so no later pass can see inside
+ * them.
+ *
  * @param text - Text that may contain styling markup
  * @returns Text with markup stripped
  */
 export function stripMessageStyling(text: string): string {
   if (!text) return text
 
-  let result = text
+  // Drop any NUL characters so the placeholder sentinel cannot be forged.
+  let result = text.replace(/\u0000/g, '')
+
+  const codeSpans: string[] = []
+  const protectCode = (content: string): string => {
+    const index = codeSpans.push(content) - 1
+    return `${CODE_PLACEHOLDER}${index}${CODE_PLACEHOLDER}`
+  }
+
+  // Protect fenced code blocks first (the renderer also handles them before
+  // inline styling), then inline code spans in what remains.
+  result = result.replace(CODE_FENCE_REGEX, (_match, _lang, content: string) => protectCode(content.trim()))
+  result = result.replace(INLINE_CODE_REGEX, match => protectCode(match.slice(1, -1)))
 
   // Strip heading markers (# Title, ## Title, ### Title, #### Title)
   // Must be at start of line, followed by space
   result = result.replace(/^#{1,4}\s+/gm, '')
-
-  // Strip inline code (backticks) - do this first to avoid processing markup inside code
-  // Matches `code` but not ```code blocks```
-  result = result.replace(/(?<!`)`([^`\n]+)`(?!`)/g, '$1')
 
   // Strip Markdown-style bold (**text**) - must come before single asterisk
   // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
@@ -148,6 +179,15 @@ export function stripMessageStyling(text: string): string {
 
   // Strip XEP-0393 strikethrough (~text~)
   result = result.replace(/(?<=^|[\s\p{P}])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}])/gu, '$1')
+
+  // Restore the protected code contents verbatim, in a single pass so restored
+  // text is never rescanned.
+  if (codeSpans.length > 0) {
+    result = result.replace(
+      new RegExp(`${CODE_PLACEHOLDER}(\\d+)${CODE_PLACEHOLDER}`, 'g'),
+      (_match, index: string) => codeSpans[Number(index)]
+    )
+  }
 
   return result
 }
