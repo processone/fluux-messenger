@@ -228,13 +228,16 @@ describe('StateSnapshot', () => {
       const [persisted] = adapterData.store.get('user@example.com')!.rooms as Array<{
         readPointer?: { messageId: string; timestamp: number; archiveOrderKey?: unknown }
       }>
+      // The tie-break's `id` is NOT persisted: it is `messageId`, and storing a
+      // second copy made a disagreement representable on disk. Only `from`,
+      // which the pointer cannot reconstruct, rides through.
       expect(persisted?.readPointer?.archiveOrderKey).toEqual({
         kind: 'room',
         from: 'room@conf.example.com/alice',
-        id: 'msg-8',
       })
 
-      // Read back: a fresh hydrate into an empty room store must recover it.
+      // Read back: a fresh hydrate into an empty room store must recover it,
+      // with `id` reconstructed from `messageId`.
       roomStore.getState().removeRoom('room@conf.example.com')
       await snapshot.hydrate('user@example.com')
       expect(roomStore.getState().rooms.get('room@conf.example.com')?.readPointer?.archiveOrderKey).toEqual({

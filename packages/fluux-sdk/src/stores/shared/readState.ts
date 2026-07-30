@@ -105,7 +105,17 @@ export function worthReconcilingOnDeactivate(
   return meta.readPointer !== undefined || meta.unreadCount > 0
 }
 
-/** Runtime guard for an `ArchiveOrderKey` read back from untrusted storage. */
+/**
+ * Runtime guard for an `ArchiveOrderKey` read back from untrusted storage.
+ *
+ * No longer on the hydration path: `deserializeReadPointer` rebuilds the key
+ * and takes its `id` from `messageId` instead of validating a persisted one.
+ * It is kept because it still describes how an OLDER build reads today's
+ * on-disk form — the `typeof k.id === 'string'` requirement is what makes an
+ * old build drop the new id-less key and degrade to the at-or-after-timestamp
+ * fallback (over-count, the safe direction) instead of mis-reading it. That
+ * compatibility claim is asserted against this function in `readPointer.test.ts`.
+ */
 export function isValidArchiveOrderKey(v: unknown): v is ArchiveOrderKey {
   if (!v || typeof v !== 'object') return false
   const k = v as Record<string, unknown>

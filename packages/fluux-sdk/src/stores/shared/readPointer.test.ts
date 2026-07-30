@@ -7,6 +7,7 @@ import {
   deserializeReadPointer,
 } from './readPointer'
 import type { ReadPointer } from './readPointer'
+import { isValidArchiveOrderKey } from './readState'
 
 const at = (ms: number) => new Date(ms)
 
@@ -153,5 +154,129 @@ describe('serialization', () => {
   // position to derive a key from — absence here is legitimate, not corrupt.
   it('a legacy pointer with no key deserializes with archiveOrderKey undefined', () => {
     expect(deserializeReadPointer({ messageId: 'm', timestamp: 1000 })!.archiveOrderKey).toBeUndefined()
+  })
+})
+
+// The tie-break's `id` IS `messageId` — the same message named twice. Storing
+// them independently made a disagreement representable on disk, and the
+// ordering scan trusts the key as the at-or-behind boundary, so an inconsistent
+// restored pointer could select a row that is actually AHEAD — the
+// unrecoverable direction for a forward-only position. The on-disk form now
+// omits the id entirely, which makes the disagreement unrepresentable rather
+// than merely rejected.
+describe('serialization: the tie-break id is not persisted', () => {
+  it('omits `id` from a persisted chat key', () => {
+    const p = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    expect(serializeReadPointer(p).archiveOrderKey).toEqual({ kind: 'chat' })
+  })
+
+  it('omits `id` from a persisted room key but keeps `from` (the room tie-break needs it)', () => {
+    const p = makeReadPointer({ id: 'm1', from: 'room@x/nick', timestamp: at(1000) }, 'room')
+    expect(serializeReadPointer(p).archiveOrderKey).toEqual({ kind: 'room', from: 'room@x/nick' })
+  })
+
+  it('no persisted pointer carries an id beside the messageId', () => {
+    const chat = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    const room = makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room')
+    for (const p of [chat, room]) {
+      const onDisk = JSON.parse(JSON.stringify(serializeReadPointer(p)))
+      expect(onDisk.archiveOrderKey).not.toHaveProperty('id')
+    }
+  })
+
+  it('hydration reconstructs the key id from messageId, so the round trip is unchanged in memory', () => {
+    const chat = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    const room = makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room')
+    for (const p of [chat, room]) {
+      expect(deserializeReadPointer(JSON.parse(JSON.stringify(serializeReadPointer(p))))).toEqual(p)
+    }
+  })
+
+  // Compatibility 1 — old data, new build. Any persisted `id` is ignored and
+  // `messageId` is used instead. Lossless: they were always the same value.
+  it('reads a legacy on-disk key that still carries its id (lossless)', () => {
+    expect(
+      deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'chat', id: 'm1' } })
+    ).toEqual({ messageId: 'm1', timestamp: at(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } })
+
+    expect(
+      deserializeReadPointer({
+        messageId: 'm2',
+        timestamp: 1000,
+        archiveOrderKey: { kind: 'room', from: 'room@x/nick', id: 'm2' },
+      })
+    ).toEqual({
+      messageId: 'm2',
+      timestamp: at(1000),
+      archiveOrderKey: { kind: 'room', from: 'room@x/nick', id: 'm2' },
+    })
+  })
+
+  // Compatibility 3 — inconsistent legacy data. This is the defect being
+  // closed: a stored pointer whose persisted id disagreed with `messageId` now
+  // resolves to `messageId`, so the boundary can no longer name a different
+  // (possibly newer) row than the pointer does.
+  it('resolves an inconsistent legacy key to messageId, not to the persisted id', () => {
+    const back = deserializeReadPointer({
+      messageId: 'm1',
+      timestamp: 1000,
+      archiveOrderKey: { kind: 'chat', id: 'm9-ahead' },
+    })
+    expect(back!.archiveOrderKey).toEqual({ kind: 'chat', id: 'm1' })
+
+    const roomBack = deserializeReadPointer({
+      messageId: 'm1',
+      timestamp: 1000,
+      archiveOrderKey: { kind: 'room', from: 'room@x/nick', id: 'm9-ahead' },
+    })
+    expect(roomBack!.archiveOrderKey).toEqual({ kind: 'room', from: 'room@x/nick', id: 'm1' })
+  })
+
+  // ...and the disagreement cannot be written back out either: what a
+  // re-persist emits carries no id at all, so the inconsistency does not
+  // survive a load/save cycle in any form.
+  it('cannot write the disagreement back out', () => {
+    const back = deserializeReadPointer({
+      messageId: 'm1',
+      timestamp: 1000,
+      archiveOrderKey: { kind: 'chat', id: 'm9-ahead' },
+    })!
+    expect(JSON.stringify(serializeReadPointer(back))).not.toContain('m9-ahead')
+  })
+
+  // Compatibility 2 — new data, old build. An older build validates the
+  // persisted key with `isValidArchiveOrderKey`, which requires
+  // `typeof k.id === 'string'`. The id-less form fails that guard, so an old
+  // build DROPS the key and degrades to the documented at-or-after-timestamp
+  // fallback, which over-counts — the safe, recoverable direction. Asserted
+  // here rather than assumed, because shipping a format an older build
+  // mis-read in the unsafe direction would be unrecoverable.
+  it('an old build drops the new id-less key rather than mis-reading it', () => {
+    const chat = serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'))
+    const room = serializeReadPointer(makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room'))
+    expect(isValidArchiveOrderKey(chat.archiveOrderKey)).toBe(false)
+    expect(isValidArchiveOrderKey(room.archiveOrderKey)).toBe(false)
+  })
+
+  // The pointer itself must still load on an old build: only the key degrades.
+  it('leaves messageId and timestamp readable in the old on-disk shape', () => {
+    const onDisk = JSON.parse(
+      JSON.stringify(serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')))
+    )
+    expect(onDisk.messageId).toBe('m1')
+    expect(onDisk.timestamp).toBe(1000)
+  })
+
+  // A key whose `kind` is unrecognisable, or a room key with no usable `from`,
+  // still yields no key at all — storage stays untrusted input.
+  it.each([
+    ['an unknown kind', { kind: 'nope' }],
+    ['a room key with no from', { kind: 'room' }],
+    ['a room key with a non-string from', { kind: 'room', from: 7 }],
+    ['a non-object key', 'chat'],
+  ])('drops %s', (_label, archiveOrderKey) => {
+    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey })
+    expect(back!.archiveOrderKey).toBeUndefined()
+    expect(back!.messageId).toBe('m')
   })
 })

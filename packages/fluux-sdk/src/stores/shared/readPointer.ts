@@ -15,7 +15,7 @@
  * All functions here are pure.
  */
 
-import { compareOrder, makeArchiveOrderKey, isValidArchiveOrderKey, type ArchiveOrderKey } from './readState'
+import { compareOrder, makeArchiveOrderKey, type ArchiveOrderKey } from './readState'
 
 /**
  * Where the user has read to. Written atomically or not at all.
@@ -47,11 +47,27 @@ export interface ReadPointer {
   archiveOrderKey?: ArchiveOrderKey
 }
 
+/**
+ * The tie-break as it is written to disk: everything the key needs EXCEPT its
+ * `id`, which is `messageId` and is reconstructed at hydration.
+ *
+ * The id was stored twice — once as `messageId`, once inside the key — and
+ * nothing checked the two agreed. Since the ordering scan trusts the key as the
+ * at-or-behind boundary, a disagreeing restored pointer could select a row that
+ * is actually AHEAD of the read position, which is the unrecoverable direction
+ * for a forward-only pointer. Not persisting the second copy makes that
+ * disagreement unrepresentable rather than merely rejected at read time.
+ *
+ * `from` stays: it is the room archive's own `(from, id)` tie-break component
+ * and is NOT derivable from the pointer.
+ */
+export type SerializedArchiveOrderKey = { kind: 'chat' } | { kind: 'room'; from: string }
+
 /** JSON-safe form for localStorage. */
 export interface SerializedReadPointer {
   messageId: string
   timestamp: number
-  archiveOrderKey?: ArchiveOrderKey
+  archiveOrderKey?: SerializedArchiveOrderKey
 }
 
 /** The minimal message shape a pointer can be built from. */
@@ -123,12 +139,43 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
   return isAhead(candidate, current) ? candidate : current
 }
 
+/**
+ * Write the pointer, with the tie-break stripped of its redundant `id` (see
+ * {@link SerializedArchiveOrderKey}). The in-memory shape is unchanged; only
+ * the on-disk form shrinks.
+ *
+ * An OLDER build reading this format validates the key with
+ * `isValidArchiveOrderKey`, which requires `typeof k.id === 'string'` — so it
+ * drops the key and degrades to the at-or-after-timestamp fallback, which
+ * over-counts rather than under-counts (the safe, recoverable direction). The
+ * `messageId` and `timestamp` it needs are untouched.
+ */
 export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointer {
+  const key = pointer.archiveOrderKey
   return {
     messageId: pointer.messageId,
     timestamp: pointer.timestamp.getTime(),
-    archiveOrderKey: pointer.archiveOrderKey,
+    ...(key ? { archiveOrderKey: key.kind === 'room' ? { kind: 'room', from: key.from } : { kind: 'chat' } } : {}),
   }
+}
+
+/**
+ * Rebuild the tie-break from an untrusted persisted key, taking the id from
+ * `messageId` — the pointer's one name for the message it points at.
+ *
+ * Any `id` still on disk (every key written before this format) is IGNORED
+ * rather than read: it was always the same value, so ignoring it is lossless
+ * for consistent data and is exactly the fix for inconsistent data. What
+ * remains validated is what cannot be reconstructed: the `kind` discriminant,
+ * and `from` for a room key. Anything else yields no key at all, which degrades
+ * to the at-or-after-timestamp fallback (over-count, the safe direction).
+ */
+function hydrateArchiveOrderKey(raw: unknown, messageId: string): ArchiveOrderKey | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const k = raw as Record<string, unknown>
+  if (k.kind === 'chat') return { kind: 'chat', id: messageId }
+  if (k.kind === 'room' && typeof k.from === 'string') return { kind: 'room', from: k.from, id: messageId }
+  return undefined
 }
 
 /**
@@ -142,12 +189,13 @@ export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointe
  * encodings exist on disk today — this is the one place that reads either back.
  * We still only ever WRITE epoch ms; the string branch is read-only tolerance.
  *
- * `archiveOrderKey` is validated with {@link isValidArchiveOrderKey} and DROPPED
- * when malformed — storage is untrusted input, so a corrupt key must not ride
- * through verbatim into ordering comparisons. Dropping it alone (keeping the
- * rest of the pointer) is deliberate: it degrades to the at-or-after-timestamp
- * fallback, which can over-count rather than under-count (safe direction),
- * without discarding a message id and timestamp that are otherwise fine.
+ * `archiveOrderKey` is rebuilt by {@link hydrateArchiveOrderKey} — never taken
+ * verbatim — and DROPPED when what it carries is unusable. Storage is untrusted
+ * input, so a corrupt key must not ride through into ordering comparisons.
+ * Dropping it alone (keeping the rest of the pointer) is deliberate: it degrades
+ * to the at-or-after-timestamp fallback, which can over-count rather than
+ * under-count (safe direction), without discarding a message id and timestamp
+ * that are otherwise fine.
  */
 export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {
   if (!raw || typeof raw !== 'object') return undefined
@@ -157,7 +205,7 @@ export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {
     archiveOrderKey?: unknown
   }
   if (typeof messageId !== 'string' || messageId.length === 0) return undefined
-  const validKey = isValidArchiveOrderKey(archiveOrderKey) ? archiveOrderKey : undefined
+  const validKey = hydrateArchiveOrderKey(archiveOrderKey, messageId)
 
   if (typeof timestamp === 'number') {
     return Number.isFinite(timestamp)
