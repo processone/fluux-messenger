@@ -77,7 +77,7 @@
 - **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, and more — plus light/dark mode
 - **Custom Themes** - Import/export themes as JSON, pick a custom accent color, or write CSS overrides in the built-in editor
 - **Synced Across Devices** - Theme, accent, and font size preferences are stored server-side and follow you everywhere
-- **Internationalization** - 33 languages including complete EU coverage
+- **Internationalization** - 34 languages including complete EU coverage
 
 ### Privacy & Security
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency

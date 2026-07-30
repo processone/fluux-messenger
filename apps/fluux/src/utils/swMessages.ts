@@ -72,6 +72,7 @@ const FORMS: Record<string, PluralForms> = {
     many: '{count} nuovi messaggi',
     other: '{count} nuovi messaggi',
   },
+  ko: { other: '새 메시지 {count}개' },
   lt: {
     one: '{count} nauja žinutė',
     few: '{count} naujos žinutės',

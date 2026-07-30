@@ -140,7 +140,7 @@
         "enterName": "이름 입력",
         "pleaseEnterName": "이름을 입력하세요",
         "failedToRename": "연락처 이름 변경 실패",
-        "nicknameLabel": "별명",
+        "nicknameLabel": "닉네임",
         "nicknameOptional": "(선택사항)",
         "nicknamePlaceholder": "표시 이름",
         "jidLabel": "JID (Jabber ID)",
@@ -195,7 +195,7 @@
             "glanceDisabled": "암호화 꺼짐",
             "glanceLocked": "암호화됨, 잠김"
         },
-        "actionsMenu": "더 보기"
+        "actionsMenu": "작업 더 보기"
     },
     "rooms": {
         "backToRooms": "대화방 목록으로",
@@ -242,7 +242,7 @@
         "registeredNicknameRequired": "이 대화방은 등록된 닉네임이 필요합니다.",
         "roomNotFound": "대화방을 찾을 수 없습니다.",
         "nonAnonWarningTitle": "비익명 채널에 참여하시겠습니까?",
-        "nonAnonWarningMessage": "\"{{room}}\"의 모든 사람이 귀하의 실제 주소(XMPP/Jabber ID)를 볼 수 있습니다. 그래도 참여하시겠습니까?",
+        "nonAnonWarningMessage": "\"{{room}}\"의 모든 사람이 내 실제 주소(XMPP/Jabber ID)를 볼 수 있습니다. 그래도 참여하시겠습니까?",
         "nonAnonWarningConfirm": "참여",
         "joinToParticipate": "참여하여 대화하기",
         "cachedHistoryWarning": "{{date}}까지의 캐시된 기록입니다. 최신 메시지를 가져오려면 참여하세요.",
@@ -431,8 +431,8 @@
         "nickEdgeWhitespace": "이름의 가장자리에 여분의 공백이 있습니다",
         "nickHiddenChars": "이름에 숨겨진 문자가 포함되어 있습니다",
         "mentionSuggestions": "멘션 제안",
-        "unreadMessages": "읽지 않은 메시지 {{count}}개",
-        "unreadMessages_other": "읽지 않은 메시지 {{count}}개"
+        "unreadMessages": "읽지 않은 메시지 {{displayCount}}개",
+        "unreadMessages_other": "읽지 않은 메시지 {{displayCount}}개"
     },
     "events": {
         "invitedBy": "{{name}}이(가) 초대함",
@@ -447,7 +447,7 @@
             "copied": "클립보드에 복사됨"
         },
         "me": "나",
-        "you": "당신",
+        "you": "나",
         "messageTo": "{{name}}에게 메시지",
         "messageRoom": "#{{name}}에 메시지",
         "editMessage": "메시지 수정",
@@ -460,13 +460,13 @@
         "forwardMessage": "메시지 전달 (곧 출시)",
         "moreReactions": "더 많은 반응",
         "reactionOthers": "외 {{count}}명",
-        "moreOptions": "더 보기",
+        "moreOptions": "옵션 더 보기",
         "reactWith": "{{emoji}}로 반응",
         "noMessages": "아직 메시지가 없습니다. 인사해보세요!",
         "loadingMessages": "메시지 불러오는 중...",
         "newMessages": "새 메시지",
-        "newMessagesCount": "새 메시지 {{count}}개",
-        "newMessagesCount_other": "새 메시지 {{count}}개",
+        "newMessagesCount": "새 메시지 {{displayCount}}개",
+        "newMessagesCount_other": "새 메시지 {{displayCount}}개",
         "youWereAway": "자리를 비우셨습니다",
         "jumpToLastRead": "마지막으로 읽은 메시지로 이동",
         "historyStart": "대화 시작",
@@ -989,7 +989,7 @@
         "edition": "커뮤니티 에디션",
         "description": "사용하기 쉬운 강력하고 생산적인 메시징 클라이언트입니다.",
         "madeBy": "제작자",
-        "commercialLicense": "상업용 라이센스 사용 가능.",
+        "commercialLicense": "상업용 라이선스 사용 가능.",
         "contactUs": "문의하기",
         "viewOnGithub": "GitHub에서 보기",
         "copyVersionInfo": "버전 정보 복사"
@@ -1276,7 +1276,7 @@
         "muc#roomconfig_membersonly": "활성화하면 멤버 목록에 있는 사용자만 참여할 수 있습니다. 다른 사용자는 초대를 받아야 합니다.",
         "muc#roomconfig_allowinvites": "참가자가 다른 사람을 대화방에 초대할 수 있도록 허용합니다.",
         "muc#roomconfig_changesubject": "참가자가 대화방 제목을 변경할 수 있도록 허용합니다.",
-        "muc#roomconfig_moderatedroom": "중재 대화방에서는 중재자 이상만 메시지를 보낼 수 있습니다. 발언권이 부여되지 않는 한.",
+        "muc#roomconfig_moderatedroom": "중재 대화방에서는 발언권이 부여되지 않는 한 중재자 이상만 메시지를 보낼 수 있습니다.",
         "muc#roomconfig_whois": "참가자의 실제 JID(주소)를 볼 수 있는 사람을 제어합니다. 중재자만 또는 모두.",
         "muc#roomconfig_passwordprotectedroom": "대화방에 참여하려면 비밀번호가 필요합니다.",
         "muc#roomconfig_roomsecret": "대화방에 참여하는 데 필요한 비밀번호입니다.",
@@ -1352,15 +1352,15 @@
         },
         "me": {
             "desc": "액션 메시지 보내기",
-            "usage": "/me <액션>"
+            "usage": "/me <action>"
         },
         "say": {
             "desc": "슬래시로 시작하더라도 텍스트를 그대로 보내기",
-            "usage": "/say <텍스트>"
+            "usage": "/say <text>"
         },
         "nick": {
             "desc": "이 대화방에서 닉네임 변경",
-            "usage": "/nick <새닉네임>",
+            "usage": "/nick <newnick>",
             "changed": "이제 {{nick}}(으)로 알려져 있습니다"
         },
         "part": {
@@ -1369,24 +1369,24 @@
         },
         "topic": {
             "desc": "대화방 제목 보기 또는 설정",
-            "usage": "/topic [텍스트]",
+            "usage": "/topic [text]",
             "set": "제목이 업데이트되었습니다",
             "current": "현재 제목: {{subject}}",
             "none": "제목이 설정되지 않았습니다"
         },
         "kick": {
             "desc": "대화방에서 누군가 제거",
-            "usage": "/kick <닉네임> [사유]",
+            "usage": "/kick <nick> [reason]",
             "done": "{{nick}}을(를) 강퇴했습니다"
         },
         "ban": {
             "desc": "대화방에서 누군가 차단",
-            "usage": "/ban <닉네임|jid> [사유]",
+            "usage": "/ban <nick|jid> [reason]",
             "done": "{{target}}을(를) 차단했습니다"
         },
         "invite": {
             "desc": "대화방에 누군가 초대",
-            "usage": "/invite [jid] [사유]",
+            "usage": "/invite [jid] [reason]",
             "done": "{{target}}에게 초대를 보냈습니다"
         },
         "config": {

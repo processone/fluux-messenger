@@ -4,42 +4,7 @@ import { Globe, Clock } from 'lucide-react'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { Select } from '@/components/ui/Select'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-
-const languages = [
-  { code: 'ar', name: 'العربية' },
-  { code: 'be', name: 'Беларускі' },
-  { code: 'bg', name: 'Български' },
-  { code: 'ca', name: 'Català' },
-  { code: 'cs', name: 'Čeština' },
-  { code: 'da', name: 'Dansk' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'el', name: 'Ελληνικά' },
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Español' },
-  { code: 'et', name: 'Eesti' },
-  { code: 'fi', name: 'Suomi' },
-  { code: 'fr', name: 'Français' },
-  { code: 'ga', name: 'Gaeilge' },
-  { code: 'he', name: 'עברית' },
-  { code: 'hr', name: 'Hrvatski' },
-  { code: 'hu', name: 'Magyar' },
-  { code: 'is', name: 'Íslenska' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'lt', name: 'Lietuvių' },
-  { code: 'lv', name: 'Latviešu' },
-  { code: 'mt', name: 'Malti' },
-  { code: 'nb', name: 'Norsk bokmål' },
-  { code: 'nl', name: 'Nederlands' },
-  { code: 'pl', name: 'Polski' },
-  { code: 'pt', name: 'Português' },
-  { code: 'ro', name: 'Română' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'sk', name: 'Slovenčina' },
-  { code: 'sl', name: 'Slovenščina' },
-  { code: 'sv', name: 'Svenska' },
-  { code: 'uk', name: 'Українська' },
-  { code: 'zh-CN', name: '简体中文' },
-]
+import { languageNames as languages } from '@/i18n/languages'
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
   { value: 'auto', labelKey: 'settings.timeFormatAuto' },

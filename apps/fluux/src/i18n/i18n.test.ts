@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import { supportedLanguages, languageNames } from './languages'
+import { newMessagesText } from '@/utils/swMessages'
 
 // Auto-discover all locale files via Vite eager glob
 const localeModules = import.meta.glob('./locales/*.json', { eager: true }) as Record<
@@ -102,6 +104,51 @@ describe('i18n', () => {
     })
   })
 
+  // A locale is only really shipped once three lists agree: the JSON file exists,
+  // `supportedLanguages` registers it with i18next, and the Settings picker offers it.
+  // `ko` shipped registered-but-unlisted, so a Korean browser got a Korean UI while the
+  // picker read "English" and no user could select Korean at all. Nothing checked that,
+  // so CI was green. These assertions are that check.
+  describe('locale registration parity', () => {
+    const pickerCodes: string[] = languageNames.map(l => l.code)
+    const registeredCodes: string[] = [...supportedLanguages]
+
+    it('offers every registered language in the settings picker', () => {
+      const unselectable = registeredCodes.filter(code => !pickerCodes.includes(code))
+      expect(unselectable).toEqual([])
+    })
+
+    it('registers every language offered in the settings picker', () => {
+      const unregistered = pickerCodes.filter(code => !registeredCodes.includes(code))
+      expect(unregistered).toEqual([])
+    })
+
+    it('ships a locale file for every registered language', () => {
+      const withoutTranslations = registeredCodes.filter(code => !languageCodes.includes(code))
+      expect(withoutTranslations).toEqual([])
+    })
+
+    it('registers every locale file that ships', () => {
+      const unregistered = languageCodes.filter(code => !registeredCodes.includes(code))
+      expect(unregistered).toEqual([])
+    })
+
+    it('gives the picker a non-empty display name for every language', () => {
+      const unnamed = languageNames.filter(l => !l.name.trim()).map(l => l.code)
+      expect(unnamed).toEqual([])
+    })
+
+    // The service worker cannot run i18next, so it carries its own string table keyed by
+    // base language. A locale missing there silently renders notifications in English.
+    it('has a service-worker notification form for every registered base language', () => {
+      const englishText = newMessagesText('en', 3)
+      const fallingBackToEnglish = registeredCodes.filter(
+        code => code !== 'en' && newMessagesText(code, 3) === englishText
+      )
+      expect(fallingBackToEnglish).toEqual([])
+    })
+  })
+
   describe('interpolation', () => {
     it('should interpolate reconnecting status with seconds and attempt', () => {
       const result = testI18n.t('status.reconnectingIn', { seconds: 5, attempt: 2 })
@@ -193,6 +240,15 @@ describe('i18n', () => {
       expect(testI18n.t('rooms.unreadMessages', { count: 998, displayCount: '998' })).toBe('998 unread messages')
       expect(testI18n.t('rooms.unreadMessages', { count: 999, displayCount: '999+' })).toBe('999+ unread messages')
       expect(testI18n.t('rooms.unreadMessages', { count: 1000, displayCount: '999+' })).toBe('999+ unread messages')
+    })
+
+    // Korean has a single plural category, so both forms share one template — but it still
+    // has to interpolate `displayCount` to get the cap, not the raw `count`.
+    it('renders the capped displayCount in Korean too', async () => {
+      await testI18n.changeLanguage('ko')
+      expect(testI18n.t('rooms.unreadMessages', { count: 3, displayCount: '3' })).toBe('읽지 않은 메시지 3개')
+      expect(testI18n.t('rooms.unreadMessages', { count: 1000, displayCount: '999+' })).toBe('읽지 않은 메시지 999+개')
+      expect(testI18n.t('chat.newMessagesCount', { count: 1000, displayCount: '999+' })).toBe('새 메시지 999+개')
     })
   })
 

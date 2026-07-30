@@ -2,12 +2,9 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import resourcesToBackend from 'i18next-resources-to-backend'
+import { supportedLanguages } from './languages'
 
-export const supportedLanguages = [
-  'ar', 'be', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr',
-  'ga', 'he', 'hr', 'hu', 'is', 'it', 'ko', 'lt', 'lv', 'mt', 'nb', 'nl',
-  'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sv', 'uk', 'zh-CN',
-] as const
+export { supportedLanguages, languageNames, type SupportedLanguage } from './languages'
 
 const RTL_LANGUAGES = new Set(['ar', 'he'])
 
