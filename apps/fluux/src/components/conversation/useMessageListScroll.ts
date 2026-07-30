@@ -18,7 +18,7 @@
  */
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
-import { scrollStateManager, AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
+import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor, slowCorrectionSignal } from './slowCorrectionMonitor'
 import {
@@ -41,6 +41,7 @@ import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import { ViewportSession } from './viewportSession'
+import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import {
   PositioningController,
   type DirectionalHistoryExecutor,
@@ -128,7 +129,6 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
-const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
 // How long a jumped-to message keeps its highlight tint, for both the controller-owned live path
@@ -468,6 +468,10 @@ export function useMessageListScroll({
   if (viewportSessionRef.current === null) {
     viewportSessionRef.current = new ViewportSession(conversationId)
   }
+  const scrollPersistenceRef = useRef<ScrollPersistenceAdapter | null>(null)
+  if (scrollPersistenceRef.current === null) {
+    scrollPersistenceRef.current = new ScrollPersistenceAdapter()
+  }
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -593,7 +597,6 @@ export function useMessageListScroll({
   const prependRef = useRef<DirectionalHistorySnapshot | null>(null)
 
   // Throttling/cooldown
-  const lastSaveTimeRef = useRef(0)
   const lastLoadTimeRef = useRef(0)
   const lastRestoreTimeRef = useRef(0) // Track when we last restored position
   // Tracks the previous windowAtLiveEdge so we can detect the false→true transition (returning to
@@ -680,7 +683,7 @@ export function useMessageListScroll({
     setMarkerAboveViewport(false)
     // At the bottom the newest message is visible → 0 new below the fold (anchor is the last row).
     setBottomVisibleMessageId(bottomAnchor?.messageId ?? null)
-    scrollStateManager.clearSavedScrollState(conversationId)
+    scrollPersistenceRef.current?.clearSavedPosition(conversationId)
   }, [conversationId, isAtBottomRef])
 
   // ==========================================================================
@@ -2667,29 +2670,16 @@ export function useMessageListScroll({
       }
     }
 
-    // Save position for cross-conversation persistence (throttled). Capture the
-    // bottom-most-visible anchor here too — throttled so the DOM query is bounded,
-    // and during scroll because at switch time the DOM is already the new room.
-    // Skipped while a programmatic loop is positioning the list (see programmaticScroll above):
-    // saving the transient entry position would poison the next re-entry's restore decision.
-    // Also skipped until the user has GENUINELY scrolled this entry: a post-restore scroll caused
-    // by media/measurement settling must not overwrite the saved anchor (that drift compounded
-    // across re-opens — see the viewport session's genuine-input evidence).
-    if (
-      !programmaticScroll &&
-      viewportSessionRef.current?.hasGenuineInput(conversationId) &&
-      now - lastSaveTimeRef.current > SAVE_THROTTLE_MS
-    ) {
-      lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(
-        conversationId,
-        scrollTop,
-        scrollHeight,
-        clientHeight,
-        bottomAnchor ?? undefined,
-        readPointerId,
-      )
-    }
+    // Persist only through the adapter. It consumes the snapshot recorded above and owns the
+    // genuine-input, active-controller, conversation, and throttle gates.
+    scrollPersistenceRef.current?.persistViewport({
+      conversationId,
+      snapshot:
+        viewportSessionRef.current?.snapshotFor(conversationId) ?? null,
+      readPositionId: readPointerId,
+      controllerOwnsPixels: programmaticScroll,
+      now,
+    })
 
     // Track if the USER scrolled away from top (allows a later return to re-trigger load). A
     // controller-owned animation can cross this threshold too — most notably Home's smooth trip
@@ -2790,22 +2780,12 @@ export function useMessageListScroll({
     // visit. Otherwise keep its existing saved anchor untouched (markAsLeft): the live scroll data
     // may have drifted from media/measurement after the restore, and persisting it would make the
     // position creep older on the next open.
-    if (
-      prevConversationRef.current &&
-      previousViewport?.geometry &&
-      previousViewport.hasGenuineInput
-    ) {
-      const { top, height, client } = previousViewport.geometry
-      scrollStateManager.leaveConversation(
+    if (prevConversationRef.current) {
+      scrollPersistenceRef.current?.leaveConversation(
         prevConversationRef.current,
-        top,
-        height,
-        client,
-        previousViewport.bottomAnchor ?? undefined,
+        previousViewport ?? null,
         previousReadPositionRef.current,
       )
-    } else if (prevConversationRef.current) {
-      scrollStateManager.markAsLeft(prevConversationRef.current)
     }
     if (
       prevConversationRef.current &&
@@ -2844,21 +2824,26 @@ export function useMessageListScroll({
       isAtBottomRef.current = false
       debugLog('CONVERSATION SWITCH: static mode, skipping scroll')
     } else {
-      // Diagnostic only: is this the FIRST open of this conversation this session? (Captured BEFORE
-      // enterConversation, which flips the manager's `initialized` flag.) The "synced marker only on
+      // Diagnostic only: is this the FIRST open of this conversation this session? The persistence
+      // adapter captures it before entry flips the manager's `initialized` flag. The "synced marker only on
       // first open" concern is handled at the SOURCE — the SDK gates the XEP-0490 entry fold to the
       // first activation per session (chatStore/roomStore), so the divider here already reflects the
       // intended read position. Gating the scroll branch on first-open was the wrong layer: it could
       // not distinguish a stale/synced marker from a genuine "new message arrived while away" marker
       // and suppressed the latter on re-entry. See
       // docs/superpowers/specs/2026-06-29-mds-sync-marker-first-open-design.md.
-      const firstOpenThisSession = !scrollStateManager.isInitialized(conversationId)
-
-      // Decide: restore position or scroll to bottom?
-      let action = scrollStateManager.enterConversation(conversationId, messageCount)
-      const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
-      const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
-      const savedReadPositionId = scrollStateManager.getSavedReadPositionId(conversationId)
+      const persistenceEntry =
+        scrollPersistenceRef.current?.enterConversation(
+          conversationId,
+          messageCount,
+        )
+      const firstOpenThisSession =
+        persistenceEntry?.firstOpenThisSession ?? true
+      let action = persistenceEntry?.action ?? 'scroll-to-bottom'
+      const savedPos = persistenceEntry?.savedOffsetPx ?? null
+      const savedAnchor = persistenceEntry?.savedAnchor ?? null
+      const savedReadPositionId =
+        persistenceEntry?.savedReadPositionId
       const syncedLiveEdge =
         action === 'restore-position' &&
         firstNewMessageId === undefined &&
@@ -2872,7 +2857,7 @@ export function useMessageListScroll({
         // downloaded row, a saved position tied to an older pointer must not win merely because
         // there was never an unread divider.
         if (syncedLiveEdge) {
-          scrollStateManager.clearSavedScrollState(conversationId)
+          scrollPersistenceRef.current?.clearSavedPosition(conversationId)
           pendingSyncedLiveEdgeRef.current = null
           action = 'scroll-to-bottom'
           debugLog('MDS LIVE EDGE: synced read supersedes saved position on entry', {
@@ -3029,7 +3014,7 @@ export function useMessageListScroll({
     if (readPointerId !== lastMessageId || readPointerId === pending.savedReadPositionId) return
 
     pendingSyncedLiveEdgeRef.current = null
-    scrollStateManager.clearSavedScrollState(conversationId)
+    scrollPersistenceRef.current?.clearSavedPosition(conversationId)
     isAtBottomRef.current = true
     debugLog('MDS LIVE EDGE: late synced read supersedes restored position', {
       conversationId,
@@ -3158,11 +3143,11 @@ export function useMessageListScroll({
     windowAtLiveEdge,
   ])
 
-  // Cleanup: properly leave conversation in scrollStateManager only when the message list
-  // actually unmounts. The conversation-switch effect above intentionally has broad deps
-  // (message count, target, marker) so it sees the current entry state, but a cleanup attached
-  // there would also run on same-conversation updates and mark the singleton manager "left"
-  // while the room is still mounted.
+  // Cleanup: leave through the persistence adapter only when the message list actually unmounts.
+  // The conversation-switch effect above intentionally has broad deps (message count, target,
+  // marker) so it sees the current entry state, but a cleanup attached there would also run on
+  // same-conversation updates and mark the underlying singleton store "left" while the room is
+  // still mounted.
   useLayoutEffect(() => {
     unmountDeactivationTokenRef.current = null
     return () => {
@@ -3183,8 +3168,9 @@ export function useMessageListScroll({
         })
       }
       if (prevConversationRef.current) {
+        const outgoingConversationId = prevConversationRef.current
         const viewportSnapshot = viewportSessionRef.current?.snapshotFor(
-          prevConversationRef.current,
+          outgoingConversationId,
         )
         // Same gate as the conversation-switch leave: only persist the live scroll data when the
         // user genuinely scrolled this visit; otherwise keep the existing saved anchor (markAsLeft)
@@ -3197,26 +3183,24 @@ export function useMessageListScroll({
           // stale or already at-bottom, the next entry restores wrong / jumps to bottom — so this
           // shows exactly what was persisted at the moment the screen was torn down.
           debugLog('UNMOUNT leaveConversation (save)', {
-            conversationId: prevConversationRef.current,
+            conversationId: outgoingConversationId,
             top, height, client,
             distFromBottom: height - top - client,
             anchorMessageId: viewportSnapshot.bottomAnchor?.messageId,
             anchorFraction: viewportSnapshot.bottomAnchor?.fraction,
           })
-          scrollStateManager.leaveConversation(
-            prevConversationRef.current,
-            top,
-            height,
-            client,
-            viewportSnapshot.bottomAnchor ?? undefined,
-            previousReadPositionRef.current,
-          )
         } else {
           // No scroll data, or the user never scrolled this visit → don't overwrite the saved
           // position; just mark the conversation left so a return is detected as a switch.
-          debugLog('UNMOUNT markAsLeft (no user scroll / no scroll data)', { conversationId: prevConversationRef.current })
-          scrollStateManager.markAsLeft(prevConversationRef.current)
+          debugLog('UNMOUNT markAsLeft (no user scroll / no scroll data)', {
+            conversationId: outgoingConversationId,
+          })
         }
+        scrollPersistenceRef.current?.leaveConversation(
+          outgoingConversationId,
+          viewportSnapshot ?? null,
+          previousReadPositionRef.current,
+        )
       }
       userInputCleanupRef.current?.()
       userInputCleanupRef.current = null

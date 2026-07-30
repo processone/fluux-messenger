@@ -1,9 +1,9 @@
 /**
  * Scroll State Manager
  *
- * A dedicated module for managing scroll positions across conversation switches.
- * Isolates scroll persistence logic from the MessageList component for better
- * testability and reliability.
+ * Conversation-scoped in-memory state for scroll positions across switches.
+ * ScrollPersistenceAdapter owns when the live MessageList may enter, save, leave,
+ * or clear this store.
  *
  * Key features:
  * - Explicit state transitions with timestamps for debugging

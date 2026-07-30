@@ -32,6 +32,13 @@ const viewportSessionSource = readFileSync(
   ),
   'utf8',
 )
+const scrollPersistenceAdapterSource = readFileSync(
+  resolve(
+    process.cwd(),
+    'src/components/conversation/scrollPersistenceAdapter.ts',
+  ),
+  'utf8',
+)
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -41,6 +48,8 @@ const legacyMessageScrollPath = resolve(
 
 const directMessageListWrite =
   /\bscrollRef\.current\.(?:scrollTo\s*\(|scrollTop\s*=)/
+const directScrollPersistenceCall =
+  /\bscrollStateManager\.(?:clearSavedScrollState|saveScrollPosition|leaveConversation|markAsLeft|isInitialized|enterConversation|getSavedScrollTop|getSavedAnchor|getSavedReadPositionId)\s*\(/
 
 function interfaceMemberNames(
   sourceText: string,
@@ -103,6 +112,55 @@ describe('live message-list scroll ownership', () => {
     expect(viewportSessionSource).not.toMatch(/\b(?:HTMLElement|Element|MessageVirtualizer)\b/)
     expect(viewportSessionSource).not.toMatch(/\b(?:scrollTop|scrollTo|scrollIntoView)\b/)
     expect(viewportSessionSource).not.toMatch(/\brequestAnimationFrame\b/)
+  })
+
+  it('keeps scroll persistence behind its adapter boundary', () => {
+    expect(hookSource).not.toMatch(directScrollPersistenceCall)
+  })
+
+  it('keeps the persistence adapter value-only and unable to position', () => {
+    expect(scrollPersistenceAdapterSource).not.toMatch(
+      /\b(?:HTMLElement|Element|MessageVirtualizer)\b/,
+    )
+    expect(scrollPersistenceAdapterSource).not.toMatch(
+      /\b(?:scrollTo|scrollIntoView|requestAnimationFrame)\b/,
+    )
+    expect(scrollPersistenceAdapterSource).not.toMatch(
+      /\.scrollTop\s*=/,
+    )
+  })
+
+  it('persists the outgoing viewport before resetting the session for entry', () => {
+    const leave = hookSource.indexOf(
+      'scrollPersistenceRef.current?.leaveConversation',
+    )
+    const reset = hookSource.indexOf(
+      'viewportSessionRef.current?.enterConversation',
+    )
+
+    expect(leave).toBeGreaterThan(-1)
+    expect(reset).toBeGreaterThan(leave)
+  })
+
+  it('would reject resetting entry evidence before persisting the room left', () => {
+    const wrongOrder = `
+      viewportSessionRef.current?.enterConversation(nextConversationId)
+      scrollPersistenceRef.current?.leaveConversation(previousConversationId)
+    `
+
+    expect(
+      wrongOrder.indexOf('viewportSessionRef.current?.enterConversation'),
+    ).toBeLessThan(
+      wrongOrder.indexOf('scrollPersistenceRef.current?.leaveConversation'),
+    )
+  })
+
+  it('would reject a direct scroll-state-manager save from the hook', () => {
+    expect(
+      directScrollPersistenceCall.test(
+        'scrollStateManager.saveScrollPosition(conversationId, top, height, client)',
+      ),
+    ).toBe(true)
   })
 
   it('would reject a viewport session that acquired a pixel-write port', () => {
