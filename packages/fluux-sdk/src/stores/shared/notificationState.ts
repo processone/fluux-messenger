@@ -280,8 +280,8 @@ export function isUnseenIncomingMessage(
  * The old fallback ladder — a `lastReadAt` timestamp probe, an Nth-from-end
  * placement driven by `unreadCount`, and a resume-preserving snap — is gone. All
  * of it existed because the pointer could not be located outside the resident
- * slice, which a persisted `archiveOrderKey` now solves, and the snap was a
- * pointer write inside a function whose job is to place a divider.
+ * slice, which a durably reconstructible `archiveOrderKey` now solves, and the
+ * snap was a pointer write inside a function whose job is to place a divider.
  *
  * With neither a pointer nor a `historyFloor` there is no boundary, so there is
  * no divider — the same stand-down the count makes when `computeFloor` yields

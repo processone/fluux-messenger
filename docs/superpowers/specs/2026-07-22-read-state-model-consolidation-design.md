@@ -157,9 +157,11 @@ it needs no data migration: a persisted pointer without it uses the timestamp fa
 a writer replaces it. Populating it is not one edit but several — the shared
 `makeReadPointer` cannot infer a room's `(from, id)` from a `PointerSource { id, timestamp }`,
 so it takes an explicit order key (or splits into chat/room constructors), and every
-serialization surface must round-trip the field: chat `conversationMeta` persistence, room
-`readStateStorage`, the SDK `stateSnapshot`, and their deserializers, each with a round-trip
-test.)
+persistence surface must round-trip the in-memory field. `readPointer.ts` owns the on-disk
+encoding: serializers omit the key's redundant `id` and hydration reconstructs it from
+`messageId`, while preserving the room-only `from` component that cannot be reconstructed.
+Chat `conversationMeta` still persists the in-memory object through plain JSON, but hydration
+uses the same reconstruction path and never trusts that legacy duplicate `id`.)
 
 To be precise about decision 3: the *field name* `lastReadAt` disappears, but the value it
 was supposed to hold survives — corrected — as `readPointer.timestamp`. Nothing is lost;
@@ -479,12 +481,14 @@ row = one position, and everything below needs no dedup:
   it, so `m2` is counted. When the pointer has no `archiveOrderKey` (a migrated `lastReadAt`),
   fall back to at-or-after-timestamp — this can recount the equal-ms set, which over-counts
   in the safe direction.
-- **The order key must be persisted on the pointer, not recovered from memory.** The whole
+- **The order key must be reconstructible from the persisted pointer, not recovered from memory.** The whole
   reason the count exists is that a backgrounded entity's resident array is *evicted* — so
   "locate the pointer by the resident message's fields" fails exactly when it is needed, and
-  a room's `id` alone is not unique within the room. So the pointer persists a **structured**
-  `archiveOrderKey`, not a delimiter-joined string (whose lexical order need not match the
-  tuple order and could collide on a delimiter):
+  a room's `id` alone is not unique within the room. The persisted pointer therefore keeps
+  the structured key's non-derivable `from`; its `id` is the pointer's `messageId` and is
+  reconstructed during hydration. The in-memory key remains structured, not a
+  delimiter-joined string (whose lexical order need not match the tuple order and could
+  collide on the delimiter):
 
   ```ts
   type ArchiveOrderKey =
@@ -550,7 +554,7 @@ later trigger.
 
 | Module | Purpose | Sync? |
 |---|---|---|
-| `messageCache.ts` *(+2 fns)* | `countUnreadInArchive(conversationId, {pointer, floor, cap})` and a room twin `countRoomUnreadInArchive` returning `{unread}` only. A cursor from the floor timestamp forward — chat over `conv_timestamp`, room over the `room_ts_from_id` index B0 added — counting `!isOutgoing && isRenderableStoredMessage` strictly after the pointer's **position** in `(timestamp, orderKey)` order (matching the row's stable `(from, id)` / `id` against the pointer's persisted `archiveOrderKey`; at-or-after-timestamp fallback when it is absent), early-out at `cap` (999). No dedup — B0 guarantees one row per logical message. Only touches the index range at/after the floor → O(unread)-capped over the *local* archive. A cursor, not `index.count()`, which can neither filter nor honor the tiebreak. It does not scan mentions; see [Mention counts remain live-only](#mention-counts-remain-live-only). | async |
+| `messageCache.ts` *(+2 fns)* | `countUnreadInArchive(conversationId, {pointer, floor, cap})` and a room twin `countRoomUnreadInArchive` returning `{unread}` only. A cursor from the floor timestamp forward — chat over `conv_timestamp`, room over the `room_ts_from_id` index B0 added — counting `!isOutgoing && isRenderableStoredMessage` strictly after the pointer's **position** in `(timestamp, orderKey)` order (matching the row's stable `(from, id)` / `id` against the pointer's hydrated `archiveOrderKey`; at-or-after-timestamp fallback when it is absent), early-out at `cap` (999). No dedup — B0 guarantees one row per logical message. Only touches the index range at/after the floor → O(unread)-capped over the *local* archive. A cursor, not `index.count()`, which can neither filter nor honor the tiebreak. It does not scan mentions; see [Mention counts remain live-only](#mention-counts-remain-live-only). | async |
 | `stores/shared/readState.ts` *(new, pure)* | `computeFloor(pointer, historyFloor)`; the derivation's outcome + defer logic (`exact | deferred | unavailable`, and the coverage / pointerless-with-count / un-migrated / pending-marker defer conditions); the `(timestamp, archiveOrderKey)` comparator used by the resident sort and the count; re-exports the single `isRenderableStoredMessage` predicate that both the cache walk and the live `+1` path use, so they cannot drift. | sync |
 | `chatStore` / `roomStore` | `recomputeUnreadForConversation` rewritten to gate on coverage, compute the floor (pure), call `countUnreadInArchive`, and write the count **only on an `exact` outcome**; a new parallel `recomputeUnreadForRoom` (rooms inline their recount today). | async |
 
@@ -578,7 +582,7 @@ counted and the pointer advances through the run** (the tie bug), chat and room;
 **IndexedDB opens but holds only part of the unread range (mid-catch-up / gap below live) →
 `deferred`, persisted count untouched, never zeroed** (the partial-archive trap);
 **pointerless conversation with a non-zero persisted count → `deferred`, count preserved**;
-**a same-ms pointer absent from memory after restart → located via persisted `archiveOrderKey`,
+**a same-ms pointer absent from memory after restart → located via its durably reconstructed `archiveOrderKey`,
 not a resident lookup**; **two room messages sharing an `id` but different `(from)` senders →
 counted as two distinct positions** (the room-id-not-unique case); **a pointer created before
 its `stanzaId` arrives → still resolvable after restart / MAM reconciliation** (the stable
@@ -613,7 +617,7 @@ including the decisive straddle case (fallback row at `t1`, stanza row for the s
 
 **PR B task order** (on a store B0 has normalised). Pure `readState` core (the
 `(timestamp, archiveOrderKey)` comparator, `computeFloor`, the outcome/defer logic) and delete
-PR A's `readFloor` → persist `archiveOrderKey` (the explicit-structured-order-key constructor
+PR A's `readFloor` → persist enough to reconstruct `archiveOrderKey` (the explicit-structured-order-key constructor
 change, plus chat persistence, room `readStateStorage`, `stateSnapshot`, their deserializers,
 and round-trip tests) → resident-sort tiebreak in `messageArrayUtils` (isolated,
 `test:scroll`-gated, lands before anything depends on the shared order) → cache primitive

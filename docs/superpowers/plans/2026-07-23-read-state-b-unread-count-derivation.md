@@ -162,6 +162,10 @@ export function isValidArchiveOrderKey(v: unknown): v is ArchiveOrderKey {
 
 ### Task 2: Persist a validated `archiveOrderKey` on the read pointer
 
+> **Historical step:** This records PR B's original full-key encoding. The current
+> on-disk contract is owned by `stores/shared/readPointer.ts` and summarized in the
+> authoritative design: hydration reconstructs `id` from `messageId`.
+
 **Files:** `readPointer.ts`; `readStateStorage.ts:161,99`; `stateSnapshot.ts:187,203`; `chatStore.ts:894,924`; tests in `readPointer.test.ts`, `readStateStorage.test.ts`.
 
 **Interfaces:** `ReadPointer { messageId; timestamp; archiveOrderKey? }`; `makeReadPointer(msg: { id: string; from?: string; timestamp: Date }, kind: 'chat' | 'room'): ReadPointer`. `deserializeReadPointer` **validates** the persisted key with `isValidArchiveOrderKey` and drops it when invalid (never passes untrusted JSON through).

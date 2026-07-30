@@ -212,6 +212,16 @@ describe('serialization: the tie-break id is not persisted', () => {
     })
   })
 
+  it('accepts a legacy chat key with a non-string id because messageId is authoritative', () => {
+    expect(
+      deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'chat', id: 42 } })
+    ).toEqual({
+      messageId: 'm1',
+      timestamp: at(1000),
+      archiveOrderKey: { kind: 'chat', id: 'm1' },
+    })
+  })
+
   // Compatibility 3 — inconsistent legacy data. This is the defect being
   // closed: a stored pointer whose persisted id disagreed with `messageId` now
   // resolves to `messageId`, so the boundary can no longer name a different
