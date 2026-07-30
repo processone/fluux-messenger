@@ -694,6 +694,54 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     cleanup()
   })
 
+  it('publishes a same-id room pointer from a new sender after the prior pointer completed', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const alice = `${ROOM}/alice`
+    const bob = `${ROOM}/bob`
+    getRoomMessage.mockImplementation(async (_roomJid: string, id: string, from?: string) =>
+      from === alice ? cachedRoomMsg(id, 'alice-stanza', alice) : cachedRoomMsg(id, 'bob-stanza', bob)
+    )
+
+    seedBackgroundedRoom('shared-id', alice)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', bob),
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', bob)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(2)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    cleanup()
+  })
+
+  it('refuses to guess a room cache row for a keyless pointer', async () => {
+    const { client, cleanup } = await armedPublisher()
+    getRoomMessage.mockResolvedValue(cachedRoomMsg('shared-id', 'guessed-stanza', `${ROOM}/bob`))
+
+    seedBackgroundedRoom()
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: { messageId: 'shared-id', timestamp: timeFor('shared-id') },
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getRoomMessage).not.toHaveBeenCalled()
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
   it('does NOT give rooms an at-or-behind cache fallback', async () => {
     const { client, cleanup } = await armedPublisher()
 

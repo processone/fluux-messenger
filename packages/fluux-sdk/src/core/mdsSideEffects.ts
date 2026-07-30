@@ -93,12 +93,12 @@ export function setupMdsSideEffects(
   let nodeRevision = 0
   let nodeSnapshotAuthoritative = false
   const currentSessionConfirmedNodeJids = new Set<string>()
-  // The read-pointer message id we last HANDLED per JID, to detect advances.
+  // The full read-pointer identity we last HANDLED per JID, to detect advances.
   // "Handled" means the position was resolved to a stanza-id and then either
   // enqueued or judged not ahead of the node — never merely "seen". A position
   // that could not be resolved stays out of this map so a later merge retries
   // it (#1142); recording it would silence the position for good.
-  const lastConsideredSeenId = new Map<string, string | undefined>()
+  const lastConsideredPointerIdentity = new Map<string, string>()
   // Seed markers (jid → marker) whose JID was NOT a known room at seed time.
   // The fresh-session seed runs before bookmarks load (roomStore.rooms is empty),
   // so a room's marker would otherwise route to chat and be dropped. We stash it
@@ -286,14 +286,31 @@ export function setupMdsSideEffects(
       : chatStore.getState().conversationMeta.get(jid)?.readPointer
   }
 
-  function sameReadPointer(a: ReadPointer | undefined, b: ReadPointer | undefined): boolean {
-    if (!a || !b) return a === b
-    if (a.messageId !== b.messageId || a.timestamp.getTime() !== b.timestamp.getTime()) return false
-    const aKey = a.archiveOrderKey
-    const bKey = b.archiveOrderKey
-    if (!aKey || !bKey) return aKey === bKey
-    if (aKey.kind !== bKey.kind || aKey.id !== bKey.id) return false
-    return aKey.kind === 'chat' || (bKey.kind === 'room' && aKey.from === bKey.from)
+  function pointerIdentity(pointer: ReadPointer | undefined): string | undefined {
+    if (!pointer) return undefined
+    const key = pointer.archiveOrderKey
+    return JSON.stringify([
+      pointer.messageId,
+      pointer.timestamp.getTime(),
+      key?.kind ?? null,
+      key?.kind === 'room' ? key.from : null,
+      key?.id ?? null,
+    ])
+  }
+
+  /**
+   * Resolve the exact `(sender, id)` target named by a room pointer.
+   *
+   * Room client ids are unique only per sender. Without a room archive-order
+   * key, choosing any matching row would risk publishing a WRONG forward-only
+   * MDS position that no device can walk back. Refusing to resolve preserves the
+   * exact-position contract and costs only a retryable delay.
+   */
+  function exactRoomPointerTarget(jid: string): { messageId: string; from: string } | undefined {
+    const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
+    const key = pointer?.archiveOrderKey
+    if (!pointer?.messageId || key?.kind !== 'room' || key.from.length === 0) return undefined
+    return { messageId: pointer.messageId, from: key.from }
   }
 
   /**
@@ -310,19 +327,18 @@ export function setupMdsSideEffects(
    */
   function resolveFromStores(jid: string): string | undefined {
     if (isRoom(jid)) {
-      const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
-      const seenId = pointer?.messageId
-      if (!seenId) return undefined
-      const from = pointer.archiveOrderKey?.kind === 'room' ? pointer.archiveOrderKey.from : undefined
+      const target = exactRoomPointerTarget(jid)
+      if (!target) return undefined
+      const { messageId: seenId, from } = target
       const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
-      const fromSlice = messages.find((m) => m.id === seenId && (!from || m.from === from))?.stanzaId
+      const fromSlice = messages.find((m) => m.id === seenId && m.from === from)?.stanzaId
       if (fromSlice) return fromSlice
       // Non-active rooms keep no resident array (memory windowing); mark-all-read
       // points at the newest known message, whose stanza-id survives on the
       // lastMessage preview.
       const last = roomStore.getState().roomMeta.get(jid)?.lastMessage
         ?? roomStore.getState().rooms.get(jid)?.lastMessage
-      return last?.id === seenId && (!from || last.from === from) ? last.stanzaId : undefined
+      return last?.id === seenId && last.from === from ? last.stanzaId : undefined
     }
     const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
     const seenId = pointer?.messageId
@@ -365,11 +381,9 @@ export function setupMdsSideEffects(
   async function resolveFromCache(jid: string): Promise<string | undefined> {
     if (!messageCache.isMessageCacheAvailable()) return undefined
     if (isRoom(jid)) {
-      const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
-      const seenId = pointer?.messageId
-      if (!seenId) return undefined
-      const from = pointer.archiveOrderKey?.kind === 'room' ? pointer.archiveOrderKey.from : undefined
-      const cached = await messageCache.getRoomMessage(jid, seenId, from)
+      const target = exactRoomPointerTarget(jid)
+      if (!target) return undefined
+      const cached = await messageCache.getRoomMessage(jid, target.messageId, target.from)
       return cached?.stanzaId
     }
     const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
@@ -445,18 +459,18 @@ export function setupMdsSideEffects(
       // buffered during the awaits above: the next meta change re-considers the
       // CURRENT pointer and re-checks this gate then.
       if (!archiveIsTrustworthy(jid)) {
-        lastConsideredSeenId.delete(jid)
+        lastConsideredPointerIdentity.delete(jid)
         continue
       }
       const by = stanzaIdBy(jid)
       if (!by) {
         // Own JID unknown (should not happen while online) — same re-arm.
-        lastConsideredSeenId.delete(jid)
+        lastConsideredPointerIdentity.delete(jid)
         continue
       }
       const decision = publishDecision(jid, stanzaId)
       if (decision === 'retry') {
-        lastConsideredSeenId.delete(jid)
+        lastConsideredPointerIdentity.delete(jid)
         continue
       }
       if (decision === 'skip') continue
@@ -529,8 +543,8 @@ export function setupMdsSideEffects(
     if (!archiveIsTrustworthy(jid)) return
 
     const pointer = readPointer(jid)
-    const seenId = pointer?.messageId
-    if (seenId === lastConsideredSeenId.get(jid)) return
+    const identity = pointerIdentity(pointer)
+    if (!identity || identity === lastConsideredPointerIdentity.get(jid)) return
 
     // Captured BEFORE the await, compared after it.
     const epoch = sessionEpoch
@@ -553,7 +567,7 @@ export function setupMdsSideEffects(
     if (isRoom(jid) !== wasRoom) return
     // The position itself: a newer pointer supersedes this one. The store
     // subscription that moved it has already asked for another pass.
-    if (!sameReadPointer(readPointer(jid), pointer)) return
+    if (pointerIdentity(readPointer(jid)) !== identity) return
     if (!archiveIsTrustworthy(jid)) return
 
     // No resolvable stanza-id: neither the resident slice nor the cache can
@@ -576,7 +590,7 @@ export function setupMdsSideEffects(
     // Resolved AND ordered → handled from here on, whether we enqueue below or
     // decide the node is already at/ahead of it. Enqueued positions are checked
     // again at flush time because live node state can change during the debounce.
-    lastConsideredSeenId.set(jid, seenId)
+    lastConsideredPointerIdentity.set(jid, identity)
     if (decision === 'skip') return
 
     dirty.add(jid, stanzaId)
@@ -636,7 +650,7 @@ export function setupMdsSideEffects(
     lastKnownNodeStanzaId.delete(jid)
     lastKnownNodeRevision.delete(jid)
     currentSessionConfirmedNodeJids.delete(jid)
-    lastConsideredSeenId.delete(jid)
+    lastConsideredPointerIdentity.delete(jid)
     unroutedSeedMarkers.delete(jid)
     resolutionOwed.delete(jid)
     dirty.delete(jid)
@@ -770,7 +784,7 @@ export function setupMdsSideEffects(
 
       dirty.drop()
       dirty.open()
-      lastConsideredSeenId.clear()
+      lastConsideredPointerIdentity.clear()
 
       if (result.status === 'unknown') {
         syncEnabled = true
