@@ -218,7 +218,7 @@ export const storyboard: Scene[] = [
     run: async (d) => {
       await d.navigateTo('messages')
       await d.selectItem('Emma Wilson')
-      await d.caption('33 languages · full RTL', 'Right-to-left layouts, fully mirrored')
+      await d.caption('34 languages · full RTL', 'Right-to-left layouts, fully mirrored')
       await d.setLanguage('ar', 3000)
       await d.setLanguage('en', 800)
       await d.clearCaption()
