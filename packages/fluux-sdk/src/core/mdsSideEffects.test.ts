@@ -51,6 +51,25 @@ function msg(id: string, stanzaId: string | undefined): Message {
   } as Message
 }
 
+/**
+ * Our OWN 1:1 message. The server does not reflect these back the way a MUC
+ * does, so an own send carries only a client `originId` and never acquires a
+ * server `stanzaId` — the state the at-or-behind fallback exists for.
+ */
+function ownMsg(id: string, stanzaId: string | undefined): Message {
+  return {
+    type: 'chat',
+    id,
+    stanzaId,
+    originId: `origin-${id}`,
+    conversationId: 'juliet@capulet.example',
+    from: 'romeo@montague.example',
+    body: id,
+    timestamp: timeFor(id),
+    isOutgoing: true,
+  } as Message
+}
+
 /** Seed messages directly into the store's messages Map (same as chatStore.mds.test.ts). */
 function seedMessages(cid: string, messages: Message[]): void {
   chatStore.setState((state) => {
@@ -99,6 +118,22 @@ function rmsg(room: string, id: string, stanzaId: string | undefined, t: number)
     body: id,
     timestamp: new Date(t),
     isOutgoing: false,
+  } as RoomMessage
+}
+
+/** Our own groupchat message — outgoing, and (until reflected) without a stanza-id. */
+function ownRoomMsg(room: string, id: string, stanzaId: string | undefined, t: number): RoomMessage {
+  return {
+    type: 'groupchat',
+    id,
+    stanzaId,
+    originId: `origin-${id}`,
+    roomJid: room,
+    from: `${room}/testuser`,
+    nick: 'testuser',
+    body: id,
+    timestamp: new Date(t),
+    isOutgoing: true,
   } as RoomMessage
 }
 
@@ -200,6 +235,30 @@ function setConvMamState(
   })
 }
 
+/** Force a room's MAM query state (catch-up gate input, room twin). */
+function setRoomMamState(
+  jid: string,
+  patch: Partial<{
+    isLoading: boolean
+    hasQueried: boolean
+    isCaughtUpToLive: boolean
+    error: string | null
+  }>
+): void {
+  roomStore.setState((state) => {
+    const next = new Map(state.mamQueryStates)
+    next.set(jid, {
+      isLoading: false,
+      hasQueried: false,
+      error: null,
+      isHistoryComplete: false,
+      isCaughtUpToLive: false,
+      ...patch,
+    } as never)
+    return { mamQueryStates: next }
+  })
+}
+
 describe('setupMdsSideEffects', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -249,6 +308,207 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  // ==========================================================================
+  // The at-or-behind fallback for a pointer naming our own unarchived 1:1 send.
+  //
+  // The test directly above passes for BOTH behaviours: its fixture holds a
+  // single stanza-id-less message, so there is nothing at-or-behind to fall back
+  // to either way. That made it an accidental rather than a deliberate pin, so
+  // the contract is stated explicitly here — in both directions.
+  // ==========================================================================
+
+  it('publishes the newest resolvable position at or behind a pointer naming our own unarchived 1:1 send', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // 1:1 sends are never reflected back, so ours carries no stanza-id — ever.
+    seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined)])
+    // Start POINTERLESS: an initial pointer on m1 would resolve to s1 on its own
+    // and this would pass without the fallback ever running.
+    seedMeta(cid)
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m2')
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('does not publish when nothing at or behind the pointer is resolvable', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // Every candidate at-or-behind is our own, unarchived: nothing to fall back
+    // to, and the fallback must not invent one.
+    seedMessages(cid, [ownMsg('m1', undefined), ownMsg('m2', undefined)])
+    seedMeta(cid)
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('never publishes a position ahead of the read pointer', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // m3 arrived AFTER our own m2 and has NOT been read. The fallback walks
+    // back from the pointer, so it must never reach forward to s3.
+    seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined), msg('m3', 's3')])
+    seedMeta(cid)
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m2')
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('uses the pointer archive-order key to reject an unread same-millisecond sibling', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // IndexedDB orders equal-timestamp chat messages by id. The pointer names
+    // m2, so m3 is still ahead even though all three messages share a timestamp.
+    const sameTimestamp = new Date('2026-01-01T00:00:02Z')
+    seedMessages(cid, [
+      { ...msg('m1', 's1'), timestamp: sameTimestamp },
+      { ...ownMsg('m2', undefined), timestamp: sameTimestamp },
+      { ...msg('m3', 's3'), timestamp: sameTimestamp },
+    ])
+    seedMeta(cid)
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(
+      chatStore.getState().conversationMeta.get(cid)?.readPointer?.archiveOrderKey
+    ).toEqual({ kind: 'chat', id: 'm2' })
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('keeps a keyless legacy-migrated pointer conservative, ordering by its lastReadAt alone', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    seedMessages(cid, [msg('m1', 's1'), msg('m3', 's3'), ownMsg('m4', undefined)])
+    seedMeta(cid)
+    // A pointer migrated from the pre-#1081 lastSeenMessageId + lastReadAt pair
+    // has NO archiveOrderKey, and its timestamp is lastReadAt — documented as at
+    // or behind the message it names (readPointer.ts). Ordering by it therefore
+    // under-advances: m3 sits past lastReadAt=2s and must not be selected.
+    patchMeta(cid, { readPointer: { messageId: 'm4', timestamp: timeFor('m2') } })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('does not publish when the pointer is off-slice and every resident message is newer', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // The resident window is a NEWER slice; the pointed-at message was evicted.
+    // Ordering against the pointer keeps the fallback from over-advancing onto
+    // the window (the shape issue #1175 describes).
+    seedMessages(cid, [msg('m9', 's9'), msg('m10', 's10')])
+    seedMeta(cid)
+    patchMeta(cid, { readPointer: { messageId: 'evicted-m2', timestamp: timeFor('m2') } })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does not re-assert an unchanged fallback as further own sends advance the pointer', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined)])
+    seedMeta(cid)
+    chatStore.getState().advanceReadPointer(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+
+    // A further own send advances the pointer, but resolves to the same
+    // fallback: the exact-equal skip must suppress a redundant publish.
+    seedMessages(cid, [msg('m1', 's1'), ownMsg('m2', undefined), ownMsg('m4', undefined)])
+    chatStore.getState().advanceReadPointer(cid, 'm4')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('does NOT apply the fallback to rooms, whose own messages are reflected with a stanza-id', async () => {
+    const room = 'tech@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // Our own groupchat message, momentarily before the room reflects it back.
+    seedRoom(room, [rmsg(room, 'r1', 'rs1', 1_000), ownRoomMsg(room, 'r2', undefined, 2_000)], 'r2')
+    setRoomMamState(room, { hasQueried: true, isCaughtUpToLive: true })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // Deliberate asymmetry: the room branch keeps the exact-position contract.
+    // It is safe because the wait is transient — MUC reflection supplies the
+    // stanza-id — and it avoids degrading a path that already reports the true
+    // position. A room that never injected stanza-ids would have nothing
+    // resolvable at-or-behind either, so a fallback could not help it.
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // The reflection lands and backfills the stanza-id; #1142's retry then
+    // publishes the TRUE position rather than an approximation of it.
+    roomStore.setState((s) => {
+      const runtime = new Map(s.roomRuntime)
+      const entry = runtime.get(room)!
+      runtime.set(room, {
+        ...entry,
+        messages: entry.messages.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2' } : m)),
+      })
+      return { roomRuntime: runtime }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(room, 'rs2', room)
     cleanup()
   })
 

@@ -31,6 +31,7 @@ import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
+import { compareOrder, makeArchiveOrderKey, type OrderPosition } from '../stores/shared/readState'
 import { getBareJid } from './jid'
 import { logInfo } from './logger'
 
@@ -177,7 +178,79 @@ export function setupMdsSideEffects(
     return pendingRemoteDisplayed(jid) === nodeId ? 'retry' : 'publish'
   }
 
-  /** Resolve the stanza-id of the message a conversation's/room's read pointer names. */
+  /**
+   * The newest stanza-id at or behind `pointer` among `messages`.
+   *
+   * In a 1:1 the read pointer normally comes to rest on the user's OWN send,
+   * and that message never acquires a `stanza-id`: unlike a MUC — which
+   * reflects our message back carrying a room-assigned one — the server does not
+   * echo our own 1:1 messages to us, so the only id it ever has is the
+   * client-generated `origin-id`, in RAM and in IndexedDB alike. XEP-0490 admits
+   * exactly one `<stanza-id/>` and a receiver MUST ignore an id it cannot find,
+   * so an `origin-id` is not publishable. Without a fallback the position is
+   * therefore unresolvable *permanently* — not "not yet" — and #1142's retry has
+   * nothing to retry into: 1:1 read positions never reach the user's other
+   * devices once they reply.
+   *
+   * Falling back to the newest message that DOES carry a stanza-id and is at or
+   * behind the pointer restores the sync. It is safe in the direction that
+   * matters, and cheap in the direction it costs:
+   *
+   * - It can never be AHEAD of the read position: candidates strictly after the
+   *   pointer are filtered out. Ordering uses the pointer's own
+   *   timestamp/`archiveOrderKey` rather than its index, so the pointer's
+   *   message need not be resident — a newer resident window cannot drag the
+   *   result forward. A keyless (#1081-migrated) pointer orders by `lastReadAt`,
+   *   which is documented as at or behind the message it names, so it
+   *   under-advances further rather than past. Under-advancing is the direction
+   *   this module already prefers (`compareOrder`: "unresolved sorts first →
+   *   under-advance → over-count (safe)").
+   * - It cannot regress the node: `publishDecision` is unchanged, and the one
+   *   value we must never publish over — a remote marker we could not order — is
+   *   still refused there. XEP-0490's receiver-side "MUST ignore older" rule is
+   *   a second layer, never the primary defence.
+   * - What it gives up is only precision, and only over the user's OWN trailing
+   *   sends: in a 1:1 a message lacking a stanza-id IS one of ours (the server
+   *   stamps inbound). So the published position still means "I have read
+   *   everything you sent" — it withholds only "and I also read my own
+   *   replies", which no receiver derives anything from, because unread
+   *   counting excludes outgoing messages everywhere.
+   *
+   * Rooms deliberately do NOT get this fallback — see {@link resolveSeenStanzaId}.
+   */
+  function newestResolvableAtOrBehind(
+    messages: Array<{ stanzaId?: string; from?: string; id: string; timestamp: Date }>,
+    pointer: { timestamp: Date; archiveOrderKey?: OrderPosition['archiveOrderKey'] }
+  ): string | undefined {
+    const pointerPos: OrderPosition = {
+      timestamp: pointer.timestamp.getTime(),
+      archiveOrderKey: pointer.archiveOrderKey,
+    }
+    let best: { pos: OrderPosition; stanzaId: string } | undefined
+    for (const m of messages) {
+      if (!m.stanzaId) continue
+      const pos: OrderPosition = {
+        timestamp: m.timestamp.getTime(),
+        archiveOrderKey: makeArchiveOrderKey(m, 'chat'),
+      }
+      if (compareOrder(pos, pointerPos) > 0) continue // ahead of the pointer — never publish
+      if (!best || compareOrder(pos, best.pos) > 0) best = { pos, stanzaId: m.stanzaId }
+    }
+    return best?.stanzaId
+  }
+
+  /**
+   * Resolve the stanza-id of the message a conversation's/room's read pointer names.
+   *
+   * The two branches differ deliberately. A MUC reflects our own message back
+   * with a room-assigned `stanza-id`, so a room pointer resolves exactly, and
+   * the only unresolvable window is the brief one before the reflection arrives
+   * — which #1142's retry already closes when the backfill lands. Giving rooms
+   * the 1:1 fallback would therefore trade an exact position for an
+   * approximation on a path that is not broken, and a room that never injected
+   * stanza-ids at all would have nothing resolvable at or behind the pointer for
+   * a fallback to find. So the asymmetry is the point, not an omission.
+   */
   function resolveSeenStanzaId(jid: string): string | undefined {
     if (isRoom(jid)) {
       const seenId = roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
@@ -192,7 +265,8 @@ export function setupMdsSideEffects(
         ?? roomStore.getState().rooms.get(jid)?.lastMessage
       return last?.id === seenId ? last.stanzaId : undefined
     }
-    const seenId = chatStore.getState().conversationMeta.get(jid)?.readPointer?.messageId
+    const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
+    const seenId = pointer?.messageId
     if (!seenId) return undefined
     const messages = chatStore.getState().messages.get(jid) || []
     const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
@@ -200,7 +274,11 @@ export function setupMdsSideEffects(
     // Same eviction fallback for backgrounded 1:1 conversations.
     const last = chatStore.getState().conversationMeta.get(jid)?.lastMessage
       ?? chatStore.getState().conversations.get(jid)?.lastMessage
-    return last?.id === seenId ? last.stanzaId : undefined
+    if (last?.id === seenId && last.stanzaId) return last.stanzaId
+    // The pointer names a message with no stanza-id — in 1:1 the normal resting
+    // state once the user has replied. Publish the newest position we CAN
+    // address at or behind it rather than staying silent for the session.
+    return newestResolvableAtOrBehind(messages, pointer)
   }
 
   /**
