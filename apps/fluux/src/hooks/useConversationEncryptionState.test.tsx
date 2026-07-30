@@ -353,7 +353,7 @@ describe('useConversationEncryptionState', () => {
     })
   })
 
-  describe('key-change alerts', () => {
+  describe('retired key-change alerts (≤0.17.2 residue)', () => {
     const mod = '@/stores/keyChangeAlertsStore'
     type KeyChangeStore = typeof import('@/stores/keyChangeAlertsStore')
     let store: KeyChangeStore
@@ -368,13 +368,17 @@ describe('useConversationEncryptionState', () => {
       store.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
     })
 
-    it("returns 'blocked' when a probe observes a pin mismatch but leaves the plugin cache cold", async () => {
+    it('never reports blocked for a persisted alert — the pin gate is retired', async () => {
+      // An upgrading user can carry a keyChangeAlert written by ≤0.17.2. OpenPGP
+      // no longer raises alerts and `encrypt()` has no pin gate, so a residual
+      // alert must NOT claim the conversation is blocked while sending works.
+      // (The alert store itself is deliberately left intact and sealed for
+      // Stage 2's ordered migration — this only stops the UI acting on it.)
+      store.recordKeyChangeAlert('bob@example.com', 'OLD_FP', 'NEW_FP')
+
       const plugin = makePlugin({
-        getPeerFingerprint: vi.fn().mockReturnValue(null),
-        probePeer: vi.fn().mockImplementation(async () => {
-          store.recordKeyChangeAlert('bob@example.com', 'OLD_FP', 'NEW_FP')
-          return { supported: true }
-        }),
+        getPeerFingerprint: vi.fn().mockReturnValue('NEW_FP'),
+        probePeer: vi.fn().mockResolvedValue({ supported: true }),
       })
       wireMocks({ plugin })
 
@@ -383,12 +387,9 @@ describe('useConversationEncryptionState', () => {
       )
 
       await waitFor(() => {
-        expect(result.current).toEqual({
-          kind: 'blocked',
-          pinnedFingerprint: 'OLD_FP',
-          advertisedFingerprint: 'NEW_FP',
-        })
+        expect(result.current.kind).toBe('encrypted')
       })
+      expect(result.current.kind).not.toBe('blocked')
     })
   })
 
