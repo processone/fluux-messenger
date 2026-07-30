@@ -817,6 +817,14 @@ export interface RoomState {
   // Session-only new-message divider per room (jid -> messageId). Derived at
   // activation from the read pointer; never persisted.
   firstNewMessageMarkers: Map<string, string>
+  /**
+   * Monotonic per-room versions incremented whenever `appendLive` places a
+   * genuine arrival before the resident timeline's live edge.
+   *
+   * @remarks
+   * Stable public API. The versions are ephemeral and reset with the store.
+   */
+  interiorPlacementVersions: Map<string, number>
 
   // Actions
   addRoom: (room: Room) => void
@@ -1072,7 +1080,7 @@ function createEmptyRoomState(
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
   roomCoverage: Map<string, CoverageRecord> = new Map(),
   pendingRetractions: Map<string, PendingRetraction[]> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'roomCoverage' | 'acknowledgedNonAnonymousRooms' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'interiorPlacementVersions'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -1091,6 +1099,7 @@ function createEmptyRoomState(
     acknowledgedNonAnonymousRooms,
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
+    interiorPlacementVersions: new Map(),
   }
 }
 
@@ -1924,7 +1933,14 @@ export const roomStore = createStore<RoomState>()(
       // IndexedDB (above) and the preview/unread updates below still run;
       // they reload on jump-to-latest.
       const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
-      const append = timeline.appendLive(existing.messages, messageToAdd, atLiveEdge, roomTimelineConfig())
+      const appendObservation: timeline.AppendLiveObservation = {}
+      const append = timeline.appendLive(
+        existing.messages,
+        messageToAdd,
+        atLiveEdge,
+        roomTimelineConfig(),
+        appendObservation
+      )
 
       if (append.kind === 'duplicate-unchanged') return state
       if (append.kind === 'duplicate-backfilled') {
@@ -1946,6 +1962,14 @@ export const roomStore = createStore<RoomState>()(
       // incoming message after the window slid off the live edge).
       const appendedMessages = append.kind === 'appended' ? append.messages : [...existing.messages, messageToAdd]
       const newMessages = append.kind === 'appended' ? append.messages : existing.messages
+      const interiorPlacementPatch = appendObservation.placement === 'interior'
+        ? {
+            interiorPlacementVersions: new Map(state.interiorPlacementVersions).set(
+              roomJid,
+              (state.interiorPlacementVersions.get(roomJid) ?? 0) + 1
+            ),
+          }
+        : {}
 
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
@@ -2081,7 +2105,7 @@ export const roomStore = createStore<RoomState>()(
       if (updated.firstNewMessageId) newMarkers.set(roomJid, updated.firstNewMessageId)
       else newMarkers.delete(roomJid)
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
     })
 
     // Task 9: a coalesce/moved-earlier overlay change doesn't get a

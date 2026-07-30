@@ -35,14 +35,16 @@ frame scheduling, stale-work cancellation, convergence, and live-edge fallback. 
 message targets it owns supersession, one around-load attempt, mounting and center-position
 convergence, user takeover, and completion. For live edge it owns entry/FAB/outgoing generations,
 same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-frame convergence
-budget, and user cancellation. Media growth and unread-divider movement while reading history share
-one fixed-anchor execution machine with the former 90-frame/8-stable-frame/8px contract. Divider
-movement has distinct `layout-preservation` provenance and is ambient: it is rejected rather than
-superseding an unsettled entry restore, explicit target, or user navigation. Hook executors
+budget, and user cancellation. Media growth, unread-divider movement, and delayed live-path
+insertions while reading history share one fixed-anchor execution machine with the former
+90-frame/8-stable-frame/8px contract. Divider movement and delayed insertion have distinct
+`layout-preservation` reasons and are ambient: they are rejected rather than superseding an
+unsettled entry restore, explicit target, or user navigation. Hook executors
 translate accepted requests into browser/virtualizer writes, and every frame must hold the current
 controller lease before it can write. Directional history is accepted before a load begins, remains
-pending until the first resident ID changes, then performs its pre-paint anchor/fallback write and
-the former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
+pending until the first resident ID changes or the load settles without a window shift, then either
+performs its pre-paint anchor/fallback write or releases the request. A landed shift retains the
+former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
 kinetic-scroll cancellation, 2px target-shift correction, 5px clamp recovery, and bounded
 distance-from-bottom fallback. Boundary input while the load is still pending retains the captured
 anchor because no pixel owner exists yet; takeover becomes cancellable after the initial
@@ -141,8 +143,8 @@ WebKit paint correctness.
 - **Live edge:** keep following appended messages and bottom-of-list UI until genuine user takeover.
 - **Fixed anchor:** keep a point in one message at a stable viewport placement. Its placement is a
   discriminated type, so the two geometries cannot be mixed:
-  - `bottom-fraction`: saved reading position, media preservation, and divider-layout preservation.
-    The fraction is validated in
+  - `bottom-fraction`: saved reading position, media preservation, and ambient layout preservation
+    for divider movement or delayed insertion. The fraction is validated in
     `[0, 1]`, where `0` is the row top and `1` its bottom. The exact equation is
     `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
   - `top-offset`: directional history preservation. The equation is
@@ -185,16 +187,19 @@ Sources distinguish:
 - an outgoing message that deliberately returns the sender to live edge;
 - directional history preservation;
 - media remeasurement preservation;
-- ambient layout preservation when the unread divider moves;
+- ambient layout preservation when the unread divider moves or a delayed live-path message is
+  inserted inside the resident window;
 - late XEP-0490/MDS supersession.
 
-Incoming messages, reactions, typing, composer/container/viewport resize, media measurement, and MAM
-completion are normally **reconciliation stimuli for the current request**, not new competing
-requests. An outgoing send is different: current behavior deliberately moves a reader out of
-history, so it creates a live-edge request. The attempt is dropped while a directional-load or
-entry-restore preservation step is still pending, matching the existing send-stick suppression;
-the preservation owner releases after its first position is applied, not after the entire
-measurement-settle loop. Later ordinary stimuli handle content from any dropped attempt.
+Incoming messages at the resident live edge, reactions, typing, composer/container/viewport resize,
+media measurement, and MAM completion are normally **reconciliation stimuli for the current
+request**, not new competing requests. A delayed live-path message placed inside the resident
+window is the ambient-layout exception described above. An outgoing send is different: current
+behavior deliberately moves a reader out of history, so it creates a live-edge request. The attempt
+is dropped while a directional-load or entry-restore preservation step is still pending, matching
+the existing send-stick suppression; the preservation owner releases after its first position is
+applied, not after the entire measurement-settle loop. Later ordinary stimuli handle content from
+any dropped attempt.
 
 ## Entry arbitration and later supersession
 
@@ -319,12 +324,13 @@ abort valid deep growth and media-settle runs.
 | Jump-to-last-read | Message at start | Reuses unread-marker placement |
 | FAB or live-edge keyboard command | Unread marker, then live edge | If the marker is still below the viewport, first activation visits it (virtualized start alignment; current non-virtualized path uses top-third); a later activation goes live |
 | Outgoing message | Live edge | Deliberately supersedes a fixed historical position after its first landing releases preservation ownership; it need not wait for full convergence |
-| Incoming message | Existing live edge only | Must not make a fixed anchor follow |
+| Incoming message at the resident live edge | Existing live edge only | Must not make a fixed anchor follow |
+| Delayed live-path message inserted inside the resident window while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; reject the ambient request while requested navigation is unsettled |
 | Late MDS live-edge state | Live edge | Newer automatic request only before user takeover |
 | Media at live edge | Existing live edge | Debounced measurement stimulus |
 | Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement |
 | Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; reject the ambient request while requested navigation is unsettled |
-| Load older/newer | Fixed top-relative offset anchor | Wait for the directional window change; if the anchor disappears, preserve captured distance from bottom and clamp |
+| Load older/newer | Fixed top-relative offset anchor | Wait for the directional window change; release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Current live edge, when active | Geometry stimulus, not a new position request |
 
@@ -334,16 +340,17 @@ is already visible or above the viewport, the same activation goes directly to l
 ## Ownership boundary
 
 The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
-explicit center-aligned targets, live edge, fixed-anchor media/divider preservation, directional
+explicit center-aligned targets, live edge, fixed-anchor media/layout preservation, directional
 history, and resident top. These
 reconcilers implement measurement convergence; they are not separate positioning authorities.
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
 
-Unread-divider preservation is entirely inside the scroll owner. `MessageList` no longer receives
-raw anchor capture/restore callbacks, and the virtualized executor corrects through
-`scrollToOffset`/`scrollToIndex` so TanStack's pending-scroll reconciler is retargeted rather than
-raced by an unleased `scrollTop` write. The pre-mutation anchor is still captured continuously and
-the accepted request performs its first correction in the post-commit, pre-paint layout effect.
+Ambient layout preservation is entirely inside the scroll owner. `MessageList` receives only the
+store-owned interior-placement version; it receives no raw anchor capture/restore callbacks. The
+virtualized executor corrects through `scrollToOffset`/`scrollToIndex` so TanStack's pending-scroll
+reconciler is retargeted rather than raced by an unleased `scrollTop` write. Pre-mutation anchors
+for divider movement and delayed insertion are captured continuously, and the accepted request
+performs its first correction in the post-commit, pre-paint layout effect.
 
 Every leased reconciler uses `controllerFrameLoop`. It owns the concrete scheduled frame and
 diagnostic handle, and finishes exactly once when the lease is stale before scheduling, becomes

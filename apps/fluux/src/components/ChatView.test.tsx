@@ -180,6 +180,13 @@ vi.mock('@fluux/sdk', () => ({
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
+  useChatStore: (selector: (state: {
+    activeConversationId: null
+    interiorPlacementVersions: Map<string, number>
+  }) => unknown) => selector({
+    activeConversationId: null,
+    interiorPlacementVersions: new Map(),
+  }),
   useConnectionStore: (selector: (state: { jid: string; ownAvatar: null; ownNickname: string; status: string }) => unknown) => {
     return selector({
       jid: 'me@example.com/resource',

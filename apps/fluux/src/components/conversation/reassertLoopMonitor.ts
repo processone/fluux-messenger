@@ -35,15 +35,16 @@ import type { AnomalySignal } from '@/utils/anomalySignal'
 /**
  * Every loop kind the message list can start.
  *
- * A closed union rather than `string`, so adding a ninth loop is a COMPILE error
+ * A closed union rather than `string`, so adding a tenth loop is a COMPILE error
  * everywhere the set matters — in particular the anomaly fan-out's label table.
- * Two of these labels reach `begin()` through a variable rather than a literal, so
+ * Three of these labels reach `begin()` through a variable rather than a literal, so
  * a source grep cannot enumerate them; only the type can.
  */
 export type ReassertLoopLabel =
   | 'pin-bottom'
   | 'media-anchor'
   | 'divider-anchor'
+  | 'insertion-anchor'
   | 'prepend'
   | 'restore-anchor'
   | 'marker'

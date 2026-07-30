@@ -71,6 +71,7 @@ export interface MessageListProps<T extends BaseMessage> {
   messages: T[]
   /** Unique identifier for this conversation/room */
   conversationId: string
+  interiorPlacementVersion?: number
   /** ID of the first unread message (for new message marker) */
   firstNewMessageId?: string
   /** Divider derived while a synced XEP-0490 read position is still unresolved — rendered muted */
@@ -179,6 +180,7 @@ export interface MessageListProps<T extends BaseMessage> {
 export function MessageList<T extends BaseMessage>({
   messages,
   conversationId,
+  interiorPlacementVersion = 0,
   firstNewMessageId,
   firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
@@ -537,6 +539,7 @@ export function MessageList<T extends BaseMessage>({
   } = useMessageListScroll({
     conversationId,
     messageCount: messages.length,
+    interiorPlacementVersion,
     firstMessageId,
     firstNewMessageId,
     readPointerId,

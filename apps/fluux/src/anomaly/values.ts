@@ -98,6 +98,7 @@ export const TAG = Object.freeze({
   loopPinBottom: mint('loop:pin-bottom', 'tag'),
   loopMediaAnchor: mint('loop:media-anchor', 'tag'),
   loopDividerAnchor: mint('loop:divider-anchor', 'tag'),
+  loopInsertionAnchor: mint('loop:insertion-anchor', 'tag'),
   loopPrepend: mint('loop:prepend', 'tag'),
   loopRestoreAnchor: mint('loop:restore-anchor', 'tag'),
   loopMarker: mint('loop:marker', 'tag'),
