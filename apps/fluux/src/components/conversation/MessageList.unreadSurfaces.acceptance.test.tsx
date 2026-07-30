@@ -306,7 +306,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     // row at/after the divider's position is pushed down by markerHeight, exactly as a real
     // "New messages" row insertion would push the rows beneath it. getBoundingClientRect reads
     // the scroller's CURRENT (live) scrollTop at call time — not a snapshot — so it reflects
-    // whatever restoreAnchor (or its absence) actually leaves scrollTop at.
+    // whatever controller-owned anchor preservation (or its absence) leaves scrollTop at.
     const rowHeight = 100
     const markerHeight = 100
     const layoutRowsForDivider = (dividerMessageId: string | undefined) => {
@@ -376,10 +376,11 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     expect(container.querySelector('[data-message-id="msg-3"] [data-new-message-marker]')).toBeNull()
 
     // Break check (a): msg-4's OWN offsetTop just shifted by -100 (500 -> 400) because the
-    // divider moved past it — restoreAnchor must move scrollTop by the SAME -100 so msg-4's
+    // divider moved past it — the leased preservation executor must move scrollTop by the SAME
+    // -100 so msg-4's
     // VIEWPORT-RELATIVE position (top - scrollTop) stays byte-identical. Asserting the relative
     // position (not raw scrollTop) is what makes this bite: a naive "scrollTop unchanged"
-    // assertion would pass even if restoreAnchor were a no-op AND the geometry never actually
+    // assertion would pass even if preservation were a no-op AND the geometry never actually
     // moved — the documented failure mode this rewrite fixes.
     const relativeTopAfter = msg4().getBoundingClientRect().top
     expect(relativeTopAfter).toBe(relativeTopBefore)

@@ -40,6 +40,7 @@ const animatedScrollToOffsetCalls: number[] = []
 const scrollToIndexCalls: Array<string | undefined> = []
 const scrollToIndexBehaviors: Array<ScrollBehavior | undefined> = []
 const scrollToIndexStartOffsets: number[] = []
+let virtualItemSize = 40
 // Keys the fake virtualizer treats as OUTSIDE the mounted window: getVirtualItems() omits them (so
 // the restore's fraction-refine finds no measured size and must mount the row first via
 // scrollToIndex), and a scrollToIndex(...) "windows them in" by removing them here. Empty by
@@ -68,9 +69,14 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
   useTanstackMessageVirtualizer: (args: { items: { key: string }[]; scrollRef: React.RefObject<HTMLElement | null> }) => ({
     getVirtualItems: () =>
       args.items
-        .map((it, index) => ({ index, start: index * 40, size: 40, key: it.key }))
+        .map((it, index) => ({
+          index,
+          start: index * virtualItemSize,
+          size: virtualItemSize,
+          key: it.key,
+        }))
         .filter((vi) => !windowedOutKeys.has(vi.key)),
-    getTotalSize: () => args.items.length * 40,
+    getTotalSize: () => args.items.length * virtualItemSize,
     itemCount: args.items.length,
     getOffsetForMessageId,
     getIndexForMessageId: (id: string) => {
@@ -169,6 +175,7 @@ describe('MessageList — virtualized scroll integration', () => {
     animatedScrollToOffsetCalls.length = 0
     scrollToIndexStartOffsets.length = 0
     windowedOutKeys.clear()
+    virtualItemSize = 40
   })
   afterEach(() => localStorage.clear())
 
@@ -571,6 +578,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scrollToIndexCalls.length = 0
     scrollToIndexStartOffsets.length = 0
     windowedOutKeys.clear()
+    virtualItemSize = 40
     realRaf = globalThis.requestAnimationFrame
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       rafQueue.push(cb)
@@ -654,6 +662,99 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     expect(scrollToIndexCalls.filter((align) => align === 'center').length).toBeGreaterThan(1)
     expect(onConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it('routes divider-mutation anchor preservation through the virtualizer-owned controller path', () => {
+    const messages = makeMessages(10)
+    const allIds = messages.map((message) => message.id)
+    let dividerId: string | undefined = 'msg-3'
+    getOffsetForMessageId.mockImplementation((id) => {
+      const index = allIds.indexOf(id)
+      const dividerIndex = dividerId ? allIds.indexOf(dividerId) : -1
+      return index < 0
+        ? null
+        : index * 100 + (dividerIndex >= 0 && index >= dividerIndex ? 100 : 0)
+    })
+
+    const { container, rerender } = render(
+      <MessageList
+        messages={messages}
+        conversationId="conv-divider-preservation"
+        firstNewMessageId={dividerId}
+        unreadCount={5}
+        {...props}
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 2000)
+    Object.defineProperty(scroller, 'clientHeight', { value: 250, configurable: true })
+    virtualItemSize = 100
+    flush(12) // finish the entry pin so the following scroll events are genuine user geometry
+
+    const layoutRows = () => {
+      const dividerIndex = dividerId ? allIds.indexOf(dividerId) : -1
+      scroller
+        .querySelectorAll('.message-row[data-message-id]')
+        .forEach((node, index) => {
+          const element = node as HTMLElement
+          const offsetTop =
+            index * 100 +
+            (dividerIndex >= 0 && index >= dividerIndex ? 100 : 0)
+          Object.defineProperties(element, {
+            offsetHeight: { value: 100, configurable: true },
+            offsetTop: { value: offsetTop, configurable: true },
+            getBoundingClientRect: {
+              value: () => {
+                const top = offsetTop - scroller.scrollTop
+                return {
+                  top,
+                  bottom: top + 100,
+                  height: 100,
+                  left: 0,
+                  right: 0,
+                  width: 0,
+                  x: 0,
+                  y: top,
+                  toJSON() {},
+                } as DOMRect
+              },
+              configurable: true,
+            },
+          })
+        })
+    }
+
+    layoutRows()
+    scroller.scrollTop = 250
+    fireEvent.wheel(scroller, { deltaY: -20 })
+    fireEvent.scroll(scroller)
+    scroller.scrollTop = 280
+    fireEvent.scroll(scroller)
+
+    const anchoredMessage = () =>
+      scroller.querySelector('[data-message-id="msg-4"]') as HTMLElement
+    const relativeTopBefore = anchoredMessage().getBoundingClientRect().top
+    expect(relativeTopBefore).toBe(220)
+
+    scrollToOffsetCalls.length = 0
+    dividerId = 'msg-6'
+    layoutRows()
+    rerender(
+      <MessageList
+        messages={messages}
+        conversationId="conv-divider-preservation"
+        firstNewMessageId={dividerId}
+        unreadCount={2}
+        {...props}
+      />,
+    )
+
+    // The old implementation called restoreAnchor() from MessageList, which wrote raw scrollTop
+    // behind both the controller generation and @tanstack's pending-scroll reconciler. A raw write
+    // can preserve this jsdom position yet still fight the virtualizer in a real engine, so the
+    // virtualizer call is the load-bearing assertion.
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
+    expect(anchoredMessage().getBoundingClientRect().top).toBe(relativeTopBefore)
   })
 
   // The ResizeObserver bottom-stick correction is intentionally disabled when the virtualizer

@@ -10,9 +10,11 @@ import {
   selectLiveEdgeNavigation,
   settleUserPosition,
   shouldReconcileAfterAppend,
+  type AnchorPreservationRequest,
   type DirectionalHistoryRequest,
   type EntryPositionFacts,
   type ExplicitTargetRequest,
+  type LayoutPreservationRequest,
   type LiveEdgeRequest,
   type LiveEdgeNavigationFacts,
   type MediaPreservationRequest,
@@ -162,13 +164,13 @@ export interface LiveEdgeExecutor {
   ) => void
 }
 
-export type MediaPreservationCompletion =
+export type AnchorPreservationCompletion =
   | 'settled'
   | 'best-effort'
   | 'user-takeover'
   | 'superseded'
 
-export type MediaPreservationFrameResult =
+export type AnchorPreservationFrameResult =
   | { kind: 'unavailable' }
   | {
       kind: 'positioned'
@@ -176,18 +178,18 @@ export type MediaPreservationFrameResult =
       reassert: boolean
     }
 
-export interface MediaPreservationExecutor {
+export interface AnchorPreservationExecutor {
   reachability: (
-    desired: MediaPreservationRequest['desired'],
+    desired: AnchorPreservationRequest['desired'],
   ) => ReachabilityFacts
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
   positionFrame: (
-    request: MediaPreservationRequest,
+    request: AnchorPreservationRequest,
     lease: PositionExecutionLease,
-  ) => MediaPreservationFrameResult
+  ) => AnchorPreservationFrameResult
   complete: (
-    request: MediaPreservationRequest,
-    outcome: MediaPreservationCompletion,
+    request: AnchorPreservationRequest,
+    outcome: AnchorPreservationCompletion,
   ) => void
 }
 
@@ -347,9 +349,9 @@ interface LiveEdgeExecutionState {
   completed: boolean
 }
 
-interface MediaPreservationExecutionState {
-  request: MediaPreservationRequest
-  executor: MediaPreservationExecutor
+interface AnchorPreservationExecutionState {
+  request: AnchorPreservationRequest
+  executor: AnchorPreservationExecutor
   operation: number
   abortController: AbortController | null
   loop: PositionFrameLoop | null
@@ -387,9 +389,9 @@ const UNREAD_MARKER_TAKEOVER_DRIFT_PX = 300
 const LIVE_EDGE_REASSERT_FRAMES = 60
 const LIVE_EDGE_STABLE_FRAMES = 8
 // Preserved from the former standalone media-anchor loop.
-const MEDIA_PRESERVATION_REASSERT_FRAMES = 90
-const MEDIA_PRESERVATION_STABLE_FRAMES = 8
-const MEDIA_PRESERVATION_DRIFT_PX = 8
+const ANCHOR_PRESERVATION_REASSERT_FRAMES = 90
+const ANCHOR_PRESERVATION_STABLE_FRAMES = 8
+const ANCHOR_PRESERVATION_DRIFT_PX = 8
 // Preserved from the former hook-local prepend/window-shift loop. It intentionally has no
 // early-stable exit because virtualizer measurements can arrive late after several quiet frames.
 const DIRECTIONAL_HISTORY_REASSERT_FRAMES = 60
@@ -439,7 +441,7 @@ export class PositioningController {
   private explicitTargetExecution: ExplicitTargetExecutionState | null = null
   private residentTopExecution: ResidentTopExecutionState | null = null
   private liveEdgeExecution: LiveEdgeExecutionState | null = null
-  private mediaPreservationExecution: MediaPreservationExecutionState | null = null
+  private anchorPreservationExecution: AnchorPreservationExecutionState | null = null
   private directionalHistoryExecution: DirectionalHistoryExecutionState | null = null
 
   snapshot(): PositioningModel {
@@ -694,10 +696,33 @@ export class PositioningController {
   beginMediaPreservation(input: {
     conversationId: string
     desired: MediaPreservationRequest['desired']
-    executor: MediaPreservationExecutor
+    executor: AnchorPreservationExecutor
   }): MediaPreservationRequest | null {
+    return this.beginAnchorPreservation({
+      ...input,
+      source: { kind: 'media-preservation', reason: 'remeasure' },
+    }) as MediaPreservationRequest | null
+  }
+
+  beginLayoutPreservation(input: {
+    conversationId: string
+    desired: LayoutPreservationRequest['desired']
+    executor: AnchorPreservationExecutor
+  }): LayoutPreservationRequest | null {
+    return this.beginAnchorPreservation({
+      ...input,
+      source: { kind: 'layout-preservation', reason: 'divider-mutation' },
+    }) as LayoutPreservationRequest | null
+  }
+
+  private beginAnchorPreservation(input: {
+    conversationId: string
+    source: AnchorPreservationRequest['source']
+    desired: AnchorPreservationRequest['desired']
+    executor: AnchorPreservationExecutor
+  }): AnchorPreservationRequest | null {
     return runScrollShadowSafely({
-      event: 'media-preservation-begin',
+      event: `${input.source.kind}-begin`,
       conversationId: input.conversationId,
       fallback: null,
       observe: () => {
@@ -705,14 +730,14 @@ export class PositioningController {
         const request = withIdentity(
           input.conversationId,
           generation,
-          {
-            source: { kind: 'media-preservation', reason: 'remeasure' },
+          ({
+            source: input.source,
             desired: input.desired,
             onUnavailable: { kind: 'warn-and-stop' },
-          },
-        ) as MediaPreservationRequest
+          }) as PositionRequestDraft,
+        ) as AnchorPreservationRequest
         const reachability = runScrollShadowSafely<ReachabilityFacts | null>({
-          event: 'media-preservation-reachability',
+          event: `${input.source.kind}-reachability`,
           conversationId: input.conversationId,
           fallback: null,
           observe: () => input.executor.reachability(request.desired),
@@ -729,18 +754,18 @@ export class PositioningController {
           generation,
           resolveReachability(request, reachability),
         )
-        const execution: MediaPreservationExecutionState = {
+        const execution: AnchorPreservationExecutionState = {
           request,
           executor: input.executor,
           operation: 0,
           abortController: null,
           loop: null,
-          framesLeft: MEDIA_PRESERVATION_REASSERT_FRAMES,
+          framesLeft: ANCHOR_PRESERVATION_REASSERT_FRAMES,
           stableFrames: 0,
           landedTarget: null,
         }
-        this.mediaPreservationExecution = execution
-        this.driveMediaPreservation(execution)
+        this.anchorPreservationExecution = execution
+        this.driveAnchorPreservation(execution)
         return request
       },
     })
@@ -1216,11 +1241,11 @@ export class PositioningController {
           liveEdgeExecution !== null &&
           liveEdgeExecution.request.conversationId === conversationId &&
           this.isLiveEdgeExecutionCurrent(liveEdgeExecution)
-        const mediaExecution = this.mediaPreservationExecution
+        const mediaExecution = this.anchorPreservationExecution
         const mediaWasCurrent =
           mediaExecution !== null &&
           mediaExecution.request.conversationId === conversationId &&
-          this.isMediaPreservationExecutionCurrent(mediaExecution)
+          this.isAnchorPreservationExecutionCurrent(mediaExecution)
         const directionalExecution = this.directionalHistoryExecution
         const directionalWasCurrent =
           directionalExecution !== null &&
@@ -1256,7 +1281,7 @@ export class PositioningController {
           this.cancelLiveEdgeExecution('user-takeover')
         }
         if (mediaWasCurrent) {
-          this.cancelMediaPreservationExecution('user-takeover')
+          this.cancelAnchorPreservationExecution('user-takeover')
         }
         if (directionalWasCurrent) {
           this.cancelDirectionalHistoryExecution('user-takeover')
@@ -1700,52 +1725,52 @@ export class PositioningController {
     )
   }
 
-  private driveMediaPreservation(
-    execution: MediaPreservationExecutionState,
+  private driveAnchorPreservation(
+    execution: AnchorPreservationExecutionState,
   ): void {
-    if (!this.isMediaPreservationExecutionCurrent(execution)) return
+    if (!this.isAnchorPreservationExecutionCurrent(execution)) return
     const phase = this.model.active?.phase
     if (!phase) return
     if (phase.kind === 'mounting' || phase.kind === 'reconciling') {
-      this.startMediaPreservationLoop(execution)
+      this.startAnchorPreservationLoop(execution)
       return
     }
     if (
       phase.kind === 'unavailable' ||
       phase.kind === 'pending'
     ) {
-      const lease = this.beginMediaPreservationOperation(execution)
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      const lease = this.beginAnchorPreservationOperation(execution)
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
     }
   }
 
-  private startMediaPreservationLoop(
-    execution: MediaPreservationExecutionState,
+  private startAnchorPreservationLoop(
+    execution: AnchorPreservationExecutionState,
   ): void {
     if (
-      !this.isMediaPreservationExecutionCurrent(execution) ||
+      !this.isAnchorPreservationExecutionCurrent(execution) ||
       execution.loop
     ) {
       return
     }
-    execution.framesLeft = MEDIA_PRESERVATION_REASSERT_FRAMES
+    execution.framesLeft = ANCHOR_PRESERVATION_REASSERT_FRAMES
     execution.stableFrames = 0
     execution.landedTarget = null
-    const lease = this.beginMediaPreservationOperation(execution)
-    const initial = this.positionMediaPreservationFrame(execution, lease)
+    const lease = this.beginAnchorPreservationOperation(execution)
+    const initial = this.positionAnchorPreservationFrame(execution, lease)
     if (!lease.isCurrent()) return
     if (initial.kind === 'unavailable') {
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
       return
     }
     lease.markApplied()
     if (!lease.isCurrent()) return
     if (!initial.reassert) {
-      this.settleMediaPreservation(execution, lease, 'settled')
+      this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
     const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'media-preservation-loop-start',
+      event: 'anchor-preservation-loop-start',
       conversationId: execution.request.conversationId,
       fallback: null,
       observe: () => execution.executor.beginLoop(lease),
@@ -1755,37 +1780,37 @@ export class PositioningController {
       return
     }
     if (!loop) {
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
       return
     }
     execution.loop = loop
-    this.scheduleMediaPreservationFrame(execution, lease)
+    this.scheduleAnchorPreservationFrame(execution, lease)
   }
 
-  private driveMediaPreservationFrame(
-    execution: MediaPreservationExecutionState,
+  private driveAnchorPreservationFrame(
+    execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
   ): void {
     if (!lease.isCurrent()) return
     if (execution.framesLeft-- <= 0) {
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
       return
     }
-    const result = this.positionMediaPreservationFrame(execution, lease)
+    const result = this.positionAnchorPreservationFrame(execution, lease)
     if (!lease.isCurrent()) return
     if (result.kind === 'unavailable') {
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
       return
     }
     if (!result.reassert) {
-      this.settleMediaPreservation(execution, lease, 'settled')
+      this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
     let wrote = false
     if (
       execution.landedTarget !== null &&
       Math.abs(result.scrollTop - execution.landedTarget) <=
-        MEDIA_PRESERVATION_DRIFT_PX
+        ANCHOR_PRESERVATION_DRIFT_PX
     ) {
       execution.stableFrames += 1
     } else {
@@ -1793,22 +1818,22 @@ export class PositioningController {
       execution.stableFrames = 0
     }
     execution.landedTarget = result.scrollTop
-    this.recordMediaPreservationFrame(execution, wrote)
+    this.recordAnchorPreservationFrame(execution, wrote)
     if (
-      execution.stableFrames >= MEDIA_PRESERVATION_STABLE_FRAMES
+      execution.stableFrames >= ANCHOR_PRESERVATION_STABLE_FRAMES
     ) {
-      this.settleMediaPreservation(execution, lease, 'settled')
+      this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
-    this.scheduleMediaPreservationFrame(execution, lease)
+    this.scheduleAnchorPreservationFrame(execution, lease)
   }
 
-  private positionMediaPreservationFrame(
-    execution: MediaPreservationExecutionState,
+  private positionAnchorPreservationFrame(
+    execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
-  ): MediaPreservationFrameResult {
-    return runScrollShadowSafely<MediaPreservationFrameResult>({
-      event: 'media-preservation-frame',
+  ): AnchorPreservationFrameResult {
+    return runScrollShadowSafely<AnchorPreservationFrameResult>({
+      event: 'anchor-preservation-frame',
       conversationId: execution.request.conversationId,
       fallback: { kind: 'unavailable' },
       observe: () => execution.executor.positionFrame(
@@ -1818,63 +1843,63 @@ export class PositioningController {
     })
   }
 
-  private scheduleMediaPreservationFrame(
-    execution: MediaPreservationExecutionState,
+  private scheduleAnchorPreservationFrame(
+    execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
   ): void {
     if (!lease.isCurrent() || !execution.loop) return
     const scheduled = runScrollShadowSafely({
-      event: 'media-preservation-frame-schedule',
+      event: 'anchor-preservation-frame-schedule',
       conversationId: execution.request.conversationId,
       fallback: false,
       observe: () => {
         execution.loop?.schedule(
-          () => this.driveMediaPreservationFrame(execution, lease),
+          () => this.driveAnchorPreservationFrame(execution, lease),
         )
         return true
       },
     })
     if (!scheduled && lease.isCurrent()) {
-      this.settleMediaPreservation(execution, lease, 'best-effort')
+      this.settleAnchorPreservation(execution, lease, 'best-effort')
     }
   }
 
-  private recordMediaPreservationFrame(
-    execution: MediaPreservationExecutionState,
+  private recordAnchorPreservationFrame(
+    execution: AnchorPreservationExecutionState,
     wrote: boolean,
   ): void {
     runScrollShadowSafely({
-      event: 'media-preservation-frame-monitor',
+      event: 'anchor-preservation-frame-monitor',
       conversationId: execution.request.conversationId,
       fallback: undefined,
       observe: () => execution.loop?.recordFrame(wrote),
     })
   }
 
-  private settleMediaPreservation(
-    execution: MediaPreservationExecutionState,
+  private settleAnchorPreservation(
+    execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
     outcome: Extract<
-      MediaPreservationCompletion,
+      AnchorPreservationCompletion,
       'settled' | 'best-effort'
     >,
   ): void {
     if (!lease.isCurrent()) return
-    this.finishMediaPreservationLoop(execution)
-    this.completeMediaPreservation(execution, outcome)
+    this.finishAnchorPreservationLoop(execution)
+    this.completeAnchorPreservation(execution, outcome)
     lease.settle()
     execution.abortController?.abort()
-    if (this.mediaPreservationExecution === execution) {
-      this.mediaPreservationExecution = null
+    if (this.anchorPreservationExecution === execution) {
+      this.anchorPreservationExecution = null
     }
   }
 
-  private completeMediaPreservation(
-    execution: MediaPreservationExecutionState,
-    outcome: MediaPreservationCompletion,
+  private completeAnchorPreservation(
+    execution: AnchorPreservationExecutionState,
+    outcome: AnchorPreservationCompletion,
   ): void {
     runScrollShadowSafely({
-      event: 'media-preservation-complete',
+      event: 'anchor-preservation-complete',
       conversationId: execution.request.conversationId,
       fallback: undefined,
       observe: () => execution.executor.complete(
@@ -1884,22 +1909,22 @@ export class PositioningController {
     })
   }
 
-  private finishMediaPreservationLoop(
-    execution: MediaPreservationExecutionState,
+  private finishAnchorPreservationLoop(
+    execution: AnchorPreservationExecutionState,
   ): void {
     const loop = execution.loop
     execution.loop = null
     if (!loop) return
     runScrollShadowSafely({
-      event: 'media-preservation-loop-finish',
+      event: 'anchor-preservation-loop-finish',
       conversationId: execution.request.conversationId,
       fallback: undefined,
       observe: () => loop.finish(),
     })
   }
 
-  private beginMediaPreservationOperation(
-    execution: MediaPreservationExecutionState,
+  private beginAnchorPreservationOperation(
+    execution: AnchorPreservationExecutionState,
   ): PositionExecutionLease {
     execution.abortController?.abort()
     const abortController = new AbortController()
@@ -1908,7 +1933,7 @@ export class PositioningController {
     const { conversationId, generation } = execution.request
     const isCurrent = () =>
       !abortController.signal.aborted &&
-      this.mediaPreservationExecution === execution &&
+      this.anchorPreservationExecution === execution &&
       execution.operation === operation &&
       isCurrentGeneration(this.model, conversationId, generation)
     const advance = (phase: PositioningPhase) => {
@@ -1932,11 +1957,11 @@ export class PositioningController {
     }
   }
 
-  private isMediaPreservationExecutionCurrent(
-    execution: MediaPreservationExecutionState,
+  private isAnchorPreservationExecutionCurrent(
+    execution: AnchorPreservationExecutionState,
   ): boolean {
     return (
-      this.mediaPreservationExecution === execution &&
+      this.anchorPreservationExecution === execution &&
       isCurrentGeneration(
         this.model,
         execution.request.conversationId,
@@ -3542,12 +3567,12 @@ export class PositioningController {
     ) {
       this.cancelLiveEdgeExecution('superseded')
     }
-    const mediaExecution = this.mediaPreservationExecution
+    const mediaExecution = this.anchorPreservationExecution
     if (
       mediaExecution &&
-      !this.isMediaPreservationExecutionCurrent(mediaExecution)
+      !this.isAnchorPreservationExecutionCurrent(mediaExecution)
     ) {
-      this.cancelMediaPreservationExecution('superseded')
+      this.cancelAnchorPreservationExecution('superseded')
     }
     const directionalExecution = this.directionalHistoryExecution
     if (
@@ -3564,7 +3589,7 @@ export class PositioningController {
     this.cancelExplicitTargetExecution()
     this.cancelResidentTopExecution(outcome)
     this.cancelLiveEdgeExecution(outcome)
-    this.cancelMediaPreservationExecution(outcome)
+    this.cancelAnchorPreservationExecution(outcome)
     this.cancelDirectionalHistoryExecution(outcome)
   }
 
@@ -3611,16 +3636,16 @@ export class PositioningController {
     this.liveEdgeExecution = null
   }
 
-  private cancelMediaPreservationExecution(
-    outcome: MediaPreservationCompletion,
+  private cancelAnchorPreservationExecution(
+    outcome: AnchorPreservationCompletion,
   ): void {
-    const execution = this.mediaPreservationExecution
+    const execution = this.anchorPreservationExecution
     if (execution) {
-      this.finishMediaPreservationLoop(execution)
+      this.finishAnchorPreservationLoop(execution)
       execution.abortController?.abort()
-      this.completeMediaPreservation(execution, outcome)
+      this.completeAnchorPreservation(execution, outcome)
     }
-    this.mediaPreservationExecution = null
+    this.anchorPreservationExecution = null
   }
 
   private cancelDirectionalHistoryExecution(

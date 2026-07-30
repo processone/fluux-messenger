@@ -9,8 +9,8 @@ import {
   type ExplicitTargetFrameResult,
   type LiveEdgeExecutor,
   type LiveEdgeFrameResult,
-  type MediaPreservationExecutor,
-  type MediaPreservationFrameResult,
+  type AnchorPreservationExecutor,
+  type AnchorPreservationFrameResult,
   type PositionExecutionLease,
   type PositionRequestDraft,
   type ResidentTopExecutor,
@@ -699,6 +699,7 @@ describe('positioning controller live-edge ownership', () => {
       request.generation,
     )
     expect(first.complete).toHaveBeenCalledWith(request, 'restarted')
+    expect(first.finish).toHaveBeenCalledOnce()
     expect(second.positionFrame).toHaveBeenCalledTimes(1)
 
     staleFrame()
@@ -721,6 +722,7 @@ describe('positioning controller live-edge ownership', () => {
       kind: 'paused-user-input',
     })
     expect(harness.complete).toHaveBeenCalledWith(request, 'user-takeover')
+    expect(harness.finish).toHaveBeenCalledOnce()
     staleFrame()
     expect(harness.positionFrame).toHaveBeenCalledTimes(1)
 
@@ -728,6 +730,57 @@ describe('positioning controller live-edge ownership', () => {
       conversationId,
       atLiveEdge: false,
     })
+    expect(controller.snapshot().active).toBeNull()
+  })
+
+  it('finishes the live-edge loop when a later frame becomes unavailable', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })
+    harness.setFrameResult({ kind: 'unavailable' })
+
+    harness.runFrame()
+
+    expect(harness.finish).toHaveBeenCalledOnce()
+    expect(harness.complete).toHaveBeenCalledWith(request, 'best-effort')
+  })
+
+  it('finishes the live-edge loop when its frame executor throws', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })
+    harness.positionFrame.mockImplementationOnce(() => {
+      throw new Error('frame executor failed')
+    })
+
+    harness.runFrame()
+
+    expect(harness.finish).toHaveBeenCalledOnce()
+    expect(harness.complete).toHaveBeenCalledWith(request, 'best-effort')
+    expect(getScrollShadowSnapshot().instrumentationErrorCount).toBe(1)
+  })
+
+  it('finishes the live-edge loop when its conversation deactivates', () => {
+    const harness = liveEdgeHarness()
+    const controller = new PositioningController()
+    const request = controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: harness.executor,
+    })!
+
+    controller.deactivate(conversationId, request.generation)
+
+    expect(harness.finish).toHaveBeenCalledOnce()
+    expect(harness.complete).toHaveBeenCalledWith(request, 'superseded')
     expect(controller.snapshot().active).toBeNull()
   })
 
@@ -741,13 +794,13 @@ describe('positioning controller live-edge ownership', () => {
     const callbacks: Array<() => void> = []
     const mediaComplete = vi.fn()
     const mediaPositionFrame = vi.fn(
-      (): MediaPreservationFrameResult => ({
+      (): AnchorPreservationFrameResult => ({
         kind: 'positioned',
         scrollTop: 500,
         reassert: true,
       }),
     )
-    const mediaExecutor: MediaPreservationExecutor = {
+    const mediaExecutor: AnchorPreservationExecutor = {
       reachability: () => ({
         kind: 'available',
         index: 5,
@@ -789,6 +842,55 @@ describe('positioning controller live-edge ownership', () => {
     staleMediaFrame()
     expect(mediaPositionFrame).toHaveBeenCalledTimes(1)
     expect(outgoing.positionFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs divider layout preservation through the shared anchor execution machine', () => {
+    const controller = new PositioningController()
+    controller.beginLiveEdgeEntry({
+      conversationId,
+      entryFacts: liveEntryFacts(),
+      executor: inertLiveEdgeExecutor(),
+    })
+    const positionFrame = vi.fn(
+      (): AnchorPreservationFrameResult => ({
+        kind: 'positioned',
+        scrollTop: 420,
+        reassert: false,
+      }),
+    )
+    const complete = vi.fn()
+    const executor: AnchorPreservationExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 4,
+        mounted: true,
+        placement: 'viable',
+      }),
+      beginLoop: vi.fn(() => null),
+      positionFrame,
+      complete,
+    }
+
+    const request = controller.beginLayoutPreservation({
+      conversationId,
+      desired: {
+        kind: 'anchor',
+        messageId: 'message-4',
+        placement: {
+          kind: 'bottom-fraction',
+          fraction: messageFraction(0.4),
+        },
+      },
+      executor,
+    })
+
+    expect(request?.source).toEqual({
+      kind: 'layout-preservation',
+      reason: 'divider-mutation',
+    })
+    expect(positionFrame).toHaveBeenCalledOnce()
+    expect(complete).toHaveBeenCalledWith(request, 'settled')
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
   })
 })
 

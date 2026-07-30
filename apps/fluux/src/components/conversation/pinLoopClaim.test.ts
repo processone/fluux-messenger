@@ -35,11 +35,9 @@ describe('createPinLoopClaim', () => {
     }
   })
 
-  // THE REGRESSION THIS TYPE EXISTS FOR. A loop dropped without its finish callback (a lease that
-  // silently stopped being current mid-flight) used to latch a plain boolean forever, and a latched
-  // claim suppresses every later bottom re-pin — a link-preview fastening, an attachment, a reaction
-  // — for the whole life of the mounted list. That is the "it never sticks to the bottom" report.
-  it('expires on its own when a loop is dropped without ever releasing it', () => {
+  // Defense in depth if the browser/scheduler never delivers the queued callback. Ordinary stale
+  // leases and thrown frame work release synchronously through controllerFrameLoop.
+  it('expires on its own when the scheduler never returns control to the loop', () => {
     const clock = fakeClock()
     const claim = createPinLoopClaim(clock.now)
 

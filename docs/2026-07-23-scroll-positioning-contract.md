@@ -1,8 +1,9 @@
 # Message-list scroll positioning contract
 
-Status: core migration complete. Saved-position restoration, unread-marker positioning, explicit
-message targets, live-edge pinning, media remeasurement preservation, directional history
-preservation, and resident-top navigation are authoritative controller slices.
+Status: core migration, ownership hardening, and dead-owner cleanup complete. Saved-position
+restoration, unread-marker positioning, explicit message targets, live-edge pinning, fixed-anchor
+layout preservation, directional history preservation, and resident-top navigation are
+authoritative controller slices.
 
 ## Purpose
 
@@ -34,16 +35,19 @@ frame scheduling, stale-work cancellation, convergence, and live-edge fallback. 
 message targets it owns supersession, one around-load attempt, mounting and center-position
 convergence, user takeover, and completion. For live edge it owns entry/FAB/outgoing generations,
 same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-frame convergence
-budget, and user cancellation. Media growth while reading history is a separate fixed-anchor
-request with the former 90-frame/8-stable-frame/8px contract. Hook executors translate accepted
-requests into browser/virtualizer writes, and every frame must hold the current controller lease
-before it can write. Directional history is accepted before a load begins, remains pending until
-the first resident ID changes, then performs its pre-paint anchor/fallback write and the former
-full 60-frame late-measurement budget under one lease. Its executor retains WebKit kinetic-scroll
-cancellation, 2px target-shift correction, 5px clamp recovery, and bounded distance-from-bottom
-fallback. Boundary input while the load is still pending retains the captured anchor because no
-pixel owner exists yet; takeover becomes cancellable after the initial positioning write, matching
-the former loop's timing. Explicit competing requests still supersede pending directional history.
+budget, and user cancellation. Media growth and unread-divider movement while reading history share
+one fixed-anchor execution machine with the former 90-frame/8-stable-frame/8px contract. Divider
+movement has distinct `layout-preservation` provenance and is ambient: it is rejected rather than
+superseding an unsettled entry restore, explicit target, or user navigation. Hook executors
+translate accepted requests into browser/virtualizer writes, and every frame must hold the current
+controller lease before it can write. Directional history is accepted before a load begins, remains
+pending until the first resident ID changes, then performs its pre-paint anchor/fallback write and
+the former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
+kinetic-scroll cancellation, 2px target-shift correction, 5px clamp recovery, and bounded
+distance-from-bottom fallback. Boundary input while the load is still pending retains the captured
+anchor because no pixel owner exists yet; takeover becomes cancellable after the initial
+positioning write, matching the former loop's timing. Explicit competing requests still supersede
+pending directional history.
 All seven authoritative slices share the same controller-owned
 `PositionFrameLoop` shape. The saved executor retains the existing fractional-anchor
 measurement write, 90-frame budget, 8-frame stability window, and 8px tolerance; only scheduling,
@@ -125,7 +129,8 @@ WebKit paint correctness.
 - **Live edge:** keep following appended messages and bottom-of-list UI until genuine user takeover.
 - **Fixed anchor:** keep a point in one message at a stable viewport placement. Its placement is a
   discriminated type, so the two geometries cannot be mixed:
-  - `bottom-fraction`: saved reading position and media preservation. The fraction is validated in
+  - `bottom-fraction`: saved reading position, media preservation, and divider-layout preservation.
+    The fraction is validated in
     `[0, 1]`, where `0` is the row top and `1` its bottom. The exact equation is
     `rowTop + fraction * rowHeight = scrollTop + viewportHeight`;
   - `top-offset`: directional history preservation. The equation is
@@ -168,6 +173,7 @@ Sources distinguish:
 - an outgoing message that deliberately returns the sender to live edge;
 - directional history preservation;
 - media remeasurement preservation;
+- ambient layout preservation when the unread divider moves;
 - late XEP-0490/MDS supersession.
 
 Incoming messages, reactions, typing, composer/container/viewport resize, media measurement, and MAM
@@ -305,6 +311,7 @@ abort valid deep growth and media-settle runs.
 | Late MDS live-edge state | Live edge | Newer automatic request only before user takeover |
 | Media at live edge | Existing live edge | Debounced measurement stimulus |
 | Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement |
+| Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; reject the ambient request while requested navigation is unsettled |
 | Load older/newer | Fixed top-relative offset anchor | Wait for the directional window change; if the anchor disappears, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Current live edge, when active | Geometry stimulus, not a new position request |
@@ -315,10 +322,31 @@ is already visible or above the viewport, the same activation goes directly to l
 ## Ownership boundary
 
 The controller-owned mechanisms retain leased browser reconcilers for saved anchors, unread markers,
-explicit center-aligned targets, live edge, media preservation, directional history, and resident
-top. These
+explicit center-aligned targets, live edge, fixed-anchor media/divider preservation, directional
+history, and resident top. These
 reconcilers implement measurement convergence; they are not separate positioning authorities.
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
+
+Unread-divider preservation is entirely inside the scroll owner. `MessageList` no longer receives
+raw anchor capture/restore callbacks, and the virtualized executor corrects through
+`scrollToOffset`/`scrollToIndex` so TanStack's pending-scroll reconciler is retargeted rather than
+raced by an unleased `scrollTop` write. The pre-mutation anchor is still captured continuously and
+the accepted request performs its first correction in the post-commit, pre-paint layout effect.
+
+Every leased reconciler uses `controllerFrameLoop`. It owns the concrete scheduled frame and
+diagnostic handle, and finishes exactly once when the lease is stale before scheduling, becomes
+stale before callback delivery, or frame scheduling/controller callback work throws. Normal
+controller unavailable—including a safely contained executor failure—superseded, takeover,
+deactivation, and settlement paths call the same finish operation. Live-edge pin-claim
+start/renew/release hooks are part of that lifecycle, so the claim deadline is scheduler-failure
+defense in depth rather than recovery from an accepted controller gap.
+
+The live hook result and active-list registry have exact reviewed API-shape guards. Adding a new
+callback—whether or not its name contains `scrollTop`—fails until its ownership semantics are
+reviewed, preventing a low-level anchor/offset/scroller escape hatch from bypassing generations.
+The unused generic `useMessageScroll` hook and its raw bottom writers have been deleted, so the app
+hook barrel no longer advertises an alternate live-list positioning owner. The ownership guard
+keeps that retired surface absent.
 
 The former send/composer/media writers in `ChatView` and `RoomView` have been removed. Outgoing rows
 already create a controller-owned live-edge request, scroller resize is observed by the message
@@ -420,8 +448,13 @@ kinetic scrolling and stale-paint behavior.
 5. [x] Migrate directional history preservation last, retaining kinetic cancellation, full-budget
    late-measurement tracking, distance-from-bottom fallback, and clamp recovery; delete the private
    prepend/window-shift loop.
-6. [x] Route resident-top through the controller and document the two isolated, non-competing
-   preview/selection scroll contexts.
+6. [x] Route resident-top and unread-divider layout preservation through the controller, remove
+   public raw anchor restoration, and document the two isolated, non-competing preview/selection
+   scroll contexts.
+   - [x] Harden the shared frame lifecycle so stale leases and thrown work release monitors and
+     live-edge pin claims; guard the public live-scroll API against semantic escape hatches.
+   - [x] Delete the unused generic `useMessageScroll` owner, its barrel export, dedicated tests, and
+     stale component-test mocks.
 7. Split persistence, user-intent tracking, history windowing, and reconciliation out of the
    orchestration hook.
 

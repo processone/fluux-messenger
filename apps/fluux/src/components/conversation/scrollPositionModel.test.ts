@@ -92,6 +92,16 @@ function outgoingMessage(generation: number): PositionRequest {
   }
 }
 
+function dividerPreservation(generation: number): PositionRequest {
+  return {
+    generation,
+    conversationId,
+    source: { kind: 'layout-preservation', reason: 'divider-mutation' },
+    desired: savedAnchor,
+    onUnavailable: { kind: 'warn-and-stop' },
+  }
+}
+
 describe('scroll position model', () => {
   it('couples provenance to compatible desired-position types', () => {
     type InvalidLateMdsAnchor = {
@@ -173,6 +183,29 @@ describe('scroll position model', () => {
     }
     const model = acceptPositionRequest(initialPositioningModel(), legacyEntry)
     expect(shouldReconcileAfterAppend(model, conversationId)).toBe(false)
+  })
+
+  it('does not let ambient divider preservation supersede an in-flight user navigation', () => {
+    const entered = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
+    const navigating = acceptPositionRequest(entered, explicitMessage(2))
+
+    const rejected = acceptPositionRequest(navigating, dividerPreservation(3))
+
+    expect(rejected).toBe(navigating)
+    expect(rejected.watermark).toBe(2)
+
+    const settled = advancePhaseIfCurrent(
+      navigating,
+      conversationId,
+      2,
+      { kind: 'settled' },
+    )
+    const accepted = acceptPositionRequest(settled, dividerPreservation(3))
+    expect(accepted.watermark).toBe(3)
+    expect(accepted.active?.request.source).toEqual({
+      kind: 'layout-preservation',
+      reason: 'divider-mutation',
+    })
   })
 
   it('distinguishes empty, loadable, unavailable, unmounted, and mounted targets', () => {

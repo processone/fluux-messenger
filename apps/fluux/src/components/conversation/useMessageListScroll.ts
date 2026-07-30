@@ -22,7 +22,11 @@ import { scrollStateManager, AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/ut
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
-import type { ReassertLoopHandle } from './reassertLoopMonitor'
+import {
+  createControllerFrameLoop,
+  type ControllerFrameLoopLifecycle,
+  type ControllerFrameLoopRegistration,
+} from './controllerFrameLoop'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
@@ -36,9 +40,9 @@ import {
   PositioningController,
   type DirectionalHistoryExecutor,
   type ExplicitTargetExecutor,
+  type AnchorPreservationExecutor,
   type LiveEdgeExecutor,
   type LiveEdgeCompletion,
-  type MediaPreservationExecutor,
   type PositionExecutionLease,
   type ResidentTopExecutor,
   type SavedPositionExecutionLease,
@@ -55,11 +59,11 @@ import {
 import {
   messageFraction,
   pixelOffset,
+  type AnchorPreservationRequest,
   type DirectionalHistoryRequest,
   type DesiredPosition,
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
-  type MediaPreservationRequest,
   type ReachabilityFacts,
   type SavedPositionRequest,
   type UnreadMarkerRequest,
@@ -364,32 +368,6 @@ export interface UseMessageListScrollResult {
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
    *  there is no current marker. */
   scrollToMarker: () => void
-  /**
-   * Read-state PR B, Task 12: capture a CONTENT anchor (the bottom-most visible message plus the
-   * fraction of its height at the viewport bottom) from the CURRENT scroller geometry. Exposes the
-   * module-private `findBottomAnchor` so callers (MessageList's divider live-tracking) can snapshot
-   * a pre-mutation anchor themselves, on their own cadence — see `restoreAnchor`'s doc for why the
-   * capture point has to be genuinely pre-mutation. Returns null when there's no scroller or no
-   * rendered message row (nothing to anchor to).
-   */
-  captureAnchor: () => ScrollAnchor | null
-  getLatestAnchor: () => ScrollAnchor | null
-  /**
-   * Read-state PR B, Task 12: restore the scroll position so the anchor message sits at the same
-   * fractional offset it was captured at, using the CURRENT scroller and the message's CURRENT
-   * measured height. Exposes the module-private `restoreToAnchor`.
-   *
-   * Why this needs to be a caller-driven pair rather than an effect keyed on the divider id: a
-   * `useLayoutEffect` keyed on `firstNewMessageId` runs after React has already committed the new
-   * divider into the DOM — reading geometry there is *post*-mutation, so there is nothing left to
-   * capture (the anchor message may already have shifted). The fix is a continuously-maintained
-   * anchor (`captureAnchor`, refreshed by the caller every render while the divider is unchanged)
-   * paired with a restore call in that same post-mutation, pre-paint layout effect — `restoreAnchor`
-   * writes `scrollTop` synchronously, so it still lands before the browser paints the mutated layout,
-   * even though the capture had to happen earlier. Returns false when the anchor message isn't
-   * currently mounted (so the caller can decide whether to fall back).
-   */
-  restoreAnchor: (anchor: ScrollAnchor) => boolean
 }
 
 interface DirectionalHistorySnapshot {
@@ -451,15 +429,15 @@ export function useMessageListScroll({
   // surfaces a non-converging loop or two overlapping loops fighting over scrollTop on WebKit
   // (frame-coupled, so invisible to the headless harness and the other monitors). Never cancels.
   const reassertMonitorRef = useRef<ReturnType<typeof createReassertLoopMonitor> | null>(null)
-  // In-flight controller-owned scroll re-assert loop (rAF id + monitor handle). Starting any loop
+  // In-flight controller-owned scroll re-assert loop (rAF id + idempotent terminal cleanup). Starting any loop
   // supersedes whatever is in flight so bottom, message, restore, media, and history targets cannot
   // fight over scrollTop. Single-flight: latest accepted generation wins with a fresh budget.
-  const reassertLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
+  const reassertLoopRef = useRef<ControllerFrameLoopRegistration | null>(null)
   // Whether a pin-bottom re-assert loop is in flight. The row-growth re-pin defers to an active loop
   // (it re-checks scrollHeight every frame and picks the change up itself) instead of restarting it
-  // — the restart's synchronous forced layout + repaint is the WebKitGTK hot path. A self-expiring
-  // claim rather than a boolean, so a loop dropped without finishing cannot latch it: see
-  // pinLoopClaim.ts.
+  // — the restart's synchronous forced layout + repaint is the WebKitGTK hot path. The leased frame
+  // lifecycle releases this claim on every terminal path; its deadline remains browser/scheduler
+  // defense in depth. See pinLoopClaim.ts.
   const pinBottomClaimRef = useRef<PinLoopClaim | null>(null)
   // Same lazy-ref idiom as pinRunProbeRef / pinRepaintBurstRef below: a ref is stable, so reading it
   // at the use sites keeps the exhaustive-deps rule satisfied without a dependency.
@@ -475,12 +453,7 @@ export function useMessageListScroll({
   // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
   // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
   const supersedeReassertLoopRef = useRef(() => {
-    if (reassertLoopRef.current) {
-      cancelAnimationFrame(reassertLoopRef.current.raf)
-      reassertLoopRef.current.handle.end()
-      reassertLoopRef.current = null
-    }
-    pinBottomClaimRef.current?.release()
+    reassertLoopRef.current?.finish()
   })
 
   // Track scroll position - always create internal ref to follow rules of hooks
@@ -650,6 +623,13 @@ export function useMessageListScroll({
   // survives the conversation switch (at switch time the DOM is already the new
   // conversation). Used for content-stable position restoration on return.
   const lastAnchorRef = useRef<ScrollAnchor | null>(null)
+  // Divider movement is an ambient layout mutation, not a navigation command. Keep its last
+  // pre-mutation anchor inside the scroll owner so restoration can share the controller lease.
+  const dividerAnchorRef = useRef<ScrollAnchor | null>(null)
+  const dividerTrackingRef = useRef({
+    conversationId,
+    dividerId: firstNewMessageId,
+  })
 
   // Track whether user has scrolled at least once since the marker was set.
   // Prevents the marker from being cleared immediately on initial load/scroll-to-marker.
@@ -969,37 +949,24 @@ export function useMessageListScroll({
   const beginControllerFrameLoop = useCallback((
     label: string,
     lease: PositionExecutionLease,
+    lifecycle?: ControllerFrameLoopLifecycle,
   ) => {
     if (!lease.isCurrent()) return null
-    supersedeReassertLoopRef.current()
-    const monitor = (reassertMonitorRef.current ??=
-      createReassertLoopMonitor()).begin(label, performance.now())
-    let finished = false
-    const finish = () => {
-      if (finished) return
-      finished = true
-      monitor.end()
-      const activeLoop = reassertLoopRef.current
-      if (activeLoop?.handle === monitor) {
-        cancelAnimationFrame(activeLoop.raf)
-        reassertLoopRef.current = null
-      }
-    }
-    return {
-      schedule: (callback: () => void) => {
-        if (finished || !lease.isCurrent()) return
-        // Register before scheduling so synchronous-rAF test harnesses cannot resurrect a loop that
-        // completed from inside the callback.
-        const entry = { raf: 0, handle: monitor }
-        reassertLoopRef.current = entry
-        entry.raf = requestAnimationFrame(callback)
-      },
-      recordFrame: (wrote: boolean) => {
-        const warning = monitor.frame(performance.now(), wrote)
-        if (warning) console.warn(warning)
-      },
-      finish,
-    }
+    return createControllerFrameLoop({
+      lease,
+      supersede: supersedeReassertLoopRef.current,
+      beginHandle: () => (reassertMonitorRef.current ??=
+        createReassertLoopMonitor()).begin(label, performance.now()),
+      registry: reassertLoopRef,
+      // Native WebKit/Chromium scheduler methods require Window as their receiver. Keep them behind
+      // closures when passing into the extracted adapter; an unbound method throws before the first
+      // convergence frame and strands the requested position.
+      requestFrame: (callback) => requestAnimationFrame(callback),
+      cancelFrame: (id) => cancelAnimationFrame(id),
+      now: () => performance.now(),
+      warn: (warning) => console.warn(warning),
+      lifecycle,
+    })
   }, [])
 
   const createLiveEdgeExecutor = useCallback((
@@ -1099,22 +1066,12 @@ export function useMessageListScroll({
           }
         : undefined,
       beginLoop: (lease) => {
-        const loop = beginControllerFrameLoop('pin-bottom', lease)
-        if (!loop) return null
-        pinBottomClaim().renew()
-        return {
-          ...loop,
-          // Every frame the loop actually runs renews the claim, so it stays held for as long as
-          // the loop lives — and expires on its own if the loop is ever dropped without finishing.
-          recordFrame: (wrote: boolean) => {
-            pinBottomClaim().renew()
-            loop.recordFrame(wrote)
-          },
-          finish: () => {
-            loop.finish()
-            pinBottomClaim().release()
-          },
-        }
+        const claim = pinBottomClaim()
+        return beginControllerFrameLoop('pin-bottom', lease, {
+          onStart: claim.renew,
+          onFrame: claim.renew,
+          onFinish: claim.release,
+        })
       },
       positionFrame: (
         request: LiveEdgeRequest,
@@ -1290,8 +1247,8 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [rememberBottomIntent])
 
-  const createMediaPreservationExecutor = useCallback(
-    (): MediaPreservationExecutor => ({
+  const createAnchorPreservationExecutor = useCallback(
+    (loopLabel: 'media-anchor' | 'divider-anchor'): AnchorPreservationExecutor => ({
       reachability: (desired) => deriveReachabilityForDesired({
         desired,
         hasRows: messageCount > 0 && firstMessageId !== undefined,
@@ -1301,9 +1258,9 @@ export function useMessageListScroll({
         loadAround: 'unavailable',
         canRecenter: false,
       }),
-      beginLoop: (lease) => beginControllerFrameLoop('media-anchor', lease),
+      beginLoop: (lease) => beginControllerFrameLoop(loopLabel, lease),
       positionFrame: (
-        request: MediaPreservationRequest,
+        request: AnchorPreservationRequest,
         lease: PositionExecutionLease,
       ) => {
         if (
@@ -1341,9 +1298,10 @@ export function useMessageListScroll({
           rememberCurrentScrollSnapshot()
         }
         lastProgrammaticScrollAtRef.current = Date.now()
-        debugLog('MEDIA LOAD: controller completed preservation', {
+        debugLog('ANCHOR: controller completed preservation', {
           conversationId: request.conversationId,
           generation: request.generation,
+          source: request.source.kind,
           outcome,
         })
       },
@@ -1358,6 +1316,79 @@ export function useMessageListScroll({
       windowAtLiveEdge,
     ],
   )
+
+  // Keep a pre-mutation divider anchor while the reader is scrolled up. On the render where the
+  // divider moves, the id mismatch deliberately prevents this effect from replacing the old
+  // geometry with a post-mutation measurement.
+  useLayoutEffect(() => {
+    const tracked = dividerTrackingRef.current
+    if (
+      tracked.conversationId !== conversationId ||
+      tracked.dividerId !== firstNewMessageId ||
+      !showScrollToBottom
+    ) {
+      return
+    }
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const anchor = findBottomAnchor(scroller)
+    dividerAnchorRef.current = anchor
+    lastAnchorRef.current = anchor
+  }, [
+    bottomVisibleMessageId,
+    conversationId,
+    firstNewMessageId,
+    showScrollToBottom,
+  ])
+
+  // Divider mutation is ambient layout preservation. It may correct immediately before paint when
+  // no requested navigation owns the controller, but the model rejects it while an entry restore,
+  // explicit target, Home/End command, or other active positioning request is still in flight.
+  useLayoutEffect(() => {
+    const tracked = dividerTrackingRef.current
+    if (tracked.conversationId !== conversationId) {
+      dividerTrackingRef.current = {
+        conversationId,
+        dividerId: firstNewMessageId,
+      }
+      dividerAnchorRef.current = null
+      return
+    }
+    if (tracked.dividerId === firstNewMessageId) return
+
+    const anchor = lastAnchorRef.current ?? dividerAnchorRef.current
+    if (showScrollToBottom && anchor) {
+      runScrollShadowSafely({
+        event: 'divider-anchor-preservation',
+        conversationId,
+        fallback: undefined,
+        observe: () => {
+          const desired: AnchorPreservationRequest['desired'] = {
+            kind: 'anchor',
+            messageId: anchor.messageId,
+            placement: {
+              kind: 'bottom-fraction',
+              fraction: messageFraction(anchor.fraction),
+            },
+          }
+          positioningControllerRef.current?.beginLayoutPreservation({
+            conversationId,
+            desired,
+            executor: createAnchorPreservationExecutor('divider-anchor'),
+          })
+        },
+      })
+    }
+    dividerTrackingRef.current = {
+      conversationId,
+      dividerId: firstNewMessageId,
+    }
+  }, [
+    conversationId,
+    createAnchorPreservationExecutor,
+    firstNewMessageId,
+    showScrollToBottom,
+  ])
 
   const createDirectionalHistoryExecutor = useCallback(
     (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor => {
@@ -2388,7 +2419,7 @@ export function useMessageListScroll({
           conversationId,
           fallback: undefined,
           observe: () => {
-            const desired: MediaPreservationRequest['desired'] = {
+            const desired: AnchorPreservationRequest['desired'] = {
               kind: 'anchor',
               messageId: anchor.messageId,
               placement: {
@@ -2399,7 +2430,7 @@ export function useMessageListScroll({
             positioningControllerRef.current?.beginMediaPreservation({
               conversationId,
               desired,
-              executor: createMediaPreservationExecutor(),
+              executor: createAnchorPreservationExecutor('media-anchor'),
             })
           },
         })
@@ -2424,7 +2455,7 @@ export function useMessageListScroll({
     }, MEDIA_LOAD_DEBOUNCE_MS)
   }, [
     conversationId,
-    createMediaPreservationExecutor,
+    createAnchorPreservationExecutor,
     isAtBottomRef,
     reconcileLiveEdge,
   ])
@@ -3695,24 +3726,6 @@ export function useMessageListScroll({
     })
   }, [firstNewMessageId, conversationId, createUnreadMarkerExecutor])
 
-  // Read-state PR B, Task 12: caller-driven anchor capture/restore — see the return type's doc
-  // for why the capture point can't just be a layout effect keyed on the divider id.
-  const captureAnchor = useCallback((): ScrollAnchor | null => {
-    const scroller = scrollerRef.current
-    if (!scroller) return null
-    const anchor = findBottomAnchor(scroller)
-    lastAnchorRef.current = anchor
-    return anchor
-  }, [])
-
-  const getLatestAnchor = useCallback((): ScrollAnchor | null => lastAnchorRef.current, [])
-
-  const restoreAnchor = useCallback((anchor: ScrollAnchor): boolean => {
-    const scroller = scrollerRef.current
-    if (!scroller) return false
-    return restoreToAnchor(scroller, anchor)
-  }, [])
-
   // ==========================================================================
   // RETURN
   // ==========================================================================
@@ -3731,8 +3744,5 @@ export function useMessageListScroll({
     markerAboveViewport,
     bottomVisibleMessageId,
     scrollToMarker,
-    captureAnchor,
-    getLatestAnchor,
-    restoreAnchor,
   }
 }

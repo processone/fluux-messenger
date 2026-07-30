@@ -25,7 +25,6 @@ import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
-import type { ScrollAnchor } from '@/utils/scrollStateManager'
 import { formatUnreadCount } from '@/utils/formatUnreadCount'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
@@ -535,9 +534,6 @@ export function MessageList<T extends BaseMessage>({
     markerAboveViewport,
     bottomVisibleMessageId,
     scrollToMarker,
-    captureAnchor,
-    getLatestAnchor,
-    restoreAnchor,
   } = useMessageListScroll({
     conversationId,
     messageCount: messages.length,
@@ -564,66 +560,6 @@ export function MessageList<T extends BaseMessage>({
     staticMode,
     virtualizer: activeVirtualizer,
   })
-
-  // --------------------------------------------------------------------------
-  // DIVIDER ANCHOR PRESERVATION (Read-state PR B, Task 12 / acceptance scenario 7)
-  // --------------------------------------------------------------------------
-  //
-  // The divider now live-tracks the read boundary — it can reposition or disappear when the
-  // effective boundary moves (e.g. a remote XEP-0490 marker advancing the pointer while the
-  // conversation is open) — but that reposition must never visually scroll the reader: only the
-  // divider's row should move; the message the reader is actually looking at must stay at the
-  // same pixel offset.
-  //
-  // A `useLayoutEffect` keyed on `firstNewMessageId` is too late to CAPTURE the anchor: by the
-  // time it runs, React has already committed the new divider into the DOM, so any geometry read
-  // there is post-mutation — there is nothing left to capture. Instead this keeps a
-  // CONTINUOUSLY-MAINTAINED anchor, refreshed every render while the divider id is unchanged (so a
-  // valid PRE-mutation snapshot always exists heading into the next change), and restores it in a
-  // layout effect keyed on the id change — that effect runs after the DOM mutation but before
-  // paint, so the corrected offset is what the user sees and there is no visible scroll.
-  const dividerAnchorRef = useRef<ScrollAnchor | null>(null)
-  const prevDividerIdRef = useRef(firstNewMessageId)
-
-  // Refresh from CURRENT (pre-mutation) geometry — but only while the divider id is unchanged
-  // from the previous render. Declared BEFORE the restore effect below, so React runs it first
-  // within the same commit: on the render where the id changes, `prevDividerIdRef.current` still
-  // holds the OLD id here (the restore effect hasn't updated it yet), so the mismatch correctly
-  // skips the refresh and leaves the last-known pre-mutation snapshot intact for that restore.
-  //
-  // Only while scrolled away from the bottom (`showScrollToBottom`): a reader glued to the live
-  // edge is already handled by the separate bottom-pin mechanism and has no "anchor" to protect —
-  // the whole point of this feature is preserving a SCROLLED-UP reader's position, so there is
-  // nothing to do at the bottom. This also sidesteps a real perf/timing hazard found while
-  // developing this: an at-bottom room streaming in a MAM catch-up keeps `bottomVisibleMessageId`
-  // advancing to the newest row on every batch, so a version of this effect that ran on every
-  // such change forced a DOM querySelectorAll + getBoundingClientRect scan on every catch-up
-  // commit — enough extra synchronous layout work to shift `npm run test:scroll`'s
-  // invariant-4 reassert timing and flip its scroll-shadow phase assertion. Skipping entirely
-  // while at the bottom removes the hazard at its most common trigger (the live-following case)
-  // without weakening the scrolled-up guarantee scenario 7 requires.
-  useLayoutEffect(() => {
-    if (showScrollToBottom && prevDividerIdRef.current === firstNewMessageId) {
-      dividerAnchorRef.current = captureAnchor()
-    }
-    // firstNewMessageId/captureAnchor are listed for exhaustive-deps; including firstNewMessageId
-    // does not reintroduce the perf hazard above (divider changes are rare — nothing like the
-    // catch-up burst) and the id-changed render just no-ops via the guard, same as before.
-  }, [bottomVisibleMessageId, showScrollToBottom, firstNewMessageId, captureAnchor])
-
-  // Restore the anchor exactly when the divider id changes. React guarantees this runs after the
-  // refresh effect above within the same commit, so it always sees the pre-mutation anchor before
-  // advancing prevDividerIdRef to the new id. Also gated on `showScrollToBottom`: a reader who has
-  // since scrolled to the bottom must never be yanked back to a now-irrelevant anchor captured
-  // from an earlier scrolled-up moment — the anchor is only ever restored while it's still the
-  // thing protecting the reader's current position.
-  useLayoutEffect(() => {
-    if (prevDividerIdRef.current !== firstNewMessageId) {
-      const anchor = getLatestAnchor() ?? dividerAnchorRef.current
-      if (showScrollToBottom && anchor) restoreAnchor(anchor)
-      prevDividerIdRef.current = firstNewMessageId
-    }
-  }, [firstNewMessageId, getLatestAnchor, restoreAnchor, showScrollToBottom])
 
   // Combined ref setter for scroll container
   const setScrollContainerRef = (element: HTMLDivElement | null) => {

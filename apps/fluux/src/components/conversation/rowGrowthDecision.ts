@@ -4,13 +4,9 @@
  * A row-growth signature change is consumed exactly once — nothing re-runs the effect for the same
  * signature — so every `skip` is final.
  *
- * KNOWN GAP, accepted deliberately: when a pin loop already claims the bottom we skip, betting that
- * the loop absorbs the growth itself. If that loop was abandoned without releasing its claim, the
- * bet is wrong and this growth is never pinned. The claim self-expires, so the window in which that
- * can happen is bounded — but expiry only stops FUTURE growths being suppressed; it does not replay
- * the one already consumed. Recovering that growth needs the reader to move, or another growth to
- * arrive after the claim lapses. The underlying defect is the controller path that can abandon a
- * frame loop without calling finish(); fixing that closes this gap at the source.
+ * When a pin loop claims the bottom, it already re-reads scroll height every frame and absorbs the
+ * growth itself. The shared leased frame-loop adapter releases that claim on stale leases, thrown
+ * work, cancellation, and settlement; the claim's timer is only scheduler-failure defense in depth.
  */
 export type RowGrowthDecision = 'pin' | 'skip'
 
@@ -49,7 +45,7 @@ export function decideRowGrowth(facts: RowGrowthFacts): RowGrowthDecision {
   const growth = facts.heightDelta ?? 0
   if (facts.distanceFromBottom - growth >= facts.atBottomThreshold) return 'skip'
 
-  // A running loop re-reads the height every frame and absorbs this itself — see the known gap above.
+  // A running loop re-reads the height every frame and absorbs this itself.
   if (facts.pinClaimHeld) return 'skip'
 
   // Row growth is ambient — the reader did not ask for it, so it must not cancel a position they

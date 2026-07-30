@@ -165,6 +165,11 @@ export type PositionRequest =
       Extract<UnavailablePolicy, { kind: 'warn-and-stop' }>
     >
   | Request<
+      { kind: 'layout-preservation'; reason: 'divider-mutation' },
+      BottomFractionAnchorPosition,
+      Extract<UnavailablePolicy, { kind: 'warn-and-stop' }>
+    >
+  | Request<
       {
         kind: 'late-mds-supersession'
         reason: 'read-pointer-at-live-edge' | 'divider-cleared'
@@ -238,6 +243,15 @@ export type MediaPreservationRequest = Extract<
   PositionRequest,
   { source: { kind: 'media-preservation'; reason: 'remeasure' } }
 >
+
+export type LayoutPreservationRequest = Extract<
+  PositionRequest,
+  { source: { kind: 'layout-preservation'; reason: 'divider-mutation' } }
+>
+
+export type AnchorPreservationRequest =
+  | MediaPreservationRequest
+  | LayoutPreservationRequest
 
 export type DirectionalHistoryRequest = Extract<
   PositionRequest,
@@ -421,6 +435,18 @@ export function acceptPositionRequest(
   }
 
   const active = model.active
+  const layoutPreservationWhilePositioning =
+    request.source.kind === 'layout-preservation' &&
+    active !== null &&
+    active.phase.kind !== 'settled' &&
+    active.phase.kind !== 'paused-user-input'
+  if (layoutPreservationWhilePositioning) {
+    // Divider movement is ambient layout preservation, not navigation. It may preserve a settled
+    // reading point, but it must never supersede Home, a message target, entry restore, or another
+    // position the reader is still waiting to reach.
+    return model
+  }
+
   const preservationPending =
     active !== null &&
     active.phase.kind !== 'position-applied' &&

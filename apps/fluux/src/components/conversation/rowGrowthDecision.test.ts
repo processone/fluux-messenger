@@ -63,11 +63,9 @@ describe('decideRowGrowth', () => {
     expect(decideRowGrowth(atBottomAfterCard({ navigationInFlight: true }))).toBe('skip')
   })
 
-  // ACCEPTED GAP, pinned here so it is a decision and not a surprise: a held claim skips, betting
-  // the running loop absorbs the growth. If that loop was abandoned the bet is wrong and THIS growth
-  // is never pinned — the claim's expiry bounds how long further growths stay suppressed, but it
-  // does not replay one already consumed. See the module doc.
-  it('skips while a pin loop holds the claim, betting that loop absorbs the growth', () => {
+  // The lifecycle adapter guarantees a held claim belongs to a current loop (with the deadline kept
+  // only as browser/scheduler defense in depth), so that loop will absorb this growth.
+  it('skips while the current pin loop holds the claim and will absorb the growth', () => {
     expect(decideRowGrowth(atBottomAfterCard({ pinClaimHeld: true }))).toBe('skip')
   })
 

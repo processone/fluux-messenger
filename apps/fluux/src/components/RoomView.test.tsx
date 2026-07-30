@@ -381,14 +381,6 @@ vi.mock('@/hooks', () => ({
   })),
   useMode: () => ({ resolvedMode: 'dark', isDark: true }),
   useTimeFormat: () => ({ formatTime: () => '14:30', timeFormat: '24h', effectiveTimeFormat: '24h' }),
-  useMessageScroll: () => ({
-    scrollRef: { current: null },
-    isAtBottomRef: { current: true },
-    scrollToBottomIfNeeded: vi.fn(),
-    scrollToBottom: vi.fn(),
-    handleScroll: vi.fn(),
-    resetScrollState: vi.fn(),
-  }),
   // useMessageSelection must return STABLE references. If vi.fn() is created
   // inside the hook function, it's a new ref each render, and the useEffect in
   // RoomView that depends on clearSelection re-fires every render — which calls

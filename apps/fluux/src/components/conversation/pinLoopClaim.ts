@@ -7,19 +7,17 @@
  * and the scroll-to-bottom FAB (a growth-driven scroll event fires at the pre-repin scrollTop, which
  * would flash the FAB while the loop is settling AT the bottom).
  *
- * Held as a DEADLINE, not a boolean. A boolean is cleared only by the loop's finish callback, so any
- * path that drops a loop without finishing it — a lease that silently stops being current mid-flight
- * — latches the claim forever. A latched claim silently suppresses EVERY later bottom re-pin (a
- * link-preview fastening, an attachment, a reaction) for the whole life of that mounted list, which
- * is exactly the "it never sticks to the bottom" report. A running loop renews the claim on every
- * frame, so a claim that has gone this long without one is provably stale and heals itself instead
- * of wedging the list.
+ * Held as a DEADLINE, not a boolean. The leased frame-loop adapter now releases the claim on every
+ * normal terminal path, including a stale lease and thrown controller frame work. The deadline
+ * remains defense in depth for a browser or scheduler failure that prevents the queued callback from
+ * running at all. A running loop renews the claim on every frame, so a claim with no frame for this
+ * long heals itself instead of wedging the list.
  *
  * The failure mode of expiring too early is benign and self-correcting: one extra pin loop, which
  * supersedes the stale one and re-pins an already-pinned bottom.
  */
 
-/** How long a claim survives without a loop frame renewing it. Well past any real frame gap. */
+/** Defense-in-depth lifetime without a loop frame. Well past any healthy frame gap. */
 export const PIN_CLAIM_STALE_MS = 2000
 
 export interface PinLoopClaim {

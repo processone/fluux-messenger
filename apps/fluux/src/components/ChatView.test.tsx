@@ -227,14 +227,6 @@ vi.mock('@/hooks', () => ({
   })),
   useMode: () => ({ resolvedMode: 'dark', isDark: true }),
   useTimeFormat: () => ({ formatTime: () => '14:30', timeFormat: '24h', effectiveTimeFormat: '24h' }),
-  useMessageScroll: () => ({
-    scrollRef: { current: null },
-    isAtBottomRef: { current: true },
-    scrollToBottomIfNeeded: vi.fn(),
-    scrollToBottom: vi.fn(),
-    handleScroll: vi.fn(),
-    resetScrollState: vi.fn(),
-  }),
   useMessageSelection: () => ({
     selectedMessageId: null,
     setSelectedMessageId: vi.fn(),
