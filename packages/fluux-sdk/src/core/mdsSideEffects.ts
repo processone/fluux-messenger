@@ -880,6 +880,7 @@ export function setupMdsSideEffects(
   // SM resumption: server replays notifications; keep publishing enabled, no reseed.
   const unsubscribeResumed = client.on('resumed', () => {
     dirty.open()
+    lastConsideredPointerIdentity.clear()
     syncEnabled = true
     // Rebuild the delete-detection baseline to the current live set (mirrors the
     // fresh-session handler) so a resume's known entities aren't seen as deletes.

@@ -535,6 +535,27 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     cleanup()
   })
 
+  it('retries a buffered cache resolution after SM resume without store churn', async () => {
+    const { client, cleanup } = await armedPublisher()
+    getMessages.mockResolvedValue([cachedMsg('m7', 's7')])
+
+    seedBackgroundedConversation()
+    patchMeta({ readPointer: pointerAt('m7') })
+    await flushMicrotasks()
+
+    expect(getMessages).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    connectionStore.setState({ status: 'disconnected' } as never)
+    connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
+    client._emit('resumed')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getMessages).toHaveBeenCalledTimes(2)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    cleanup()
+  })
+
   it('discards a resolution whose archive stopped being trustworthy mid-flight, and retries later', async () => {
     const { client, cleanup } = await armedPublisher()
     const gate = deferred<Message[]>()
