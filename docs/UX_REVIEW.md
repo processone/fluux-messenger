@@ -28,11 +28,14 @@ Screenshots referenced are under `docs/ux-review-screenshots/`.
    data exists in `MessageBubble`, but the optimistic and confirmed states
    look identical. (H · M)
 3. **Promote subscription requests / room invitations out of the Events tab** —
-   today they sit alongside reaction logs; users with a pending request need to
-   know within seconds, not after a tab visit. (H · S)
-4. **Add always-visible labels to the icon rail** — seven icons that today reveal
-   their name only via a 500 ms hover tooltip (no persistent label), including two
-   similar-looking glyphs at the bottom, are a first-run friction. (M · S)
+   ✅ *resolved:* the Events tab was dissolved (#789). Pending subscription
+   requests now surface inline in the contacts list (with a red dot on the
+   Contacts rail tab), and room invitations surface inline at the top of the
+   Rooms list (`RoomInvitationsBanner`) — no tab visit required (§9).
+4. **Add always-visible labels to the icon rail** — the rail's icons reveal
+   their name only via a 500 ms hover tooltip (no persistent label), including an
+   unlabeled bottom cluster (Contacts / Admin / Settings), which is a first-run
+   friction. (M · S)
 5. **Discoverable command palette and "Add contact / Join room" entry points** —
    both flows are buried behind icon-only dropdowns or `⌘K`; new users won't
    find them. (M · S)
@@ -90,8 +93,8 @@ recurring XMPP-onboarding question.
 | #   | Issue                                                                                                                                                                                                                                                                                                                                   | Recommendation                                                                                                                                                                                                                                  | Sev | Eff |
 |-----|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|-----|
 | 3.1 | ✅ **Resolved.** The unread badge now overlays the avatar (top-right), freeing the name column from truncation pressure (the code comment cites this finding).                                                                                                                                             | Shipped — `ConversationList.tsx:309-342`.                                                                                                                   | M   | S   |
-| 3.2 | **The icon rail is seven icons with hover tooltips but no always-visible labels.** Each button already has a tooltip (`Tooltip content={label}`, 500 ms delay) and an `aria-label` (`IconRailButton`/`IconRailNavLink`), so screen-reader users and patient hoverers are covered — but a new user scanning the rail can't read what each icon does without waiting on a hover. The icons aren't all conventional (a `#` for rooms, a bell for events, a `⚒` for admin), and the `⚒` (Admin) and `⚙` (Settings) glyphs sit adjacent at the bottom and look very similar at a glance. | Either (a) auto-expand to a labeled rail on first run (collapse after 7 days), (b) always show labels under icons (Discord/Slack pattern), or (c) widen the rail by 60 px and add labels. Low-cost interim: drop the 500 ms tooltip delay on the rail so names appear instantly. Tooltips already exist, so this is a first-run polish improvement, not a fix for a missing affordance. | M   | S   |
-| 3.3 | ✅ **Resolved.** The unread/pending dot now renders consistently on the Messages, Rooms, and Events icon-rail tabs.                                                                                                                                                              | Shipped — `Sidebar.tsx:233,241,265`.                                                                                                                                                   | M   | S   |
+| 3.2 | **The icon rail is five icons (six for server administrators) with hover tooltips but no always-visible labels.** The rail holds Messages, Rooms and Search at the top, then Contacts, Admin (administrators only) and Settings in a bottom cluster, plus a transient "update available" button. Each button already has a tooltip (`Tooltip content={label}`, 500 ms delay) and an `aria-label` (`IconRailButton`/`IconRailNavLink`), so screen-reader users and patient hoverers are covered — but a new user scanning the rail can't read what each icon does without waiting on a hover. The icons aren't all conventional (a `#` for rooms, a server rack for admin), and the bottom cluster in particular gives no hint of its grouping at a glance. | Either (a) auto-expand to a labeled rail on first run (collapse after 7 days), (b) always show labels under icons (Discord/Slack pattern), or (c) widen the rail by 60 px and add labels. Low-cost interim: drop the 500 ms tooltip delay on the rail so names appear instantly. Tooltips already exist, so this is a first-run polish improvement, not a fix for a missing affordance. | M   | S   |
+| 3.3 | ✅ **Resolved.** The unread/pending dot now renders consistently on the Messages, Rooms, and Contacts icon-rail tabs — the three tabs that carry a count (unread DMs, room unread/mentions, pending subscription requests). Search, Admin and Settings have nothing to count. | Shipped — the `showBadge` props on the Messages, Rooms and Contacts `IconRailNavLink`s in `Sidebar.tsx`, rendered by `sidebar-components/IconRailNavLink.tsx`.                                                                                                                                                  | M   | S   |
 | 3.4 | **"Moi:" prefix on outgoing messages** ("Moi: Good catch…", "Moi: OMEMO…") is doubly redundant: the conversation row is already showing the *contact's* avatar and name on the left, so a "Moi:" prefix is the only thing telling you *you* sent it. But the prefix steals 24 px of the preview text.                                   | Replace the "Moi:" prefix with a small ↪ glyph or a thin left border on the preview line.                                                                                                                                                       | L   | S   |
 | 3.5 | The sidebar has **no tab-level empty states** — when no conversation is selected the right pane shows a generic "Conversations privées / Sélectionnez une conversation" message, with no CTA.                                                                                                                                           | Replace the description with two action buttons: "Start a conversation" (opens the contact picker) and "Join a room".                                                                                                                           | M   | S   |
 
@@ -348,7 +351,7 @@ A copy-paste checklist for triage. Severity in brackets.
 [x] [H] Reconnect/network-state signal — §4.1, §4.2 (4.2 offline composer shipped; 4.1 in-flow banner intentionally reverted — status now lives in the sidebar chip)
 [ ] [H] Render sending/sent/failed states on outgoing messages — §2.1
 [ ] [L] Persist staged attachments per conversation (text drafts already done) — §2.4
-[ ] [H] Split Events into "Action required" + "Activity" — §9.2
+[x] [H] Surface subscription requests / room invitations without a tab visit — §9 (Events tab dissolved in #789: requests inline in contacts, invitations inline in Rooms, reactions in context; findings §9.1–§9.4 dropped with the screen)
 [ ] [H] Promote "+ Add contact" out of the icon-only dropdown — §6.1
 [ ] [H] Add registration / "find a server" path on LoginScreen — §1.1 (footer xmpp.org link added; in-app registration path still open)
 [ ] [M] Label or auto-expand the icon rail (Discord/Slack pattern) — §3.2
@@ -377,7 +380,6 @@ A copy-paste checklist for triage. Severity in brackets.
 [ ] [L] Composer send button: accent when input non-empty — §2.7
 [x] [L] Login: validate JID shape locally — §1.4
 [ ] [L] Admin: add breadcrumb when navigating into a category — §10.2
-[ ] [L] Events: archive accepted activity items after 7 days — §9.4
 [ ] [L] Search: surface filters once result counts justify — §8.3 (type/scope filters added; date/sender still open)
 [ ] [L] Index settings actions into command palette — §11.2
 ```
