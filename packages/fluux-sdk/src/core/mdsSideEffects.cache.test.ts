@@ -279,7 +279,12 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: pointerAt('m7') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(getMessages).toHaveBeenCalledWith(CID, expect.objectContaining({ limit: expect.any(Number) }))
+    expect(getMessages).toHaveBeenCalledTimes(1)
+    expect(getMessages).toHaveBeenCalledWith(CID, {
+      after: new Date(0),
+      before: new Date(timeFor('m7').getTime() + 1),
+      limit: 50,
+    })
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })

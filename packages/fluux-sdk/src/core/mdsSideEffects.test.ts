@@ -164,7 +164,13 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
       const existing = meta.get(jid)!
       meta.set(jid, {
         ...existing,
-        readPointer: { messageId: seenMessageId, timestamp: seen?.timestamp ?? new Date(0) },
+        readPointer: {
+          messageId: seenMessageId,
+          timestamp: seen?.timestamp ?? new Date(0),
+          archiveOrderKey: seen
+            ? { kind: 'room', from: seen.from, id: seenMessageId }
+            : undefined,
+        },
       })
       return { roomMeta: meta }
     })
@@ -701,7 +707,14 @@ describe('setupMdsSideEffects', () => {
     // known message id with NO resident messages loaded to resolve it from.
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: { messageId: newest.id, timestamp: newest.timestamp } })
+      meta.set(ROOM, {
+        ...meta.get(ROOM)!,
+        readPointer: {
+          messageId: newest.id,
+          timestamp: newest.timestamp,
+          archiveOrderKey: { kind: 'room', from: newest.from, id: newest.id },
+        },
+      })
       return { roomMeta: meta }
     })
 
@@ -807,7 +820,14 @@ describe('setupMdsSideEffects', () => {
 
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: pointerAt('m2') })
+      meta.set(ROOM, {
+        ...meta.get(ROOM)!,
+        readPointer: {
+          messageId: 'm2',
+          timestamp: new Date(2),
+          archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' },
+        },
+      })
       return { roomMeta: meta }
     })
     await vi.advanceTimersByTimeAsync(2_000)
