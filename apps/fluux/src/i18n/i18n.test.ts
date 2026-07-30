@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { supportedLanguages, languageNames } from './languages'
-import { newMessagesText } from '@/utils/swMessages'
+import { newMessagesText, serviceWorkerNotificationBaseLanguages } from '@/utils/swMessages'
 
 // Auto-discover all locale files via Vite eager glob
 const localeModules = import.meta.glob('./locales/*.json', { eager: true }) as Record<
@@ -112,6 +112,7 @@ describe('i18n', () => {
   describe('locale registration parity', () => {
     const pickerCodes: string[] = languageNames.map(l => l.code)
     const registeredCodes: string[] = [...supportedLanguages]
+    const registeredBaseCodes = registeredCodes.map(code => code.toLowerCase().split('-')[0])
 
     it('offers every registered language in the settings picker', () => {
       const unselectable = registeredCodes.filter(code => !pickerCodes.includes(code))
@@ -146,6 +147,13 @@ describe('i18n', () => {
         code => code !== 'en' && newMessagesText(code, 3) === englishText
       )
       expect(fallingBackToEnglish).toEqual([])
+    })
+
+    it('registers every service-worker notification base language', () => {
+      const unregistered = serviceWorkerNotificationBaseLanguages.filter(
+        code => !registeredBaseCodes.includes(code)
+      )
+      expect(unregistered).toEqual([])
     })
   })
 

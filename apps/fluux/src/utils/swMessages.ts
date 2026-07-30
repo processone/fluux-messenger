@@ -135,6 +135,9 @@ const FORMS: Record<string, PluralForms> = {
   zh: { other: '{count}条新消息' },
 }
 
+/** Normalized base-language codes supported by the runtime notification string table. */
+export const serviceWorkerNotificationBaseLanguages: readonly string[] = Object.freeze(Object.keys(FORMS))
+
 /** Localized "N new messages" for a coalesced notification body. */
 export function newMessagesText(locale: string, count: number): string {
   const base = locale.toLowerCase().split('-')[0]
