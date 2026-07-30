@@ -38,6 +38,7 @@ import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
 import { compareOrder, makeArchiveOrderKey, type OrderPosition } from '../stores/shared/readState'
+import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
@@ -49,12 +50,21 @@ const PUBLISH_DEBOUNCE_MS = 1_500
 /**
  * How many cached rows at or behind the pointer the cache resolution reads.
  *
- * The pointer's OWN row is the newest thing at or behind itself, so this window
- * resolves the exact position whenever it is cached, and degrades into the
- * at-or-behind fallback only when it is not resolvable. Bounding it keeps the
- * read cheap on the path that cannot resolve at all (a 1:1 whose whole tail is
- * our own unarchived sends), where nothing may be committed as handled and the
- * lookup therefore re-runs on later store changes.
+ * Fifty rows is one small page: enough to cover a short unresolved own-send tail
+ * without making every retry scan an unbounded archive. The pointer's OWN row is
+ * the newest thing at or behind itself, so this window resolves the exact
+ * position whenever it is cached, and degrades into the at-or-behind fallback
+ * only when it is not resolvable. Bounding it keeps the read cheap on the path
+ * that cannot resolve at all (a 1:1 whose whole tail is our own unarchived
+ * sends), where nothing may be committed as handled and the lookup therefore
+ * re-runs on later store changes.
+ *
+ * The IndexedDB `conv_timestamp` index bounds these 50 rows by TIMESTAMP ALONE;
+ * `newestResolvableAtOrBehind` applies archive-order filtering afterwards.
+ * More than 50 rows sharing the pointer's millisecond and sorting after it can
+ * therefore crowd the pointer row out. That containment deliberately fails in
+ * the safe UNDER-ADVANCE direction: the position stays unresolved and retryable,
+ * and is never published ahead of the true read position.
  */
 const CACHE_LOOKBACK = 50
 
@@ -270,11 +280,20 @@ export function setupMdsSideEffects(
     return best?.stanzaId
   }
 
-  /** The read-pointer message id this entity currently names, if any. */
-  function pointerMessageId(jid: string): string | undefined {
+  function readPointer(jid: string): ReadPointer | undefined {
     return isRoom(jid)
-      ? roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
-      : chatStore.getState().conversationMeta.get(jid)?.readPointer?.messageId
+      ? roomStore.getState().roomMeta.get(jid)?.readPointer
+      : chatStore.getState().conversationMeta.get(jid)?.readPointer
+  }
+
+  function sameReadPointer(a: ReadPointer | undefined, b: ReadPointer | undefined): boolean {
+    if (!a || !b) return a === b
+    if (a.messageId !== b.messageId || a.timestamp.getTime() !== b.timestamp.getTime()) return false
+    const aKey = a.archiveOrderKey
+    const bKey = b.archiveOrderKey
+    if (!aKey || !bKey) return aKey === bKey
+    if (aKey.kind !== bKey.kind || aKey.id !== bKey.id) return false
+    return aKey.kind === 'chat' || (bKey.kind === 'room' && aKey.from === bKey.from)
   }
 
   /**
@@ -291,17 +310,19 @@ export function setupMdsSideEffects(
    */
   function resolveFromStores(jid: string): string | undefined {
     if (isRoom(jid)) {
-      const seenId = roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
+      const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
+      const seenId = pointer?.messageId
       if (!seenId) return undefined
+      const from = pointer.archiveOrderKey?.kind === 'room' ? pointer.archiveOrderKey.from : undefined
       const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
-      const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
+      const fromSlice = messages.find((m) => m.id === seenId && (!from || m.from === from))?.stanzaId
       if (fromSlice) return fromSlice
       // Non-active rooms keep no resident array (memory windowing); mark-all-read
       // points at the newest known message, whose stanza-id survives on the
       // lastMessage preview.
       const last = roomStore.getState().roomMeta.get(jid)?.lastMessage
         ?? roomStore.getState().rooms.get(jid)?.lastMessage
-      return last?.id === seenId ? last.stanzaId : undefined
+      return last?.id === seenId && (!from || last.from === from) ? last.stanzaId : undefined
     }
     const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
     const seenId = pointer?.messageId
@@ -344,9 +365,11 @@ export function setupMdsSideEffects(
   async function resolveFromCache(jid: string): Promise<string | undefined> {
     if (!messageCache.isMessageCacheAvailable()) return undefined
     if (isRoom(jid)) {
-      const seenId = roomStore.getState().roomMeta.get(jid)?.readPointer?.messageId
+      const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
+      const seenId = pointer?.messageId
       if (!seenId) return undefined
-      const cached = await messageCache.getRoomMessage(jid, seenId)
+      const from = pointer.archiveOrderKey?.kind === 'room' ? pointer.archiveOrderKey.from : undefined
+      const cached = await messageCache.getRoomMessage(jid, seenId, from)
       return cached?.stanzaId
     }
     const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
@@ -505,7 +528,8 @@ export function setupMdsSideEffects(
     // the current pointer once catch-up becomes trustworthy.
     if (!archiveIsTrustworthy(jid)) return
 
-    const seenId = pointerMessageId(jid)
+    const pointer = readPointer(jid)
+    const seenId = pointer?.messageId
     if (seenId === lastConsideredSeenId.get(jid)) return
 
     // Captured BEFORE the await, compared after it.
@@ -529,7 +553,7 @@ export function setupMdsSideEffects(
     if (isRoom(jid) !== wasRoom) return
     // The position itself: a newer pointer supersedes this one. The store
     // subscription that moved it has already asked for another pass.
-    if (pointerMessageId(jid) !== seenId) return
+    if (!sameReadPointer(readPointer(jid), pointer)) return
     if (!archiveIsTrustworthy(jid)) return
 
     // No resolvable stanza-id: neither the resident slice nor the cache can
@@ -846,6 +870,8 @@ export function setupMdsSideEffects(
     // Rebuild the delete-detection baseline to the current live set (mirrors the
     // fresh-session handler) so a resume's known entities aren't seen as deletes.
     trackedJids = liveJids()
+    considerConversations()
+    considerRooms()
   })
 
   // On disconnect: DROP pending work and cancel the timer. The canonical pointer

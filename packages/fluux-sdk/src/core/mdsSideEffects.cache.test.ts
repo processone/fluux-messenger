@@ -79,6 +79,14 @@ function pointerAt(id: string): {
   return { messageId: id, timestamp: timeFor(id), archiveOrderKey: { kind: 'chat', id } }
 }
 
+function roomPointerAt(id: string, from = `${ROOM}/alice`): {
+  messageId: string
+  timestamp: Date
+  archiveOrderKey: { kind: 'room'; from: string; id: string }
+} {
+  return { messageId: id, timestamp: timeFor(id), archiveOrderKey: { kind: 'room', from, id } }
+}
+
 /** A cached (IndexedDB) 1:1 row, incoming so it carries a server stanza-id. */
 function cachedMsg(id: string, stanzaId: string | undefined): Message {
   return {
@@ -107,14 +115,18 @@ function cachedOwnMsg(id: string): Message {
   } as Message
 }
 
-function cachedRoomMsg(id: string, stanzaId: string | undefined): RoomMessage {
+function cachedRoomMsg(
+  id: string,
+  stanzaId: string | undefined,
+  from = `${ROOM}/alice`
+): RoomMessage {
   return {
     type: 'groupchat',
     id,
     stanzaId,
     roomJid: ROOM,
-    from: `${ROOM}/alice`,
-    nick: 'alice',
+    from,
+    nick: getLocalPart(from),
     body: id,
     timestamp: timeFor(id),
     isOutgoing: false,
@@ -150,7 +162,7 @@ function patchMeta(
 }
 
 /** A backgrounded room: joined and known, but its runtime message array is empty. */
-function seedBackgroundedRoom(pointerId?: string): void {
+function seedBackgroundedRoom(pointerId?: string, pointerFrom = `${ROOM}/alice`): void {
   const room: Room = {
     jid: ROOM,
     name: getLocalPart(ROOM),
@@ -167,7 +179,7 @@ function seedBackgroundedRoom(pointerId?: string): void {
   if (pointerId !== undefined) {
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: pointerAt(pointerId) })
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: roomPointerAt(pointerId, pointerFrom) })
       return { roomMeta: meta }
     })
   }
@@ -501,6 +513,28 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     cleanup()
   })
 
+  it('retries a discarded cache resolution after SM resume without store churn', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const gate = deferred<Message[]>()
+    getMessages.mockReturnValueOnce(gate.promise).mockResolvedValue([cachedMsg('m7', 's7')])
+
+    seedBackgroundedConversation()
+    patchMeta({ readPointer: pointerAt('m7') })
+    await flushMicrotasks()
+    expect(getMessages).toHaveBeenCalledTimes(1)
+
+    connectionStore.setState({ status: 'disconnected' } as never)
+    connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
+    client._emit('resumed')
+
+    gate.resolve([cachedMsg('m7', 's7')])
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getMessages).toHaveBeenCalledTimes(2)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    cleanup()
+  })
+
   it('discards a resolution whose archive stopped being trustworthy mid-flight, and retries later', async () => {
     const { client, cleanup } = await armedPublisher()
     const gate = deferred<Message[]>()
@@ -592,14 +626,71 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     getRoomMessage.mockResolvedValue(cachedRoomMsg('r5', 'rs5'))
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: pointerAt('r5') })
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: roomPointerAt('r5') })
       return { roomMeta: meta }
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'r5')
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'r5', `${ROOM}/alice`)
     // Rooms publish under the room's own archive (XEP-0359 `by`).
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
+    cleanup()
+  })
+
+  it('resolves a colliding room client id for the pointer sender only', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const alice = `${ROOM}/alice`
+    const bob = `${ROOM}/bob`
+    getRoomMessage.mockImplementation(async (_roomJid: string, id: string, from?: string) =>
+      from === alice ? cachedRoomMsg(id, 'alice-stanza', alice) : cachedRoomMsg(id, 'bob-stanza', bob)
+    )
+
+    seedBackgroundedRoom('shared-id', alice)
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        lastMessage: cachedRoomMsg('shared-id', 'bob-stanza', bob),
+      })
+      return { roomMeta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', alice)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    cleanup()
+  })
+
+  it('discards a room resolution after the pointer moves between same-id senders', async () => {
+    const { client, cleanup } = await armedPublisher()
+    const alice = `${ROOM}/alice`
+    const bob = `${ROOM}/bob`
+    const first = deferred<RoomMessage | null>()
+    const second = deferred<RoomMessage | null>()
+    getRoomMessage.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+
+    seedBackgroundedRoom('shared-id', alice)
+    await flushMicrotasks()
+
+    roomStore.setState((state) => {
+      const roomMeta = new Map(state.roomMeta)
+      roomMeta.set(ROOM, {
+        ...roomMeta.get(ROOM)!,
+        readPointer: roomPointerAt('shared-id', bob),
+      })
+      return { roomMeta }
+    })
+    await flushMicrotasks()
+
+    first.resolve(cachedRoomMsg('shared-id', 'alice-stanza', alice))
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    second.resolve(cachedRoomMsg('shared-id', 'bob-stanza', bob))
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
   })
 
@@ -611,7 +702,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     getRoomMessage.mockResolvedValue({ ...cachedRoomMsg('r5', undefined), isOutgoing: true })
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
-      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: pointerAt('r5') })
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: roomPointerAt('r5') })
       return { roomMeta: meta }
     })
     await vi.advanceTimersByTimeAsync(2_000)
