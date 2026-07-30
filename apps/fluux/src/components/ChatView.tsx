@@ -33,6 +33,7 @@ import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
 import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
+import { registerViewportScroller } from '@/utils/viewportScroller'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
@@ -165,6 +166,17 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     const id = activeConversation?.id
     if (!id) return
     return registerViewportBottomRef('conversation', id, isAtBottomRef)
+  }, [activeConversation?.id])
+
+  // Publish the scroll element too. Unlike the ref above this is not consumed in
+  // release builds; it exists so a dev-only check can measure the viewport WITHOUT
+  // going through the scroll hook's own at-bottom state, which is exactly the value
+  // under suspicion when the list and its affordances disagree.
+  useEffect(() => {
+    if (!__FLUUX_ANOMALY__) return
+    const id = activeConversation?.id
+    if (!id) return
+    return registerViewportScroller('conversation', id, scrollRef)
   }, [activeConversation?.id])
 
   // Stable handler for the send-animation: clears the highlight after 400 ms.

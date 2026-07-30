@@ -25,11 +25,37 @@ describe('auditBundle', () => {
     expect(() => auditBundle(withAnomaly, false)).toThrow(/anomaly/i)
   })
 
+  it('fails a production bundle containing anomaly-only support', () => {
+    const withSupport = {
+      'assets/index-abc.js': {
+        type: 'chunk',
+        modules: {
+          '/repo/apps/fluux/src/utils/viewportScroller.ts': {},
+          '/repo/apps/fluux/src/ChatView.tsx': {},
+        },
+      },
+    }
+    expect(() => auditBundle(withSupport, false)).toThrow(/viewportScroller\.ts/)
+  })
+
   it('fails a Dev bundle that is MISSING the anomaly modules', () => {
     // The direction that would silently regress to "eliminated everywhere,
     // including where it was supposed to run" — which is what import.meta.env.DEV
     // did before #1167. Asserting only absence would pass vacuously here.
     expect(() => auditBundle(withoutAnomaly, true)).toThrow(/expected/i)
+  })
+
+  it('fails a Dev bundle containing only anomaly support', () => {
+    const withSupportOnly = {
+      'assets/index-abc.js': {
+        type: 'chunk',
+        modules: {
+          '/repo/apps/fluux/src/utils/viewportScroller.ts': {},
+          '/repo/apps/fluux/src/ChatView.tsx': {},
+        },
+      },
+    }
+    expect(() => auditBundle(withSupportOnly, true)).toThrow(/expected/i)
   })
 
   it('passes a Dev bundle containing the anomaly modules', () => {

@@ -1,5 +1,6 @@
 /**
- * Build-time assertion that the anomaly tree is present exactly where it should be.
+ * Build-time assertion that anomaly instrumentation is present exactly where it
+ * should be, including support modules outside `src/anomaly/`.
  *
  * Inspects each emitted chunk's `modules` collection rather than chunk filenames: a
  * module inlined into an existing chunk has no distinguishing filename, so a
@@ -17,6 +18,7 @@ import type { Plugin } from 'vite'
 
 /** `src/anomaly/` on either path separator, and not `src/anomalyReports/`. */
 const ANOMALY_PATH = /[\\/]src[\\/]anomaly[\\/]/
+const ANOMALY_SUPPORT_PATH = /[\\/]src[\\/]utils[\\/]viewportScroller\.ts$/
 
 interface ChunkLike {
   type?: string
@@ -26,27 +28,31 @@ interface ChunkLike {
 /**
  * @internal Exported for testing.
  * @param bundle - Rollup/Rolldown's emitted bundle, keyed by file name.
- * @param expectPresent - whether this build is supposed to contain the tree.
+ * @param expectPresent - whether this build is supposed to contain the runtime.
  */
 export function auditBundle(bundle: Record<string, ChunkLike>, expectPresent: boolean): void {
-  const found: string[] = []
+  const runtimeModules: string[] = []
+  const supportModules: string[] = []
   for (const chunk of Object.values(bundle)) {
     if (chunk.type !== 'chunk') continue
     for (const moduleId of Object.keys(chunk.modules ?? {})) {
-      if (ANOMALY_PATH.test(moduleId)) found.push(moduleId)
+      if (ANOMALY_PATH.test(moduleId)) runtimeModules.push(moduleId)
+      else if (ANOMALY_SUPPORT_PATH.test(moduleId)) supportModules.push(moduleId)
     }
   }
 
-  if (!expectPresent && found.length > 0) {
+  const instrumentationModules = [...runtimeModules, ...supportModules]
+
+  if (!expectPresent && instrumentationModules.length > 0) {
     throw new Error(
-      `[anomaly-build-audit] ${found.length} anomaly module(s) survived into a ` +
-        `production bundle — dead-code elimination regressed:\n  ${found.join('\n  ')}\n` +
+      `[anomaly-build-audit] ${instrumentationModules.length} anomaly module(s) survived into a ` +
+        `production bundle — dead-code elimination regressed:\n  ${instrumentationModules.join('\n  ')}\n` +
         'Check that every call site is guarded by `if (__FLUUX_ANOMALY__)` and that no ' +
         'module imports src/anomaly/ unconditionally.',
     )
   }
 
-  if (expectPresent && found.length === 0) {
+  if (expectPresent && runtimeModules.length === 0) {
     throw new Error(
       '[anomaly-build-audit] expected the anomaly modules in this build, but none were ' +
         'emitted. The gate is off where it should be on — check that FLUUX_ANOMALY=1 ' +

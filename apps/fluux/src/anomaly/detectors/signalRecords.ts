@@ -1,22 +1,26 @@
 /**
- * The anomaly side of the sentinel fan-out.
+ * Signal to record: the single translation point between an observation and a line
+ * in the log.
  *
- * Stage 2 adds NO detection logic. `reassertLoopMonitor`, `resizeLoopMonitor`,
- * `slowCorrectionMonitor` and `stallSentinel` already decide correctly and already
- * emit their prose; all that happens here is translating one of their observations
- * into a record. If this file ever starts deciding whether something is an anomaly,
- * the decision has escaped the monitor that owns it.
+ * NO decision logic lives here, and none ever should. Two kinds of caller feed it and
+ * both have already decided: the always-shipped monitors (`reassertLoopMonitor`,
+ * `resizeLoopMonitor`, `slowCorrectionMonitor`, `stallSentinel`), which also emit
+ * their own prose; and the dev-only detectors in this directory, each a pure function
+ * with its own tests. If this file ever starts deciding whether something is an
+ * anomaly, the decision has escaped the module that owns it.
  *
  * The translation is where the privacy boundary is crossed, and it is one-way by
- * construction: the incoming signal carries plain numbers plus, in one case, a loop
- * label — and that label is mapped through a CLOSED table to a `TAG` constant. An
- * unrecognised label yields no ctx entry rather than reaching the record, so a new
- * loop kind added without a registry entry loses a detail, never leaks one.
+ * construction. A signal carries plain numbers plus, in a few cases, a caller string:
+ * a loop label, a conversation id, a message id. None reaches the record as itself —
+ * the label goes through a CLOSED table to a `TAG`, and the ids through the HMAC
+ * tokenizer or the session-local ref map. An unmapped label yields no ctx entry
+ * rather than passing through, so a new loop kind loses a detail, never leaks one.
  *
- * @module Anomaly/Detectors/SentinelFanout
+ * @module Anomaly/Detectors/SignalRecords
  */
 import type { ReassertLoopLabel } from '../../components/conversation/reassertLoopMonitor'
 import type { AnomalySignal } from '../../utils/anomalySignal'
+import { convToken, messageRef, roomToken } from '../identity'
 import type { RecordInput } from '../recorder'
 import { CTX, ID, TAG, type Opaque } from '../values'
 
@@ -126,6 +130,56 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
         ctx: [],
       }
 
+    case 'read-state/unread-survives-focus':
+      // `suspect`, not `bug`, on its first outing: the app marks read on focus
+      // regain, so a count lingering for the hold window is more likely a
+      // propagation delay than a broken invariant. `bug` has to keep meaning "an
+      // invariant broke" or it stops meaning anything.
+      //
+      // The conversation IS recorded here, unlike slow-correction: this signal
+      // carries its kind, so the token lands in the right namespace instead of
+      // splitting one entity across two.
+      return {
+        id: ID.unreadSurvivesFocus,
+        sev: 'suspect',
+        expected: 0,
+        observed: signal.unreadCount,
+        ctx: [
+          signal.kind === 'room'
+            ? [CTX.room, roomToken(signal.id)]
+            : [CTX.conv, convToken(signal.id)],
+          [CTX.heldMs, signal.heldMs],
+        ],
+      }
+
+    case 'scroll/fab-at-live-edge':
+      // `expected: 0` reads as "no FAB while at the live edge". The observed value
+      // is the independently measured distance, which is what makes the record
+      // reviewable: a reader can see how far from the bottom the app actually was.
+      return {
+        id: ID.fabAtLiveEdge,
+        sev: 'bug',
+        expected: 0,
+        observed: signal.distFromBottom,
+        ctx: [[CTX.heldMs, signal.heldMs]],
+      }
+
+    case 'scroll/jump-target-miss': {
+      // A session-local ref, not a token: a message id is seen once, so hashing it
+      // into the cross-session space would fill the cache with singletons and
+      // resolve to the unresolved sentinel anyway.
+      const ref = messageRef(signal.messageId)
+      return {
+        id: ID.jumpTargetMiss,
+        sev: 'bug',
+        expected: true,
+        observed: false,
+        // `null` under ref pressure: omit the message rather than substitute
+        // anything for it.
+        ctx: ref ? [[CTX.msg, ref], [CTX.offBy, signal.offBy]] : [[CTX.offBy, signal.offBy]],
+      }
+    }
+
     default:
       // Unreachable while the union and this switch agree. Reached only if a
       // signal is added without a case here, in which case dropping it is the
@@ -134,13 +188,23 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
   }
 }
 
-/** Every invariant id this stage can produce, for the registry parity test. */
+/**
+ * Every invariant id this mapping can produce.
+ *
+ * Closes the third link of the parity chain: `values.test.ts` ties `ID` to the
+ * registry document, and `signalRecords.test.ts` ties this list to what the switch
+ * above actually returns. Without it an id could be declared and documented while
+ * being unreachable — a registry row for something that can never appear.
+ */
 export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
   ID.reassertOverlap,
   ID.reassertNonConverging,
   ID.resizeLoop,
   ID.slowCorrection,
   ID.mainThreadStall,
+  ID.unreadSurvivesFocus,
+  ID.fabAtLiveEdge,
+  ID.jumpTargetMiss,
 ])
 
 /** Loop labels this build knows how to attribute. */

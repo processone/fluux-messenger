@@ -37,6 +37,7 @@ import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { signalAnomaly } from '@/utils/anomalySignal'
+import { evaluateJumpTarget } from './jumpTargetVisibility'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
@@ -1936,6 +1937,31 @@ export function useMessageListScroll({
         outcome,
         highlighted: Boolean(element && applied),
       })
+
+      // The jump has settled, which makes this the one moment the claim "the target
+      // is on screen" can be checked. Measured from the live rects rather than from
+      // any scroll bookkeeping, so a wrong offset cannot hide behind agreeing state.
+      if (__FLUUX_ANOMALY__) {
+        const settledScroller = scrollerRef.current
+        if (settledScroller) {
+          const viewport = settledScroller.getBoundingClientRect()
+          const target = element?.getBoundingClientRect() ?? null
+          const miss = evaluateJumpTarget({
+            outcome,
+            applied,
+            target: target ? { top: target.top, bottom: target.bottom } : null,
+            viewport: { top: viewport.top, bottom: viewport.bottom },
+          })
+          if (miss) {
+            signalAnomaly({
+              name: 'scroll/jump-target-miss',
+              offBy: Math.round(miss.offBy),
+              messageId: request.desired.messageId,
+            })
+          }
+        }
+      }
+
       if (consumeStoreTarget) onTargetMessageConsumedRef.current?.()
     },
   }), [

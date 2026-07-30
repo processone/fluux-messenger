@@ -1,6 +1,5 @@
 /**
- * The seam between the always-present diagnostic sentinels and the dev-only
- * anomaly tree.
+ * The neutral observation seam into the dev-only anomaly runtime.
  *
  * The sentinels live in production code — `useMessageListScroll` and
  * `stallSentinel` ship in every build, because their `console.warn` prose is the
@@ -14,14 +13,15 @@
  * `signalAnomaly` is a null check on a path that is already rate-limited to once
  * per five seconds — and no anomaly module is reachable from here.
  *
- * This is fan-out, not re-pointing: every caller emits its prose exactly as before
- * and signals IN ADDITION. Nothing is removed from `fluux.log`.
+ * For the always-shipped monitors this is fan-out, not re-pointing: each still emits
+ * its prose and signals in addition. Dev-only detectors use the same seam after
+ * reaching their own verdicts.
  *
  * @module Utils/AnomalySignal
  */
 
 /**
- * One observation, as the sentinel that made it describes it.
+ * One observation, as its source describes it.
  *
  * A discriminated union rather than a bag of optional fields: the anomaly side
  * must map each case to a specific invariant id with the right `expected` and
@@ -68,6 +68,27 @@ export type AnomalySignal =
       /** How long the main thread was blocked, beyond the expected tick gap. */
       blockedMs: number
       thresholdMs: number
+    }
+  | {
+      name: 'read-state/unread-survives-focus'
+      /** Which conversation, so the record adapter can use the right token namespace. */
+      kind: 'conversation' | 'room'
+      id: string
+      unreadCount: number
+      heldMs: number
+    }
+  | {
+      name: 'scroll/fab-at-live-edge'
+      /** Independently measured — NOT the scroll hook's own at-bottom state. */
+      distFromBottom: number
+      heldMs: number
+    }
+  | {
+      name: 'scroll/jump-target-miss'
+      /** Signed px outside the viewport: negative above, positive below. */
+      offBy: number
+      /** The target message id, mapped to a session-local ref by the record adapter. */
+      messageId: string
     }
 
 export type AnomalySignalHandler = (signal: AnomalySignal) => void

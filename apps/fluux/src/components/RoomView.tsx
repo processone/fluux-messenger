@@ -43,6 +43,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { registerViewportBottomRef } from '@/utils/viewportAtBottom'
+import { registerViewportScroller } from '@/utils/viewportScroller'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
@@ -266,6 +267,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   useEffect(() => {
     if (!activeRoomJid) return
     return registerViewportBottomRef('room', activeRoomJid, isAtBottomRef)
+  }, [activeRoomJid])
+
+  // Publish the scroll element too. Unlike the ref above this is not consumed in
+  // release builds; it exists so a dev-only check can measure the viewport WITHOUT
+  // going through the scroll hook's own at-bottom state, which is exactly the value
+  // under suspicion when the list and its affordances disagree.
+  useEffect(() => {
+    if (!__FLUUX_ANOMALY__) return
+    if (!activeRoomJid) return
+    return registerViewportScroller('room', activeRoomJid, scrollRef)
   }, [activeRoomJid])
 
   // Composer handle ref for focusing after staging attachment

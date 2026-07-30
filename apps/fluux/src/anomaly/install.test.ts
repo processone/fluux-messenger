@@ -181,6 +181,36 @@ describe('the sentinel fan-out seam', () => {
   })
 })
 
+describe('the detector tick', () => {
+  it('arms one sampler per attachment and releases it with the last hold', () => {
+    // Counted rather than inspected: two intervals sampling would double every
+    // verdict, and the per-id cooldown would file the duplicate as a phantom
+    // suppression rather than a visible fault.
+    vi.useFakeTimers()
+    try {
+      const baseline = vi.getTimerCount()
+
+      const cleanup1 = install()
+      const armed = vi.getTimerCount()
+      expect(armed).toBeGreaterThan(baseline)
+
+      // Second hold: the sampler is already running, so nothing new is armed.
+      const cleanup2 = install()
+      expect(vi.getTimerCount()).toBe(armed)
+
+      // First cleanup runs while the second hold is still live — the interleaving
+      // the refcount exists for. The sampler must survive it.
+      cleanup1()
+      expect(vi.getTimerCount()).toBe(armed)
+
+      cleanup2()
+      expect(vi.getTimerCount()).toBe(baseline)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('the session record', () => {
   it('announces the session exactly once across a StrictMode cycle', async () => {
     // The emission belongs to the runtime, not to an attachment. If each install()

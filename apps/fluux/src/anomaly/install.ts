@@ -8,15 +8,19 @@
  * relies on while the session kept its id. Only SUBSCRIPTIONS are attached and
  * detached — the runtime outlives them.
  *
- * The only thing attached so far is the sentinel fan-out: the existing scroll and
- * stall monitors keep their prose and additionally signal into a neutral seam,
- * which is connected here. No detection logic lives in this tree.
+ * Two things attach here. The signal-to-record adapter connects the neutral signal
+ * seam used by both always-shipped monitors and dev-only detectors. The detector tick
+ * samples the app once a second for the two timed detectors. Nothing decides in this
+ * file: the monitors and the pure detectors under `detectors/` own their verdicts.
  *
  * @module Anomaly/Install
  */
+import { chatStore, getStorageScopeJid, roomStore } from '@fluux/sdk'
 import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
+import type { ViewportKind } from '../utils/viewportAtBottom'
 import { isTauri } from '../utils/tauri'
-import { recordForSignal } from './detectors/sentinelFanout'
+import { recordForSignal } from './detectors/signalRecords'
+import { browserWorld, startDetectorTick, type DetectorTick } from './detectors/tick'
 import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
@@ -70,6 +74,48 @@ let attachments = 0
 let attachRefs = 0
 let digestTimer: ReturnType<typeof setInterval> | null = null
 let detachListener: (() => void) | null = null
+let detectorTick: DetectorTick | null = null
+
+/**
+ * Read the active conversation from the vanilla stores.
+ *
+ * A room takes precedence: both ids can be set at once (the last conversation stays in
+ * `chatStore` while a room is open), and the ROOM is what is on screen. Getting this
+ * backwards would attribute a room's unread count to a stale 1:1 — a wrong entity in
+ * the log, which is worse than no record.
+ */
+function readActiveConversation(): { kind: ViewportKind; id: string } | null {
+  const roomJid = roomStore.getState().activeRoomJid
+  if (roomJid) return { kind: 'room', id: roomJid }
+  const conversationId = chatStore.getState().activeConversationId
+  if (conversationId) return { kind: 'conversation', id: conversationId }
+  return null
+}
+
+/** The one canonical unread count for whichever entity is on screen. */
+function readUnreadCount(kind: ViewportKind, id: string): number {
+  const meta =
+    kind === 'room'
+      ? roomStore.getState().roomMeta.get(id)
+      : chatStore.getState().conversationMeta.get(id)
+  // Absent meta is 0, not "unknown": a conversation with no metadata has nothing
+  // unread, and inventing a non-zero count would fabricate an anomaly.
+  return meta?.unreadCount ?? 0
+}
+
+/**
+ * Is the loaded window at the tail of the archive.
+ *
+ * Rooms keep it on `roomRuntime`, conversations in a `windowAtLiveEdge` map — one fact
+ * in two shapes. Defaults to `false`, the conservative direction: an unknown window is
+ * treated as possibly slid up, which suppresses `fab-at-live-edge` rather than
+ * reporting a FAB that may be legitimately offering "jump to latest".
+ */
+function readWindowAtLiveEdge(kind: ViewportKind, id: string): boolean {
+  return kind === 'room'
+    ? (roomStore.getState().roomRuntime.get(id)?.windowAtLiveEdge ?? false)
+    : (chatStore.getState().windowAtLiveEdge.get(id) ?? false)
+}
 
 function runtime(): Recorder {
   if (!recorder) {
@@ -176,6 +222,18 @@ export function install(): () => void {
       if (input) rec.record(input)
     })
 
+    // The timed detectors. Started here rather than at module scope so it shares the
+    // refcount: a StrictMode remount must not leave two intervals sampling, which
+    // would double every verdict and turn the duplicate into a phantom suppression.
+    detectorTick = startDetectorTick(
+      browserWorld(
+        readActiveConversation,
+        readUnreadCount,
+        () => getStorageScopeJid() ?? '',
+        readWindowAtLiveEdge,
+      ),
+    )
+
     digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
 
     const onVisibility = () => {
@@ -198,6 +256,8 @@ export function install(): () => void {
     if (attachRefs > 0) return
 
     clearAnomalySignalHandler()
+    detectorTick?.stop()
+    detectorTick = null
     detachListener?.()
     detachListener = null
     if (digestTimer) clearInterval(digestTimer)
@@ -213,6 +273,8 @@ export function setSessionRetryDelayForTesting(ms: number): void {
 /** Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
   clearAnomalySignalHandler()
+  detectorTick?.stop()
+  detectorTick = null
   detachListener?.()
   detachListener = null
   if (digestTimer) clearInterval(digestTimer)

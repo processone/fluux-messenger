@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { FANOUT_IDS, knownLoopLabels, recordForSignal } from './sentinelFanout'
+import { FANOUT_IDS, knownLoopLabels, recordForSignal } from './signalRecords'
 import { createRecorder } from '../recorder'
 import { createMemorySink } from '../sinks/memory'
 import { serialize } from '../serializer'
 import { initTokenizer, resetValuesForTesting, tokenKeyId } from '../values'
+import { warmConversation, warmRoom } from '../identity'
 import type { AnomalySignal } from '../../utils/anomalySignal'
 
 /** The prose the monitors emit is not tested here — see each monitor's own suite. */
@@ -173,6 +174,15 @@ describe('every fan-out record survives the privacy gate', () => {
     { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },
     { name: 'scroll/slow-correction', durationMs: 210, thresholdMs: 32, rows: 1840 },
     { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 },
+    {
+      name: 'read-state/unread-survives-focus',
+      kind: 'conversation',
+      id: 'bob@x.tld',
+      unreadCount: 3,
+      heldMs: 2000,
+    },
+    { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
+    { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'msg-1' },
   ]
 
   it('serializes each one rather than being rejected for provenance', () => {
@@ -254,6 +264,132 @@ describe('every fan-out record survives the privacy gate', () => {
   })
 })
 
+describe('stage-3 detector mappings', () => {
+  beforeEach(async () => {
+    resetValuesForTesting()
+    await initTokenizer()
+  })
+
+  it('records the conversation in the jid namespace for a 1:1', () => {
+    const record = recordForSignal({
+      name: 'read-state/unread-survives-focus',
+      kind: 'conversation',
+      id: 'bob@x.tld/laptop',
+      unreadCount: 3,
+      heldMs: 2000,
+    })
+
+    expect(record?.id.s).toBe('read-state/unread-survives-focus')
+    expect(record?.sev).toBe('suspect')
+    expect(record?.expected).toBe(0)
+    expect(record?.observed).toBe(3)
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['conv', 'heldMs'])
+  })
+
+  it('resolves to the unresolved sentinel when the token was never warmed', () => {
+    // `tokenSync` cannot hash on the spot — HMAC is async — so an unwarmed
+    // conversation yields the sentinel. That is safe but USELESS: every record
+    // would be uncorrelatable. The driver must warm on the conversation it starts
+    // watching; this test is the reason that requirement exists.
+    const record = recordForSignal({
+      name: 'read-state/unread-survives-focus',
+      kind: 'conversation',
+      id: 'never-warmed@x.tld',
+      unreadCount: 1,
+      heldMs: 2000,
+    })
+    expect((record!.ctx![0][1] as { s: string }).s).toBe('c:unresolved')
+  })
+
+  it('records a room in the room namespace, not the jid one', async () => {
+    // The same bare JID can name a contact on one server and a MUC on another.
+    // Sharing one token space would assert an identity that does not exist.
+    await warmConversation('same@x.tld')
+    await warmRoom('same@x.tld')
+
+    const conv = recordForSignal({
+      name: 'read-state/unread-survives-focus',
+      kind: 'conversation',
+      id: 'same@x.tld',
+      unreadCount: 1,
+      heldMs: 2000,
+    })
+    const room = recordForSignal({
+      name: 'read-state/unread-survives-focus',
+      kind: 'room',
+      id: 'same@x.tld',
+      unreadCount: 1,
+      heldMs: 2000,
+    })
+
+    expect(room?.ctx?.map(([k]) => k.s)).toEqual(['room', 'heldMs'])
+    const convTok = (conv!.ctx![0][1] as { s: string }).s
+    const roomTok = (room!.ctx![0][1] as { s: string }).s
+    expect(convTok).not.toBe('c:unresolved')
+    expect(roomTok).not.toBe('c:unresolved')
+    expect(convTok).not.toBe(roomTok)
+  })
+
+  it('never lets a JID reach the record', () => {
+    const JID = 'verysecretuser@private.example'
+    const record = recordForSignal({
+      name: 'read-state/unread-survives-focus',
+      kind: 'conversation',
+      id: JID,
+      unreadCount: 3,
+      heldMs: 2000,
+    })
+    const line = JSON.stringify(record?.ctx)
+    for (let i = 0; i + 6 <= JID.length; i++) {
+      expect(line, `leaked a substring of the JID at ${i}`).not.toContain(JID.slice(i, i + 6))
+    }
+  })
+
+  it('maps a FAB-at-live-edge to the measured distance', () => {
+    const record = recordForSignal({
+      name: 'scroll/fab-at-live-edge',
+      distFromBottom: 10,
+      heldMs: 1000,
+    })
+
+    expect(record?.sev).toBe('bug')
+    expect(record?.expected).toBe(0)
+    expect(record?.observed).toBe(10)
+    expect(record?.ctx?.map(([k, v]) => [k.s, v])).toEqual([['heldMs', 1000]])
+  })
+
+  it('maps a jump-target miss with a message ref and a signed distance', () => {
+    const record = recordForSignal({
+      name: 'scroll/jump-target-miss',
+      offBy: -80,
+      messageId: 'stanza-abc',
+    })
+
+    expect(record?.sev).toBe('bug')
+    expect(record?.expected).toBe(true)
+    expect(record?.observed).toBe(false)
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['msg', 'offBy'])
+    // A session-local ref, never the raw id.
+    expect((record!.ctx![0][1] as { s: string }).s).toMatch(/^s:m\d+$/)
+    expect(JSON.stringify(record?.ctx)).not.toContain('stanza-abc')
+  })
+
+  it('keeps the offBy sign, so a review can tell overshoot from undershoot', () => {
+    const above = recordForSignal({
+      name: 'scroll/jump-target-miss',
+      offBy: -80,
+      messageId: 'a',
+    })
+    const below = recordForSignal({
+      name: 'scroll/jump-target-miss',
+      offBy: 200,
+      messageId: 'b',
+    })
+    expect(above?.ctx?.find(([k]) => k.s === 'offBy')?.[1]).toBe(-80)
+    expect(below?.ctx?.find(([k]) => k.s === 'offBy')?.[1]).toBe(200)
+  })
+})
+
 describe('FANOUT_IDS', () => {
   it('lists exactly the ids the mapping can produce', () => {
     // Guards the registry parity chain: values.test.ts asserts ID matches the
@@ -267,6 +403,15 @@ describe('FANOUT_IDS', () => {
           { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },
           { name: 'scroll/slow-correction', durationMs: 210, thresholdMs: 32, rows: 1840 },
           { name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 },
+          {
+            name: 'read-state/unread-survives-focus',
+            kind: 'conversation',
+            id: 'bob@x.tld',
+            unreadCount: 3,
+            heldMs: 2000,
+          },
+          { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
+          { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'm' },
         ] as AnomalySignal[]
       ).map((s) => recordForSignal(s)!.id.s),
     )

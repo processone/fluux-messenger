@@ -448,12 +448,15 @@ belt-and-braces against a malformed record shape, not the privacy mechanism itse
 
 ## 5. Detector catalogue
 
+This is the design-time catalogue. Once an id ships, `docs/ANOMALY_INVARIANTS.md` owns its current
+record contract, severity, context fields, and named non-cases.
+
 ### 5.1 `read-state/`
 
 | id | check | sev | stage |
 |---|---|---|---|
 | `pointer-regression` | every pointer write must satisfy `isAhead` (`stores/shared/readPointer.ts:89`) | bug | **5 — blocked** |
-| `unread-survives-focus` | active + focused + at live edge for >2s, yet `unreadCount > 0` | bug | 3 |
+| `unread-survives-focus` | See the runtime invariant registry | registry | 3 |
 | `badge-vs-pointer` | archive-derived recount vs displayed count | bug | **5 — blocked** |
 
 **`pointer-regression` moves to stage 5, because generations are not observable.** "Forward-only"
