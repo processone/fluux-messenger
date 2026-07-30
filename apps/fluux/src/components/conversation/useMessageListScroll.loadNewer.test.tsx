@@ -19,12 +19,14 @@ interface Handle {
 // scrollHeight 1000, clientHeight 500 → distFromBottom = 500 - scrollTop.
 // scrollTop 500 ⇒ distFromBottom 0 (at the resident bottom); scrollTop 100 ⇒ 400 (scrolled up).
 function Harness({
+  conversationId = 'room@conf.example.com',
   onLoadNewer,
   windowAtLiveEdge,
   isLoadingNewer,
   initialScrollTop,
   onReady,
 }: {
+  conversationId?: string
   onLoadNewer?: () => void
   windowAtLiveEdge?: boolean
   isLoadingNewer?: boolean
@@ -35,7 +37,7 @@ function Harness({
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
 
   const api = useMessageListScroll({
-    conversationId: 'room@conf.example.com',
+    conversationId,
     messageCount: 20,
     firstMessageId: 'm-0',
     rowGrowthSignature: '',
@@ -121,5 +123,50 @@ describe('useMessageListScroll load-newer trigger', () => {
     expect(onLoadNewer).toHaveBeenCalledTimes(1) // live-edge entry recenter
     scrollAt(h, 100) // distFromBottom 400
     expect(onLoadNewer).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not carry bottom-travel evidence into another conversation', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000)
+    try {
+      const loadRoomA = vi.fn()
+      const loadRoomB = vi.fn()
+      let handle!: Handle
+      const onReady = (next: Handle) => { handle = next }
+      const common = {
+        windowAtLiveEdge: false,
+        initialScrollTop: 0,
+        onReady,
+      }
+      const { rerender } = render(
+        <Harness
+          {...common}
+          conversationId="room-a"
+          onLoadNewer={loadRoomA}
+        />,
+      )
+
+      // Entry recenters once. Reaching the resident bottom starts an ordinary newer load and its
+      // cooldown; moving away then arms room A's bottom-travel latch.
+      expect(loadRoomA).toHaveBeenCalledTimes(1)
+      scrollAt(handle, 500)
+      expect(loadRoomA).toHaveBeenCalledTimes(2)
+      scrollAt(handle, 100)
+
+      rerender(
+        <Harness
+          {...common}
+          conversationId="room-b"
+          onLoadNewer={loadRoomB}
+        />,
+      )
+      expect(loadRoomB).toHaveBeenCalledTimes(1) // room B entry recenter
+
+      // Still inside room A's cooldown: room B may load only if the old room's latch leaked.
+      scrollAt(handle, 500)
+      expect(loadRoomB).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

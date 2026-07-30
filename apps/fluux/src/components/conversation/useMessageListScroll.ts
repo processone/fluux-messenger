@@ -37,10 +37,10 @@ import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { signalAnomaly } from '@/utils/anomalySignal'
-import { isProgrammaticScroll } from './scrollGate'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
+import { ViewportSession } from './viewportSession'
 import {
   PositioningController,
   type DirectionalHistoryExecutor,
@@ -464,6 +464,10 @@ export function useMessageListScroll({
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
   const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
+  const viewportSessionRef = useRef<ViewportSession | null>(null)
+  if (viewportSessionRef.current === null) {
+    viewportSessionRef.current = new ViewportSession(conversationId)
+  }
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -482,6 +486,10 @@ export function useMessageListScroll({
   // `isAtBottomRef.current = ...` assignments.
   const setMeasuredAtBottom = useCallback((atEdge: boolean) => {
     isAtBottomRef.current = atEdge
+    viewportSessionRef.current?.recordMeasuredLiveEdge(
+      activeConversationIdRef.current,
+      atEdge,
+    )
     onLiveEdgeMeasuredRef.current?.(atEdge)
   }, [isAtBottomRef])
 
@@ -527,23 +535,6 @@ export function useMessageListScroll({
   useEffect(() => {
     previousReadPositionRef.current = readPointerId
   }, [conversationId, readPointerId])
-  // Whether the user has GENUINELY scrolled since entering this conversation (wheel / touch /
-  // keyboard / FAB). Reset on every conversation switch. The saved scroll position is only
-  // overwritten once this is true: a restore can drift on its own as rows below the fold load media
-  // and re-measure, and persisting that spontaneous shift made the position creep older on every
-  // re-open ("goes back in time on switch"). Gating the save on real user intent keeps the saved
-  // anchor at the user's actual reading position, so re-opens are stable regardless of media timing.
-  const userHasScrolledSinceEntryRef = useRef(false)
-  // scrollHeight at the previous scroll event, to tell a genuine user scroll (content height
-  // unchanged) from a media/measurement-driven shift (height changed). Complements the input-event
-  // listeners below so scrollbar-drag — which fires no wheel/touch — still counts. Reset per entry.
-  const prevScrollHeightRef = useRef<number | null>(null)
-  // Timestamp of the last programmatic scroll WRITE (one-shot restore, or the frame the re-pin loop
-  // ends). Scroll events within PROGRAMMATIC_SETTLE_MS of it are the virtualizer's measurement settle,
-  // not the user, so they must NOT open the save gate — see scrollGate.isProgrammaticScroll. Without
-  // it, that settle (height unchanged, no loop running) looks exactly like a scrollbar drag, opens the
-  // gate, and the drifted position is persisted → the reading position creeps older on every re-open.
-  const lastProgrammaticScrollAtRef = useRef(0)
   // Teardown for the native user-input listeners attached to the scroller (set them via addEventListener
   // so touch/keyboard scrolls — which don't go through the React onWheel handler — also count).
   const userInputCleanupRef = useRef<(() => void) | null>(null)
@@ -605,16 +596,9 @@ export function useMessageListScroll({
   const lastSaveTimeRef = useRef(0)
   const lastLoadTimeRef = useRef(0)
   const lastRestoreTimeRef = useRef(0) // Track when we last restored position
-  const scrolledAwayFromTopRef = useRef(false)
-  // Mirror of scrolledAwayFromTopRef for the newer direction: only auto-load newer once the reader
-  // has genuinely scrolled away from the resident bottom and returned to it (guards spurious fires).
-  const scrolledAwayFromBottomRef = useRef(false)
   // Tracks the previous windowAtLiveEdge so we can detect the false→true transition (returning to
   // the live edge) and drop a stale prepend/append anchor — see the effect below.
   const prevWindowAtLiveEdgeRef = useRef(windowAtLiveEdge)
-  // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The controller receives the
-  // same input directly; this timestamp also supports marker clearing and resize heuristics.
-  const userScrollIntentAtRef = useRef(0)
 
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
@@ -622,12 +606,6 @@ export function useMessageListScroll({
   const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean; userScrolled: boolean; anchor: ScrollAnchor | null } | null>(null)
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Last scroll data (for saving on conversation switch)
-  const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
-  // Bottom-most-visible message anchor, captured (throttled) during scroll so it
-  // survives the conversation switch (at switch time the DOM is already the new
-  // conversation). Used for content-stable position restoration on return.
-  const lastAnchorRef = useRef<ScrollAnchor | null>(null)
   // Divider movement is an ambient layout mutation, not a navigation command. Keep its last
   // pre-mutation anchor inside the scroll owner so restoration can share the controller lease.
   const dividerAnchorRef = useRef<ScrollAnchor | null>(null)
@@ -651,8 +629,9 @@ export function useMessageListScroll({
   const [markerAboveViewport, setMarkerAboveViewport] = useState(false)
   // Id of the bottom-most message whose top is within the viewport (the row peeking in at the bottom
   // edge). Drives the scroll-to-bottom FAB badge so it counts DOWN as new messages scroll into view.
-  // Reuses the anchor already computed every scroll (lastAnchorRef); updated at the same throttled
-  // cadence via the prev-dedup setter, so it only re-renders when the bottom-most row changes.
+  // Reuses the anchor recorded by the viewport session on every scroll; updated at the same
+  // throttled cadence via the prev-dedup setter, so it only re-renders when the bottom-most row
+  // changes.
   const [bottomVisibleMessageId, setBottomVisibleMessageId] = useState<string | null>(null)
 
   // ==========================================================================
@@ -670,12 +649,15 @@ export function useMessageListScroll({
   const rememberCurrentScrollSnapshot = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
-    lastScrollDataRef.current = {
-      top: scroller.scrollTop,
-      height: scroller.scrollHeight,
-      client: scroller.clientHeight,
-    }
-    lastAnchorRef.current = findBottomAnchor(scroller)
+    viewportSessionRef.current?.recordViewport(
+      activeConversationIdRef.current,
+      {
+        top: scroller.scrollTop,
+        height: scroller.scrollHeight,
+        client: scroller.clientHeight,
+      },
+      findBottomAnchor(scroller),
+    )
   }, [])
 
   const rememberBottomIntent = useCallback(() => {
@@ -683,17 +665,21 @@ export function useMessageListScroll({
     if (!scroller) return
 
     const bottomTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-    lastScrollDataRef.current = {
-      top: bottomTop,
-      height: scroller.scrollHeight,
-      client: scroller.clientHeight,
-    }
-    lastAnchorRef.current = findBottomAnchor(scroller)
+    const bottomAnchor = findBottomAnchor(scroller)
+    viewportSessionRef.current?.recordViewport(
+      conversationId,
+      {
+        top: bottomTop,
+        height: scroller.scrollHeight,
+        client: scroller.clientHeight,
+      },
+      bottomAnchor,
+    )
     isAtBottomRef.current = true
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
     // At the bottom the newest message is visible → 0 new below the fold (anchor is the last row).
-    setBottomVisibleMessageId(lastAnchorRef.current?.messageId ?? null)
+    setBottomVisibleMessageId(bottomAnchor?.messageId ?? null)
     scrollStateManager.clearSavedScrollState(conversationId)
   }, [conversationId, isAtBottomRef])
 
@@ -897,16 +883,18 @@ export function useMessageListScroll({
         if (externalScrollerRef) {
           (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
         }
-        // Native user-input listeners: mark a GENUINE user scroll so the save gate (see
-        // userHasScrolledSinceEntryRef) opens. wheel covers mouse/trackpad, touchstart covers
+        // Native user-input listeners: mark a GENUINE user scroll so the viewport session's save
+        // gate opens. wheel covers mouse/trackpad, touchstart covers
         // mobile, keydown covers PageUp/Down/arrows/Space when the list is focused. These are
         // distinct from media/measurement-driven scroll events, which must NOT open the gate.
         userInputCleanupRef.current?.()
         userInputCleanupRef.current = null
         if (el) {
           const markUserScrolled = () => {
-            userHasScrolledSinceEntryRef.current = true
-            userScrollIntentAtRef.current = Date.now()
+            viewportSessionRef.current?.recordUserInput(
+              activeConversationIdRef.current,
+              Date.now(),
+            )
             positioningControllerRef.current?.observeUserInput(
               activeConversationIdRef.current,
             )
@@ -1214,7 +1202,10 @@ export function useMessageListScroll({
 
         if (scroller) {
           setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
-          lastProgrammaticScrollAtRef.current = Date.now()
+          viewportSessionRef.current?.recordProgrammaticWrite(
+            request.conversationId,
+            Date.now(),
+          )
         }
         const probe = (pinRunProbeRef.current ??= createRenderCostProbe({
           thresholdMs: PIN_PROBE_THRESHOLD_MS,
@@ -1319,7 +1310,10 @@ export function useMessageListScroll({
             getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
           rememberCurrentScrollSnapshot()
         }
-        lastProgrammaticScrollAtRef.current = Date.now()
+        viewportSessionRef.current?.recordProgrammaticWrite(
+          request.conversationId,
+          Date.now(),
+        )
         debugLog('ANCHOR: controller completed preservation', {
           conversationId: request.conversationId,
           generation: request.generation,
@@ -1355,7 +1349,7 @@ export function useMessageListScroll({
     if (!scroller) return
     const anchor = findBottomAnchor(scroller)
     dividerAnchorRef.current = anchor
-    lastAnchorRef.current = anchor
+    viewportSessionRef.current?.recordBottomAnchor(conversationId, anchor)
   }, [
     bottomVisibleMessageId,
     conversationId,
@@ -1378,7 +1372,9 @@ export function useMessageListScroll({
     }
     if (tracked.dividerId === firstNewMessageId) return
 
-    const anchor = lastAnchorRef.current ?? dividerAnchorRef.current
+    const anchor =
+      viewportSessionRef.current?.snapshotFor(conversationId)?.bottomAnchor ??
+      dividerAnchorRef.current
     if (showScrollToBottom && anchor) {
       runScrollShadowSafely({
         event: 'divider-anchor-preservation',
@@ -1544,7 +1540,10 @@ export function useMessageListScroll({
             saved.restoredAt = Date.now()
             lastRestoreTimeRef.current = saved.restoredAt
             prevMessageCountRef.current = messageCountRef.current
-            lastProgrammaticScrollAtRef.current = saved.restoredAt
+            viewportSessionRef.current?.recordProgrammaticWrite(
+              request.conversationId,
+              saved.restoredAt,
+            )
             setTimeout(() => {
               if (
                 prependRef.current === saved &&
@@ -1561,7 +1560,10 @@ export function useMessageListScroll({
             prependRef.current = null
           }
           if (outcome !== 'applied') {
-            lastProgrammaticScrollAtRef.current = Date.now()
+            viewportSessionRef.current?.recordProgrammaticWrite(
+              request.conversationId,
+              Date.now(),
+            )
           }
           debugLog('DIRECTIONAL HISTORY COMPLETE', {
             generation: request.generation,
@@ -1679,7 +1681,10 @@ export function useMessageListScroll({
       if (!scroller) return
       setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
       rememberCurrentScrollSnapshot()
-      lastProgrammaticScrollAtRef.current = Date.now()
+      viewportSessionRef.current?.recordProgrammaticWrite(
+        request.conversationId,
+        Date.now(),
+      )
       debugLog('RESTORE: controller completed position', {
         conversationId,
         generation: request.generation,
@@ -1983,9 +1988,7 @@ export function useMessageListScroll({
 
     // FAB / scroll-to-bottom is deliberate user input. Record it for the marker/resize heuristics;
     // observeUserInput separately cancels any controller-owned history loop.
-    userScrollIntentAtRef.current = Date.now()
-    // Deliberate user action → open the save gate so the resulting position persists.
-    userHasScrolledSinceEntryRef.current = true
+    viewportSessionRef.current?.recordUserInput(conversationId, Date.now())
 
     // Two-step behavior: scroll to the new message marker only when it exists AND
     // is still further down than the current viewport (not yet visible). Otherwise —
@@ -2113,7 +2116,7 @@ export function useMessageListScroll({
     // away from the top, so leaving the latch armed would make the smooth arrival immediately
     // prepend history and supersede the resident-top request. A later genuine move away from the
     // top re-arms the latch in handleScroll.
-    scrolledAwayFromTopRef.current = false
+    viewportSessionRef.current?.clearTravel(conversationId, 'top')
     positioningControllerRef.current?.beginResidentTopNavigation({
       conversationId,
       executor: createResidentTopExecutor(),
@@ -2309,9 +2312,12 @@ export function useMessageListScroll({
       return
     }
 
-    if (cooldownOk || scrolledAwayFromTopRef.current) {
+    if (
+      cooldownOk ||
+      viewportSessionRef.current?.hasTravelledAway(conversationId, 'top')
+    ) {
       lastLoadTimeRef.current = now
-      scrolledAwayFromTopRef.current = false
+      viewportSessionRef.current?.clearTravel(conversationId, 'top')
 
       const { saved, anchor } = beginDirectionalHistoryLoad(scroller)
 
@@ -2342,10 +2348,15 @@ export function useMessageListScroll({
 
     const now = Date.now()
     const cooldownOk = now - lastLoadTimeRef.current > LOAD_COOLDOWN_MS
-    if (!cooldownOk && !scrolledAwayFromBottomRef.current) return
+    if (
+      !cooldownOk &&
+      !viewportSessionRef.current?.hasTravelledAway(conversationId, 'bottom')
+    ) {
+      return
+    }
 
     lastLoadTimeRef.current = now
-    scrolledAwayFromBottomRef.current = false
+    viewportSessionRef.current?.clearTravel(conversationId, 'bottom')
 
     beginDirectionalHistoryLoad(scroller)
 
@@ -2502,17 +2513,27 @@ export function useMessageListScroll({
     const el = e.currentTarget
     const { scrollTop, scrollHeight, clientHeight } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
+    const now = Date.now()
 
     // A programmatic re-assert loop (marker positioning / pin-bottom / prepend / anchor restore)
     // owns scrollTop while it runs — scroll events fired during it are NOT the user.
     const programmaticScroll = reassertLoopRef.current !== null
 
-    // Update refs (NO React state updates here except FAB)
-    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
     // Capture the bottom-most-visible anchor on every scroll event (binary search,
     // cheap) so it reflects the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
-    lastAnchorRef.current = findBottomAnchor(el)
+    const bottomAnchor = findBottomAnchor(el)
+    const viewportObservation = viewportSessionRef.current?.observeScroll({
+      conversationId,
+      geometry: {
+        top: scrollTop,
+        height: scrollHeight,
+        client: clientHeight,
+      },
+      bottomAnchor,
+      controllerOwnsPixels: programmaticScroll,
+      now,
+    })
     // Do NOT recompute at-bottom from a GROWTH-driven scroll event fired while a programmatic loop
     // owns scrollTop. The pin-bottom comment's assumption that "programmatic growth doesn't move
     // scrollTop, so it never flips isAtBottom" is FALSE on WebKitGTK (Tauri): when the just-pinned
@@ -2524,9 +2545,10 @@ export function useMessageListScroll({
     // the measurement-noise signature. A genuine user scroll-UP during a loop (e.g. scrolling back
     // while the entry pin is still settling) leaves scrollHeight unchanged, so it still registers
     // and correctly flips isAtBottom false. The loops also detect deliberate takeover via
-    // userScrollIntentAtRef. Mirrors the same height-unchanged discriminator used by the save gate.
+    // viewport session's input timestamp. Mirrors the same height-unchanged discriminator used by
+    // the save gate.
     const growthDrivenDuringLoop =
-      programmaticScroll && prevScrollHeightRef.current !== null && scrollHeight > prevScrollHeightRef.current
+      viewportObservation?.growthDrivenDuringControllerScroll ?? false
     if (!growthDrivenDuringLoop) {
       setMeasuredAtBottom(distFromBottom < AT_BOTTOM_THRESHOLD)
     }
@@ -2536,7 +2558,11 @@ export function useMessageListScroll({
     // not-programmatic discriminator the save gate below uses). A growth event marking userScrolled
     // is exactly what made the media handler "respect" a position the user never moved — leaving the
     // view drifted (at the bottom: no re-pin; scrolled up: no re-anchor).
-    if (mediaLoadSnapshotRef.current && !programmaticScroll && prevScrollHeightRef.current === scrollHeight) {
+    if (
+      mediaLoadSnapshotRef.current &&
+      !programmaticScroll &&
+      viewportObservation?.previousScrollHeight === scrollHeight
+    ) {
       mediaLoadSnapshotRef.current.userScrolled = true
     }
 
@@ -2578,7 +2604,7 @@ export function useMessageListScroll({
     // positioning. Conversation switch resets this to null, so the snap can't fire until the reader
     // actually scrolls.
     if (!programmaticScroll) {
-      const bottomId = lastAnchorRef.current?.messageId ?? null
+      const bottomId = bottomAnchor?.messageId ?? null
       setBottomVisibleMessageId(prev => (prev !== bottomId ? bottomId : prev))
     }
 
@@ -2589,18 +2615,6 @@ export function useMessageListScroll({
     // (the transient scrollTop:0 of the virtualized initial render was saved as a "scrolled-up"
     // position, poisoning the next re-entry into restore-position and bypassing the marker entirely).
 
-    // A height change between consecutive scroll events is a measurement settle (rows re-measuring,
-    // media decoding), never a user scroll — keep the programmatic-settle window alive across it.
-    // isProgrammaticScroll's window is anchored to the last programmatic WRITE, but a WebKit settle
-    // can fire 'scroll' events well beyond PROGRAMMATIC_SETTLE_MS after that write; once one of them
-    // happened to match the previous frame's height, the gate below mistook it for a scrollbar drag,
-    // opened, and persisted a drifted anchor that crept between room visits. Re-anchoring the window
-    // to the last measurement CHANGE covers a settle of any duration. A genuine scrollbar-drag leaves
-    // height unchanged, so it never refreshes the window and still opens the gate.
-    if (prevScrollHeightRef.current !== null && prevScrollHeightRef.current !== scrollHeight) {
-      lastProgrammaticScrollAtRef.current = Date.now()
-    }
-
     // Open the save gate when this is a genuine user scroll: content height UNCHANGED from the
     // previous scroll event (a media/measurement-driven shift changes the height; a wheel / touch /
     // scrollbar-drag does not). Complements the input-event listeners so scrollbar-drag — which
@@ -2610,14 +2624,8 @@ export function useMessageListScroll({
     // the window a settle frame looked like a scrollbar drag, opened the gate, and persisted a
     // drifted position that crept older on every re-open. Genuine user scrolls still open the gate
     // via the input-event listeners / handleWheel, unaffected.
-    const genuineUserScroll =
-      !isProgrammaticScroll(
-        programmaticScroll,
-        Date.now(),
-        lastProgrammaticScrollAtRef.current,
-      ) && prevScrollHeightRef.current === scrollHeight
+    const genuineUserScroll = viewportObservation?.genuineUserScroll ?? false
     if (genuineUserScroll) {
-      userHasScrolledSinceEntryRef.current = true
       positioningControllerRef.current?.observeUserInput(conversationId)
       runScrollShadowSafely({
         event: 'settled-user-geometry',
@@ -2631,14 +2639,15 @@ export function useMessageListScroll({
         },
       })
     }
-    prevScrollHeightRef.current = scrollHeight
 
     // Clear new message marker when user scrolls past it or reaches the bottom.
     // Skip on the very first scroll events after marker setup to avoid clearing
     // the marker before the user has a chance to see it.
     if (firstNewMessageId && clearFirstNewMessageId && !programmaticScroll) {
+      const lastUserIntentAt =
+        viewportSessionRef.current?.lastUserIntentAt(conversationId) ?? 0
       const recentUserScrollIntent =
-        userScrollIntentAtRef.current > 0 && Date.now() - userScrollIntentAtRef.current < 1500
+        lastUserIntentAt > 0 && now - lastUserIntentAt < 1500
       if (
         !userHasScrolledSinceMarkerRef.current &&
         !(distFromBottom < AT_BOTTOM_THRESHOLD && recentUserScrollIntent)
@@ -2665,16 +2674,19 @@ export function useMessageListScroll({
     // saving the transient entry position would poison the next re-entry's restore decision.
     // Also skipped until the user has GENUINELY scrolled this entry: a post-restore scroll caused
     // by media/measurement settling must not overwrite the saved anchor (that drift compounded
-    // across re-opens — see userHasScrolledSinceEntryRef).
-    const now = Date.now()
-    if (!programmaticScroll && userHasScrolledSinceEntryRef.current && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
+    // across re-opens — see the viewport session's genuine-input evidence).
+    if (
+      !programmaticScroll &&
+      viewportSessionRef.current?.hasGenuineInput(conversationId) &&
+      now - lastSaveTimeRef.current > SAVE_THROTTLE_MS
+    ) {
       lastSaveTimeRef.current = now
       scrollStateManager.saveScrollPosition(
         conversationId,
         scrollTop,
         scrollHeight,
         clientHeight,
-        lastAnchorRef.current ?? undefined,
+        bottomAnchor ?? undefined,
         readPointerId,
       )
     }
@@ -2683,10 +2695,12 @@ export function useMessageListScroll({
     // controller-owned animation can cross this threshold too — most notably Home's smooth trip
     // from the bottom — but that is not evidence of a separate pagination gesture.
     if (!programmaticScroll && scrollTop > 50) {
-      scrolledAwayFromTopRef.current = true
+      viewportSessionRef.current?.markTravelAway(conversationId, 'top')
     }
     // Mirror for the newer direction (sliding window): away from the resident bottom.
-    if (distFromBottom > 50) scrolledAwayFromBottomRef.current = true
+    if (distFromBottom > 50) {
+      viewportSessionRef.current?.markTravelAway(conversationId, 'bottom')
+    }
 
     // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0).
     // Gate on scrolledAwayFromTop: a PASSIVE scroll reaching the top must only auto-load when the
@@ -2695,7 +2709,13 @@ export function useMessageListScroll({
     // must NOT spuriously load older — doing so prepends a batch and clears isAtBottom, breaking
     // bottom-stick for the next incoming message. A wheel-up (handleWheel) is explicit intent and
     // is intentionally NOT gated this way.
-    if (scrollTop === 0 && !staticMode && scrolledAwayFromTopRef.current) triggerLoadOlder()
+    if (
+      scrollTop === 0 &&
+      !staticMode &&
+      viewportSessionRef.current?.hasTravelledAway(conversationId, 'top')
+    ) {
+      triggerLoadOlder()
+    }
 
     // Sliding window: when the window is slid up (canLoadNewer ⇒ windowAtLiveEdge === false),
     // reaching the resident bottom means newer messages exist in cache below — load them. Gated by
@@ -2706,20 +2726,23 @@ export function useMessageListScroll({
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     // A wheel cancels any older controller generation before a new directional request is captured
     // below; later wheel input cancels that new request.
-    userScrollIntentAtRef.current = Date.now()
-    // Genuine user scroll → open the save gate (see userHasScrolledSinceEntryRef). Mirrors the
+    viewportSessionRef.current?.recordUserInput(conversationId, Date.now())
+    // Genuine user scroll → open the viewport session's save gate. Mirrors the
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
-    userHasScrolledSinceEntryRef.current = true
     positioningControllerRef.current?.observeUserInput(conversationId)
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
     const distFromBottom = scrollHeight - scrollTop - clientHeight
     if (scrollTop === 0 && e.deltaY < 0 && !staticMode) triggerLoadOlder()
-    if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
+    if (scrollTop === 0 && e.deltaY > 0) {
+      viewportSessionRef.current?.markTravelAway(conversationId, 'top')
+    }
     // Sliding window mirror: a wheel-DOWN pinned at the resident bottom fires no scroll event
     // (already at max scrollTop), so trigger load-newer here — same reason handleWheel handles the
     // pinned-top load-older case above.
     if (distFromBottom <= LOAD_NEWER_THRESHOLD && e.deltaY > 0 && !staticMode) triggerLoadNewer()
-    if (distFromBottom > 50 && e.deltaY < 0) scrolledAwayFromBottomRef.current = true
+    if (distFromBottom > 50 && e.deltaY < 0) {
+      viewportSessionRef.current?.markTravelAway(conversationId, 'bottom')
+    }
   }
 
   // Mount marker (diagnostic). Fires once when the message view is freshly created — i.e. after a
@@ -2759,18 +2782,26 @@ export function useMessageListScroll({
       messageCount,
     })
 
+    const previousViewport = prevConversationRef.current
+      ? viewportSessionRef.current?.snapshotFor(prevConversationRef.current)
+      : null
+
     // LEAVING old conversation - save position, but ONLY if the user genuinely scrolled it this
     // visit. Otherwise keep its existing saved anchor untouched (markAsLeft): the live scroll data
     // may have drifted from media/measurement after the restore, and persisting it would make the
-    // position creep older on the next open (see userHasScrolledSinceEntryRef).
-    if (prevConversationRef.current && lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
-      const { top, height, client } = lastScrollDataRef.current
+    // position creep older on the next open.
+    if (
+      prevConversationRef.current &&
+      previousViewport?.geometry &&
+      previousViewport.hasGenuineInput
+    ) {
+      const { top, height, client } = previousViewport.geometry
       scrollStateManager.leaveConversation(
         prevConversationRef.current,
         top,
         height,
         client,
-        lastAnchorRef.current ?? undefined,
+        previousViewport.bottomAnchor ?? undefined,
         previousReadPositionRef.current,
       )
     } else if (prevConversationRef.current) {
@@ -2789,14 +2820,9 @@ export function useMessageListScroll({
     // ENTERING new conversation - reset state
     hasInitializedRef.current = false
     userHasScrolledSinceMarkerRef.current = false
-    scrolledAwayFromTopRef.current = false
-    lastScrollDataRef.current = null
-    lastAnchorRef.current = null
+    viewportSessionRef.current?.enterConversation(conversationId)
     prependRef.current = null
     pendingSyncedLiveEdgeRef.current = null
-    // Fresh entry: the saved position is locked until the user genuinely scrolls (see the ref).
-    userHasScrolledSinceEntryRef.current = false
-    prevScrollHeightRef.current = null
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
     // No scroll observed in the new conversation yet → badge falls back to the full new count until
@@ -2993,7 +3019,12 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     const pending = pendingSyncedLiveEdgeRef.current
     if (!pending || pending.conversationId !== conversationId) return
-    if (staticMode || userHasScrolledSinceEntryRef.current) return
+    if (
+      staticMode ||
+      viewportSessionRef.current?.hasGenuineInput(conversationId)
+    ) {
+      return
+    }
     if (firstNewMessageId !== undefined || readPointerId === undefined) return
     if (readPointerId !== lastMessageId || readPointerId === pending.savedReadPositionId) return
 
@@ -3051,7 +3082,9 @@ export function useMessageListScroll({
     if (staticMode) return
     if (prev.conv !== conversationId) return
     if (prev.divider === undefined || firstNewMessageId !== undefined) return
-    if (userHasScrolledSinceEntryRef.current) return
+    if (viewportSessionRef.current?.hasGenuineInput(conversationId)) {
+      return
+    }
     debugLog('MDS SETTLE: divider cleared by late read-sync → settle to bottom', {
       conversationId,
       prevMarker: prev.divider,
@@ -3150,11 +3183,14 @@ export function useMessageListScroll({
         })
       }
       if (prevConversationRef.current) {
+        const viewportSnapshot = viewportSessionRef.current?.snapshotFor(
+          prevConversationRef.current,
+        )
         // Same gate as the conversation-switch leave: only persist the live scroll data when the
         // user genuinely scrolled this visit; otherwise keep the existing saved anchor (markAsLeft)
         // so a media/measurement-induced post-restore drift can't be saved (see the ref).
-        if (lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
-          const { top, height, client } = lastScrollDataRef.current
+        if (viewportSnapshot?.geometry && viewportSnapshot.hasGenuineInput) {
+          const { top, height, client } = viewportSnapshot.geometry
           // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
           // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
           // mounted and saves via the conversation-switch effect instead.) If `top`/anchor here are
@@ -3164,15 +3200,15 @@ export function useMessageListScroll({
             conversationId: prevConversationRef.current,
             top, height, client,
             distFromBottom: height - top - client,
-            anchorMessageId: lastAnchorRef.current?.messageId,
-            anchorFraction: lastAnchorRef.current?.fraction,
+            anchorMessageId: viewportSnapshot.bottomAnchor?.messageId,
+            anchorFraction: viewportSnapshot.bottomAnchor?.fraction,
           })
           scrollStateManager.leaveConversation(
             prevConversationRef.current,
             top,
             height,
             client,
-            lastAnchorRef.current ?? undefined,
+            viewportSnapshot.bottomAnchor ?? undefined,
             previousReadPositionRef.current,
           )
         } else {
@@ -3539,8 +3575,8 @@ export function useMessageListScroll({
   // consistent under virtualization — the grown row is absolutely positioned and overflows the
   // @tanstack spacer, so the row can hang below the fold while scrollHeight (still the pre-growth
   // spacer) reports a comfortable distance. Both engines reproduce this; see the fastening tests in
-  // scripts/scroll-invariants.ts. lastScrollDataRef is refreshed on every scroll event and by every
-  // bottom pin, so it is the last geometry the reader actually saw.
+  // scripts/scroll-invariants.ts. The viewport session is refreshed on every scroll event and by
+  // every bottom pin, so it is the last geometry the reader actually saw.
   //
   // A signature change is consumed EXACTLY ONCE — nothing re-runs this effect for the same
   // signature — so every skip is final. That includes the skip taken while a pin loop already claims
@@ -3566,7 +3602,8 @@ export function useMessageListScroll({
     // snapshot — report null rather than a number, so the decision treats it as "unknown" instead of
     // trusting it. Trusting a bogus baseline would inflate the delta and make a scrolled-up reader
     // look as if they had been at the bottom, which is the harmful direction.
-    const baseline = lastScrollDataRef.current?.height ?? 0
+    const baseline =
+      viewportSessionRef.current?.snapshotFor(conversationId)?.geometry?.height ?? 0
     const active = positioningControllerRef.current?.snapshot().active
     const decision = decideRowGrowth({
       distanceFromBottom: getDistanceFromBottom(scroller),
@@ -3745,8 +3782,7 @@ export function useMessageListScroll({
   // conversation entry. No-op without a live marker.
   const scrollToMarker = useCallback(() => {
     if (!firstNewMessageId) return
-    userScrollIntentAtRef.current = Date.now()
-    userHasScrolledSinceEntryRef.current = true
+    viewportSessionRef.current?.recordUserInput(conversationId, Date.now())
     positioningControllerRef.current?.beginUnreadMarkerNavigation({
       conversationId,
       navigationFacts: {

@@ -25,6 +25,13 @@ const activeControllerSource = readFileSync(
   ),
   'utf8',
 )
+const viewportSessionSource = readFileSync(
+  resolve(
+    process.cwd(),
+    'src/components/conversation/viewportSession.ts',
+  ),
+  'utf8',
+)
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -90,6 +97,24 @@ describe('live message-list scroll ownership', () => {
     expect(chatViewSource).not.toMatch(/\bonInputResize\b/)
     expect(roomViewSource).not.toMatch(/\bonMessageSent\b/)
     expect(roomViewSource).not.toMatch(/\bonInputResize\b/)
+  })
+
+  it('keeps the viewport session observation-only', () => {
+    expect(viewportSessionSource).not.toMatch(/\b(?:HTMLElement|Element|MessageVirtualizer)\b/)
+    expect(viewportSessionSource).not.toMatch(/\b(?:scrollTop|scrollTo|scrollIntoView)\b/)
+    expect(viewportSessionSource).not.toMatch(/\brequestAnimationFrame\b/)
+  })
+
+  it('would reject a viewport session that acquired a pixel-write port', () => {
+    const competingOwner = `
+      class ViewportSession {
+        apply(scroller: HTMLElement) {
+          scroller.scrollTop = 0
+        }
+      }
+    `
+    expect(competingOwner).toMatch(/\bHTMLElement\b/)
+    expect(competingOwner).toMatch(/\bscrollTop\b/)
   })
 
   it('routes room media through the callback supplied by MessageList', () => {

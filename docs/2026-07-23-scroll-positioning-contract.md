@@ -56,6 +56,13 @@ and explicit-target loops, saved-position restoration deliberately has no fixed 
 takeover threshold: legitimate deep-history measurement corrections can exceed 300px while rows
 settle, so user-input cancellation remains its takeover signal.
 
+Viewport observation is now owned by one imperative, conversation-scoped `ViewportSession`. It
+holds the latest geometry and bottom anchor, measured-live-edge evidence, genuine-input evidence,
+the programmatic-settle window, and independent top/bottom travel latches. It accepts only values:
+no DOM element, virtualizer, frame scheduler, or pixel-write operation crosses its boundary.
+Conversation entry resets every fact, and observations tagged for the room just left are rejected,
+so delayed controller callbacks cannot mutate the new room's evidence.
+
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
 remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
@@ -455,8 +462,17 @@ kinetic scrolling and stale-paint behavior.
      live-edge pin claims; guard the public live-scroll API against semantic escape hatches.
    - [x] Delete the unused generic `useMessageScroll` owner, its barrel export, dedicated tests, and
      stale component-test mocks.
-7. Split persistence, user-intent tracking, history windowing, and reconciliation out of the
-   orchestration hook.
+7. Split persistence, viewport/interaction tracking, history windowing, and reconciliation out of
+   the orchestration hook.
+   - [x] Extract a conversation-scoped, observation-only viewport session for current geometry,
+     bottom anchor, measured-live-edge and genuine-input evidence, measurement settling, and
+     top/bottom travel latches.
+   - [ ] Move enter/leave/save/clear behavior and throttling behind a persistence adapter consuming
+     viewport-session snapshots.
+   - [ ] Extract directional history load eligibility, invocation, and completion into a window
+     coordinator that owns no positioning.
+   - [ ] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
+   - [ ] Leave the React hook as thin lifecycle orchestration.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove
 one previous source of scroll authority.
