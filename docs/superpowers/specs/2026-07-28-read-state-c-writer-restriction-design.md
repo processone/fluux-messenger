@@ -638,6 +638,5 @@ Carried forward, to be raised when PR C lands — not to evaporate:
 3. **Mention derivation.** `isMention` is set only on the live stanza path; persisting a
    mention classification at ingest is a prerequisite before any scan may raise *or* lower
    `mentionsCount`.
-4. **Smaller PR B deferrals:** `appendLive`'s sort also repositions delayed arrivals
-   (untested); `useDesktopNotifications` renders the count unformatted; replace the fixed-tick
-   `for (i<5) await setTimeout(0)` convergence idiom with `vi.waitFor`.
+4. **Smaller PR B deferrals:** `useDesktopNotifications` renders the count unformatted;
+   replace the fixed-tick `for (i<5) await setTimeout(0)` convergence idiom with `vi.waitFor`.
