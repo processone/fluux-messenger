@@ -255,13 +255,24 @@ function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
  * Restore scroll so the viewport bottom sits at the saved FRACTION through the anchor message,
  * using the message's CURRENT measured height. Returns false if the anchor message isn't currently
  * mounted (scrolled up beyond the re-hydrated/virtualized window) so the caller can fall back.
+ *
+ * Measured with getBoundingClientRect, NOT offsetTop — the exact inverse of the basis
+ * {@link findBottomAnchor} captures on, and for the same reason it documents. `offsetTop` is
+ * relative to the element's offsetParent, which under virtualization is the row's own
+ * `position:absolute` `[data-index]` wrapper (so it reads ~0 for EVERY row) and in normal flow is
+ * whichever positioned ancestor happens to be nearest — not necessarily the scroller. A rect-based
+ * capture paired with an offsetTop-based restore was therefore never a true inverse. Deriving both
+ * sides from rects makes an unchanged capture→restore an exact no-op, so repeated restorations
+ * cannot accumulate error.
  */
 function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
   const el = scroller.querySelector(
     `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
   ) as HTMLElement | null
   if (!el || el.offsetHeight <= 0) return false
-  scroller.scrollTop = el.offsetTop + anchor.fraction * el.offsetHeight - scroller.clientHeight
+  const rect = el.getBoundingClientRect()
+  const contentTop = rect.top - scroller.getBoundingClientRect().top + scroller.scrollTop
+  scroller.scrollTop = contentTop + anchor.fraction * rect.height - scroller.clientHeight
   return true
 }
 
@@ -273,6 +284,7 @@ function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
 export interface UseMessageListScrollOptions {
   conversationId: string
   messageCount: number
+  interiorPlacementVersion?: number
   firstMessageId: string | undefined
   firstNewMessageId?: string  // ID of the first unread message (for new message marker)
   /** Forward-only local id of the furthest read message, including XEP-0490 sync. */
@@ -394,6 +406,7 @@ interface DirectionalHistorySnapshot {
 export function useMessageListScroll({
   conversationId,
   messageCount,
+  interiorPlacementVersion = 0,
   firstMessageId,
   firstNewMessageId,
   readPointerId,
@@ -616,6 +629,24 @@ export function useMessageListScroll({
   const dividerTrackingRef = useRef({
     conversationId,
     dividerId: firstNewMessageId,
+  })
+
+  // A mid-array message insertion is the same shape of ambient layout mutation as a divider move,
+  // so it keeps its own pre-mutation anchor on the same terms. Tracked by BOTH ends of the resident
+  // array, not by count: at the resident bound `appendLive` trims the oldest row as it inserts, so
+  // the count does not change and only the first id moves.
+  const insertionAnchorRef = useRef<ScrollAnchor | null>(null)
+  const insertionGeometryRef = useRef<{
+    scrollTop: number
+    scrollHeight: number
+    clientHeight: number
+  } | null>(null)
+  const insertionTrackingRef = useRef({
+    conversationId,
+    messageCount,
+    firstMessageId,
+    lastMessageId,
+    interiorPlacementVersion,
   })
 
   // Track whether user has scrolled at least once since the marker was set.
@@ -926,8 +957,8 @@ export function useMessageListScroll({
   const { setScrollContainerRef, setContentRef } = stableSettersRef.current
 
   // Apply one virtualized bottom-fraction anchor write from CURRENT measurements. Saved-position
-  // restoration and media preservation share this browser geometry while the positioning controller
-  // owns both frame-loop lifecycles.
+  // restoration and fixed-anchor media/layout preservation share this browser geometry while the
+  // positioning controller owns every frame-loop lifecycle.
   const applyVirtualizedAnchorFrame = useCallback((anchor: ScrollAnchor): number | null => {
     const v = virtualizerRef.current
     const s = scrollerRef.current
@@ -946,7 +977,22 @@ export function useMessageListScroll({
     const size = item?.size
     const start = size ? v.getOffsetForMessageId(anchor.messageId) : null
     if (size && start !== null) {
-      v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
+      // Measure the ROW when it is mounted, not the virtualizer's item. `findBottomAnchor` captures
+      // the fraction against the `.message-row` rect, while `start`/`size` describe the enclosing
+      // `[data-index]` wrapper — they differ by the inter-row gap, so capture and restore are not
+      // inverses and each preservation leaves a small residual behind. Invisible once; across a
+      // burst of arrivals it compounds into a visible drift. Deriving the target from the row's own
+      // rect makes an unchanged capture→restore an exact no-op. The WRITE still goes through the
+      // virtualizer (never a raw scrollTop), so it re-windows and cannot fight @tanstack's pending
+      // scroll reconciler.
+      const row = s.querySelector(
+        `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
+      ) as HTMLElement | null
+      const rect = row && row.offsetHeight > 0 ? row.getBoundingClientRect() : null
+      const target = rect
+        ? rect.top - s.getBoundingClientRect().top + s.scrollTop + anchor.fraction * rect.height - s.clientHeight
+        : start + anchor.fraction * size - s.clientHeight
+      v.scrollToOffset(Math.max(0, target))
     } else {
       // Anchor not yet in the measured window (or fraction===1): mount it / pin its bottom to the
       // viewport bottom. Once it measures in, later frames take the fractional branch above.
@@ -1265,7 +1311,7 @@ export function useMessageListScroll({
   }, [rememberBottomIntent])
 
   const createAnchorPreservationExecutor = useCallback(
-    (loopLabel: 'media-anchor' | 'divider-anchor'): AnchorPreservationExecutor => ({
+    (loopLabel: 'media-anchor' | 'divider-anchor' | 'insertion-anchor'): AnchorPreservationExecutor => ({
       reachability: (desired) => deriveReachabilityForDesired({
         desired,
         hasRows: messageCount > 0 && firstMessageId !== undefined,
@@ -1396,6 +1442,7 @@ export function useMessageListScroll({
           positioningControllerRef.current?.beginLayoutPreservation({
             conversationId,
             desired,
+            reason: 'divider-mutation',
             executor: createAnchorPreservationExecutor('divider-anchor'),
           })
         },
@@ -1410,6 +1457,144 @@ export function useMessageListScroll({
     createAnchorPreservationExecutor,
     firstNewMessageId,
     showScrollToBottom,
+  ])
+
+  const refreshInsertionAnchor = useCallback(
+    (scroller: HTMLElement, measuredAnchor?: ScrollAnchor | null) => {
+      const { scrollTop, scrollHeight, clientHeight } = scroller
+      insertionGeometryRef.current = { scrollTop, scrollHeight, clientHeight }
+      if (scrollHeight - scrollTop - clientHeight < AT_BOTTOM_THRESHOLD) {
+        insertionAnchorRef.current = null
+        return
+      }
+      const anchor =
+        measuredAnchor === undefined ? findBottomAnchor(scroller) : measuredAnchor
+      insertionAnchorRef.current = anchor
+    },
+    [],
+  )
+
+  // Keep a pre-mutation insertion anchor while the reader is scrolled up, on the same terms as the
+  // divider anchor above: on the render where the resident array mutates, the mismatch below stops
+  // this effect replacing the old geometry with a post-mutation measurement.
+  //
+  // No dependency array. The anchor has to survive a virtualizer RE-MEASURE, which re-renders and
+  // moves every row's content offset without changing the message identifiers, `bottomVisibleMessageId`,
+  // or firing a scroll event — keyed on any of those the snapshot silently ages out and the restore
+  // lands on geometry the reader already left. `findBottomAnchor` is a per-row measurement scan, so
+  // it is gated on the two cheap scalar reads that between them cover every way the geometry can
+  // move: `scrollTop` (the reader scrolled) and `scrollHeight` (rows re-measured, viewport resized).
+  useLayoutEffect(() => {
+    const tracked = insertionTrackingRef.current
+    if (
+      tracked.conversationId !== conversationId ||
+      tracked.messageCount !== messageCount ||
+      tracked.firstMessageId !== firstMessageId ||
+      tracked.lastMessageId !== lastMessageId ||
+      tracked.interiorPlacementVersion !== interiorPlacementVersion
+    ) {
+      return
+    }
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const { scrollTop, scrollHeight, clientHeight } = scroller
+    const geometry = insertionGeometryRef.current
+    if (
+      geometry &&
+      geometry.scrollTop === scrollTop &&
+      geometry.scrollHeight === scrollHeight &&
+      geometry.clientHeight === clientHeight
+    ) {
+      return
+    }
+    refreshInsertionAnchor(scroller)
+  })
+
+  // A delayed arrival — offline replay, gateway/MUC history, the MAM `{ids}` fetch — reaches the
+  // LIVE path carrying an OLD timestamp, so `appendLive` sorts it into the MIDDLE of the resident
+  // array. Landing above a scrolled-up reader it pushes the reading position down by the inserted
+  // height: the reader drifts backwards in time.
+  //
+  // Nothing else covers it. The media-growth compensation is reachable only from `onMediaLoad` and
+  // an insertion fires no media event; the new-message effect deliberately does nothing for an
+  // incoming message while scrolled up; and browser-native CSS scroll anchoring — which does handle
+  // this in normal flow — is inert under virtualization, because the virtualizer rewrites every
+  // row's inline `top` on each commit, and WebKit does not implement it at all.
+  //
+  // Like divider movement this is ambient layout preservation, NOT navigation: it goes through the
+  // same request source, so the model rejects it while an entry restore, explicit target, or
+  // Home/End command is still in flight rather than superseding what the reader asked for.
+  useLayoutEffect(() => {
+    const tracked = insertionTrackingRef.current
+    const next = {
+      conversationId,
+      messageCount,
+      firstMessageId,
+      lastMessageId,
+      interiorPlacementVersion,
+    }
+    if (tracked.conversationId !== conversationId) {
+      insertionTrackingRef.current = next
+      insertionAnchorRef.current = null
+      insertionGeometryRef.current = null
+      return
+    }
+
+    // A live-edge arrival moves the LAST row: the reader is scrolled up, so content added below
+    // cannot move them, and the bottom-pin loop owns that case when they are at the bottom.
+    const bottomMoved = tracked.lastMessageId !== lastMessageId
+    // A load-older/load-newer batch also changes the resident array without moving the bottom row,
+    // and owns its own directional-history restore, which must not be fought here. It is
+    // distinguished by an in-flight snapshot that is landing in THIS commit — not merely by a
+    // first-id change, because at the resident bound an insertion evicts the oldest row and so
+    // moves the first id too. This effect is declared before the directional restore effect, so
+    // the snapshot is still unrestored here when its load genuinely lands.
+    const pendingDirectional = prependRef.current
+    const directionalLoad =
+      !!pendingDirectional &&
+      !pendingDirectional.restored &&
+      pendingDirectional.oldFirstId !== firstMessageId
+    const residentChanged =
+      tracked.messageCount !== messageCount || tracked.firstMessageId !== firstMessageId
+
+    const anchor = insertionAnchorRef.current
+    const interiorPlacementAdvanced =
+      interiorPlacementVersion > tracked.interiorPlacementVersion
+    const inserted =
+      !directionalLoad &&
+      (interiorPlacementAdvanced || (residentChanged && !bottomMoved))
+
+    if (inserted && anchor) {
+      runScrollShadowSafely({
+        event: 'insertion-anchor-preservation',
+        conversationId,
+        fallback: undefined,
+        observe: () => {
+          const desired: AnchorPreservationRequest['desired'] = {
+            kind: 'anchor',
+            messageId: anchor.messageId,
+            placement: {
+              kind: 'bottom-fraction',
+              fraction: messageFraction(anchor.fraction),
+            },
+          }
+          positioningControllerRef.current?.beginLayoutPreservation({
+            conversationId,
+            desired,
+            reason: 'message-insertion',
+            executor: createAnchorPreservationExecutor('insertion-anchor'),
+          })
+        },
+      })
+    }
+    insertionTrackingRef.current = next
+  }, [
+    conversationId,
+    createAnchorPreservationExecutor,
+    firstMessageId,
+    interiorPlacementVersion,
+    lastMessageId,
+    messageCount,
   ])
 
   const createDirectionalHistoryExecutor = useCallback(
@@ -2563,6 +2748,19 @@ export function useMessageListScroll({
       controllerOwnsPixels: programmaticScroll,
       now,
     })
+    // Keep the pre-mutation insertion anchor current on the same measurement the session already
+    // took — only while the resident array is unchanged, so the commit that mutates it still sees
+    // the geometry from BEFORE the mutation.
+    const insertionTracking = insertionTrackingRef.current
+    if (
+      insertionTracking.conversationId === conversationId &&
+      insertionTracking.messageCount === messageCount &&
+      insertionTracking.firstMessageId === firstMessageId &&
+      insertionTracking.lastMessageId === lastMessageId &&
+      insertionTracking.interiorPlacementVersion === interiorPlacementVersion
+    ) {
+      refreshInsertionAnchor(el, bottomAnchor)
+    }
     // Do NOT recompute at-bottom from a GROWTH-driven scroll event fired while a programmatic loop
     // owns scrollTop. The pin-bottom comment's assumption that "programmatic growth doesn't move
     // scrollTop, so it never flips isAtBottom" is FALSE on WebKitGTK (Tauri): when the just-pinned

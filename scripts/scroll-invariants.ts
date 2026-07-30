@@ -63,6 +63,7 @@ const PREPEND_DRIFT_PX = 20  // acceptable anchor-position drift after prepend (
 const PREPEND_DRIFT_WEBKIT_PX = 48
 const LARGE_JUMP_PX = 150     // frame-to-frame jump threshold signalling instability
 const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to bottom"
+const FAB_THRESHOLD_PX = 300
 // Distance-from-bottom a test must reach before it can claim the reader is NOT at the bottom.
 // Deliberately several times AT_BOTTOM_OK_PX: engines differ in how much of a wheel gesture they
 // apply per scroll event, so a margin this wide is what makes "the reader has left the bottom" an
@@ -119,7 +120,7 @@ test.afterEach(async ({ page }) => {
  * 'messages'), so the rooms auto-select guard fires with `activeRoomJid` already
  * set when we later flip the hash.
  */
-async function navigateToStressRoom(page: Page): Promise<void> {
+async function navigateToStressRoom(page: Page, virtualized = true): Promise<void> {
   // Step 1: activate while sidebarView='messages' (auto-select for rooms won't race)
   await page.evaluate((jid) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,8 +138,10 @@ async function navigateToStressRoom(page: Page): Promise<void> {
     window.location.hash = '#/rooms/' + encodeURIComponent(jid)
   }, STRESS_ROOM_JID)
 
-  // Wait for at least one virtualized row to mount ([data-index] exists)
-  await page.waitForSelector('[data-index]', { timeout: 15_000 })
+  await page.waitForSelector(
+    virtualized ? '[data-index]' : '.message-row[data-message-id]',
+    { timeout: 15_000 },
+  )
   await page.waitForTimeout(SETTLE_MS)
 }
 
@@ -2987,5 +2990,437 @@ test.describe('Fastening + reaction stick diagnostic (1:1)', () => {
       `list not pinned after the message+preview+reaction burst — distFromBottom=${state.distFromBottom}`,
     ).toBeLessThan(AT_BOTTOM_OK_PX)
     expect(state.visible, 'the fastened message was left below the fold').toBe(true)
+  })
+})
+
+// ── 14: A mid-array insertion above a scrolled-up reader must not move the reading position ──────
+//
+// A DELAYED arrival — offline replay, gateway/MUC history, the MAM `{ids}` fetch — reaches the LIVE
+// path carrying an OLD timestamp, so appendLive's sort places it chronologically: in the MIDDLE of
+// the resident array, above a reader who has scrolled up. That is a different event from the media
+// growth invariant-11 covers (it changes the element COUNT, not the height of an existing element),
+// and it reaches none of the same machinery: no media event fires, the new-message effect
+// deliberately does nothing for an incoming message while scrolled up, and browser-native scroll
+// anchoring is inert under virtualization because the virtualizer rewrites each row's inline `top`
+// every commit. RED before the fix (the reader drifts down by ~the inserted height: ~50px for one
+// row, ~424px for a tall one, ~248px for a 10-message burst); GREEN once the insertion re-anchors
+// the scrolled-up reading position.
+//
+// The window bound is deliberately left at its default: appendLive only GATES an out-of-order
+// arrival once the window has slid off the live edge, which needs ~100 load-older triggers at the
+// production windowSize, so a normal scrolled-up reader is always in the ungated case this covers.
+test.describe('Insertion drift while scrolled up', () => {
+  const INSERTION_URL =
+    '/demo.html?tutorial=false&virt=1&stress=rooms:1,messages:200,mode:live,msgStep:0'
+  const FULL_WINDOW_INSERTION_URL =
+    '/demo.html?tutorial=false&virt=1&window=200&stress=rooms:1,messages:200,mode:live,msgStep:0'
+
+  /** Open the stress room and scroll clear of the bottom, with content above AND below. */
+  async function openScrolledUp(
+    page: Page,
+    url = INSERTION_URL,
+    targetDistanceFromBottom?: number,
+    virtualized = true,
+  ): Promise<void> {
+    await bootDemo(page, url)
+    await page.evaluate(() => {
+      ;(
+        window as Window & { __fluuxScrollShadow?: (reset?: boolean) => unknown }
+      ).__fluuxScrollShadow?.(true)
+    })
+    if (!virtualized) {
+      await page.evaluate(() => {
+        localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+      })
+    }
+    await navigateToStressRoom(page, virtualized)
+    const list = page.locator('[data-message-list]').first()
+    await list.evaluate((element, { targetDistance, virtualized: usesVirtualizer }) => {
+      const scroller = element as HTMLElement
+      if (!usesVirtualizer) scroller.style.overflowAnchor = 'none'
+      const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+      scroller.scrollTop = targetDistance === undefined
+        ? Math.max(800, Math.min(maxScrollTop - 800, maxScrollTop * 0.55))
+        : Math.max(0, maxScrollTop - targetDistance)
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    }, { targetDistance: targetDistanceFromBottom, virtualized })
+    const box = await list.boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.waitForTimeout(SETTLE_MS)
+  }
+
+  /** Rendered rows (scroller-relative) plus the resident array, read together. */
+  const readView = (page: Page) => page.evaluate((jid) => {
+    const s = document.querySelector('[data-message-list]') as HTMLElement | null
+    if (!s) return null
+    const sr = s.getBoundingClientRect()
+    const rows = (Array.from(s.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[])
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return { id: el.dataset.messageId!, top: r.top - sr.top, bottom: r.bottom - sr.top }
+      })
+      .sort((a, b) => a.top - b.top)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msgs: any[] = (window as any).__roomStore.getState().rooms.get(jid)?.messages ?? []
+    return {
+      scrollTop: Math.round(s.scrollTop),
+      distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      visible: rows.filter((r) => r.top >= 5 && r.bottom <= sr.height - 5),
+      ids: msgs.map((m) => m.id as string),
+      stamps: msgs.map((m) => new Date(m.timestamp).getTime()),
+    }
+  }, STRESS_ROOM_JID)
+
+  /**
+   * Inject `bodies` as delayed arrivals through the REAL live path (roomStore.addMessage →
+   * appendLive — the same action the `room:message` binding calls), timestamped to sort in ABOVE
+   * the viewport, and report how far the tracked reading row moved.
+   */
+  async function insertAboveViewport(
+    page: Page,
+    bodies: string[],
+    options: {
+      coalescedTail?: boolean
+      maxDistanceFromBottom?: number
+      minDistanceFromBottom?: number
+      userTakeover?: boolean
+    } = {},
+  ) {
+    const before = await readView(page)
+    expect(before, 'the message list must be readable').not.toBeNull()
+    expect(
+      before!.distFromBottom,
+      'precondition: the reader must be clear of the bottom',
+    ).toBeGreaterThanOrEqual(options.minDistanceFromBottom ?? CLEAR_OF_BOTTOM_PX)
+    if (options.maxDistanceFromBottom !== undefined) {
+      expect(
+        before!.distFromBottom,
+        'precondition: the reader must remain below the requested distance',
+      ).toBeLessThan(options.maxDistanceFromBottom)
+    }
+    expect(
+      before!.scrollTop,
+      'precondition: there must be content ABOVE the viewport to insert into',
+    ).toBeGreaterThan(600)
+    expect(
+      before!.visible.length,
+      'precondition: several fully-visible rows to track',
+    ).toBeGreaterThan(3)
+
+    // Track a row in the LOWER half of the viewport; insert 10 messages ABOVE the top-visible row
+    // so the insertion is genuinely off-screen above rather than at the live edge.
+    const track = before!.visible[before!.visible.length - 2]
+    const topIdx = before!.ids.indexOf(before!.visible[0].id)
+    expect(topIdx, 'precondition: the top-visible row is in the resident array').toBeGreaterThan(12)
+    const insertTs = before!.stamps[topIdx - 10]
+    let scrollTopBeforeTakeover: number | null = null
+
+    if (options.coalescedTail) {
+      expect(bodies).toHaveLength(1)
+      await page.evaluate(([jid, ts, body, tailTs]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const store = (window as any).__roomStore.getState()
+        store.addMessage(jid as string, {
+          type: 'groupchat',
+          id: 'delayed-arrival-0',
+          stanzaId: 'sid-delayed-arrival-0',
+          from: `${jid}/DelayedSender`,
+          nick: 'DelayedSender',
+          body: body as string,
+          timestamp: new Date(ts as number),
+          isOutgoing: false,
+          isDelayed: true,
+          roomJid: jid as string,
+        })
+        store.addMessage(jid as string, {
+          type: 'groupchat',
+          id: 'coalesced-tail-arrival',
+          stanzaId: 'sid-coalesced-tail-arrival',
+          from: `${jid}/TailSender`,
+          nick: 'TailSender',
+          body: 'live tail arrival in the same commit',
+          timestamp: new Date(tailTs as number),
+          isOutgoing: false,
+          roomJid: jid as string,
+        })
+      }, [
+        STRESS_ROOM_JID,
+        insertTs,
+        bodies[0],
+        before!.stamps[before!.stamps.length - 1] + 1_000,
+      ] as const)
+    } else {
+      for (let i = 0; i < bodies.length; i++) {
+        await page.evaluate(([jid, ts, idx, body]) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(window as any).__roomStore.getState().addMessage(jid as string, {
+            type: 'groupchat',
+            id: `delayed-arrival-${idx}`,
+            stanzaId: `sid-delayed-arrival-${idx}`,
+            from: `${jid}/DelayedSender`,
+            nick: 'DelayedSender',
+            body: body as string,
+            timestamp: new Date(ts as number),
+            isOutgoing: false,
+            isDelayed: true,
+            roomJid: jid as string,
+          })
+        }, [STRESS_ROOM_JID, insertTs, i, bodies[i]] as const)
+        if (i === 0 && options.userTakeover) {
+          await page.waitForFunction(
+            (baseline) => {
+              const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+              return scroller !== null && scroller.scrollTop > baseline + 200
+            },
+            before!.scrollTop,
+          )
+          scrollTopBeforeTakeover = await page.locator('[data-message-list]').first().evaluate(
+            (element) => (element as HTMLElement).scrollTop,
+          )
+          await page.mouse.wheel(0, 600)
+        }
+        await page.waitForTimeout(80)
+      }
+    }
+    await page.waitForTimeout(1200) // let any re-anchor / measurement settle
+
+    const after = await readView(page)
+    const trackedTop = await page.evaluate((id) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(
+        `.message-row[data-message-id="${CSS.escape(id)}"]`,
+      ) as HTMLElement | null
+      if (!s || !el) return null
+      return el.getBoundingClientRect().top - s.getBoundingClientRect().top
+    }, track.id)
+
+    const insertedIndexes = bodies.map((_, i) => after!.ids.indexOf(`delayed-arrival-${i}`))
+    return {
+      trackedId: track.id,
+      beforeTop: Math.round(track.top),
+      afterTop: trackedTop === null ? null : Math.round(trackedTop),
+      // A tracked row that unmounted entirely is a gross mis-position, not a small drift — report
+      // it as such rather than silently passing on a missing element.
+      drift: trackedTop === null ? Number.POSITIVE_INFINITY : Math.abs(trackedTop - track.top),
+      allInsertedAboveViewport: insertedIndexes.every((k) => k >= 0 && k < topIdx),
+      residentCountBefore: before!.ids.length,
+      residentCountAfter: after!.ids.length,
+      scrollTopBefore: before!.scrollTop,
+      scrollTopAfter: after!.scrollTop,
+      scrollTopBeforeTakeover,
+      tailAtResidentEnd:
+        after!.ids.indexOf('coalesced-tail-arrival') === after!.ids.length - 1,
+    }
+  }
+
+  // Tolerance: a re-anchor settles against measured row heights, so a sub-row residual is expected.
+  // Well under the smallest real regression this catches (a single inserted row is ~50px+, and the
+  // uncompensated tall/burst cases are 250-425px).
+  const INSERTION_DRIFT_PX = 40
+
+  test('invariant-14: a single delayed arrival inserted above the viewport holds the reading position', async ({ page }) => {
+    const probes: string[] = []
+    page.on('console', (m) => { const t=m.text(); if (t.includes('[AnchorProbe]')||t.includes('[RestoreProbe]')) probes.push(t) })
+    await openScrolledUp(page)
+    const r = await insertAboveViewport(page, ['delayed arrival (offline replay)'])
+    console.log('── INSERTION-DRIFT single ──', JSON.stringify(r))
+    console.log('── ANCHOR PROBES ──\n' + probes.join('\n'))
+    expect(r.allInsertedAboveViewport, 'the arrival must land ABOVE the viewport, not at the live edge').toBe(true)
+    expect(
+      r.residentCountAfter,
+      `the insertion must not have provoked a pagination load — ${JSON.stringify(r)}`,
+    ).toBe(r.residentCountBefore + 1)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a message was inserted above the viewport`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14b: a TALL delayed arrival above the viewport holds the reading position', async ({ page }) => {
+    await openScrolledUp(page)
+    // Far taller than a normal row, so an uncompensated insertion drifts by hundreds of px — this
+    // is what proves the hold is a real re-anchor and not a fixed small correction.
+    const r = await insertAboveViewport(page, ['delayed arrival line\n'.repeat(18)])
+    console.log('── INSERTION-DRIFT tall ──', JSON.stringify(r))
+    expect(r.allInsertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a TALL message was inserted above the viewport`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14c: a BURST of delayed arrivals above the viewport holds the reading position', async ({ page }) => {
+    await openScrolledUp(page)
+    // The offline-replay shape: a reconnect flushes a backlog, so the arrivals land as a run rather
+    // than singly, and each one re-triggers the compensation.
+    const r = await insertAboveViewport(page, Array.from({ length: 10 }, (_, i) => `replayed backlog message ${i}`))
+    console.log('── INSERTION-DRIFT burst ──', JSON.stringify(r))
+    expect(r.allInsertedAboveViewport, 'every arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.residentCountAfter,
+      `the burst must not have provoked a pagination load — ${JSON.stringify(r)}`,
+    ).toBe(r.residentCountBefore + 10)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a 10-message burst was inserted above the viewport`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14d: a delayed arrival at the resident bound holds the reading position', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertAboveViewport(page, ['full-window delayed arrival\n'.repeat(18)])
+    console.log('── INSERTION-DRIFT full-window ──', JSON.stringify(r))
+    expect(r.allInsertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.residentCountAfter,
+      `the resident window must stay at its configured bound — ${JSON.stringify(r)}`,
+    ).toBe(r.residentCountBefore)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a full-window insertion`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14e: user input takes over insertion preservation', async ({ page }) => {
+    await openScrolledUp(page)
+    const r = await insertAboveViewport(
+      page,
+      ['delayed arrival before user takeover\n'.repeat(18)],
+      { userTakeover: true },
+    )
+    console.log('── INSERTION-DRIFT user-takeover ──', JSON.stringify(r))
+    expect(r.scrollTopBeforeTakeover, 'the insertion must settle before wheel takeover').not.toBeNull()
+    expect(
+      r.scrollTopAfter - r.scrollTopBeforeTakeover!,
+      `the insertion restore overrode the reader's wheel movement — ${JSON.stringify(r)}`,
+    ).toBeGreaterThan(500)
+  })
+
+  // A load-older that delivers NOTHING leaves no trace of itself: windowAtLiveEdge stays true and
+  // firstMessageId never moves, so the directional-history restore neither fires nor releases its
+  // snapshot. Left pending, the next UNRELATED firstMessageId change is misread as that load
+  // completing — and at the resident bound an interior delayed arrival evicts the oldest row, which
+  // is exactly such a change. The stale top anchor is then restored and insertion preservation is
+  // skipped, so the reader is thrown back to where the abandoned load-older would have put them.
+  //
+  // KNOWN-FAILING, deliberately. This staleness is PRE-EXISTING on main — this test is RED on plain
+  // 179b78b3, before any of this branch's work — and correcting it needs directional-snapshot
+  // re-arm semantics that would change pagination behaviour. That is out of scope here and tracked
+  // as fluux-directional-snapshot-lifecycle, with this test as its starting RED case. Marked
+  // test.fail so the suite stays honest AND tells us the moment the follow-up makes it pass.
+  test.fail('invariant-14g: an abandoned load-older does not defeat a later insertion at the resident bound', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+
+    // Neutralise both older-history sources so the load below genuinely returns nothing while still
+    // being STARTED (the snapshot is taken when the load begins, not when it resolves).
+    const stubbed = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__roomStore
+      if (!store) return false
+      store.setState({ loadOlderMessagesFromCache: async () => 0 })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const demo = (window as any).__demoClient
+      if (demo?.chat) demo.chat.queryRoomMAM = async () => {}
+      return true
+    })
+    expect(stubbed, 'the older-history loaders must be stubbable for this scenario').toBe(true)
+
+    const firstIdBefore = (await readView(page))!.ids[0]
+
+    // Start a load-older that will deliver nothing, and let it settle.
+    await scrollToTopAndLoad(page)
+    await page.waitForTimeout(SETTLE_MS)
+
+    const afterAbandoned = await readView(page)
+    expect(
+      afterAbandoned!.ids[0],
+      'precondition: the abandoned load must not have delivered any older rows',
+    ).toBe(firstIdBefore)
+
+    // Return to mid-history so the reader is scrolled up but clear of the top boundary.
+    await page.locator('[data-message-list]').first().evaluate((element) => {
+      const scroller = element as HTMLElement
+      const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+      scroller.scrollTop = Math.max(800, Math.min(maxScrollTop - 800, maxScrollTop * 0.55))
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    })
+    await page.waitForTimeout(SETTLE_MS)
+
+    const r = await insertAboveViewport(page, ['delayed arrival after an abandoned load-older\n'.repeat(18)])
+    console.log('── INSERTION-DRIFT abandoned-load-older ──', JSON.stringify(r))
+    expect(r.allInsertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after an abandoned load-older preceded the insertion`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14f: a scroller resize refreshes the insertion anchor', async ({ page }) => {
+    await openScrolledUp(page)
+    const resized = await page.locator('[data-message-list]').first().evaluate((element) => {
+      const scroller = element as HTMLElement
+      const before = scroller.clientHeight
+      scroller.style.flex = 'none'
+      scroller.style.height = `${before - 96}px`
+      return { before, after: scroller.clientHeight }
+    })
+    expect(resized.after, 'the scroller must shrink before insertion').toBeLessThan(resized.before)
+    await page.waitForTimeout(100)
+
+    const r = await insertAboveViewport(page, ['delayed arrival after scroller resize\n'.repeat(18)])
+    console.log('── INSERTION-DRIFT scroller-resize ──', JSON.stringify(r))
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a scroller resize and insertion`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14h: insertion preservation starts at the semantic live-edge threshold', async ({ page }) => {
+    await openScrolledUp(page, INSERTION_URL, 225)
+    const r = await insertAboveViewport(
+      page,
+      ['delayed arrival inside the FAB threshold gap\n'.repeat(18)],
+      {
+        minDistanceFromBottom: AT_BOTTOM_OK_PX,
+        maxDistanceFromBottom: FAB_THRESHOLD_PX,
+      },
+    )
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px inside the live-edge/FAB threshold gap`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14i: a capped coalesced interior and tail arrival holds the reading position', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertAboveViewport(
+      page,
+      ['coalesced delayed interior arrival\n'.repeat(18)],
+      { coalescedTail: true },
+    )
+    expect(r.allInsertedAboveViewport, 'the delayed arrival must land above the viewport').toBe(true)
+    expect(r.tailAtResidentEnd, 'the coalesced live arrival must land at the resident tail').toBe(true)
+    expect(r.residentCountAfter, 'the resident window must remain at its bound').toBe(
+      r.residentCountBefore,
+    )
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px after a capped coalesced interior and tail arrival`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  test('invariant-14j: a legacy coalesced interior and tail arrival holds the reading position', async ({ page }) => {
+    await openScrolledUp(page, INSERTION_URL, undefined, false)
+    const r = await insertAboveViewport(
+      page,
+      ['legacy delayed interior arrival\n'.repeat(18)],
+      { coalescedTail: true },
+    )
+    expect(r.allInsertedAboveViewport, 'the delayed arrival must land above the viewport').toBe(true)
+    expect(r.tailAtResidentEnd, 'the coalesced live arrival must land at the resident tail').toBe(true)
+    expect(
+      r.drift,
+      `legacy reading position drifted ${r.drift}px after a coalesced interior and tail arrival`,
+    ).toBeLessThan(INSERTION_DRIFT_PX)
   })
 })

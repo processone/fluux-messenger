@@ -69,11 +69,16 @@ export type AppendLiveResult<T> =
    */
   | { kind: 'gated' }
 
+export interface AppendLiveObservation {
+  placement?: 'live-edge' | 'interior'
+}
+
 export function appendLive<T extends TimelineMessage>(
   messages: T[],
   incoming: T,
   atLiveEdge: boolean,
-  config: TimelineConfig<T>
+  config: TimelineConfig<T>,
+  observation?: AppendLiveObservation
 ): AppendLiveResult<T> {
   const existingKeys = buildMessageKeySet(messages, config.getKeys)
   if (isMessageDuplicate(incoming, existingKeys, config.getKeys)) {
@@ -94,9 +99,16 @@ export function appendLive<T extends TimelineMessage>(
   // under-count, the unrecoverable direction. `sortMessagesByTimestamp` is the
   // SAME comparator `loadOlderSlice`/`loadNewerSlice`/`latestSlice` already use
   // here, so all resident-array construction paths agree with the archive walk.
+  const sorted = sortMessagesByTimestamp([...messages, incoming], config.kind)
+  const trimmed = trimMessages(sorted, config.windowSize)
+  const residentIndex = trimmed.indexOf(incoming)
+  if (observation && residentIndex >= 0) {
+    observation.placement =
+      residentIndex === trimmed.length - 1 ? 'live-edge' : 'interior'
+  }
   return {
     kind: 'appended',
-    messages: trimMessages(sortMessagesByTimestamp([...messages, incoming], config.kind), config.windowSize),
+    messages: trimmed,
   }
 }
 

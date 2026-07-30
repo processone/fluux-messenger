@@ -881,6 +881,7 @@ describe('positioning controller live-edge ownership', () => {
           fraction: messageFraction(0.4),
         },
       },
+      reason: 'divider-mutation',
       executor,
     })
 

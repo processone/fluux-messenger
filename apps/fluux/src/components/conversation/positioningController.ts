@@ -15,6 +15,7 @@ import {
   type EntryPositionFacts,
   type ExplicitTargetRequest,
   type LayoutPreservationRequest,
+  type LayoutPreservationReason,
   type LiveEdgeRequest,
   type LiveEdgeNavigationFacts,
   type MediaPreservationRequest,
@@ -707,11 +708,13 @@ export class PositioningController {
   beginLayoutPreservation(input: {
     conversationId: string
     desired: LayoutPreservationRequest['desired']
+    reason: LayoutPreservationReason
     executor: AnchorPreservationExecutor
   }): LayoutPreservationRequest | null {
+    const { reason, ...rest } = input
     return this.beginAnchorPreservation({
-      ...input,
-      source: { kind: 'layout-preservation', reason: 'divider-mutation' },
+      ...rest,
+      source: { kind: 'layout-preservation', reason },
     }) as LayoutPreservationRequest | null
   }
 

@@ -9,7 +9,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, buildReplyContext } from './conversation'
@@ -58,6 +58,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
   const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const interiorPlacementVersion = useChatStore((state) => {
+    const id = state.activeConversationId
+    return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
+  })
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -534,6 +538,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
           <ChatMessageList
             messages={activeMessages}
+            interiorPlacementVersion={interiorPlacementVersion}
             contactsByJid={contactsByJid}
             typingUsers={activeTypingUsers}
             scrollerRef={scrollRef}
@@ -643,6 +648,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
 export const ChatMessageList = memo(function ChatMessageList({
   messages,
+  interiorPlacementVersion = 0,
   contactsByJid,
   typingUsers,
   scrollerRef,
@@ -691,6 +697,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   isCatchingUp,
 }: {
   messages: Message[]
+  interiorPlacementVersion?: number
   contactsByJid: Map<string, ContactIdentity>
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement | null>
@@ -821,6 +828,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       // external singleton keyed by conversation id).
       key={conversationId}
       messages={messages}
+      interiorPlacementVersion={interiorPlacementVersion}
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}

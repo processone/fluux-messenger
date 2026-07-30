@@ -317,6 +317,14 @@ interface ChatState {
   // EPHEMERAL: never persisted (absent from partialize). A restored arrival
   // would be re-read as a fresh delivery on the next launch.
   lastArrivedMessage: Map<string, Message>
+  /**
+   * Monotonic per-conversation versions incremented whenever `appendLive`
+   * places a genuine arrival before the resident timeline's live edge.
+   *
+   * @remarks
+   * Stable public API. The versions are ephemeral and reset with the store.
+   */
+  interiorPlacementVersions: Map<string, number>
 
   // Computed
   activeConversation: () => Conversation | null
@@ -1142,7 +1150,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -1162,6 +1170,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     firstNewMessageMarkers: new Map(),
     windowAtLiveEdge: new Map(),
     lastArrivedMessage: new Map(),
+    interiorPlacementVersions: new Map(),
   }
 }
 
@@ -1171,7 +1180,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -1213,7 +1222,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'conversationCoverage' | 'pendingRetractions' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge' | 'lastArrivedMessage' | 'interiorPlacementVersions'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -1664,7 +1673,14 @@ export const chatStore = createStore<ChatState>()(
           // at the live edge; a slid window gates the append so a fresh
           // message never splices after an OLD one), and window trim.
           const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
-          const append = timeline.appendLive(convMessages, msg, atLiveEdge, chatTimelineConfig())
+          const appendObservation: timeline.AppendLiveObservation = {}
+          const append = timeline.appendLive(
+            convMessages,
+            msg,
+            atLiveEdge,
+            chatTimelineConfig(),
+            appendObservation
+          )
 
           if (append.kind === 'duplicate-unchanged') return state
           if (append.kind === 'duplicate-backfilled') {
@@ -1691,6 +1707,14 @@ export const chatStore = createStore<ChatState>()(
             msg.conversationId,
             append.kind === 'appended' ? append.messages : convMessages
           )
+          const interiorPlacementPatch = appendObservation.placement === 'interior'
+            ? {
+                interiorPlacementVersions: new Map(state.interiorPlacementVersions).set(
+                  msg.conversationId,
+                  (state.interiorPlacementVersions.get(msg.conversationId) ?? 0) + 1
+                ),
+              }
+            : {}
 
           // Record the arrival. Both surviving append kinds are genuine
           // deliveries — 'appended' spliced into the resident window, 'gated'
@@ -1782,14 +1806,15 @@ export const chatStore = createStore<ChatState>()(
                   archivedConversations: newArchived,
                   firstNewMessageMarkers: newMarkers,
                   lastArrivedMessage: newArrived,
+                  ...interiorPlacementPatch,
                 }
               }
             }
 
-            return { messages: newMessages, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived }
+            return { messages: newMessages, ...draft.commit(), firstNewMessageMarkers: newMarkers, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
           }
 
-          return { messages: newMessages, lastArrivedMessage: newArrived }
+          return { messages: newMessages, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
         })
 
         // Task 9: a coalesce/moved-earlier overlay change doesn't get a

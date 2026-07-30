@@ -100,6 +100,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const interiorPlacementVersion = useRoomStore((state) => {
+    const jid = state.activeRoomJid
+    return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
+  })
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -592,6 +596,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
             <RoomMessageList
               messages={displayMessages}
+              interiorPlacementVersion={interiorPlacementVersion}
               scrollerRef={scrollRef}
               isAtBottomRef={isAtBottomRef}
               onLiveEdgeMeasured={reportLiveEdge}
@@ -881,6 +886,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
 export const RoomMessageList = memo(function RoomMessageList({
   messages,
+  interiorPlacementVersion = 0,
   scrollerRef,
   isAtBottomRef,
   onLiveEdgeMeasured,
@@ -932,6 +938,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isCatchingUp,
 }: {
   messages: RoomMessage[]
+  interiorPlacementVersion?: number
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   onLiveEdgeMeasured?: (atEdge: boolean) => void
@@ -1220,6 +1227,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       // between rooms. Restoration survives via scrollStateManager (keyed by room jid).
       key={room.jid}
       messages={messages}
+      interiorPlacementVersion={interiorPlacementVersion}
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
