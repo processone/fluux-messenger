@@ -7,7 +7,7 @@
  *
  * No @font-face here on purpose — the artwork carries no words beyond the
  * brand lockup (an SVG). The installers localize their own copy, so baking
- * English into the bitmaps would be wrong in 32 of our 33 locales.
+ * English into the bitmaps would be wrong for every non-English locale.
  */
 :root {
   /* The aurora quartet, same stops as the app icon and the blog heroes. */

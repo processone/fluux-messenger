@@ -82,7 +82,7 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | French                                                                                | Greek                                                                                |
 |---------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | <a href="./19-chat-fr.png"><img src="./19-chat-fr.png" width="400" alt="French"/></a> | <a href="./20-chat-el.png"><img src="./20-chat-el.png" width="400" alt="Greek"/></a> |
-| *33 languages including all EU official languages and RTL languages*                  |                                                                                      |
+| *All EU official languages, plus RTL language support*                                |                                                                                      |
 
 | Arabic (RTL)                                                                          | Hebrew (RTL)                                                                          |
 |---------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|

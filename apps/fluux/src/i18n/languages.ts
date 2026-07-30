@@ -2,11 +2,11 @@
  * The locale registry, kept free of side effects so it can be imported by
  * tests and by the service-worker string table without booting i18next.
  *
- * `supportedLanguages` is what i18next will load; `languageNames` is what the
- * Settings picker renders. The two must agree in both directions — a locale
- * registered but not listed cannot be chosen by anyone, and a locale listed but
- * not registered would silently resolve to the English fallback. The i18n
- * parity suite enforces that, so adding a locale means touching both lists.
+ * A shipped locale has four registrations: `supportedLanguages` tells i18next
+ * what to load, `languageNames` populates the Settings picker, a matching JSON
+ * file supplies the app strings, and `utils/swMessages.ts` supplies notification
+ * text without i18next. The i18n parity suite enforces agreement in both
+ * directions, so adding a locale means updating all four.
  */
 
 export const supportedLanguages = [
