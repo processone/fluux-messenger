@@ -2577,11 +2577,20 @@ export function useMessageListScroll({
   ): void => {
     const settle = () => {
       saved.loadSettled = true
-      const frame = requestAnimationFrame(() => {
-        directionalReleaseFrames().delete(frame)
+      const frames = directionalReleaseFrames()
+      // The handle is only known AFTER requestAnimationFrame returns, but the callback can run
+      // BEFORE it does — jsdom suites stub rAF to invoke synchronously. So the handle is a
+      // reassignable `let` the callback reads defensively (a `const` closed over here would be in
+      // its temporal dead zone), and it is tracked for cancellation only if a frame is really
+      // pending. Run synchronously, there is nothing to cancel and nothing to track.
+      let frame: number | null = null
+      let pending = true
+      frame = requestAnimationFrame(() => {
+        pending = false
+        if (frame !== null) frames.delete(frame)
         releaseUnshiftedDirectionalHistory(saved, ownerConversationId)
       })
-      directionalReleaseFrames().add(frame)
+      if (pending) frames.add(frame)
     }
 
     let result: unknown
