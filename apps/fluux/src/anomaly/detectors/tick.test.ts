@@ -100,7 +100,7 @@ describe('detector tick', () => {
     tick.stop()
 
     // Warming is async; let the microtask and the HMAC settle.
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     expect(tokenSync('jid', ACTIVE.id).s).not.toBe('c:unresolved')
   })
 
@@ -111,7 +111,7 @@ describe('detector tick', () => {
     tick.sample()
     tick.stop()
 
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     expect(tokenSync('room', room.id).s).not.toBe('c:unresolved')
     // The jid space must NOT have been populated: they are disjoint identities.
     expect(tokenSync('jid', room.id).s).toBe('c:unresolved')
@@ -122,7 +122,7 @@ describe('detector tick', () => {
     const tick = startDetectorTick(world())
     for (let i = 0; i < 5; i++) tick.sample()
     tick.stop()
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
 
     // A token is cached after the first warm, so re-warming is cheap but pointless.
     // The observable proof is that the unresolved counter never advanced.
@@ -144,13 +144,13 @@ describe('detector tick', () => {
     const tick = startDetectorTick(world({ activeConversation: () => startup }))
 
     tick.sample() // tokenizer NOT ready: nothing can be warmed
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     expect(tokenSync('jid', startup.id).s).toBe('c:unresolved')
 
     await initTokenizer() // key arrives
 
     tick.sample()
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     tick.stop()
 
     expect(
@@ -174,13 +174,13 @@ describe('detector tick', () => {
     const tick = startDetectorTick(world({ activeConversation: () => episode }))
 
     tick.sample() // t=1000, unready — starts the unread clock
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     await initTokenizer()
 
     tick.sample() // t=2000, held 1000ms
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     tick.sample() // t=3000, held 2000ms -> verdict
-    await new Promise((r) => setTimeout(r, 0))
+    await tick.warmSettled()
     tick.stop()
 
     const unreadRecord = records.find(

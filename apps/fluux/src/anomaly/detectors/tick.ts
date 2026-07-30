@@ -90,6 +90,16 @@ export function browserWorld(
 export interface DetectorTick {
   /** Sample once and emit any verdicts. Exposed so a test need not wait a second. */
   sample(): void
+  /**
+   * Resolves once the warm started by the most recent `sample()` has settled.
+   *
+   * Test-only, and a seam rather than a sleep on purpose: the warm ends in an async
+   * WebCrypto HMAC, so waiting a fixed macrotask is a race that a slow machine loses —
+   * it lost one in CI. Polling `tokenSync` instead is not an option either: it starts
+   * its own warm on a miss, so a polled assertion would pass whether or not the tick
+   * ever warmed anything.
+   */
+  warmSettled(): Promise<void>
   stop(): void
 }
 
@@ -114,6 +124,8 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
    * is only set on resolution.
    */
   let warmInFlight: string | null = null
+  /** The most recent warm, so a test can await exactly what it started. */
+  let pendingWarm: Promise<void> = Promise.resolve()
 
   function sample(): void {
     const now = world.now()
@@ -130,13 +142,18 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
       // rejected warm also retries rather than being recorded as done.
       if (warmedFor !== target && warmInFlight !== target && isTokenizerReady()) {
         warmInFlight = target
-        void (active.kind === 'room' ? warmRoom(active.id) : warmConversation(active.id))
+        pendingWarm = (active.kind === 'room' ? warmRoom(active.id) : warmConversation(active.id))
           .then(() => {
             warmedFor = target
+          })
+          .catch(() => {
+            // Swallowed so a failed warm cannot surface as an unhandled rejection.
+            // `warmedFor` stays unset, so the next tick retries.
           })
           .finally(() => {
             if (warmInFlight === target) warmInFlight = null
           })
+        void pendingWarm
       }
     }
 
@@ -180,6 +197,7 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
   const id = setInterval(sample, intervalMs)
   return {
     sample,
+    warmSettled: () => pendingWarm,
     stop: () => clearInterval(id),
   }
 }
