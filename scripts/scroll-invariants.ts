@@ -3301,14 +3301,13 @@ test.describe('Insertion drift while scrolled up', () => {
   // snapshot. Left pending, the next UNRELATED firstMessageId change is misread as that load
   // completing — and at the resident bound an interior delayed arrival evicts the oldest row, which
   // is exactly such a change. The stale top anchor is then restored and insertion preservation is
-  // skipped, so the reader is thrown back to where the abandoned load-older would have put them.
+  // skipped (its pending controller request refuses every ambient layout preservation), so the
+  // reader is thrown back to where the abandoned load-older would have put them.
   //
-  // KNOWN-FAILING, deliberately. This staleness is PRE-EXISTING on main — this test is RED on plain
-  // 179b78b3, before any of this branch's work — and correcting it needs directional-snapshot
-  // re-arm semantics that would change pagination behaviour. That is out of scope here and tracked
-  // as fluux-directional-snapshot-lifecycle, with this test as its starting RED case. Marked
-  // test.fail so the suite stays honest AND tells us the moment the follow-up makes it pass.
-  test.fail('invariant-14g: an abandoned load-older does not defeat a later insertion at the resident bound', async ({ page }) => {
+  // The snapshot is now bounded by the lifetime of the load it was armed for, so an abandoned
+  // load-older releases it instead of leaving it to claim someone else's window change. See
+  // invariant-14k/14l for the other half: that bound must not cut a load-older's batch short.
+  test('invariant-14g: an abandoned load-older does not defeat a later insertion at the resident bound', async ({ page }) => {
     await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
 
     // Neutralise both older-history sources so the load below genuinely returns nothing while still
@@ -3422,5 +3421,192 @@ test.describe('Insertion drift while scrolled up', () => {
       r.drift,
       `legacy reading position drifted ${r.drift}px after a coalesced interior and tail arrival`,
     ).toBeLessThan(INSERTION_DRIFT_PX)
+  })
+
+  // ── The other half of the snapshot lifecycle: it must NOT be released too eagerly ──────────
+  //
+  // Releasing the directional snapshot whenever an interior arrival lands is the obvious way to
+  // stop a stale snapshot claiming an unrelated first-id change (invariant-14g). It is also wrong:
+  // a load-older that is still IN FLIGHT when the arrival lands comes back to an empty snapshot and
+  // gets no restore. The two tests below hold a load-older open across an interior arrival — once
+  // under the resident cap, once at it — and require the reader to be held either way.
+  //
+  // 14l is the one that discriminates, and it is RED-verified: with the snapshot cancelled on every
+  // interior-placement advance, the tracked row is not merely drifted but WINDOWED OUT ENTIRELY
+  // (afterTop null), and it is the only failure in the whole suite — insertion preservation quietly
+  // absorbs the under-cap case (14k), so nothing else here notices the loss.
+
+  /** Total drift budget for a sequence that both preserves an insertion AND restores a prepend.
+   *  Two settles compound, so this is wider than either alone — but a dropped restore is ~3000px
+   *  (a 50-row batch) and a dropped preservation ~450px, so both regressions stay unmissable. */
+  const IN_FLIGHT_DRIFT_PX = 60
+
+  /**
+   * Hold the demo's older-history MAM answer open, so an arrival can be injected while a
+   * load-older is genuinely IN FLIGHT, then let the batch land and report how far the tracked
+   * reading row moved across the whole sequence.
+   */
+  async function insertDuringInFlightLoadOlder(page: Page, body: string) {
+    // Gate the synthetic MAM batch. The cache path in front of it returns nothing in demo mode
+    // (all seeded messages are already resident), so this is the whole delivery of a load-older.
+    const gated = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const demo = (window as any).__demoClient
+      if (!demo?.chat) return false
+      const original = demo.chat.queryRoomMAM.bind(demo.chat)
+      let open: () => void = () => {}
+      const gate = new Promise<void>((resolve) => {
+        open = resolve
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__releaseOlderLoad = open
+      demo.chat.queryRoomMAM = async (options: unknown) => {
+        await gate
+        return original(options)
+      }
+      return true
+    })
+    expect(gated, 'the demo older-history answer must be gateable for this scenario').toBe(true)
+
+    const before = await readView(page)
+    expect(before, 'the message list must be readable').not.toBeNull()
+    expect(
+      before!.distFromBottom,
+      'precondition: the reader must be clear of the bottom',
+    ).toBeGreaterThanOrEqual(CLEAR_OF_BOTTOM_PX)
+    expect(
+      before!.visible.length,
+      'precondition: several fully-visible rows to track',
+    ).toBeGreaterThan(3)
+
+    const track = before!.visible[before!.visible.length - 2]
+    const topIdx = before!.ids.indexOf(before!.visible[0].id)
+    expect(topIdx, 'precondition: the top-visible row is in the resident array').toBeGreaterThan(12)
+    const insertTs = before!.stamps[topIdx - 10]
+
+    // Arm the directional snapshot WITHOUT moving the reader: handleLoadEarlier, not a
+    // scroll-to-top, so the reader stays mid-history with content above and below.
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trigger = (window as any).__fluuxTriggerLoadOlder
+      if (typeof trigger === 'function') trigger()
+    })
+    await page.waitForTimeout(200)
+
+    const inFlight = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return Boolean((window as any).__roomStore.getState().getRoomMAMQueryState(jid)?.isLoading)
+    }, STRESS_ROOM_JID)
+    expect(inFlight, 'precondition: the load-older must still be in flight').toBe(true)
+
+    // The delayed arrival lands while that load is still waiting for its batch.
+    await page.evaluate(([jid, ts, text]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().addMessage(jid as string, {
+        type: 'groupchat',
+        id: 'delayed-arrival-0',
+        stanzaId: 'sid-delayed-arrival-0',
+        from: `${jid}/DelayedSender`,
+        nick: 'DelayedSender',
+        body: text as string,
+        timestamp: new Date(ts as number),
+        isOutgoing: false,
+        isDelayed: true,
+        roomJid: jid as string,
+      })
+    }, [STRESS_ROOM_JID, insertTs, body] as const)
+    await page.waitForTimeout(400)
+
+    const midway = await readView(page)
+
+    // Let the load-older deliver its batch.
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__releaseOlderLoad?.()
+    })
+    await page.waitForTimeout(2000)
+
+    const after = await readView(page)
+    const trackedTop = await page.evaluate((id) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(
+        `.message-row[data-message-id="${CSS.escape(id)}"]`,
+      ) as HTMLElement | null
+      if (!s || !el) return null
+      return el.getBoundingClientRect().top - s.getBoundingClientRect().top
+    }, track.id)
+
+    // Read placement from the MIDWAY array: the batch that lands afterwards renumbers every index.
+    const insertedIndex = midway!.ids.indexOf('delayed-arrival-0')
+    const midwayTopIndex = midway!.visible.length > 0
+      ? midway!.ids.indexOf(midway!.visible[0].id)
+      : -1
+    return {
+      trackedId: track.id,
+      beforeTop: Math.round(track.top),
+      afterTop: trackedTop === null ? null : Math.round(trackedTop),
+      drift: trackedTop === null ? Number.POSITIVE_INFINITY : Math.abs(trackedTop - track.top),
+      insertedAboveViewport:
+        insertedIndex >= 0 && midwayTopIndex >= 0 && insertedIndex < midwayTopIndex,
+      firstIdBefore: before!.ids[0],
+      firstIdMidway: midway!.ids[0],
+      firstIdAfter: after!.ids[0],
+      residentCountBefore: before!.ids.length,
+      residentCountMidway: midway!.ids.length,
+      residentCountAfter: after!.ids.length,
+      scrollTopBefore: before!.scrollTop,
+      scrollTopAfter: after!.scrollTop,
+    }
+  }
+
+  test('invariant-14k: an interior arrival during an in-flight load-older does not cost the batch its restore', async ({ page }) => {
+    await openScrolledUp(page)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'delayed arrival during an in-flight load-older\n'.repeat(18),
+    )
+    console.log('── INSERTION-DRIFT in-flight-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    expect(
+      r.firstIdMidway,
+      'precondition: under the resident cap the arrival must not move the first id',
+    ).toBe(r.firstIdBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px when a batch landed after an interior arrival`,
+    ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
+  })
+
+  test('invariant-14l: an interior arrival at the resident bound holds the reading position across an in-flight load-older', async ({ page }) => {
+    await openScrolledUp(page, FULL_WINDOW_INSERTION_URL)
+    const r = await insertDuringInFlightLoadOlder(
+      page,
+      'bound delayed arrival during an in-flight load-older\n'.repeat(18),
+    )
+    console.log('── INSERTION-DRIFT bound-in-flight-load-older ──', JSON.stringify(r))
+    expect(r.insertedAboveViewport, 'the arrival must land ABOVE the viewport').toBe(true)
+    // At the bound the arrival EVICTS the oldest row, so it moves the first id without any window
+    // shift — the exact signal the pending snapshot discriminates on. Whichever of the two owners
+    // ends up holding the reader, the reader must not move.
+    expect(
+      r.firstIdMidway,
+      `precondition: at the resident bound the arrival must evict the oldest row — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdBefore)
+    expect(
+      r.residentCountMidway,
+      'precondition: the resident window must stay at its bound',
+    ).toBe(r.residentCountBefore)
+    expect(
+      r.firstIdAfter,
+      `precondition: the gated load-older must have delivered its batch — ${JSON.stringify(r)}`,
+    ).not.toBe(r.firstIdMidway)
+    expect(
+      r.drift,
+      `reading position drifted ${r.drift}px when a batch landed after an eviction at the bound`,
+    ).toBeLessThan(IN_FLIGHT_DRIFT_PX)
   })
 })

@@ -294,7 +294,9 @@ export interface UseMessageListScrollOptions {
   externalScrollerRef?: React.RefObject<HTMLElement | null>
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
   clearFirstNewMessageId?: () => void  // Called when user scrolls past the new message marker
-  onScrollToTop?: () => void
+  /** Load the next-older history slice. Any returned promise is treated as the load's lifetime:
+   *  it bounds how long the directional-history snapshot may claim the next window shift. */
+  onScrollToTop?: () => unknown
   /**
    * Hydrate the resident message window with the cache slice CONTAINING a specific message.
    * Called by the restore path when a saved content anchor (or a navigation target) is older than
@@ -307,8 +309,8 @@ export interface UseMessageListScrollOptions {
   isLoadingOlder?: boolean
   /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
    *  bottom of a slid-up window (mirror of onScrollToTop for the newer direction). Fired only
-   *  when windowAtLiveEdge is false. */
-  onLoadNewer?: () => void
+   *  when windowAtLiveEdge is false. Its returned promise bounds the snapshot the same way. */
+  onLoadNewer?: () => unknown
   isLoadingNewer?: boolean
   /** Sliding window: whether the resident window includes the newest message. `false` = slid up,
    *  which enables the load-newer trigger (the resident bottom is NOT the live edge). Absent/true
@@ -397,6 +399,9 @@ interface DirectionalHistorySnapshot {
   generation?: number
   restored?: boolean
   restoredAt?: number
+  /** Whether the load this snapshot was armed for has finished running (delivered or not). It is
+   *  what bounds the snapshot's claim on the next window shift — see runDirectionalHistoryLoad. */
+  loadSettled?: boolean
 }
 
 // ============================================================================
@@ -609,6 +614,13 @@ export function useMessageListScroll({
   // then restore it AFTER React renders the new messages.
   // Using element-based positioning is more reliable than pure scroll math.
   const prependRef = useRef<DirectionalHistorySnapshot | null>(null)
+  // Frames on which settled-without-shift snapshots are released (see runDirectionalHistoryLoad).
+  // A set, not a single slot: two loads can be in flight across a fast re-trigger and settle in
+  // either order, so one snapshot's frame must never displace another's. Cancelled on unmount.
+  // Same lazy-ref idiom as pinBottomClaim below — stable identity, no per-render allocation.
+  const directionalReleaseFramesRef = useRef<Set<number> | null>(null)
+  const directionalReleaseFrames = () =>
+    (directionalReleaseFramesRef.current ??= new Set<number>())
 
   // Throttling/cooldown
   const lastLoadTimeRef = useRef(0)
@@ -2509,6 +2521,84 @@ export function useMessageListScroll({
     return { saved, anchor }
   }
 
+  /**
+   * Drop a directional snapshot whose load is over and which never saw the window shift it was
+   * armed for. Guarded so it is a no-op the moment anything else has taken the snapshot over: the
+   * batch landed and restored it, a newer load replaced it, or the conversation changed.
+   *
+   * Going through `cancelDirectionalHistoryWithoutShift` (the same primitive the returned-to-live-
+   * edge case uses) matters twice over: it clears the controller's pending `history-preservation`
+   * request, which the positioning model treats as a position the reader is still waiting to reach
+   * — while it stands, EVERY ambient layout preservation (insertion, divider) is refused.
+   */
+  const releaseUnshiftedDirectionalHistory = (
+    saved: DirectionalHistorySnapshot,
+    ownerConversationId: string,
+  ) => {
+    if (prependRef.current !== saved || saved.restored) return
+    if (activeConversationIdRef.current !== ownerConversationId) return
+    // The window DID shift after all — the restore effect owns this snapshot, not us.
+    if ((liveWindowRef.current.firstMessageId ?? '') !== saved.oldFirstId) return
+
+    debugLog('DIRECTIONAL HISTORY RELEASE (settled without a window shift)', {
+      oldFirstId: saved.oldFirstId,
+      oldMessageCount: saved.oldMessageCount,
+      messageCount: liveWindowRef.current.messageCount,
+      generation: saved.generation,
+    })
+    if (saved.generation !== undefined) {
+      positioningControllerRef.current?.cancelDirectionalHistoryWithoutShift({
+        conversationId: ownerConversationId,
+        generation: saved.generation,
+      })
+    }
+    if (prependRef.current === saved) prependRef.current = null
+  }
+
+  /**
+   * Run the load a snapshot was armed for, and bound the snapshot's lifetime to it.
+   *
+   * The snapshot's whole purpose is to catch the window shift its load produces, and it recognises
+   * that shift as a `firstMessageId` change. A load that settles WITHOUT delivering rows — an
+   * exhausted archive, a query that returns only duplicates, a fetch that bails before it starts —
+   * never produces one, so the restore effect just keeps waiting. Left armed, the snapshot claims
+   * the next first-id change from ANY source (a live arrival evicting the oldest row at the
+   * resident bound is one) and restores the reader to a position that stopped meaning anything
+   * loads ago; meanwhile its pending controller request blocks insertion preservation outright.
+   *
+   * So the loader's own promise is the snapshot's deadline. Releasing is deferred one frame, and
+   * re-checked when it fires: a commit that delivers the batch takes the snapshot first, which is
+   * what keeps successful pagination — the case this must never break — restoring as before.
+   */
+  const runDirectionalHistoryLoad = (
+    saved: DirectionalHistorySnapshot,
+    ownerConversationId: string,
+    run: () => unknown,
+  ): void => {
+    const settle = () => {
+      saved.loadSettled = true
+      const frame = requestAnimationFrame(() => {
+        directionalReleaseFrames().delete(frame)
+        releaseUnshiftedDirectionalHistory(saved, ownerConversationId)
+      })
+      directionalReleaseFrames().add(frame)
+    }
+
+    let result: unknown
+    try {
+      result = run()
+    } catch (error) {
+      settle()
+      throw error
+    }
+    const thenable = result as PromiseLike<unknown> | null | undefined
+    if (typeof thenable?.then === 'function') {
+      thenable.then(settle, settle)
+      return
+    }
+    settle()
+  }
+
   const triggerLoadOlder = () => {
     if (!canLoadMore) return
     const scroller = scrollerRef.current
@@ -2545,7 +2635,7 @@ export function useMessageListScroll({
         messageCount,
       })
 
-      onScrollToTop?.()
+      runDirectionalHistoryLoad(saved, conversationId, () => onScrollToTop?.())
     }
   }
 
@@ -2572,9 +2662,9 @@ export function useMessageListScroll({
     lastLoadTimeRef.current = now
     viewportSessionRef.current?.clearTravel(conversationId, 'bottom')
 
-    beginDirectionalHistoryLoad(scroller)
+    const { saved } = beginDirectionalHistoryLoad(scroller)
 
-    onLoadNewer?.()
+    runDirectionalHistoryLoad(saved, conversationId, () => onLoadNewer?.())
   }
 
   const handleLoadEarlier = () => {
@@ -2596,7 +2686,7 @@ export function useMessageListScroll({
       messageCount,
     })
 
-    onScrollToTop?.()
+    runDirectionalHistoryLoad(saved, conversationId, () => onScrollToTop?.())
   }
 
   // ==========================================================================
@@ -3496,6 +3586,11 @@ export function useMessageListScroll({
         cancelAnimationFrame(correctionRafRef.current)
         correctionRafRef.current = null
       }
+      const pendingReleaseFrames = directionalReleaseFramesRef.current
+      if (pendingReleaseFrames) {
+        for (const frame of pendingReleaseFrames) cancelAnimationFrame(frame)
+        pendingReleaseFrames.clear()
+      }
     }
   }, [])
 
@@ -3503,10 +3598,11 @@ export function useMessageListScroll({
   // EFFECT: Returned to the live edge → drop any stale directional-load anchor.
   // ==========================================================================
   // A directional load that returns NOTHING never changes firstMessageId, so the restore effect
-  // below never fires and never clears its prependRef — the anchor lingers. The reachable case is
-  // load-newer hitting the tail: windowAtLiveEdge flips false→true with a stashed (never-restored)
-  // anchor. Left in place, a LATER unrelated firstMessageId change — e.g. a live message evicting
-  // the oldest at the cap — would fire that stale restore. Clearing on the false→true TRANSITION
+  // below never fires. `runDirectionalHistoryLoad` is what releases the snapshot in that case, on
+  // the load's own settlement; this effect stays as the semantic signal for one specific shape of
+  // it — load-newer hitting the tail, where windowAtLiveEdge flips false→true with a stashed
+  // (never-restored) anchor and the reader is demonstrably back at the live edge, whether or not
+  // that load has finished running. Clearing on the false→true TRANSITION
   // targets exactly "we just returned to the live edge": normal under-cap load-older keeps
   // windowAtLiveEdge true (no transition) and a slide keeps it false, so their in-flight restores
   // are untouched. This is a passive useEffect so it runs AFTER the restore useLayoutEffect — a
@@ -3555,12 +3651,15 @@ export function useMessageListScroll({
     // firstId AND grows the count, so this is unchanged for the common case.
     const firstIdChanged = firstMessageId !== saved.oldFirstId
 
+    // Waiting is bounded: the snapshot is released once the load that armed it settles without
+    // delivering a shift (runDirectionalHistoryLoad), so this branch cannot hold it indefinitely.
     if (!firstIdChanged) {
       debugLog('PREPEND WAITING', {
         messageCount,
         oldMessageCount: saved.oldMessageCount,
         firstMessageId,
         oldFirstId: saved.oldFirstId,
+        loadSettled: Boolean(saved.loadSettled),
         firstIdChanged,
       })
       return
