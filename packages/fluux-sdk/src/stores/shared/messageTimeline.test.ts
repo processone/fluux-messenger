@@ -113,6 +113,62 @@ describe('messageTimeline', () => {
         ])
       }
     })
+
+    // ------------------------------------------------------------------------
+    // DELAYED arrivals (issue #1176 characterisation)
+    //
+    // A "delayed" arrival reaches appendLive on the LIVE path but carries an
+    // older timestamp: offline replay, gateway/MUC history, the MAM `{ids}`
+    // fetch behind deferred poll-closed verification. FIX 5's sort is a total
+    // order over the whole resident array, so it does not distinguish these
+    // from same-millisecond siblings — it repositions them too. The two tests
+    // below pin that consequence, which no test covered before.
+    // ------------------------------------------------------------------------
+
+    it('places a DELAYED arrival in timestamp order rather than at the end of the resident array', () => {
+      // windowSize 10 keeps the trim out of it — this pins POSITION alone.
+      const wideCfg = { ...cfg, windowSize: 10 }
+      const resident = [
+        msg('live-1', '2024-01-15T10:01:00Z'),
+        msg('live-2', '2024-01-15T10:03:00Z'),
+        msg('live-3', '2024-01-15T10:05:00Z'),
+      ]
+      // Arrives now (last), but stamped between live-1 and live-2.
+      const delayed = msg('offline-replay', '2024-01-15T10:02:00Z')
+
+      const result = appendLive(resident, delayed, true, wideCfg)
+
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') {
+        expect(result.messages.map((m) => m.id)).toEqual(['live-1', 'offline-replay', 'live-2', 'live-3'])
+        // Explicitly NOT at the live edge, where arrival order would have put
+        // it (pre-FIX-5 this was `[live-1, live-2, live-3, offline-replay]`).
+        expect(result.messages[result.messages.length - 1].id).toBe('live-3')
+      }
+    })
+
+    it('trims a DELAYED arrival older than the window entirely out of the resident array', () => {
+      // Resident array already AT the window bound (windowSize 3).
+      const resident = [
+        msg('live-1', '2024-01-15T10:01:00Z'),
+        msg('live-2', '2024-01-15T10:02:00Z'),
+        msg('live-3', '2024-01-15T10:03:00Z'),
+      ]
+      // Older than the window's OLDEST resident message.
+      const delayed = msg('offline-replay', '2024-01-15T09:00:00Z')
+
+      const result = appendLive(resident, delayed, true, cfg)
+
+      // Still reported as 'appended' — the caller has no signal that the
+      // message it just accepted is absent from the array it received.
+      expect(result.kind).toBe('appended')
+      if (result.kind === 'appended') {
+        // The sort puts it at index 0, then keep-newest(3) drops it again: the
+        // resident array comes back with exactly its prior contents.
+        expect(result.messages.map((m) => m.id)).toEqual(['live-1', 'live-2', 'live-3'])
+        expect(result.messages.some((m) => m.id === 'offline-replay')).toBe(false)
+      }
+    })
   })
 
   describe('mergeArchive', () => {

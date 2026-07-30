@@ -5112,3 +5112,106 @@ describe('chatStore parity drift regressions', () => {
     })
   })
 })
+
+/**
+ * Issue #1176 — characterisation of how the live-append path treats a DELAYED
+ * arrival (offline replay, gateway history, the MAM `{ids}` fetch behind
+ * deferred poll-closed verification): a live-path message carrying an older
+ * timestamp.
+ *
+ * `appendLive` sorts the whole resident array (FIX 5, #1155), so a delayed
+ * arrival is placed in timestamp order rather than at the live edge — and when
+ * it is older than the window's oldest resident message and the window is
+ * already at its bound, keep-newest drops it again in the same call. The pure
+ * positioning/trim behaviour is pinned in `shared/messageTimeline.test.ts`;
+ * this file pins the STORE-level consequence the pure function cannot show —
+ * the durable cache write happens anyway, so the message is persisted while
+ * being absent from the resident array the UI renders.
+ */
+describe('chatStore delayed live arrivals (#1176)', () => {
+  const convId = 'peer@example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    chatStore.setState({
+      conversationEntities: new Map(),
+      conversationMeta: new Map(),
+      conversations: new Map(),
+      messages: new Map(),
+      activeConversationId: null,
+      archivedConversations: new Set(),
+      firstNewMessageMarkers: new Map(),
+      windowAtLiveEdge: new Map(),
+      mamQueryStates: new Map(),
+      conversationGaps: new Map(),
+    })
+    vi.clearAllMocks()
+    _clearAllTransientForTesting()
+    chatStore.getState().addConversation(createConversation(convId))
+  })
+
+  afterEach(() => {
+    setResidentWindowSize(5000)
+  })
+
+  function arrival(id: string, iso: string, extra: Partial<Message> = {}): Message {
+    return {
+      type: 'chat',
+      id,
+      conversationId: convId,
+      from: convId,
+      body: id,
+      timestamp: new Date(iso),
+      isOutgoing: false,
+      ...extra,
+    }
+  }
+
+  it('persists a delayed arrival trimmed out of the resident window to the durable cache', () => {
+    setResidentWindowSize(3)
+    // Fill the resident window to its bound with live messages.
+    for (const [id, iso] of [
+      ['live-1', '2024-01-15T10:01:00Z'],
+      ['live-2', '2024-01-15T10:02:00Z'],
+      ['live-3', '2024-01-15T10:03:00Z'],
+    ] as const) {
+      chatStore.getState().addMessage(arrival(id, iso))
+    }
+    vi.mocked(messageCache.saveMessage).mockClear()
+
+    // Offline replay: reaches the live path now, stamped BEFORE the window's
+    // oldest resident message.
+    const delayed = arrival('offline-replay', '2024-01-15T09:00:00Z', { isDelayed: true })
+    chatStore.getState().addMessage(delayed)
+
+    const resident = chatStore.getState().messages.get(convId) || []
+    // Sorted to the front, then dropped by keep-newest: not resident at all.
+    expect(resident.map((m) => m.id)).toEqual(['live-1', 'live-2', 'live-3'])
+    expect(resident.some((m) => m.id === 'offline-replay')).toBe(false)
+    // ...yet it WAS written to IndexedDB, so it is durable-only: invisible in
+    // the timeline until a cache slice pages it back in.
+    expect(messageCache.saveMessage).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(messageCache.saveMessage).mock.calls[0][0]).toMatchObject({ id: 'offline-replay' })
+  })
+
+  it('positions a delayed arrival inside the resident window in timestamp order', () => {
+    setResidentWindowSize(10) // above the fixture: the trim never engages here
+    for (const [id, iso] of [
+      ['live-1', '2024-01-15T10:01:00Z'],
+      ['live-2', '2024-01-15T10:03:00Z'],
+      ['live-3', '2024-01-15T10:05:00Z'],
+    ] as const) {
+      chatStore.getState().addMessage(arrival(id, iso))
+    }
+
+    chatStore.getState().addMessage(arrival('offline-replay', '2024-01-15T10:02:00Z', { isDelayed: true }))
+
+    const resident = chatStore.getState().messages.get(convId) || []
+    expect(resident.map((m) => m.id)).toEqual(['live-1', 'offline-replay', 'live-2', 'live-3'])
+    // The sidebar preview is deliberately NOT dragged back by the delayed
+    // arrival (see `shouldReplaceLastMessage` at the addMessage call site) —
+    // pinned here so the two policies stay visibly independent.
+    expect(chatStore.getState().conversationMeta.get(convId)?.lastMessage?.id).toBe('live-3')
+  })
+})
