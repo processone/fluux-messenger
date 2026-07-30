@@ -15,6 +15,7 @@ import {
   registerViewportBottomRef,
 } from '../../utils/viewportAtBottom'
 import { initTokenizer, resetValuesForTesting, tokenSync } from '../values'
+import { recordForSignal } from './signalRecords'
 
 const ACTIVE = { kind: 'conversation' as const, id: 'bob@x.tld' }
 
@@ -126,6 +127,72 @@ describe('detector tick', () => {
     // A token is cached after the first warm, so re-warming is cheap but pointless.
     // The observable proof is that the unresolved counter never advanced.
     expect(tokenSync('jid', ACTIVE.id).s).not.toBe('c:unresolved')
+  })
+
+  it('warms on a later tick when the tokenizer was not ready on the first', async () => {
+    // The startup window. `warmToken` is a silent no-op before the HMAC key exists,
+    // so a latch taken on that call suppresses every retry and leaves the
+    // conversation unwarmed for the whole episode — losing the entity on precisely
+    // the first anomaly of the session, the one that says something just started
+    // going wrong.
+    //
+    // A dedicated id, because `warmToken` writes AFTER an await: a warm started by an
+    // earlier test can resolve past `resetValuesForTesting()` and repopulate the map,
+    // which made this pass in file order while failing in isolation.
+    const startup = { kind: 'conversation' as const, id: 'startup-window@x.tld' }
+    registerViewportBottomRef('conversation', startup.id, { current: true })
+    const tick = startDetectorTick(world({ activeConversation: () => startup }))
+
+    tick.sample() // tokenizer NOT ready: nothing can be warmed
+    await new Promise((r) => setTimeout(r, 0))
+    expect(tokenSync('jid', startup.id).s).toBe('c:unresolved')
+
+    await initTokenizer() // key arrives
+
+    tick.sample()
+    await new Promise((r) => setTimeout(r, 0))
+    tick.stop()
+
+    expect(
+      tokenSync('jid', startup.id).s,
+      'the conversation was never re-warmed after the tokenizer became ready',
+    ).not.toBe('c:unresolved')
+  })
+
+  it('names the entity on the first record of an episode that began before readiness', async () => {
+    // The consequence the warm exists to prevent, asserted end to end: the record is
+    // built at signal time exactly as install.ts builds it.
+    const episode = { kind: 'conversation' as const, id: 'first-anomaly@x.tld' }
+    registerViewportBottomRef('conversation', episode.id, { current: true })
+
+    const records: (ReturnType<typeof recordForSignal>)[] = []
+    setAnomalySignalHandler((s) => {
+      seen.push(s)
+      records.push(recordForSignal(s))
+    })
+
+    const tick = startDetectorTick(world({ activeConversation: () => episode }))
+
+    tick.sample() // t=1000, unready — starts the unread clock
+    await new Promise((r) => setTimeout(r, 0))
+    await initTokenizer()
+
+    tick.sample() // t=2000, held 1000ms
+    await new Promise((r) => setTimeout(r, 0))
+    tick.sample() // t=3000, held 2000ms -> verdict
+    await new Promise((r) => setTimeout(r, 0))
+    tick.stop()
+
+    const unreadRecord = records.find(
+      (r) => r?.id.s === 'read-state/unread-survives-focus',
+    )
+    expect(unreadRecord, 'the unread detector never reported').toBeDefined()
+
+    const convToken = unreadRecord!.ctx!.find(([k]) => k.s === 'conv')![1] as { s: string }
+    expect(
+      convToken.s,
+      'the first record of the episode named no entity — it is uncorrelatable',
+    ).not.toBe('c:unresolved')
   })
 
   it('samples on its interval', () => {

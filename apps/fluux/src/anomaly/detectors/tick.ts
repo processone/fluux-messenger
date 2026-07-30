@@ -21,6 +21,7 @@
 import { signalAnomaly } from '../../utils/anomalySignal'
 import { isViewportAtBottom, type ViewportKind } from '../../utils/viewportAtBottom'
 import { measureViewport } from '../../utils/viewportScroller'
+import { isTokenizerReady } from '../values'
 import { warmConversation, warmRoom } from '../identity'
 import { createFabAtLiveEdgeDetector } from './fabAtLiveEdge'
 import { createUnreadSurvivesFocusDetector } from './unreadSurvivesFocus'
@@ -96,8 +97,23 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
   const unread = createUnreadSurvivesFocusDetector()
   const fab = createFabAtLiveEdgeDetector()
 
-  /** Which conversation we have already asked the tokenizer to warm. */
+  /**
+   * Which conversation the tokenizer has CONFIRMED warm.
+   *
+   * Not "which one we asked about": `warmToken` returns silently when the tokenizer
+   * holds no key yet, so a latch taken on the call rather than on its result marks a
+   * conversation warm that nothing warmed, and every later tick then skips it. The
+   * episode keeps running with the entity unresolved — and the record that loses it is
+   * the FIRST of the session, the one that says something just started going wrong.
+   */
   let warmedFor: string | null = null
+  /**
+   * A warm already asked for and not yet resolved.
+   *
+   * Without it a slow HMAC would start a fresh warm on every tick, since `warmedFor`
+   * is only set on resolution.
+   */
+  let warmInFlight: string | null = null
 
   function sample(): void {
     const now = world.now()
@@ -109,9 +125,18 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
     // entity at all. Warming on change costs one HMAC per conversation opened.
     if (active) {
       const target = `${active.kind}:${active.id}`
-      if (warmedFor !== target) {
-        warmedFor = target
+      // Skip entirely until the tokenizer holds its key: warming before then is a
+      // no-op, and the next tick retries. Latch only once the warm has RESOLVED, so a
+      // rejected warm also retries rather than being recorded as done.
+      if (warmedFor !== target && warmInFlight !== target && isTokenizerReady()) {
+        warmInFlight = target
         void (active.kind === 'room' ? warmRoom(active.id) : warmConversation(active.id))
+          .then(() => {
+            warmedFor = target
+          })
+          .finally(() => {
+            if (warmInFlight === target) warmInFlight = null
+          })
       }
     }
 
