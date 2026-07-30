@@ -16,13 +16,29 @@
  *
  * Pure fixed-window logic, timestamps passed in, unit-testable.
  */
+import type { AnomalySignal } from '@/utils/anomalySignal'
+
+/**
+ * A reportable correction.
+ *
+ * Unlike the other monitors this one does NOT carry the prose: the log line needs
+ * the row count, the scrollHeight and the conversation, and those reads are not
+ * free, so they stay on the caller's warn path where they have always been. What
+ * travels back is the threshold that was crossed, which the caller cannot
+ * otherwise know once it has been overridden.
+ */
+export interface SlowCorrectionReport {
+  /** The duration at or above which a correction became reportable. */
+  thresholdMs: number
+}
+
 export interface SlowCorrectionMonitor {
   /**
    * Record one correction that took `durationMs`, finishing at `now` (ms,
-   * monotonic e.g. performance.now()). Returns true when the caller should
-   * log a diagnostic line (duration ≥ threshold and cooldown elapsed).
+   * monotonic e.g. performance.now()). Returns a report when the caller should
+   * log a diagnostic line (duration ≥ threshold and cooldown elapsed), else null.
    */
-  record(durationMs: number, now: number): boolean
+  record(durationMs: number, now: number): SlowCorrectionReport | null
 }
 
 export interface SlowCorrectionMonitorOptions {
@@ -45,11 +61,32 @@ export function createSlowCorrectionMonitor(
   let lastReportAt = Number.NEGATIVE_INFINITY
 
   return {
-    record(durationMs: number, now: number): boolean {
-      if (durationMs < thresholdMs) return false
-      if (now - lastReportAt < cooldownMs) return false
+    record(durationMs: number, now: number): SlowCorrectionReport | null {
+      if (durationMs < thresholdMs) return null
+      if (now - lastReportAt < cooldownMs) return null
       lastReportAt = now
-      return true
+      return { thresholdMs }
     },
+  }
+}
+
+/**
+ * Translate a report into the signal the anomaly log records.
+ *
+ * Takes the caller's numbers too, because unlike the other monitors this one
+ * never sees them: the duration is measured around the correction and the row
+ * count is a warn-path DOM read. Kept here anyway so the mapping is unit-tested
+ * rather than living only inside a rAF callback.
+ */
+export function slowCorrectionSignal(
+  report: SlowCorrectionReport,
+  durationMs: number,
+  rows: number,
+): AnomalySignal {
+  return {
+    name: 'scroll/slow-correction',
+    durationMs,
+    thresholdMs: report.thresholdMs,
+    rows,
   }
 }

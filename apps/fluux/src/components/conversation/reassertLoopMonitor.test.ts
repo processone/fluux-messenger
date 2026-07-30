@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { createReassertLoopMonitor } from './reassertLoopMonitor'
+import {
+  createReassertLoopMonitor,
+  reassertLoopSignal,
+  type ReassertLoopWarning,
+} from './reassertLoopMonitor'
 
 /**
  * Pure, deterministic tests — timestamps are passed in explicitly so there is
@@ -9,7 +13,7 @@ describe('createReassertLoopMonitor', () => {
   it('stays silent for a single converged loop that writes only a few times', () => {
     const m = createReassertLoopMonitor({ writeThreshold: 40 })
     const loop = m.begin('prepend', 0)
-    let last: string | null = 'x'
+    let last: ReassertLoopWarning | null = null
     // 60 frames, scroll write only on the first 3 (then converged/idle).
     for (let f = 0; f < 60; f++) last = loop.frame(f * 16, f < 3)
     loop.end()
@@ -19,13 +23,22 @@ describe('createReassertLoopMonitor', () => {
   it('warns once when a single loop keeps writing past the threshold (non-converging)', () => {
     const m = createReassertLoopMonitor({ writeThreshold: 10, cooldownMs: 5000 })
     const loop = m.begin('prepend', 0)
-    const out: (string | null)[] = []
+    const out: (ReassertLoopWarning | null)[] = []
     // Writes on EVERY frame — the signature of a loop that never settles.
     for (let f = 0; f < 30; f++) out.push(loop.frame(f * 16, true))
-    const warnings = out.filter((r): r is string => r !== null)
+    const warnings = out.filter((r): r is ReassertLoopWarning => r !== null)
     expect(warnings).toHaveLength(1) // cooldown outlasts the ~480ms span
-    expect(warnings[0]).toMatch(/prepend/)
-    expect(warnings[0]).toMatch(/reassert/i)
+    expect(warnings[0].message).toMatch(/prepend/)
+    expect(warnings[0].message).toMatch(/reassert/i)
+
+    // The structured view must agree with the prose, or the anomaly log and
+    // fluux.log describe two different events.
+    const w = warnings[0]
+    expect(w.reason).toBe('non-converging')
+    expect(w.reason === 'non-converging' && w.label).toBe('prepend')
+    expect(w.reason === 'non-converging' && w.writes).toBe(11) // first frame past 10
+    expect(w.threshold).toBe(10)
+    expect(w.message).toContain('issued 11 scroll writes')
   })
 
   it('warns when two re-assert loops run concurrently (overlap), naming both', () => {
@@ -35,9 +48,13 @@ describe('createReassertLoopMonitor', () => {
     const b = m.begin('prepend', 20) // a second prepend before the first finished
     const w = b.frame(32, false)
     expect(w).not.toBeNull()
-    expect(w).toMatch(/overlap/i)
+    expect(w!.message).toMatch(/overlap/i)
     // Both concurrent labels are surfaced so the log identifies the pair.
-    expect(w).toMatch(/prepend.*prepend|prepend x2|2 .*prepend/i)
+    expect(w!.message).toMatch(/prepend.*prepend|prepend x2|2 .*prepend/i)
+
+    expect(w!.reason).toBe('overlap')
+    expect(w!.reason === 'overlap' && w!.active).toBe(2)
+    expect(w!.threshold).toBe(2)
   })
 
   it('does not warn for loops that run sequentially (no temporal overlap)', () => {
@@ -54,14 +71,14 @@ describe('createReassertLoopMonitor', () => {
     const m = createReassertLoopMonitor({ cooldownMs: 5000 })
     const a = m.begin('prepend', 0)
     const b = m.begin('marker', 0)
-    const out: (string | null)[] = []
+    const out: (ReassertLoopWarning | null)[] = []
     for (let f = 0; f < 40; f++) {
       // Collect from BOTH loops — the single allowed warning may land on either,
       // since they share the monitor-wide overlap cooldown.
       out.push(a.frame(f * 16, false))
       out.push(b.frame(f * 16, false))
     }
-    const warnings = out.filter((r): r is string => r !== null)
+    const warnings = out.filter((r): r is ReassertLoopWarning => r !== null)
     expect(warnings).toHaveLength(1) // 40 frames ≈ 640ms < 5000ms cooldown
   })
 
@@ -87,5 +104,44 @@ describe('createReassertLoopMonitor', () => {
     expect(m.activeLabels()).toEqual(['prepend'])
     b.end()
     expect(m.activeLabels()).toEqual([])
+  })
+})
+
+describe('reassertLoopSignal', () => {
+  it('routes an overlap to its own invariant', () => {
+    expect(
+      reassertLoopSignal({ message: 'ignored', reason: 'overlap', active: 3, threshold: 2 }),
+    ).toEqual({ name: 'scroll/reassert-overlap', active: 3, threshold: 2 })
+  })
+
+  it('routes a non-converging loop to a different invariant, keeping its label', () => {
+    // The two modes have different causes and different fixes, so collapsing them
+    // into one id would make the log unable to tell them apart.
+    expect(
+      reassertLoopSignal({
+        message: 'ignored',
+        reason: 'non-converging',
+        label: 'prepend',
+        writes: 41,
+        threshold: 40,
+      }),
+    ).toEqual({
+      name: 'scroll/reassert-nonconverging',
+      label: 'prepend',
+      writes: 41,
+      threshold: 40,
+    })
+  })
+
+  it('does not carry the prose into the record', () => {
+    // The overlap message names every concurrent loop; the record must carry
+    // only the count.
+    const signal = reassertLoopSignal({
+      message: '[ScrollReassertLoop] 2 loops active concurrently (prepend, marker)',
+      reason: 'overlap',
+      active: 2,
+      threshold: 2,
+    })
+    expect(JSON.stringify(signal)).not.toContain('ScrollReassertLoop')
   })
 })

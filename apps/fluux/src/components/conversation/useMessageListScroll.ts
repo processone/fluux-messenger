@@ -19,9 +19,13 @@
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { scrollStateManager, AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
-import { createResizeLoopMonitor } from './resizeLoopMonitor'
-import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
-import { createReassertLoopMonitor } from './reassertLoopMonitor'
+import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
+import { createSlowCorrectionMonitor, slowCorrectionSignal } from './slowCorrectionMonitor'
+import {
+  createReassertLoopMonitor,
+  reassertLoopSignal,
+  type ReassertLoopLabel,
+} from './reassertLoopMonitor'
 import {
   createControllerFrameLoop,
   type ControllerFrameLoopLifecycle,
@@ -32,6 +36,7 @@ import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
+import { signalAnomaly } from '@/utils/anomalySignal'
 import { isProgrammaticScroll } from './scrollGate'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
@@ -769,7 +774,11 @@ export function useMessageListScroll({
           if (!slowCorrectionMonitorRef.current) {
             slowCorrectionMonitorRef.current = createSlowCorrectionMonitor()
           }
-          if (slowCorrectionMonitorRef.current.record(correctionEnd - correctionStart, correctionEnd)) {
+          const slow = slowCorrectionMonitorRef.current.record(
+            correctionEnd - correctionStart,
+            correctionEnd,
+          )
+          if (slow) {
             // Context reads are warn-path only (rate-limited): querySelectorAll
             // over the backlog is not free.
             const rows = currentScroller.querySelectorAll('.message-row').length
@@ -779,6 +788,11 @@ export function useMessageListScroll({
               `conversation=${latestRef.current.conversationId}) — ` +
               `reflow cost scales with the rendered backlog.`
             )
+            if (__FLUUX_ANOMALY__) {
+              signalAnomaly(
+                slowCorrectionSignal(slow, Math.round(correctionEnd - correctionStart), rows),
+              )
+            }
           }
         }
       }
@@ -858,7 +872,10 @@ export function useMessageListScroll({
         // can't see. Log-rate-limited; never disconnects.
         if (!resizeMonitorRef.current) resizeMonitorRef.current = createResizeLoopMonitor()
         const warning = resizeMonitorRef.current.record(performance.now())
-        if (warning) console.warn(warning)
+        if (warning) {
+          console.warn(warning.message)
+          if (__FLUUX_ANOMALY__) signalAnomaly(resizeLoopSignal(warning))
+        }
 
         // Coalesce the measure + correction into a single rAF no matter how many
         // times the observer fires this frame. This breaks the read-scrollHeight
@@ -947,7 +964,7 @@ export function useMessageListScroll({
   }, [])
 
   const beginControllerFrameLoop = useCallback((
-    label: string,
+    label: ReassertLoopLabel,
     lease: PositionExecutionLease,
     lifecycle?: ControllerFrameLoopLifecycle,
   ) => {
@@ -964,7 +981,12 @@ export function useMessageListScroll({
       requestFrame: (callback) => requestAnimationFrame(callback),
       cancelFrame: (id) => cancelAnimationFrame(id),
       now: () => performance.now(),
-      warn: (warning) => console.warn(warning),
+      // The adapter forwards whatever the monitor produced; deciding what to do with it
+      // belongs here. Fan-out, not re-pointing: the prose is untouched.
+      warn: (warning) => {
+        console.warn(warning.message)
+        if (__FLUUX_ANOMALY__) signalAnomaly(reassertLoopSignal(warning))
+      },
       lifecycle,
     })
   }, [])
@@ -3659,7 +3681,17 @@ export function useMessageListScroll({
       // Log-rate-limited; never disconnects.
       if (!monitor) monitor = createResizeLoopMonitor()
       const warning = monitor.record(performance.now())
-      if (warning) console.warn(warning)
+      if (warning) {
+        console.warn(warning.message)
+        if (__FLUUX_ANOMALY__) {
+          signalAnomaly({
+            name: 'scroll/resize-loop',
+            fires: warning.fires,
+            threshold: warning.threshold,
+            elapsedMs: warning.elapsedMs,
+          })
+        }
+      }
 
       // Track the latest height and coalesce the correction into one rAF per
       // frame, no matter how many times the observer fires this frame. The

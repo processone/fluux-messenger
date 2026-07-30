@@ -92,12 +92,28 @@ export const TAG = Object.freeze({
   mamResult: mint('mam:result', 'tag'),
   ahead: mint('ahead', 'tag'),
   behind: mint('behind', 'tag'),
+  // The message list's re-assert loop kinds. Closed constants rather than the
+  // caller's label string: the label is code-controlled today, but an unmapped
+  // free string reaching a record is exactly the hole the registries close.
+  loopPinBottom: mint('loop:pin-bottom', 'tag'),
+  loopMediaAnchor: mint('loop:media-anchor', 'tag'),
+  loopDividerAnchor: mint('loop:divider-anchor', 'tag'),
+  loopPrepend: mint('loop:prepend', 'tag'),
+  loopRestoreAnchor: mint('loop:restore-anchor', 'tag'),
+  loopMarker: mint('loop:marker', 'tag'),
+  loopTarget: mint('loop:target', 'tag'),
+  loopResidentTop: mint('loop:resident-top', 'tag'),
 })
 
 /** Invariant ids. One entry per row in docs/ANOMALY_INVARIANTS.md. */
 export const ID = Object.freeze({
   sessionStart: mint('recorder/session-start', 'id'),
   ceilingReached: mint('recorder/ceiling-reached', 'id'),
+  reassertOverlap: mint('scroll/reassert-overlap', 'id'),
+  reassertNonConverging: mint('scroll/reassert-nonconverging', 'id'),
+  resizeLoop: mint('scroll/resize-loop', 'id'),
+  slowCorrection: mint('scroll/slow-correction', 'id'),
+  mainThreadStall: mint('perf/main-thread-stall', 'id'),
 })
 
 /** Permitted `ctx` keys. */
@@ -107,6 +123,12 @@ export const CTX = Object.freeze({
   route: mint('route', 'ctx'),
   msg: mint('msg', 'ctx'),
   query: mint('query', 'ctx'),
+  /** Which re-assert loop kind — a TAG constant, never the raw label. */
+  loop: mint('loop', 'ctx'),
+  /** Rendered message rows at the time of the observation. */
+  rows: mint('rows', 'ctx'),
+  /** Measured window length, where a count alone would not be interpretable. */
+  elapsedMs: mint('elapsedMs', 'ctx'),
 })
 
 /**

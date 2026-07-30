@@ -9,6 +9,7 @@ import {
   whenReady,
 } from './install'
 import { CTX, METRIC, resetValuesForTesting } from './values'
+import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
 const w = () => window as unknown as WindowWithSink
@@ -128,6 +129,55 @@ describe('attach and detach', () => {
     install()()
     expect(remove).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
     remove.mockRestore()
+  })
+})
+
+describe('the sentinel fan-out seam', () => {
+  it('is inert before install, so a release build records nothing', () => {
+    expect(hasAnomalySignalHandler()).toBe(false)
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+    expect(lines()).toHaveLength(0)
+  })
+
+  it('records a signal once installed and the tokenizer is ready', async () => {
+    install()
+    await whenReady()
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    const stall = records().find((r) => r.id === 'perf/main-thread-stall')
+    expect(stall).toBeDefined()
+    expect(stall.observed).toBe(2500)
+    expect(stall.expected).toBe(1000)
+  })
+
+  it('stops recording once the last hold is released', async () => {
+    const cleanup = install()
+    await whenReady()
+    cleanup()
+
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    expect(records().filter((r) => r.id === 'perf/main-thread-stall')).toHaveLength(0)
+  })
+
+  it('survives a StrictMode cycle with exactly one handler', async () => {
+    // The same interleaving the refcount exists for: the first cleanup runs AFTER
+    // the second install. A handler cleared unconditionally on cleanup would leave
+    // the seam disconnected for the rest of the session — silently, since a
+    // missing record looks exactly like a healthy app.
+    const cleanup1 = install()
+    const cleanup2 = install()
+    cleanup1()
+    await whenReady()
+
+    expect(hasAnomalySignalHandler()).toBe(true)
+    signalAnomaly({ name: 'perf/main-thread-stall', blockedMs: 2500, thresholdMs: 1000 })
+
+    // One record, not two: a second registration would have stacked handlers.
+    expect(records().filter((r) => r.id === 'perf/main-thread-stall')).toHaveLength(1)
+    cleanup2()
+    expect(hasAnomalySignalHandler()).toBe(false)
   })
 })
 

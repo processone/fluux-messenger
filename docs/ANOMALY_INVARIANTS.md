@@ -46,8 +46,7 @@ Counter names (digest only, not invariant ids):
 
 ## Detector families
 
-No detectors ship in stage 1. Each entry below is added by the stage that
-introduces it.
+Each entry below is added by the stage that introduces it.
 
 ### `read-state/`
 
@@ -59,7 +58,30 @@ _(stage 5: `mam-page-yield`, `redundant-query`, `iq-unanswered`)_
 
 ### `scroll/`
 
-_(stage 2: existing sentinels; stage 3: `fab-at-live-edge`, `jump-target-miss`)_
+These are **fan-out, not new detection.** The monitors in
+`apps/fluux/src/components/conversation/` decide, log their prose to `fluux.log`
+exactly as they always have, and additionally signal a record. So every id here has
+a matching `console.warn` line: when one is puzzling, the prose has the detail that
+could not be recorded (overlapping loop labels, the conversation, the scrollHeight).
+
+| id | sev | Meaning | What to do |
+|---|---|---|---|
+| `scroll/reassert-overlap` | bug | Two or more message-list re-assert loops were alive at once, fighting over `scrollTop`. `observed` is how many; `expected` is 1 | A loop started without superseding the previous one. Historically a second MAM prepend beginning before the first re-assert finished |
+| `scroll/reassert-nonconverging` | bug | One loop issued `observed` scroll writes without settling on a stable anchor (`expected` is the threshold) | Two anchors disagree by more than the tolerance and the loop ping-pongs. `ctx.loop` names the loop kind |
+| `scroll/resize-loop` | suspect | The message-list `ResizeObserver` fired `observed` times in `ctx.elapsedMs` (`expected` is the threshold per window) | Oscillating content — classically a `<video controls>` on WebKitGTK — driving a correction feedback loop. Not itself a failure; a sustained one is |
+| `scroll/slow-correction` | suspect | A scroll correction took `observed` ms (`expected` is the threshold), with `ctx.rows` rows rendered | Reflow cost scaling with the rendered backlog. Correlate with `ctx.rows`: a high count means virtualization is not engaged |
+
+_(stage 3 adds `fab-at-live-edge` and `jump-target-miss` in this family — those are
+genuinely new detectors, not fan-out.)_
+
+### `perf/`
+
+`stallSentinel` is route-wide and fires for freezes that have nothing to do with
+the message list.
+
+| id | sev | Meaning | What to do |
+|---|---|---|---|
+| `perf/main-thread-stall` | suspect | The main thread was blocked ~`observed` ms (`expected` is the threshold) | Any freeze class, including ones with no React render. The prose line carries the route; the record deliberately does not, because a route contains a JID |
 
 ### `resource/`
 

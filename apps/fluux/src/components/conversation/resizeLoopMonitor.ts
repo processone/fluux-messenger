@@ -19,13 +19,33 @@
  * firing thousands of times per second). Timestamps are passed in so the logic
  * is deterministic and unit-testable.
  */
+import type { AnomalySignal } from '@/utils/anomalySignal'
+
+/**
+ * A detected runaway.
+ *
+ * `message` is the prose line, assembled here so it stays byte-identical to what
+ * `fluux.log` has always carried; the numeric fields ride alongside it so the
+ * dev-only anomaly log can record the observation structurally without re-parsing
+ * the prose. See `src/utils/anomalySignal.ts`.
+ */
+export interface ResizeLoopWarning {
+  message: string
+  /** Observer fires counted in this window. */
+  fires: number
+  /** Count above which a window is a runaway. */
+  threshold: number
+  /** How long the counted window actually ran. */
+  elapsedMs: number
+}
+
 export interface ResizeLoopMonitor {
   /**
    * Record one observer fire at `now` (ms, monotonic e.g. performance.now()).
-   * Returns a warning string to log once per cooldown when a runaway is
-   * detected, or null otherwise.
+   * Returns a warning once per cooldown when a runaway is detected, or null
+   * otherwise.
    */
-  record(now: number): string | null
+  record(now: number): ResizeLoopWarning | null
 }
 
 export interface ResizeLoopMonitorOptions {
@@ -51,7 +71,7 @@ export function createResizeLoopMonitor(opts: ResizeLoopMonitorOptions = {}): Re
   let lastWarnAt = Number.NEGATIVE_INFINITY
 
   return {
-    record(now: number): string | null {
+    record(now: number): ResizeLoopWarning | null {
       if (!started || now - windowStart > windowMs) {
         windowStart = now
         count = 0
@@ -62,13 +82,35 @@ export function createResizeLoopMonitor(opts: ResizeLoopMonitorOptions = {}): Re
       if (count > threshold && now - lastWarnAt >= cooldownMs) {
         lastWarnAt = now
         const elapsed = Math.max(1, Math.round(now - windowStart))
-        return (
-          `[ScrollResizeLoop] message-list ResizeObserver fired ${count} times in ${elapsed}ms ` +
-          `(threshold ${threshold}/${windowMs}ms) — likely a WebKitGTK scroll-correction feedback loop. ` +
-          `Scroll correction is rAF-coalesced; this log is a diagnostic only.`
-        )
+        return {
+          message:
+            `[ScrollResizeLoop] message-list ResizeObserver fired ${count} times in ${elapsed}ms ` +
+            `(threshold ${threshold}/${windowMs}ms) — likely a WebKitGTK scroll-correction feedback loop. ` +
+            `Scroll correction is rAF-coalesced; this log is a diagnostic only.`,
+          fires: count,
+          threshold,
+          elapsedMs: elapsed,
+        }
       }
       return null
     },
+  }
+}
+
+/**
+ * Translate a warning into the signal the anomaly log records.
+ *
+ * Lives here rather than at the call site because there are TWO observers using
+ * this monitor — the content one and the scroller one — and a mapping written
+ * twice is a mapping that can disagree with itself. It is also the only way this
+ * translation gets a unit test at all: the call sites are buried inside a rAF
+ * loop in `useMessageListScroll`.
+ */
+export function resizeLoopSignal(warning: ResizeLoopWarning): AnomalySignal {
+  return {
+    name: 'scroll/resize-loop',
+    fires: warning.fires,
+    threshold: warning.threshold,
+    elapsedMs: warning.elapsedMs,
   }
 }

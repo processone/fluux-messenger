@@ -1,4 +1,4 @@
-import type { ReassertLoopHandle } from './reassertLoopMonitor'
+import type { ReassertLoopHandle, ReassertLoopWarning } from './reassertLoopMonitor'
 
 export interface ControllerFrameLoop {
   schedule: (callback: () => void) => void
@@ -27,7 +27,15 @@ export interface CreateControllerFrameLoopOptions {
   requestFrame: (callback: () => void) => number
   cancelFrame: (id: number) => void
   now: () => number
-  warn: (warning: string) => void
+  /**
+   * Forward a detection to the caller, verbatim.
+   *
+   * The whole warning travels rather than just its prose: the caller logs
+   * `warning.message` and, in a Dev build, also records the numbers structurally.
+   * Rendering the line here would strip the numbers and force a consumer to
+   * re-parse the sentence to recover them.
+   */
+  warn: (warning: ReassertLoopWarning) => void
   lifecycle?: ControllerFrameLoopLifecycle
 }
 

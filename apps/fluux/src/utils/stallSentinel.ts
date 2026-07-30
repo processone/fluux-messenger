@@ -15,12 +15,31 @@
  * Pure tick logic (timestamps and visibility passed in) for unit testing;
  * `startStallSentinel` wires it to setInterval + document.hidden.
  */
+import { signalAnomaly } from './anomalySignal'
+
+/**
+ * A detected stall.
+ *
+ * `message` is the prose line, assembled here so it stays byte-identical to what
+ * `fluux.log` has always carried; the numbers ride alongside so the dev-only
+ * anomaly log can record the observation structurally. Note that the prose
+ * context (the active route) deliberately does NOT travel: a route carries the
+ * conversation JID, which may not reach a structured record.
+ */
+export interface StallWarning {
+  message: string
+  /** How long the main thread was blocked beyond the expected tick gap. */
+  blockedMs: number
+  /** Overshoot at or above which a late tick counts as a stall. */
+  thresholdMs: number
+}
+
 export interface StallSentinel {
   /**
-   * Record one heartbeat at `now` (ms, monotonic). Returns a log line when a
+   * Record one heartbeat at `now` (ms, monotonic). Returns a warning when a
    * stall is detected (rate-limited), null otherwise.
    */
-  tick(now: number, hidden: boolean): string | null
+  tick(now: number, hidden: boolean): StallWarning | null
 }
 
 export interface StallSentinelOptions {
@@ -49,7 +68,7 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
   let lastReportAt = Number.NEGATIVE_INFINITY
 
   return {
-    tick(now: number, hidden: boolean): string | null {
+    tick(now: number, hidden: boolean): StallWarning | null {
       if (hidden) {
         // Timer clamping in hidden windows mimics a stall — don't evaluate,
         // and make the next visible tick re-baseline instead of comparing
@@ -74,10 +93,13 @@ export function createStallSentinel(opts: StallSentinelOptions = {}): StallSenti
       lastReportAt = now
 
       const context = getContext ? ` (${getContext()})` : ''
-      return (
-        `[MainThreadStall] main thread blocked ~${Math.round(blockedMs)}ms` +
-        `${context} — heartbeat expected every ${intervalMs}ms, fired after ${Math.round(gap)}ms`
-      )
+      return {
+        message:
+          `[MainThreadStall] main thread blocked ~${Math.round(blockedMs)}ms` +
+          `${context} — heartbeat expected every ${intervalMs}ms, fired after ${Math.round(gap)}ms`,
+        blockedMs: Math.round(blockedMs),
+        thresholdMs: stallThresholdMs,
+      }
     },
   }
 }
@@ -96,7 +118,17 @@ export function startStallSentinel(opts: StallSentinelOptions = {}): () => void 
 
   const id = setInterval(() => {
     const warning = sentinel.tick(performance.now(), document.hidden)
-    if (warning) console.warn(warning)
+    if (!warning) return
+    console.warn(warning.message)
+    // Fan-out, not re-pointing: the prose above is untouched and still the
+    // troubleshooting path. In a release build nothing is listening.
+    if (__FLUUX_ANOMALY__) {
+      signalAnomaly({
+        name: 'perf/main-thread-stall',
+        blockedMs: warning.blockedMs,
+        thresholdMs: warning.thresholdMs,
+      })
+    }
   }, intervalMs)
 
   return () => clearInterval(id)

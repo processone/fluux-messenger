@@ -8,11 +8,15 @@
  * relies on while the session kept its id. Only SUBSCRIPTIONS are attached and
  * detached — the runtime outlives them.
  *
- * Stage 1 registers NO detectors. This establishes the contract they attach to.
+ * The only thing attached so far is the sentinel fan-out: the existing scroll and
+ * stall monitors keep their prose and additionally signal into a neutral seam,
+ * which is connected here. No detection logic lives in this tree.
  *
  * @module Anomaly/Install
  */
+import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
 import { isTauri } from '../utils/tauri'
+import { recordForSignal } from './detectors/sentinelFanout'
 import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
@@ -162,6 +166,16 @@ export function install(): () => void {
   if (attachRefs === 1) {
     attachments++
 
+    // The sentinels in `useMessageListScroll` and `stallSentinel` cannot import
+    // this tree — they ship in release builds. They signal into a neutral seam
+    // instead, and this is where the seam is connected. Registration is idempotent
+    // (the handler is a fresh closure over the same runtime), so a StrictMode
+    // remount replaces it rather than stacking a second one.
+    setAnomalySignalHandler((signal) => {
+      const input = recordForSignal(signal)
+      if (input) rec.record(input)
+    })
+
     digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
 
     const onVisibility = () => {
@@ -183,6 +197,7 @@ export function install(): () => void {
     attachRefs--
     if (attachRefs > 0) return
 
+    clearAnomalySignalHandler()
     detachListener?.()
     detachListener = null
     if (digestTimer) clearInterval(digestTimer)
@@ -197,6 +212,7 @@ export function setSessionRetryDelayForTesting(ms: number): void {
 
 /** Test-only: tears down the runtime as well as the subscriptions. */
 export function resetInstallForTesting(): void {
+  clearAnomalySignalHandler()
   detachListener?.()
   detachListener = null
   if (digestTimer) clearInterval(digestTimer)
