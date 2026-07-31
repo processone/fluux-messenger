@@ -52,7 +52,10 @@ function makeState(overrides: Partial<EntityNotificationState> = {}): EntityNoti
  * timestamp has to be that message's own.
  */
 function seen(id: string, timestamp: Date): ReadPointer {
-  return { messageId: id, timestamp }
+  // A FLOOR order: the shape this helper replaces carried a timestamp and no
+  // tie-break, so the position is known only to a millisecond. `local`, because
+  // no archive id was ever part of it.
+  return { order: { role: 'floor', timestamp: timestamp.getTime() }, identity: { state: 'local', messageId: id } }
 }
 
 /**
@@ -118,7 +121,7 @@ describe('onMessageReceived', () => {
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
       expect(result.firstNewMessageId).toBeUndefined()
-      expect(result.readPointer).toMatchObject({ messageId: msg.id, timestamp: msg.timestamp })
+      expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: msg.id } })
     })
 
     // Superseded by PR C, D1: the outgoing early return that used to clear
@@ -140,7 +143,7 @@ describe('onMessageReceived', () => {
       const state = makeState({ readPointer: seen('seen-1', new Date(1000)) })
       const msg = makeMsg({ isOutgoing: true })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
-      expect(result.readPointer).toMatchObject({ messageId: msg.id, timestamp: msg.timestamp })
+      expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: msg.id } })
     })
 
     it('does not regress the read pointer for an older outgoing message', () => {
@@ -175,14 +178,14 @@ describe('onMessageReceived', () => {
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
-      expect(result.readPointer).toMatchObject({ messageId: msg.id, timestamp: msg.timestamp })
+      expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: msg.id } })
     })
 
     it('advances the read pointer to the new message', () => {
       const state = makeState({ readPointer: seen('old-msg', new Date(1000)) })
       const msg = makeMsg({ id: 'new-msg' })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
-      expect(result.readPointer).toMatchObject({ messageId: 'new-msg', timestamp: msg.timestamp })
+      expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: 'new-msg' } })
     })
 
     it('does not regress the read pointer for an older delayed arrival at the live edge', () => {
@@ -287,7 +290,7 @@ describe('onMessageReceived', () => {
       const state = makeState({ readPointer: priorPointer, unreadCount: 4 })
       const msg = makeMsg({ id: 'new-msg', timestamp: new Date('2025-01-15T09:00:00Z') })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE, 'chat')
-      expect(result.readPointer).toMatchObject({ messageId: 'new-msg', timestamp: msg.timestamp })
+      expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: 'new-msg' } })
       expect(result.unreadCount).toBe(0)
     })
 
@@ -437,14 +440,15 @@ describe('onActivate', () => {
   it('does not drag the read time forward to the newest loaded message', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages, 'chat')
-    expect(result.readPointer).toMatchObject({ messageId: 'msg-2', timestamp: new Date('2025-01-15T09:30:00Z') })
-    expect(result.readPointer?.timestamp).not.toEqual(new Date('2025-01-15T11:00:00Z'))
+    expect(result.readPointer?.identity.messageId).toBe('msg-2')
+    expect(result.readPointer?.order.timestamp).toBe(new Date('2025-01-15T09:30:00Z').getTime())
+    expect(result.readPointer?.order.timestamp).not.toBe(new Date('2025-01-15T11:00:00Z').getTime())
   })
 
   it('preserves the read pointer', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages, 'chat')
-    expect(result.readPointer?.messageId).toBe('msg-2')
+    expect(result.readPointer?.identity.messageId).toBe('msg-2')
   })
 
   // FIX 2: an empty slice gives onActivate nothing to derive a divider from —
@@ -775,7 +779,7 @@ describe('onMessageSeen atLiveEdge advance', () => {
     const state = { ...createInitialNotificationState(), readPointer: seen('evicted', new Date(500)) }
     const messages = [{ id: 'a', timestamp: new Date(1000) }, { id: 'b', timestamp: new Date(2000) }]
     const out = onMessageSeen(state, 'b', messages, 'chat', { atLiveEdge: true })
-    expect(out.readPointer).toMatchObject({ messageId: 'b', timestamp: new Date(2000) })
+    expect(out.readPointer).toMatchObject({ order: { timestamp: new Date(2000).getTime() }, identity: { messageId: 'b' } })
   })
   it('stays guarded off the live edge (window slid up — no regression)', () => {
     const state = { ...createInitialNotificationState(), readPointer: seen('newer-than-slice', new Date(9000)) }
@@ -812,7 +816,7 @@ describe('onDeactivate', () => {
     const result = onDeactivate(state)
     expect(result.unreadCount).toBe(3)
     expect(result.mentionsCount).toBe(1)
-    expect(result.readPointer?.messageId).toBe('seen-1')
+    expect(result.readPointer?.identity.messageId).toBe('seen-1')
   })
 })
 
@@ -863,7 +867,7 @@ describe('onMarkAsRead', () => {
     const state = makeState({ unreadCount: 3, readPointer: seen('seen-1', new Date(1000)) })
     const messages = [makeMsg({ id: 'seen-1', timestamp: new Date(1000) }), makeMsg({ id: 'newest-9', timestamp: new Date(9000) })]
     const result = onMarkAsRead(state, messages, 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
-    expect(result.readPointer).toMatchObject({ messageId: 'newest-9', timestamp: new Date(9000) })
+    expect(result.readPointer).toMatchObject({ order: { timestamp: new Date(9000).getTime() }, identity: { messageId: 'newest-9' } })
     expect(result.unreadCount).toBe(0)
   })
 
@@ -874,7 +878,7 @@ describe('onMarkAsRead', () => {
     const messages = [makeMsg({ id: 'seen-1', timestamp: new Date(1000) }), makeMsg({ id: 'newest-9', timestamp: ts })]
     const result = onMarkAsRead(state, messages, 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
     expect(result).not.toBe(state)
-    expect(result.readPointer).toMatchObject({ messageId: 'newest-9', timestamp: ts })
+    expect(result.readPointer).toMatchObject({ order: { timestamp: ts.getTime() }, identity: { messageId: 'newest-9' } })
   })
 
   it('returns same reference when the newest loaded message is already the current pointer', () => {
@@ -892,7 +896,7 @@ describe('onMarkAsRead — live-edge decision (PR C, D8)', () => {
   it('advances the pointer to the newest loaded message at the live edge', () => {
     const state = { unreadCount: 5, mentionsCount: 2, readPointer: undefined, firstNewMessageId: 'x' }
     const r = onMarkAsRead(state, [m('m1', 1000), m('m2', 2000)], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
-    expect(r.readPointer?.messageId).toBe('m2')
+    expect(r.readPointer?.identity.messageId).toBe('m2')
     expect(r.unreadCount).toBe(0)
     expect(r.mentionsCount).toBe(0)
     expect(r.firstNewMessageId).toBe('x')
@@ -953,7 +957,7 @@ describe('onClearMarker', () => {
     })
     const result = onClearMarker(state)
     expect(result.unreadCount).toBe(3)
-    expect(result.readPointer?.messageId).toBe('seen-1')
+    expect(result.readPointer?.identity.messageId).toBe('seen-1')
   })
 })
 
@@ -999,7 +1003,7 @@ describe('onWindowBecameVisible', () => {
     })
     const result = onWindowBecameVisible(state, true)
     expect(result.firstNewMessageId).toBe('marker-1')
-    expect(result.readPointer?.messageId).toBe('seen-1')
+    expect(result.readPointer?.identity.messageId).toBe('seen-1')
   })
 })
 
@@ -1018,19 +1022,19 @@ describe('onMessageSeen', () => {
 
   const pointerAt = (id: string): ReadPointer => {
     const found = messages.find((m) => m.id === id)!
-    return { messageId: found.id, timestamp: found.timestamp }
+    return { order: { role: 'floor', timestamp: found.timestamp.getTime() }, identity: { state: 'local', messageId: found.id } }
   }
 
   it('sets the read pointer when none exists', () => {
     const state = makeState()
     const result = onMessageSeen(state, 'msg-3', messages, 'chat')
-    expect(result.readPointer).toMatchObject({ messageId: 'msg-3', timestamp: new Date(3000) })
+    expect(result.readPointer).toMatchObject({ order: { timestamp: new Date(3000).getTime() }, identity: { messageId: 'msg-3' } })
   })
 
   it('advances forward', () => {
     const state = makeState({ readPointer: pointerAt('msg-2') })
     const result = onMessageSeen(state, 'msg-4', messages, 'chat')
-    expect(result.readPointer).toMatchObject({ messageId: 'msg-4', timestamp: new Date(4000) })
+    expect(result.readPointer).toMatchObject({ order: { timestamp: new Date(4000).getTime() }, identity: { messageId: 'msg-4' } })
   })
 
   it('does not go backwards', () => {
@@ -1078,7 +1082,7 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
       readPointer: makeReadPointer({ id: 'old', timestamp: new Date(500) }, 'chat'),
       firstNewMessageId: undefined }
     const r = onMessageSeen(state, 'm2', [m('m2', 2000)], 'chat')
-    expect(r.readPointer?.messageId).toBe('m2')
+    expect(r.readPointer?.identity.messageId).toBe('m2')
   })
 
   it('does NOT advance a KEYED pointer to a message behind it', () => {
@@ -1094,7 +1098,7 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
       firstNewMessageId: undefined }
     const r = onMessageSeen(state, 'm2', [m('m1', 1000), m('m2', 1000)], 'chat')
-    expect(r.readPointer?.messageId).toBe('m2')
+    expect(r.readPointer?.identity.messageId).toBe('m2')
   })
 
   // OFF-SLICE + same millisecond: nothing but the cache order key can decide
@@ -1106,7 +1110,7 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm1', timestamp: new Date(1000) }, 'chat'),
       firstNewMessageId: undefined }
-    expect(onMessageSeen(state, 'm2', [m('m2', 1000)], 'chat').readPointer?.messageId).toBe('m2')
+    expect(onMessageSeen(state, 'm2', [m('m2', 1000)], 'chat').readPointer?.identity.messageId).toBe('m2')
   })
 
   // NEGATIVE POLARITY — this is the forward-only guard itself. The keyed branch
@@ -1126,11 +1130,11 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
 
   // CONTROL: the keyless branch keeps its guard AND its escape hatch.
   it('refuses a KEYLESS pointer that is absent from the slice, unless at the live edge and newest', () => {
-    const state = { unreadCount: 4, mentionsCount: 0,
-      readPointer: { messageId: 'old', timestamp: new Date(500) }, firstNewMessageId: undefined }
+    const state: EntityNotificationState = { unreadCount: 4, mentionsCount: 0,
+      readPointer: { order: { role: 'floor', timestamp: new Date(500).getTime() }, identity: { state: 'local', messageId: 'old' } }, firstNewMessageId: undefined }
     expect(onMessageSeen(state, 'm1', [m('m1', 2000), m('m2', 3000)], 'chat')).toBe(state)
     const edge = onMessageSeen(state, 'm2', [m('m1', 2000), m('m2', 3000)], 'chat', { atLiveEdge: true })
-    expect(edge.readPointer?.messageId).toBe('m2')
+    expect(edge.readPointer?.identity.messageId).toBe('m2')
   })
 
   // ACCEPTED HAZARD — read this before "fixing" it.
@@ -1169,8 +1173,8 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
 
     // The observer reports a row in the MIDDLE of that window — not its newest.
     const advancedState = onMessageSeen(state, 'm255', slice, 'chat')
-    expect(advancedState.readPointer?.messageId).toBe('m255')
-    expect(advancedState.readPointer?.timestamp.getTime()).toBe(255_000)
+    expect(advancedState.readPointer?.identity.messageId).toBe('m255')
+    expect(advancedState.readPointer?.order.timestamp).toBe(255_000)
 
     // The consequence, made explicit: m200 was never rendered, yet it is now
     // behind the boundary — it no longer qualifies as the first new message,
@@ -1228,7 +1232,7 @@ describe('shouldNotifyConversation', () => {
         isActive: false,
         windowVisible: false,
         unreadCount: 1,
-        readPointer: { messageId: 'm5', timestamp: new Date() },
+        readPointer: { order: { role: 'floor', timestamp: new Date().getTime() }, identity: { state: 'local', messageId: 'm5' } },
       }),
     ).toBe(false)
   })
@@ -1388,7 +1392,7 @@ describe('lifecycle sequences', () => {
     expect(state.mentionsCount).toBe(0)
     expect(state.firstNewMessageId).toBeUndefined()
     // advanced to the outgoing message, timestamp included
-    expect(state.readPointer).toMatchObject({ messageId: 'out-1', timestamp: outgoing.timestamp })
+    expect(state.readPointer).toMatchObject({ order: { timestamp: outgoing.timestamp.getTime() }, identity: { messageId: 'out-1' } })
   })
 
   it('no spurious marker after user replies to a conversation', () => {
@@ -1407,15 +1411,15 @@ describe('lifecycle sequences', () => {
 
     // User sends reply-1 → the read pointer must advance
     state = onMessageReceived(state, msgs[2], ACTIVE_VISIBLE, 'chat')
-    expect(state.readPointer?.messageId).toBe('reply-1')
+    expect(state.readPointer?.identity.messageId).toBe('reply-1')
 
     // Incoming msg-3 arrives while user is viewing
     state = onMessageReceived(state, msgs[3], ACTIVE_VISIBLE, 'chat')
-    expect(state.readPointer?.messageId).toBe('msg-3')
+    expect(state.readPointer?.identity.messageId).toBe('msg-3')
 
     // User sends reply-2
     state = onMessageReceived(state, msgs[4], ACTIVE_VISIBLE, 'chat')
-    expect(state.readPointer?.messageId).toBe('reply-2')
+    expect(state.readPointer?.identity.messageId).toBe('reply-2')
 
     // User switches away and back
     state = onDeactivate(state)
@@ -1567,7 +1571,7 @@ describe('lifecycle sequences', () => {
     // User opens conversation → marker at m2
     state = onActivate(state, initialMessages, 'chat')
     expect(state.firstNewMessageId).toBe('m2')
-    expect(state.readPointer?.messageId).toBe('m1')
+    expect(state.readPointer?.identity.messageId).toBe('m1')
 
     // User scrolls and sees all messages via IntersectionObserver
     state = onMessageSeen(state, 'm3', initialMessages, 'chat')
@@ -1580,7 +1584,7 @@ describe('lifecycle sequences', () => {
     state = onMessageReceived(state, m5, ACTIVE_VISIBLE, 'chat')
 
     // the read pointer should have advanced to m5 (user sees each message)
-    expect(state.readPointer).toMatchObject({ messageId: 'm5', timestamp: m5.timestamp })
+    expect(state.readPointer).toMatchObject({ order: { timestamp: m5.timestamp.getTime() }, identity: { messageId: 'm5' } })
 
     // User switches away
     state = onDeactivate(state)
@@ -1596,7 +1600,7 @@ describe('lifecycle sequences', () => {
 
     // No new messages after m5 → no marker (not the stale marker at m2!)
     expect(state.firstNewMessageId).toBeUndefined()
-    expect(state.readPointer?.messageId).toBe('m5')
+    expect(state.readPointer?.identity.messageId).toBe('m5')
   })
 })
 
@@ -1623,7 +1627,7 @@ describe('readPointer is the whole read position (#1081)', () => {
     )
     // Whole-object assertion: a write that got the timestamp from anywhere but
     // the message itself fails here.
-    expect(out.readPointer).toMatchObject({ messageId: 'm1', timestamp: new Date(1000) })
+    expect(out.readPointer).toMatchObject({ order: { timestamp: new Date(1000).getTime() }, identity: { messageId: 'm1' } })
   })
 
   it('onMessageReceived writes the whole pointer when the user sees the message', () => {
@@ -1633,19 +1637,20 @@ describe('readPointer is the whole read position (#1081)', () => {
       { isActive: true, windowVisible: true, viewportAtLiveEdge: true },
       'chat'
     )
-    expect(out.readPointer).toMatchObject({ messageId: 'm2', timestamp: new Date(2000) })
+    expect(out.readPointer).toMatchObject({ order: { timestamp: new Date(2000).getTime() }, identity: { messageId: 'm2' } })
   })
 
   it('onMessageSeen resolves the timestamp from the messages array', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
-    const start = { ...base(), readPointer: { messageId: 'm1', timestamp: new Date(1000) } }
+    const start: EntityNotificationState = { ...base(), readPointer: { order: { role: 'floor', timestamp: new Date(1000).getTime() }, identity: { state: 'local', messageId: 'm1' } } }
     const out = notifState.onMessageSeen(start, 'm3', messages, 'chat')
-    expect(out.readPointer).toMatchObject({ messageId: 'm3', timestamp: new Date(3000) })
+    expect(out.readPointer?.identity.messageId).toBe('m3')
+    expect(out.readPointer?.order.timestamp).toBe(3000)
   })
 
   it('onMessageSeen leaves the pointer put when it does not advance', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000)]
-    const pointer = { messageId: 'm2', timestamp: new Date(2000) }
+    const pointer: ReadPointer = { order: { role: 'floor', timestamp: 2000 }, identity: { state: 'local', messageId: 'm2' } }
     const start = { ...base(), readPointer: pointer }
     const out = notifState.onMessageSeen(start, 'm1', messages, 'chat')
     expect(out.readPointer).toBe(pointer)
@@ -1661,7 +1666,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
   })
 
   it('onMessageReceived keeps the pointer put for an unseen incoming message', () => {
-    const pointer = { messageId: 'm1', timestamp: new Date(1000) }
+    const pointer: ReadPointer = { order: { role: 'floor', timestamp: 1000 }, identity: { state: 'local', messageId: 'm1' } }
     const start = { ...base(), readPointer: pointer }
     const out = notifState.onMessageReceived(start, msg('m2', 2000), { isActive: false, windowVisible: false }, 'chat')
     expect(out.readPointer).toBe(pointer)
@@ -1673,7 +1678,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
   // in this suite as a NEGATIVE case.
   it('onActivate never writes the pointer, stale id or not', () => {
     const messages = [msg('m1', 1000), msg('m2', 2000), msg('m3', 3000)]
-    const stale = { messageId: 'gone', timestamp: new Date(1500) }
+    const stale: ReadPointer = { order: { role: 'floor', timestamp: 1500 }, identity: { state: 'local', messageId: 'gone' } }
     const outStale = notifState.onActivate({ ...base(), readPointer: stale, unreadCount: 2 }, messages, 'chat')
     expect(outStale.firstNewMessageId).toBe('m2')
     expect(outStale.readPointer).toBe(stale)
@@ -1688,14 +1693,15 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     const start = {
       ...base(),
       unreadCount: 3,
-      readPointer: { messageId: 'm1', timestamp: new Date(1000) },
-    }
+      readPointer: { order: { role: 'floor', timestamp: new Date(1000).getTime() }, identity: { state: 'local', messageId: 'm1' } },
+    } satisfies EntityNotificationState
     const out = notifState.onMarkAsRead(start, [msg('m1', 1000), msg('m3', 3000)], 'chat', { windowAtLiveEdge: true, viewportAtLiveEdge: true })
-    expect(out.readPointer).toMatchObject({ messageId: 'm3', timestamp: new Date(3000) })
+    expect(out.readPointer?.identity.messageId).toBe('m3')
+    expect(out.readPointer?.order.timestamp).toBe(3000)
   })
 
   it('onMarkAsRead leaves the pointer put when the window is off the live edge', () => {
-    const pointer = { messageId: 'm1', timestamp: new Date(1000) }
+    const pointer: ReadPointer = { order: { role: 'floor', timestamp: 1000 }, identity: { state: 'local', messageId: 'm1' } }
     const start = { ...base(), unreadCount: 3, readPointer: pointer }
     const out = notifState.onMarkAsRead(start, [msg('m1', 1000)], 'chat', { windowAtLiveEdge: false, viewportAtLiveEdge: true })
     expect(out.readPointer).toBe(pointer)
@@ -1720,8 +1726,10 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     // across every call here would otherwise make it trivially match.
     const coherent = (st: EntityNotificationState, label: string) => {
       const p = st.readPointer
-      expect(`${label}: ${JSON.stringify(p && { messageId: p.messageId, timestamp: p.timestamp })}`).toBe(
-        `${label}: ${JSON.stringify(p && { messageId: p.messageId, timestamp: byId.get(p.messageId) })}`
+      expect(
+        `${label}: ${JSON.stringify(p && { messageId: p.identity.messageId, timestamp: p.order.timestamp })}`
+      ).toBe(
+        `${label}: ${JSON.stringify(p && { messageId: p.identity.messageId, timestamp: byId.get(p.identity.messageId)?.getTime() })}`
       )
     }
 
@@ -1746,7 +1754,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
     coherent(s, 'onWindowBecameVisible')
     s = notifState.onClearMarker(s)
     coherent(s, 'onClearMarker')
-    expect(s.readPointer?.messageId).toBe('m4')
+    expect(s.readPointer?.identity.messageId).toBe('m4')
   })
 })
 
@@ -1769,7 +1777,7 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
   it('advances the pointer on an outgoing message ONLY at the live edge', () => {
     const seen = onMessageReceived(base({ unreadCount: 5 }), out('m1', 1000),
       { isActive: true, windowVisible: true, viewportAtLiveEdge: true }, 'chat', { treatDelayedAsNew: true })
-    expect(seen.readPointer?.messageId).toBe('m1')
+    expect(seen.readPointer?.identity.messageId).toBe('m1')
     expect(seen.unreadCount).toBe(0)
   })
 
@@ -1821,7 +1829,7 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
       readPointer: makeReadPointer({ id: 'p0', from: 'r@c/alice', timestamp: new Date(500) }, 'room') })
     const r = onMessageReceived(state, { id: 'm1', from: 'r@c/imposter', timestamp: new Date(1000), isOutgoing: true, body: 'x' },
       { isActive: false, windowVisible: true, viewportAtLiveEdge: false }, 'room')
-    expect(r.readPointer?.messageId).toBe('p0')
+    expect(r.readPointer?.identity.messageId).toBe('p0')
     expect(r.unreadCount).toBe(6)
   })
 

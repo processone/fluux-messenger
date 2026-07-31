@@ -1431,7 +1431,7 @@ describe('countUnreadInArchive (chat)', () => {
     ])
     const res = await messageCache.countUnreadInArchive(CONV, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'chat', id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
     expect(res).toEqual({ unread: 2 })
   })
@@ -1444,7 +1444,7 @@ describe('countUnreadInArchive (chat)', () => {
     ])
     const res = await messageCache.countUnreadInArchive(CONV, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'chat', id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1457,7 +1457,7 @@ describe('countUnreadInArchive (chat)', () => {
     ])
     const res = await messageCache.countUnreadInArchive(CONV, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'chat', id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1470,7 +1470,7 @@ describe('countUnreadInArchive (chat)', () => {
     ])
     const res = await messageCache.countUnreadInArchive(CONV, {
       floor: t,
-      pointer: { timestamp: t, tiebreak: { kind: 'chat', id: 'm1' } },
+      pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'chat', id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1508,7 +1508,7 @@ describe('countUnreadInArchive (chat)', () => {
     // unread sibling being silently dropped. m3 (a later timestamp) counts regardless.
     const res = await messageCache.countUnreadInArchive(CONV, {
       floor: t,
-      pointer: { timestamp: t },
+      pointer: { role: 'floor', timestamp: t.getTime() },
     })
     expect(res).toEqual({ unread: 3 })
   })
@@ -1539,7 +1539,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     ])
     const res = await messageCache.countRoomUnreadInArchive(ROOM, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
     expect(res).toEqual({ unread: 2 })
   })
@@ -1552,7 +1552,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     ])
     const res = await messageCache.countRoomUnreadInArchive(ROOM, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1565,7 +1565,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     ])
     const res = await messageCache.countRoomUnreadInArchive(ROOM, {
       floor: new Date(1000),
-      pointer: { timestamp: new Date(1000), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
+      pointer: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/user`, id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1578,7 +1578,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     ])
     const res = await messageCache.countRoomUnreadInArchive(ROOM, {
       floor: t,
-      pointer: { timestamp: t, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
+      pointer: { role: 'exact', timestamp: t.getTime(), tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm1' } },
     })
     expect(res).toEqual({ unread: 1 })
   })
@@ -1592,7 +1592,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     ])
     // Same over-count rationale as the chat case: both same-ms rows (m1, m2) resolve
     // as "after" an unresolved pointer position; m3 counts regardless of the key.
-    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { timestamp: t } })
+    const res = await messageCache.countRoomUnreadInArchive(ROOM, { floor: t, pointer: { role: 'floor', timestamp: t.getTime() } })
     expect(res).toEqual({ unread: 3 })
   })
 

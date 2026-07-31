@@ -137,7 +137,11 @@ describe('room read state persistence', () => {
     expect(persisted.get(ROOM)?.historyFloor).toBeInstanceOf(Date)
     // …and the pointer itself, not just the creation-time floor: a wiring that
     // only saved at addRoom would pass the floor assertion above on its own.
-    expect(persisted.get(ROOM)?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(persisted.get(ROOM)?.readPointer).toEqual({
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
+      // The room reflected a stanza-id, so the position is publishable as-is.
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+    })
   })
 
   // The one shape that can tell DISK apart from MEMORY, and so the only test
@@ -152,7 +156,7 @@ describe('room read state persistence', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([
-        [DISK_ONLY_ROOM, { readPointer: { messageId: 'd7', timestamp: 7000 }, historyFloor: 1000 }],
+        [DISK_ONLY_ROOM, { readPointer: { order: { role: 'floor', timestamp: new Date(7000).getTime() }, identity: { state: 'local', messageId: 'd7' } }, historyFloor: 1000 }],
       ])
     )
 
@@ -161,7 +165,7 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(DISK_ONLY_ROOM))
 
     const meta = roomStore.getState().roomMeta.get(DISK_ONLY_ROOM)
-    expect(meta?.readPointer).toEqual({ messageId: 'd7', timestamp: new Date(7000) })
+    expect(meta?.readPointer).toEqual({ order: { role: 'floor', timestamp: new Date(7000).getTime() }, identity: { state: 'local', messageId: 'd7' } })
     // …and the floor must come from disk rather than being restamped to now.
     expect(meta?.historyFloor).toEqual(new Date(1000))
   })
@@ -175,7 +179,10 @@ describe('room read state persistence', () => {
     roomStore.getState().addRoom(makeRoom(ROOM))
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(meta?.readPointer).toEqual({
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+    })
   })
 
   // The cross-restart half of the "written once" rule: re-adding the room in a
@@ -199,11 +206,9 @@ describe('room read state persistence', () => {
     // The markReadToNewest save is the one under test, and it coalesced behind
     // addRoom's leading edge.
     flushThrottledStorage()
-    // toMatchObject: makeReadPointer also stamps a tiebreak onto the
-    // pointer; this assertion only cares about messageId/timestamp.
-    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toMatchObject({
-      messageId: 'm2',
-      timestamp: new Date(2000),
+    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({
+      order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' } },
+      identity: { state: 'addressable', messageId: 'm2', archiveId: 's-m2' },
     })
   })
 
@@ -235,7 +240,10 @@ describe('room read state persistence', () => {
     roomStore.getState().setBookmark(ROOM, { name: 'Room', nick: 'me', autojoin: true })
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer).toMatchObject({ messageId: 'm5', timestamp: new Date(5000) })
+    expect(meta?.readPointer).toEqual({
+      order: { role: 'exact', timestamp: 5000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm5' } },
+      identity: { state: 'addressable', messageId: 'm5', archiveId: 's-m5' },
+    })
     expect(meta?.historyFloor).toEqual(floor)
   })
 
@@ -249,16 +257,16 @@ describe('room read state persistence', () => {
   it('keeps the durable pointer when the snapshot Room carries a staler one', () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify([[ROOM, { readPointer: { messageId: 'm9', timestamp: 9000 }, historyFloor: 1000 }]])
+      JSON.stringify([[ROOM, { readPointer: { order: { role: 'floor', timestamp: new Date(9000).getTime() }, identity: { state: 'local', messageId: 'm9' } }, historyFloor: 1000 }]])
     )
     roomStore.getState().switchAccount(JID)
 
     // The snapshot was written before the last few advances landed.
-    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { messageId: 'm5', timestamp: new Date(5000) } } as Room)
+    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { order: { role: 'floor', timestamp: new Date(5000).getTime() }, identity: { state: 'local', messageId: 'm5' } } } as Room)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ order: { role: 'floor', timestamp: new Date(9000).getTime() }, identity: { state: 'local', messageId: 'm9' } })
     // …and the durable row must not have been overwritten with the staler one.
-    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+    expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toEqual({ order: { role: 'floor', timestamp: new Date(9000).getTime() }, identity: { state: 'local', messageId: 'm9' } })
   })
 
   // Control for the same rule in the other direction: the snapshot is not being
@@ -266,13 +274,13 @@ describe('room read state persistence', () => {
   it('takes the snapshot pointer when it is ahead of the durable row', () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify([[ROOM, { readPointer: { messageId: 'm5', timestamp: 5000 }, historyFloor: 1000 }]])
+      JSON.stringify([[ROOM, { readPointer: { order: { role: 'floor', timestamp: new Date(5000).getTime() }, identity: { state: 'local', messageId: 'm5' } }, historyFloor: 1000 }]])
     )
     roomStore.getState().switchAccount(JID)
 
-    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { messageId: 'm9', timestamp: new Date(9000) } } as Room)
+    roomStore.getState().addRoom({ ...makeRoom(ROOM), readPointer: { order: { role: 'floor', timestamp: new Date(9000).getTime() }, identity: { state: 'local', messageId: 'm9' } } } as Room)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ messageId: 'm9', timestamp: new Date(9000) })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer).toEqual({ order: { role: 'floor', timestamp: new Date(9000).getTime() }, identity: { state: 'local', messageId: 'm9' } })
   })
 
   it('drops a removed room from the durable copy', () => {

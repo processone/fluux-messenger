@@ -384,7 +384,7 @@ describe('chatSelectors', () => {
       const meta: ConversationMetadata = {
         unreadCount: 5,
         lastMessage: undefined,
-        readPointer: { messageId: 'm1', timestamp: new Date() },
+        readPointer: { order: { role: 'floor', timestamp: new Date().getTime() }, identity: { state: 'local', messageId: 'm1' } },
       }
       const conversationMeta = new Map([['user@example.com', meta]])
       const state = createMockState({ conversationMeta })

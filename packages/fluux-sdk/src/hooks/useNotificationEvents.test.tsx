@@ -725,7 +725,10 @@ describe('useNotificationEvents', () => {
           // the notification and this case could not tell a working read-pointer
           // check from a missing one.
           unreadCount: 1,
-          readPointer: { messageId: 'm1', timestamp: new Date() },
+          readPointer: {
+            order: { role: 'exact', timestamp: Date.now(), tiebreak: { kind: 'chat', id: 'm1' } },
+            identity: { state: 'local', messageId: 'm1' },
+          },
           lastMessage: {
             id: 'm1',
             // A body is required: without one `isPreviewableMessage` rejects the

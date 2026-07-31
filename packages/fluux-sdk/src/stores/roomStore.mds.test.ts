@@ -119,7 +119,7 @@ function seedRoom(
     // construction — a position we cannot locate in this slice, i.e. the
     // migrated shape — so it stays keyless.
     const readPointer: ReadPointer = pointerTimestamp
-      ? { messageId: seenMessageId, timestamp: pointerTimestamp }
+      ? { order: { role: 'floor', timestamp: pointerTimestamp.getTime() }, identity: { state: 'local', messageId: seenMessageId } }
       : pointerIn(messages, seenMessageId)
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
@@ -163,13 +163,13 @@ describe('roomStore.applyRemoteDisplayed', () => {
   it('advances the read pointer forward to the local id of the matching stanza-id', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   it('never regresses the read pointer (incoming marker behind current)', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm3')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   it('stores a pending high-water mark when the stanza-id is not yet loaded', () => {
@@ -177,7 +177,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-future')
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
-    expect(meta?.readPointer?.messageId).toBe('m1')
+    expect(meta?.readPointer?.identity.messageId).toBe('m1')
   })
 
   it('clears a stale pending marker when the message is loaded but position already past it', () => {
@@ -192,7 +192,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
     const after = roomStore.getState().roomMeta.get(ROOM)
     expect(after?.pendingRemoteDisplayedStanzaId).toBe(undefined)
-    expect(after?.readPointer?.messageId).toBe('m2')
+    expect(after?.readPointer?.identity.messageId).toBe('m2')
   })
 
   // PR C, D3 widening — at the store layer, where it actually bites. The store
@@ -223,7 +223,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's3', mergedPage)
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m3')
+    expect(meta?.readPointer?.identity.messageId).toBe('m3')
     // Resolved, so the high-water mark is retired rather than left to re-fire.
     expect(meta?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // The count is NOT this page's own tally (which would be 1: m4 alone). It
@@ -246,7 +246,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m3')
   })
 
@@ -260,7 +260,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m3')
   })
 
@@ -296,7 +296,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's4', messages)
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m4')
+    expect(meta?.readPointer?.identity.messageId).toBe('m4')
 
     // Let the fire-and-forget archive recount run to completion.
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -332,7 +332,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().applyRemoteDisplayed(ROOM, 's2', messages)
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m2')
+    expect(meta?.readPointer?.identity.messageId).toBe('m2')
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(3)
@@ -352,7 +352,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     )
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m5')
+    expect(meta?.readPointer?.identity.messageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -399,7 +399,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
 
     // Pointer resolved at p0 (forward-only sync is unconditional and
     // unaffected by PR B).
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
 
     // The archive-derived recount runs (fire-and-forget) but defers: no
     // mamQueryStates/roomCoverage were seeded, so coverage down to the new
@@ -439,7 +439,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     // PR B: the pointer resolves synchronously, but the count is no longer
     // written synchronously from this page — the archive-derived recount is
     // still pending on the gated cache read below, so the count is untouched.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('p0')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
 
     // User opens the room before the cache read lands. No coverage record or
@@ -493,7 +493,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 
@@ -511,7 +511,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m3')
 
     // Leave (deactivation evicts the resident message array).
     await roomStore.getState().activateRoom(null)
@@ -528,7 +528,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomRuntime: rt, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   // Regression (bug: "read on another device, still unread on return"): a NEWER remote read
@@ -547,7 +547,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m3')
 
     // Leave (deactivation evicts the resident message array).
     await roomStore.getState().activateRoom(null)
@@ -563,7 +563,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       return { roomRuntime: rt, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
-    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.messageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m4')
   })
 
   // Regression (gate burn on stash): the first activation fold may find the marker's
@@ -584,7 +584,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(RETRY_ROOM)
     // Unresolvable → stash survives, pointer untouched.
-    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.identity.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
 
     await roomStore.getState().activateRoom(null)
@@ -600,7 +600,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
 
     await roomStore.getState().activateRoom(RETRY_ROOM)
     // The gate must allow the retry (the marker was never actually folded).
-    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.messageId).toBe('m9')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.readPointer?.identity.messageId).toBe('m9')
     expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
   })
 
@@ -632,7 +632,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     await roomStore.getState().activateRoom(DEEP_ROOM)
 
     // The retried fold advances the pointer to the synced position…
-    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.readPointer?.messageId).toBe('m5')
+    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.readPointer?.identity.messageId).toBe('m5')
     expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
     expect(roomSelectors.firstNewMessageIdFor(DEEP_ROOM)(roomStore.getState())).toBe('m6')
@@ -711,7 +711,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     const full = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4), rmsg('m5', 's5', 5)]
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
-    expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.messageId).toBe('m4')
+    expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.identity.messageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m5')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
@@ -833,8 +833,8 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     roomStore.getState().markAsRead(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
-    expect(roomStore.getState().rooms.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
+    expect(roomStore.getState().rooms.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
   })
 
@@ -854,7 +854,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     roomStore.getState().markAsRead(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
   })
 
@@ -870,7 +870,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
 
     roomStore.getState().markAsRead(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
   })
 })
@@ -908,24 +908,24 @@ describe('roomStore.advanceReadPointer presence gate', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(true)
     roomStore.getState().advanceReadPointer(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 
   it('does not advance the read pointer while the window is unfocused', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
     roomStore.getState().advanceReadPointer(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
   })
 
   it('resumes advancing once the window regains focus', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
     connectionStore.getState().setWindowVisible(false)
     roomStore.getState().advanceReadPointer(ROOM, 'm2')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     connectionStore.getState().setWindowVisible(true)
     roomStore.getState().advanceReadPointer(ROOM, 'm3')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
   })
 })
 
@@ -971,7 +971,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
     roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m3')
+    expect(meta?.readPointer?.identity.messageId).toBe('m3')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -996,7 +996,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
 
     roomStore.getState().mergeRoomMAMMessages(ROOM, archive(), {}, true, 'forward')
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m3')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
   })
@@ -1073,7 +1073,7 @@ describe('roomStore pending-marker guard edges', () => {
     )
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m5')
+    expect(meta?.readPointer?.identity.messageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
@@ -1099,7 +1099,7 @@ describe('roomStore pending-marker guard edges', () => {
       {}, true, 'forward'
     )
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m1')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
   })
@@ -1129,7 +1129,7 @@ describe('roomStore pending-marker guard edges', () => {
     roomStore.getState().mergeRoomMAMMessages(ROOM, page, {}, true, 'forward')
 
     const meta = roomStore.getState().roomMeta.get(ROOM)
-    expect(meta?.readPointer?.messageId).toBe('m2')
+    expect(meta?.readPointer?.identity.messageId).toBe('m2')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)

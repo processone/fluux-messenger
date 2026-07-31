@@ -194,9 +194,23 @@ export { isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions 
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
 export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
 
-// Read pointer (canonical read position; supersedes lastSeenMessageId + lastReadAt, issue #1081)
-export type { ReadPointer } from './stores/shared/readPointer'
-export { makeReadPointer, isAhead, advance } from './stores/shared/readPointer'
+// Read pointer (canonical read position; supersedes lastSeenMessageId + lastReadAt, issue #1081).
+//
+// A pointer is `{ order, identity }`: one ORDER, and two NAMES that answer
+// different questions. `identity` is a DISCRIMINATED union — `addressable`
+// carries the XEP-0359 archive id that XEP-0490 publishes, `local` says the
+// position has no wire name yet — so a consumer that wants to publish a position
+// has to say what it does when there isn't one. `order` is likewise `exact` or
+// `floor`. See `stores/shared/readPointer.ts` for why neither name can replace
+// the other.
+export type { ReadPointer, PointerIdentity, PointerSource } from './stores/shared/readPointer'
+export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
+export type {
+  CacheOrderKey,
+  PointerOrder,
+  ExactPosition,
+  FloorPosition,
+} from './stores/shared/readState'
 
 // Viewport evidence (read-state PR B, Task 11): SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`

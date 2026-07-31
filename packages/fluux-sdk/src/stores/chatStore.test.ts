@@ -229,13 +229,13 @@ describe('chatStore', () => {
         conversationMeta.set(cid, {
           ...conversationMeta.get(cid)!,
           unreadCount: 2,
-          readPointer: { messageId: read.id, timestamp: read.timestamp },
+          readPointer: { order: { role: 'floor', timestamp: new Date(read.timestamp).getTime() }, identity: { state: 'local', messageId: read.id } },
         })
         const conversations = new Map(s.conversations)
         conversations.set(cid, {
           ...conversations.get(cid)!,
           unreadCount: 2,
-          readPointer: { messageId: read.id, timestamp: read.timestamp },
+          readPointer: { order: { role: 'floor', timestamp: new Date(read.timestamp).getTime() }, identity: { state: 'local', messageId: read.id } },
         })
         const messages = new Map(s.messages)
         messages.set(cid, [read, realUnread])
@@ -263,13 +263,13 @@ describe('chatStore', () => {
         conversationMeta.set(cid, {
           ...conversationMeta.get(cid)!,
           unreadCount: 2,
-          readPointer: { messageId: read.id, timestamp: read.timestamp },
+          readPointer: { order: { role: 'floor', timestamp: new Date(read.timestamp).getTime() }, identity: { state: 'local', messageId: read.id } },
         })
         const conversations = new Map(s.conversations)
         conversations.set(cid, {
           ...conversations.get(cid)!,
           unreadCount: 2,
-          readPointer: { messageId: read.id, timestamp: read.timestamp },
+          readPointer: { order: { role: 'floor', timestamp: new Date(read.timestamp).getTime() }, identity: { state: 'local', messageId: read.id } },
         })
         // No resident messages array — the durable (never-opened) path.
         return { conversationMeta, conversations, activeConversationId: null }
@@ -1180,11 +1180,7 @@ describe('chatStore', () => {
         const meta = new Map(state.conversationMeta)
         meta.set(A, {
           ...meta.get(A)!,
-          readPointer: {
-            messageId: 'msg-150',
-            timestamp: new Date(150 * 60_000),
-            tiebreak: { kind: 'chat', id: 'msg-150' },
-          },
+          readPointer: { order: { role: 'exact', timestamp: new Date(150 * 60_000).getTime(), tiebreak: { kind: 'chat', id: 'msg-150' } }, identity: { state: 'local', messageId: 'msg-150' } },
         })
         return { conversationMeta: meta }
       })
@@ -1337,7 +1333,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation(id),
         unreadCount: 4,
-        readPointer: { messageId: 'prior-seen', timestamp: new Date('2025-01-15T09:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-15T09:00:00Z').getTime() }, identity: { state: 'local', messageId: 'prior-seen' } },
       })
       // Backgrounded: never activated, so `isActive` is false. Deliberately NOT
       // a raw `setState({ activeConversationId })` — `setActiveConversation` is
@@ -1360,9 +1356,9 @@ describe('chatStore', () => {
       const conv = chatStore.getState().conversations.get(id)
       const meta = chatStore.getState().conversationMeta.get(id)
       // Both assertions are reversals: pre-D1 these were 'carbon-from-my-phone' and 0.
-      expect(meta?.readPointer?.messageId).toBe('prior-seen')
+      expect(meta?.readPointer?.identity.messageId).toBe('prior-seen')
       expect(meta?.unreadCount).toBe(4)
-      expect(conv?.readPointer?.messageId).toBe('prior-seen')
+      expect(conv?.readPointer?.identity.messageId).toBe('prior-seen')
       expect(conv?.unreadCount).toBe(4)
     })
 
@@ -1975,7 +1971,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation('alice@example.com'),
         unreadCount: 2,
-        readPointer: { messageId: 'older', timestamp: new Date('2025-01-10T10:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'older' } },
       })
       // Add a message so markAsRead can use its timestamp
       chatStore.getState().addMessage({
@@ -1999,7 +1995,7 @@ describe('chatStore', () => {
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(0)
       // The whole position moved to msg1 — id and timestamp together.
-      expect(conv?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(conv?.readPointer).toMatchObject({ order: { role: 'exact', timestamp: messageTimestamp.getTime() }, identity: { state: 'local', messageId: 'msg1' } })
     })
 
     // Replaces 'should set lastReadAt to current time when no messages exist'
@@ -2024,7 +2020,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation('alice@example.com'),
         unreadCount: 0, // Already read
-        readPointer: { messageId: 'older', timestamp: new Date('2025-01-10T10:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'older' } },
       })
 
       // Add a newer message
@@ -2047,7 +2043,7 @@ describe('chatStore', () => {
       chatStore.getState().markAsRead('alice@example.com')
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(conv?.readPointer).toMatchObject({ order: { role: 'exact', timestamp: messageTimestamp.getTime() }, identity: { state: 'local', messageId: 'msg1' } })
     })
 
     it('should not trigger state update when called twice at the same read position (regression test for infinite loop)', () => {
@@ -2077,7 +2073,7 @@ describe('chatStore', () => {
       chatStore.getState().markAsRead('alice@example.com')
       const convAfterFirst = chatStore.getState().conversations.get('alice@example.com')
       expect(convAfterFirst?.unreadCount).toBe(0)
-      expect(convAfterFirst?.readPointer).toMatchObject({ messageId: 'msg1', timestamp: messageTimestamp })
+      expect(convAfterFirst?.readPointer).toMatchObject({ order: { role: 'exact', timestamp: messageTimestamp.getTime() }, identity: { state: 'local', messageId: 'msg1' } })
 
       // Capture conversation reference after first markAsRead
       const conversationsMapAfterFirst = chatStore.getState().conversations
@@ -2117,8 +2113,8 @@ describe('chatStore', () => {
       await chatStore.persist.rehydrate()
 
       const pointer = chatStore.getState().conversationMeta.get('alice@example.com')?.readPointer
-      expect(pointer?.timestamp).toBeInstanceOf(Date)
-      expect(pointer).toEqual({ messageId: 'msg1', timestamp: new Date('2025-01-10T10:00:00.000Z') })
+      expect(typeof pointer?.order.timestamp).toBe('number')
+      expect(pointer).toEqual({ order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00.000Z').getTime() }, identity: { state: 'local', messageId: 'msg1' } })
     })
 
     it('places the new-messages divider from the read pointer timestamp in setActiveConversation', () => {
@@ -2135,7 +2131,7 @@ describe('chatStore', () => {
           type: 'chat',
           unreadCount: 1,
           // Position resolved elsewhere (deep in history, not in this slice)
-          readPointer: { messageId: 'msg-older', timestamp: new Date('2025-01-10T10:00:00.000Z') },
+          readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00.000Z').getTime() }, identity: { state: 'local', messageId: 'msg-older' } },
         })
         const newMessages = new Map(state.messages)
         newMessages.set('alice@example.com', [{
@@ -2165,7 +2161,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation(conversationId),
         unreadCount: 2,
-        readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'm1' } },
       })
       chatStore.getState().addMessage({
         type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
@@ -2188,7 +2184,7 @@ describe('chatStore', () => {
       chatStore.getState().markReadToNewest(conversationId)
 
       const meta = chatStore.getState().conversationMeta.get(conversationId)
-      expect(meta?.readPointer?.messageId).toBe('m3')
+      expect(meta?.readPointer?.identity.messageId).toBe('m3')
       expect(meta?.unreadCount).toBe(0)
       expect(chatStore.getState().firstNewMessageMarkers.has(conversationId)).toBe(false)
     })
@@ -2198,7 +2194,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation({
         ...createConversation(conversationId),
         unreadCount: 2,
-        readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'm1' } },
       })
       chatStore.getState().addMessage({
         type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
@@ -3909,7 +3905,7 @@ describe('chatStore', () => {
           // tally of 2 unread messages (m2, m3) — so a broken defer gate that
           // commits the derived count instead of returning early fails loudly.
           unreadCount: 5,
-          readPointer: { messageId: 'm1', timestamp: new Date('2025-01-10T10:00:00Z') },
+          readPointer: { order: { role: 'floor', timestamp: new Date('2025-01-10T10:00:00Z').getTime() }, identity: { state: 'local', messageId: 'm1' } },
         })
         const convs = new Map(state.conversations)
         convs.set(conversationId, { ...convs.get(conversationId)!, unreadCount: 5 })

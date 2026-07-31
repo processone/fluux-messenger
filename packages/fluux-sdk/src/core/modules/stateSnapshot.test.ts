@@ -151,7 +151,7 @@ describe('StateSnapshot', () => {
           mentionsCount: 1,
           isBookmarked: true,
           autojoin: true,
-          readPointer: { messageId: 'msg-42', timestamp: readAt.getTime() },
+          readPointer: { order: { role: 'floor', timestamp: new Date(readAt.getTime()).getTime() }, identity: { state: 'local', messageId: 'msg-42' } },
           messages: [],
         }],
       })
@@ -168,11 +168,14 @@ describe('StateSnapshot', () => {
       expect(room?.selfOccupant?.nick).toBe('me')
       expect(room?.unreadCount).toBe(3)
       expect(room?.autojoin).toBe(true)
-      // A Date, not the epoch number that sits on disk: a pointer carrying a
-      // number compares false against every message Date it meets, silently.
-      expect(room?.readPointer).toEqual({ messageId: 'msg-42', timestamp: readAt })
-      expect(roomStore.getState().roomMeta.get('room@conf.example.com')?.readPointer)
-        .toEqual({ messageId: 'msg-42', timestamp: readAt })
+      // Epoch ms, which is what `order.timestamp` is in memory as well as on
+      // disk — the ISO/Date ambiguity the old shape carried is gone.
+      const restored = {
+        order: { role: 'floor', timestamp: readAt.getTime() },
+        identity: { state: 'local', messageId: 'msg-42' },
+      }
+      expect(room?.readPointer).toEqual(restored)
+      expect(roomStore.getState().roomMeta.get('room@conf.example.com')?.readPointer).toEqual(restored)
     })
 
     // PR B (Task 8, cold-start rehydrate trigger): a room restored here may
@@ -204,15 +207,18 @@ describe('StateSnapshot', () => {
     it('persists the room read pointer so it can be hydrated back', async () => {
       const readAt = new Date('2026-04-21T09:15:00Z')
       roomStore.getState().addRoom(makeRoom('room@conf.example.com', {
-        readPointer: { messageId: 'msg-7', timestamp: readAt },
+        readPointer: { order: { role: 'floor', timestamp: new Date(readAt).getTime() }, identity: { state: 'local', messageId: 'msg-7' } },
       }))
 
       await snapshot.flush()
 
       const [persisted] = adapterData.store.get('user@example.com')!.rooms as Array<{
-        readPointer?: { messageId: string; timestamp: number }
+        readPointer?: unknown
       }>
-      expect(persisted?.readPointer).toEqual({ messageId: 'msg-7', timestamp: readAt.getTime() })
+      expect(persisted?.readPointer).toEqual({
+        order: { role: 'floor', timestamp: readAt.getTime() },
+        identity: { state: 'local', messageId: 'msg-7' },
+      })
     })
 
     // Task 2 (#1102): the structured tiebreak rides through this
@@ -226,25 +232,24 @@ describe('StateSnapshot', () => {
       await snapshot.flush()
 
       const [persisted] = adapterData.store.get('user@example.com')!.rooms as Array<{
-        readPointer?: { messageId: string; timestamp: number; tiebreak?: unknown }
+        readPointer?: { order?: { tiebreak?: unknown } }
       }>
       // The tie-break's `id` is NOT persisted: it is `messageId`, and storing a
       // second copy made a disagreement representable on disk. Only `from`,
       // which the pointer cannot reconstruct, rides through. The persisted
       // property name matches the in-memory field.
-      expect(persisted?.readPointer?.tiebreak).toEqual({
+      expect(persisted?.readPointer?.order?.tiebreak).toEqual({
         kind: 'room',
         from: 'room@conf.example.com/alice',
       })
 
       // Read back: a fresh hydrate into an empty room store must recover it,
-      // with `id` reconstructed from `messageId`.
+      // with `id` reconstructed from the identity's `messageId`.
       roomStore.getState().removeRoom('room@conf.example.com')
       await snapshot.hydrate('user@example.com')
-      expect(roomStore.getState().rooms.get('room@conf.example.com')?.readPointer?.tiebreak).toEqual({
-        kind: 'room',
-        from: 'room@conf.example.com/alice',
-        id: 'msg-8',
+      expect(roomStore.getState().rooms.get('room@conf.example.com')?.readPointer?.order).toMatchObject({
+        role: 'exact',
+        tiebreak: { kind: 'room', from: 'room@conf.example.com/alice', id: 'msg-8' },
       })
     })
 

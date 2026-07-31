@@ -43,13 +43,13 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
  * EXPLICITLY whenever a test advances a read pointer across two messages.
  *
  * NOT because a same-millisecond pair can never advance — read-state PR C
- * (task 1) changed exactly that. Two KEYED positions sharing a millisecond now
- * break the tie on the cache order key: `isAhead`
- * (shared/readPointer.ts, ~line 99) does it, and `advanceReadPointer` routes
- * through `onMessageSeen`'s keyed `mayAdvanceTo`, which does it too. The bare
- * "equal timestamps are NOT an advance" rule now applies ONLY when either side
- * is KEYLESS — i.e. a pointer migrated from the pre-#1081 `lastSeenMessageId` +
- * `lastReadAt` pair, whose timestamp cannot certify its own position.
+ * (task 1) changed exactly that. Two EXACT positions sharing a millisecond now
+ * break the tie on the cache order key: `isAhead` (shared/readPointer.ts) does
+ * it, and `advanceReadPointer` routes through `onMessageSeen`'s exact-order
+ * `mayAdvanceTo`, which does it too. The bare "equal timestamps are NOT an
+ * advance" rule now applies ONLY when either side is a FLOOR — i.e. a pointer
+ * migrated from the pre-#1081 `lastSeenMessageId` + `lastReadAt` pair, whose
+ * timestamp cannot certify its own position.
  *
  * The reason to be explicit is that the ROOM tie-break is `(from, id)`. Under
  * fake timers `new Date()` returns the same instant every call, so the order of

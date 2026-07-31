@@ -41,11 +41,7 @@ describe('room read-state persistence', () => {
 
     const restored = loadRoomReadState(JID)
     expect(restored.get('room@conf.example.com')).toEqual({
-      readPointer: {
-        messageId: 'm7',
-        timestamp: at(7000),
-        tiebreak: { kind: 'room', from: 'room@conf.example.com/alice', id: 'm7' },
-      },
+      readPointer: { order: { role: 'exact', timestamp: new Date(at(7000)).getTime(), tiebreak: { kind: 'room', from: 'room@conf.example.com/alice', id: 'm7' } }, identity: { state: 'local', messageId: 'm7' } },
       historyFloor: at(100),
     })
   })
@@ -145,12 +141,12 @@ describe('room read-state persistence', () => {
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
   })
 
-  // The tie-break's on-disk rename at the room persistence surface. Rows written
-  // by a build before the rename carry `archiveOrderKey` and must still load
-  // with their key intact — losing it here would silently downgrade a real read
-  // position to the at-or-after-timestamp fallback for every room of every
-  // account that upgraded.
-  it('loads a room row written under the historical tie-break name', () => {
+  // The pre-identity flat shapes at the room persistence surface. Rows written
+  // by an earlier build carry `archiveOrderKey` (or `tiebreak`) beside a
+  // top-level name, and must still load with their key intact — losing it here
+  // would silently downgrade a real read position to the at-or-after-timestamp
+  // fallback for every room of every account that upgraded.
+  it('migrates a room row written under the historical tie-break name', () => {
     localStorage.setItem(
       getRoomReadStateStorageKey(JID),
       JSON.stringify([
@@ -159,16 +155,16 @@ describe('room read-state persistence', () => {
     )
 
     expect(loadRoomReadState(JID).get('r@c')?.readPointer).toEqual({
-      messageId: 'm7',
-      timestamp: at(7000),
-      tiebreak: { kind: 'room', from: 'r@c/alice', id: 'm7' },
+      order: { role: 'exact', timestamp: 7000, tiebreak: { kind: 'room', from: 'r@c/alice', id: 'm7' } },
+      // `local`: no archive id was ever stored in that format.
+      identity: { state: 'local', messageId: 'm7' },
     })
   })
 
-  // ...and the evidence behind the fallback's removal condition: a save
-  // re-serializes the WHOLE map, so one write sheds the historical name for
-  // every room of the account, not only the room whose pointer moved.
-  it('a single save rewrites every room under the new name', () => {
+  // ...and the evidence behind the migration branch's removal condition: a save
+  // re-serializes the WHOLE map, so one write converts every room of the
+  // account, not only the room whose pointer moved.
+  it('a single save rewrites every room in the nested shape', () => {
     localStorage.setItem(
       getRoomReadStateStorageKey(JID),
       JSON.stringify([
@@ -187,12 +183,12 @@ describe('room read-state persistence', () => {
 
     const written = localStorage.getItem(getRoomReadStateStorageKey(JID))!
     expect(written).not.toContain('archiveOrderKey')
-    expect(written).toContain('tiebreak')
-    // The untouched room kept its position; only the property name changed.
+    expect(written).toContain('"identity"')
+    expect(written).toContain('"order"')
+    // The untouched room kept its position; only the shape changed.
     expect(loadRoomReadState(JID).get('untouched@c')?.readPointer).toEqual({
-      messageId: 'm2',
-      timestamp: at(2000),
-      tiebreak: { kind: 'room', from: 'untouched@c/bob', id: 'm2' },
+      order: { role: 'exact', timestamp: 2000, tiebreak: { kind: 'room', from: 'untouched@c/bob', id: 'm2' } },
+      identity: { state: 'local', messageId: 'm2' },
     })
   })
 })

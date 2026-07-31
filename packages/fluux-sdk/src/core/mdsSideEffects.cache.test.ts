@@ -50,6 +50,7 @@ import { setStorageScopeJid, _resetStorageScopeForTesting } from '../utils/stora
 import type { Message } from './types/chat'
 import type { Room, RoomMessage } from './types/room'
 import { getLocalPart } from './jid'
+import type { ReadPointer } from '../stores/shared/readPointer'
 
 const CID = 'juliet@capulet.example'
 const OWN_JID = 'romeo@montague.example/phone'
@@ -71,20 +72,36 @@ function timeFor(id: string): Date {
  * timestamp AND its cache order key. A pointer without a key is the
  * pre-#1081 migrated shape, covered separately in mdsSideEffects.test.ts.
  */
-function pointerAt(id: string): {
-  messageId: string
-  timestamp: Date
-  tiebreak: { kind: 'chat'; id: string }
-} {
-  return { messageId: id, timestamp: timeFor(id), tiebreak: { kind: 'chat', id } }
+function pointerAt(id: string): ReadPointer {
+  return {
+    order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'chat', id } },
+    identity: { state: 'local', messageId: id },
+  }
 }
 
-function roomPointerAt(id: string, from = `${ROOM}/alice`): {
-  messageId: string
-  timestamp: Date
-  tiebreak: { kind: 'room'; from: string; id: string }
-} {
-  return { messageId: id, timestamp: timeFor(id), tiebreak: { kind: 'room', from, id } }
+function roomPointerAt(id: string, from = `${ROOM}/alice`): ReadPointer {
+  return {
+    order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'room', from, id } },
+    identity: { state: 'local', messageId: id },
+  }
+}
+
+/**
+ * The same positions, ADDRESSABLE: minted from a message that already carried an
+ * archive id. This is what every peer message and every MUC reflection produces.
+ */
+function addressablePointerAt(id: string, archiveId: string): ReadPointer {
+  return {
+    order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'chat', id } },
+    identity: { state: 'addressable', messageId: id, archiveId },
+  }
+}
+
+function addressableRoomPointerAt(id: string, archiveId: string, from = `${ROOM}/alice`): ReadPointer {
+  return {
+    order: { role: 'exact', timestamp: timeFor(id).getTime(), tiebreak: { kind: 'room', from, id } },
+    identity: { state: 'addressable', messageId: id, archiveId },
+  }
 }
 
 /** A cached (IndexedDB) 1:1 row, incoming so it carries a server stanza-id. */
@@ -757,7 +774,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
       const roomMeta = new Map(state.roomMeta)
       roomMeta.set(ROOM, {
         ...roomMeta.get(ROOM)!,
-        readPointer: { messageId: 'shared-id', timestamp: timeFor('shared-id') },
+        readPointer: { order: { role: 'floor', timestamp: new Date(timeFor('shared-id')).getTime() }, identity: { state: 'local', messageId: 'shared-id' } },
       })
       return { roomMeta }
     })
@@ -784,6 +801,75 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     // The deliberate asymmetry (#1189): MUC reflection supplies the exact
     // stanza-id shortly, so an approximation would degrade a working path.
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+  // ==========================================================================
+  // What the IDENTITY VARIANT does — and does NOT — remove from the machinery
+  // above.
+  //
+  // The design note that produced this shape predicted #1175 would "dissolve":
+  // with the archive id on the pointer, the publisher would need no lookup, so
+  // the async / serial-drain / revalidate constraint list would disappear WITH
+  // the lookup. That is only half right, and the half it gets wrong is why every
+  // test above still exists.
+  //
+  //  - `addressable` pointers: correct. Resolution is a field read. No resident
+  //    slice, no `lastMessage`, no IndexedDB, no await that could span a session
+  //    boundary. Every peer message and every MUC reflection mints one.
+  //  - `local` pointers: WRONG. The archive id genuinely does not exist yet, so
+  //    the only way to find one is still to read the archive — and the `local`
+  //    population is precisely the case #1175 and #1189 were opened for (a 1:1
+  //    resting on the user's own send, whose row may never acquire an id at all).
+  //
+  // So the machinery is SCOPED, not deleted. These three cases pin that split so
+  // nobody deletes it on the strength of the prediction.
+  // ==========================================================================
+
+  it('an ADDRESSABLE pointer publishes with no lookup of any kind', async () => {
+    const { client, cleanup } = await armedPublisher()
+
+    seedBackgroundedConversation()
+    patchMeta({ readPointer: addressablePointerAt('m7', 's7') })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    // The whole #1175 apparatus is skipped: nothing touched the cache, and
+    // nothing needed the resident slice either.
+    expect(getMessages).not.toHaveBeenCalled()
+    expect(getMessage).not.toHaveBeenCalled()
+    expect(getRoomMessage).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('an addressable ROOM pointer likewise skips the room cache lookup', async () => {
+    const { client, cleanup } = await armedPublisher()
+
+    seedBackgroundedRoom()
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, readPointer: addressableRoomPointerAt('r5', 'rs5') })
+      return { roomMeta: meta }
+    })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
+    expect(getRoomMessage).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('a LOCAL pointer still needs the cache — the machinery cannot be deleted', async () => {
+    const { client, cleanup } = await armedPublisher()
+
+    seedBackgroundedConversation()
+    // The 1:1 resting state: the pointer names our own send, which carries no
+    // archive id, so the position is `local` and unresolvable from the pointer
+    // alone. Without the cache read there is nothing to publish at all.
+    getMessages.mockResolvedValue([cachedMsg('m1', 's1'), cachedMsg('m7', undefined)])
+    patchMeta({ readPointer: pointerAt('m7') })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(getMessages).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's1', OWN_BARE)
     cleanup()
   })
 })

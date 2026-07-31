@@ -1,4 +1,4 @@
-import { compareExact, isAfterBoundary, type ExactPosition, type OrderPosition } from './readState'
+import { compareExact, isAfterBoundary, type ExactPosition, type PointerOrder } from './readState'
 import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../../utils/roomMessageIdentity'
 
 /**
@@ -198,7 +198,7 @@ export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: st
  * logical message counts exactly once regardless of how many aliases it is
  * known under. A `undefined` boundary counts everything (no floor yet).
  */
-export function transientCounts(key: ScopeKey, boundary: OrderPosition | undefined): { unread: number } {
+export function transientCounts(key: ScopeKey, boundary: PointerOrder | undefined): { unread: number } {
   const scope = getScope(key)
   if (!scope) return { unread: 0 }
   let unread = 0
@@ -213,7 +213,7 @@ export function transientCounts(key: ScopeKey, boundary: OrderPosition | undefin
  * them). A memory bound, not a correctness mechanism — {@link transientCounts}
  * already excludes them from the count without this ever being called.
  */
-export function pruneTransient(key: ScopeKey, boundary: OrderPosition): { removed: number } {
+export function pruneTransient(key: ScopeKey, boundary: PointerOrder): { removed: number } {
   const scope = getScope(key)
   if (!scope) return { removed: 0 }
   let removed = 0

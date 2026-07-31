@@ -24,6 +24,7 @@ import { roomStore } from '../stores/roomStore'
 import type { Message } from './types/chat'
 import type { Room, RoomMessage } from './types/room'
 import { getLocalPart } from './jid'
+import { makeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
 
 // Deterministic per-id timestamp: 'm3' → base + 3s. A read pointer carries the
 // timestamp of the message it names (#1081), so `pointerAt` can build one from
@@ -33,9 +34,13 @@ function timeFor(id: string): Date {
   return new Date(BASE_TIME + (Number(id.replace(/\D/g, '')) || 0) * 1000)
 }
 
-/** The read pointer naming `id`, carrying that message's own timestamp. */
-function pointerAt(id: string): { messageId: string; timestamp: Date } {
-  return { messageId: id, timestamp: timeFor(id) }
+/**
+ * The read pointer naming `id`, carrying that message's own timestamp — but as a
+ * FLOOR, i.e. the pre-#1081 migrated shape with no tie-break. The exact variant
+ * is covered in mdsSideEffects.cache.test.ts.
+ */
+function pointerAt(id: string): ReadPointer {
+  return { order: { role: 'floor', timestamp: timeFor(id).getTime() }, identity: { state: 'local', messageId: id } }
 }
 
 function msg(id: string, stanzaId: string | undefined): Message {
@@ -97,7 +102,7 @@ function seedMeta(cid: string, seenMessageId?: string): void {
 /** Patch a conversationMeta entry in place (fires the conversationMeta subscription). */
 function patchMeta(
   cid: string,
-  patch: Partial<{ readPointer: { messageId: string; timestamp: Date }; unreadCount: number }>
+  patch: Partial<{ readPointer: ReadPointer; unreadCount: number }>
 ): void {
   chatStore.setState((state) => {
     const newMeta = new Map(state.conversationMeta)
@@ -165,11 +170,10 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
       meta.set(jid, {
         ...existing,
         readPointer: {
-          messageId: seenMessageId,
-          timestamp: seen?.timestamp ?? new Date(0),
-          tiebreak: seen
-            ? { kind: 'room', from: seen.from, id: seenMessageId }
-            : undefined,
+          order: seen
+            ? { role: 'exact', timestamp: seen.timestamp.getTime(), tiebreak: { kind: 'room', from: seen.from, id: seenMessageId } }
+            : { role: 'floor', timestamp: 0 },
+          identity: { state: 'local', messageId: seenMessageId },
         },
       })
       return { roomMeta: meta }
@@ -342,7 +346,7 @@ describe('setupMdsSideEffects', () => {
     chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m2')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m2')
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
     cleanup()
   })
@@ -381,7 +385,7 @@ describe('setupMdsSideEffects', () => {
     chatStore.getState().advanceReadPointer(cid, 'm2')
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.messageId).toBe('m2')
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m2')
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
     expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
     cleanup()
@@ -408,8 +412,8 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(
-      chatStore.getState().conversationMeta.get(cid)?.readPointer?.tiebreak
-    ).toEqual({ kind: 'chat', id: 'm2' })
+      chatStore.getState().conversationMeta.get(cid)?.readPointer?.order
+    ).toEqual({ role: 'exact', timestamp: timeFor('m2').getTime(), tiebreak: { kind: 'chat', id: 'm2' } })
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
     expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
     cleanup()
@@ -429,7 +433,7 @@ describe('setupMdsSideEffects', () => {
     // has NO tiebreak, and its timestamp is lastReadAt — documented as at
     // or behind the message it names (readPointer.ts). Ordering by it therefore
     // under-advances: m3 sits past lastReadAt=2s and must not be selected.
-    patchMeta(cid, { readPointer: { messageId: 'm4', timestamp: timeFor('m2') } })
+    patchMeta(cid, { readPointer: { order: { role: 'floor', timestamp: new Date(timeFor('m2')).getTime() }, identity: { state: 'local', messageId: 'm4' } } })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
@@ -450,7 +454,7 @@ describe('setupMdsSideEffects', () => {
     // the window (the shape issue #1175 describes).
     seedMessages(cid, [msg('m9', 's9'), msg('m10', 's10')])
     seedMeta(cid)
-    patchMeta(cid, { readPointer: { messageId: 'evicted-m2', timestamp: timeFor('m2') } })
+    patchMeta(cid, { readPointer: { order: { role: 'floor', timestamp: new Date(timeFor('m2')).getTime() }, identity: { state: 'local', messageId: 'evicted-m2' } } })
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
@@ -613,7 +617,7 @@ describe('setupMdsSideEffects', () => {
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m2')
     cleanup()
   })
 
@@ -642,7 +646,7 @@ describe('setupMdsSideEffects', () => {
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
 
     // The stashed marker was drained and applied to the room.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m2')
 
     // And it must NOT cause an echo republish: lastKnownNodeStanzaId[ROOM] was
     // recorded during the seed, so consider() is echo-suppressed.
@@ -709,11 +713,7 @@ describe('setupMdsSideEffects', () => {
       const meta = new Map(s.roomMeta)
       meta.set(ROOM, {
         ...meta.get(ROOM)!,
-        readPointer: {
-          messageId: newest.id,
-          timestamp: newest.timestamp,
-          tiebreak: { kind: 'room', from: newest.from, id: newest.id },
-        },
+        readPointer: { order: { role: 'exact', timestamp: new Date(newest.timestamp).getTime(), tiebreak: { kind: 'room', from: newest.from, id: newest.id } }, identity: { state: 'local', messageId: newest.id } },
       })
       return { roomMeta: meta }
     })
@@ -822,11 +822,7 @@ describe('setupMdsSideEffects', () => {
       const meta = new Map(s.roomMeta)
       meta.set(ROOM, {
         ...meta.get(ROOM)!,
-        readPointer: {
-          messageId: 'm2',
-          timestamp: new Date(2),
-          tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' },
-        },
+        readPointer: { order: { role: 'exact', timestamp: new Date(2).getTime(), tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' } }, identity: { state: 'local', messageId: 'm2' } },
       })
       return { roomMeta: meta }
     })
@@ -1035,15 +1031,20 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // Five conversations, each read to its newest message. No resident arrays —
-    // memory windowing is the realistic cold-start shape, so the pointers resolve
-    // through the lastMessage preview.
+    // memory windowing is the realistic cold-start shape. Each pointer was minted
+    // from a peer message, so it is ADDRESSABLE and resolves by a field read
+    // rather than by looking anything up; what this case pins is the SWEEP (one
+    // publish per position the node lacks), not the resolution mechanism. The
+    // degraded `local` resolution — resident slice, then lastMessage preview,
+    // then the cache — is covered by the cases above and in
+    // `mdsSideEffects.cache.test.ts`.
     const jids = Array.from({ length: 5 }, (_, i) => `contact${i}@example.com`)
     chatStore.setState((state) => {
       const meta = new Map(state.conversationMeta)
       const convs = new Map(state.conversations)
       for (const cid of jids) {
         const newest = { ...msg('m2', `${cid}-s2`), id: `${cid}-m2`, conversationId: cid }
-        const readPointer = { messageId: newest.id, timestamp: newest.timestamp }
+        const readPointer = makeReadPointer(newest, 'chat')
         meta.set(cid, { unreadCount: 0, readPointer, lastMessage: newest } as never)
         convs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, readPointer } as never)
       }
@@ -1322,7 +1323,7 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m2')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m2')
 
     // And no echo republish on top of the migration.
     await vi.advanceTimersByTimeAsync(2_000)

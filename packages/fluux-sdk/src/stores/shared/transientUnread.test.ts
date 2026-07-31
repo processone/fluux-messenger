@@ -22,7 +22,7 @@ import { makeCacheOrderKey, type ExactPosition } from './readState'
  * message, so in production its tie-break always resolves (#1173).
  */
 const FIXTURE_TIEBREAK = makeCacheOrderKey({ from: 'fixture@x', id: 'fixture' }, 'room')
-const posAt = (timestamp: number): ExactPosition => ({ timestamp, tiebreak: FIXTURE_TIEBREAK })
+const posAt = (timestamp: number): ExactPosition => ({ role: 'exact', timestamp, tiebreak: FIXTURE_TIEBREAK })
 
 // Fresh scope per test: entityIds are unique so no state leaks between tests
 // (the module holds module-level state, matching the always-on lifetime the
@@ -42,7 +42,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note(msg, 10)
     // simulate deactivate + reactivate: nothing is called; the entry must remain
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1)
   })
 
   it('re-noting the same logical message after a stanzaId arrives does not double-count', () => {
@@ -53,7 +53,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note(msg, 10)
     note({ ...msg, stanzaId: 'S1' }, 10) // same logical message, higher identity tier
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1) // NOT 2
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1) // NOT 2
   })
 
   it('removeTransient resolves a retraction that references only the stanza-id', () => {
@@ -64,7 +64,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note({ ...msg, stanzaId: 'S1' }, 10)
     removeTransient(K, roomStanzaKey(K.entityId, 'S1'))
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(0)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(0)
   })
 
   it('two room messages with the SAME id but different senders count as two', () => {
@@ -74,7 +74,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'dup' }, 10)
     note({ roomJid: K.entityId, from: `${K.entityId}/bo`, id: 'dup' }, 11)
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(2)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(2)
   })
 
   it('a partial pointer advance drops only the passed entries', () => {
@@ -84,7 +84,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
 
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'a' }, 10)
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'b' }, 20)
-    expect(transientCounts(K, { timestamp: 15 }).unread).toBe(1) // only the t=20 one remains unread
+    expect(transientCounts(K, { role: 'floor', timestamp: 15 }).unread).toBe(1) // only the t=20 one remains unread
   })
 
   it('returns added:false when an alias merges into an existing entry', () => {
@@ -102,11 +102,11 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     // Two copies land separately (no shared tier yet), then a copy carrying BOTH tiers arrives.
     noteTransient(K, { position: posAt(10) }, 'origin-key-O', ['origin-key-O'])
     noteTransient(K, { position: posAt(10) }, 'stanza-key-S', ['stanza-key-S'])
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(2)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(2)
 
     const r = noteTransient(K, { position: posAt(10) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O']) // bridges both
     expect(r).toEqual({ added: false, requiresRecount: true }) // nothing added, but 2 -> 1
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1) // coalesced, not 2
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1) // coalesced, not 2
   })
 
   it('a plain alias registration reports no semantic change', () => {
@@ -144,8 +144,8 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     // A boundary of 10 sits strictly between the earliest (5) and tier-a's own
     // original position (20): correct behaviour reads 0 (5 <= 10, already
     // passed); "keep the first match's own position" would wrongly read 1.
-    expect(transientCounts(K, { timestamp: 10 }).unread).toBe(0)
-    expect(transientCounts(K, { timestamp: 4 }).unread).toBe(1) // the surviving entry (at 5) still exists
+    expect(transientCounts(K, { role: 'floor', timestamp: 10 }).unread).toBe(0)
+    expect(transientCounts(K, { role: 'floor', timestamp: 4 }).unread).toBe(1) // the surviving entry (at 5) still exists
   })
 })
 
@@ -159,8 +159,8 @@ describe('transientUnread — scope isolation', () => {
       'k-a',
     ])
 
-    expect(transientCounts(accountA, { timestamp: 5 }).unread).toBe(1)
-    expect(transientCounts(accountB, { timestamp: 5 }).unread).toBe(0)
+    expect(transientCounts(accountA, { role: 'floor', timestamp: 5 }).unread).toBe(1)
+    expect(transientCounts(accountB, { role: 'floor', timestamp: 5 }).unread).toBe(0)
   })
 
   it('chat and room kinds under the same entityId are independent scopes', () => {
@@ -170,8 +170,8 @@ describe('transientUnread — scope isolation', () => {
 
     noteTransient(chatKey, { position: posAt(10) }, transientIdentity({ id: 'c1' }, 'chat'), transientAliases({ id: 'c1' }, 'chat'))
 
-    expect(transientCounts(chatKey, { timestamp: 5 }).unread).toBe(1)
-    expect(transientCounts(roomKey, { timestamp: 5 }).unread).toBe(0)
+    expect(transientCounts(chatKey, { role: 'floor', timestamp: 5 }).unread).toBe(1)
+    expect(transientCounts(roomKey, { role: 'floor', timestamp: 5 }).unread).toBe(0)
   })
 })
 
@@ -184,8 +184,8 @@ describe('transientUnread — chat identity (bare id, no tiers)', () => {
   it('counts a noted chat message as unread until the boundary passes it', () => {
     const K = freshScopeKey('chat')
     noteTransient(K, { position: posAt(10) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
-    expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1)
-    expect(transientCounts(K, { timestamp: 15 }).unread).toBe(0)
+    expect(transientCounts(K, { role: 'floor', timestamp: 5 }).unread).toBe(1)
+    expect(transientCounts(K, { role: 'floor', timestamp: 15 }).unread).toBe(0)
   })
 })
 
@@ -214,8 +214,8 @@ describe('transientUnread — pruneTransient', () => {
     const K = freshScopeKey()
     noteTransient(K, { position: posAt(10) }, 'a', ['a'])
 
-    expect(pruneTransient(K, { timestamp: 10 })).toEqual({ removed: 0 })
-    expect(transientCounts(K, { timestamp: 10 }).unread).toBe(1)
+    expect(pruneTransient(K, { role: 'floor', timestamp: 10 })).toEqual({ removed: 0 })
+    expect(transientCounts(K, { role: 'floor', timestamp: 10 }).unread).toBe(1)
   })
 
   it('removed aliases can no longer resolve for removeTransient', () => {

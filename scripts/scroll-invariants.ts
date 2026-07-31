@@ -2720,15 +2720,28 @@ test.describe('Jump-to-last-read pill', () => {
       const dividerId = msgs[dIdx].id
       const pointerId = msgs[pIdx].id
       const expectedTargetId = msgs[targetIdx].id
-      // One read position, written whole: id, the named message's own timestamp, and the archive
-      // order key (#1081) — the literal shape `makeReadPointer` writes. The key is not optional
-      // decoration here: every stress-room message shares one millisecond, so a KEYLESS pointer
-      // cannot certify its position at all and the divider correctly falls back to "the whole
-      // slice is after the boundary". Only a migrated pre-#1081 pointer is ever keyless.
+      // One read position, written whole — the literal shape `makeReadPointer`
+      // writes: an EXACT order (the named message's own timestamp plus the cache
+      // tie-break) and an identity naming it. The exact role is not optional
+      // decoration here: every stress-room message shares one millisecond, so a
+      // FLOOR order cannot certify its position at all and the divider correctly
+      // falls back to "the whole slice is after the boundary". Only a migrated
+      // pre-#1081 pointer is ever a floor.
+      //
+      // `local`, because a demo message carries no archive id — and the divider
+      // does not care: identity names a position, it never orders one.
+      //
+      // NOTE: this file is not covered by `npm run typecheck` (the root tsconfig
+      // has `files: []`, and the app's `include` covers apps/fluux/scripts, not
+      // this one), so a stale pointer shape here compiles and fails only as a
+      // browser-side timeout. Keep it in step with `ReadPointer` by hand.
       const readPointer = {
-        messageId: pointerId,
-        timestamp: msgs[pIdx].timestamp,
-        tiebreak: { kind: 'room', from: msgs[pIdx].from ?? '', id: pointerId },
+        order: {
+          role: 'exact',
+          timestamp: msgs[pIdx].timestamp.getTime(),
+          tiebreak: { kind: 'room', from: msgs[pIdx].from ?? '', id: pointerId },
+        },
+        identity: { state: 'local', messageId: pointerId },
       }
       const roomMeta = new Map(s.roomMeta)
       const meta = roomMeta.get(jid)

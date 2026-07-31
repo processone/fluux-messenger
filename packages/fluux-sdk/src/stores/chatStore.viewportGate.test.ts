@@ -21,6 +21,7 @@ import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, getStorageScopeJid } from '../utils/storageScope'
 import { _clearAllTransientForTesting } from './shared/transientUnread'
+import type { ReadPointer } from './shared/readPointer'
 import {
   currentViewportGeneration,
   currentViewportEvidence,
@@ -105,7 +106,7 @@ function reportCurrent(conversationId: string, evidence: 'at-edge' | 'away'): vo
  * reset without touching the SDK's own activation code path under test.
  */
 function setPriorReadState(id: string, unreadCount: number, priorMessageId: string): void {
-  const priorPointer = { messageId: priorMessageId, timestamp: new Date('2025-01-15T08:00:00Z') }
+  const priorPointer: ReadPointer = { order: { role: 'floor', timestamp: new Date('2025-01-15T08:00:00Z').getTime() }, identity: { state: 'local', messageId: priorMessageId } }
   chatStore.setState((state) => {
     const meta = state.conversationMeta.get(id)
     const conv = state.conversations.get(id)
@@ -177,7 +178,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       // Break check (a): gating on `isActive && windowVisible` only would take the
       // "sees it" branch here and wrongly report unreadCount 4 (unchanged from the
       // seed, since force-zero was removed) / pointer advanced.
-      expect(conv?.readPointer?.messageId).toBe(PRIOR_MESSAGE_ID)
+      expect(conv?.readPointer?.identity.messageId).toBe(PRIOR_MESSAGE_ID)
       expect(conv?.unreadCount).toBe(5)
     })
 
@@ -189,7 +190,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       chatStore.getState().addMessage(msg)
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.readPointer?.messageId).toBe(msg.id)
+      expect(conv?.readPointer?.identity.messageId).toBe(msg.id)
       expect(conv?.unreadCount).toBe(0)
     })
 
@@ -200,7 +201,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       chatStore.getState().addMessage(createMessage('alice@example.com', 'incoming, no report yet'))
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.readPointer?.messageId).toBe(PRIOR_MESSAGE_ID)
+      expect(conv?.readPointer?.identity.messageId).toBe(PRIOR_MESSAGE_ID)
       expect(conv?.unreadCount).toBe(5)
     })
 
@@ -213,7 +214,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       chatStore.getState().addMessage(createMessage('alice@example.com', 'incoming while unfocused'))
 
       const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.readPointer?.messageId).toBe(PRIOR_MESSAGE_ID)
+      expect(conv?.readPointer?.identity.messageId).toBe(PRIOR_MESSAGE_ID)
       expect(conv?.unreadCount).toBe(5)
     })
   })
@@ -245,7 +246,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       const convB = chatStore.getState().conversations.get('convB@example.com')
       // Break check (b) territory: if B's evidence had inherited/started at-edge
       // (instead of 'unknown'), this would wrongly advance and zero the count.
-      expect(convB?.readPointer?.messageId).toBe(PRIOR_B)
+      expect(convB?.readPointer?.identity.messageId).toBe(PRIOR_B)
       expect(convB?.unreadCount).toBe(5)
     })
 
@@ -275,7 +276,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       chatStore.getState().addMessage(createMessage('convB@example.com', 'arrives after A (only) reports'))
 
       const convB = chatStore.getState().conversations.get('convB@example.com')
-      expect(convB?.readPointer?.messageId).toBe(PRIOR_B)
+      expect(convB?.readPointer?.identity.messageId).toBe(PRIOR_B)
       expect(convB?.unreadCount).toBe(5)
       // B's OWN evidence is unaffected by a report scoped to A's key.
       expect(currentViewportEvidence(evidenceKey('convB@example.com'))).toBe('unknown')
@@ -296,7 +297,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       chatStore.getState().addMessage(msg)
 
       const convB = chatStore.getState().conversations.get('convB@example.com')
-      expect(convB?.readPointer?.messageId).toBe(msg.id)
+      expect(convB?.readPointer?.identity.messageId).toBe(msg.id)
       expect(convB?.unreadCount).toBe(0)
     })
   })
@@ -324,7 +325,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       reportViewport(evidenceKey('alice@example.com'), firstGeneration, 'at-edge')
       chatStore.getState().addMessage(createMessage('alice@example.com', 'arrives after the stale re-activation report'))
       const convAfterStaleReport = chatStore.getState().conversations.get('alice@example.com')
-      expect(convAfterStaleReport?.readPointer?.messageId).toBe(PRIOR)
+      expect(convAfterStaleReport?.readPointer?.identity.messageId).toBe(PRIOR)
       expect(convAfterStaleReport?.unreadCount).toBe(5)
 
       // A report on the NEW (current) generation is accepted.
@@ -332,7 +333,7 @@ describe('chatStore viewport-evidence gate (Task 11)', () => {
       const msg = createMessage('alice@example.com', 'arrives once the new generation reports at-edge')
       chatStore.getState().addMessage(msg)
       const convAfterFreshReport = chatStore.getState().conversations.get('alice@example.com')
-      expect(convAfterFreshReport?.readPointer?.messageId).toBe(msg.id)
+      expect(convAfterFreshReport?.readPointer?.identity.messageId).toBe(msg.id)
       expect(convAfterFreshReport?.unreadCount).toBe(0)
     })
   })

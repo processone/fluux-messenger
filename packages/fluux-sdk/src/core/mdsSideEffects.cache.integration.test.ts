@@ -176,19 +176,11 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
       const conversationMeta = new Map(state.conversationMeta)
       conversationMeta.set(EXACT_CHAT, {
         ...conversationMeta.get(EXACT_CHAT)!,
-        readPointer: {
-          messageId: 'exact-7',
-          timestamp: new Date(7_000),
-          tiebreak: { kind: 'chat', id: 'exact-7' },
-        },
+        readPointer: { order: { role: 'exact', timestamp: new Date(7_000).getTime(), tiebreak: { kind: 'chat', id: 'exact-7' } }, identity: { state: 'local', messageId: 'exact-7' } },
       })
       conversationMeta.set(FALLBACK_CHAT, {
         ...conversationMeta.get(FALLBACK_CHAT)!,
-        readPointer: {
-          messageId: 'own-4',
-          timestamp: new Date(4_000),
-          tiebreak: { kind: 'chat', id: 'own-4' },
-        },
+        readPointer: { order: { role: 'exact', timestamp: new Date(4_000).getTime(), tiebreak: { kind: 'chat', id: 'own-4' } }, identity: { state: 'local', messageId: 'own-4' } },
       })
       return { conversationMeta }
     })
@@ -196,11 +188,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
       const roomMeta = new Map(state.roomMeta)
       roomMeta.set(ROOM, {
         ...roomMeta.get(ROOM)!,
-        readPointer: {
-          messageId: 'shared-id',
-          timestamp: new Date(8_000),
-          tiebreak: { kind: 'room', from: alice, id: 'shared-id' },
-        },
+        readPointer: { order: { role: 'exact', timestamp: new Date(8_000).getTime(), tiebreak: { kind: 'room', from: alice, id: 'shared-id' } }, identity: { state: 'local', messageId: 'shared-id' } },
       })
       return { roomMeta }
     })

@@ -26,9 +26,8 @@ import {
   mayAdvanceTo,
   computeFloor,
   isRenderableStoredMessage,
-  makeCacheOrderKey,
-  type ExactPosition,
-  type OrderPosition,
+  exactPosition,
+  type PointerOrder,
   type RenderabilityCheckFields,
 } from './readState'
 
@@ -53,12 +52,13 @@ export interface EntityNotificationState {
    *
    * Advances forward only, and only to a message present in the slice the
    * transition was given, so a pointer THESE transitions produce carries that
-   * message's own timestamp. Not a universal invariant of the type: pointers
-   * built by the #1081 migration from a legacy `lastSeenMessageId` + `lastReadAt`
-   * pair carry `lastReadAt`, which sits at or behind the named message
-   * deliberately — see `readPointer.ts`. Only `timestamp` is used for ordering,
-   * and nothing derives a message from it, so the two populations are
-   * interchangeable here. `undefined` until the entity is first read.
+   * message's own timestamp — so it is an `exact` order. Not a universal
+   * invariant of the type: pointers built by the #1081 migration from a legacy
+   * `lastSeenMessageId` + `lastReadAt` pair carry `lastReadAt` and are a `floor`,
+   * which sits at or behind the named message deliberately — see
+   * `readPointer.ts`. Only `order` is used for ordering, and nothing derives a
+   * message from it, so the two populations are interchangeable here.
+   * `undefined` until the entity is first read.
    *
    * REQUIRED, not optional, deliberately: several transitions build a fresh
    * object literal rather than spreading `state`, and an optional property
@@ -95,6 +95,16 @@ export interface NotificationMessage extends RenderabilityCheckFields {
   isMention?: boolean
   /** Sender's JID — feeds the ROOM cache order key's (from, id) tie-break. */
   from?: string
+  /**
+   * XEP-0359 archive id, when the server has assigned one.
+   *
+   * Threaded through so a pointer minted from this arrival is `addressable`
+   * immediately (see `makeReadPointer`) — the free convergence path for every
+   * peer message and every MUC reflection. A caller that narrows a real message
+   * into this shape and omits `stanzaId` does not break anything, but it does
+   * silently give up that convergence, so pass it.
+   */
+  stanzaId?: string
 }
 
 /** Context about the entity's current visibility and unread state. */
@@ -298,20 +308,17 @@ export function onActivate(
 
   let firstNewMessageId: string | undefined = undefined
   if (floor) {
-    const floorPos: OrderPosition = state.readPointer
-      ? { timestamp: state.readPointer.timestamp.getTime(), tiebreak: state.readPointer.tiebreak }
-      : { timestamp: floor.getTime() }
+    // The pointer's own order when there is one, so the comparison is not blind
+    // to a message sharing its exact millisecond; a historyFloor-derived
+    // boundary knows only a millisecond and says so.
+    const floorPos: PointerOrder = state.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
 
     for (const m of messages) {
       if (m.isOutgoing) continue
       if (!isRenderableStoredMessage(m)) continue
-      const pos: ExactPosition = {
-        timestamp: m.timestamp.getTime(),
-        tiebreak: makeCacheOrderKey(m, kind),
-      }
-      // The DIVIDER question: a keyless floor means at-or-after its
+      // The DIVIDER question: a `floor` boundary means at-or-after its
       // millisecond, placing the divider conservatively early (#1173).
-      if (isAfterBoundary(pos, floorPos)) {
+      if (isAfterBoundary(exactPosition(m, kind), floorPos)) {
         firstNewMessageId = m.id
         break
       }
@@ -372,7 +379,7 @@ export function onMarkAsRead(
     options.windowAtLiveEdge && options.viewportAtLiveEdge
       ? messages[messages.length - 1]
       : undefined
-  const seenUnchanged = newest === undefined || newest.id === state.readPointer?.messageId
+  const seenUnchanged = newest === undefined || newest.id === state.readPointer?.identity.messageId
   if (state.unreadCount === 0 && state.mentionsCount === 0 && seenUnchanged) {
     return state
   }
@@ -439,10 +446,10 @@ export function onWindowBecameVisible(
  * moving on a fabricated timestamp would push a forward-only floor past unread
  * messages for good.
  *
- * A KEYED current pointer (carries `tiebreak`) is ordered by cache
+ * An EXACT current pointer (`order.role === 'exact'`) is ordered by cache
  * POSITION via `mayAdvanceTo`, not by array index — its position is provable
  * without being resident in `messages` (PR C, D4). The off-slice guard and the
- * `atLiveEdge` escape hatch below apply only to a KEYLESS (migrated) pointer,
+ * `atLiveEdge` escape hatch below apply only to a FLOOR (migrated) pointer,
  * whose bare timestamp cannot certify a position.
  *
  * @param state - Current notification state
@@ -470,26 +477,21 @@ export function onMessageSeen(
   // No read position yet: any resolvable message is an advancement.
   if (!state.readPointer) return advanced()
 
-  // Keyed pointer: compare cache POSITIONS. The pointer no longer has to be
+  // EXACT pointer: compare cache POSITIONS. The pointer no longer has to be
   // resident, and a same-millisecond sibling that sorts after it is a genuine
   // advance. Safe against the resident array because PR B gave
   // `messageArrayUtils` the same tie-break, so array index and cache order
   // agree.
-  if (state.readPointer.tiebreak) {
-    const target = messages[newIdx]
+  const current = state.readPointer.order
+  if (current.role === 'exact') {
     // The ADVANCE question: never overtake at a shared millisecond (#1173).
-    return mayAdvanceTo(
-      { timestamp: target.timestamp.getTime(), tiebreak: makeCacheOrderKey(target, kind) },
-      { timestamp: state.readPointer.timestamp.getTime(), tiebreak: state.readPointer.tiebreak }
-    )
-      ? advanced()
-      : state
+    return mayAdvanceTo(exactPosition(messages[newIdx], kind), current) ? advanced() : state
   }
 
-  // Keyless (migrated) pointer: its timestamp proves nothing about its position,
+  // FLOOR (migrated) pointer: its timestamp proves nothing about its position,
   // so keep ordering by index — including the off-slice guard and the live-edge
   // escape hatch that stops it getting stuck.
-  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.messageId)
+  const currentIdx = messages.findIndex((m) => m.id === state.readPointer!.identity.messageId)
   if (currentIdx === -1) {
     if (options?.atLiveEdge && newIdx === messages.length - 1) return advanced()
     return state
@@ -519,7 +521,7 @@ export function shouldNotifyConversation(
   if (msg.isOutgoing) return false
   if (ctx.isActive && ctx.windowVisible) return false
   if ((ctx.unreadCount ?? 0) <= 0) return false
-  if (msg.id === ctx.readPointer?.messageId) return false
+  if (msg.id === ctx.readPointer?.identity.messageId) return false
   return true
 }
 

@@ -22,9 +22,9 @@ import {
   pointerlessDefers,
   worthReconcilingOnDeactivate,
   isAfterBoundary,
-  makeCacheOrderKey,
+  exactPosition,
   isRenderableStoredMessage,
-  type OrderPosition,
+  type PointerOrder,
 } from './shared/readState'
 import {
   transientCounts,
@@ -763,10 +763,20 @@ export async function migrateReadPointer(
   const { lastSeenMessageId, lastReadAt } = legacy
 
   if (lastSeenMessageId && lastReadAt) {
-    return { messageId: lastSeenMessageId, timestamp: lastReadAt }
+    // A FLOOR, and the type now says so: `lastReadAt` is at or behind the
+    // message `lastSeenMessageId` names, so the position is known only to a
+    // millisecond. It also enters `local` — no archive id was ever stored here,
+    // and it must never acquire one: a floor's name and order already disagree,
+    // so giving it a wire name would widen that inconsistency (`withArchiveId`
+    // refuses this pointer for exactly that reason).
+    return { order: { role: 'floor', timestamp: lastReadAt.getTime() }, identity: { state: 'local', messageId: lastSeenMessageId } }
   }
 
   if (lastSeenMessageId) {
+    // Resolved BY ITS IDENTIFIER, so "I know exactly which archived message this
+    // is" is earned: the row's own archive id may ride along, and this pointer
+    // mints `addressable` when the cached row carries one. Contrast the
+    // timestamp-resolved branch below, which cannot make that claim.
     const cached = await messageCache.getMessage(lastSeenMessageId)
     if (cached) return makeReadPointer(cached, 'chat')
     return undefined
@@ -790,7 +800,28 @@ export async function migrateReadPointer(
       before: new Date(lastReadAt.getTime() + 1),
       limit: 1,
     })
-    return newest ? makeReadPointer(newest, 'chat') : undefined
+    if (!newest) return undefined
+
+    // Deliberately WITHOUT the row's archive id, so this pointer mints `local`.
+    //
+    // This row was located by TIMESTAMP, not by identity, and two messages can
+    // share a millisecond — so it can be the wrong message. The pointer is
+    // internally consistent either way (it takes this row's id, timestamp and
+    // tie-break together), and the ORDER is unchanged by dropping the archive
+    // id. What an `addressable` identity would add is a claim of exactness we
+    // never established, and the XEP-0490 publisher would then send that archive
+    // id to the user's other devices as an exact read position — forward-only,
+    // and unrecoverable if it names the wrong row.
+    //
+    // `local` is the honest encoding: claim exactness only where we have it.
+    // It costs nothing lasting — this pointer still converges through the normal
+    // paths, when the position next advances onto a message that carries an
+    // archive id, or when the publisher resolves it.
+    const timestampLocatedLocalSource = {
+      id: newest.id,
+      timestamp: newest.timestamp,
+    }
+    return makeReadPointer(timestampLocatedLocalSource, 'chat')
   }
 
   return undefined
@@ -1465,7 +1496,7 @@ export const chatStore = createStore<ChatState>()(
           // one is never re-folded (that would reposition the divider on every
           // return). Gate + retry policy live in shared/readMarkerSync.
           const foldOnce = (stage: string) => {
-            const lastSeenBefore = get().conversationMeta.get(id)?.readPointer?.messageId
+            const lastSeenBefore = get().conversationMeta.get(id)?.readPointer?.identity.messageId
             const fold = foldPendingRemoteDisplayed(
               mdsGate,
               id,
@@ -1477,7 +1508,7 @@ export const chatStore = createStore<ChatState>()(
                 conversationId: id,
                 pendingStanzaId: fold.pending,
                 lastSeenBefore,
-                lastSeenAfter: get().conversationMeta.get(id)?.readPointer?.messageId,
+                lastSeenAfter: get().conversationMeta.get(id)?.readPointer?.identity.messageId,
                 resolved: fold.resolved,
               })
             } else if (fold.pending) {
@@ -1503,7 +1534,7 @@ export const chatStore = createStore<ChatState>()(
           // degraded case is gone. What a cache miss costs is CONTEXT: the
           // latest slice is kept, the divider lands wherever the boundary falls
           // inside it, and MAM catch-up heals the cache for the next open.
-          const pointer = get().conversationMeta.get(id)?.readPointer?.messageId
+          const pointer = get().conversationMeta.get(id)?.readPointer?.identity.messageId
           if (pointer) {
             const loaded = get().messages.get(id) ?? []
             if (!loaded.some((m) => m.id === pointer)) {
@@ -1658,7 +1689,7 @@ export const chatStore = createStore<ChatState>()(
           const before = transientCounts(scopeKey, undefined).unread
           const result = noteTransient(
             scopeKey,
-            { position: { timestamp: msg.timestamp.getTime(), tiebreak: makeCacheOrderKey(msg, 'chat') } },
+            { position: exactPosition(msg, 'chat') },
             transientIdentity({ id: msg.id }, 'chat'),
             transientAliases({ id: msg.id }, 'chat')
           )
@@ -1871,10 +1902,7 @@ export const chatStore = createStore<ChatState>()(
           // later recompute trigger. Pruning is a memory bound only:
           // transientCounts already excludes entries at/behind the boundary.
           if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
-            pruneTransient(chatTransientScopeKey(conversationId), {
-              timestamp: updated.readPointer.timestamp.getTime(),
-              tiebreak: updated.readPointer.tiebreak,
-            })
+            pruneTransient(chatTransientScopeKey(conversationId), updated.readPointer.order)
           }
 
           const draft = draftConversationMaps(state)
@@ -1900,7 +1928,7 @@ export const chatStore = createStore<ChatState>()(
 
           // Skip update if already fully read: pointer at the computed newest id,
           // no unread count, and no "new messages" divider to clear.
-          const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.messageId
+          const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.identity.messageId
           const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
           if (
             currentSeenMessageId === newest.id &&
@@ -1915,10 +1943,7 @@ export const chatStore = createStore<ChatState>()(
           // Task 9: mark-all-read jumps the pointer straight to the newest
           // message — prune the overlay now rather than leaving every noted
           // entry to a later recompute trigger.
-          pruneTransient(chatTransientScopeKey(conversationId), {
-            timestamp: readPointer.timestamp.getTime(),
-            tiebreak: readPointer.tiebreak,
-          })
+          pruneTransient(chatTransientScopeKey(conversationId), readPointer.order)
 
           const draft = draftConversationMaps(state)
           draft.setMeta(conversationId, {
@@ -2020,10 +2045,7 @@ export const chatStore = createStore<ChatState>()(
           // pruned-away entry was already excluded from transientCounts by
           // the boundary comparison, this just reclaims the memory.
           if (updated.readPointer) {
-            pruneTransient(chatTransientScopeKey(conversationId), {
-              timestamp: updated.readPointer.timestamp.getTime(),
-              tiebreak: updated.readPointer.tiebreak,
-            })
+            pruneTransient(chatTransientScopeKey(conversationId), updated.readPointer.order)
           }
 
           const draft = draftConversationMaps(state)
@@ -2576,7 +2598,7 @@ export const chatStore = createStore<ChatState>()(
         // count below is computed AGAINST. Re-checked at the final commit
         // (see that guard's comment) to close a race the new allowActive
         // trigger (advanceReadPointer) makes materially more likely.
-        const pointerIdAtCompute = metaNow.readPointer?.messageId
+        const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
         const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
@@ -2597,26 +2619,24 @@ export const chatStore = createStore<ChatState>()(
           if (record) get().clearConversationCoverage(conversationId, record.bottomId)
           return
         }
-        // The floor as an OrderPosition: when the floor came from the pointer,
-        // reuse the pointer's own order key so the comparison isn't blind to a
-        // coverage bottom sharing its exact millisecond; a historyFloor-derived
-        // floor has no such key (unresolved sorts conservatively).
-        const floorPos: OrderPosition = metaNow.readPointer
-          ? { timestamp: metaNow.readPointer.timestamp.getTime(), tiebreak: metaNow.readPointer.tiebreak }
-          : { timestamp: floor.getTime() }
+        // The boundary: the pointer's own order when there is one, so the
+        // comparison is not blind to a coverage bottom sharing its exact
+        // millisecond; a historyFloor-derived boundary knows only a millisecond
+        // and says so (unresolved sorts conservatively).
+        const floorPos: PointerOrder = metaNow.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
 
         // Task 9 safety net: this recompute is one of the "pointer advance /
         // content settled" triggers — bound the transient overlay's memory
         // here too, since not every trigger path calls pruneTransient directly.
         pruneTransient(chatTransientScopeKey(conversationId), floorPos)
 
-        // A BOUNDARY test: a keyless (migrated) floor reads as at-or-after its
+        // A BOUNDARY test: a FLOOR (migrated) boundary reads as at-or-after its
         // millisecond, so an equal-ms bottom counts as not reaching it (#1173).
         if (isAfterBoundary(bottom, floorPos)) return // coverage doesn't reach the floor
 
         const res = await messageCache.countUnreadInArchive(conversationId, {
           floor,
-          pointer: metaNow.readPointer,
+          pointer: metaNow.readPointer?.order,
         })
         if (!recountContextIsCurrent()) return
         if (res === null) return // unavailable — IndexedDB error
@@ -2650,7 +2670,7 @@ export const chatStore = createStore<ChatState>()(
           // the newer, correct value — worst case this recompute under-acts
           // once; the next trigger (another arrival, deactivation, or
           // activation) re-derives it.
-          if (meta.readPointer?.messageId !== pointerIdAtCompute) return state
+          if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) return state
 
           // Rederive the divider (requirement 5): the boundary may have moved
           // since a marker was last parked here (a remote pointer advance).

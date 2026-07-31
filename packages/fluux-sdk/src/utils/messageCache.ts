@@ -15,9 +15,9 @@ import {
   makeCacheOrderKey,
   isAfterBoundary,
   isRenderableStoredMessage,
-  type CacheOrderKey,
   type ExactPosition,
-  type OrderPosition,
+  exactPosition,
+  type PointerOrder,
 } from '../stores/shared/readState'
 
 const DB_NAME = 'fluux-message-cache'
@@ -848,20 +848,22 @@ export interface UnreadCountArgs {
   /** Cursor start: the read pointer's timestamp, or the entity's history watermark. */
   floor: Date
   /**
-   * The read pointer's position, for a strict-after-POSITION test rather than a
-   * timestamp-only test — two messages can share a millisecond. When
-   * `tiebreak` is omitted (a pointer migrated from the pre-#1081 legacy
-   * fields), {@link isAfterBoundary} reads the boundary as at-or-after its
-   * timestamp — so every row at the pointer's exact millisecond, including the
-   * pointer's own message, resolves as "after" the pointer and gets counted.
-   * That is
+   * The read pointer's ORDER, for a strict-after-POSITION test rather than a
+   * timestamp-only test — two messages can share a millisecond. Identity plays
+   * no part in counting, so this deliberately takes `readPointer.order` rather
+   * than the pointer: nothing here can reach for a name.
+   *
+   * A `floor` order (a pointer migrated from the pre-#1081 legacy fields) makes
+   * {@link isAfterBoundary} read the boundary as at-or-after its timestamp — so
+   * every row at the pointer's exact millisecond, including the pointer's own
+   * message, resolves as "after" the pointer and gets counted. That is
    * at-or-after-TIMESTAMP semantics, not strict-after-timestamp: it over-counts
    * by up to the same-ms sibling set, which is the safe direction (an
    * over-count clears the moment the user reads; an under-count would hide a
    * message permanently). Omitting `pointer` entirely counts everything from
    * `floor`.
    */
-  pointer?: { timestamp: Date; tiebreak?: CacheOrderKey }
+  pointer?: PointerOrder
   /** Cap on the reported `unread` count. Default {@link DEFAULT_UNREAD_CAP}. */
   unreadCap?: number
 }
@@ -872,21 +874,16 @@ export interface ArchiveCount {
   unread: number
 }
 
-/** The pointer's position as an `OrderPosition`, or `undefined` when there is no pointer. */
-function toPointerPosition(pointer: UnreadCountArgs['pointer']): OrderPosition | undefined {
-  return pointer ? { timestamp: pointer.timestamp.getTime(), tiebreak: pointer.tiebreak } : undefined
-}
-
 /**
  * Whether an archive row sorts strictly after the read boundary. No pointer
  * means everything from `floor` counts.
  *
- * This is the COUNTING question, so it uses {@link isAfterBoundary} — a keyless
- * pointer means at-or-after its millisecond, which over-counts (safe). Never
+ * This is the COUNTING question, so it uses {@link isAfterBoundary} — a `floor`
+ * boundary means at-or-after its millisecond, which over-counts (safe). Never
  * hand-roll this comparison, and never substitute the advance comparator: its
- * missing-key rule is the opposite one (#1173).
+ * floor rule is the opposite one (#1173).
  */
-function isStrictlyAfterPointer(position: ExactPosition, pointerPosition: OrderPosition | undefined): boolean {
+function isStrictlyAfterPointer(position: ExactPosition, pointerPosition: PointerOrder | undefined): boolean {
   return pointerPosition ? isAfterBoundary(position, pointerPosition) : true
 }
 
@@ -921,7 +918,7 @@ export async function countUnreadInArchive(
     const index = tx.store.index('conv_timestamp')
     const range = IDBKeyRange.bound([conversationId, floor.getTime()], [conversationId, Number.MAX_SAFE_INTEGER])
 
-    const pointerPosition = toPointerPosition(pointer)
+    const pointerPosition = pointer
     let unread = 0
 
     let cursor = await index.openCursor(range, 'next')
@@ -931,6 +928,7 @@ export async function countUnreadInArchive(
         const message = deserializeMessage(stored)
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
           const position: ExactPosition = {
+            role: 'exact',
             timestamp: stored.timestamp,
             tiebreak: makeCacheOrderKey(message, 'chat'),
           }
@@ -1339,7 +1337,7 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
     const index = tx.store.index('room_ts_from_id')
     const range = IDBKeyRange.bound([roomJid, floor.getTime(), '', ''], [roomJid, Infinity, '￿', '￿'])
 
-    const pointerPosition = toPointerPosition(pointer)
+    const pointerPosition = pointer
     let unread = 0
 
     let cursor = await index.openCursor(range, 'next')
@@ -1349,6 +1347,7 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
         const message = deserializeRoomMessage(stored)
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
           const position: ExactPosition = {
+            role: 'exact',
             timestamp: stored.timestamp,
             tiebreak: makeCacheOrderKey(message, 'room'),
           }
@@ -1395,10 +1394,7 @@ export async function resolveArchivePosition(
     ? await getRoomMessageByStanzaId(entityId, archiveId)
     : await getMessageByStanzaId(archiveId)
   if (!message) return null
-  return {
-    timestamp: message.timestamp.getTime(),
-    tiebreak: makeCacheOrderKey(message, isRoom ? 'room' : 'chat'),
-  }
+  return exactPosition(message, isRoom ? 'room' : 'chat')
 }
 
 /**

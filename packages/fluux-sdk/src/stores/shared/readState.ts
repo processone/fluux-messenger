@@ -44,34 +44,68 @@ export function makeCacheOrderKey(msg: { from?: string; id: string }, kind: 'cha
 }
 
 /**
- * A position in message-cache order: a timestamp, optionally refined by a key.
+ * A position that is exactly located in message-cache order: a timestamp
+ * refined by the tie-break that resolves its millisecond.
  *
- * The tie-break is optional because a pointer migrated from the pre-#1081
- * `lastSeenMessageId` + `lastReadAt` pair carries only a millisecond, with no
- * provable position inside it. Such a value is a FLOOR — it means "at least
- * here", not "exactly here".
+ * Every real message yields one, because {@link makeCacheOrderKey} always
+ * produces a key — use {@link exactPosition} rather than assembling the literal.
  *
- * {@link ExactPosition} is the refinement that does mean "exactly here". Prefer
- * it wherever a position is genuinely resolvable — every message resolves to
- * one, because {@link makeCacheOrderKey} always produces a key — so that the
- * compiler, rather than a comment, is what keeps a floor out of a comparison
- * that assumes exactness.
+ * `role` is not redundant with the presence of `tiebreak`: it is what makes
+ * {@link PointerOrder} a DISCRIMINATED union, so narrowing reads as
+ * `order.role === 'floor'` at every consumer instead of as an incidental
+ * "the optional field happens to be missing" test. A weaker position cannot be
+ * passed where an exact one is required (#1173).
  */
-export interface OrderPosition {
-  timestamp: number
-  tiebreak?: CacheOrderKey
+export interface ExactPosition {
+  readonly role: 'exact'
+  readonly timestamp: number
+  readonly tiebreak: CacheOrderKey
 }
 
 /**
- * A position whose tie-break is known, so it can be ordered exactly against
- * another such position.
+ * A position known only to a millisecond: "at least here", not "exactly here".
  *
- * An `OrderPosition` is deliberately NOT assignable to this (#1173): the only
- * way to obtain one is to actually have a tie-break, which in practice means
- * the position came from a message rather than from a bare `lastReadAt`.
+ * This is what a pointer migrated from the pre-#1081 `lastSeenMessageId` +
+ * `lastReadAt` pair carries — `lastReadAt` sits at or behind the message the
+ * pointer names, with no provable position inside its millisecond. It is also
+ * where an {@link ExactPosition} degrades when its persisted tie-break comes
+ * back unusable: dropping to a floor over-counts (the safe direction) rather
+ * than trusting a key we cannot rebuild.
+ *
+ * Deliberately has NO `tiebreak` property at all rather than an optional one:
+ * with `role` discriminating, `order.tiebreak` does not typecheck on this
+ * variant, so nothing can read a key off a floor and nothing can smuggle one in.
  */
-export interface ExactPosition extends OrderPosition {
-  tiebreak: CacheOrderKey
+export interface FloorPosition {
+  readonly role: 'floor'
+  readonly timestamp: number
+}
+
+/**
+ * Where a read pointer sits in message-cache order — see {@link ReadPointer}.
+ *
+ * The two variants are the two things a stored position can honestly claim, and
+ * every comparator below answers them differently on purpose. Note that
+ * `readonly` here stops a position being MUTATED, not rebuilt: a consumer can
+ * still construct a fresh order object with a different timestamp. Never moving
+ * a stored position stays a review concern (`readPointer.ts`), which the type
+ * makes visible — you have to name `order` — rather than impossible.
+ */
+export type PointerOrder = ExactPosition | FloorPosition
+
+/**
+ * The exact cache-order position of a real message.
+ *
+ * The one place the `{ role, timestamp, tiebreak }` literal is assembled, so
+ * the kind-discriminated tie-break rule (see {@link CacheOrderKey}) cannot be
+ * re-spelled slightly differently at one of the many sites that need a row's
+ * position.
+ */
+export function exactPosition(
+  msg: { from?: string; id: string; timestamp: Date },
+  kind: 'chat' | 'room'
+): ExactPosition {
+  return { role: 'exact', timestamp: msg.timestamp.getTime(), tiebreak: makeCacheOrderKey(msg, kind) }
 }
 
 /**
@@ -81,7 +115,7 @@ export interface ExactPosition extends OrderPosition {
  *
  * Private, and takes the KEYS rather than the positions, so it cannot be
  * mistaken for a general comparator over positions and cannot be reached with a
- * keyless one. The three functions below are the only entry points.
+ * floor one. The three functions below are the only entry points.
  */
 function compareTiebreak(a: CacheOrderKey, b: CacheOrderKey): number {
   if (a.kind === 'room' && b.kind === 'room') {
@@ -96,12 +130,12 @@ function compareTiebreak(a: CacheOrderKey, b: CacheOrderKey): number {
  * the tie-break. This is the comparator for ordering messages against each
  * other: sorting a resident array, picking the newest of a candidate set.
  *
- * It deliberately has no answer for a keyless position, because there is no
+ * It deliberately has no answer for a floor position, because there is no
  * single right one. The two questions the codebase actually asks —
- * {@link isAfterBoundary} and {@link mayAdvanceTo} — have OPPOSITE
- * missing-tie-break rules, so a comparator that picked one of them would be
- * silently wrong at every call site that meant the other. That was #1173.
- * Passing a possibly-keyless `OrderPosition` here does not compile.
+ * {@link isAfterBoundary} and {@link mayAdvanceTo} — have OPPOSITE floor rules,
+ * so a comparator that picked one of them would be silently wrong at every call
+ * site that meant the other. That was #1173.
+ * Passing a possibly-floor {@link PointerOrder} here does not compile.
  */
 export function compareExact(a: ExactPosition, b: ExactPosition): number {
   if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
@@ -111,39 +145,46 @@ export function compareExact(a: ExactPosition, b: ExactPosition): number {
 /**
  * "Is this row after the read boundary?" — the COUNTING and DIVIDER question.
  *
- * A missing tie-break on the BOUNDARY means AT-OR-AFTER its timestamp: every
- * row sharing the boundary's millisecond, including the boundary's own message,
- * counts as after it. That over-counts by up to the same-millisecond sibling
- * set, which is the recoverable direction — an over-count clears the moment the
- * user reads, while an under-count hides a message permanently.
+ * A FLOOR boundary means AT-OR-AFTER its timestamp: every row sharing the
+ * boundary's millisecond, including the boundary's own message, counts as after
+ * it. That over-counts by up to the same-millisecond sibling set, which is the
+ * recoverable direction — an over-count clears the moment the user reads, while
+ * an under-count hides a message permanently.
  *
  * `row` is an {@link ExactPosition} because an archive row always resolves to
  * one. That is not a formality: it is what stops this function from being used
  * to answer the advance question, where this same rule is unsafe (#1173).
  */
-export function isAfterBoundary(row: ExactPosition, boundary: OrderPosition): boolean {
+export function isAfterBoundary(row: ExactPosition, boundary: PointerOrder): boolean {
+  if (boundary.role === 'floor') return row.timestamp >= boundary.timestamp // over-count (safe)
   if (row.timestamp !== boundary.timestamp) return row.timestamp > boundary.timestamp
-  if (!boundary.tiebreak) return true // at-or-after timestamp → over-count (safe)
   return compareTiebreak(row.tiebreak, boundary.tiebreak) > 0
 }
 
 /**
  * "May the read pointer advance to this?" — the ADVANCE and SEEN question.
  *
- * A missing tie-break on EITHER side means STRICT MILLISECOND: never overtake.
- * The key is what certifies that a pointer's timestamp is its named message's
- * own, so when either side lacks one, nothing about their relative order within
- * a shared millisecond is provable. The read pointer is forward-only, so a
+ * A FLOOR on EITHER side means STRICT MILLISECOND: never overtake. An exact
+ * position certifies that a timestamp is its named message's own, so when
+ * either side is only a floor, nothing about their relative order within a
+ * shared millisecond is provable. The read pointer is forward-only, so a
  * position given away here is unrecoverable; refusing to move merely
  * over-counts, which the user clears by reading.
+ *
+ * `candidate` is a {@link PointerOrder} rather than an `ExactPosition` because
+ * a pointer migrated from the legacy pair really is a floor and really does get
+ * offered as a candidate (`advance`, the #1081 backfill) — the floor rule below
+ * is the answer for it, not a signature to tighten away.
  *
  * This is the exact inverse of {@link isAfterBoundary}'s rule, on purpose. The
  * two questions are not interchangeable — that is why they are two functions
  * (#1173) rather than one comparator with a warning attached to it.
  */
-export function mayAdvanceTo(candidate: OrderPosition, current: OrderPosition): boolean {
+export function mayAdvanceTo(candidate: PointerOrder, current: PointerOrder): boolean {
+  if (candidate.role === 'floor' || current.role === 'floor') {
+    return candidate.timestamp > current.timestamp // strict ms → never overtake (safe)
+  }
   if (candidate.timestamp !== current.timestamp) return candidate.timestamp > current.timestamp
-  if (!candidate.tiebreak || !current.tiebreak) return false // strict ms → never overtake (safe)
   return compareTiebreak(candidate.tiebreak, current.tiebreak) > 0
 }
 
@@ -157,7 +198,7 @@ export function mayAdvanceTo(candidate: OrderPosition, current: OrderPosition): 
  * read position.
  */
 export function computeFloor(pointer: ReadPointer | undefined, historyFloor: Date | undefined): Date | undefined {
-  return pointer ? pointer.timestamp : historyFloor
+  return pointer ? new Date(pointer.order.timestamp) : historyFloor
 }
 
 /**
@@ -187,27 +228,6 @@ export function worthReconcilingOnDeactivate(
 ): boolean {
   if (!meta) return false
   return meta.readPointer !== undefined || meta.unreadCount > 0
-}
-
-/**
- * Runtime guard for a `CacheOrderKey` read back from untrusted storage.
- *
- * No longer on the hydration path: `deserializeReadPointer` rebuilds the key
- * and takes its `id` from `messageId` instead of validating a persisted one.
- * It is kept because it describes an OLDER build's second line of defence
- * against today's on-disk form: since the tie-break's rename that build no
- * longer even finds the property (it reads `archiveOrderKey` only), and the
- * `typeof k.id === 'string'` requirement here would reject the id-less key had
- * it found one. Either way it degrades to the at-or-after-timestamp fallback
- * (over-count, the safe direction) rather than mis-reading the key. Both halves
- * of that compatibility claim are asserted in `readPointer.test.ts`.
- */
-export function isValidCacheOrderKey(v: unknown): v is CacheOrderKey {
-  if (!v || typeof v !== 'object') return false
-  const k = v as Record<string, unknown>
-  if (k.kind === 'chat') return typeof k.id === 'string'
-  if (k.kind === 'room') return typeof k.id === 'string' && typeof k.from === 'string'
-  return false
 }
 
 /**

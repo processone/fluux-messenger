@@ -9,7 +9,7 @@
 
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
-import { mayAdvanceTo, makeCacheOrderKey } from './readState'
+import { mayAdvanceTo, exactPosition } from './readState'
 import { makeReadPointer, type ReadPointer } from './readPointer'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
@@ -57,19 +57,24 @@ export type RemoteDisplayedResolution =
  * Decide whether the remote marker `match` is a forward advance over `current`.
  *
  * Three branches (read-state PR C, D3), because the no-pointer case is NOT the
- * same as the keyless one:
+ * same as the floor one:
  *
  * - **No pointer** — any resolvable marker is an advance. This is what the code
  *   did before PR C (an undefined pointer made the residency check vacuously
  *   true, so `onMessageSeen` took its own no-pointer path); it is preserved
  *   explicitly so it cannot be lost by refactoring.
- * - **Keyed pointer** — decide by cache position, with no residency
- *   requirement. The key certifies that the pointer's timestamp is its named
- *   message's own, which is exactly the guarantee the old comment here said we
- *   lacked.
- * - **Keyless (migrated) pointer** — its timestamp is `lastReadAt`, which can
+ * - **Exact pointer** — decide by cache position, with no residency
+ *   requirement. An exact order certifies that the pointer's timestamp is its
+ *   named message's own, which is exactly the guarantee the old comment here
+ *   said we lacked.
+ * - **Floor (migrated) pointer** — its timestamp is `lastReadAt`, which can
  *   sit on EITHER side of the message it names, so nothing is provable from it.
  *   Keep the resident-index path, and stash when the pointer is off-slice.
+ *
+ * `match` is the resolved local row for an inbound XEP-0490 marker, so it
+ * carries the archive id we just matched on: `makeReadPointer` mints an
+ * `addressable` pointer from it directly. That archive id is bound by IDENTITY
+ * — it is the very id this row was found by — never by position.
  */
 function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
   current: ReadPointer | undefined,
@@ -81,16 +86,13 @@ function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
 ): ReadPointer | 'no-advance' | 'undecidable' {
   if (!current) return makeReadPointer(match, kind)
 
-  if (current.tiebreak) {
+  if (current.order.role === 'exact') {
     // The ADVANCE question — never overtake at a shared millisecond (#1173).
-    const ahead = mayAdvanceTo(
-      { timestamp: match.timestamp.getTime(), tiebreak: makeCacheOrderKey(match, kind) },
-      { timestamp: current.timestamp.getTime(), tiebreak: current.tiebreak }
-    )
+    const ahead = mayAdvanceTo(exactPosition(match, kind), current.order)
     return ahead ? makeReadPointer(match, kind) : 'no-advance'
   }
 
-  if (!messages.some((m) => m.id === current.messageId)) return 'undecidable'
+  if (!messages.some((m) => m.id === current.identity.messageId)) return 'undecidable'
 
   const updated = notifState.onMessageSeen(
     {
@@ -104,7 +106,7 @@ function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
     kind
   )
   const next = updated.readPointer
-  return next && next.messageId !== current.messageId ? next : 'no-advance'
+  return next && next.identity.messageId !== current.identity.messageId ? next : 'no-advance'
 }
 
 export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaId?: string }>(

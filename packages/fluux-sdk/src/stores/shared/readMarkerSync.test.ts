@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
 import type { NotificationMessage } from './notificationState'
-import { makeReadPointer } from './readPointer'
+import { makeReadPointer, type ReadPointer } from './readPointer'
 
 /**
  * XEP-0490 remote-read-position resolution — the state machine that both
@@ -32,10 +32,14 @@ const baseMeta = {
   pendingRemoteDisplayedStanzaId: undefined,
 }
 
-/** The read position naming `id`, carrying that message's own timestamp. */
-function seenIn(id: string) {
+/**
+ * The read position naming `id`, carrying that message's own timestamp as a
+ * FLOOR — the pre-#1081 migrated shape, which is what these cases exercise (the
+ * exact-order branch is covered by the `seenExactIn` cases below).
+ */
+function seenIn(id: string): ReadPointer {
   const found = messages.find((m) => m.id === id)!
-  return { messageId: found.id, timestamp: found.timestamp }
+  return { order: { role: 'floor', timestamp: found.timestamp.getTime() }, identity: { state: 'local', messageId: found.id } }
 }
 
 describe('resolveRemoteDisplayed', () => {
@@ -61,7 +65,13 @@ describe('resolveRemoteDisplayed', () => {
     // which is not what this test is about.
     expect(result).toMatchObject({
       kind: 'advanced',
-      readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
+      readPointer: {
+        order: { role: 'exact', timestamp: new Date('2024-01-15T10:02:00Z').getTime(), tiebreak: { kind: 'chat', id: 'm2' } },
+        // ADDRESSABLE, and free: the row was found BY the archive id the marker
+        // carried, so the minted pointer already holds its wire name — no
+        // lookup, no residency, nothing for the publisher to resolve.
+        identity: { state: 'addressable', messageId: 'm2', archiveId: 'arch-m2' },
+      },
     })
   })
 
@@ -78,7 +88,13 @@ describe('resolveRemoteDisplayed', () => {
     // Advanced to m2 → the first unseen incoming message after it is m3.
     expect(result).toMatchObject({
       kind: 'advanced-with-divider',
-      readPointer: { messageId: 'm2', timestamp: new Date('2024-01-15T10:02:00Z') },
+      readPointer: {
+        order: { role: 'exact', timestamp: new Date('2024-01-15T10:02:00Z').getTime(), tiebreak: { kind: 'chat', id: 'm2' } },
+        // ADDRESSABLE, and free: the row was found BY the archive id the marker
+        // carried, so the minted pointer already holds its wire name — no
+        // lookup, no residency, nothing for the publisher to resolve.
+        identity: { state: 'addressable', messageId: 'm2', archiveId: 'arch-m2' },
+      },
       firstNewMessageId: 'm3',
     })
   })
@@ -95,7 +111,10 @@ describe('resolveRemoteDisplayed', () => {
 
     expect(result).toMatchObject({
       kind: 'advanced-with-divider',
-      readPointer: { messageId: 'm3', timestamp: new Date('2024-01-15T10:03:00Z') },
+      readPointer: {
+        order: { role: 'exact', timestamp: new Date('2024-01-15T10:03:00Z').getTime(), tiebreak: { kind: 'chat', id: 'm3' } },
+        identity: { state: 'addressable', messageId: 'm3', archiveId: 'arch-m3' },
+      },
       firstNewMessageId: 'm2',
     })
   })
@@ -135,9 +154,9 @@ describe('resolveRemoteDisplayed', () => {
     // and reading that as "already read" would lose the remote position for
     // good, since the activation fold (which loads a wide enough slice) would
     // then have nothing left to apply.
-    const offSlicePointer = {
-      messageId: 'ties-m3',
-      timestamp: new Date('2024-01-15T10:03:00Z'),
+    const offSlicePointer: ReadPointer = {
+      order: { role: 'floor', timestamp: new Date('2024-01-15T10:03:00Z').getTime() },
+      identity: { state: 'local', messageId: 'ties-m3' },
     }
 
     const result = resolveRemoteDisplayed(
@@ -163,7 +182,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'may-lag-its-timestamp', timestamp: new Date('2024-01-15T11:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2024-01-15T11:00:00Z').getTime() }, identity: { state: 'local', messageId: 'may-lag-its-timestamp' } },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -182,7 +201,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'older-than-slice', timestamp: new Date(0) },
+        readPointer: { order: { role: 'floor', timestamp: new Date(0).getTime() }, identity: { state: 'local', messageId: 'older-than-slice' } },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -201,7 +220,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'may-name-a-newer-message', timestamp: new Date('2024-01-15T09:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2024-01-15T09:00:00Z').getTime() }, identity: { state: 'local', messageId: 'may-name-a-newer-message' } },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -220,7 +239,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'ties-m3', timestamp: new Date('2024-01-15T10:03:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2024-01-15T10:03:00Z').getTime() }, identity: { state: 'local', messageId: 'ties-m3' } },
       },
       messages,
       undefined,
@@ -238,7 +257,7 @@ describe('resolveRemoteDisplayed', () => {
     const result = resolveRemoteDisplayed(
       {
         ...baseMeta,
-        readPointer: { messageId: 'may-lag-its-timestamp', timestamp: new Date('2024-01-15T11:00:00Z') },
+        readPointer: { order: { role: 'floor', timestamp: new Date('2024-01-15T11:00:00Z').getTime() }, identity: { state: 'local', messageId: 'may-lag-its-timestamp' } },
         pendingRemoteDisplayedStanzaId: 'arch-m3',
       },
       messages,
@@ -260,9 +279,9 @@ describe('resolveRemoteDisplayed', () => {
       msg('m4', '2024-01-15T10:04:00Z'),
     ]
     const latestPage = fullHistory.slice(2)
-    let readPointer = {
-      messageId: 'm1',
-      timestamp: new Date('2024-01-15T10:01:00Z'),
+    let readPointer: ReadPointer = {
+      order: { role: 'floor', timestamp: new Date('2024-01-15T10:01:00Z').getTime() },
+      identity: { state: 'local', messageId: 'm1' },
     }
     let pending: string | undefined = 'arch-m3'
     let firstNewMessageId: string | undefined = 'm2'
@@ -317,7 +336,7 @@ describe('resolveRemoteDisplayed', () => {
     )
 
     expect(fold).toEqual({ pending: 'arch-m3', attempted: true, resolved: true })
-    expect(readPointer.messageId).toBe('m3')
+    expect(readPointer.identity.messageId).toBe('m3')
     expect(firstNewMessageId).toBe('m4')
     expect(pending).toBeUndefined()
   })
@@ -336,7 +355,7 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
       undefined, 's2', 'chat', { isActive: false }
     )
     expect(r.kind).toBe('advanced')
-    expect(r.kind === 'advanced' && r.readPointer.messageId).toBe('m2')
+    expect(r.kind === 'advanced' && r.readPointer.identity.messageId).toBe('m2')
   })
 
   // Branch 2 — the widening. The local pointer's message is NOT in the slice.
@@ -348,7 +367,7 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
       undefined, 's2', 'chat', { isActive: false }
     )
     expect(r.kind).toBe('advanced')
-    expect(r.kind === 'advanced' && r.readPointer.messageId).toBe('m2')
+    expect(r.kind === 'advanced' && r.readPointer.identity.messageId).toBe('m2')
   })
 
   it('does NOT advance a KEYED pointer when the marker is behind it', () => {
@@ -376,7 +395,7 @@ describe('resolveRemoteDisplayed — position resolution (PR C, D3)', () => {
   // NOT provable and must keep stashing.
   it('stashes a KEYLESS pointer that is absent from the slice', () => {
     const r = resolveRemoteDisplayed(
-      { unreadCount: 3, mentionsCount: 0, readPointer: { messageId: 'old', timestamp: new Date(500) } },
+      { unreadCount: 3, mentionsCount: 0, readPointer: { order: { role: 'floor', timestamp: new Date(500).getTime() }, identity: { state: 'local', messageId: 'old' } } },
       [msg('m2', 2000, 's2')],
       undefined, 's2', 'chat', { isActive: false }
     )

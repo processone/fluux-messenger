@@ -95,7 +95,7 @@ export function useChatActive() {
   // count and the divider resync-on-scroll-up trigger in MessageList.
   const activeReadPointerId = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
-    return s.conversationMeta.get(s.activeConversationId)?.readPointer?.messageId
+    return s.conversationMeta.get(s.activeConversationId)?.readPointer?.identity.messageId
   })
   // Provisional divider: derived from the local pointer while a synced XEP-0490
   // read position is still unresolved — rendered muted until confirmed.

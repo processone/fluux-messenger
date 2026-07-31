@@ -5,7 +5,7 @@
  * to reduce code duplication for common message array operations.
  */
 
-import { compareExact, makeCacheOrderKey } from './readState'
+import { compareExact, exactPosition } from './readState'
 
 /**
  * Generic interface for messages with a timestamp.
@@ -204,10 +204,7 @@ export function sortMessagesByTimestamp<T extends TimestampedMessage>(
   kind: 'chat' | 'room'
 ): T[] {
   return [...messages].sort((a, b) =>
-    compareExact(
-      { timestamp: a.timestamp.getTime(), tiebreak: makeCacheOrderKey(a, kind) },
-      { timestamp: b.timestamp.getTime(), tiebreak: makeCacheOrderKey(b, kind) }
-    )
+    compareExact(exactPosition(a, kind), exactPosition(b, kind))
   )
 }
 

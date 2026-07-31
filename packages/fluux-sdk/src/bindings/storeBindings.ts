@@ -254,8 +254,8 @@ export function createStoreBindings(
     // [MDS] line sits inline with the [Scroll]/[Nav] trace at the moment it mutates the marker.
     if (isMarkerDebugEnabled()) {
       const beforeSeen = isRoom
-        ? stores.room.roomMeta.get(conversationId)?.readPointer?.messageId
-        : stores.chat.conversationMeta.get(conversationId)?.readPointer?.messageId
+        ? stores.room.roomMeta.get(conversationId)?.readPointer?.identity.messageId
+        : stores.chat.conversationMeta.get(conversationId)?.readPointer?.identity.messageId
       const isActive = isRoom
         ? stores.room.activeRoomJid === conversationId
         : stores.chat.activeConversationId === conversationId
@@ -263,8 +263,8 @@ export function createStoreBindings(
       else stores.chat.applyRemoteDisplayed(conversationId, stanzaId)
       const after = getStores()
       const afterSeen = isRoom
-        ? after.room.roomMeta.get(conversationId)?.readPointer?.messageId
-        : after.chat.conversationMeta.get(conversationId)?.readPointer?.messageId
+        ? after.room.roomMeta.get(conversationId)?.readPointer?.identity.messageId
+        : after.chat.conversationMeta.get(conversationId)?.readPointer?.identity.messageId
       markerDebugLog('read:displayed-synced (remote device)', {
         conversationId, stanzaId, kind: isRoom ? 'room' : 'chat', isActive,
         lastSeenBefore: beforeSeen, lastSeenAfter: afterSeen, advanced: beforeSeen !== afterSeen,

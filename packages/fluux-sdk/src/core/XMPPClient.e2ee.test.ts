@@ -64,6 +64,7 @@ import {
 import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import * as messageCache from '../utils/messageCache'
+import type { ReadPointer } from '../stores/shared/readPointer'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -633,10 +634,13 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // this the derivation would correctly DEFER (see chatStore.test.ts's
       // "phantom-badge cleanup" describe for that control) and the badge
       // fix below would not apply — this test proves the fix survives PR B.
-      const readPointer = {
-        messageId: 'read-msg',
-        timestamp: new Date('2026-06-10T00:00:00Z'),
-        tiebreak: { kind: 'chat' as const, id: 'read-msg' },
+      const readPointer: ReadPointer = {
+        order: {
+          role: 'exact',
+          timestamp: new Date('2026-06-10T00:00:00Z').getTime(),
+          tiebreak: { kind: 'chat', id: 'read-msg' },
+        },
+        identity: { state: 'local', messageId: 'read-msg' },
       }
       chatStore.setState((s) => {
         const conversationMeta = new Map(s.conversationMeta)
@@ -666,6 +670,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // The coverage record's bottom resolves to a position strictly before
       // the floor (proving coverage reaches at least that far back).
       vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({
+        role: 'exact',
         timestamp: new Date('2026-06-09T23:00:00Z').getTime(),
         tiebreak: { kind: 'chat', id: 'archive-anchor' },
       })
@@ -913,10 +918,13 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // Model catch-up already complete, with a resolvable coverage bottom —
       // the realistic state by the time a deferred decrypt runs — and a
       // badge that is currently stale/inflated relative to the truth.
-      const readPointer = {
-        messageId: 'read-msg',
-        timestamp: new Date('2026-06-10T00:00:00Z'),
-        tiebreak: { kind: 'room' as const, from: `${ROOM}/alice`, id: 'read-msg' },
+      const readPointer: ReadPointer = {
+        order: {
+          role: 'exact',
+          timestamp: new Date('2026-06-10T00:00:00Z').getTime(),
+          tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'read-msg' },
+        },
+        identity: { state: 'local', messageId: 'read-msg' },
       }
       roomStore.setState((s) => {
         const roomMeta = new Map(s.roomMeta)
@@ -934,6 +942,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // The coverage record's bottom resolves to a position strictly before
       // the floor (proving coverage reaches at least that far back).
       vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({
+        role: 'exact',
         timestamp: new Date('2026-06-09T23:00:00Z').getTime(),
         tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'archive-anchor' },
       })

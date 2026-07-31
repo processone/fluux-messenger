@@ -84,7 +84,7 @@ export function useRoomActive() {
   // and the divider resync-on-scroll-up trigger in MessageList.
   const activeReadPointerId = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
-    return s.roomMeta.get(s.activeRoomJid)?.readPointer?.messageId
+    return s.roomMeta.get(s.activeRoomJid)?.readPointer?.identity.messageId
   })
 
   // Provisional divider: derived from the local pointer while a synced XEP-0490

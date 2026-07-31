@@ -39,9 +39,9 @@ import {
   pointerlessDefers,
   worthReconcilingOnDeactivate,
   isAfterBoundary,
-  makeCacheOrderKey,
+  exactPosition,
   isRenderableStoredMessage,
-  type OrderPosition,
+  type PointerOrder,
 } from './shared/readState'
 import {
   transientCounts,
@@ -1904,7 +1904,7 @@ export const roomStore = createStore<RoomState>()(
       }
       const result = noteTransient(
         scopeKey,
-        { position: { timestamp: messageToAdd.timestamp.getTime(), tiebreak: makeCacheOrderKey(messageToAdd, 'room') } },
+        { position: exactPosition(messageToAdd, 'room') },
         transientIdentity(identityFields, 'room'),
         transientAliases(identityFields, 'room')
       )
@@ -1996,6 +1996,10 @@ export const roomStore = createStore<RoomState>()(
           id: messageToAdd.id,
           from: messageToAdd.from,
           timestamp: messageToAdd.timestamp,
+          // The room-assigned archive id when the reflection carries one, so a
+          // pointer this arrival advances is `addressable` immediately rather
+          // than needing the publisher to look it back up.
+          stanzaId: messageToAdd.stanzaId,
           isOutgoing: messageToAdd.isOutgoing ?? false,
           isDelayed: messageToAdd.isDelayed,
           isMention: messageToAdd.isMention,
@@ -2400,7 +2404,7 @@ export const roomStore = createStore<RoomState>()(
     // below is computed AGAINST. Re-checked at the final commit (see that
     // guard's comment) to close a race the new allowActive trigger
     // (advanceReadPointer) makes materially more likely.
-    const pointerIdAtCompute = metaNow.readPointer?.messageId
+    const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
     const unreadInputVersionAtCompute = roomUnreadInputVersion.get(roomJid) ?? 0
 
     const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
@@ -2421,26 +2425,24 @@ export const roomStore = createStore<RoomState>()(
       if (record) get().clearRoomCoverage(roomJid, record.bottomId)
       return
     }
-    // The floor as an OrderPosition: when the floor came from the pointer,
-    // reuse the pointer's own order key so the comparison isn't blind to a
-    // coverage bottom sharing its exact millisecond; a historyFloor-derived
-    // floor has no such key (unresolved sorts conservatively).
-    const floorPos: OrderPosition = metaNow.readPointer
-      ? { timestamp: metaNow.readPointer.timestamp.getTime(), tiebreak: metaNow.readPointer.tiebreak }
-      : { timestamp: floor.getTime() }
+    // The boundary: the pointer's own order when there is one, so the
+    // comparison is not blind to a coverage bottom sharing its exact
+    // millisecond; a historyFloor-derived boundary knows only a millisecond and
+    // says so (unresolved sorts conservatively).
+    const floorPos: PointerOrder = metaNow.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
 
     // Task 9 safety net: this recompute is one of the "pointer advance /
     // content settled" triggers — bound the transient overlay's memory here
     // too, since not every trigger path calls pruneTransient directly.
     pruneTransient(roomTransientScopeKey(roomJid), floorPos)
 
-    // A BOUNDARY test: a keyless (migrated) floor reads as at-or-after its
+    // A BOUNDARY test: a FLOOR (migrated) boundary reads as at-or-after its
     // millisecond, so an equal-ms bottom counts as not reaching it (#1173).
     if (isAfterBoundary(bottom, floorPos)) return // coverage doesn't reach the floor
 
     const res = await messageCache.countRoomUnreadInArchive(roomJid, {
       floor,
-      pointer: metaNow.readPointer,
+      pointer: metaNow.readPointer?.order,
     })
     if (!recountContextIsCurrent()) return
     if (res === null) return // unavailable — IndexedDB error
@@ -2474,7 +2476,7 @@ export const roomStore = createStore<RoomState>()(
       // the newer, correct value — worst case this recompute under-acts
       // once; the next trigger (another arrival, deactivation, or
       // activation) re-derives it.
-      if (meta.readPointer?.messageId !== pointerIdAtCompute) return state
+      if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) return state
 
       // Rederive the divider (requirement 5): the boundary may have moved
       // since a marker was last parked here (a remote pointer advance).
@@ -2580,10 +2582,7 @@ export const roomStore = createStore<RoomState>()(
       // later recompute trigger. Pruning is a memory bound only:
       // transientCounts already excludes entries at/behind the boundary.
       if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
-        pruneTransient(roomTransientScopeKey(roomJid), {
-          timestamp: updated.readPointer.timestamp.getTime(),
-          tiebreak: updated.readPointer.tiebreak,
-        })
+        pruneTransient(roomTransientScopeKey(roomJid), updated.readPointer.order)
       }
 
       const newRooms = new Map(state.rooms)
@@ -2616,7 +2615,7 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if already fully read: pointer at the computed newest id,
       // no unread/mentions, and no "new messages" divider to clear.
       const meta = state.roomMeta.get(roomJid)
-      const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.messageId
+      const currentSeenMessageId = (meta?.readPointer ?? existing.readPointer)?.identity.messageId
       const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
       const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
       if (
@@ -2637,10 +2636,7 @@ export const roomStore = createStore<RoomState>()(
       // Task 9: mark-all-read jumps the pointer straight to the newest
       // message — prune the overlay now rather than leaving every noted
       // entry to a later recompute trigger.
-      pruneTransient(roomTransientScopeKey(roomJid), {
-        timestamp: read.readPointer.timestamp.getTime(),
-        tiebreak: read.readPointer.tiebreak,
-      })
+      pruneTransient(roomTransientScopeKey(roomJid), read.readPointer.order)
 
       const committed = commitRoomUpdate(state, roomJid, read)
       if (!committed) return state
@@ -2841,7 +2837,7 @@ export const roomStore = createStore<RoomState>()(
       // would reposition the divider on every return). Gate + retry policy live
       // in shared/readMarkerSync.
       const foldOnce = (stage: string) => {
-        const lastSeenBefore = get().roomMeta.get(roomJid)?.readPointer?.messageId
+        const lastSeenBefore = get().roomMeta.get(roomJid)?.readPointer?.identity.messageId
         const fold = foldPendingRemoteDisplayed(
           mdsGate,
           roomJid,
@@ -2853,7 +2849,7 @@ export const roomStore = createStore<RoomState>()(
             roomJid,
             pendingStanzaId: fold.pending,
             lastSeenBefore,
-            lastSeenAfter: get().roomMeta.get(roomJid)?.readPointer?.messageId,
+            lastSeenAfter: get().roomMeta.get(roomJid)?.readPointer?.identity.messageId,
             resolved: fold.resolved,
           })
         } else if (fold.pending) {
@@ -2879,7 +2875,7 @@ export const roomStore = createStore<RoomState>()(
       // What a cache miss costs is CONTEXT: the latest slice is kept, the
       // divider lands wherever the boundary falls inside it, and MAM catch-up
       // heals the cache for the next open.
-      const pointer = get().roomMeta.get(roomJid)?.readPointer?.messageId
+      const pointer = get().roomMeta.get(roomJid)?.readPointer?.identity.messageId
       if (pointer) {
         const loaded = get().roomRuntime.get(roomJid)?.messages ?? get().rooms.get(roomJid)?.messages ?? []
         if (!loaded.some((m) => m.id === pointer)) {
@@ -2983,10 +2979,7 @@ export const roomStore = createStore<RoomState>()(
       // pruned-away entry was already excluded from transientCounts by the
       // boundary comparison, this just reclaims the memory.
       if (updated.readPointer) {
-        pruneTransient(roomTransientScopeKey(roomJid), {
-          timestamp: updated.readPointer.timestamp.getTime(),
-          tiebreak: updated.readPointer.tiebreak,
-        })
+        pruneTransient(roomTransientScopeKey(roomJid), updated.readPointer.order)
       }
 
       const newRooms = new Map(state.rooms)

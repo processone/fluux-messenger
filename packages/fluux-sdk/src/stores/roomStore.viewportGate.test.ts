@@ -28,6 +28,7 @@ import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, getStorageScopeJid } from '../utils/storageScope'
 import { _clearAllTransientForTesting } from './shared/transientUnread'
+import type { ReadPointer } from './shared/readPointer'
 import {
   currentViewportGeneration,
   currentViewportEvidence,
@@ -115,7 +116,7 @@ function reportCurrent(roomJid: string, evidence: 'at-edge' | 'away'): void {
  * array in this lightweight test file).
  */
 function setPriorReadState(jid: string, unreadCount: number, priorMessageId: string): void {
-  const priorPointer = { messageId: priorMessageId, timestamp: new Date('2025-01-15T08:00:00Z') }
+  const priorPointer: ReadPointer = { order: { role: 'floor', timestamp: new Date('2025-01-15T08:00:00Z').getTime() }, identity: { state: 'local', messageId: priorMessageId } }
   roomStore.setState((state) => {
     const meta = state.roomMeta.get(jid)
     const room = state.rooms.get(jid)
@@ -189,9 +190,9 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
 
       const room = roomStore.getState().rooms.get('lounge@conference.example.com')
       expect(room?.unreadCount).toBe(0)
-      expect(room?.readPointer?.messageId).toBe(msg.id)
+      expect(room?.readPointer?.identity.messageId).toBe(msg.id)
       expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.unreadCount).toBe(0)
-      expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.readPointer?.messageId).toBe(msg.id)
+      expect(roomStore.getState().roomMeta.get('lounge@conference.example.com')?.readPointer?.identity.messageId).toBe(msg.id)
     })
 
     it('active + focused + UNKNOWN viewport (never reported): treated as not-at-edge, unread increases', () => {
@@ -278,7 +279,7 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
 
       const roomB = roomStore.getState().rooms.get(ROOM_B)
       expect(roomB?.unreadCount).toBe(0)
-      expect(roomB?.readPointer?.messageId).toBe(msg.id)
+      expect(roomB?.readPointer?.identity.messageId).toBe(msg.id)
     })
   })
 
@@ -312,7 +313,7 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       roomStore.getState().addMessage(ROOM, msg)
       const roomAfterFreshReport = roomStore.getState().rooms.get(ROOM)
       expect(roomAfterFreshReport?.unreadCount).toBe(0)
-      expect(roomAfterFreshReport?.readPointer?.messageId).toBe(msg.id)
+      expect(roomAfterFreshReport?.readPointer?.identity.messageId).toBe(msg.id)
     })
   })
 })

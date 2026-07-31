@@ -81,7 +81,7 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
     const meta = chatStore.getState().conversationMeta.get(CID)!
-    expect(meta.readPointer?.messageId).toBe('m2')
+    expect(meta.readPointer?.identity.messageId).toBe('m2')
     expect(meta.unreadCount).toBe(0)
   })
 })

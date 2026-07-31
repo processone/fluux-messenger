@@ -21,11 +21,17 @@
  * session never managed to publish is retried without waiting for a further
  * local read advance (#1145).
  *
- * Read positions resolve from resident state first and from the IndexedDB
- * message cache second (#1175), so a BACKGROUNDED entity — which keeps no
- * resident message array — still resolves and publishes. That makes resolution
- * asynchronous, so `consider()` runs as a LATEST-WINS SERIAL DRAIN per JID and
- * revalidates every input after the await; see `consider`/`considerOnce`.
+ * An ADDRESSABLE read pointer already carries the archive id XEP-0490 publishes,
+ * so resolving it is a field read: no residency, no cache, nothing to order.
+ *
+ * A LOCAL one does not — the archive id genuinely does not exist yet, and for
+ * the user's own 1:1 sends it may never — so it still resolves from resident
+ * state first and from the IndexedDB message cache second (#1175), which is what
+ * lets a BACKGROUNDED entity (no resident message array) publish at all. That
+ * path is asynchronous, so `consider()` runs as a LATEST-WINS SERIAL DRAIN per
+ * JID and revalidates every input after the await; see `consider`/`considerOnce`.
+ * The identity variant SCOPES that machinery to the degraded population rather
+ * than removing it — see the split pinned in `mdsSideEffects.cache.test.ts`.
  *
  * @module Core/MdsSideEffects
  */
@@ -40,9 +46,9 @@ import { createKeyedCoalescer } from '../utils/keyedCoalescer'
 import {
   compareExact,
   isAfterBoundary,
-  makeCacheOrderKey,
+  exactPosition,
   type ExactPosition,
-  type OrderPosition,
+  type PointerOrder,
 } from '../stores/shared/readState'
 import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
@@ -247,10 +253,10 @@ export function setupMdsSideEffects(
    *   pointer are filtered out. Ordering uses the pointer's own
    *   timestamp/`tiebreak` rather than its index, so the pointer's
    *   message need not be resident — a newer resident window cannot drag the
-   *   result forward. A keyless (#1081-migrated) pointer orders by `lastReadAt`,
+   *   result forward. A FLOOR (#1081-migrated) pointer orders by `lastReadAt`,
    *   which is documented as at or behind the message it names, so it
    *   under-advances further rather than past. Under-advancing is the direction
-   *   this module already prefers (`isAfterBoundary`: a keyless boundary reads
+   *   this module already prefers (`isAfterBoundary`: a floor boundary reads
    *   as at-or-after its millisecond → under-advance → over-count (safe)).
    * - It cannot regress the node: `publishDecision` is unchanged, and the one
    *   value we must never publish over — a remote marker we could not order — is
@@ -267,23 +273,16 @@ export function setupMdsSideEffects(
    */
   function newestResolvableAtOrBehind(
     messages: Array<{ stanzaId?: string; from?: string; id: string; timestamp: Date }>,
-    pointer: { timestamp: Date; tiebreak?: OrderPosition['tiebreak'] }
+    boundary: PointerOrder
   ): string | undefined {
-    const pointerPos: OrderPosition = {
-      timestamp: pointer.timestamp.getTime(),
-      tiebreak: pointer.tiebreak,
-    }
     let best: { pos: ExactPosition; stanzaId: string } | undefined
     for (const m of messages) {
       if (!m.stanzaId) continue
-      const pos: ExactPosition = {
-        timestamp: m.timestamp.getTime(),
-        tiebreak: makeCacheOrderKey(m, 'chat'),
-      }
-      // A BOUNDARY test against the pointer: a keyless pointer reads as
+      const pos = exactPosition(m, 'chat')
+      // A BOUNDARY test against the pointer: a `floor` pointer reads as
       // at-or-after its millisecond, so we withhold that millisecond rather
       // than publish past it — the under-advance this module prefers (#1173).
-      if (isAfterBoundary(pos, pointerPos)) continue // ahead of the pointer — never publish
+      if (isAfterBoundary(pos, boundary)) continue // ahead of the pointer — never publish
       // Picking the newest candidate: both sides are exact by construction.
       if (!best || compareExact(pos, best.pos) > 0) best = { pos, stanzaId: m.stanzaId }
     }
@@ -296,35 +295,54 @@ export function setupMdsSideEffects(
       : chatStore.getState().conversationMeta.get(jid)?.readPointer
   }
 
+  /**
+   * The de-dup key for "we have already handled THIS position".
+   *
+   * Covers the identity as well as the order, deliberately: a `local` pointer
+   * that converges to `addressable` is the SAME position with a better name, and
+   * that is exactly the change that makes it publishable. Keying on the order
+   * alone would short-circuit the pass that should finally send it.
+   */
   function pointerIdentity(pointer: ReadPointer | undefined): string | undefined {
     if (!pointer) return undefined
-    const key = pointer.tiebreak
+    const { order, identity } = pointer
     return JSON.stringify([
-      pointer.messageId,
-      pointer.timestamp.getTime(),
-      key?.kind ?? null,
-      key?.kind === 'room' ? key.from : null,
-      key?.id ?? null,
+      identity.messageId,
+      identity.state === 'addressable' ? identity.archiveId : null,
+      order.timestamp,
+      order.role,
+      order.role === 'exact' ? order.tiebreak.kind : null,
+      order.role === 'exact' && order.tiebreak.kind === 'room' ? order.tiebreak.from : null,
     ])
   }
 
   /**
-   * Resolve the exact `(sender, id)` target named by a room pointer.
+   * Resolve the exact `(sender, id)` target named by a `local` room pointer.
    *
    * Room client ids are unique only per sender. Without a room cache-order
    * key, choosing any matching row would risk publishing a WRONG forward-only
    * MDS position that no device can walk back. Refusing to resolve preserves the
    * exact-position contract and costs only a retryable delay.
+   *
+   * Takes the pointer rather than re-reading the store, so both resolution
+   * sources answer for the SAME position the caller already read and revalidated.
+   * Only reached for a `local` pointer: an `addressable` one already carries the
+   * archive id this lookup exists to find.
    */
-  function exactRoomPointerTarget(jid: string): { messageId: string; from: string } | undefined {
-    const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
-    const key = pointer?.tiebreak
-    if (!pointer?.messageId || key?.kind !== 'room' || key.from.length === 0) return undefined
-    return { messageId: pointer.messageId, from: key.from }
+  function exactRoomPointerTarget(pointer: ReadPointer): { messageId: string; from: string } | undefined {
+    const { order, identity } = pointer
+    if (order.role !== 'exact' || order.tiebreak.kind !== 'room' || order.tiebreak.from.length === 0) {
+      return undefined
+    }
+    return { messageId: identity.messageId, from: order.tiebreak.from }
   }
 
   /**
-   * Resolve the stanza-id of the message a conversation's/room's read pointer names.
+   * Resolve a LOCAL pointer's stanza-id from resident state.
+   *
+   * Only reached for `identity.state === 'local'`: an `addressable` pointer
+   * needs no resolution at all (see {@link resolveSeenStanzaId}), so everything
+   * below is the degraded path and nothing else.
    *
    * The two branches differ deliberately. A MUC reflects our own message back
    * with a room-assigned `stanza-id`, so a room pointer resolves exactly, and
@@ -335,9 +353,9 @@ export function setupMdsSideEffects(
    * stanza-ids at all would have nothing resolvable at or behind the pointer for
    * a fallback to find. So the asymmetry is the point, not an omission.
    */
-  function resolveFromStores(jid: string): string | undefined {
+  function resolveFromStores(jid: string, pointer: ReadPointer): string | undefined {
     if (isRoom(jid)) {
-      const target = exactRoomPointerTarget(jid)
+      const target = exactRoomPointerTarget(pointer)
       if (!target) return undefined
       const { messageId: seenId, from } = target
       const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
@@ -350,9 +368,7 @@ export function setupMdsSideEffects(
         ?? roomStore.getState().rooms.get(jid)?.lastMessage
       return last?.id === seenId && last.from === from ? last.stanzaId : undefined
     }
-    const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
-    const seenId = pointer?.messageId
-    if (!seenId) return undefined
+    const seenId = pointer.identity.messageId
     const messages = chatStore.getState().messages.get(jid) || []
     const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
     if (fromSlice) return fromSlice
@@ -363,11 +379,11 @@ export function setupMdsSideEffects(
     // The pointer names a message with no stanza-id — in 1:1 the normal resting
     // state once the user has replied. Publish the newest position we CAN
     // address at or behind it rather than staying silent for the session.
-    return newestResolvableAtOrBehind(messages, pointer)
+    return newestResolvableAtOrBehind(messages, pointer.order)
   }
 
   /**
-   * Resolve the pointer from the IndexedDB message cache (#1175).
+   * Resolve a LOCAL pointer from the IndexedDB message cache (#1175).
    *
    * The store-backed resolution above can only see what is RESIDENT, and a
    * backgrounded entity keeps no resident array at all — `setActiveConversation`
@@ -379,25 +395,24 @@ export function setupMdsSideEffects(
    * cached rows at or before the pointer's timestamp — and hands it to the same
    * {@link newestResolvableAtOrBehind} the resident fallback uses. That is
    * deliberately one code path for two jobs: the pointer's own row is the newest
-   * thing at or behind itself, so an exactly-resolvable pointer yields its own
-   * stanza-id, and only an unresolvable one degrades to the #1189 approximation.
-   * Ordering against the pointer is what makes it safe in the direction that
-   * matters — a row newer than the pointer can never be selected, so this cannot
-   * publish ahead of the true read position, exactly as for the resident scan.
+   * thing at or behind itself, so a pointer whose named row has since acquired
+   * an archive id yields that id, and only a still-unresolvable one degrades to
+   * the #1189 approximation. Ordering against the pointer is what makes it safe
+   * in the direction that matters — a row newer than the pointer can never be
+   * selected, so this cannot publish ahead of the true read position, exactly as
+   * for the resident scan.
    *
    * Rooms keep the exact-position contract and get NO at-or-behind fallback, in
    * the cache as in memory — see {@link resolveFromStores} for why.
    */
-  async function resolveFromCache(jid: string): Promise<string | undefined> {
+  async function resolveFromCache(jid: string, pointer: ReadPointer): Promise<string | undefined> {
     if (!messageCache.isMessageCacheAvailable()) return undefined
     if (isRoom(jid)) {
-      const target = exactRoomPointerTarget(jid)
+      const target = exactRoomPointerTarget(pointer)
       if (!target) return undefined
       const cached = await messageCache.getRoomMessage(jid, target.messageId, target.from)
       return cached?.stanzaId
     }
-    const pointer = chatStore.getState().conversationMeta.get(jid)?.readPointer
-    if (!pointer?.messageId) return undefined
     // `before` is an exclusive upper bound, so probe one millisecond past the
     // pointer to include the message sitting exactly on it; it also forces the
     // backwards cursor, so `limit` yields the NEWEST rows rather than the
@@ -406,24 +421,52 @@ export function setupMdsSideEffects(
     // this one has nothing to return (see messageCache.entityTimestampRange).
     const rows = await messageCache.getMessages(jid, {
       after: new Date(0),
-      before: new Date(pointer.timestamp.getTime() + 1),
+      before: new Date(pointer.order.timestamp + 1),
       limit: CACHE_LOOKBACK,
     })
-    return newestResolvableAtOrBehind(rows, pointer)
+    return newestResolvableAtOrBehind(rows, pointer.order)
   }
 
   /**
-   * Resolve the pointer, resident state first and the cache second.
+   * Resolve the wire name of a conversation's/room's read position.
    *
-   * Ordering is a cost decision, not a correctness one: both sources answer with
-   * a position at or behind the pointer, so neither can over-advance. Preferring
-   * the resident answer keeps every case that resolves today free of an
-   * IndexedDB read — including the active-conversation #1189 fallback, where the
-   * cached copy of an own send has no stanza-id either, so the read could not
-   * have improved on it.
+   * The identity variant splits this into two genuinely different jobs, and the
+   * split is the point of the whole shape:
+   *
+   * - **`addressable`** — a FIELD READ. The archive id was captured from the very
+   *   message the pointer names, at mint, so there is no lookup, no residency
+   *   requirement, no IndexedDB read and nothing to order. Every peer message and
+   *   every MUC reflection mints one, so this is the common path.
+   * - **`local`** — the degraded path, and the only reason the machinery below
+   *   still exists. The pointer names a message that had no archive id when the
+   *   position was taken: in a 1:1 that is the normal resting state once the user
+   *   replies (the server never echoes our own sends back, so the row may NEVER
+   *   acquire one), and in a MUC it is the window before the reflection lands.
+   *   Resolving it needs the archive, resident state first and the cache second.
+   *
+   * Ordering resident-before-cache is a cost decision, not a correctness one:
+   * both sources answer with a position at or behind the pointer, so neither can
+   * over-advance. Preferring the resident answer keeps every case that resolves
+   * from memory free of an IndexedDB read — including the active-conversation
+   * #1189 fallback, where the cached copy of an own send has no stanza-id either,
+   * so the read could not have improved on it.
+   *
+   * NOTE ON #1195: the async / serial-drain / revalidate machinery in
+   * `consider()` is NOT removed by the identity variant, and the design note
+   * that predicted it would be was wrong about the `local` population. It is
+   * skipped for `addressable` pointers — no await ever reaches the cache for
+   * them — but the branch above still needs it, and the `local` population is
+   * exactly the 1:1-resting-on-an-own-send case that #1175 and #1189 were opened
+   * for. The function therefore stays `async` and every caller keeps
+   * revalidating after the await.
    */
   async function resolveSeenStanzaId(jid: string): Promise<string | undefined> {
-    return resolveFromStores(jid) ?? (await resolveFromCache(jid))
+    const pointer = readPointer(jid)
+    if (!pointer) return undefined
+    // The wire name we already hold. No lookup can improve on it: it came from
+    // the message this position names, bound by identity at mint time.
+    if (pointer.identity.state === 'addressable') return pointer.identity.archiveId
+    return resolveFromStores(jid, pointer) ?? (await resolveFromCache(jid, pointer))
   }
 
   /**
