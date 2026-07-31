@@ -387,7 +387,7 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
-  it('uses the pointer archive-order key to reject an unread same-millisecond sibling', async () => {
+  it('uses the pointer cache-order key to reject an unread same-millisecond sibling', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)

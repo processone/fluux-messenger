@@ -301,7 +301,7 @@ export function setupMdsSideEffects(
   /**
    * Resolve the exact `(sender, id)` target named by a room pointer.
    *
-   * Room client ids are unique only per sender. Without a room archive-order
+   * Room client ids are unique only per sender. Without a room cache-order
    * key, choosing any matching row would risk publishing a WRONG forward-only
    * MDS position that no device can walk back. Refusing to resolve preserves the
    * exact-position contract and costs only a retryable delay.

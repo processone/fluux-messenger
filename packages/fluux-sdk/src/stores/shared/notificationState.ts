@@ -435,7 +435,7 @@ export function onWindowBecameVisible(
  * moving on a fabricated timestamp would push a forward-only floor past unread
  * messages for good.
  *
- * A KEYED current pointer (carries `tiebreak`) is ordered by archive
+ * A KEYED current pointer (carries `tiebreak`) is ordered by cache
  * POSITION via `compareOrder`, not by array index — its position is provable
  * without being resident in `messages` (PR C, D4). The off-slice guard and the
  * `atLiveEdge` escape hatch below apply only to a KEYLESS (migrated) pointer,
