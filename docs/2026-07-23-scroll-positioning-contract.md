@@ -70,6 +70,17 @@ viewport-session snapshots and owns entry reads, throttled continuous saves, lea
 decisions, and explicit saved-position clearing. The adapter rejects stale-room snapshots and
 controller-owned scroll events and has no DOM, virtualizer, scheduler, or pixel-write capability.
 
+Directional history windowing is mediated by a value-only
+`DirectionalHistoryWindowCoordinator`. It owns older/newer availability, cooldown and travel
+eligibility, monotonic load identity, anchor/distance facts, loader invocation, no-shift completion,
+and false-to-true live-window cleanup. A loader promise bounds only the snapshot that invoked it:
+settlement from an older superseded load cannot release the current request, while an in-flight
+load keeps its snapshot until its own first-id shift can reconcile. Conversation entry drops the
+departed conversation's snapshot, and delayed settlement or window observation from that snapshot
+cannot mutate the active conversation. The hook currently supplies the DOM measurements and
+one-frame browser settlement callback; the coordinator imports no DOM, virtualizer, frame
+scheduler, positioning controller, or pixel-write capability.
+
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
 remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
@@ -481,7 +492,7 @@ kinetic scrolling and stale-paint behavior.
      top/bottom travel latches.
    - [x] Move enter/leave/save/clear behavior and throttling behind a persistence adapter consuming
      viewport-session snapshots.
-   - [ ] Extract directional history load eligibility, invocation, and completion into a window
+   - [x] Extract directional history load eligibility, invocation, and completion into a window
      coordinator that owns no positioning.
    - [ ] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
    - [ ] Leave the React hook as thin lifecycle orchestration.

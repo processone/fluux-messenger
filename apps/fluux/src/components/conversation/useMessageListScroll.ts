@@ -3,9 +3,9 @@
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
- * 2. Saved-position, unread-marker, explicit-target, live-edge, media-preservation,
- *    directional-history, and resident-top policy/retry ownership lives in
- *    PositioningController; browser writes stay imperative in leased hook executors
+ * 2. PositioningController owns every live-list positioning generation. Directional window-load
+ *    eligibility/lifetime lives in a value-only coordinator; browser writes stay imperative in
+ *    leased hook executors
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
@@ -43,6 +43,12 @@ import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 import { ViewportSession } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
+import {
+  DIRECTIONAL_HISTORY_COOLDOWN_MS,
+  DirectionalHistoryWindowCoordinator,
+  type DirectionalHistoryReleaseDecision,
+  type DirectionalHistorySnapshot,
+} from './directionalHistoryWindowCoordinator'
 import {
   PositioningController,
   type DirectionalHistoryExecutor,
@@ -128,9 +134,7 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // on purpose: a tall last message can measure taller than the estimate and leave the view a
 // AT_BOTTOM_THRESHOLD is imported from scrollStateManager (shared with wasAtBottom persistence).
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
-const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
-const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
 // How long a jumped-to message keeps its highlight tint, for both the controller-owned live path
 // and the scoped static-preview path (they must flash identically).
@@ -390,20 +394,6 @@ export interface UseMessageListScrollResult {
   scrollToMarker: () => void
 }
 
-interface DirectionalHistorySnapshot {
-  anchorMessageId: string
-  anchorOffsetFromTop: number
-  distanceFromBottom: number
-  oldFirstId: string
-  oldMessageCount: number
-  generation?: number
-  restored?: boolean
-  restoredAt?: number
-  /** Whether the load this snapshot was armed for has finished running (delivered or not). It is
-   *  what bounds the snapshot's claim on the next window shift — see runDirectionalHistoryLoad. */
-  loadSettled?: boolean
-}
-
 // ============================================================================
 // HOOK
 // ============================================================================
@@ -490,6 +480,11 @@ export function useMessageListScroll({
   const scrollPersistenceRef = useRef<ScrollPersistenceAdapter | null>(null)
   if (scrollPersistenceRef.current === null) {
     scrollPersistenceRef.current = new ScrollPersistenceAdapter()
+  }
+  const directionalWindowRef =
+    useRef<DirectionalHistoryWindowCoordinator | null>(null)
+  if (directionalWindowRef.current === null) {
+    directionalWindowRef.current = new DirectionalHistoryWindowCoordinator()
   }
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
@@ -609,25 +604,16 @@ export function useMessageListScroll({
       },
     })
   }
-  // Track prepend (loading older messages)
-  // When we load older messages, we save the anchor element position BEFORE the load,
-  // then restore it AFTER React renders the new messages.
-  // Using element-based positioning is more reliable than pure scroll math.
-  const prependRef = useRef<DirectionalHistorySnapshot | null>(null)
-  // Frames on which settled-without-shift snapshots are released (see runDirectionalHistoryLoad).
+  // Browser frames on which the value-only directional coordinator is told to adjudicate a load
+  // that settled without shifting the resident window. The coordinator owns request identity and
+  // cancellation policy; this hook retains only the browser scheduling mechanism until the browser
+  // adapter extraction in the next architecture slice.
   // A set, not a single slot: two loads can be in flight across a fast re-trigger and settle in
-  // either order, so one snapshot's frame must never displace another's. Cancelled on unmount.
+  // either order, so one request's frame must never displace another's. Cancelled on unmount.
   // Same lazy-ref idiom as pinBottomClaim below — stable identity, no per-render allocation.
   const directionalReleaseFramesRef = useRef<Set<number> | null>(null)
   const directionalReleaseFrames = () =>
     (directionalReleaseFramesRef.current ??= new Set<number>())
-
-  // Throttling/cooldown
-  const lastLoadTimeRef = useRef(0)
-  const lastRestoreTimeRef = useRef(0) // Track when we last restored position
-  // Tracks the previous windowAtLiveEdge so we can detect the false→true transition (returning to
-  // the live edge) and drop a stale prepend/append anchor — see the effect below.
-  const prevWindowAtLiveEdgeRef = useRef(windowAtLiveEdge)
 
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
@@ -684,11 +670,6 @@ export function useMessageListScroll({
   // ==========================================================================
   // HELPERS
   // ==========================================================================
-
-  const canLoadMore = !isHistoryComplete && !isLoadingOlder && !!onScrollToTop
-  // Sliding window: load-newer is possible only when the window is slid up (windowAtLiveEdge === false)
-  // — otherwise the resident bottom IS the live edge and there is nothing newer to fetch.
-  const canLoadNewer = windowAtLiveEdge === false && !isLoadingNewer && !!onLoadNewer
 
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
@@ -1561,11 +1542,11 @@ export function useMessageListScroll({
     // first-id change, because at the resident bound an insertion evicts the oldest row and so
     // moves the first id too. This effect is declared before the directional restore effect, so
     // the snapshot is still unrestored here when its load genuinely lands.
-    const pendingDirectional = prependRef.current
     const directionalLoad =
-      !!pendingDirectional &&
-      !pendingDirectional.restored &&
-      pendingDirectional.oldFirstId !== firstMessageId
+      directionalWindowRef.current?.isPendingWindowShift(
+        conversationId,
+        firstMessageId ?? '',
+      ) ?? false
     const residentChanged =
       tracked.messageCount !== messageCount || tracked.firstMessageId !== firstMessageId
 
@@ -1737,28 +1718,25 @@ export function useMessageListScroll({
         complete: (request, outcome) => {
           if (activeConversationIdRef.current !== request.conversationId) return
           if (outcome === 'applied') {
-            saved.restored = true
-            saved.restoredAt = Date.now()
-            lastRestoreTimeRef.current = saved.restoredAt
+            const restored = directionalWindowRef.current?.markRestored(
+              saved.requestId,
+              Date.now(),
+            )
+            const restoredAt = restored?.restoredAt
+            if (restoredAt === undefined) return
             prevMessageCountRef.current = messageCountRef.current
             viewportSessionRef.current?.recordProgrammaticWrite(
               request.conversationId,
-              saved.restoredAt,
+              restoredAt,
             )
             setTimeout(() => {
-              if (
-                prependRef.current === saved &&
-                prependRef.current.restoredAt === saved.restoredAt
-              ) {
-                debugLog('DIRECTIONAL HISTORY CLEAR')
-                prependRef.current = null
-              }
-            }, PREPEND_COOLDOWN_MS)
-          } else if (
-            !saved.restored &&
-            prependRef.current === saved
-          ) {
-            prependRef.current = null
+              directionalWindowRef.current?.expireRestored(
+                saved.requestId,
+                restoredAt,
+              )
+            }, DIRECTIONAL_HISTORY_COOLDOWN_MS)
+          } else {
+            directionalWindowRef.current?.finishPosition(saved.requestId)
           }
           if (outcome !== 'applied') {
             viewportSessionRef.current?.recordProgrammaticWrite(
@@ -2329,7 +2307,7 @@ export function useMessageListScroll({
   ])
 
   const scrollToTopImpl = useCallback(() => {
-    lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
+    directionalWindowRef.current?.suppressAutomaticLoads(Date.now())
     if (staticMode) {
       // Search/stranger previews intentionally own neither a controller conversation nor live-list
       // persistence. Preserve their isolated one-shot Home behavior inside this scroller; routing
@@ -2484,21 +2462,94 @@ export function useMessageListScroll({
     return null
   }
 
+  const applyDirectionalReleaseDecision = useCallback(
+    (decision: DirectionalHistoryReleaseDecision) => {
+      if (decision.kind !== 'cancel') return
+      debugLog('DIRECTIONAL HISTORY RELEASE (without window shift)', {
+        requestId: decision.snapshot.requestId,
+        oldFirstId: decision.snapshot.oldFirstId,
+        oldMessageCount: decision.snapshot.oldMessageCount,
+        messageCount: liveWindowRef.current.messageCount,
+        generation: decision.generation,
+      })
+      positioningControllerRef.current?.cancelDirectionalHistoryWithoutShift({
+        conversationId: decision.snapshot.conversationId,
+        generation: decision.generation,
+      })
+    },
+    [],
+  )
+
+  const scheduleDirectionalHistorySettlement = (requestId: number) => {
+    const frames = directionalReleaseFrames()
+    // The handle is only known AFTER requestAnimationFrame returns, but the callback can run
+    // BEFORE it does — jsdom suites stub rAF synchronously. Track it only while genuinely pending.
+    let frame: number | null = null
+    let pending = true
+    frame = requestAnimationFrame(() => {
+      pending = false
+      if (frame !== null) frames.delete(frame)
+      const activeConversationId = activeConversationIdRef.current
+      applyDirectionalReleaseDecision(
+        directionalWindowRef.current?.releaseSettledWithoutShift({
+          requestId,
+          conversationId: activeConversationId,
+          firstMessageId: liveWindowRef.current.firstMessageId ?? '',
+        }) ?? { kind: 'none' },
+      )
+    })
+    if (pending) frames.add(frame)
+  }
+
   const beginDirectionalHistoryLoad = (
     scroller: HTMLDivElement,
+    direction: 'older' | 'newer',
+    mode: 'automatic' | 'explicit',
   ): {
     saved: DirectionalHistorySnapshot
     anchor: { id: string; offsetFromTop: number } | null
-  } => {
-    const anchor = findAnchorElement()
-    const saved: DirectionalHistorySnapshot = {
-      anchorMessageId: anchor?.id ?? '',
-      anchorOffsetFromTop: anchor?.offsetFromTop ?? 0,
-      distanceFromBottom: getDistanceFromBottom(scroller),
-      oldFirstId: firstMessageId ?? '',
-      oldMessageCount: messageCount,
+  } | null => {
+    let anchor: { id: string; offsetFromTop: number } | null = null
+    const result = directionalWindowRef.current?.begin({
+      conversationId,
+      direction,
+      mode,
+      now: Date.now(),
+      loaderAvailable:
+        direction === 'older' ? Boolean(onScrollToTop) : Boolean(onLoadNewer),
+      loading:
+        direction === 'older' ? Boolean(isLoadingOlder) : Boolean(isLoadingNewer),
+      historyComplete: Boolean(isHistoryComplete),
+      windowAtLiveEdge: windowAtLiveEdge !== false,
+      travelledAway:
+        viewportSessionRef.current?.hasTravelledAway(
+          conversationId,
+          direction === 'older' ? 'top' : 'bottom',
+        ) ?? false,
+      capture: () => {
+        anchor = findAnchorElement()
+        return {
+          anchorMessageId: anchor?.id ?? '',
+          anchorOffsetFromTop: anchor?.offsetFromTop ?? 0,
+          distanceFromBottom: getDistanceFromBottom(scroller),
+          firstMessageId: firstMessageId ?? '',
+          messageCount,
+        }
+      },
+    })
+    if (!result || result.kind === 'blocked') {
+      if (result?.reason === 'recently-restored') {
+        debugLog('LOAD BLOCKED (recently restored)')
+      }
+      return null
     }
-    prependRef.current = saved
+    if (result.clearTravel) {
+      viewportSessionRef.current?.clearTravel(
+        conversationId,
+        direction === 'older' ? 'top' : 'bottom',
+      )
+    }
+    const saved = result.snapshot
     const request = runScrollShadowSafely({
       event: 'directional-history-capture',
       conversationId,
@@ -2517,173 +2568,78 @@ export function useMessageListScroll({
         executor: createDirectionalHistoryExecutor(saved),
       }) ?? null,
     })
-    saved.generation = request?.generation
+    if (request) {
+      directionalWindowRef.current?.attachGeneration(
+        saved.requestId,
+        request.generation,
+      )
+    }
     return { saved, anchor }
   }
 
-  /**
-   * Drop a directional snapshot whose load is over and which never saw the window shift it was
-   * armed for. Guarded so it is a no-op the moment anything else has taken the snapshot over: the
-   * batch landed and restored it, a newer load replaced it, or the conversation changed.
-   *
-   * Going through `cancelDirectionalHistoryWithoutShift` (the same primitive the returned-to-live-
-   * edge case uses) matters twice over: it clears the controller's pending `history-preservation`
-   * request, which the positioning model treats as a position the reader is still waiting to reach
-   * — while it stands, EVERY ambient layout preservation (insertion, divider) is refused.
-   */
-  const releaseUnshiftedDirectionalHistory = (
-    saved: DirectionalHistorySnapshot,
-    ownerConversationId: string,
-  ) => {
-    if (prependRef.current !== saved || saved.restored) return
-    if (activeConversationIdRef.current !== ownerConversationId) return
-    // The window DID shift after all — the restore effect owns this snapshot, not us.
-    if ((liveWindowRef.current.firstMessageId ?? '') !== saved.oldFirstId) return
-
-    debugLog('DIRECTIONAL HISTORY RELEASE (settled without a window shift)', {
-      oldFirstId: saved.oldFirstId,
-      oldMessageCount: saved.oldMessageCount,
-      messageCount: liveWindowRef.current.messageCount,
-      generation: saved.generation,
-    })
-    if (saved.generation !== undefined) {
-      positioningControllerRef.current?.cancelDirectionalHistoryWithoutShift({
-        conversationId: ownerConversationId,
-        generation: saved.generation,
-      })
-    }
-    if (prependRef.current === saved) prependRef.current = null
-  }
-
-  /**
-   * Run the load a snapshot was armed for, and bound the snapshot's lifetime to it.
-   *
-   * The snapshot's whole purpose is to catch the window shift its load produces, and it recognises
-   * that shift as a `firstMessageId` change. A load that settles WITHOUT delivering rows — an
-   * exhausted archive, a query that returns only duplicates, a fetch that bails before it starts —
-   * never produces one, so the restore effect just keeps waiting. Left armed, the snapshot claims
-   * the next first-id change from ANY source (a live arrival evicting the oldest row at the
-   * resident bound is one) and restores the reader to a position that stopped meaning anything
-   * loads ago; meanwhile its pending controller request blocks insertion preservation outright.
-   *
-   * So the loader's own promise is the snapshot's deadline. Releasing is deferred one frame, and
-   * re-checked when it fires: a commit that delivers the batch takes the snapshot first, which is
-   * what keeps successful pagination — the case this must never break — restoring as before.
-   */
   const runDirectionalHistoryLoad = (
     saved: DirectionalHistorySnapshot,
-    ownerConversationId: string,
     run: () => unknown,
   ): void => {
-    const settle = () => {
-      saved.loadSettled = true
-      const frames = directionalReleaseFrames()
-      // The handle is only known AFTER requestAnimationFrame returns, but the callback can run
-      // BEFORE it does — jsdom suites stub rAF to invoke synchronously. So the handle is a
-      // reassignable `let` the callback reads defensively (a `const` closed over here would be in
-      // its temporal dead zone), and it is tracked for cancellation only if a frame is really
-      // pending. Run synchronously, there is nothing to cancel and nothing to track.
-      let frame: number | null = null
-      let pending = true
-      frame = requestAnimationFrame(() => {
-        pending = false
-        if (frame !== null) frames.delete(frame)
-        releaseUnshiftedDirectionalHistory(saved, ownerConversationId)
-      })
-      if (pending) frames.add(frame)
-    }
-
-    let result: unknown
-    try {
-      result = run()
-    } catch (error) {
-      settle()
-      throw error
-    }
-    const thenable = result as PromiseLike<unknown> | null | undefined
-    if (typeof thenable?.then === 'function') {
-      thenable.then(settle, settle)
-      return
-    }
-    settle()
+    directionalWindowRef.current?.invokeLoad(
+      saved,
+      run,
+      scheduleDirectionalHistorySettlement,
+    )
   }
 
   const triggerLoadOlder = () => {
-    if (!canLoadMore) return
     const scroller = scrollerRef.current
     if (!scroller) return
+    const started = beginDirectionalHistoryLoad(
+      scroller,
+      'older',
+      'automatic',
+    )
+    if (!started) return
+    const { saved, anchor } = started
 
-    const now = Date.now()
-    const cooldownOk = now - lastLoadTimeRef.current > LOAD_COOLDOWN_MS
-    const recentlyRestored = now - lastRestoreTimeRef.current < LOAD_COOLDOWN_MS
+    debugLog('PREPEND START', {
+      anchor,
+      distanceFromBottom: saved.distanceFromBottom,
+      scrollHeight: scroller.scrollHeight,
+      scrollTop: scroller.scrollTop,
+      clientHeight: scroller.clientHeight,
+      firstMessageId,
+      messageCount,
+    })
 
-    // Don't trigger if we just restored scroll position (prevents rapid re-loading)
-    if (recentlyRestored) {
-      debugLog('LOAD BLOCKED (recently restored)', {
-        timeSinceRestore: now - lastRestoreTimeRef.current,
-      })
-      return
-    }
-
-    if (
-      cooldownOk ||
-      viewportSessionRef.current?.hasTravelledAway(conversationId, 'top')
-    ) {
-      lastLoadTimeRef.current = now
-      viewportSessionRef.current?.clearTravel(conversationId, 'top')
-
-      const { saved, anchor } = beginDirectionalHistoryLoad(scroller)
-
-      debugLog('PREPEND START', {
-        anchor,
-        distanceFromBottom: saved.distanceFromBottom,
-        scrollHeight: scroller.scrollHeight,
-        scrollTop: scroller.scrollTop,
-        clientHeight: scroller.clientHeight,
-        firstMessageId,
-        messageCount,
-      })
-
-      runDirectionalHistoryLoad(saved, conversationId, () => onScrollToTop?.())
-    }
+    runDirectionalHistoryLoad(saved, () => onScrollToTop?.())
   }
 
-  // Sliding window: mirror of triggerLoadOlder for the newer direction. Fires when the reader
-  // scrolls back down to the bottom of a slid-up window (canLoadNewer gates on windowAtLiveEdge ===
-  // false). Loading newer APPENDS a batch and EVICTS the oldest (opposite end), so it shifts every
+  // Sliding window: mirror of triggerLoadOlder for the newer direction. The coordinator permits it
+  // only when the reader is in a slid-up window. Loading newer APPENDS a batch and EVICTS the
+  // oldest (opposite end), so it shifts every
   // offset up; we save the same anchor prepend uses and let the shared restore effect hold the
   // viewport steady. The evicted rows are the OLDEST — far above the viewport — so the top-visible
   // anchor survives, making the anchor-based restore direction-agnostic.
   const triggerLoadNewer = () => {
-    if (!canLoadNewer) return
     const scroller = scrollerRef.current
     if (!scroller) return
-
-    const now = Date.now()
-    const cooldownOk = now - lastLoadTimeRef.current > LOAD_COOLDOWN_MS
-    if (
-      !cooldownOk &&
-      !viewportSessionRef.current?.hasTravelledAway(conversationId, 'bottom')
-    ) {
-      return
-    }
-
-    lastLoadTimeRef.current = now
-    viewportSessionRef.current?.clearTravel(conversationId, 'bottom')
-
-    const { saved } = beginDirectionalHistoryLoad(scroller)
-
-    runDirectionalHistoryLoad(saved, conversationId, () => onLoadNewer?.())
+    const started = beginDirectionalHistoryLoad(
+      scroller,
+      'newer',
+      'automatic',
+    )
+    if (!started) return
+    runDirectionalHistoryLoad(started.saved, () => onLoadNewer?.())
   }
 
   const handleLoadEarlier = () => {
-    if (!canLoadMore) return
     const scroller = scrollerRef.current
     if (!scroller) return
-
-    lastLoadTimeRef.current = Date.now()
-
-    const { saved, anchor } = beginDirectionalHistoryLoad(scroller)
+    const started = beginDirectionalHistoryLoad(
+      scroller,
+      'older',
+      'explicit',
+    )
+    if (!started) return
+    const { saved, anchor } = started
 
     debugLog('LOAD EARLIER', {
       anchor,
@@ -2695,7 +2651,7 @@ export function useMessageListScroll({
       messageCount,
     })
 
-    runDirectionalHistoryLoad(saved, conversationId, () => onScrollToTop?.())
+    runDirectionalHistoryLoad(saved, () => onScrollToTop?.())
   }
 
   // ==========================================================================
@@ -3030,9 +2986,9 @@ export function useMessageListScroll({
       triggerLoadOlder()
     }
 
-    // Sliding window: when the window is slid up (canLoadNewer ⇒ windowAtLiveEdge === false),
-    // reaching the resident bottom means newer messages exist in cache below — load them. Gated by
-    // canLoadNewer, so at the live edge this is inert and bottom-stick is unchanged.
+    // Sliding window: when the window is slid up, reaching the resident bottom means newer
+    // messages exist in cache below. The coordinator rejects this at the live edge, where
+    // bottom-stick remains authoritative.
     if (distFromBottom <= LOAD_NEWER_THRESHOLD && !staticMode) triggerLoadNewer()
   }
 
@@ -3124,7 +3080,10 @@ export function useMessageListScroll({
     hasInitializedRef.current = false
     userHasScrolledSinceMarkerRef.current = false
     viewportSessionRef.current?.enterConversation(conversationId)
-    prependRef.current = null
+    directionalWindowRef.current?.enterConversation(
+      conversationId,
+      windowAtLiveEdge,
+    )
     pendingSyncedLiveEdgeRef.current = null
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
@@ -3319,6 +3278,7 @@ export function useMessageListScroll({
     readPointerId,
     staticMode,
     targetMessageId,
+    windowAtLiveEdge,
   ])
 
   // Zero-unread twin of the divider-clear settle below. The old local position may be restored
@@ -3606,33 +3566,17 @@ export function useMessageListScroll({
   // ==========================================================================
   // EFFECT: Returned to the live edge → drop any stale directional-load anchor.
   // ==========================================================================
-  // A directional load that returns NOTHING never changes firstMessageId, so the restore effect
-  // below never fires. `runDirectionalHistoryLoad` is what releases the snapshot in that case, on
-  // the load's own settlement; this effect stays as the semantic signal for one specific shape of
-  // it — load-newer hitting the tail, where windowAtLiveEdge flips false→true with a stashed
-  // (never-restored) anchor and the reader is demonstrably back at the live edge, whether or not
-  // that load has finished running. Clearing on the false→true TRANSITION
-  // targets exactly "we just returned to the live edge": normal under-cap load-older keeps
-  // windowAtLiveEdge true (no transition) and a slide keeps it false, so their in-flight restores
-  // are untouched. This is a passive useEffect so it runs AFTER the restore useLayoutEffect — a
-  // load-newer that both slides AND reaches the tail in one batch still restores first, then this
-  // clears the already-`restored` ref harmlessly.
+  // Feed the value-only window transition to the coordinator. This passive effect still runs after
+  // the layout restore, so a newer load that shifts and reaches the tail in one commit reconciles
+  // first; a no-shift tail load releases only its own generation.
   useEffect(() => {
-    if (windowAtLiveEdge === true && prevWindowAtLiveEdgeRef.current === false) {
-      const saved = prependRef.current
-      if (saved && !saved.restored) {
-        if (saved.generation !== undefined) {
-          positioningControllerRef.current?.cancelDirectionalHistoryWithoutShift({
-            conversationId,
-            generation: saved.generation,
-          })
-        } else {
-          prependRef.current = null
-        }
-      }
-    }
-    prevWindowAtLiveEdgeRef.current = windowAtLiveEdge
-  }, [conversationId, windowAtLiveEdge])
+    applyDirectionalReleaseDecision(
+      directionalWindowRef.current?.observeLiveEdge(
+        conversationId,
+        windowAtLiveEdge,
+      ) ?? { kind: 'none' },
+    )
+  }, [applyDirectionalReleaseDecision, conversationId, windowAtLiveEdge])
 
   // EFFECT: Prepend complete (older messages loaded)
   // ==========================================================================
@@ -3644,11 +3588,13 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     if (staticMode) return
     const scroller = scrollerRef.current
-    const saved = prependRef.current
-    if (!scroller || !saved) return
-
-    // Already restored? Skip.
-    if (saved.restored) return
+    if (!scroller) return
+    const decision = directionalWindowRef.current?.observeWindow({
+      conversationId,
+      firstMessageId: firstMessageId ?? '',
+    }) ?? { kind: 'none' as const }
+    if (decision.kind === 'none') return
+    const saved = decision.snapshot
 
     // A directional load (older OR newer) landed iff the FIRST message id changed. Sliding window:
     // a load-older OR load-newer at the resident cap prepends/appends a batch AND evicts the
@@ -3658,28 +3604,23 @@ export function useMessageListScroll({
     // direction-agnostic (it repositions the top-visible anchor, which survives either eviction —
     // the evicted rows are at the far, off-screen end). Under the cap, load-older still changes
     // firstId AND grows the count, so this is unchanged for the common case.
-    const firstIdChanged = firstMessageId !== saved.oldFirstId
-
-    // Waiting is bounded: the snapshot is released once the load that armed it settles without
-    // delivering a shift (runDirectionalHistoryLoad), so this branch cannot hold it indefinitely.
-    if (!firstIdChanged) {
+    if (decision.kind === 'waiting') {
       debugLog('PREPEND WAITING', {
         messageCount,
         oldMessageCount: saved.oldMessageCount,
         firstMessageId,
         oldFirstId: saved.oldFirstId,
         loadSettled: Boolean(saved.loadSettled),
-        firstIdChanged,
+        firstIdChanged: false,
       })
       return
     }
 
-    if (saved.generation === undefined) {
+    if (decision.kind === 'dropped') {
       debugLog('DIRECTIONAL HISTORY DROPPED (controller unavailable)', {
         oldFirstId: saved.oldFirstId,
         firstMessageId,
       })
-      prependRef.current = null
       return
     }
 
@@ -3688,7 +3629,7 @@ export function useMessageListScroll({
     // clamp recovery, and the full late-measurement frame budget.
     positioningControllerRef.current?.reconcileDirectionalHistory({
       conversationId,
-      generation: saved.generation,
+      generation: decision.generation,
       executor: createDirectionalHistoryExecutor(saved),
     })
 

@@ -39,6 +39,13 @@ const scrollPersistenceAdapterSource = readFileSync(
   ),
   'utf8',
 )
+const directionalWindowCoordinatorSource = readFileSync(
+  resolve(
+    process.cwd(),
+    'src/components/conversation/directionalHistoryWindowCoordinator.ts',
+  ),
+  'utf8',
+)
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -50,6 +57,8 @@ const directMessageListWrite =
   /\bscrollRef\.current\.(?:scrollTo\s*\(|scrollTop\s*=)/
 const directScrollPersistenceCall =
   /\bscrollStateManager\.(?:clearSavedScrollState|saveScrollPosition|leaveConversation|markAsLeft|isInitialized|enterConversation|getSavedScrollTop|getSavedAnchor|getSavedReadPositionId)\s*\(/
+const browserOrPixelAuthority =
+  /\b(?:HTMLElement|Element|MessageVirtualizer|requestAnimationFrame|cancelAnimationFrame|scrollIntoView|scrollTo)\b|\.scrollTop\s*=/
 
 function interfaceMemberNames(
   sourceText: string,
@@ -128,6 +137,29 @@ describe('live message-list scroll ownership', () => {
     expect(scrollPersistenceAdapterSource).not.toMatch(
       /\.scrollTop\s*=/,
     )
+  })
+
+  it('keeps directional window coordination value-only and outside positioning ownership', () => {
+    expect(directionalWindowCoordinatorSource).not.toMatch(
+      browserOrPixelAuthority,
+    )
+    expect(directionalWindowCoordinatorSource).not.toMatch(
+      /from ['"]\.\/positioningController['"]/,
+    )
+    expect(hookSource).not.toMatch(
+      /\b(?:prependRef|lastLoadTimeRef|lastRestoreTimeRef|prevWindowAtLiveEdgeRef)\b/,
+    )
+  })
+
+  it('would reject a directional coordinator that schedules or writes pixels', () => {
+    const competingOwner = `
+      class DirectionalHistoryWindowCoordinator {
+        settle(scroller: HTMLElement) {
+          requestAnimationFrame(() => { scroller.scrollTop = 0 })
+        }
+      }
+    `
+    expect(competingOwner).toMatch(browserOrPixelAuthority)
   })
 
   it('persists the outgoing viewport before resetting the session for entry', () => {

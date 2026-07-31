@@ -1,5 +1,9 @@
 # Resident-Top Controller Migration Design
 
+> **Historical design note:** This records the pre-Step-7 hook mechanics used during the
+> resident-top migration. The current ownership and history-window contract is
+> `docs/2026-07-23-scroll-positioning-contract.md`.
+
 ## Goal
 
 Complete scroll-positioning migration step 6 by making the generation-aware
