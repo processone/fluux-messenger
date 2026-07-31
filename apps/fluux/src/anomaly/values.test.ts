@@ -12,6 +12,7 @@ import {
   localRef,
   localRefOverflowCount,
   METRIC,
+  RECOUNT_METRIC,
   releaseRef,
   resetValuesForTesting,
   retainOpaque,
@@ -31,7 +32,13 @@ beforeEach(async () => {
 
 describe('registries', () => {
   it('recognises constants from every registry', () => {
-    for (const value of [TAG.focus, ID.sessionStart, CTX.conv, COUNTER.rejectedValue]) {
+    for (const value of [
+      TAG.focus,
+      ID.sessionStart,
+      CTX.conv,
+      COUNTER.rejectedValue,
+      RECOUNT_METRIC['room:pointer-changed'],
+    ]) {
       expect(isOpaque(value)).toBe(true)
     }
   })

@@ -60,6 +60,10 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey, getStorageScopeJid } from '../utils/storageScope'
+import {
+  recordRecountDeferral,
+  type RecountDeferralReason,
+} from './shared/recountDiagnostics'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
@@ -2530,15 +2534,18 @@ export const chatStore = createStore<ChatState>()(
       },
 
       recomputeUnreadForConversation: async (conversationId, options) => {
+        // Passive diagnostic — see the room twin and #1211.
+        const defer = (reason: RecountDeferralReason): void =>
+          recordRecountDeferral('chat', reason)
         const allowActive = options?.allowActive ?? false
         // Active conversation counts are usually reconciled by their own
         // synchronous path (Task 11's live-edge convergence) — skip here to
         // avoid a redundant race, UNLESS the caller explicitly opted in
         // (FIX 3: a remote XEP-0490 advance on the active entity, which that
         // convergence path never runs for).
-        if (!allowActive && get().activeConversationId === conversationId) return
+        if (!allowActive && get().activeConversationId === conversationId) return defer('active-skipped')
         const meta0 = get().conversationMeta.get(conversationId)
-        if (!meta0) return
+        if (!meta0) return defer('no-meta')
 
         // Pointerless-with-a-trusted-nonzero-count stands down: a bare zero
         // derived for an entity that has never established a read position
@@ -2546,7 +2553,7 @@ export const chatStore = createStore<ChatState>()(
         // overwrite was accumulated live. Checked against the state as it
         // stood at entry, before any awaits. Repeated below — see the
         // "Defer conditions" comment there before breaking either copy.
-        if (pointerlessDefers(meta0.readPointer, meta0.unreadCount)) return
+        if (pointerlessDefers(meta0.readPointer, meta0.unreadCount)) return defer('pointerless-defer')
 
         // Latest-wins (requirement 3): bumped before the first await and
         // re-checked immediately before every commit below, so a slow recount
@@ -2556,11 +2563,16 @@ export const chatStore = createStore<ChatState>()(
         const cacheEpochAtStart = chatCacheEpoch
         const storageScopeAtStart = getStorageScopeJid()
         const unreadInputVersionAtStart = chatUnreadInputVersion.get(conversationId) ?? 0
-        const recountContextIsCurrent = () =>
-          chatCacheEpoch === cacheEpochAtStart &&
-          getStorageScopeJid() === storageScopeAtStart &&
-          chatRecountVersion.get(conversationId) === version &&
-          (chatUnreadInputVersion.get(conversationId) ?? 0) === unreadInputVersionAtStart
+        const recountContextDeferral = (): RecountDeferralReason | undefined => {
+          if (chatCacheEpoch !== cacheEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
+            return 'context-changed'
+          }
+          if (chatRecountVersion.get(conversationId) !== version) return 'recount-superseded'
+          if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtStart) {
+            return 'input-version-changed'
+          }
+          return undefined
+        }
 
         // --- Defer conditions ---------------------------------------------
         //
@@ -2590,9 +2602,9 @@ export const chatStore = createStore<ChatState>()(
         // from its `historyFloor` creation watermark, and a cross-device reply
         // moves the read position only through XEP-0490.
         const metaNow = get().conversationMeta.get(conversationId)
-        if (!metaNow) return
-        if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return
-        if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return
+        if (!metaNow) return defer('no-meta')
+        if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
+        if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
         // final-fix-2: snapshot the pointer identity the archive-derived
         // count below is computed AGAINST. Re-checked at the final commit
@@ -2602,22 +2614,23 @@ export const chatStore = createStore<ChatState>()(
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
         const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
-        if (!floor) return
+        if (!floor) return defer('no-floor')
 
         // --- Coverage gate: every uncertain branch defers (requirement 4) -
         const mam = mamState.getMAMQueryState(get().mamQueryStates, conversationId)
-        if (!isCaughtUpForCounting(mam)) return
+        if (!isCaughtUpForCounting(mam)) return defer('mam-not-caught-up')
 
         const record = get().conversationCoverage.get(conversationId)
         const bottom = await resolveCoverageBottom(conversationId, record, false)
-        if (!recountContextIsCurrent()) return
-        if (bottom === 'missing') return
+        const coverageContextDeferral = recountContextDeferral()
+        if (coverageContextDeferral) return defer(coverageContextDeferral)
+        if (bottom === 'missing') return defer('coverage-missing')
         if (bottom === 'unresolvable') {
           // Invalidate the stale record so a later merge can re-establish it,
           // guarded on the SAME bottomId so a record that already moved on
           // (a concurrent merge) is not clobbered.
           if (record) get().clearConversationCoverage(conversationId, record.bottomId)
-          return
+          return defer('coverage-unresolvable')
         }
         // The boundary: the pointer's own order when there is one, so the
         // comparison is not blind to a coverage bottom sharing its exact
@@ -2632,29 +2645,36 @@ export const chatStore = createStore<ChatState>()(
 
         // A BOUNDARY test: a FLOOR (migrated) boundary reads as at-or-after its
         // millisecond, so an equal-ms bottom counts as not reaching it (#1173).
-        if (isAfterBoundary(bottom, floorPos)) return // coverage doesn't reach the floor
+        if (isAfterBoundary(bottom, floorPos)) return defer('coverage-short-of-floor') // coverage doesn't reach the floor
 
         const res = await messageCache.countUnreadInArchive(conversationId, {
           floor,
           pointer: metaNow.readPointer?.order,
         })
-        if (!recountContextIsCurrent()) return
-        if (res === null) return // unavailable — IndexedDB error
+        const countContextDeferral = recountContextDeferral()
+        if (countContextDeferral) return defer(countContextDeferral)
+        if (res === null) return defer('cache-unavailable') // unavailable — IndexedDB error
 
         // --- Latest-wins commit (requirement 3) ---------------------------
-        if (chatRecountVersion.get(conversationId) !== version) return
-        if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) return
+        if (chatRecountVersion.get(conversationId) !== version) return defer('recount-superseded')
+        if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) {
+          return defer('input-version-changed')
+        }
 
         const transient = transientCounts(chatTransientScopeKey(conversationId), floorPos)
         const unreadCount = Math.min(999, res.unread + transient.unread)
 
         set((state) => {
-          if (!recountContextIsCurrent()) return state
-          if (chatRecountVersion.get(conversationId) !== version) return state
-          if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) return state
-          if (!allowActive && state.activeConversationId === conversationId) return state
+          const commitContextDeferral = recountContextDeferral()
+          if (commitContextDeferral) { defer(commitContextDeferral); return state }
+          if (chatRecountVersion.get(conversationId) !== version) { defer('recount-superseded'); return state }
+          if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) {
+            defer('input-version-changed')
+            return state
+          }
+          if (!allowActive && state.activeConversationId === conversationId) { defer('active-skipped'); return state }
           const meta = state.conversationMeta.get(conversationId)
-          if (!meta) return state
+          if (!meta) { defer('no-meta'); return state }
 
           // final-fix-2: `res.unread` was derived against `pointerIdAtCompute`
           // (metaNow.readPointer, captured before the coverage-bottom and
@@ -2670,7 +2690,10 @@ export const chatStore = createStore<ChatState>()(
           // the newer, correct value — worst case this recompute under-acts
           // once; the next trigger (another arrival, deactivation, or
           // activation) re-derives it.
-          if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) return state
+          if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
+            defer('pointer-changed')
+            return state
+          }
 
           // Rederive the divider (requirement 5): the boundary may have moved
           // since a marker was last parked here (a remote pointer advance).

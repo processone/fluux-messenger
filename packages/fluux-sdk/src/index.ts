@@ -101,6 +101,15 @@ export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
 
+// Read-only diagnostic: why an unread recount declined to commit (issue #1211).
+// A tally of reasons — no entity ids or unread totals — so a dev build can
+// attribute a stale badge instead of guessing which of ~20 guards stood down.
+export { readRecountDeferrals } from './stores/shared/recountDiagnostics'
+export type {
+  RecountDeferralReason,
+  RecountEntityKind,
+} from './stores/shared/recountDiagnostics'
+
 // Fine-grained metadata subscription hooks (Phase 6)
 export {
   // Chat metadata hooks

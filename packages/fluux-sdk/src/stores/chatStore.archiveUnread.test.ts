@@ -16,6 +16,7 @@ import { chatStore } from './chatStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
 import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 import { _resetForTesting as _resetThrottledStorageForTesting } from './shared/throttledStorage'
+import { readRecountDeferrals, resetRecountDeferralsForTesting } from './shared/recountDiagnostics'
 import type { Message, Conversation } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -110,6 +111,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     ;(messageCache as unknown as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
     localStorageMock.clear()
     chatStore.getState().reset()
+    resetRecountDeferralsForTesting()
     chatStore.getState().addConversation(createConversation(CID))
     // mockClear() only resets call history, never the base implementation set
     // by vi.fn(actual.countUnreadInArchive) above, so it stays real by default.
@@ -556,6 +558,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
     expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+    expect(readRecountDeferrals()['chat:coverage-unresolvable']).toBe(1)
   })
 
   // FIX 4 (final whole-branch review, Minor (r)): the coverage gate's fourth
@@ -732,6 +735,8 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     // A (slow) resolved LAST but must be discarded — B's result stands.
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
+    expect(readRecountDeferrals()['chat:recount-superseded']).toBe(1)
+    expect(readRecountDeferrals()['chat:context-changed']).toBeUndefined()
   })
 
   it('discards a recount whose archive snapshot predates a live arrival', async () => {
@@ -761,6 +766,8 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
     expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(6)
+    expect(readRecountDeferrals()['chat:input-version-changed']).toBe(1)
+    expect(readRecountDeferrals()['chat:context-changed']).toBeUndefined()
   })
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',
@@ -770,7 +777,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // remaining await, the archive count. Nothing else about the recount context
   // changes across the swap here (no switchAccount, so the cache epoch, the
   // recount version, the input version and the pointer are all identical),
-  // which makes the storage-scope term of `recountContextIsCurrent` the single
+    // which makes the storage-scope term of `recountContextDeferral` the single
   // load-bearing guard: drop it and the account-A result of 55 overwrites 7.
   it('rejects a recount commit after the account scope changes', async () => {
     const accountA = 'account-a@example.com'
@@ -824,6 +831,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     expect(getStorageScopeJid()).toBe(accountB)
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(7)
+    expect(readRecountDeferrals()['chat:context-changed']).toBe(1)
     // Control for the isolation above: `stale` is the ONLY archive count this
     // test may produce. A second one means a deferred recount slipped in, which
     // is exactly how the seeded 7 used to get overwritten with a real 0.
@@ -887,6 +895,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // clobber it.
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('u1')
+    expect(readRecountDeferrals()['chat:pointer-changed']).toBe(1)
   })
 
   // ---------------------------------------------------------------------

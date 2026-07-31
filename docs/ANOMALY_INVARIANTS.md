@@ -44,6 +44,45 @@ Counter names (digest only, not invariant ids):
 | `recorder/dropped-not-ready` | Records refused because the tokenizer had no key yet | A few at startup are normal. Sustained means the tokenizer never initialised — check `fluux.log` for the warning |
 | `recorder/sink-write-failed` | A sidecar append failed | Check `fluux.log` — failures mirror there, because a broken sink cannot report itself |
 
+## Recount deferrals
+
+`recount.deferred.<chat|room>.<reason>`, in the digest counters.
+
+An unread recount is a chain of about twenty guards, most of which decline to count
+rather than risk a wrong number. Each is correct alone, but from outside the store they
+are indistinguishable: the badge simply keeps its old value. These tallies say which
+guard stood down, so a stale badge can be attributed instead of guessed at (issue
+#1211).
+
+Read them **alongside** `read-state/unread-survives-focus`. That record flags the stale
+badge episode; these counters show which guards deferred during the same window.
+
+The counters are aggregate deltas for one digest window, split by chat or room but
+carrying no entity id. Use the kind and timing to correlate them with an observed
+badge; recounts for other entities in the same window can contribute to the tally.
+
+| reason | Meaning |
+|---|---|
+| `active-skipped` | The entity was active and the caller did not opt in |
+| `no-meta` | No metadata for the entity |
+| `pointerless-defer` | No read position ever established; a bare zero cannot be trusted |
+| `pending-remote-displayed` | A remote XEP-0490 position is still resolving |
+| `no-floor` | Neither a read pointer nor a history floor to count from |
+| `mam-not-caught-up` | History is partial, so any count would under-report |
+| `context-changed` | Cache epoch or storage scope moved underneath |
+| `coverage-missing` | No coverage record, so the archive bottom is unknown |
+| `coverage-unresolvable` | The coverage bottom no longer resolves in the archive |
+| `coverage-short-of-floor` | Coverage does not reach back to the floor |
+| `cache-unavailable` | The archive count failed — an IndexedDB error |
+| `recount-superseded` | Another recount for the same entity overtook this one |
+| `input-version-changed` | Message inputs changed mid-recount, for example through a live arrival or MAM merge |
+| `pointer-changed` | The read pointer moved while the recount was in flight |
+
+`input-version-changed` is the one to watch for #1211: `addMessage` bumps that version
+on **every** arrival, so an active room that keeps receiving can invalidate each recount
+with the traffic that made it necessary. A high tally during the affected window
+supports that attribution; a high `coverage-missing` points elsewhere entirely.
+
 ## Detector families
 
 Each entry below is added by the stage that introduces it.

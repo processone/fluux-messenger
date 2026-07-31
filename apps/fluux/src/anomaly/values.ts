@@ -169,6 +169,45 @@ export const METRIC = Object.freeze({
 })
 
 /**
+ * Counter names for `recomputeUnread*` deferrals (issue #1211).
+ *
+ * Built from two literal unions rather than writing out every kind/reason pair. That
+ * is still a CLOSED registry in the sense that matters: every part is a literal in
+ * this file, so no caller data can reach a counter name. The alternative — accepting
+ * the SDK's reason string directly — would be a free-text path into the log.
+ *
+ * Dotted, so `values.test.ts`'s slash-form parity check correctly treats them as
+ * application metrics rather than invariant ids.
+ */
+const RECOUNT_DEFERRAL_REASONS = [
+  'active-skipped',
+  'no-meta',
+  'pointerless-defer',
+  'pending-remote-displayed',
+  'no-floor',
+  'mam-not-caught-up',
+  'context-changed',
+  'coverage-missing',
+  'coverage-unresolvable',
+  'coverage-short-of-floor',
+  'cache-unavailable',
+  'recount-superseded',
+  'input-version-changed',
+  'pointer-changed',
+] as const
+
+export const RECOUNT_METRIC: Readonly<Record<string, Opaque>> = Object.freeze(
+  Object.fromEntries(
+    (['chat', 'room'] as const).flatMap((kind) =>
+      RECOUNT_DEFERRAL_REASONS.map((reason) => [
+        `${kind}:${reason}`,
+        mint(`recount.deferred.${kind}.${reason}`, 'counter'),
+      ]),
+    ),
+  ),
+)
+
+/**
  * The reserved set, enforced by the recorder's `count()`.
  *
  * Private for the same reason as VALUE_KINDS: `ReadonlySet` is a compile-time type

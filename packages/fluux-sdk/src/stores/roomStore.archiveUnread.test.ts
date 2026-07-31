@@ -19,6 +19,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { roomStore, _resetRoomReadStateForTesting } from './roomStore'
 import { noteTransient, removeTransient, transientIdentity, transientAliases, clearTransientScope, transientCounts, type ScopeKey } from './shared/transientUnread'
 import { _resetStorageScopeForTesting, getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
+import { readRecountDeferrals, resetRecountDeferralsForTesting } from './shared/recountDiagnostics'
 import type { Room, RoomMessage } from '../core/types'
 
 vi.mock('../utils/messageCache', async (importOriginal) => {
@@ -128,6 +129,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     localStorageMock.clear()
     roomStore.getState().reset()
     _resetRoomReadStateForTesting()
+    resetRecountDeferralsForTesting()
     roomStore.getState().addRoom(createRoom(ROOM))
     // mockClear() only resets call history, never the base implementation set
     // by vi.fn(actual.countRoomUnreadInArchive) above, so it stays real by default.
@@ -460,6 +462,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+    expect(readRecountDeferrals()['room:coverage-unresolvable']).toBe(1)
   })
 
   // FIX 4 (final whole-branch review, Minor (r)): the coverage gate's fourth
@@ -642,6 +645,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     // A (slow) resolved LAST but must be discarded — B's result stands.
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
+    expect(readRecountDeferrals()['room:recount-superseded']).toBe(1)
+    expect(readRecountDeferrals()['room:context-changed']).toBeUndefined()
   })
 
   it('discards a recount whose archive snapshot predates a live arrival', async () => {
@@ -671,6 +676,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(6)
+    expect(readRecountDeferrals()['room:input-version-changed']).toBe(1)
+    expect(readRecountDeferrals()['room:context-changed']).toBeUndefined()
   })
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',
@@ -680,7 +687,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // remaining await, the archive count. Nothing else about the recount context
   // changes across the swap here (no switchAccount, so the cache epoch, the
   // recount version, the input version and the pointer are all identical),
-  // which makes the storage-scope term of `recountContextIsCurrent` the single
+  // which makes the storage-scope term of `recountContextDeferral` the single
   // load-bearing guard: drop it and the account-A result of 55 overwrites 7.
   it('rejects a recount commit after the account scope changes', async () => {
     const accountA = 'account-a@example.com'
@@ -715,6 +722,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     expect(getStorageScopeJid()).toBe(accountB)
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+    expect(readRecountDeferrals()['room:context-changed']).toBe(1)
   })
 
   // final-fix-2: the race the re-reviewer flagged, room twin of
@@ -771,6 +779,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The direct write's fresher, correct state survives untouched.
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('u1')
+    expect(readRecountDeferrals()['room:pointer-changed']).toBe(1)
   })
 
   // ---------------------------------------------------------------------

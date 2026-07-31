@@ -15,7 +15,7 @@
  *
  * @module Anomaly/Install
  */
-import { chatStore, getStorageScopeJid, roomStore } from '@fluux/sdk'
+import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore } from '@fluux/sdk'
 import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
 import type { ViewportKind } from '../utils/viewportAtBottom'
 import { isTauri } from '../utils/tauri'
@@ -25,7 +25,7 @@ import { markAnomalyBuild } from './gate'
 import { createRecorder, type Recorder } from './recorder'
 import { createMemorySink } from './sinks/memory'
 import { createPluginFsWriter, createTauriSink } from './sinks/tauri'
-import { ID, initTokenizer } from './values'
+import { ID, RECOUNT_METRIC, initTokenizer } from './values'
 
 const DIGEST_INTERVAL_MS = 5 * 60 * 1000
 /**
@@ -115,6 +115,37 @@ function readWindowAtLiveEdge(kind: ViewportKind, id: string): boolean {
   return kind === 'room'
     ? (roomStore.getState().roomRuntime.get(id)?.windowAtLiveEdge ?? false)
     : (chatStore.getState().windowAtLiveEdge.get(id) ?? false)
+}
+
+/**
+ * Cumulative deferral tallies as of the last digest, so each window reports a delta.
+ *
+ * The SDK counts for the life of the process; a digest describes one window. Without
+ * this the same deferrals would be re-reported every five minutes and a quiet window
+ * would look identical to a busy one.
+ */
+const lastDeferrals = new Map<string, number>()
+
+/**
+ * Fold the SDK's recount-deferral tallies into the recorder before a digest.
+ *
+ * Why the anomaly log rather than a store subscription: these say why an unread badge
+ * kept a stale value, and the badge staying stale is what
+ * `read-state/unread-survives-focus` already reports. Having both in the same digest
+ * is what turns "the badge was wrong" into "the badge was wrong BECAUSE coverage was
+ * missing" (issue #1211).
+ */
+function foldRecountDeferrals(rec: Recorder): void {
+  for (const [key, total] of Object.entries(readRecountDeferrals())) {
+    const previous = lastDeferrals.get(key) ?? 0
+    if (total <= previous) continue
+    const metric = RECOUNT_METRIC[key]
+    // An unknown key means the SDK grew a reason this build has no constant for.
+    // Dropping it is right: a counter name is a closed registry, and inventing one
+    // from a string that crossed a package boundary is the hole that registry closes.
+    if (metric) rec.count(metric, total - previous)
+    lastDeferrals.set(key, total)
+  }
 }
 
 function runtime(): Recorder {
@@ -234,12 +265,18 @@ export function install(): () => void {
       ),
     )
 
-    digestTimer = setInterval(() => rec.flushDigest(DIGEST_INTERVAL_MS), DIGEST_INTERVAL_MS)
+    digestTimer = setInterval(() => {
+      foldRecountDeferrals(rec)
+      rec.flushDigest(DIGEST_INTERVAL_MS)
+    }, DIGEST_INTERVAL_MS)
 
     const onVisibility = () => {
       // Best effort: the WebView gives no guarantee that asynchronous I/O completes
       // during teardown, so a missing trailing digest is normal and never a signal.
-      if (document.visibilityState === 'hidden') rec.flushDigest(DIGEST_INTERVAL_MS)
+      if (document.visibilityState === 'hidden') {
+        foldRecountDeferrals(rec)
+        rec.flushDigest(DIGEST_INTERVAL_MS)
+      }
     }
     document.addEventListener('visibilitychange', onVisibility)
     detachListener = () => document.removeEventListener('visibilitychange', onVisibility)
@@ -288,6 +325,7 @@ export function resetInstallForTesting(): void {
   sessionRetryMs = SESSION_RETRY_MS
   attachments = 0
   attachRefs = 0
+  lastDeferrals.clear()
 }
 
 /** Diagnostic: how many times `install()` actually attached. */

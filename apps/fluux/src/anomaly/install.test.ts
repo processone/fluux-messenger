@@ -10,6 +10,10 @@ import {
 } from './install'
 import { CTX, METRIC, resetValuesForTesting } from './values'
 import { hasAnomalySignalHandler, signalAnomaly } from '../utils/anomalySignal'
+import {
+  recordRecountDeferral,
+  resetRecountDeferralsForTesting,
+} from '../../../../packages/fluux-sdk/src/stores/shared/recountDiagnostics'
 
 type WindowWithSink = Record<string, unknown> & { __fluuxAnomalies?: string[] }
 const w = () => window as unknown as WindowWithSink
@@ -129,6 +133,72 @@ describe('attach and detach', () => {
     install()()
     expect(remove).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
     remove.mockRestore()
+  })
+})
+
+describe('recount deferrals reach the digest', () => {
+  // Issue #1211: the badge staying stale is already reported; these say WHY. Both in
+  // one digest is what turns "the badge was wrong" into an attribution.
+  beforeEach(() => {
+    resetRecountDeferralsForTesting()
+  })
+
+  /**
+   * Record one deferral.
+   *
+   * The app's `@fluux/sdk` mock has no real store, so the deferral is recorded
+   * directly. That the STORES call this at all is covered where it belongs, in
+   * `recountDiagnostics.test.ts` against the real chatStore and roomStore; what this
+   * suite owns is the fold from cumulative tallies to per-window deltas.
+   */
+  function provokeRoomDeferral(): void {
+    recordRecountDeferral('room', 'no-meta')
+  }
+
+  /**
+   * Flush through the visibility handler rather than calling `flushDigest`.
+   *
+   * The fold lives on the digest TRIGGERS, so a direct recorder call would skip it
+   * and the assertions below would be testing nothing.
+   */
+  function forceDigest(): void {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  }
+
+  it('reports a deferral as a counter delta, not a running total', async () => {
+    // The SDK counts for the life of the process while a digest describes one
+    // window. Re-reporting the total would make every window after the first
+    // over-count, and a quiet window indistinguishable from a busy one.
+    install()
+    await whenReady()
+
+    provokeRoomDeferral()
+    provokeRoomDeferral()
+    forceDigest()
+
+    provokeRoomDeferral()
+    forceDigest()
+
+    const digests = records().filter((r) => r.kind === 'digest')
+    const key = 'recount.deferred.room.no-meta'
+    expect(digests[0].counters[key]).toBe(2)
+    expect(digests[1].counters[key]).toBe(1)
+  })
+
+  it('omits a reason that never fired', async () => {
+    // Control: a digest listing every reason at zero would bury the one that matters,
+    // and would make the tally useless for attributing a stale badge.
+    install()
+    await whenReady()
+    provokeRoomDeferral()
+    forceDigest()
+
+    const digest = records().filter((r) => r.kind === 'digest').pop()
+    expect(digest.counters['recount.deferred.room.no-meta']).toBe(1)
+    expect(digest.counters['recount.deferred.room.coverage-missing']).toBeUndefined()
+    expect(digest.counters['recount.deferred.chat.no-meta']).toBeUndefined()
   })
 })
 
