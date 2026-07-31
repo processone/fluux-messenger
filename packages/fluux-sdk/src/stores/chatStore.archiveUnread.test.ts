@@ -450,6 +450,10 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     seedCoverage('anchor-stanza')
     setMeta({ unreadCount: 6, readPointer: undefined, historyFloor: new Date(500) })
 
+    // Cleared right before the controlled call so the rehydrate fixture's own
+    // cold-start recount — which defers at this same guard — cannot be mistaken
+    // for the deferral this test asserts.
+    resetRecountDeferralsForTesting()
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
@@ -457,6 +461,12 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // the derivation before it ever reads the archive, not merely produce a
     // count that happens to match the seed.
     expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
+    // #1174 + #1214: proves the `pointerless-defer` reason is still emitted,
+    // and still reachable, now that the duplicate guard is gone. (It does NOT
+    // pin the number of call sites: a guard that returns emits once whether
+    // there is one copy or two. What makes the single site matter is that the
+    // reason now has exactly one origin, so a recorded defer is unambiguous.)
+    expect(readRecountDeferrals()['chat:pointerless-defer']).toBe(1)
   })
 
   // #1174: this used to seed `historyFloor: new Date(0)` against a coverage
@@ -487,6 +497,12 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // derivation before it ever reads the archive, not merely produce a count
     // that happens to match the seed.
     expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
+    // #1174 + #1214: proves the `pointerless-defer` reason is still emitted,
+    // and still reachable, now that the duplicate guard is gone. (It does NOT
+    // pin the number of call sites: a guard that returns emits once whether
+    // there is one copy or two. What makes the single site matter is that the
+    // reason now has exactly one origin, so a recorded defer is unambiguous.)
+    expect(readRecountDeferrals()['chat:pointerless-defer']).toBe(1)
   })
 
   // The reviewer's control (requirement 1), rewritten for PR C's D6 deletion.

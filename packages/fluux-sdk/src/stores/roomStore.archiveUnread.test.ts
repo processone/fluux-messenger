@@ -391,6 +391,12 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // derivation before it ever reads the archive, not merely produce a count
     // that happens to match the seed.
     expect(vi.mocked(messageCache.countRoomUnreadInArchive)).not.toHaveBeenCalled()
+    // #1174 + #1214: proves the `pointerless-defer` reason is still emitted,
+    // and still reachable, now that the duplicate guard is gone. (It does NOT
+    // pin the number of call sites: a guard that returns emits once whether
+    // there is one copy or two. What makes the single site matter is that the
+    // reason now has exactly one origin, so a recorded defer is unambiguous.)
+    expect(readRecountDeferrals()['room:pointerless-defer']).toBe(1)
   })
 
   // The reviewer's control (requirement 1, mirrored from Task 7), rewritten
