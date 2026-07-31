@@ -1503,7 +1503,7 @@ export const chatStore = createStore<ChatState>()(
           // advanced the pointer to the synced position.
           //
           // The DIVIDER does not depend on this load. `onActivate` derives it by
-          // archive POSITION — the first renderable incoming message strictly
+          // cache POSITION — the first renderable incoming message strictly
           // after the pointer in `(timestamp, tiebreak)` order — so an
           // off-slice pointer places it exactly as well as a resident one. The
           // stale-pointer fallback ladder that made an off-slice pointer a

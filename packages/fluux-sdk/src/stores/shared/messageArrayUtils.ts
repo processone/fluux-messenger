@@ -191,8 +191,8 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
  * room by `from` then `id`. This is deliberately NOT a generic `from`-then-`id`
  * comparator — chat messages carry `from` too, so inferring the tiebreak from
  * field presence would silently apply the room rule to chat. The resident
- * array and the IndexedDB archive must agree on this order, or the read
- * pointer (positioned in archive order) and the viewport observer (walking
+ * array and IndexedDB must agree on this order, or the read pointer
+ * (positioned in cache order) and the viewport observer (walking
  * this resident order) can disagree about which message came second.
  *
  * @param messages - Array of messages to sort

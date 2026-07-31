@@ -5,7 +5,7 @@
  * Mirrors chatStore.archiveUnread.test.ts (Task 7) — see that file for the
  * shared derivation's full rationale. This file additionally covers the
  * room-specific control: two messages sharing an `id` but sent by different
- * occupants (`from`) are two distinct archive positions, not one.
+ * occupants (`from`) are two distinct cache positions, not one.
  *
  * Unlike roomStore.test.ts / roomStore.mds.test.ts, this file does NOT fully
  * mock `../utils/messageCache` — `countRoomUnreadInArchive` and
@@ -481,10 +481,10 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // guard), so an unsorted resident array can let that guard make the WRONG
   // forward/no-op decision, landing the stored pointer on the wrong message
   // and skewing the later archive-derived count. The 'zulu' occupant's
-  // message arrives FIRST (wall-clock) but archive-sorts AFTER the 'alice'
-  // occupant's ((from) tie-break) — arrival order deliberately disagrees with
-  // archive order, the exact case the fix reconciles.
-  it('two same-millisecond live arrivals land in archive order, so the viewport-advance pointer and derived count are both correct', async () => {
+  // message arrives FIRST (wall-clock) but cache-sorts AFTER the 'alice'
+  // occupant's `(from, id)` tie-break — arrival order deliberately disagrees with
+  // cache order, the exact case the fix reconciles.
+  it('two same-millisecond live arrivals land in cache order, so the viewport-advance pointer and derived count are both correct', async () => {
     await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     seedCoverage('anchor-stanza')
     roomStore.setState({ activeRoomJid: ROOM })
@@ -498,7 +498,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     // A same-millisecond message from a DIFFERENT occupant arrives live, SECOND.
     roomStore.getState().addMessage(ROOM, archiveMsg('m2', T, { from: `${ROOM}/alice`, nick: 'alice' }))
-    // The resident array must be in ARCHIVE order ((from, id) ascending — alice
+    // The resident array must be in CACHE order ((from, id) ascending — alice
     // before zulu), not arrival order — the load-bearing invariant
     // messageTimeline.test.ts pins at the pure-function level; here it is
     // asserted through the real store.

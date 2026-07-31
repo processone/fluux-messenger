@@ -466,11 +466,11 @@ export function onMessageSeen(
   // No read position yet: any resolvable message is an advancement.
   if (!state.readPointer) return advanced()
 
-  // Keyed pointer: compare archive POSITIONS. The pointer no longer has to be
+  // Keyed pointer: compare cache POSITIONS. The pointer no longer has to be
   // resident, and a same-millisecond sibling that sorts after it is a genuine
   // advance. Safe against the resident array because PR B gave
   // `messageArrayUtils` the same `compareOrder` tie-break, so array index and
-  // archive order agree.
+  // cache order agree.
   if (state.readPointer.tiebreak) {
     const target = messages[newIdx]
     return compareOrder(

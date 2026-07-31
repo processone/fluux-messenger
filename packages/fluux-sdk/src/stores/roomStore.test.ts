@@ -6359,7 +6359,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       meta.set(ROOM, {
         ...existing,
         // KEYED, as every pointer `makeReadPointer` writes is — the divider is
-        // derived by archive POSITION now, and a keyless pointer cannot certify
+        // derived by cache POSITION now, and a keyless pointer cannot certify
         // its own (it would land the divider on the seen message itself).
         readPointer: makeReadPointer(seenMsg, 'room'),
       })
@@ -6374,7 +6374,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
    * `createMessage`'s default `new Date()` would make the "already read" message
    * the NEWEST in the fixture while sitting first in the array — an ordering the
    * resident array never has in production (PR B gave `messageArrayUtils` the
-   * same `compareOrder` tie-break, so index order and archive order agree).
+   * same `compareOrder` tie-break, so index order and cache order agree).
    */
   const seenMsg = (): RoomMessage =>
     createMessage('seen', ROOM, 'alice', 'seen message', false, new Date('2025-01-15T09:00:00Z'))
@@ -6417,7 +6417,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       [
         seenMsg(),
         // isDelayed defaults to false; timestamped explicitly so the array is
-        // in archive order (see seenMsg above).
+        // in cache order (see seenMsg above).
         createMessage('live', ROOM, 'bob', 'live message', false, new Date('2025-01-15T10:00:00Z')),
       ],
       'seen',

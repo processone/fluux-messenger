@@ -558,9 +558,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // unsorted resident array can let that guard make the WRONG forward/no-op
   // decision, landing the stored pointer on the wrong message and skewing the
   // later archive-derived count. 'z-msg' arrives FIRST (wall-clock) but
-  // archive-sorts AFTER 'a-msg' (id tie-break) — arrival order deliberately
-  // disagrees with archive order, the exact case the fix reconciles.
-  it('two same-millisecond live arrivals land in archive order, so the viewport-advance pointer and derived count are both correct', async () => {
+  // cache-sorts AFTER 'a-msg' (id tie-break) — arrival order deliberately
+  // disagrees with cache order, the exact case the fix reconciles.
+  it('two same-millisecond live arrivals land in cache order, so the viewport-advance pointer and derived count are both correct', async () => {
     await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     seedCoverage('anchor-stanza')
     chatStore.setState({ activeConversationId: CID })
@@ -573,7 +573,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     // A same-millisecond sibling arrives live, SECOND.
     chatStore.getState().addMessage(archiveMsg('a-msg', T))
-    // The resident array must be in ARCHIVE order (id-ascending), not arrival
+    // The resident array must be in CACHE order (id-ascending), not arrival
     // order — the load-bearing invariant messageTimeline.test.ts pins at the
     // pure-function level; here it is asserted through the real store.
     expect(chatStore.getState().messages.get(CID)?.map((m) => m.id)).toEqual(['a-msg', 'z-msg'])

@@ -3,7 +3,8 @@
  *
  * This is the total-order comparator and read-boundary floor that every later
  * PR-B derivation builds on. It knows nothing about stores, IndexedDB, or React
- * — only how to order two archive positions and where the read boundary sits.
+ * — only how to order two message-cache positions and where the read boundary
+ * sits.
  *
  * All functions here are pure.
  */
@@ -42,14 +43,14 @@ export function makeCacheOrderKey(msg: { from?: string; id: string }, kind: 'cha
   return kind === 'room' ? { kind: 'room', from: msg.from ?? '', id: msg.id } : { kind: 'chat', id: msg.id }
 }
 
-/** A position in archive order: a timestamp, optionally refined by an order key. */
+/** A position in message-cache order: a timestamp, optionally refined by a key. */
 export interface OrderPosition {
   timestamp: number
   tiebreak?: CacheOrderKey
 }
 
 /**
- * Total order over archive positions: timestamp first, then the kind-aware
+ * Total order over cached message positions: timestamp first, then the kind-aware
  * tie-break key. A missing key sorts BEFORE a present one at an equal
  * timestamp — unresolved sorts first, which under-advances rather than
  * over-advances (over-counting unread is the recoverable direction).
@@ -111,7 +112,7 @@ export function worthReconcilingOnDeactivate(
 }
 
 /**
- * Runtime guard for an `CacheOrderKey` read back from untrusted storage.
+ * Runtime guard for a `CacheOrderKey` read back from untrusted storage.
  *
  * No longer on the hydration path: `deserializeReadPointer` rebuilds the key
  * and takes its `id` from `messageId` instead of validating a persisted one.

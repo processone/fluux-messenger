@@ -2018,7 +2018,7 @@ export const roomStore = createStore<RoomState>()(
       // incoming message even when the window has slid off the live edge.
       //
       // FIX 5 (read-state PR B, final whole-branch review) now has appendLive
-      // sort its result into archive order (`sortMessagesByTimestamp`) instead
+      // sort its result into cache order (`sortMessagesByTimestamp`) instead
       // of appending in arrival order — so on the ordinary `append.kind ===
       // 'appended'` path, `appendedMessages` is already chronological and
       // `findLastNonIgnoredMessage`'s backward scan finds the true newest
@@ -2870,7 +2870,7 @@ export const roomStore = createStore<RoomState>()(
       // the pointer to the synced position.
       //
       // The DIVIDER does not depend on this load. `onActivate` derives it by
-      // archive POSITION — the first renderable incoming message strictly after
+      // cache POSITION — the first renderable incoming message strictly after
       // the pointer in `(timestamp, tiebreak)` order — so an off-slice
       // pointer places it exactly as well as a resident one. The stale-pointer
       // fallback ladder that made an off-slice pointer a degraded case is gone.

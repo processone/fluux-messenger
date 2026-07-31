@@ -63,7 +63,7 @@ export type RemoteDisplayedResolution =
  *   did before PR C (an undefined pointer made the residency check vacuously
  *   true, so `onMessageSeen` took its own no-pointer path); it is preserved
  *   explicitly so it cannot be lost by refactoring.
- * - **Keyed pointer** — decide by archive position, with no residency
+ * - **Keyed pointer** — decide by cache position, with no residency
  *   requirement. The key certifies that the pointer's timestamp is its named
  *   message's own, which is exactly the guarantee the old comment here said we
  *   lacked.

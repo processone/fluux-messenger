@@ -665,7 +665,7 @@ describe('onActivate stale pointer', () => {
   // Replaces 'snaps pointer to the message before the derived divider, not to
   // the newest' — the snap is gone (see the D5 suite's 'never moves the read
   // pointer'). What survives is that an OFF-SLICE pointer still positions a
-  // divider, now purely by archive order.
+  // divider, now purely by cache order.
   it('positions a divider from an off-slice pointer without touching it', () => {
     const mkMsg = (id: string, minutesAgo: number): NotificationMessage => ({
       id, timestamp: new Date(Date.now() - minutesAgo * 60_000), isOutgoing: false, isDelayed: true, body: 'hi',

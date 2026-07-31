@@ -58,7 +58,7 @@ export interface ReadPointer {
  * for a forward-only pointer. Not persisting the second copy makes that
  * disagreement unrepresentable rather than merely rejected at read time.
  *
- * `from` stays: it is the room archive's own `(from, id)` tie-break component
+ * `from` stays: it is the room cache's `(from, id)` tie-break component
  * and is NOT derivable from the pointer.
  */
 export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: string }
@@ -152,14 +152,15 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
 
 /**
  * Write the pointer, with the tie-break stripped of its redundant `id` (see
- * {@link SerializedCacheOrderKey}). The in-memory shape is unchanged; only
- * the on-disk form shrinks.
+ * {@link SerializedCacheOrderKey}). The in-memory key keeps its full shape;
+ * only the on-disk form omits the redundant `id`.
  *
- * An OLDER build reading this format validates the key with
- * `isValidCacheOrderKey`, which requires `typeof k.id === 'string'` — so it
- * drops the key and degrades to the at-or-after-timestamp fallback, which
- * over-counts rather than under-counts (the safe, recoverable direction). The
- * `messageId` and `timestamp` it needs are untouched.
+ * An OLDER build reading this format validates the key with the equivalent
+ * guard (now called `isValidCacheOrderKey`), which requires
+ * `typeof k.id === 'string'` — so it drops the key and degrades to the
+ * at-or-after-timestamp fallback, which over-counts rather than under-counts
+ * (the safe, recoverable direction). The `messageId` and `timestamp` it needs
+ * are untouched.
  */
 export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointer {
   const key = pointer.tiebreak
@@ -225,7 +226,8 @@ function hydrateCacheOrderKey(raw: unknown, messageId: string): CacheOrderKey | 
  * writes) or an ISO string (what a chat pointer riding inside `conversationMeta`
  * becomes after a plain `JSON.stringify` turns its `Date` into a string). Both
  * encodings exist on disk today — this is the one place that reads either back.
- * We still only ever WRITE epoch ms; the string branch is read-only tolerance.
+ * {@link serializeReadPointer} writes epoch ms; the chat storage blob writes an
+ * ISO string through its plain `JSON.stringify`.
  *
  * `tiebreak` is rebuilt by {@link hydrateCacheOrderKey} — never taken
  * verbatim — and DROPPED when what it carries is unusable. Storage is untrusted
