@@ -953,8 +953,8 @@ function scheduleReadPointerBackfill(
         // `historyFloor`. That is NOT the common case here, though: this backfill
         // only ever enqueues pointerless conversations, and a pre-#1081 restore
         // typically carries a non-zero persisted `unreadCount`. For that shape,
-        // `pointerlessDefers` stands the recount down at entry, before
-        // `historyFloor` is ever consulted, and the badge stays stale until the
+        // `pointerlessDefers` stands the recount down before `historyFloor` is
+        // ever consulted, and the badge stays stale until the
         // pointer itself resolves. With a persisted zero (or no floor at all),
         // `if (!floor) return` defers it too, as it does everywhere.
         //
@@ -2544,21 +2544,60 @@ export const chatStore = createStore<ChatState>()(
         // (FIX 3: a remote XEP-0490 advance on the active entity, which that
         // convergence path never runs for).
         if (!allowActive && get().activeConversationId === conversationId) return defer('active-skipped')
-        const meta0 = get().conversationMeta.get(conversationId)
-        if (!meta0) return defer('no-meta')
 
+        // --- Defer conditions ---------------------------------------------
+        //
+        // ONE snapshot, read once, and every defer below decided against it —
+        // the same object the derivation itself computes from. Do NOT add a
+        // second `get()` and a second copy of a guard up here (#1174). Two
+        // reads make "which snapshot did we check?" answerable two ways, and
+        // they make each copy unfalsifiable: both read the same state and
+        // evaluate the same pure predicate, so disabling one leaves the other
+        // deferring and the whole suite green. With one read, deleting the
+        // guard fails a test.
+        //
+        // The duplicate this replaced was justified as being "the correct check
+        // the moment anything above it starts to await". That was not true:
+        // both copies sat on the same side of every await, so the duplication
+        // straddled nothing — it bought a coincidence, not a defence.
+        //
+        // Every guard here still sits ABOVE the first await
+        // (`resolveCoverageBottom` below), so nothing can move underneath them
+        // while they run. State that moves AFTER them is caught on the far side
+        // by `recountContextDeferral()` and by the `pointerIdAtCompute`
+        // re-check at the final commit. That is where a post-await guard
+        // belongs — so if an await is ever inserted above this block, the fix
+        // is a re-check after THAT await, not a second copy on this side.
+        //
+        // One guard also means ONE emission site for the `pointerless-defer`
+        // reason (#1214), so a recorded pointerless defer is unambiguous about
+        // which check produced it.
+        //
         // Pointerless-with-a-trusted-nonzero-count stands down: a bare zero
         // derived for an entity that has never established a read position
         // cannot be told apart from a real "all read", and the count it would
-        // overwrite was accumulated live. Checked against the state as it
-        // stood at entry, before any awaits. Repeated below — see the
-        // "Defer conditions" comment there before breaking either copy.
-        if (pointerlessDefers(meta0.readPointer, meta0.unreadCount)) return defer('pointerless-defer')
+        // overwrite was accumulated live.
+        //
+        // This derivation NEVER writes the read pointer (read-state PR C, D6).
+        // The pointer-writing recount that used to run here — snapping a
+        // pointerless entity to the newest message, and advancing the pointer
+        // onto any outgoing message in range — is gone: both were inferences
+        // about what the user had read, and the pointer is forward-only, so a
+        // wrong inference is unrecoverable. A pointerless entity now counts
+        // from its `historyFloor` creation watermark, and a cross-device reply
+        // moves the read position only through XEP-0490.
+        const metaNow = get().conversationMeta.get(conversationId)
+        if (!metaNow) return defer('no-meta')
+        if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
+        if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
-        // Latest-wins (requirement 3): bumped before the first await and
-        // re-checked immediately before every commit below, so a slow recount
-        // that resolves after a faster, newer one for the SAME conversation is
-        // discarded instead of overwriting the newer (correct) result.
+        // Latest-wins (requirement 3): bumped once this call is committed to
+        // running — AFTER the defers above, so a call that stands down cannot
+        // cancel a recount already in flight for the same conversation — and
+        // still before the first await, then re-checked immediately before
+        // every commit below, so a slow recount that resolves after a faster,
+        // newer one for the SAME conversation is discarded instead of
+        // overwriting the newer (correct) result.
         const version = bumpChatRecountVersion(conversationId)
         const cacheEpochAtStart = chatCacheEpoch
         const storageScopeAtStart = getStorageScopeJid()
@@ -2573,38 +2612,6 @@ export const chatStore = createStore<ChatState>()(
           }
           return undefined
         }
-
-        // --- Defer conditions ---------------------------------------------
-        //
-        // `metaNow` re-reads state that `meta0` above already read, and today
-        // that re-read is REDUNDANT: everything between the two `get()` calls is
-        // synchronous, so both see the same state. (The `await
-        // messageCache.getMessages` that once justified re-reading lived in the
-        // guard pass deleted in PR C.) That applies to `pointerlessDefers` and
-        // to `pendingRemoteDisplayedStanzaId` alike — neither flag has anything
-        // to change across.
-        //
-        // Kept deliberately, as belt and braces: these are the correct checks
-        // the moment anything above them starts to await, and deleting them
-        // would turn that future insertion into a silent correctness change.
-        //
-        // CONSEQUENCE FOR VERIFICATION: a deliberate break of ONE
-        // `pointerlessDefers` check is UNFALSIFIABLE — the other copy still
-        // defers and the suite stays green. Any break-check of that guard must
-        // disable BOTH (the entry check and this one) at the same time.
-        //
-        // This derivation NEVER writes the read pointer (read-state PR C, D6).
-        // The pointer-writing recount that used to run here — snapping a
-        // pointerless entity to the newest message, and advancing the pointer
-        // onto any outgoing message in range — is gone: both were inferences
-        // about what the user had read, and the pointer is forward-only, so a
-        // wrong inference is unrecoverable. A pointerless entity now counts
-        // from its `historyFloor` creation watermark, and a cross-device reply
-        // moves the read position only through XEP-0490.
-        const metaNow = get().conversationMeta.get(conversationId)
-        if (!metaNow) return defer('no-meta')
-        if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
-        if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
         // final-fix-2: snapshot the pointer identity the archive-derived
         // count below is computed AGAINST. Re-checked at the final commit

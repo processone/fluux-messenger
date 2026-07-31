@@ -366,7 +366,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // anchor at t=500, which put the coverage bottom ABOVE the floor — so
   // `isAfterBoundary` deferred the recount before `pointerlessDefers` could
   // matter, and the surviving count proved the coverage gate had fired, not
-  // the guard. Both room `pointerlessDefers` call sites could be deleted with
+  // the guard — every room `pointerlessDefers` call site could be deleted with
   // this test still green. The coverage-gate branch it was really exercising
   // already has its own unambiguous test ("a resolved coverage bottom sitting
   // above the floor defers"), so this one is repaired to test what it names:

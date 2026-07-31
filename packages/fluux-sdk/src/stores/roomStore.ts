@@ -2348,55 +2348,39 @@ export const roomStore = createStore<RoomState>()(
     // race, UNLESS the caller explicitly opted in (FIX 3: a remote XEP-0490
     // advance on the active room, which that convergence path never runs for).
     if (!allowActive && get().activeRoomJid === roomJid) return defer('active-skipped')
-    const meta0 = get().roomMeta.get(roomJid)
-    if (!meta0) return defer('no-meta')
-
-    // Pointerless-with-a-trusted-nonzero-count stands down — see chatStore's
-    // `recomputeUnreadForConversation` for the full rationale (mirrored here
-    // verbatim): a bare zero derived for a room that has never established a
-    // read position cannot be told apart from a real "all read". Checked
-    // against the state as it stood at entry, before any awaits. Repeated
-    // below — see the "Defer conditions" comment there before breaking either
-    // copy.
-    if (pointerlessDefers(meta0.readPointer, meta0.unreadCount)) return defer('pointerless-defer')
-
-    // Latest-wins (requirement 3): bumped before the first await and
-    // re-checked immediately before every commit below, so a slow recount
-    // that resolves after a faster, newer one for the SAME room is discarded
-    // instead of overwriting the newer (correct) result.
-    const version = bumpRoomRecountVersion(roomJid)
-    const cacheEpochAtStart = roomCacheEpoch
-    const storageScopeAtStart = getStorageScopeJid()
-    const unreadInputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
-    const recountContextDeferral = (): RecountDeferralReason | undefined => {
-      if (roomCacheEpoch !== cacheEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
-        return 'context-changed'
-      }
-      if (roomRecountVersion.get(roomJid) !== version) return 'recount-superseded'
-      if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtStart) {
-        return 'input-version-changed'
-      }
-      return undefined
-    }
 
     // --- Defer conditions -----------------------------------------------
     //
-    // `metaNow` re-reads state that `meta0` above already read, and today that
-    // re-read is REDUNDANT: everything between the two `get()` calls is
-    // synchronous, so both see the same state. (The `await
-    // messageCache.getMessages` that once justified re-reading lived in the
-    // guard pass deleted in PR C.) That applies to `pointerlessDefers` and to
-    // `pendingRemoteDisplayedStanzaId` alike — neither flag has anything to
-    // change across.
+    // ONE snapshot, read once, and every defer below decided against it — the
+    // same object the derivation itself computes from. Do NOT add a second
+    // `get()` and a second copy of a guard up here (#1174). Two reads make
+    // "which snapshot did we check?" answerable two ways, and they make each
+    // copy unfalsifiable: both read the same state and evaluate the same pure
+    // predicate, so disabling one leaves the other deferring and the whole
+    // suite green. With one read, deleting the guard fails a test.
     //
-    // Kept deliberately, as belt and braces: these are the correct checks the
-    // moment anything above them starts to await, and deleting them would turn
-    // that future insertion into a silent correctness change.
+    // The duplicate this replaced was justified as being "the correct check the
+    // moment anything above it starts to await". That was not true: both copies
+    // sat on the same side of every await, so the duplication straddled nothing
+    // — it bought a coincidence, not a defence.
     //
-    // CONSEQUENCE FOR VERIFICATION: a deliberate break of ONE
-    // `pointerlessDefers` check is UNFALSIFIABLE — the other copy still defers
-    // and the suite stays green. Any break-check of that guard must disable
-    // BOTH (the entry check and this one) at the same time.
+    // Every guard here still sits ABOVE the first await
+    // (`resolveCoverageBottom` below), so nothing can move underneath them
+    // while they run. State that moves AFTER them is caught on the far side by
+    // `recountContextDeferral()` and by the `pointerIdAtCompute` re-check at
+    // the final commit. That is where a post-await guard belongs — so if an
+    // await is ever inserted above this block, the fix is a re-check after THAT
+    // await, not a second copy on this side.
+    //
+    // One guard also means ONE emission site for the `pointerless-defer` reason
+    // (#1214), so a recorded pointerless defer is unambiguous about which check
+    // produced it.
+    //
+    // Pointerless-with-a-trusted-nonzero-count stands down — see chatStore's
+    // `recomputeUnreadForConversation` for the full rationale (mirrored here
+    // verbatim): a bare zero derived for a room that has never established a
+    // read position cannot be told apart from a real "all read", and the count
+    // it would overwrite was accumulated live.
     //
     // This derivation NEVER writes the read pointer (read-state PR C, D6).
     // The pointer-writing recount that used to run here — snapping a
@@ -2411,6 +2395,27 @@ export const roomStore = createStore<RoomState>()(
     if (!metaNow) return defer('no-meta')
     if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
     if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
+
+    // Latest-wins (requirement 3): bumped once this call is committed to
+    // running — AFTER the defers above, so a call that stands down cannot
+    // cancel a recount already in flight for the same room — and still before
+    // the first await, then re-checked immediately before every commit below,
+    // so a slow recount that resolves after a faster, newer one for the SAME
+    // room is discarded instead of overwriting the newer (correct) result.
+    const version = bumpRoomRecountVersion(roomJid)
+    const cacheEpochAtStart = roomCacheEpoch
+    const storageScopeAtStart = getStorageScopeJid()
+    const unreadInputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
+    const recountContextDeferral = (): RecountDeferralReason | undefined => {
+      if (roomCacheEpoch !== cacheEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
+        return 'context-changed'
+      }
+      if (roomRecountVersion.get(roomJid) !== version) return 'recount-superseded'
+      if ((roomUnreadInputVersion.get(roomJid) ?? 0) !== unreadInputVersionAtStart) {
+        return 'input-version-changed'
+      }
+      return undefined
+    }
 
     // final-fix-2: snapshot the pointer identity the archive-derived count
     // below is computed AGAINST. Re-checked at the final commit (see that
