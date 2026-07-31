@@ -456,18 +456,34 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
   })
 
-  it('a pointerless entity with a nonzero persisted count defers rather than trusting a zero derivation', async () => {
-    await messageCache.saveMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
-    setMeta({
-      unreadCount: 4,
-      readPointer: undefined,
-      historyFloor: new Date(0), // ensure a floor exists so !floor isn't what defers this
-    })
+  // #1174: this used to seed `historyFloor: new Date(0)` against a coverage
+  // anchor at t=500, which put the coverage bottom ABOVE the floor — so
+  // `isAfterBoundary` deferred the recount before `pointerlessDefers` could
+  // matter, and the surviving count proved the coverage gate had fired, not
+  // the guard. The coverage-gate branch it was really exercising already has
+  // its own unambiguous test ("a resolved coverage bottom sitting above the
+  // floor defers"), so this one is repaired to test what it names: the bottom
+  // (400) now sits BELOW the floor (500), leaving the guard as the ONLY thing
+  // that can stand this recount down. Distinct from the sibling above, which
+  // reaches the same guard through the stuck-legacy-migration path rather than
+  // a plain pointerless conversation.
+  it('a pointerless conversation with a nonzero persisted count defers at pointerlessDefers, not at the coverage gate', async () => {
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('m1', 1000),
+      archiveMsg('m2', 1001),
+      archiveMsg('m3', 1002),
+    ])
     seedCoverage('anchor-stanza')
+    setMeta({ unreadCount: 6, readPointer: undefined, historyFloor: new Date(500) })
 
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
-    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+    // Assert the mechanism, not just the outcome: the guard must stop the
+    // derivation before it ever reads the archive, not merely produce a count
+    // that happens to match the seed.
+    expect(vi.mocked(messageCache.countUnreadInArchive)).not.toHaveBeenCalled()
   })
 
   // The reviewer's control (requirement 1), rewritten for PR C's D6 deletion.

@@ -360,18 +360,34 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // deferred
   // ---------------------------------------------------------------------
 
-  it('a pointerless entity with a nonzero persisted count defers rather than trusting a zero derivation', async () => {
-    await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
-    setMeta({
-      unreadCount: 4,
-      readPointer: undefined,
-      historyFloor: new Date(0), // ensure a floor exists so !floor isn't what defers this
-    })
+  // #1174: this used to seed `historyFloor: new Date(0)` against a coverage
+  // anchor at t=500, which put the coverage bottom ABOVE the floor — so
+  // `isAfterBoundary` deferred the recount before `pointerlessDefers` could
+  // matter, and the surviving count proved the coverage gate had fired, not
+  // the guard. Both room `pointerlessDefers` call sites could be deleted with
+  // this test still green. The coverage-gate branch it was really exercising
+  // already has its own unambiguous test ("a resolved coverage bottom sitting
+  // above the floor defers"), so this one is repaired to test what it names:
+  // the bottom (400) now sits BELOW the floor (500), leaving the guard as the
+  // ONLY thing that can stand this recount down. Counterpart to chatStore's
+  // "NONZERO persisted count still defers via pointerlessDefers".
+  it('a pointerless room with a nonzero persisted count defers at pointerlessDefers, not at the coverage gate', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 400, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('m1', 1000),
+      archiveMsg('m2', 1001),
+      archiveMsg('m3', 1002),
+    ])
     seedCoverage('anchor-stanza')
+    setMeta({ unreadCount: 6, readPointer: undefined, historyFloor: new Date(500) })
 
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
+    // Assert the mechanism, not just the outcome: the guard must stop the
+    // derivation before it ever reads the archive, not merely produce a count
+    // that happens to match the seed.
+    expect(vi.mocked(messageCache.countRoomUnreadInArchive)).not.toHaveBeenCalled()
   })
 
   // The reviewer's control (requirement 1, mirrored from Task 7), rewritten
