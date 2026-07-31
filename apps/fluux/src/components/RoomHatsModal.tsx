@@ -17,6 +17,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { ContactSelector } from './ContactSelector'
 import { buildRoomContactSuggestions } from '@/utils/roomSuggestions'
 import { useToastStore } from '@/stores/toastStore'
+import { getHatCommandErrorMessage } from '@/utils/hatCommandErrorMessage'
 import { Loader2, Search, X, Plus, Trash2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -132,8 +133,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
         setHats(result)
         setHatsLoaded(true)
       }
-    } catch {
-      if (mountedRef.current) addToast('error', t('rooms.hatCreateError'))
+    } catch (err) {
+      if (mountedRef.current) addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatCreateError'))
     } finally {
       hatsLoadingRef.current = false
       if (mountedRef.current) setHatsLoading(false)
@@ -150,8 +151,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
         setAssignments(result)
         setAssignmentsLoaded(true)
       }
-    } catch {
-      if (mountedRef.current) addToast('error', t('rooms.hatAssignError'))
+    } catch (err) {
+      if (mountedRef.current) addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatAssignError'))
     } finally {
       assignmentsLoadingRef.current = false
       if (mountedRef.current) setAssignmentsLoading(false)
@@ -196,8 +197,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       // Refresh
       const result = await listHats(room.jid)
       if (mountedRef.current) setHats(result)
-    } catch {
-      addToast('error', t('rooms.hatCreateError'))
+    } catch (err) {
+      addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatCreateError'))
     } finally {
       if (mountedRef.current) setIsCreating(false)
     }
@@ -215,8 +216,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
         const a = await listHatAssignments(room.jid)
         if (mountedRef.current) setAssignments(a)
       }
-    } catch {
-      addToast('error', t('rooms.hatDestroyError'))
+    } catch (err) {
+      addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatDestroyError'))
     } finally {
       if (mountedRef.current) {
         setActionKey(null)
@@ -241,8 +242,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       // Refresh
       const result = await listHatAssignments(room.jid)
       if (mountedRef.current) setAssignments(result)
-    } catch {
-      addToast('error', t('rooms.hatAssignError'))
+    } catch (err) {
+      addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatAssignError'))
     } finally {
       if (mountedRef.current) setIsAssigning(false)
     }
@@ -256,8 +257,8 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       addToast('success', t('rooms.hatUnassigned'))
       const result = await listHatAssignments(room.jid)
       if (mountedRef.current) setAssignments(result)
-    } catch {
-      addToast('error', t('rooms.hatUnassignError'))
+    } catch (err) {
+      addToast('error', getHatCommandErrorMessage(t, err, 'rooms.hatUnassignError'))
     } finally {
       if (mountedRef.current) setActionKey(null)
     }

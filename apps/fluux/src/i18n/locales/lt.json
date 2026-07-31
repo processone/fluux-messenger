@@ -422,6 +422,7 @@
         "hatDestroyError": "Nepavyko ištrinti ženklelio",
         "hatAssignError": "Nepavyko priskirti ženklelio",
         "hatUnassignError": "Nepavyko pašalinti ženklelio",
+        "hatCommandNoReply": "Serveris neatsakė",
         "selectHat": "Pasirinkti ženklelį",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Naudotojo informacija",

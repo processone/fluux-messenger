@@ -424,6 +424,7 @@
         "hatDestroyError": "배지 삭제 실패",
         "hatAssignError": "배지 할당 실패",
         "hatUnassignError": "배지 제거 실패",
+        "hatCommandNoReply": "서버가 응답하지 않았습니다",
         "selectHat": "배지 선택",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "초대",

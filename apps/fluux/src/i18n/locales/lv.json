@@ -423,6 +423,7 @@
         "hatDestroyError": "Neizdevās dzēst nozīmīti",
         "hatAssignError": "Neizdevās piešķirt nozīmīti",
         "hatUnassignError": "Neizdevās noņemt nozīmīti",
+        "hatCommandNoReply": "Serveris neatbildēja",
         "selectHat": "Izvēlēties nozīmīti",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Lietotāja informācija",

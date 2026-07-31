@@ -422,6 +422,7 @@
         "hatDestroyError": "Theip ar scriosadh suaitheantais",
         "hatAssignError": "Theip ar shannadh suaitheantais",
         "hatUnassignError": "Theip ar bhaint suaitheantais",
+        "hatCommandNoReply": "Níor fhreagair an freastalaí",
         "selectHat": "Roghnaigh suaitheantais",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Eolas úsáideora",

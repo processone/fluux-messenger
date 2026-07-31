@@ -424,6 +424,7 @@
         "hatDestroyError": "Ma rnexxiex jitħassar il-badge",
         "hatAssignError": "Ma rnexxiex jiġi assenjat il-badge",
         "hatUnassignError": "Ma rnexxiex jitneħħa l-badge",
+        "hatCommandNoReply": "Is-server ma weġibx",
         "selectHat": "Agħżel badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info tal-utent",

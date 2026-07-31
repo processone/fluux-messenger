@@ -424,6 +424,7 @@
         "hatDestroyError": "Märgise kustutamine ebaõnnestus",
         "hatAssignError": "Märgise määramine ebaõnnestus",
         "hatUnassignError": "Märgise eemaldamine ebaõnnestus",
+        "hatCommandNoReply": "Server ei vastanud",
         "selectHat": "Vali märgis",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Kasutaja teave",

@@ -423,6 +423,7 @@
         "hatDestroyError": "Nepodarilo sa zmazať odznak",
         "hatAssignError": "Nepodarilo sa priradiť odznak",
         "hatUnassignError": "Nepodarilo sa odstrániť odznak",
+        "hatCommandNoReply": "Server neodpovedal",
         "selectHat": "Vybrať odznak",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informácie o používateľovi",

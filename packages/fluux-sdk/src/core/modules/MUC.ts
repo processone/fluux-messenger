@@ -43,6 +43,7 @@ import type {
 import type { StoredRoomMessage } from '../types/message-internal'
 import { parseXMPPError, formatXMPPError, hasErrorCondition } from '../../utils/xmppError'
 import { RoomJoinError } from '../errors'
+import { toHatCommandError } from '../../utils/hatCommandError'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 
@@ -2373,6 +2374,24 @@ export class MUC extends BaseModule {
   private static readonly HATS_FORM_TYPE = 'urn:xmpp:hats:commands'
 
   /**
+   * Deadline for a *whole* hat ad-hoc command, spanning both round trips of a
+   * two-step XEP-0050 exchange.
+   *
+   * Hat commands are handled by the room process on the MUC service the client
+   * is already connected to: no federation hop and no archive scan. A healthy
+   * server should answer quickly, while 8s still leaves ample room for a poor
+   * mobile RTT plus server queuing and stays under the ~10s at which a user
+   * watching a spinner concludes the UI is stuck. Applying it as a deadline
+   * rather than a per-request timeout means a two-step command cannot quietly
+   * cost twice as much.
+   *
+   * Without it these requests have no caller-defined SDK deadline, so a server
+   * that never answers leaves the user staring at a spinner until the
+   * transport's 30s ceiling before an unexplained failure.
+   */
+  private static readonly HAT_COMMAND_TIMEOUT_MS = 8_000
+
+  /**
    * Execute an XEP-0050 ad-hoc command targeted at a MUC room for hat management.
    *
    * @param roomJid - Room JID to send the command to
@@ -2384,6 +2403,24 @@ export class MUC extends BaseModule {
     roomJid: string,
     node: string,
     fields?: Record<string, string>,
+  ): Promise<Element> {
+    // One deadline shared by both round trips of a two-step command.
+    const deadline = Date.now() + MUC.HAT_COMMAND_TIMEOUT_MS
+    const remainingBudget = () => Math.max(1, deadline - Date.now())
+
+    try {
+      return await this.runHatCommand(roomJid, node, fields, remainingBudget)
+    } catch (err) {
+      throw toHatCommandError(err, roomJid, node)
+    }
+  }
+
+  /** Ad-hoc command exchange itself; failures are classified by the caller. */
+  private async runHatCommand(
+    roomJid: string,
+    node: string,
+    fields: Record<string, string> | undefined,
+    remainingBudget: () => number,
   ): Promise<Element> {
     const commandChildren: Element[] = []
 
@@ -2400,7 +2437,7 @@ export class MUC extends BaseModule {
         ...commandChildren
       )
     )
-    const response = await this.deps.sendIQ(iq)
+    const response = await this.deps.sendIQ(iq, remainingBudget())
 
     // Handle multi-step ad-hoc commands (XEP-0050):
     // Some servers return status="executing" with a sessionid, expecting a
@@ -2429,7 +2466,7 @@ export class MUC extends BaseModule {
           ...completeChildren
         )
       )
-      return this.deps.sendIQ(completeIq)
+      return this.deps.sendIQ(completeIq, remainingBudget())
     }
 
     return response

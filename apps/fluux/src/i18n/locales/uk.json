@@ -422,6 +422,7 @@
         "hatDestroyError": "Не вдалося видалити значок",
         "hatAssignError": "Не вдалося призначити значок",
         "hatUnassignError": "Не вдалося прибрати значок",
+        "hatCommandNoReply": "Сервер не відповів",
         "selectHat": "Обрати значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інформація про користувача",

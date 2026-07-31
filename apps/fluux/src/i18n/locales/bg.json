@@ -422,6 +422,7 @@
         "hatDestroyError": "Неуспешно изтриване на значка",
         "hatAssignError": "Неуспешно присвояване на значка",
         "hatUnassignError": "Неуспешно премахване на значка",
+        "hatCommandNoReply": "Сървърът не отговори",
         "selectHat": "Избери значка",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Информация за потребителя",

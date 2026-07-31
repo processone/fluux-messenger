@@ -423,6 +423,7 @@
         "hatDestroyError": "Αποτυχία διαγραφής σήματος",
         "hatAssignError": "Αποτυχία ανάθεσης σήματος",
         "hatUnassignError": "Αποτυχία αφαίρεσης σήματος",
+        "hatCommandNoReply": "Ο διακομιστής δεν απάντησε",
         "selectHat": "Επιλογή σήματος",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Πληροφορίες χρήστη",

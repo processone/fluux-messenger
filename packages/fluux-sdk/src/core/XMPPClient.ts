@@ -29,6 +29,7 @@ import { setupStoreSideEffects } from './sideEffects'
 import { defaultStores, type SDKStores } from '../stores/sdkStores'
 import { detectPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
+import { IQTimeoutError } from './errors'
 import { getBareJid, getDomain } from './jid'
 import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
@@ -1789,7 +1790,7 @@ export class XMPPClient {
         return await Promise.race([
           request,
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`IQ timeout after ${timeoutMs}ms`)), timeoutMs)
+            setTimeout(() => reject(new IQTimeoutError(timeoutMs)), timeoutMs)
           ),
         ])
       }

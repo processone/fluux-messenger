@@ -424,6 +424,7 @@
         "hatDestroyError": "Falha ao eliminar o emblema",
         "hatAssignError": "Falha ao atribuir o emblema",
         "hatUnassignError": "Falha ao remover o emblema",
+        "hatCommandNoReply": "O servidor não respondeu",
         "selectHat": "Selecionar emblema",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info do utilizador",

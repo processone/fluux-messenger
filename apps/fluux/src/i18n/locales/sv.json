@@ -422,6 +422,7 @@
         "hatDestroyError": "Kunde inte ta bort märke",
         "hatAssignError": "Kunde inte tilldela märke",
         "hatUnassignError": "Kunde inte ta bort märke",
+        "hatCommandNoReply": "Servern svarade inte",
         "selectHat": "Välj märke",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Användarinfo",

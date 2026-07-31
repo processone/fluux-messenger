@@ -424,6 +424,7 @@
         "hatDestroyError": "فشل حذف الشارة",
         "hatAssignError": "فشل تعيين الشارة",
         "hatUnassignError": "فشل إزالة الشارة",
+        "hatCommandNoReply": "لم يستجب الخادم",
         "selectHat": "اختيار شارة",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "الدعوات",

@@ -424,6 +424,7 @@
         "hatDestroyError": "Nie udało się usunąć odznaki",
         "hatAssignError": "Nie udało się przypisać odznaki",
         "hatUnassignError": "Nie udało się usunąć odznaki",
+        "hatCommandNoReply": "Serwer nie odpowiedział",
         "selectHat": "Wybierz odznakę",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informacje o użytkowniku",

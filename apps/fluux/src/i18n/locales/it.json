@@ -424,6 +424,7 @@
         "hatDestroyError": "Impossibile eliminare il distintivo",
         "hatAssignError": "Impossibile assegnare il distintivo",
         "hatUnassignError": "Impossibile rimuovere il distintivo",
+        "hatCommandNoReply": "Il server non ha risposto",
         "selectHat": "Seleziona distintivo",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info utente",

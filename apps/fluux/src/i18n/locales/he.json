@@ -424,6 +424,7 @@
         "hatDestroyError": "מחיקת התג נכשלה",
         "hatAssignError": "הקצאת התג נכשלה",
         "hatUnassignError": "הסרת התג נכשלה",
+        "hatCommandNoReply": "השרת לא הגיב",
         "selectHat": "בחר תג",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "הזמנות",

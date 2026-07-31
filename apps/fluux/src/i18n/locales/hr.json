@@ -422,6 +422,7 @@
         "hatDestroyError": "Nije uspjelo brisanje značke",
         "hatAssignError": "Nije uspjela dodjela značke",
         "hatUnassignError": "Nije uspjelo uklanjanje značke",
+        "hatCommandNoReply": "Poslužitelj nije odgovorio",
         "selectHat": "Odaberi značku",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podaci o korisniku",

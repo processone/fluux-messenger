@@ -422,6 +422,7 @@
         "hatDestroyError": "Mistókst að eyða merki",
         "hatAssignError": "Mistókst að úthluta merki",
         "hatUnassignError": "Mistókst að fjarlægja merki",
+        "hatCommandNoReply": "Þjónninn svaraði ekki",
         "selectHat": "Veldu merki",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Notandaupplýsingar",

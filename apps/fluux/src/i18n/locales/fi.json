@@ -422,6 +422,7 @@
         "hatDestroyError": "Tunnuksen poistaminen epäonnistui",
         "hatAssignError": "Tunnuksen myöntäminen epäonnistui",
         "hatUnassignError": "Tunnuksen poistaminen epäonnistui",
+        "hatCommandNoReply": "Palvelin ei vastannut",
         "selectHat": "Valitse tunnus",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Käyttäjätiedot",

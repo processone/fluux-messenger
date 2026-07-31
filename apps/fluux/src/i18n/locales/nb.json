@@ -422,6 +422,7 @@
         "hatDestroyError": "Kunne ikke slette merke",
         "hatAssignError": "Kunne ikke tildele merke",
         "hatUnassignError": "Kunne ikke fjerne merke",
+        "hatCommandNoReply": "Serveren svarte ikke",
         "selectHat": "Velg merke",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Brukerinfo",

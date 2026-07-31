@@ -424,6 +424,7 @@
         "hatDestroyError": "Échec de la suppression du badge",
         "hatAssignError": "Échec de l'attribution du badge",
         "hatUnassignError": "Échec du retrait du badge",
+        "hatCommandNoReply": "Le serveur n'a pas répondu",
         "selectHat": "Sélectionner un badge",
         "hatJidPlaceholder": "user@example.com",
         "manageOccupant": "Gérer",

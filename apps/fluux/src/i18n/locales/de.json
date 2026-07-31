@@ -424,6 +424,7 @@
         "hatDestroyError": "Abzeichen konnte nicht gelöscht werden",
         "hatAssignError": "Abzeichen konnte nicht zugewiesen werden",
         "hatUnassignError": "Abzeichen konnte nicht entfernt werden",
+        "hatCommandNoReply": "Der Server hat nicht geantwortet",
         "selectHat": "Abzeichen auswählen",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Benutzerinfo",

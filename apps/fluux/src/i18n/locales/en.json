@@ -424,6 +424,7 @@
         "hatDestroyError": "Failed to delete hat",
         "hatAssignError": "Failed to assign hat",
         "hatUnassignError": "Failed to remove hat",
+        "hatCommandNoReply": "The server did not reply",
         "selectHat": "Select hat",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "Invitations",

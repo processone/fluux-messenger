@@ -14,7 +14,24 @@ const mockListHatAssignments = vi.fn()
 const mockAssignHat = vi.fn()
 const mockUnassignHat = vi.fn()
 
+// Mirrors the SDK's HatCommandError closely enough for `instanceof` in
+// getHatCommandErrorMessage; this suite deliberately avoids the SDK barrel, so
+// the class is hoisted alongside the mock factory that exposes it.
+const { MockHatCommandError } = vi.hoisted(() => ({
+  MockHatCommandError: class HatCommandError extends Error {
+    condition: string
+    text?: string
+    constructor(condition: string, text?: string) {
+      super(text || condition)
+      this.name = 'HatCommandError'
+      this.condition = condition
+      this.text = text
+    }
+  },
+}))
+
 vi.mock('@fluux/sdk', () => ({
+  HatCommandError: MockHatCommandError,
   useRoomModeration: () => ({
     listHats: mockListHats,
     createHat: mockCreateHat,
@@ -57,6 +74,7 @@ vi.mock('react-i18next', () => ({
         'rooms.hatDestroyError': 'Failed to destroy hat',
         'rooms.hatAssignError': 'Failed to assign hat',
         'rooms.hatUnassignError': 'Failed to unassign hat',
+        'rooms.hatCommandNoReply': 'The server did not reply',
         'rooms.selectHat': 'Select hat',
         'rooms.hatJidPlaceholder': 'user@example.com',
         'common.close': 'Close',
@@ -818,6 +836,46 @@ describe('RoomHatsModal', () => {
 
       await waitFor(() => {
         expect(mockAddToast).toHaveBeenCalledWith('error', 'Failed to create hat')
+      })
+    })
+  })
+
+  // ---------- Failure causes ------------------------------------------------
+
+  describe('Failure causes', () => {
+    it('names an unanswered command instead of showing a bare failure string', async () => {
+      renderModal()
+      await waitFor(() => expect(screen.getByText('Moderator')).toBeInTheDocument())
+
+      mockDestroyHat.mockRejectedValue(new MockHatCommandError('timeout'))
+
+      fireEvent.click(screen.getAllByTitle('Delete')[0])
+      fireEvent.click(screen.getByTestId('confirm-yes'))
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith(
+          'error',
+          'Failed to destroy hat — The server did not reply',
+        )
+      })
+    })
+
+    it("shows the server's own explanation when it refused", async () => {
+      renderModal()
+      await waitFor(() => expect(screen.getByText('Moderator')).toBeInTheDocument())
+
+      mockDestroyHat.mockRejectedValue(
+        new MockHatCommandError('forbidden', 'Only owners may manage hats')
+      )
+
+      fireEvent.click(screen.getAllByTitle('Delete')[0])
+      fireEvent.click(screen.getByTestId('confirm-yes'))
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith(
+          'error',
+          'Failed to destroy hat — Only owners may manage hats',
+        )
       })
     })
   })

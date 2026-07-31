@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import { HatCommandError } from '../errors'
 import {
   createMockXmppClient,
   createMockStores,
@@ -608,6 +609,96 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await expect(
         xmppClient.muc.unassignHat('room@conference.example.com', 'bob@example.com', 'urn:hat:mod')
       ).rejects.toThrow('not-allowed')
+    })
+  })
+
+  // ---------- failure reporting ---------------------------------------------
+
+  describe('command failure reporting', () => {
+    it('should give up well before the transport ceiling when the server never replies', async () => {
+      await connectClient()
+      // A server that accepts the IQ and simply never answers.
+      mockXmppClientInstance.iqCaller.request.mockReturnValue(new Promise(() => {}))
+
+      const pending = xmppClient.muc.destroyHat('room@conference.example.com', 'urn:hat:mod')
+      const outcome = pending.then(() => 'resolved', (err: unknown) => err)
+
+      // Still pending just before the budget elapses...
+      await vi.advanceTimersByTimeAsync(7_000)
+      let settled = false
+      void outcome.then(() => { settled = true })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      // ...and reported as a timeout well short of the 30s the user used to wait.
+      await vi.advanceTimersByTimeAsync(2_000)
+      const err = await outcome
+      expect(err).toBeInstanceOf(HatCommandError)
+      expect((err as HatCommandError).condition).toBe('timeout')
+      expect((err as HatCommandError).node).toBe('urn:xmpp:hats:commands:destroy')
+    })
+
+    it('should budget the whole two-step exchange, not each round trip', async () => {
+      await connectClient()
+
+      const executing = mockEl('iq', { type: 'result' }, [
+        mockEl('command', {
+          xmlns: 'http://jabber.org/protocol/commands',
+          status: 'executing',
+          sessionid: 'sess-1',
+        }),
+      ])
+      mockXmppClientInstance.iqCaller.request
+        .mockImplementationOnce(async () => {
+          // First round trip burns most of the budget.
+          await new Promise(resolve => setTimeout(resolve, 6_000))
+          return executing
+        })
+        .mockReturnValueOnce(new Promise(() => {}))
+
+      const outcome = xmppClient.muc
+        .destroyHat('room@conference.example.com', 'urn:hat:mod')
+        .then(() => 'resolved', (err: unknown) => err)
+
+      // 6s for step one plus the ~2s left of the budget — not 6s + a fresh 8s.
+      await vi.advanceTimersByTimeAsync(9_000)
+
+      const err = await outcome
+      expect(err).toBeInstanceOf(HatCommandError)
+      expect((err as HatCommandError).condition).toBe('timeout')
+    })
+
+    it('should surface the server condition and text from an error reply', async () => {
+      await connectClient()
+      const stanzaError = Object.assign(new Error('forbidden - Only owners may manage hats'), {
+        name: 'StanzaError',
+        condition: 'forbidden',
+        text: 'Only owners may manage hats',
+        type: 'auth',
+      })
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(stanzaError)
+
+      const err = await xmppClient.muc
+        .destroyHat('room@conference.example.com', 'urn:hat:mod')
+        .catch((e: unknown) => e)
+
+      expect(err).toBeInstanceOf(HatCommandError)
+      expect((err as HatCommandError).condition).toBe('forbidden')
+      expect((err as HatCommandError).text).toBe('Only owners may manage hats')
+      expect((err as HatCommandError).errorType).toBe('auth')
+    })
+
+    it('should keep the underlying message when the failure carries no condition', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('Not connected'))
+
+      const err = await xmppClient.muc
+        .createHat('room@conference.example.com', 'Mod', 'urn:hat:mod')
+        .catch((e: unknown) => e)
+
+      expect(err).toBeInstanceOf(HatCommandError)
+      expect((err as HatCommandError).condition).toBe('undefined-condition')
+      expect((err as Error).message).toBe('Not connected')
     })
   })
 })

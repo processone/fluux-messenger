@@ -422,6 +422,7 @@
         "hatDestroyError": "Kan badge niet verwijderen",
         "hatAssignError": "Kan badge niet toewijzen",
         "hatUnassignError": "Kan badge niet verwijderen",
+        "hatCommandNoReply": "De server heeft niet geantwoord",
         "selectHat": "Badge selecteren",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Gebruikersinfo",

@@ -424,6 +424,7 @@
         "hatDestroyError": "Error al eliminar la insignia",
         "hatAssignError": "Error al asignar la insignia",
         "hatUnassignError": "Error al quitar la insignia",
+        "hatCommandNoReply": "El servidor no ha respondido",
         "selectHat": "Seleccionar insignia",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info del usuario",

@@ -422,6 +422,7 @@
         "hatDestroyError": "Nem sikerült törölni a jelvényt",
         "hatAssignError": "Nem sikerült hozzárendelni a jelvényt",
         "hatUnassignError": "Nem sikerült eltávolítani a jelvényt",
+        "hatCommandNoReply": "A kiszolgáló nem válaszolt",
         "selectHat": "Jelvény kiválasztása",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Felhasználó adatai",

@@ -424,6 +424,7 @@
         "hatDestroyError": "Nepodařilo se smazat odznak",
         "hatAssignError": "Nepodařilo se přiřadit odznak",
         "hatUnassignError": "Nepodařilo se odebrat odznak",
+        "hatCommandNoReply": "Server neodpověděl",
         "selectHat": "Vybrat odznak",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informace o uživateli",

@@ -422,6 +422,7 @@
         "hatDestroyError": "无法删除头衔",
         "hatAssignError": "无法分配头衔",
         "hatUnassignError": "无法移除头衔",
+        "hatCommandNoReply": "服务器没有响应",
         "selectHat": "选择头衔",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "用户信息",

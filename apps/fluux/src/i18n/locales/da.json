@@ -422,6 +422,7 @@
         "hatDestroyError": "Kunne ikke slette badge",
         "hatAssignError": "Kunne ikke tildele badge",
         "hatUnassignError": "Kunne ikke fjerne badge",
+        "hatCommandNoReply": "Serveren svarede ikke",
         "selectHat": "Vælg badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Brugerinfo",

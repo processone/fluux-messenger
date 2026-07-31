@@ -424,6 +424,7 @@
         "hatDestroyError": "Nu s-a putut șterge insigna",
         "hatAssignError": "Nu s-a putut atribui insigna",
         "hatUnassignError": "Nu s-a putut elimina insigna",
+        "hatCommandNoReply": "Serverul nu a răspuns",
         "selectHat": "Selectează insignă",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informații utilizator",
