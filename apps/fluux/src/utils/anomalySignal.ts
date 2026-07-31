@@ -78,6 +78,23 @@ export type AnomalySignal =
       heldMs: number
     }
   | {
+      name: 'read-state/unread-persists'
+      kind: 'conversation' | 'room'
+      id: string
+      /** How long it had held when it proved persistent. */
+      heldMs: number
+      peakUnread: number
+    }
+  | {
+      name: 'read-state/unread-focus-cleared'
+      kind: 'conversation' | 'room'
+      id: string
+      /** How long the episode actually lasted, end to end. */
+      heldMs: number
+      /** The worst unread count reached while it ran. */
+      peakUnread: number
+    }
+  | {
       name: 'scroll/fab-at-live-edge'
       /** Independently measured — NOT the scroll hook's own at-bottom state. */
       distFromBottom: number

@@ -28,6 +28,7 @@ import { createUnreadSurvivesFocusDetector } from './unreadSurvivesFocus'
 
 /** How often the world is sampled. */
 const TICK_MS = 1000
+const MAX_SAMPLE_GAP_TICKS = 5
 
 /** The FAB's marker attribute, shared with the scroll e2e suite. */
 const FAB_SELECTOR = '[data-fab="scroll-to-bottom"]'
@@ -104,7 +105,9 @@ export interface DetectorTick {
 }
 
 export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): DetectorTick {
-  const unread = createUnreadSurvivesFocusDetector()
+  const unread = createUnreadSurvivesFocusDetector({
+    maxSampleGapMs: intervalMs * MAX_SAMPLE_GAP_TICKS,
+  })
   const fab = createFabAtLiveEdgeDetector()
 
   /**
@@ -162,18 +165,35 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
         active,
         focused: world.focused(),
         viewportAtBottom: active ? isViewportAtBottom(active.kind, active.id) : false,
+        windowAtLiveEdge: active ? world.windowAtLiveEdge(active.kind, active.id) : false,
         unreadCount: active ? world.unreadCount(active.kind, active.id) : 0,
         scopeKey: world.scopeKey(),
       },
       now,
     )
-    if (unreadVerdict) {
+    if (unreadVerdict?.kind === 'held') {
       signalAnomaly({
         name: 'read-state/unread-survives-focus',
         kind: unreadVerdict.active.kind,
         id: unreadVerdict.active.id,
         unreadCount: unreadVerdict.unreadCount,
         heldMs: unreadVerdict.heldMs,
+      })
+    } else if (unreadVerdict?.kind === 'persisted') {
+      signalAnomaly({
+        name: 'read-state/unread-persists',
+        kind: unreadVerdict.active.kind,
+        id: unreadVerdict.active.id,
+        heldMs: unreadVerdict.heldMs,
+        peakUnread: unreadVerdict.peakUnread,
+      })
+    } else if (unreadVerdict?.kind === 'cleared') {
+      signalAnomaly({
+        name: 'read-state/unread-focus-cleared',
+        kind: unreadVerdict.active.kind,
+        id: unreadVerdict.active.id,
+        heldMs: unreadVerdict.heldMs,
+        peakUnread: unreadVerdict.peakUnread,
       })
     }
 

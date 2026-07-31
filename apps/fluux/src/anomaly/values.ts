@@ -116,6 +116,8 @@ export const ID = Object.freeze({
   slowCorrection: mint('scroll/slow-correction', 'id'),
   mainThreadStall: mint('perf/main-thread-stall', 'id'),
   unreadSurvivesFocus: mint('read-state/unread-survives-focus', 'id'),
+  unreadPersists: mint('read-state/unread-persists', 'id'),
+  unreadFocusCleared: mint('read-state/unread-focus-cleared', 'id'),
   fabAtLiveEdge: mint('scroll/fab-at-live-edge', 'id'),
   jumpTargetMiss: mint('scroll/jump-target-miss', 'id'),
 })
@@ -137,6 +139,8 @@ export const CTX = Object.freeze({
   distFromBottom: mint('distFromBottom', 'ctx'),
   /** How long a condition had held continuously when it was reported. */
   heldMs: mint('heldMs', 'ctx'),
+  /** The worst unread count reached during an episode. */
+  peak: mint('peak', 'ctx'),
   /** Signed px by which a jump target sat outside the viewport. */
   offBy: mint('offBy', 'ctx'),
 })

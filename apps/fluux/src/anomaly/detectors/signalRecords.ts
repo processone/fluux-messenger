@@ -153,6 +153,42 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
         ],
       }
 
+    case 'read-state/unread-persists':
+      // `bug`, where the 2s record is only `suspect`. After this long with the user
+      // looking straight at the message, a mark-read that has not landed is not a
+      // propagation delay — it did not happen.
+      return {
+        id: ID.unreadPersists,
+        sev: 'bug',
+        expected: 0,
+        observed: signal.heldMs,
+        ctx: [
+          signal.kind === 'room'
+            ? [CTX.room, roomToken(signal.id)]
+            : [CTX.conv, convToken(signal.id)],
+          [CTX.peak, signal.peakUnread],
+        ],
+      }
+
+    case 'read-state/unread-focus-cleared':
+      // `drift`, not `suspect`: this is the MEASUREMENT that closes an episode the
+      // `suspect` record already opened, not a second complaint about it. Pairing the
+      // two by conversation gives the observed recovery time; `unread-persists` is the
+      // separate proof that the count stayed wrong. No close record means only that
+      // recovery was not observed.
+      return {
+        id: ID.unreadFocusCleared,
+        sev: 'drift',
+        expected: 0,
+        observed: signal.heldMs,
+        ctx: [
+          signal.kind === 'room'
+            ? [CTX.room, roomToken(signal.id)]
+            : [CTX.conv, convToken(signal.id)],
+          [CTX.peak, signal.peakUnread],
+        ],
+      }
+
     case 'scroll/fab-at-live-edge':
       // `expected: 0` reads as "no FAB while at the live edge". The observed value
       // is the independently measured distance, which is what makes the record
@@ -204,6 +240,8 @@ export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
   ID.slowCorrection,
   ID.mainThreadStall,
   ID.unreadSurvivesFocus,
+  ID.unreadPersists,
+  ID.unreadFocusCleared,
   ID.fabAtLiveEdge,
   ID.jumpTargetMiss,
 ])

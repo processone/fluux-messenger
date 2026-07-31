@@ -479,13 +479,9 @@ seam exists:
 - **accepts an identical rewrite** — the same pointer written twice is idempotence, not regression.
   Only a strictly-behind pointer within one generation is an anomaly.
 
-`unread-survives-focus` stays in stage 3, and its reset condition is **only** the publicly
-observable account/storage-scope change — it cannot see a generation change before stage 5, so the
-spec must not claim it reacts to one. That is tolerable here in a way it was not for
-`pointer-regression`: this detector requires the condition to hold continuously for 2s while the
-conversation is active and focused, so a rehydration inside the window disturbs the state it is
-watching and the timer restarts on the next evaluation rather than producing a verdict from a
-half-rebuilt store.
+`unread-survives-focus` stays in stage 3 because it needs no private generation seam. The runtime
+invariant registry owns its current continuity and reset contract, including how the publicly
+observable account/storage scope bounds an episode.
 
 **Why `badge-vs-pointer` is deferred.** The original design proposed
 `recomputeCountsFromPointer` (`stores/shared/notificationState.ts:637`) as an oracle. That is not

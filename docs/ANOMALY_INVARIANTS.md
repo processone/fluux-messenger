@@ -52,15 +52,37 @@ Each entry below is added by the stage that introduces it.
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
-| `read-state/unread-survives-focus` | suspect | A conversation was active, the window focused, and the newest message actually on screen, yet the unread count stayed above zero for `ctx.heldMs`. `observed` is the count | The mark-read path on focus regain did not run or did not stick. Check the read pointer for that conversation and whether a recount overwrote it |
+| `read-state/unread-survives-focus` | suspect | A conversation was active, the window focused, and the newest message actually on screen at the archive tail, yet the unread count stayed above zero for `ctx.heldMs`. `observed` is the count | The mark-read path on focus regain did not run or did not stick. Check the read pointer for that conversation and whether a recount overwrote it |
+| `read-state/unread-persists` | bug | The same condition was continuously observed 30s later. `observed` is how long it had held; `ctx.peak` is the worst count reached | The mark-read did not merely lag, it did not happen. This is the record that makes the finding actionable |
+| `read-state/unread-focus-cleared` | drift | The count genuinely reached zero while the conversation was still active, focused and at the live edge. `observed` is the real end-to-end duration | Not a complaint — the measurement that says how bad an episode was |
+
+**How to read the three.** Within one `sid`, match records by their conversation or room
+token. The `suspect` record fires the instant the threshold is crossed, so its `heldMs`
+is always ~2000 and says nothing about severity. A following `unread-persists` proves
+that the same badge stayed wrong for at least 30s; a following `unread-focus-cleared`
+gives the observed recovery time. If neither follows, the episode's outcome is unknown.
+
+`unread-focus-cleared` is deliberately narrow: it is emitted **only** on a genuine
+recovery under observation. Losing sight of an episode any other way — focus lost,
+viewport moved, conversation switched, store rebuilt — ends it **silently**. An earlier
+revision reported those as clears, which measured how long the detector could watch
+rather than how long the badge was wrong.
+
+So the absence of a close record means **the end was not observed**. It does NOT mean
+the badge never recovered — the app marks read on focus change and tab switch, so a
+badge may routinely clear just after the user looks away, and the per-id cooldown can
+also suppress a close when two episodes fall inside one minute. Judge severity from
+`unread-persists`, never from a missing `unread-focus-cleared`.
 
 `suspect` rather than `bug` on purpose: the app marks read on focus regain, so a count
 lingering briefly is more likely propagation delay than a broken invariant, and `bug`
 has to keep meaning "an invariant broke". Promote it if the log shows it is not noisy.
 
-This uses the **viewport**, not the SDK's `windowAtLiveEdge` — the latter is true for
-any backgrounded conversation parked at the tail, so it is not evidence anyone saw
-anything.
+This requires both the **viewport** and the SDK's `windowAtLiveEdge`. The latter alone
+is true for any backgrounded conversation parked at the tail, while the viewport alone
+can be at the bottom of a resident slice with newer unread messages beyond it. A missed
+sampling window ends the episode silently, so suspended timers cannot turn an
+unobserved interval into persistence evidence.
 
 _(stage 5 adds `badge-vs-pointer` and `pointer-regression`, both of which need SDK
 seams that do not exist yet.)_

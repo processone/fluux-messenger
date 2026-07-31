@@ -181,6 +181,20 @@ describe('every fan-out record survives the privacy gate', () => {
       unreadCount: 3,
       heldMs: 2000,
     },
+    {
+      name: 'read-state/unread-persists',
+      kind: 'conversation',
+      id: 'bob@x.tld',
+      heldMs: 30_000,
+      peakUnread: 21,
+    },
+    {
+      name: 'read-state/unread-focus-cleared',
+      kind: 'conversation',
+      id: 'bob@x.tld',
+      heldMs: 10_000,
+      peakUnread: 21,
+    },
     { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
     { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'msg-1' },
   ]
@@ -345,6 +359,52 @@ describe('stage-3 detector mappings', () => {
     }
   })
 
+  it('maps persistence to a bug, unlike the suspect that opened the episode', () => {
+    // The severity step is the point: 2s is a plausible propagation delay, 30s of the
+    // user looking straight at the message is not.
+    const record = recordForSignal({
+      name: 'read-state/unread-persists',
+      kind: 'conversation',
+      id: 'bob@x.tld',
+      heldMs: 30_000,
+      peakUnread: 21,
+    })
+    expect(record?.id.s).toBe('read-state/unread-persists')
+    expect(record?.sev).toBe('bug')
+    expect(record?.observed).toBe(30_000)
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['conv', 'peak'])
+  })
+
+  it('maps an episode close to the duration, with the peak as context', () => {
+    const record = recordForSignal({
+      name: 'read-state/unread-focus-cleared',
+      kind: 'conversation',
+      id: 'bob@x.tld',
+      heldMs: 10_000,
+      peakUnread: 21,
+    })
+
+    expect(record?.id.s).toBe('read-state/unread-focus-cleared')
+    // `drift`: it measures an episode, it does not complain about one.
+    expect(record?.sev).toBe('drift')
+    expect(record?.observed).toBe(10_000)
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['conv', 'peak'])
+    expect(record?.ctx?.find(([k]) => k.s === 'peak')?.[1]).toBe(21)
+  })
+
+  it('closes a room episode in the room namespace', async () => {
+    await warmRoom('muc@conf.x.tld')
+    const record = recordForSignal({
+      name: 'read-state/unread-focus-cleared',
+      kind: 'room',
+      id: 'muc@conf.x.tld',
+      heldMs: 5000,
+      peakUnread: 3,
+    })
+    expect(record?.ctx?.map(([k]) => k.s)).toEqual(['room', 'peak'])
+    expect((record!.ctx![0][1] as { s: string }).s).not.toBe('c:unresolved')
+  })
+
   it('maps a FAB-at-live-edge to the measured distance', () => {
     const record = recordForSignal({
       name: 'scroll/fab-at-live-edge',
@@ -409,6 +469,20 @@ describe('FANOUT_IDS', () => {
             id: 'bob@x.tld',
             unreadCount: 3,
             heldMs: 2000,
+          },
+          {
+            name: 'read-state/unread-persists',
+            kind: 'conversation',
+            id: 'bob@x.tld',
+            heldMs: 30_000,
+            peakUnread: 21,
+          },
+          {
+            name: 'read-state/unread-focus-cleared',
+            kind: 'conversation',
+            id: 'bob@x.tld',
+            heldMs: 10_000,
+            peakUnread: 21,
           },
           { name: 'scroll/fab-at-live-edge', distFromBottom: 10, heldMs: 1000 },
           { name: 'scroll/jump-target-miss', offBy: -80, messageId: 'm' },

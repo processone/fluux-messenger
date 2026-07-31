@@ -41,20 +41,10 @@ when the bug is present, which §5.1 calls the worst possible detector failure.
 
 → **Requires a new measurement seam.** See §1.2 and Decision D1.
 
-### 0.2 `unread-survives-focus` has a ready-made "at live edge" oracle
+### 0.2 `unread-survives-focus` live-edge contract
 
-`src/utils/viewportAtBottom.ts` already exists for precisely this distinction, and its module comment
-makes the argument the detector needs:
-
-> `windowAtLiveEdge` (SDK) says where the *loaded message window* sits; it is true for any
-> backgrounded conversation parked at the tail […] It is therefore NOT evidence that the user saw
-> anything. The only real evidence is the scroll viewport.
-
-`isViewportAtBottom(kind, id)` is the correct oracle, and unknown ids return `false` — it never
-invents a read position. `ChatView` and `RoomView` already register their refs.
-
-Using `windowAtLiveEdge` instead would fire on every backgrounded conversation. Named here because it
-is the obvious wrong choice.
+See `docs/ANOMALY_INVARIANTS.md` for the current sampling contract and named non-cases. It owns the
+runtime semantics; this implementation plan does not duplicate them.
 
 ### 0.3 `jump-target-miss` has an exact settle point already
 

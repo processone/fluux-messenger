@@ -243,6 +243,7 @@ describe('detector tick', () => {
     for (let i = 0; i < 5; i++) tick.sample()
     tick.stop()
     expect(seen.some((s) => s.name === 'scroll/fab-at-live-edge')).toBe(false)
+    expect(seen.some((s) => s.name === 'read-state/unread-survives-focus')).toBe(false)
   })
 
   it('goes quiet when an unmeasurable viewport makes the FAB check blind', () => {
