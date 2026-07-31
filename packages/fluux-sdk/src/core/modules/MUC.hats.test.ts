@@ -419,6 +419,27 @@ describe('MUC Hat Management (XEP-0317)', () => {
       return mockEl('field', { var: varName, type: 'jid-single', label }, [required])
     }
 
+    /** Build a required text-single field carrying no options and no default value */
+    function textField(varName: string, label: string): MockChild {
+      const required = mockEl('required', {})
+      return mockEl('field', { var: varName, type: 'text-single', label }, [required])
+    }
+
+    /** Read the submitted `<x/>` of an IQ recorded by the mock transport */
+    function submittedFields(callIndex: number): Map<string, unknown> | null {
+      const iq = mockXmppClientInstance.iqCaller.request.mock.calls[callIndex][0]
+      const command = iq.children[0]
+      const dataForm = command.children.find((c: { name: string }) => c.name === 'x')
+      if (!dataForm) return null
+      const fields = dataForm.children.filter((c: { name: string }) => c.name === 'field')
+      return new Map(
+        fields.map((f: { attrs: { var: string }; children: Array<{ children: unknown[] }> }) => {
+          const value = f.children[0]?.children?.[0]
+          return [f.attrs.var, value]
+        })
+      )
+    }
+
     it('should map original field values to server form fields when names differ', async () => {
       await connectClient()
 
@@ -473,6 +494,90 @@ describe('MUC Hat Management (XEP-0317)', () => {
 
       // `hats#uri` should NOT be present (server didn't use this field name)
       expect(fieldMap.has('hats#uri')).toBe(false)
+    })
+
+    /**
+     * ejabberd 26.01–26.04 answer the destroy command with a single `text-single`
+     * field named `hat`, carrying no options and no default value. None of the
+     * name, option or jid strategies can fill it, so the completion used to go out
+     * with no `<x/>` at all — which the room process could not parse (#1198).
+     */
+    it('should map the only original value onto the only unmatched server field', async () => {
+      await connectClient()
+
+      const serverForm = executingResponse('session-destroy', [
+        textField('hat', 'Hat URI'),
+      ])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(serverForm)
+        .mockResolvedValueOnce(emptyResultResponse())
+
+      await xmppClient.muc.destroyHat('room@conference.example.com', 'urn:hat:mod')
+
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(2)
+
+      const completeIq = mockXmppClientInstance.iqCaller.request.mock.calls[1][0]
+      const command = completeIq.children[0]
+      expect(command.attrs.action).toBe('complete')
+      expect(command.attrs.sessionid).toBe('session-destroy')
+
+      // The completion must carry a submit form, not an empty <command/>
+      const fieldMap = submittedFields(1)
+      expect(fieldMap).not.toBeNull()
+      expect(fieldMap!.get('hat')).toBe('urn:hat:mod')
+      // The client's own field name is not what the server asked for
+      expect(fieldMap!.has('hats#uri')).toBe(false)
+    })
+
+    it('should still fill server fields by exact name (create)', async () => {
+      await connectClient()
+
+      // ejabberd's create form reuses the client's own var names
+      const serverForm = executingResponse('session-create', [
+        textField('hats#uri', 'Hat URI'),
+        textField('hats#title', 'Hat title'),
+        textField('hats#hue', 'Hat hue'),
+      ])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(serverForm)
+        .mockResolvedValueOnce(emptyResultResponse())
+
+      await xmppClient.muc.createHat('room@conference.example.com', 'Moderator', 'urn:hat:mod', 210)
+
+      const fieldMap = submittedFields(1)
+      expect(fieldMap).not.toBeNull()
+      expect(fieldMap!.get('hats#uri')).toBe('urn:hat:mod')
+      expect(fieldMap!.get('hats#title')).toBe('Moderator')
+      expect(fieldMap!.get('hats#hue')).toBe('210')
+    })
+
+    it('should not guess when several server fields and several values are unmatched', async () => {
+      await connectClient()
+
+      // Neither field matches by name, neither carries options, neither is jid-single,
+      // and two original values are unused — the mapping is ambiguous, so the
+      // positional rule must stay out of it rather than pair them arbitrarily.
+      const serverForm = executingResponse('session-ambiguous', [
+        textField('alpha', 'Alpha'),
+        textField('beta', 'Beta'),
+      ])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(serverForm)
+        .mockResolvedValueOnce(emptyResultResponse())
+
+      await xmppClient.muc.assignHat(
+        'room@conference.example.com',
+        'user@example.com',
+        'urn:hat:mod',
+      )
+
+      const fieldMap = submittedFields(1)
+      const submitted = fieldMap ? [...fieldMap.values()] : []
+      expect(submitted).not.toContain('user@example.com')
+      expect(submitted).not.toContain('urn:hat:mod')
     })
   })
 

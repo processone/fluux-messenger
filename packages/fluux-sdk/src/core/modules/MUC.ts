@@ -2447,6 +2447,10 @@ export class MUC extends BaseModule {
    * 2. For list-single/list-multi fields: find an original value among the
    *    field's options
    * 3. For jid-single fields: use a jid value from the original fields
+   *
+   * A renamed plain `text-single` matches none of those, which is how the
+   * destroy command used to submit an empty form (see the positional rule
+   * below).
    */
   private buildCompletionFields(
     command: Element,
@@ -2499,6 +2503,20 @@ export class MUC extends BaseModule {
       if (field.value && !Array.isArray(field.value)) {
         result[field.var] = field.value
       }
+    }
+
+    // 5. Last resort: a renamed field carrying neither options nor a default
+    // (ejabberd 26.01-26.04 answer the destroy command with a bare
+    // `text-single` named `hat`). Pair it up only when the mapping is
+    // unambiguous — exactly one field left to fill and exactly one value left
+    // to place. Anything else stays unfilled rather than guessed.
+    const unmatched = serverForm.fields.filter(
+      field => field.var && field.var !== 'FORM_TYPE' && result[field.var] === undefined
+    )
+    const usedValues = Object.values(result)
+    const unusedValues = originalValues.filter(value => !usedValues.includes(value))
+    if (unmatched.length === 1 && unusedValues.length === 1) {
+      result[unmatched[0].var] = unusedValues[0]
     }
 
     return result
