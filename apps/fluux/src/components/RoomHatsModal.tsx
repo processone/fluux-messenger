@@ -94,8 +94,15 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
 
   const [search, setSearch] = useState('')
 
+  // Re-arm on every effect run, not only at declaration: React StrictMode's dev
+  // double-invoke runs the cleanup on the *same* component instance, so a ref that
+  // is only cleared would stay false for the life of the modal and every
+  // `mountedRef.current` guard below would silently drop its state update.
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const extraSuggestions = buildRoomContactSuggestions(room)
 

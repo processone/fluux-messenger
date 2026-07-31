@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RoomHatsModal } from './RoomHatsModal'
@@ -156,6 +157,19 @@ const mockAddToast = vi.fn()
 function renderModal(room?: Room) {
   return render(
     <RoomHatsModal room={room ?? createRoom()} onClose={mockOnClose} />
+  )
+}
+
+/**
+ * StrictMode double-invokes effects on the *same* component instance: mount →
+ * cleanup → mount. A mounted-guard ref that is only cleared, never re-armed,
+ * stays false for the life of the modal.
+ */
+function renderModalStrict(room?: Room) {
+  return render(
+    <StrictMode>
+      <RoomHatsModal room={room ?? createRoom()} onClose={mockOnClose} />
+    </StrictMode>
   )
 }
 
@@ -782,6 +796,28 @@ describe('RoomHatsModal', () => {
       await waitFor(() => {
         // After assignments load, should also show their count
         expect(mockListHatAssignments).toHaveBeenCalled()
+      })
+    })
+  })
+
+  // ---------- StrictMode lifecycle -----------------------------------------
+
+  describe('StrictMode double-invoke', () => {
+    it('still renders the loaded hats after the dev mount/cleanup/mount cycle', async () => {
+      renderModalStrict()
+
+      await waitFor(() => {
+        expect(screen.getByText('Moderator')).toBeInTheDocument()
+        expect(screen.getByText('urn:hat:moderator')).toBeInTheDocument()
+      })
+    })
+
+    it('still surfaces a load failure toast after the dev mount/cleanup/mount cycle', async () => {
+      mockListHats.mockRejectedValue(new Error('boom'))
+      renderModalStrict()
+
+      await waitFor(() => {
+        expect(mockAddToast).toHaveBeenCalledWith('error', 'Failed to create hat')
       })
     })
   })

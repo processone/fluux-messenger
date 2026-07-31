@@ -57,9 +57,12 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
   const [addingAffiliation, setAddingAffiliation] = useState<RoomAffiliation>('member')
   const [isAdding, setIsAdding] = useState(false)
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  // Re-armed in the effect body: StrictMode's dev double-invoke runs the cleanup on
+  // the same instance, and a ref that is only cleared would disable every guard below.
   const mountedRef = useRef(true)
 
   useEffect(() => {
+    mountedRef.current = true
     return () => { mountedRef.current = false }
   }, [])
 

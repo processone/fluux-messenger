@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RoomMembersModal } from './RoomMembersModal'
@@ -208,5 +209,24 @@ describe('RoomMembersModal', () => {
 
     expect(screen.getByText('Roster One')).toBeInTheDocument()
     expect(screen.getByText('Roster Two')).toBeInTheDocument()
+  })
+
+  // StrictMode double-invokes effects on the same instance: mount → cleanup → mount.
+  // A mounted-guard ref that is only cleared, never re-armed, silently drops every
+  // state update that lands after the first cleanup.
+  it('should still render the loaded affiliation list under StrictMode', async () => {
+    mockQueryAffiliationList.mockResolvedValue([
+      { jid: 'strict@example.com', affiliation: 'owner' as RoomAffiliation },
+    ])
+
+    render(
+      <StrictMode>
+        <RoomMembersModal room={createMockRoom()} onClose={vi.fn()} />
+      </StrictMode>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('strict@example.com')).toBeInTheDocument()
+    })
   })
 })
