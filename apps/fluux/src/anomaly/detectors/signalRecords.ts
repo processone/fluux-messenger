@@ -131,6 +131,21 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
         ctx: [],
       }
 
+    case 'recorder/entity-warm-failing':
+      // About the LOG, not the app — hence the `recorder/` family. Records are still
+      // being written for this conversation; they simply name `c:unresolved` and
+      // cannot be correlated, so the instrument is degraded rather than the client.
+      //
+      // No ctx: the only context worth having is which conversation, and the token
+      // for it is precisely what is failing to resolve.
+      return {
+        id: ID.entityWarmFailing,
+        sev: 'suspect',
+        expected: 0,
+        observed: signal.consecutiveFailures,
+        ctx: [],
+      }
+
     case 'read-state/unread-survives-focus':
       // `suspect`, not `bug`, on its first outing: the app marks read on focus
       // regain, so a count lingering for the hold window is more likely a
@@ -234,6 +249,7 @@ export function recordForSignal(signal: AnomalySignal): RecordInput | null {
  * being unreachable — a registry row for something that can never appear.
  */
 export const FANOUT_IDS: readonly Opaque[] = Object.freeze([
+  ID.entityWarmFailing,
   ID.reassertOverlap,
   ID.reassertNonConverging,
   ID.resizeLoop,

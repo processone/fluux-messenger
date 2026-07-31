@@ -216,6 +216,7 @@ test.describe('anomaly runtime', () => {
 
     const detectorRecords = await page.evaluate(() => {
       const ids = new Set([
+        'recorder/entity-warm-failing',
         'read-state/unread-survives-focus',
         'scroll/fab-at-live-edge',
         'scroll/jump-target-miss',
@@ -230,6 +231,98 @@ test.describe('anomaly runtime', () => {
       detectorRecords,
       'a detector fired on a healthy demo session — it is miswired, not finding bugs',
     ).toEqual([])
+  })
+
+  test('a sustained entity-warm failure reaches the anomaly log', async ({ page }) => {
+    // Entity warming can fail in production only when WebCrypto itself rejects.
+    // Override that one operation before the app boots so the real detector,
+    // installer, recorder, serializer, and memory sink all remain in the path.
+    await page.addInitScript(() => {
+      const realSign = crypto.subtle.sign.bind(crypto.subtle)
+      Object.defineProperty(window, '__forcedHmacSignCalls', {
+        configurable: true,
+        value: 0,
+        writable: true,
+      })
+      Object.defineProperty(crypto.subtle, 'sign', {
+        configurable: true,
+        value(
+          algorithm: AlgorithmIdentifier | RsaPssParams | EcdsaParams,
+          key: CryptoKey,
+          data: BufferSource,
+        ) {
+          const name = typeof algorithm === 'string' ? algorithm : algorithm.name
+          if (name === 'HMAC') {
+            ;(window as unknown as { __forcedHmacSignCalls: number }).__forcedHmacSignCalls++
+            return Promise.reject(new Error('forced HMAC sign failure'))
+          }
+          return realSign(algorithm, key, data)
+        },
+      })
+    })
+
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              (window as unknown as { __forcedHmacSignCalls: number }).__forcedHmacSignCalls,
+          ),
+        {
+          timeout: 15_000,
+          message: 'the browser never attempted three forced HMAC warm failures',
+        },
+      )
+      .toBeGreaterThanOrEqual(3)
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() =>
+            (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+              .map((line) => JSON.parse(line) as { id?: string })
+              .some((record) => record.id === 'recorder/entity-warm-failing'),
+          ),
+        {
+          timeout: 15_000,
+          message: 'the sustained warm failure never reached the anomaly log',
+        },
+      )
+      .toBe(true)
+
+    const record = await page.evaluate(
+      () =>
+        (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .find((candidate) => candidate.id === 'recorder/entity-warm-failing')!,
+    )
+
+    expect(record).toMatchObject({
+      kind: 'anomaly',
+      id: 'recorder/entity-warm-failing',
+      sev: 'suspect',
+      expected: 0,
+      observed: 3,
+      ctx: {},
+    })
+    expect(record.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
+    expect(record.sid).toBeTruthy()
   })
 
   test('the sampler is actually running, so the control above means something', async ({

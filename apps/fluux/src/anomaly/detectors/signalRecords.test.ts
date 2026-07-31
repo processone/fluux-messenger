@@ -10,6 +10,23 @@ import type { AnomalySignal } from '../../utils/anomalySignal'
 
 /** The prose the monitors emit is not tested here — see each monitor's own suite. */
 describe('recordForSignal', () => {
+  it('maps a persistent warm failure as recorder health, carrying the run length', () => {
+    const record = recordForSignal({
+      name: 'recorder/entity-warm-failing',
+      consecutiveFailures: 7,
+    })
+
+    expect(record?.id.s).toBe('recorder/entity-warm-failing')
+    // `suspect`, not `bug`: the client is fine, the LOG is degraded — records are
+    // still written, they just name no entity.
+    expect(record?.sev).toBe('suspect')
+    expect(record?.expected).toBe(0)
+    expect(record?.observed).toBe(7)
+    // No ctx on purpose: the only context worth having is which conversation, and
+    // its token is exactly what is failing to resolve.
+    expect(record?.ctx).toEqual([])
+  })
+
   it('maps an overlap to a bug against the healthy count, not the threshold', () => {
     const record = recordForSignal({
       name: 'scroll/reassert-overlap',
@@ -169,6 +186,7 @@ describe('every fan-out record survives the privacy gate', () => {
   })
 
   const SIGNALS: AnomalySignal[] = [
+    { name: 'recorder/entity-warm-failing', consecutiveFailures: 3 },
     { name: 'scroll/reassert-overlap', active: 2, threshold: 2 },
     { name: 'scroll/reassert-nonconverging', label: 'marker', writes: 41, threshold: 40 },
     { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },
@@ -458,6 +476,7 @@ describe('FANOUT_IDS', () => {
     const produced = new Set(
       (
         [
+          { name: 'recorder/entity-warm-failing', consecutiveFailures: 3 },
           { name: 'scroll/reassert-overlap', active: 2, threshold: 2 },
           { name: 'scroll/reassert-nonconverging', label: 'marker', writes: 41, threshold: 40 },
           { name: 'scroll/resize-loop', fires: 340, threshold: 60, elapsedMs: 980 },

@@ -110,6 +110,7 @@ export const TAG = Object.freeze({
 export const ID = Object.freeze({
   sessionStart: mint('recorder/session-start', 'id'),
   ceilingReached: mint('recorder/ceiling-reached', 'id'),
+  entityWarmFailing: mint('recorder/entity-warm-failing', 'id'),
   reassertOverlap: mint('scroll/reassert-overlap', 'id'),
   reassertNonConverging: mint('scroll/reassert-nonconverging', 'id'),
   resizeLoop: mint('scroll/resize-loop', 'id'),

@@ -396,10 +396,9 @@ Cost accepted: a `LocalRef` does not correlate across sessions. For message and 
 is the correct scope anyway — cross-session correlation of a single stanza is not a question the
 review asks. Entity identity keeps cross-session stability via `Token`.
 
-**`c:unresolved` remains possible only for the entity class** — a genuinely new JID recorded in the
-same tick it is first observed. It is rare rather than routine, counted as
-`recorder/token-unresolved`, and the review skill **must never correlate two `c:unresolved` values
-with each other**; they are explicitly not an identity.
+**`c:unresolved` remains possible only for the entity class.** Its current causes and recorder-health
+signals are owned by `docs/ANOMALY_INVARIANTS.md`. The review skill **must never correlate two
+`c:unresolved` values with each other**; they are explicitly not an identity.
 
 - **Key persistence:** 32 random bytes from `crypto.getRandomValues`, generated once and stored in
   `localStorage` under `fluux:anomaly-token-key`. Never derived from account identity, so the token
@@ -420,8 +419,8 @@ with each other**; they are explicitly not an identity.
   synchronous, so a background tokenizer subscribes to conversation, roster and room lifecycle
   events and populates a bounded LRU (`Map`, 500 entries, keyed by `ns + '\0' + value`) *ahead of
   use*. Crumb recording does a synchronous `Map.get`. A miss emits `c:unresolved` — never the raw
-  value — and schedules tokenization so later crumbs resolve. The ephemeral class bypasses this
-  entirely via `LocalRef`, which is why the sentinel stays rare.
+  value — and schedules tokenization so later crumbs can resolve. The ephemeral class bypasses this
+  entirely via `LocalRef`, keeping the sentinel scoped to entity-resolution misses.
 
 **Recursive serialization limits.** Max depth 2, max 50 array entries, applied in the serializer —
 belt-and-braces against a malformed record shape, not the privacy mechanism itself.

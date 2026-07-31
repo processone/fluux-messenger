@@ -70,6 +70,11 @@ export type AnomalySignal =
       thresholdMs: number
     }
   | {
+      name: 'recorder/entity-warm-failing'
+      /** How many warms in a row had failed when this was reported. */
+      consecutiveFailures: number
+    }
+  | {
       name: 'read-state/unread-survives-focus'
       /** Which conversation, so the record adapter can use the right token namespace. */
       kind: 'conversation' | 'room'

@@ -33,6 +33,7 @@ These describe the recorder itself, not the app.
 |---|---|---|
 | `recorder/session-start` | One per session, written once the tokenizer holds its key | Its absence means the runtime never installed. Its `tokenKeyId` opens the session's token space |
 | `recorder/ceiling-reached` | 500 records or 2 MB in one session; recording stopped | Something fired in a loop. Find the last repeated `id` before it |
+| `recorder/entity-warm-failing` | Entity tokenisation has failed `observed` times in a row. Records for that conversation are still written but name `c:unresolved`, so they cannot be correlated | The tokenizer holds its key (startup is excluded), so this is a real `crypto.subtle` failure. Reported once per episode and again only after a recovery — its absence is meaningful |
 
 Counter names (digest only, not invariant ids):
 

@@ -30,6 +30,18 @@ import { createUnreadSurvivesFocusDetector } from './unreadSurvivesFocus'
 const TICK_MS = 1000
 const MAX_SAMPLE_GAP_TICKS = 5
 
+/**
+ * Consecutive warm failures before the condition is reported.
+ *
+ * Startup is already excluded — the block below is skipped entirely until the
+ * tokenizer holds its key — so anything reaching the catch is a real
+ * `crypto.subtle` failure rather than a not-yet. Three ticks is three seconds: long
+ * enough that one hiccup stays silent, short enough to still be reported while the
+ * session is alive. A higher number would buy nothing, since the latch means a
+ * sustained outage reports once either way.
+ */
+const WARM_FAILURE_THRESHOLD = 3
+
 /** The FAB's marker attribute, shared with the scroll e2e suite. */
 const FAB_SELECTOR = '[data-fab="scroll-to-bottom"]'
 
@@ -129,6 +141,18 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
   let warmInFlight: string | null = null
   /** The most recent warm, so a test can await exactly what it started. */
   let pendingWarm: Promise<void> = Promise.resolve()
+  /**
+   * Warms that have failed back to back.
+   *
+   * The retry is deliberate and stays; what this adds is knowing it is happening. A
+   * warm that keeps failing leaves every record for the conversation naming
+   * `c:unresolved` — present, but impossible to correlate — and until now nothing
+   * said so. Nobody knows whether this occurs in the field, because nothing would
+   * have reported it, so the first thing the signal buys is finding out.
+   */
+  let consecutiveWarmFailures = 0
+  /** Reported for the current run of failures; cleared by the next success. */
+  let warmFailureReported = false
 
   function sample(): void {
     const now = world.now()
@@ -148,10 +172,25 @@ export function startDetectorTick(world: TickWorld, intervalMs = TICK_MS): Detec
         pendingWarm = (active.kind === 'room' ? warmRoom(active.id) : warmConversation(active.id))
           .then(() => {
             warmedFor = target
+            // A success ends the run, so a LATER outage in the same session is
+            // reported again rather than being swallowed by a stale latch.
+            consecutiveWarmFailures = 0
+            warmFailureReported = false
           })
           .catch(() => {
-            // Swallowed so a failed warm cannot surface as an unhandled rejection.
-            // `warmedFor` stays unset, so the next tick retries.
+            // Still swallowed so a failed warm cannot surface as an unhandled
+            // rejection, and `warmedFor` stays unset so the next tick retries. What
+            // changes is that the failure is no longer invisible.
+            consecutiveWarmFailures++
+            if (!warmFailureReported && consecutiveWarmFailures >= WARM_FAILURE_THRESHOLD) {
+              warmFailureReported = true
+              // `signalAnomaly` contains its own throw, so a handler fault cannot
+              // re-enter this chain as a rejection.
+              signalAnomaly({
+                name: 'recorder/entity-warm-failing',
+                consecutiveFailures: consecutiveWarmFailures,
+              })
+            }
           })
           .finally(() => {
             if (warmInFlight === target) warmInFlight = null

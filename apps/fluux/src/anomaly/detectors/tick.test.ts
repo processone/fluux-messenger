@@ -15,9 +15,21 @@ import {
   registerViewportBottomRef,
 } from '../../utils/viewportAtBottom'
 import { initTokenizer, resetValuesForTesting, tokenSync } from '../values'
+import { warmConversation, warmRoom } from '../identity'
 import { recordForSignal } from './signalRecords'
 
 const ACTIVE = { kind: 'conversation' as const, id: 'bob@x.tld' }
+
+// The warm is the only thing these suites stub: a rejection is otherwise reachable
+// only by breaking WebCrypto itself.
+vi.mock('../identity', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../identity')>()
+  return {
+    ...actual,
+    warmConversation: vi.fn(actual.warmConversation),
+    warmRoom: vi.fn(actual.warmRoom),
+  }
+})
 
 /** A world in the failing state for both timed detectors. */
 function world(overrides: Partial<TickWorld> = {}): TickWorld {
@@ -322,5 +334,130 @@ describe('browserWorld readings', () => {
       document.body.appendChild(wrapper)
     }
     expect(w.fabShown()).toBe(true)
+  })
+})
+
+describe('entity warming that keeps failing', () => {
+  // `warmToken` is a no-op before the tokenizer holds its key, and the tick skips the
+  // whole block until then — so anything reaching the catch is a genuine crypto
+  // failure, not startup. The retry is correct and stays; what was missing is any
+  // way to know it is happening. Records keep being written for the conversation,
+  // they simply name `c:unresolved` forever and nothing says why.
+
+  const FAILING = { kind: 'conversation' as const, id: 'warm-fails@x.tld' }
+
+  beforeEach(async () => {
+    // Restore REAL warming before each case. A `mockRejectedValue` set by one test
+    // otherwise leaks into the next, and the control below — the one asserting
+    // silence on a healthy session — would then be passing or failing for reasons
+    // that have nothing to do with the code under test.
+    const actual = await vi.importActual<typeof import('../identity')>('../identity')
+    vi.mocked(warmConversation).mockImplementation(actual.warmConversation)
+    vi.mocked(warmRoom).mockImplementation(actual.warmRoom)
+  })
+
+  /** A tick whose warm always rejects. */
+  function failingTick(): ReturnType<typeof startDetectorTick> {
+    vi.mocked(warmConversation).mockRejectedValue(new Error('subtle.sign failed'))
+    return startDetectorTick(
+      world({
+        activeConversation: () => FAILING,
+        // Healthy on every other axis, so nothing else can report.
+        unreadCount: () => 0,
+        fabShown: () => false,
+      }),
+    )
+  }
+
+  async function tick(t: ReturnType<typeof startDetectorTick>): Promise<void> {
+    t.sample()
+    await t.warmSettled()
+  }
+
+  it('stays silent below the threshold', async () => {
+    // A single hiccup must not cry wolf: crypto failures are likelier to arrive in
+    // correlated bursts than as isolated events.
+    await initTokenizer()
+    const t = failingTick()
+    await tick(t)
+    await tick(t)
+    t.stop()
+
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toEqual([])
+  })
+
+  it('reports once the failures are consecutive and sustained', async () => {
+    await initTokenizer()
+    const t = failingTick()
+    await tick(t)
+    await tick(t)
+    await tick(t)
+    t.stop()
+
+    const reports = seen.filter((s) => s.name === 'recorder/entity-warm-failing')
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ consecutiveFailures: 3 })
+  })
+
+  it('reports once per episode, not once per tick', async () => {
+    // Latched. The recorder's per-id cooldown would coalesce repeats anyway, but a
+    // coalesced repeat still counts as a suppression, which would read as frequency
+    // information this signal does not have.
+    await initTokenizer()
+    const t = failingTick()
+    for (let i = 0; i < 10; i++) await tick(t)
+    t.stop()
+
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toHaveLength(1)
+  })
+
+  it('reports again after a recovery and a fresh run of failures', async () => {
+    // The latch must not be permanent, or a second outage in the same session is
+    // invisible.
+    await initTokenizer()
+    let failing = true
+    vi.mocked(warmConversation).mockImplementation(async () => {
+      if (failing) throw new Error('subtle.sign failed')
+    })
+    const t = startDetectorTick(
+      world({
+        activeConversation: () => (failing ? FAILING : { kind: 'conversation', id: 'ok@x.tld' }),
+        unreadCount: () => 0,
+        fabShown: () => false,
+      }),
+    )
+    for (let i = 0; i < 3; i++) await tick(t)
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toHaveLength(1)
+
+    failing = false
+    await tick(t) // succeeds -> resets the run and the latch
+
+    failing = true
+    for (let i = 0; i < 3; i++) await tick(t)
+    t.stop()
+
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toHaveLength(2)
+  })
+
+  it('says nothing at all when warming always succeeds', async () => {
+    // THE control. This signal is being added to find out whether the failure ever
+    // happens in the field, so its silence has to be trustworthy: a healthy session
+    // must produce nothing, or the answer is unreadable.
+    await initTokenizer()
+    const t = startDetectorTick(world({ unreadCount: () => 0, fabShown: () => false }))
+    for (let i = 0; i < 10; i++) await tick(t)
+    t.stop()
+
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toEqual([])
+  })
+
+  it('stays silent before the tokenizer is ready, however long that takes', async () => {
+    // Not a failure: the block is skipped entirely, so no attempt is made and none
+    // can fail. Startup must never look like an outage.
+    const t = failingTick()
+    for (let i = 0; i < 10; i++) await tick(t)
+    t.stop()
+
+    expect(seen.filter((s) => s.name === 'recorder/entity-warm-failing')).toEqual([])
   })
 })
