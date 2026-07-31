@@ -15,7 +15,7 @@
  * All functions here are pure.
  */
 
-import { compareOrder, makeCacheOrderKey, type CacheOrderKey } from './readState'
+import { mayAdvanceTo, makeCacheOrderKey, type CacheOrderKey } from './readState'
 
 /**
  * Where the user has read to. Written atomically or not at all.
@@ -107,37 +107,27 @@ export function makeReadPointer(message: PointerSource, kind: 'chat' | 'room'): 
 /**
  * Is `candidate` strictly further along than `current`?
  *
- * Timestamp first. A same-millisecond tie is broken by the cache order key —
- * but ONLY when both sides carry one (read-state PR C, D2). A key is what
- * certifies that a pointer's timestamp is its named message's own: pointers
- * built by `makeReadPointer` always have one, while a pointer migrated from the
- * pre-#1081 `lastSeenMessageId` + `lastReadAt` pair carries `lastReadAt` and no
- * key at all.
+ * This is the ADVANCE question, so it is answered by {@link mayAdvanceTo}: a
+ * same-millisecond tie is broken by the cache order key ONLY when both sides
+ * carry one (read-state PR C, D2), and otherwise it refuses to move. A key is
+ * what certifies that a pointer's timestamp is its named message's own —
+ * pointers built by `makeReadPointer` always have one, while a pointer migrated
+ * from the pre-#1081 `lastSeenMessageId` + `lastReadAt` pair carries
+ * `lastReadAt` and no key at all.
  *
- * Do NOT simplify this to `compareOrder(candidate, current) > 0`. `compareOrder`
- * sorts a MISSING key FIRST, which is the safe direction for a FLOOR
- * (under-advance -> over-count) and the UNSAFE direction for a POINTER: it would
- * let any keyed candidate overtake a migrated keyless pointer sharing its
- * millisecond, advancing a forward-only position past messages nothing has
- * proven were read. Same comparator, inverted safety. When either side is
- * keyless we fall back to strict millisecond comparison — today's behaviour,
- * preserved exactly where the position is not provable.
+ * The counting question's comparator (`isAfterBoundary`) has the OPPOSITE
+ * missing-key rule and must never be substituted here — it would let any keyed
+ * candidate overtake a migrated keyless pointer sharing its millisecond,
+ * advancing a forward-only position past messages nothing has proven were read.
+ * That used to be guarded by this comment alone (#1173); it is now guarded by
+ * the type — `isAfterBoundary` takes an `ExactPosition` row, which a pointer,
+ * being possibly keyless, is not. See `readState.enforcement.test.ts`.
  */
 export function isAhead(candidate: ReadPointer, current: ReadPointer | undefined): boolean {
   if (!current) return true
-  const candidateMs = candidate.timestamp.getTime()
-  const currentMs = current.timestamp.getTime()
-  if (candidateMs !== currentMs) return candidateMs > currentMs
-
-  const candidateKey = candidate.tiebreak
-  const currentKey = current.tiebreak
-  if (!candidateKey || !currentKey) return false
-
-  return (
-    compareOrder(
-      { timestamp: candidateMs, tiebreak: candidateKey },
-      { timestamp: currentMs, tiebreak: currentKey }
-    ) > 0
+  return mayAdvanceTo(
+    { timestamp: candidate.timestamp.getTime(), tiebreak: candidate.tiebreak },
+    { timestamp: current.timestamp.getTime(), tiebreak: current.tiebreak }
   )
 }
 

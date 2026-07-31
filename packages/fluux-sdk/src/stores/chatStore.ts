@@ -21,7 +21,7 @@ import {
   computeFloor,
   pointerlessDefers,
   worthReconcilingOnDeactivate,
-  compareOrder,
+  isAfterBoundary,
   makeCacheOrderKey,
   isRenderableStoredMessage,
   type OrderPosition,
@@ -2617,7 +2617,9 @@ export const chatStore = createStore<ChatState>()(
         // here too, since not every trigger path calls pruneTransient directly.
         pruneTransient(chatTransientScopeKey(conversationId), floorPos)
 
-        if (compareOrder(bottom, floorPos) > 0) return // coverage doesn't reach the floor
+        // A BOUNDARY test: a keyless (migrated) floor reads as at-or-after its
+        // millisecond, so an equal-ms bottom counts as not reaching it (#1173).
+        if (isAfterBoundary(bottom, floorPos)) return // coverage doesn't reach the floor
 
         const res = await messageCache.countUnreadInArchive(conversationId, {
           floor,

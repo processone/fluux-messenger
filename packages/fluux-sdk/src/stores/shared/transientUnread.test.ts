@@ -10,6 +10,19 @@ import {
   type ScopeKey,
 } from './transientUnread'
 import { roomStanzaKey } from '../../utils/roomMessageIdentity'
+import { makeCacheOrderKey, type ExactPosition } from './readState'
+
+/**
+ * A transient entry's position.
+ *
+ * These tests exercise identity, aliasing, coalescing and counting — never
+ * tie-breaks — so every fixture shares ONE key. Same-millisecond fixtures then
+ * compare equal, exactly as they did when they carried no key at all, while
+ * `ExactPosition` still holds: a transient entry is always noted from a real
+ * message, so in production its tie-break always resolves (#1173).
+ */
+const FIXTURE_TIEBREAK = makeCacheOrderKey({ from: 'fixture@x', id: 'fixture' }, 'room')
+const posAt = (timestamp: number): ExactPosition => ({ timestamp, tiebreak: FIXTURE_TIEBREAK })
 
 // Fresh scope per test: entityIds are unique so no state leaks between tests
 // (the module holds module-level state, matching the always-on lifetime the
@@ -25,7 +38,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note(msg, 10)
     // simulate deactivate + reactivate: nothing is called; the entry must remain
@@ -36,7 +49,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note(msg, 10)
     note({ ...msg, stanzaId: 'S1' }, 10) // same logical message, higher identity tier
@@ -47,7 +60,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note({ ...msg, stanzaId: 'S1' }, 10)
     removeTransient(K, roomStanzaKey(K.entityId, 'S1'))
@@ -57,7 +70,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
   it('two room messages with the SAME id but different senders count as two', () => {
     const K = freshScopeKey()
     const note = (m: { roomJid: string; from: string; id: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'dup' }, 10)
     note({ roomJid: K.entityId, from: `${K.entityId}/bo`, id: 'dup' }, 11)
@@ -67,7 +80,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
   it('a partial pointer advance drops only the passed entries', () => {
     const K = freshScopeKey()
     const note = (m: { roomJid: string; from: string; id: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'a' }, 10)
     note({ roomJid: K.entityId, from: `${K.entityId}/al`, id: 'b' }, 20)
@@ -78,7 +91,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     expect(note(msg, 10).added).toBe(true)
     expect(note({ ...msg, stanzaId: 'S1' }, 10).added).toBe(false) // merged, not new
@@ -87,11 +100,11 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
   it('coalesces two entries when a later alias bridges them', () => {
     const K = freshScopeKey()
     // Two copies land separately (no shared tier yet), then a copy carrying BOTH tiers arrives.
-    noteTransient(K, { position: { timestamp: 10 } }, 'origin-key-O', ['origin-key-O'])
-    noteTransient(K, { position: { timestamp: 10 } }, 'stanza-key-S', ['stanza-key-S'])
+    noteTransient(K, { position: posAt(10) }, 'origin-key-O', ['origin-key-O'])
+    noteTransient(K, { position: posAt(10) }, 'stanza-key-S', ['stanza-key-S'])
     expect(transientCounts(K, { timestamp: 5 }).unread).toBe(2)
 
-    const r = noteTransient(K, { position: { timestamp: 10 } }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O']) // bridges both
+    const r = noteTransient(K, { position: posAt(10) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O']) // bridges both
     expect(r).toEqual({ added: false, requiresRecount: true }) // nothing added, but 2 -> 1
     expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1) // coalesced, not 2
   })
@@ -100,10 +113,10 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note(msg, 10)
-    const r = noteTransient(K, { position: { timestamp: 10 } }, transientIdentity(msg, 'room'), transientAliases(msg, 'room'))
+    const r = noteTransient(K, { position: posAt(10) }, transientIdentity(msg, 'room'), transientAliases(msg, 'room'))
     expect(r).toEqual({ added: false, requiresRecount: false })
   })
 
@@ -111,7 +124,7 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     const K = freshScopeKey()
     const msg = { roomJid: K.entityId, from: `${K.entityId}/al`, id: 'm1' }
     const note = (m: typeof msg & { stanzaId?: string }, at: number) =>
-      noteTransient(K, { position: { timestamp: at } }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
+      noteTransient(K, { position: posAt(at) }, transientIdentity(m, 'room'), transientAliases(m, 'room'))
 
     note(msg, 10)
     expect(removeTransient(K, transientIdentity(msg, 'room')).removed).toBe(true)
@@ -124,9 +137,9 @@ describe('transientUnread — room lifecycle, identity, and alias cases', () => 
     // stored position, rather than computing the minimum across every
     // coalesced entry (5) and the incoming note itself (30).
     const K = freshScopeKey()
-    noteTransient(K, { position: { timestamp: 20 } }, 'tier-a', ['tier-a']) // first-matched under a naive impl
-    noteTransient(K, { position: { timestamp: 5 } }, 'tier-b', ['tier-b']) // earliest of all three
-    const r = noteTransient(K, { position: { timestamp: 30 } }, 'tier-a', ['tier-a', 'tier-b'])
+    noteTransient(K, { position: posAt(20) }, 'tier-a', ['tier-a']) // first-matched under a naive impl
+    noteTransient(K, { position: posAt(5) }, 'tier-b', ['tier-b']) // earliest of all three
+    const r = noteTransient(K, { position: posAt(30) }, 'tier-a', ['tier-a', 'tier-b'])
     expect(r).toEqual({ added: false, requiresRecount: true })
     // A boundary of 10 sits strictly between the earliest (5) and tier-a's own
     // original position (20): correct behaviour reads 0 (5 <= 10, already
@@ -142,7 +155,7 @@ describe('transientUnread — scope isolation', () => {
     const accountA: ScopeKey = { accountScope: 'alice@x', kind: 'room', entityId: roomJid }
     const accountB: ScopeKey = { accountScope: 'bob@x', kind: 'room', entityId: roomJid }
 
-    noteTransient(accountA, { position: { timestamp: 10 } }, transientIdentity({ roomJid, from: `${roomJid}/al`, id: 'm1' }, 'room'), [
+    noteTransient(accountA, { position: posAt(10) }, transientIdentity({ roomJid, from: `${roomJid}/al`, id: 'm1' }, 'room'), [
       'k-a',
     ])
 
@@ -155,7 +168,7 @@ describe('transientUnread — scope isolation', () => {
     const chatKey: ScopeKey = { accountScope: 'me@x', kind: 'chat', entityId }
     const roomKey: ScopeKey = { accountScope: 'me@x', kind: 'room', entityId }
 
-    noteTransient(chatKey, { position: { timestamp: 10 } }, transientIdentity({ id: 'c1' }, 'chat'), transientAliases({ id: 'c1' }, 'chat'))
+    noteTransient(chatKey, { position: posAt(10) }, transientIdentity({ id: 'c1' }, 'chat'), transientAliases({ id: 'c1' }, 'chat'))
 
     expect(transientCounts(chatKey, { timestamp: 5 }).unread).toBe(1)
     expect(transientCounts(roomKey, { timestamp: 5 }).unread).toBe(0)
@@ -170,7 +183,7 @@ describe('transientUnread — chat identity (bare id, no tiers)', () => {
 
   it('counts a noted chat message as unread until the boundary passes it', () => {
     const K = freshScopeKey('chat')
-    noteTransient(K, { position: { timestamp: 10 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+    noteTransient(K, { position: posAt(10) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
     expect(transientCounts(K, { timestamp: 5 }).unread).toBe(1)
     expect(transientCounts(K, { timestamp: 15 }).unread).toBe(0)
   })
@@ -179,25 +192,43 @@ describe('transientUnread — chat identity (bare id, no tiers)', () => {
 describe('transientUnread — pruneTransient', () => {
   it('drops entries at or behind the boundary and leaves later ones', () => {
     const K = freshScopeKey()
-    noteTransient(K, { position: { timestamp: 10 } }, 'a', ['a'])
-    noteTransient(K, { position: { timestamp: 20 } }, 'b', ['b'])
+    noteTransient(K, { position: posAt(10) }, 'a', ['a'])
+    noteTransient(K, { position: posAt(20) }, 'b', ['b'])
 
-    const result = pruneTransient(K, { timestamp: 10 })
+    // The boundary names the SAME position as entry 'a' — the read pointer
+    // sitting exactly on it. A bare `{ timestamp: 10 }` boundary would be a
+    // keyless (migrated) pointer, which deliberately does NOT prune an entry
+    // sharing its millisecond: that is the over-count-safe rule (#1173),
+    // pinned by its own test below.
+    const result = pruneTransient(K, posAt(10))
     expect(result).toEqual({ removed: 1 })
     expect(transientCounts(K, undefined).unread).toBe(1)
   })
 
+  it('a KEYLESS boundary does not prune an entry sharing its millisecond', () => {
+    // The migrated-pointer case (#1173). A keyless boundary means at-or-after
+    // its timestamp, so an entry at that exact millisecond stays counted rather
+    // than being dropped — an over-count the user clears by reading, instead of
+    // an under-count that would hide the message for good. This is the rule the
+    // prune test above deliberately does NOT exercise.
+    const K = freshScopeKey()
+    noteTransient(K, { position: posAt(10) }, 'a', ['a'])
+
+    expect(pruneTransient(K, { timestamp: 10 })).toEqual({ removed: 0 })
+    expect(transientCounts(K, { timestamp: 10 }).unread).toBe(1)
+  })
+
   it('removed aliases can no longer resolve for removeTransient', () => {
     const K = freshScopeKey()
-    noteTransient(K, { position: { timestamp: 10 } }, 'canon', ['canon', 'alias1'])
-    pruneTransient(K, { timestamp: 10 })
+    noteTransient(K, { position: posAt(10) }, 'canon', ['canon', 'alias1'])
+    pruneTransient(K, posAt(10))
     expect(removeTransient(K, 'alias1').removed).toBe(false)
   })
 
   it('an undefined boundary counts everything (no floor yet)', () => {
     const K = freshScopeKey()
-    noteTransient(K, { position: { timestamp: 10 } }, 'a', ['a'])
-    noteTransient(K, { position: { timestamp: 999999 } }, 'b', ['b'])
+    noteTransient(K, { position: posAt(10) }, 'a', ['a'])
+    noteTransient(K, { position: posAt(999999) }, 'b', ['b'])
     expect(transientCounts(K, undefined).unread).toBe(2)
   })
 })
@@ -210,9 +241,9 @@ describe('transientUnread — clearTransientScope', () => {
     const chatKey: ScopeKey = { accountScope, kind: 'chat', entityId: 'c@x' }
     const otherAccount: ScopeKey = { accountScope: 'untouched@x', kind: 'room', entityId: 'r@c' }
 
-    noteTransient(roomKey, { position: { timestamp: 10 } }, 'a', ['a'])
-    noteTransient(chatKey, { position: { timestamp: 10 } }, 'b', ['b'])
-    noteTransient(otherAccount, { position: { timestamp: 10 } }, 'c', ['c'])
+    noteTransient(roomKey, { position: posAt(10) }, 'a', ['a'])
+    noteTransient(chatKey, { position: posAt(10) }, 'b', ['b'])
+    noteTransient(otherAccount, { position: posAt(10) }, 'c', ['c'])
 
     clearTransientScope(accountScope)
 

@@ -37,7 +37,13 @@ import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
-import { compareOrder, makeCacheOrderKey, type OrderPosition } from '../stores/shared/readState'
+import {
+  compareExact,
+  isAfterBoundary,
+  makeCacheOrderKey,
+  type ExactPosition,
+  type OrderPosition,
+} from '../stores/shared/readState'
 import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
 import { logInfo } from './logger'
@@ -244,8 +250,8 @@ export function setupMdsSideEffects(
    *   result forward. A keyless (#1081-migrated) pointer orders by `lastReadAt`,
    *   which is documented as at or behind the message it names, so it
    *   under-advances further rather than past. Under-advancing is the direction
-   *   this module already prefers (`compareOrder`: "unresolved sorts first →
-   *   under-advance → over-count (safe)").
+   *   this module already prefers (`isAfterBoundary`: a keyless boundary reads
+   *   as at-or-after its millisecond → under-advance → over-count (safe)).
    * - It cannot regress the node: `publishDecision` is unchanged, and the one
    *   value we must never publish over — a remote marker we could not order — is
    *   still refused there. XEP-0490's receiver-side "MUST ignore older" rule is
@@ -267,15 +273,19 @@ export function setupMdsSideEffects(
       timestamp: pointer.timestamp.getTime(),
       tiebreak: pointer.tiebreak,
     }
-    let best: { pos: OrderPosition; stanzaId: string } | undefined
+    let best: { pos: ExactPosition; stanzaId: string } | undefined
     for (const m of messages) {
       if (!m.stanzaId) continue
-      const pos: OrderPosition = {
+      const pos: ExactPosition = {
         timestamp: m.timestamp.getTime(),
         tiebreak: makeCacheOrderKey(m, 'chat'),
       }
-      if (compareOrder(pos, pointerPos) > 0) continue // ahead of the pointer — never publish
-      if (!best || compareOrder(pos, best.pos) > 0) best = { pos, stanzaId: m.stanzaId }
+      // A BOUNDARY test against the pointer: a keyless pointer reads as
+      // at-or-after its millisecond, so we withhold that millisecond rather
+      // than publish past it — the under-advance this module prefers (#1173).
+      if (isAfterBoundary(pos, pointerPos)) continue // ahead of the pointer — never publish
+      // Picking the newest candidate: both sides are exact by construction.
+      if (!best || compareExact(pos, best.pos) > 0) best = { pos, stanzaId: m.stanzaId }
     }
     return best?.stanzaId
   }

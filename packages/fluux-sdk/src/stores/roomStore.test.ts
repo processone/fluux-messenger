@@ -2509,7 +2509,7 @@ describe('roomStore', () => {
       // the cache order key and `deserializeReadPointer` reads it back.
       // Without it the pointer cannot certify its own position, and the message
       // it NAMES sorts after the boundary (a missing key sorts first — see
-      // `compareOrder`), so the divider would correctly-but-conservatively land
+      // `isAfterBoundary`), so the divider would correctly-but-conservatively land
       // on msg-150 itself.
       const roomJid = 'test@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
@@ -6374,7 +6374,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
    * `createMessage`'s default `new Date()` would make the "already read" message
    * the NEWEST in the fixture while sitting first in the array — an ordering the
    * resident array never has in production (PR B gave `messageArrayUtils` the
-   * same `compareOrder` tie-break, so index order and cache order agree).
+   * same `compareExact` tie-break, so index order and cache order agree).
    */
   const seenMsg = (): RoomMessage =>
     createMessage('seen', ROOM, 'alice', 'seen message', false, new Date('2025-01-15T09:00:00Z'))

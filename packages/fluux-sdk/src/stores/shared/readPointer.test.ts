@@ -62,11 +62,18 @@ describe('isAhead', () => {
     expect(isAhead(candidate, current)).toBe(true)
   })
 
-  // CONTROL for the polarity inversion. compareOrder sorts a MISSING key FIRST,
-  // which is safe for a floor (under-advance -> over-count) and UNSAFE for a
-  // pointer: it would let any keyed candidate overtake a migrated keyless
-  // pointer at the same millisecond. A naive `compareOrder(candidate, current) > 0`
-  // implementation passes every test above and fails these two.
+  // CONTROL for the polarity inversion (#1173). The COUNTING comparator,
+  // `isAfterBoundary`, reads a MISSING key on the boundary as at-or-after its
+  // millisecond — safe for a floor (under-advance -> over-count) and UNSAFE for
+  // a pointer, where it would let any keyed candidate overtake a migrated
+  // keyless pointer at the same millisecond. Substituting it here passes every
+  // test above and fails these two.
+  //
+  // That substitution no longer compiles — `isAfterBoundary` takes an
+  // `ExactPosition` row, which a possibly-keyless pointer is not — so these two
+  // are now a second line of defence rather than the only one. Keep both: the
+  // type guard pins the SHAPE, these pin the BEHAVIOUR. See
+  // `readState.enforcement.test.ts`.
   it('is NOT ahead at an equal ms when the CURRENT pointer is keyless (migrated)', () => {
     const current: ReadPointer = { messageId: 'legacy', timestamp: at(1000) }
     const candidate = makeReadPointer({ id: 'm2', timestamp: at(1000) }, 'chat')

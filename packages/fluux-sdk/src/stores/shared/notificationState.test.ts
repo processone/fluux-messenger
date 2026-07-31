@@ -61,7 +61,8 @@ function seen(id: string, timestamp: Date): ReadPointer {
  * KEYED, via `makeReadPointer` — exactly how production builds a pointer for a
  * message it holds. The key is what says "this timestamp is that message's own",
  * and without it the message the pointer NAMES sorts after the floor (a missing
- * key sorts first, see `compareOrder`) and would itself become the divider.
+ * boundary means at-or-after its millisecond, see `isAfterBoundary`) and
+ * would itself become the divider.
  * `seen()` above is the keyless population — a pointer migrated from the
  * pre-#1081 `lastSeenMessageId` + `lastReadAt` pair, which genuinely cannot
  * certify its own position.
@@ -698,7 +699,7 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   //
   // Pointer m2@2000 (keyed, absent from the slice); m3@2000 is resident.
   //   before -> ladder finds the first message strictly after 2000 => 'm4'
-  //   PR C   -> compareOrder ranks m3 after m2 at the same ms  => 'm3'
+  //   PR C   -> mayAdvanceTo ranks m3 after m2 at the same ms  => 'm3'
   it('places the divider on a same-millisecond sibling of a NON-RESIDENT pointer', () => {
     const state = { unreadCount: 2, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm2', timestamp: new Date(2000) }, 'chat'),
@@ -1111,11 +1112,11 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
   // NEGATIVE POLARITY — this is the forward-only guard itself. The keyed branch
   // does NOT go through `advance()`: it builds the pointer directly, and both
   // stores commit whatever comes back after only a reference check. So this
-  // `compareOrder(...) > 0` is the SOLE thing standing between a
-  // same-millisecond sibling that sorts BEFORE the pointer and a BACKWARDS
-  // pointer move — which, on a forward-only position, is unrecoverable.
-  // Relaxing the comparison to `>= 0` (or to a key-blind `>=` on timestamps
-  // alone) is caught here and nowhere else.
+  // `mayAdvanceTo(...)` is the SOLE thing standing between a same-millisecond
+  // sibling that sorts BEFORE the pointer and a BACKWARDS pointer move —
+  // which, on a forward-only position, is unrecoverable. Relaxing it to accept
+  // equality (or to a key-blind `>=` on timestamps alone) is caught here and
+  // nowhere else.
   it('does NOT move a KEYED, OFF-SLICE pointer back onto a same-millisecond sibling that sorts before it', () => {
     const state = { unreadCount: 1, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm2', timestamp: new Date(1000) }, 'chat'),

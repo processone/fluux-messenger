@@ -13,9 +13,10 @@ import { getStorageScopeJid } from './storageScope'
 import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
 import {
   makeCacheOrderKey,
-  compareOrder,
+  isAfterBoundary,
   isRenderableStoredMessage,
   type CacheOrderKey,
+  type ExactPosition,
   type OrderPosition,
 } from '../stores/shared/readState'
 
@@ -850,10 +851,10 @@ export interface UnreadCountArgs {
    * The read pointer's position, for a strict-after-POSITION test rather than a
    * timestamp-only test — two messages can share a millisecond. When
    * `tiebreak` is omitted (a pointer migrated from the pre-#1081 legacy
-   * fields), `compareOrder` treats the pointer's key as unresolved, and an
-   * unresolved key sorts BEFORE any resolved one at an equal timestamp — so
-   * every row at the pointer's exact millisecond, including the pointer's own
-   * message, resolves as "after" the pointer and gets counted. That is
+   * fields), {@link isAfterBoundary} reads the boundary as at-or-after its
+   * timestamp — so every row at the pointer's exact millisecond, including the
+   * pointer's own message, resolves as "after" the pointer and gets counted.
+   * That is
    * at-or-after-TIMESTAMP semantics, not strict-after-timestamp: it over-counts
    * by up to the same-ms sibling set, which is the safe direction (an
    * over-count clears the moment the user reads; an under-count would hide a
@@ -877,12 +878,16 @@ function toPointerPosition(pointer: UnreadCountArgs['pointer']): OrderPosition |
 }
 
 /**
- * Whether an archive row's position sorts strictly after the read pointer. No
- * pointer means everything from `floor` counts. Uses {@link compareOrder} —
- * never hand-roll this comparison, it is the one place total order is defined.
+ * Whether an archive row sorts strictly after the read boundary. No pointer
+ * means everything from `floor` counts.
+ *
+ * This is the COUNTING question, so it uses {@link isAfterBoundary} — a keyless
+ * pointer means at-or-after its millisecond, which over-counts (safe). Never
+ * hand-roll this comparison, and never substitute the advance comparator: its
+ * missing-key rule is the opposite one (#1173).
  */
-function isStrictlyAfterPointer(position: OrderPosition, pointerPosition: OrderPosition | undefined): boolean {
-  return pointerPosition ? compareOrder(position, pointerPosition) > 0 : true
+function isStrictlyAfterPointer(position: ExactPosition, pointerPosition: OrderPosition | undefined): boolean {
+  return pointerPosition ? isAfterBoundary(position, pointerPosition) : true
 }
 
 /**
@@ -925,7 +930,7 @@ export async function countUnreadInArchive(
       if (stored.conversationId === conversationId) {
         const message = deserializeMessage(stored)
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
-          const position: OrderPosition = {
+          const position: ExactPosition = {
             timestamp: stored.timestamp,
             tiebreak: makeCacheOrderKey(message, 'chat'),
           }
@@ -1304,7 +1309,7 @@ export async function getRoomMessageCount(roomJid: string): Promise<number> {
  * Cursors `room_ts_from_id` — `[roomJid, timestamp, from, id]` — forward from
  * `floor`. This is that index's first consumer. The upper bound is
  * `[roomJid, Infinity, '￿', '￿']`; every row in range is visited and
- * adjudicated independently by {@link compareOrder}, so it is the `Infinity`
+ * adjudicated independently by {@link isAfterBoundary}, so it is the `Infinity`
  * in the timestamp slot — not the `'￿'` string sentinels — that makes the
  * bound safe: any finite timestamp compares less than `Infinity`, so the
  * trailing `from`/`id` components are never actually reached. Swapping
@@ -1343,7 +1348,7 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
       if (stored.roomJid === roomJid) {
         const message = deserializeRoomMessage(stored)
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
-          const position: OrderPosition = {
+          const position: ExactPosition = {
             timestamp: stored.timestamp,
             tiebreak: makeCacheOrderKey(message, 'room'),
           }
@@ -1385,7 +1390,7 @@ export async function resolveArchivePosition(
   entityId: string,
   archiveId: string,
   isRoom: boolean
-): Promise<OrderPosition | null> {
+): Promise<ExactPosition | null> {
   const message = isRoom
     ? await getRoomMessageByStanzaId(entityId, archiveId)
     : await getMessageByStanzaId(archiveId)

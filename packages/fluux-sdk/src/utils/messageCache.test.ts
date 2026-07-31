@@ -1501,8 +1501,8 @@ describe('countUnreadInArchive (chat)', () => {
       createMockMessage(CONV, { id: 'm2', timestamp: t, isOutgoing: false }),
       createMockMessage(CONV, { id: 'm3', timestamp: new Date(6000), isOutgoing: false }),
     ])
-    // No tiebreak on the pointer (migrated legacy pointer): per compareOrder,
-    // an unresolved key sorts BEFORE any resolved one at an equal timestamp, so BOTH
+    // No tiebreak on the pointer (migrated legacy pointer): per isAfterBoundary,
+    // a keyless boundary means at-or-after its own millisecond, so BOTH
     // m1 (the pointer's own message) and m2 (its same-ms sibling) resolve as "after"
     // the pointer — the read boundary itself gets re-counted rather than a genuinely
     // unread sibling being silently dropped. m3 (a later timestamp) counts regardless.

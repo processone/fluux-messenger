@@ -46,7 +46,7 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
  * (task 1) changed exactly that. Two KEYED positions sharing a millisecond now
  * break the tie on the cache order key: `isAhead`
  * (shared/readPointer.ts, ~line 99) does it, and `advanceReadPointer` routes
- * through `onMessageSeen`'s keyed `compareOrder`, which does it too. The bare
+ * through `onMessageSeen`'s keyed `mayAdvanceTo`, which does it too. The bare
  * "equal timestamps are NOT an advance" rule now applies ONLY when either side
  * is KEYLESS — i.e. a pointer migrated from the pre-#1081 `lastSeenMessageId` +
  * `lastReadAt` pair, whose timestamp cannot certify its own position.

@@ -29,6 +29,19 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   }
 })
 import * as messageCache from '../utils/messageCache'
+import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
+
+/**
+ * A transient entry's position.
+ *
+ * These tests exercise identity, aliasing, coalescing and counting — never
+ * tie-breaks — so every fixture shares ONE key. Same-millisecond fixtures then
+ * compare equal, exactly as they did when they carried no key at all, while
+ * `ExactPosition` still holds: a transient entry is always noted from a real
+ * message, so in production its tie-break always resolves (#1173).
+ */
+const FIXTURE_TIEBREAK = makeCacheOrderKey({ from: 'fixture@x', id: 'fixture' }, 'chat')
+const posAt = (timestamp: number): ExactPosition => ({ timestamp, tiebreak: FIXTURE_TIEBREAK })
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
@@ -1071,7 +1084,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     seedCoverage('anchor-stanza')
     // One never-archived (noLocalStore) message, after the pointer.
     const key = scopeKey()
-    noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'ephemeral-1' }, 'chat'), transientAliases({ id: 'ephemeral-1' }, 'chat'))
+    noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'ephemeral-1' }, 'chat'), transientAliases({ id: 'ephemeral-1' }, 'chat'))
 
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
@@ -1097,13 +1110,13 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     it('re-noting the same logical message through a new alias does not increment the visible count twice', async () => {
       const key = scopeKey()
-      const r1 = noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+      const r1 = noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
       expect(r1.added).toBe(true)
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
 
       // Same logical message re-noted (plain alias registration, nothing new).
-      const r2 = noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+      const r2 = noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
       expect(r2.added).toBe(false)
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1) // NOT 2
@@ -1111,7 +1124,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     it('retracting the only transient unread moves the visible count 1 -> 0', async () => {
       const key = scopeKey()
-      noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+      noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
 
@@ -1123,8 +1136,8 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     it('removing one of two transient unread messages moves the visible count 2 -> 1', async () => {
       const key = scopeKey()
-      noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
-      noteTransient(key, { position: { timestamp: 1600 } }, transientIdentity({ id: 'm2' }, 'chat'), transientAliases({ id: 'm2' }, 'chat'))
+      noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+      noteTransient(key, { position: posAt(1600) }, transientIdentity({ id: 'm2' }, 'chat'), transientAliases({ id: 'm2' }, 'chat'))
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
 
@@ -1135,13 +1148,13 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     it('a bridging alias that coalesces two separately-counted transient entries moves the visible count 2 -> 1', async () => {
       const key = scopeKey()
-      noteTransient(key, { position: { timestamp: 1500 } }, 'origin-key-O', ['origin-key-O'])
-      noteTransient(key, { position: { timestamp: 1500 } }, 'stanza-key-S', ['stanza-key-S'])
+      noteTransient(key, { position: posAt(1500) }, 'origin-key-O', ['origin-key-O'])
+      noteTransient(key, { position: posAt(1500) }, 'stanza-key-S', ['stanza-key-S'])
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
 
       // A copy carrying BOTH tiers bridges them: added:false, requiresRecount:true.
-      const r = noteTransient(key, { position: { timestamp: 1500 } }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O'])
+      const r = noteTransient(key, { position: posAt(1500) }, 'stanza-key-S', ['stanza-key-S', 'origin-key-O'])
       expect(r).toEqual({ added: false, requiresRecount: true })
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
@@ -1149,7 +1162,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     it('an overlay change while not caught up stays conservative and does not clear the trusted count', async () => {
       const key = scopeKey()
-      noteTransient(key, { position: { timestamp: 1500 } }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
+      noteTransient(key, { position: posAt(1500) }, transientIdentity({ id: 'm1' }, 'chat'), transientAliases({ id: 'm1' }, 'chat'))
       await chatStore.getState().recomputeUnreadForConversation(CID)
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
 
@@ -1160,7 +1173,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
         mamQueryStates.set(CID, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: true, isCaughtUpToLive: false })
         return { mamQueryStates }
       })
-      noteTransient(key, { position: { timestamp: 1600 } }, transientIdentity({ id: 'm2' }, 'chat'), transientAliases({ id: 'm2' }, 'chat'))
+      noteTransient(key, { position: posAt(1600) }, transientIdentity({ id: 'm2' }, 'chat'), transientAliases({ id: 'm2' }, 'chat'))
 
       await chatStore.getState().recomputeUnreadForConversation(CID)
 

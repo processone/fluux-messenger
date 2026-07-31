@@ -1,5 +1,5 @@
 import { resolveArchivePosition } from '../../utils/messageCache'
-import type { OrderPosition } from './readState'
+import type { ExactPosition } from './readState'
 
 /**
  * Persisted contiguous-with-live coverage (Codex r3 #3/#4).
@@ -258,7 +258,7 @@ export function isCaughtUpForCounting(mam: {
  * react to them differently (e.g. only the latter warrants dropping the
  * record).
  */
-export type CoverageBottom = OrderPosition | 'missing' | 'unresolvable'
+export type CoverageBottom = ExactPosition | 'missing' | 'unresolvable'
 
 /**
  * Resolve a coverage record's `bottomId` to its archive position, scoped to

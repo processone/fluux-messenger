@@ -1,4 +1,4 @@
-import { compareOrder, type OrderPosition } from './readState'
+import { compareExact, isAfterBoundary, type ExactPosition, type OrderPosition } from './readState'
 import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../../utils/roomMessageIdentity'
 
 /**
@@ -39,9 +39,12 @@ export interface ScopeKey {
   entityId: string
 }
 
-/** A transient entry's only payload: the position it counts at. */
+/**
+ * A transient entry's only payload: the position it counts at. Exact, because
+ * every entry is noted from a real message, so its tie-break always resolves.
+ */
 export interface TransientEntry {
-  position: OrderPosition
+  position: ExactPosition
 }
 
 export interface NoteTransientResult {
@@ -165,7 +168,7 @@ export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: st
         scope.canonicalByAlias.set(alias, canonicalId)
       }
     }
-    const movedEarlier = compareOrder(entry.position, stored.entry.position) < 0
+    const movedEarlier = compareExact(entry.position, stored.entry.position) < 0
     if (movedEarlier) stored.entry = { position: entry.position }
     return { added: false, requiresRecount: movedEarlier }
   }
@@ -178,7 +181,7 @@ export function noteTransient(key: ScopeKey, entry: TransientEntry, identity: st
   for (const id of ids) {
     const stored = scope.entries.get(id)!
     for (const alias of stored.aliases) unionAliases.add(alias)
-    if (compareOrder(stored.entry.position, earliestPosition) < 0) earliestPosition = stored.entry.position
+    if (compareExact(stored.entry.position, earliestPosition) < 0) earliestPosition = stored.entry.position
   }
 
   const survivorId = ids[0]
@@ -200,7 +203,7 @@ export function transientCounts(key: ScopeKey, boundary: OrderPosition | undefin
   if (!scope) return { unread: 0 }
   let unread = 0
   for (const { entry } of scope.entries.values()) {
-    if (boundary === undefined || compareOrder(entry.position, boundary) > 0) unread++
+    if (boundary === undefined || isAfterBoundary(entry.position, boundary)) unread++
   }
   return { unread }
 }
@@ -215,7 +218,7 @@ export function pruneTransient(key: ScopeKey, boundary: OrderPosition): { remove
   if (!scope) return { removed: 0 }
   let removed = 0
   for (const [canonicalId, stored] of scope.entries) {
-    if (compareOrder(stored.entry.position, boundary) <= 0) {
+    if (!isAfterBoundary(stored.entry.position, boundary)) {
       scope.entries.delete(canonicalId)
       for (const alias of stored.aliases) scope.canonicalByAlias.delete(alias)
       removed++

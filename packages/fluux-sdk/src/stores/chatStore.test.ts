@@ -1172,7 +1172,8 @@ describe('chatStore', () => {
       // every persisted pointer is: `makeReadPointer` always writes the archive
       // order key and `deserializeReadPointer` reads it back. Without it the
       // pointer cannot certify its own position, and the message it NAMES sorts
-      // after the boundary (a missing key sorts first — see `compareOrder`), so
+      // after the boundary (a keyless boundary means at-or-after its own
+      // millisecond — see `isAfterBoundary`), so
       // the divider would correctly-but-conservatively land on msg-150 itself.
       const A = 'alice@example.com'
       chatStore.getState().addConversation(createConversation(A))

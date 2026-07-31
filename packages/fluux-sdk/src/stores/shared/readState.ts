@@ -43,30 +43,108 @@ export function makeCacheOrderKey(msg: { from?: string; id: string }, kind: 'cha
   return kind === 'room' ? { kind: 'room', from: msg.from ?? '', id: msg.id } : { kind: 'chat', id: msg.id }
 }
 
-/** A position in message-cache order: a timestamp, optionally refined by a key. */
+/**
+ * A position in message-cache order: a timestamp, optionally refined by a key.
+ *
+ * The tie-break is optional because a pointer migrated from the pre-#1081
+ * `lastSeenMessageId` + `lastReadAt` pair carries only a millisecond, with no
+ * provable position inside it. Such a value is a FLOOR — it means "at least
+ * here", not "exactly here".
+ *
+ * {@link ExactPosition} is the refinement that does mean "exactly here". Prefer
+ * it wherever a position is genuinely resolvable — every message resolves to
+ * one, because {@link makeCacheOrderKey} always produces a key — so that the
+ * compiler, rather than a comment, is what keeps a floor out of a comparison
+ * that assumes exactness.
+ */
 export interface OrderPosition {
   timestamp: number
   tiebreak?: CacheOrderKey
 }
 
 /**
- * Total order over cached message positions: timestamp first, then the kind-aware
- * tie-break key. A missing key sorts BEFORE a present one at an equal
- * timestamp — unresolved sorts first, which under-advances rather than
- * over-advances (over-counting unread is the recoverable direction).
+ * A position whose tie-break is known, so it can be ordered exactly against
+ * another such position.
+ *
+ * An `OrderPosition` is deliberately NOT assignable to this (#1173): the only
+ * way to obtain one is to actually have a tie-break, which in practice means
+ * the position came from a message rather than from a bare `lastReadAt`.
  */
-export function compareOrder(a: OrderPosition, b: OrderPosition): number {
-  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
-  const ak = a.tiebreak,
-    bk = b.tiebreak
-  if (!ak && !bk) return 0
-  if (!ak) return -1 // unresolved sorts first → under-advance → over-count (safe)
-  if (!bk) return 1
-  if (ak.kind === 'room' && bk.kind === 'room') {
-    if (ak.from !== bk.from) return ak.from < bk.from ? -1 : 1
-    return ak.id < bk.id ? -1 : ak.id > bk.id ? 1 : 0
+export interface ExactPosition extends OrderPosition {
+  tiebreak: CacheOrderKey
+}
+
+/**
+ * Break a same-millisecond tie between two known tie-breaks. Kind-aware: chat
+ * compares `id` only, room compares `from` then `id` — see {@link CacheOrderKey}
+ * for why one generic shape would be wrong.
+ *
+ * Private, and takes the KEYS rather than the positions, so it cannot be
+ * mistaken for a general comparator over positions and cannot be reached with a
+ * keyless one. The three functions below are the only entry points.
+ */
+function compareTiebreak(a: CacheOrderKey, b: CacheOrderKey): number {
+  if (a.kind === 'room' && b.kind === 'room') {
+    if (a.from !== b.from) return a.from < b.from ? -1 : 1
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   }
-  return ak.id < bk.id ? -1 : ak.id > bk.id ? 1 : 0 // chat: id only
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0 // chat: id only
+}
+
+/**
+ * Total order over two positions that are BOTH exact — timestamp first, then
+ * the tie-break. This is the comparator for ordering messages against each
+ * other: sorting a resident array, picking the newest of a candidate set.
+ *
+ * It deliberately has no answer for a keyless position, because there is no
+ * single right one. The two questions the codebase actually asks —
+ * {@link isAfterBoundary} and {@link mayAdvanceTo} — have OPPOSITE
+ * missing-tie-break rules, so a comparator that picked one of them would be
+ * silently wrong at every call site that meant the other. That was #1173.
+ * Passing a possibly-keyless `OrderPosition` here does not compile.
+ */
+export function compareExact(a: ExactPosition, b: ExactPosition): number {
+  if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
+  return compareTiebreak(a.tiebreak, b.tiebreak)
+}
+
+/**
+ * "Is this row after the read boundary?" — the COUNTING and DIVIDER question.
+ *
+ * A missing tie-break on the BOUNDARY means AT-OR-AFTER its timestamp: every
+ * row sharing the boundary's millisecond, including the boundary's own message,
+ * counts as after it. That over-counts by up to the same-millisecond sibling
+ * set, which is the recoverable direction — an over-count clears the moment the
+ * user reads, while an under-count hides a message permanently.
+ *
+ * `row` is an {@link ExactPosition} because an archive row always resolves to
+ * one. That is not a formality: it is what stops this function from being used
+ * to answer the advance question, where this same rule is unsafe (#1173).
+ */
+export function isAfterBoundary(row: ExactPosition, boundary: OrderPosition): boolean {
+  if (row.timestamp !== boundary.timestamp) return row.timestamp > boundary.timestamp
+  if (!boundary.tiebreak) return true // at-or-after timestamp → over-count (safe)
+  return compareTiebreak(row.tiebreak, boundary.tiebreak) > 0
+}
+
+/**
+ * "May the read pointer advance to this?" — the ADVANCE and SEEN question.
+ *
+ * A missing tie-break on EITHER side means STRICT MILLISECOND: never overtake.
+ * The key is what certifies that a pointer's timestamp is its named message's
+ * own, so when either side lacks one, nothing about their relative order within
+ * a shared millisecond is provable. The read pointer is forward-only, so a
+ * position given away here is unrecoverable; refusing to move merely
+ * over-counts, which the user clears by reading.
+ *
+ * This is the exact inverse of {@link isAfterBoundary}'s rule, on purpose. The
+ * two questions are not interchangeable — that is why they are two functions
+ * (#1173) rather than one comparator with a warning attached to it.
+ */
+export function mayAdvanceTo(candidate: OrderPosition, current: OrderPosition): boolean {
+  if (candidate.timestamp !== current.timestamp) return candidate.timestamp > current.timestamp
+  if (!candidate.tiebreak || !current.tiebreak) return false // strict ms → never overtake (safe)
+  return compareTiebreak(candidate.tiebreak, current.tiebreak) > 0
 }
 
 /**

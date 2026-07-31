@@ -9,7 +9,7 @@
 
 import type { NotificationMessage } from './notificationState'
 import * as notifState from './notificationState'
-import { compareOrder, makeCacheOrderKey } from './readState'
+import { mayAdvanceTo, makeCacheOrderKey } from './readState'
 import { makeReadPointer, type ReadPointer } from './readPointer'
 
 /** The notification-relevant slice of a conversation/room metadata entry. */
@@ -82,11 +82,11 @@ function resolveAdvance<T extends NotificationMessage & { stanzaId?: string }>(
   if (!current) return makeReadPointer(match, kind)
 
   if (current.tiebreak) {
-    const ahead =
-      compareOrder(
-        { timestamp: match.timestamp.getTime(), tiebreak: makeCacheOrderKey(match, kind) },
-        { timestamp: current.timestamp.getTime(), tiebreak: current.tiebreak }
-      ) > 0
+    // The ADVANCE question — never overtake at a shared millisecond (#1173).
+    const ahead = mayAdvanceTo(
+      { timestamp: match.timestamp.getTime(), tiebreak: makeCacheOrderKey(match, kind) },
+      { timestamp: current.timestamp.getTime(), tiebreak: current.tiebreak }
+    )
     return ahead ? makeReadPointer(match, kind) : 'no-advance'
   }
 

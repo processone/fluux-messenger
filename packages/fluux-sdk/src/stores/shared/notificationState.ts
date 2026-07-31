@@ -22,10 +22,12 @@
 
 import { advance, makeReadPointer, type PointerSource, type ReadPointer } from './readPointer'
 import {
-  compareOrder,
+  isAfterBoundary,
+  mayAdvanceTo,
   computeFloor,
   isRenderableStoredMessage,
   makeCacheOrderKey,
+  type ExactPosition,
   type OrderPosition,
   type RenderabilityCheckFields,
 } from './readState'
@@ -303,11 +305,13 @@ export function onActivate(
     for (const m of messages) {
       if (m.isOutgoing) continue
       if (!isRenderableStoredMessage(m)) continue
-      const pos: OrderPosition = {
+      const pos: ExactPosition = {
         timestamp: m.timestamp.getTime(),
         tiebreak: makeCacheOrderKey(m, kind),
       }
-      if (compareOrder(pos, floorPos) > 0) {
+      // The DIVIDER question: a keyless floor means at-or-after its
+      // millisecond, placing the divider conservatively early (#1173).
+      if (isAfterBoundary(pos, floorPos)) {
         firstNewMessageId = m.id
         break
       }
@@ -436,7 +440,7 @@ export function onWindowBecameVisible(
  * messages for good.
  *
  * A KEYED current pointer (carries `tiebreak`) is ordered by cache
- * POSITION via `compareOrder`, not by array index — its position is provable
+ * POSITION via `mayAdvanceTo`, not by array index — its position is provable
  * without being resident in `messages` (PR C, D4). The off-slice guard and the
  * `atLiveEdge` escape hatch below apply only to a KEYLESS (migrated) pointer,
  * whose bare timestamp cannot certify a position.
@@ -469,14 +473,15 @@ export function onMessageSeen(
   // Keyed pointer: compare cache POSITIONS. The pointer no longer has to be
   // resident, and a same-millisecond sibling that sorts after it is a genuine
   // advance. Safe against the resident array because PR B gave
-  // `messageArrayUtils` the same `compareOrder` tie-break, so array index and
-  // cache order agree.
+  // `messageArrayUtils` the same tie-break, so array index and cache order
+  // agree.
   if (state.readPointer.tiebreak) {
     const target = messages[newIdx]
-    return compareOrder(
+    // The ADVANCE question: never overtake at a shared millisecond (#1173).
+    return mayAdvanceTo(
       { timestamp: target.timestamp.getTime(), tiebreak: makeCacheOrderKey(target, kind) },
       { timestamp: state.readPointer.timestamp.getTime(), tiebreak: state.readPointer.tiebreak }
-    ) > 0
+    )
       ? advanced()
       : state
   }
