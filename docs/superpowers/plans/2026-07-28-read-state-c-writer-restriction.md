@@ -1452,9 +1452,9 @@ Update the module doc-comment's reference to `recomputeCountsFromPointer` (~line
 
 In `chatStore.recomputeUnreadForConversation`, delete the entire `--- Legacy guard pass ---`
 block: the `resident` / `slice` fetch, the `if (!recountContextIsCurrent()) return`, and the
-`if (slice.length > 0) { set(...) }`. **Keep** the `--- Defer conditions ---` block below it
-unchanged, and keep the `afterGuard` read (rename the local to `meta1` if you prefer, but do not
-change what it reads).
+`if (slice.length > 0) { set(...) }`. The current defer snapshot, guard cardinality, and
+recount-version ordering were superseded after this plan; their authoritative contract is the
+`Defer conditions` block in each recount implementation.
 
 `slice` is also used by the divider rederivation near the end of the function. Replace that use
 with the resident array:

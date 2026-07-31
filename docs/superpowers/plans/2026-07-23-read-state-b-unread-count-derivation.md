@@ -431,15 +431,17 @@ it('removeTransient reports whether anything was removed', () => {
 
 **The derivation:**
 1. **Discard the legacy count.** At every site that calls `recomputeCountsFromPointer`, keep its `readPointer` (and its guard behavior) but **do not write its `unreadCount`/`mentionsCount`**. This is what makes `deferred` preserve the last *trusted* value rather than a provisional one.
-2. Bump a **per-entity recount version** (`recountVersion.set(id, v+1)`) and capture `v` before any await.
-3. Defer conditions: un-migrated legacy read state **or** pending remote marker ⇒ `deferred`; `pointerlessDefers(readPointer, unreadCount)` ⇒ `deferred`.
-4. `floor = computeFloor(readPointer, historyFloor)`; `!floor` ⇒ `deferred`.
-5. Coverage: `if (!isCaughtUpForCounting(mam)) return deferred`; `bottom = await resolveCoverageBottom(...)`; `'missing'` ⇒ `deferred`; `'unresolvable'` ⇒ invalidate the record + `deferred`; `compareOrder(bottom, floorPos) > 0` ⇒ `deferred`.
-6. `res = await countUnreadInArchive(id, { floor, pointer: readPointer })`; `null` ⇒ `unavailable`.
-7. **Latest-wins commit:** re-read the version; if `recountVersion.get(id) !== v`, **discard** (a newer recount owns the result). Otherwise:
+2. The current defer snapshot, guard cardinality, and recount-version ordering are owned by the
+   `Defer conditions` blocks in `chatStore.recomputeUnreadForConversation` and
+   `roomStore.recomputeUnreadForRoom`; this implementation plan is not authoritative for their
+   post-PR-B placement.
+3. `floor = computeFloor(readPointer, historyFloor)`; `!floor` ⇒ `deferred`.
+4. Coverage: `if (!isCaughtUpForCounting(mam)) return deferred`; `bottom = await resolveCoverageBottom(...)`; `'missing'` ⇒ `deferred`; `'unresolvable'` ⇒ invalidate the record + `deferred`; `compareOrder(bottom, floorPos) > 0` ⇒ `deferred`.
+5. `res = await countUnreadInArchive(id, { floor, pointer: readPointer })`; `null` ⇒ `unavailable`.
+6. **Latest-wins commit:** re-read the version; if `recountVersion.get(id) !== v`, **discard** (a newer recount owns the result). Otherwise:
    - `unreadCount = min(999, res.unread + transient.unread)` — commits unconditionally on `exact`.
    - **`mentionsCount` is NOT written.** Archive recounts never touch it — it stays on the live `+1` path, cleared only by explicit read / mark-read. See the Global Constraints for why (MAM never sets `isMention`, so a scan would zero a correctly live-counted mention).
-8. **Reconcile the divider.** Follow the authoritative repositioning and zero-count preservation
+7. **Reconcile the divider.** Follow the authoritative repositioning and zero-count preservation
    contract in the [acceptance
    spec](../specs/2026-07-23-read-state-unread-count-single-source-acceptance.md).
 

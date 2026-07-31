@@ -372,7 +372,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // pointer, for the rest of the session.
   //
   // Nothing else in the chain can produce the asserted 2: the pointer is real
-  // (so neither `pointerlessDefers` check fires and `computeFloor` has a floor),
+  // (so the `pointerlessDefers` check does not fire and `computeFloor` has a floor),
   // `pendingRemoteDisplayedStanzaId` is unset, the conversation is not active,
   // and coverage is caught-up AND resolvable to a row BELOW the floor. Any
   // surviving defer would leave the sharply different persisted 7 in place.

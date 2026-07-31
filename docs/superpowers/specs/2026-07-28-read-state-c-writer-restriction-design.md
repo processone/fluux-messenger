@@ -304,11 +304,12 @@ for no gain in correctness. This closes the second item carried from PR B's revi
 and the shared floor make the divider and the count answer the same question, but the count
 only *answers* it on an `exact` outcome. `recomputeUnreadForConversation` /
 `recomputeUnreadForRoom` stand down — leaving the persisted count in place — in each of these
-states, in this order:
+states. The implementations own the current check order:
 
 1. the entity is active and the caller did not pass `allowActive`;
-2. `pointerlessDefers` — no pointer *and* a non-zero persisted count. Checked **twice**: at
-   entry against the pre-await meta, and again against the freshly re-read meta;
+2. `pointerlessDefers`; its predicate is owned by `stores/shared/readState.ts`, while the
+   current snapshot and guard placement are owned by the `Defer conditions` blocks in the two
+   recount implementations;
 3. a pending inbound XEP-0490 marker (`pendingRemoteDisplayedStanzaId !== undefined`);
 4. `computeFloor` yields nothing — neither a pointer nor a `historyFloor`;
 5. MAM catch-up is not complete for the entity (`isCaughtUpForCounting`);
@@ -400,8 +401,8 @@ it, exactly two residual states could still reach it, and neither is protective:
   protection but an active defect — below.
 
 Every state in which a bare derived zero could not be trusted is still caught by
-`pointerlessDefers`, which is unconditional (`!pointer && persistedUnread > 0`) and runs both
-at entry and against the freshly re-read meta.
+`pointerlessDefers`. Its predicate is authoritative in `stores/shared/readState.ts`; the two
+recount implementations own its current snapshot and call placement.
 
 **The live bug it fixed.** `scheduleReadPointerBackfill` leaves an entry in its `pending` set
 whenever `migrateReadPointer` resolves nothing — a `lastSeenMessageId` the cache never held, or
@@ -419,8 +420,9 @@ it can never retire a legacy pair or move a read position.
 **Two invariants the analysis rests on**, both re-verified against the code:
 
 1. **`pointerlessDefers` covers every pointerless entity carrying a non-zero persisted count**,
-   unconditionally (no scope, coverage, or account qualifier) and at both check points. So
-   removing the legacy defer cannot expose a trusted count to a bare derived zero.
+   unconditionally (no scope, coverage, or account qualifier). The helper and the two recount
+   implementations are authoritative for its current predicate and call placement. Removing
+   the legacy defer therefore cannot expose a trusted count to a bare derived zero.
 2. **A pre-#1081 conversation's `historyFloor` never sits *behind* its legacy read position.**
    `historyFloor` and `readPointer` shipped in the same commit (`baa1601b`), so no pre-#1081
    blob carries a floor at all; restore never invents one (`deserializeState` reads only what
