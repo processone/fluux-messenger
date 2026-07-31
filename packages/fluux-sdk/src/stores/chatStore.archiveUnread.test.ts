@@ -167,7 +167,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       JSON.stringify({
         state: {
           conversationEntities: [[CID, { id: CID, name: CID, type: 'chat' }]],
-          conversationMeta: [[CID, { unreadCount: 3, readPointer: { messageId: 'p0', timestamp: 1000, tiebreak: { kind: 'chat', id: 'p0' } } }]],
+          conversationMeta: [[CID, { unreadCount: 3, readPointer: { messageId: 'p0', timestamp: 1000, archiveOrderKey: { kind: 'chat', id: 'p0' } } }]],
           conversations: [[CID, { id: CID, name: CID, type: 'chat', unreadCount: 3 }]],
           archivedConversations: [],
         },
