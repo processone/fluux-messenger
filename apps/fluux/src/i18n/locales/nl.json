@@ -498,7 +498,9 @@
         "copyLinkChoose": "Welke link kopiëren?",
         "openInBrowser": "Openen in browser",
         "saveImage": "Afbeelding opslaan",
+        "videoFormatUnsupported": "Dit videoformaat kan hier niet worden afgespeeld",
         "videoUnavailable": "Video niet meer beschikbaar",
+        "audioFormatUnsupported": "Dit audioformaat kan hier niet worden afgespeeld",
         "audioUnavailable": "Audio niet meer beschikbaar",
         "typing": {
             "one": "{{name}} is aan het typen...",

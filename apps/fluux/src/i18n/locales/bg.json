@@ -498,7 +498,9 @@
         "copyLinkChoose": "Коя връзка да се копира?",
         "openInBrowser": "Отваряне в браузъра",
         "saveImage": "Запазване на изображението",
+        "videoFormatUnsupported": "Този видеоформат не може да се възпроизведе тук",
         "videoUnavailable": "Видеото вече не е налично",
+        "audioFormatUnsupported": "Този аудиоформат не може да се възпроизведе тук",
         "audioUnavailable": "Аудиото вече не е налично",
         "typing": {
             "one": "{{name}} пише...",

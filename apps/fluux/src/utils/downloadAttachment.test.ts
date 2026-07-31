@@ -1,26 +1,32 @@
 /**
  * @vitest-environment jsdom
  *
- * downloadAttachment must decrypt encrypted attachments before saving. For a
- * plaintext attachment it delegates to downloadFile with the raw URL; for an
- * encrypted one it resolves the DECRYPTED bytes (via the platform media-cache
- * resolver) and saves those — the ciphertext URL must never reach the save path.
+ * downloadAttachment must resolve Tauri attachments through the native media
+ * cache and decrypt encrypted attachments before saving.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { isTauriMock, saveMock, writeFileMock, resolveTauriMock, resolveWebMock } =
-  vi.hoisted(() => ({
-    isTauriMock: vi.fn(),
-    saveMock: vi.fn(),
-    writeFileMock: vi.fn(),
-    resolveTauriMock: vi.fn(),
-    resolveWebMock: vi.fn(),
-  }))
+const {
+  isTauriMock,
+  saveMock,
+  writeFileMock,
+  resolvePlaintextTauriMock,
+  resolveTauriMock,
+  resolveWebMock,
+} = vi.hoisted(() => ({
+  isTauriMock: vi.fn(),
+  saveMock: vi.fn(),
+  writeFileMock: vi.fn(),
+  resolvePlaintextTauriMock: vi.fn(),
+  resolveTauriMock: vi.fn(),
+  resolveWebMock: vi.fn(),
+}))
 
 vi.mock('./tauri', () => ({ isTauri: isTauriMock }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: saveMock }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: writeFileMock }))
 vi.mock('./mediaCache', () => ({
+  resolveMediaUrl: resolvePlaintextTauriMock,
   resolveEncryptedMediaUrl: resolveTauriMock,
   resolveWebEncryptedMediaUrl: resolveWebMock,
 }))
@@ -88,15 +94,33 @@ describe('downloadAttachment', () => {
     expect(anchor?.getAttribute('download')).toBe('archive.zip')
   })
 
-  it('plaintext → delegates to the raw URL, resolver not called', async () => {
+  it('Tauri: plaintext → resolves through the native cache before saving', async () => {
     isTauriMock.mockReturnValue(true)
+    resolvePlaintextTauriMock.mockResolvedValue('asset://localhost/cached.txt')
     saveMock.mockResolvedValue('/Users/me/note.txt')
 
     await downloadAttachment({ url: 'https://up/note.txt', name: 'note.txt' })
 
+    expect(resolvePlaintextTauriMock).toHaveBeenCalledWith('https://up/note.txt')
     expect(resolveTauriMock).not.toHaveBeenCalled()
     expect(resolveWebMock).not.toHaveBeenCalled()
-    expect(global.fetch).toHaveBeenCalledWith('https://up/note.txt')
+    expect(global.fetch).toHaveBeenCalledWith('asset://localhost/cached.txt')
+  })
+
+  it('web: plaintext → keeps the direct URL without invoking a resolver', async () => {
+    isTauriMock.mockReturnValue(false)
+    const createEl = vi.spyOn(document, 'createElement')
+
+    await downloadAttachment({ url: 'https://up/note.txt', name: 'note.txt' })
+
+    expect(resolvePlaintextTauriMock).not.toHaveBeenCalled()
+    expect(resolveTauriMock).not.toHaveBeenCalled()
+    expect(resolveWebMock).not.toHaveBeenCalled()
+    const anchor = createEl.mock.results
+      .map((r) => r.value as HTMLElement)
+      .find((el) => el instanceof HTMLAnchorElement) as HTMLAnchorElement | undefined
+    expect(anchor?.getAttribute('href')).toBe('https://up/note.txt')
+    expect(anchor?.getAttribute('download')).toBe('note.txt')
   })
 
   it('encrypted resolve failure → error toast, nothing written', async () => {

@@ -42,7 +42,20 @@ vi.mock('./tauriDownload', () => ({
   downloadFileTauri: (params: unknown) => mockDownloadFileTauri(params),
 }))
 
-import { resolveMediaUrl, resolveWebMediaUrl, resolveEncryptedMediaUrl, clearMediaCache, getMediaCacheSize, resetMediaUrlCache, peekMediaCache, peekEncryptedMediaCache, peekWebMediaCache, peekWebEncryptedMediaCache, resolveWebEncryptedMediaUrl } from './mediaCache'
+import {
+  MediaRetrievalError,
+  resolveMediaUrl,
+  resolveWebMediaUrl,
+  resolveEncryptedMediaUrl,
+  clearMediaCache,
+  getMediaCacheSize,
+  resetMediaUrlCache,
+  peekMediaCache,
+  peekEncryptedMediaCache,
+  peekWebMediaCache,
+  peekWebEncryptedMediaCache,
+  resolveWebEncryptedMediaUrl,
+} from './mediaCache'
 import { encryptFile, decryptFile } from '@fluux/sdk'
 
 describe('mediaCache', () => {
@@ -112,12 +125,16 @@ describe('mediaCache', () => {
       expect(result).toMatch(/^https:\/\/asset\.localhost\//)
     })
 
-    it('should throw on fetch failure', async () => {
+    it('should identify a native HTTP failure as a retrieval failure', async () => {
       mockDownloadFileTauri.mockRejectedValue(new Error('Download failed: 404'))
 
       await expect(
         resolveMediaUrl('https://upload.example.com/files/missing.png')
-      ).rejects.toThrow('Download failed: 404')
+      ).rejects.toMatchObject({
+        name: 'MediaRetrievalError',
+        message: 'Download failed: 404',
+        status: 404,
+      })
     })
 
     it('should deduplicate concurrent requests for the same URL', async () => {
@@ -476,6 +493,21 @@ describe('resolveWebMediaUrl (web Cache API, scheme safety)', () => {
     expect(first).toMatch(/^blob:/)
     expect(second).toMatch(/^blob:/)
     expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('identifies a non-OK response as a retrieval failure', async () => {
+    fetchSpy.mockResolvedValue(new Response(null, {
+      status: 404,
+      statusText: 'Not Found',
+    }))
+
+    const result = resolveWebMediaUrl('https://upload.example.com/missing.png')
+
+    await expect(result).rejects.toBeInstanceOf(MediaRetrievalError)
+    await expect(result).rejects.toMatchObject({
+      message: 'Fetch failed: 404 Not Found',
+      status: 404,
+    })
   })
 })
 

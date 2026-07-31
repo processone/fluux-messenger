@@ -502,7 +502,9 @@
         "copyLinkChoose": "Care link se copiază?",
         "openInBrowser": "Deschide în browser",
         "saveImage": "Salvează imaginea",
+        "videoFormatUnsupported": "Acest format video nu poate fi redat aici",
         "videoUnavailable": "Videoclipul nu mai este disponibil",
+        "audioFormatUnsupported": "Acest format audio nu poate fi redat aici",
         "audioUnavailable": "Fișierul audio nu mai este disponibil",
         "typing": {
             "one": "{{name}} scrie...",

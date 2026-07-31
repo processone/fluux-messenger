@@ -498,7 +498,9 @@
         "copyLinkChoose": "Melyik linket másoljuk?",
         "openInBrowser": "Megnyitás böngészőben",
         "saveImage": "Kép mentése",
+        "videoFormatUnsupported": "Ez a videóformátum itt nem játszható le",
         "videoUnavailable": "A videó már nem érhető el",
+        "audioFormatUnsupported": "Ez a hangformátum itt nem játszható le",
         "audioUnavailable": "A hang már nem érhető el",
         "typing": {
             "one": "{{name}} gépel...",

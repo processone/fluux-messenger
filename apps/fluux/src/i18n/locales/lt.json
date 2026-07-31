@@ -502,7 +502,9 @@
         "copyLinkChoose": "Kurią nuorodą kopijuoti?",
         "openInBrowser": "Atidaryti naršyklėje",
         "saveImage": "Išsaugoti vaizdą",
+        "videoFormatUnsupported": "Šio vaizdo įrašo formato čia paleisti negalima",
         "videoUnavailable": "Vaizdo įrašas nebepasiekiamas",
+        "audioFormatUnsupported": "Šio garso įrašo formato čia paleisti negalima",
         "audioUnavailable": "Garso įrašas nebepasiekiamas",
         "typing": {
             "one": "{{name}} rašo...",

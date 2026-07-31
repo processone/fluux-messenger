@@ -500,7 +500,9 @@
         "copyLinkChoose": "איזה קישור להעתיק?",
         "openInBrowser": "פתיחה בדפדפן",
         "saveImage": "שמירת תמונה",
+        "videoFormatUnsupported": "לא ניתן להפעיל כאן את פורמט הווידאו הזה",
         "videoUnavailable": "הסרטון אינו זמין יותר",
+        "audioFormatUnsupported": "לא ניתן להפעיל כאן את פורמט האודיו הזה",
         "audioUnavailable": "השמע אינו זמין יותר",
         "typing": {
             "one": "{{name}} מקליד/ה...",

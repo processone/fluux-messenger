@@ -504,7 +504,9 @@
         "copyLinkChoose": "Cén nasc a chóipeáil?",
         "openInBrowser": "Oscail sa bhrabhsálaí",
         "saveImage": "Sábháil íomhá",
+        "videoFormatUnsupported": "Ní féidir an fhormáid físe seo a sheinm anseo",
         "videoUnavailable": "Níl an físeán ar fáil a thuilleadh",
+        "audioFormatUnsupported": "Ní féidir an fhormáid fuaime seo a sheinm anseo",
         "audioUnavailable": "Níl an fhuaim ar fáil a thuilleadh",
         "typing": {
             "one": "Tá {{name}} ag clóscríobh...",

@@ -498,7 +498,9 @@
         "copyLinkChoose": "어떤 링크를 복사하시겠습니까?",
         "openInBrowser": "브라우저에서 열기",
         "saveImage": "이미지 저장",
+        "videoFormatUnsupported": "이 동영상 형식은 여기에서 재생할 수 없습니다",
         "videoUnavailable": "비디오를 더 이상 사용할 수 없습니다",
+        "audioFormatUnsupported": "이 오디오 형식은 여기에서 재생할 수 없습니다",
         "audioUnavailable": "오디오를 더 이상 사용할 수 없습니다",
         "typing": {
             "one": "{{name}}이(가) 입력 중...",

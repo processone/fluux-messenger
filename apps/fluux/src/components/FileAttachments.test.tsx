@@ -1,16 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ImageAttachment, VideoAttachment, AudioAttachment, FileAttachmentCard } from './FileAttachments'
 import { MessageAttachments } from './MessageAttachments'
 import { MediaAutoloadProvider } from '@/contexts'
 import { __resetApprovedMediaUrlsForTest } from '@/utils/mediaAutoload'
+import { resetMediaSupportCache } from '@/utils/mediaSupport'
 import type { FileAttachment } from '@fluux/sdk'
 
+const MEDIA_ERR_NETWORK = 2
+const MEDIA_ERR_SRC_NOT_SUPPORTED = 4
+
+function fireMediaError(element: HTMLMediaElement, code: number) {
+  Object.defineProperty(element, 'error', {
+    configurable: true,
+    value: { code },
+  })
+  fireEvent.error(element)
+}
+
 // Spy created via vi.hoisted so it exists when the hoisted vi.mock factory runs.
-const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadAttachmentSpy } = vi.hoisted(() => ({
+const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadAttachmentSpy, isTauriSpy } = vi.hoisted(() => ({
   useAttachmentUrlSpy: vi.fn(),
   useCachedMediaUrlSpy: vi.fn(),
   downloadAttachmentSpy: vi.fn(),
+  isTauriSpy: vi.fn(() => false),
 }))
 
 // Mock react-i18next
@@ -46,9 +59,14 @@ vi.mock('@/utils/download', () => ({
   downloadAttachment: downloadAttachmentSpy,
 }))
 
+vi.mock('@/utils/tauri', () => ({
+  isTauri: isTauriSpy,
+}))
+
 describe('FileAttachments', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isTauriSpy.mockReturnValue(false)
     __resetApprovedMediaUrlsForTest()
     // Default: return successful proxied URL
     useAttachmentUrlSpy.mockReturnValue({
@@ -189,6 +207,82 @@ describe('FileAttachments', () => {
       expect(screen.getByText('chat.videoUnavailable')).toBeInTheDocument()
     })
 
+    describe('when the engine cannot decode the container', () => {
+      const mkvAttachment: FileAttachment = {
+        url: 'https://example.com/screencast.mkv',
+        mediaType: 'video/x-matroska',
+        name: 'screencast.mkv',
+        size: 4096,
+      }
+
+      beforeEach(() => {
+        resetMediaSupportCache()
+        // A real engine: MP4 decodes, Matroska does not. jsdom answers '' for
+        // everything, which the probe deliberately treats as no information.
+        vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation(
+          (type: string) => (type === 'video/mp4' ? 'maybe' : '') as CanPlayTypeResult,
+        )
+      })
+
+      afterEach(() => {
+        vi.restoreAllMocks()
+        resetMediaSupportCache()
+      })
+
+      it('should offer a download instead of claiming the file is gone', () => {
+        render(<VideoAttachment attachment={mkvAttachment} />)
+
+        const video = document.querySelector('video')
+        expect(video).not.toBeNull()
+        fireMediaError(video!, MEDIA_ERR_SRC_NOT_SUPPORTED)
+
+        expect(screen.getByText('chat.videoFormatUnsupported')).toBeInTheDocument()
+        expect(screen.queryByText('chat.videoUnavailable')).not.toBeInTheDocument()
+        expect(screen.getByLabelText('common.download')).toHaveAttribute('href', mkvAttachment.url)
+        expect(screen.getByText('screencast.mkv')).toBeInTheDocument()
+      })
+
+      it('should still call an unsupported container unavailable when the fetch fails', () => {
+        useAttachmentUrlSpy.mockReturnValue({
+          url: null,
+          isLoading: false,
+          error: new Error('Failed to fetch'),
+        })
+
+        render(<VideoAttachment attachment={mkvAttachment} />)
+
+        expect(screen.getByText('chat.videoUnavailable')).toBeInTheDocument()
+        expect(screen.queryByText('chat.videoFormatUnsupported')).not.toBeInTheDocument()
+      })
+
+      it('should call a direct unsupported-format URL unavailable on a network error', () => {
+        const missingAttachment = {
+          ...mkvAttachment,
+          url: 'https://example.com/missing-screencast.mkv',
+        }
+        render(<VideoAttachment attachment={missingAttachment} />)
+
+        fireMediaError(document.querySelector('video')!, MEDIA_ERR_NETWORK)
+
+        expect(screen.getByText('chat.videoUnavailable')).toBeInTheDocument()
+        expect(screen.queryByText('chat.videoFormatUnsupported')).not.toBeInTheDocument()
+      })
+
+      it('should reserve the media shape so the row height does not shift', () => {
+        // Own URL: the module-level failed-URL cache would otherwise skip the
+        // <video> entirely on a second render of the same source.
+        const { container } = render(
+          <VideoAttachment
+            attachment={{ ...mkvAttachment, url: 'https://example.com/sized.mkv', width: 1280, height: 720 }}
+          />,
+        )
+
+        fireMediaError(container.querySelector('video')!, MEDIA_ERR_SRC_NOT_SUPPORTED)
+
+        expect(container.querySelector('[style*="aspect-ratio"]')).toBeTruthy()
+      })
+    })
+
     it('should not render for non-video attachments', () => {
       const imageAttachment: FileAttachment = {
         url: 'https://example.com/image.jpg',
@@ -253,6 +347,64 @@ describe('FileAttachments', () => {
       fireEvent.error(audio!)
 
       expect(screen.getByText('chat.audioUnavailable')).toBeInTheDocument()
+    })
+
+    describe('when the engine cannot decode the container', () => {
+      const wmaAttachment: FileAttachment = {
+        url: 'https://example.com/voice-note.wma',
+        mediaType: 'audio/x-ms-wma',
+        name: 'voice-note.wma',
+        size: 2048,
+      }
+
+      beforeEach(() => {
+        resetMediaSupportCache()
+        vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation(
+          (type: string) => (type === 'audio/mpeg' ? 'probably' : '') as CanPlayTypeResult,
+        )
+      })
+
+      afterEach(() => {
+        vi.restoreAllMocks()
+        resetMediaSupportCache()
+      })
+
+      it('should offer a download instead of claiming the file is gone', () => {
+        render(<AudioAttachment attachment={wmaAttachment} />)
+
+        fireMediaError(document.querySelector('audio')!, MEDIA_ERR_SRC_NOT_SUPPORTED)
+
+        expect(screen.getByText('chat.audioFormatUnsupported')).toBeInTheDocument()
+        expect(screen.queryByText('chat.audioUnavailable')).not.toBeInTheDocument()
+        expect(screen.getByLabelText('common.download')).toHaveAttribute('href', wmaAttachment.url)
+        expect(screen.getByText('voice-note.wma')).toBeInTheDocument()
+      })
+
+      it('should still call an unsupported container unavailable when the fetch fails', () => {
+        useAttachmentUrlSpy.mockReturnValue({
+          url: null,
+          isLoading: false,
+          error: new Error('Failed to fetch'),
+        })
+
+        render(<AudioAttachment attachment={wmaAttachment} />)
+
+        expect(screen.getByText('chat.audioUnavailable')).toBeInTheDocument()
+        expect(screen.queryByText('chat.audioFormatUnsupported')).not.toBeInTheDocument()
+      })
+
+      it('should call a direct unsupported-format URL unavailable on a network error', () => {
+        const missingAttachment = {
+          ...wmaAttachment,
+          url: 'https://example.com/missing-voice-note.wma',
+        }
+        render(<AudioAttachment attachment={missingAttachment} />)
+
+        fireMediaError(document.querySelector('audio')!, MEDIA_ERR_NETWORK)
+
+        expect(screen.getByText('chat.audioUnavailable')).toBeInTheDocument()
+        expect(screen.queryByText('chat.audioFormatUnsupported')).not.toBeInTheDocument()
+      })
     })
 
     it('should not render for non-audio attachments', () => {
@@ -550,9 +702,15 @@ describe('FileAttachmentCard download', () => {
 describe('encrypted media download controls', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isTauriSpy.mockReturnValue(false)
     downloadAttachmentSpy.mockResolvedValue(undefined)
     useAttachmentUrlSpy.mockReturnValue({ url: 'blob:play', isLoading: false, error: null })
     useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetMediaSupportCache()
   })
 
   const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
@@ -575,6 +733,28 @@ describe('encrypted media download controls', () => {
     render(<VideoAttachment attachment={video} />)
     expect(screen.getByLabelText('common.download')).toHaveAttribute('href', 'https://x/clip.mp4')
     expect(downloadAttachmentSpy).not.toHaveBeenCalled()
+  })
+
+  it('Tauri plaintext unsupported-media download → uses the native save path', () => {
+    isTauriSpy.mockReturnValue(true)
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation(
+      (type: string) => (type === 'video/mp4' ? 'maybe' : '') as CanPlayTypeResult,
+    )
+    resetMediaSupportCache()
+    const video: FileAttachment = {
+      url: 'https://x/clip.mkv', mediaType: 'video/x-matroska', name: 'clip.mkv',
+    }
+
+    render(<VideoAttachment attachment={video} />)
+    fireMediaError(document.querySelector('video')!, MEDIA_ERR_SRC_NOT_SUPPORTED)
+
+    const control = screen.getByLabelText('common.download')
+    expect(control).not.toHaveAttribute('href')
+    fireEvent.click(control)
+    expect(downloadAttachmentSpy).toHaveBeenCalledWith(
+      video,
+      { errorMessage: 'common.downloadFailed' },
+    )
   })
 
   it('encrypted audio info-bar download → button, decrypts', () => {

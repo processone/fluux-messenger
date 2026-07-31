@@ -504,7 +504,9 @@
         "copyLinkChoose": "Katero povezavo kopirati?",
         "openInBrowser": "Odpri v brskalniku",
         "saveImage": "Shrani sliko",
+        "videoFormatUnsupported": "Te oblike videa ni mogoče predvajati tukaj",
         "videoUnavailable": "Video ni več na voljo",
+        "audioFormatUnsupported": "Te oblike zvoka ni mogoče predvajati tukaj",
         "audioUnavailable": "Zvok ni več na voljo",
         "typing": {
             "one": "{{name}} tipka...",

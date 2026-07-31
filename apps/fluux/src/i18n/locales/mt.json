@@ -506,7 +506,9 @@
         "copyLinkChoose": "Liema link tikkopja?",
         "openInBrowser": "Iftaħ fil-browser",
         "saveImage": "Issejvja l-istampa",
+        "videoFormatUnsupported": "Dan il-format tal-vidjo ma jistax jindaqq hawn",
         "videoUnavailable": "Il-vidjo m'għadux disponibbli",
+        "audioFormatUnsupported": "Dan il-format tal-awdjo ma jistax jindaqq hawn",
         "audioUnavailable": "L-awdjo m'għadux disponibbli",
         "typing": {
             "one": "{{name}} qed jikteb...",

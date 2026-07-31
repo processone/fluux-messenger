@@ -506,7 +506,9 @@
         "copyLinkChoose": "نسخ أي رابط؟",
         "openInBrowser": "فتح في المتصفح",
         "saveImage": "حفظ الصورة",
+        "videoFormatUnsupported": "لا يمكن تشغيل تنسيق الفيديو هذا هنا",
         "videoUnavailable": "الفيديو لم يعد متاحًا",
+        "audioFormatUnsupported": "لا يمكن تشغيل تنسيق الصوت هذا هنا",
         "audioUnavailable": "الصوت لم يعد متاحًا",
         "typing": {
             "one": "{{name}} يكتب...",

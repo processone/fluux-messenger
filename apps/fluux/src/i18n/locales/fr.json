@@ -501,7 +501,9 @@
         "copyLinkChoose": "Copier quel lien ?",
         "openInBrowser": "Ouvrir dans le navigateur",
         "saveImage": "Enregistrer l'image",
+        "videoFormatUnsupported": "Ce format vidéo ne peut pas être lu ici",
         "videoUnavailable": "Vidéo non disponible",
+        "audioFormatUnsupported": "Ce format audio ne peut pas être lu ici",
         "audioUnavailable": "Audio non disponible",
         "typing": {
             "one": "{{name}} est en train d'écrire...",

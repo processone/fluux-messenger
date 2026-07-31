@@ -500,7 +500,9 @@
         "copyLinkChoose": "Welchen Link kopieren?",
         "openInBrowser": "Im Browser öffnen",
         "saveImage": "Bild speichern",
+        "videoFormatUnsupported": "Dieses Videoformat kann hier nicht abgespielt werden",
         "videoUnavailable": "Video nicht mehr verfügbar",
+        "audioFormatUnsupported": "Dieses Audioformat kann hier nicht abgespielt werden",
         "audioUnavailable": "Audio nicht mehr verfügbar",
         "typing": {
             "one": "{{name}} tippt...",

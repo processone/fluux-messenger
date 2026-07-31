@@ -504,7 +504,9 @@
         "copyLinkChoose": "Který odkaz zkopírovat?",
         "openInBrowser": "Otevřít v prohlížeči",
         "saveImage": "Uložit obrázek",
+        "videoFormatUnsupported": "Tento formát videa zde nelze přehrát",
         "videoUnavailable": "Video již není k dispozici",
+        "audioFormatUnsupported": "Tento formát zvuku zde nelze přehrát",
         "audioUnavailable": "Zvuk již není k dispozici",
         "typing": {
             "one": "{{name}} píše...",

@@ -12,6 +12,9 @@ const mockResolveMediaUrl = vi.fn()
 const mockResolveWebMediaUrl = vi.fn()
 const mockResetMediaUrlCache = vi.fn()
 vi.mock('@/utils/mediaCache', () => ({
+  isMediaRetrievalError: (error: unknown) => (
+    error instanceof Error && error.name === 'MediaRetrievalError'
+  ),
   resolveMediaUrl: (url: string) => mockResolveMediaUrl(url),
   resolveWebMediaUrl: (url: string) => mockResolveWebMediaUrl(url),
   resetMediaUrlCache: () => mockResetMediaUrlCache(),
@@ -152,6 +155,31 @@ describe('useProxiedUrl', () => {
     }
   })
 
+  it('should expose a confirmed retrieval failure instead of retrying the direct URL', async () => {
+    const originalCaches = globalThis.caches
+    globalThis.caches = {} as CacheStorage
+    const retrievalError = new Error('Fetch failed: 404 Not Found')
+    retrievalError.name = 'MediaRetrievalError'
+    mockResolveWebMediaUrl.mockRejectedValue(retrievalError)
+
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/missing.mkv')
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.url).toBeNull()
+    expect(result.current.error).toBe('Fetch failed: 404 Not Found')
+
+    if (originalCaches) {
+      globalThis.caches = originalCaches
+    } else {
+      delete (globalThis as Record<string, unknown>).caches
+    }
+  })
+
   it('should use web cache result when available', async () => {
     const originalCaches = globalThis.caches
     globalThis.caches = {} as CacheStorage
@@ -199,9 +227,9 @@ describe('useProxiedUrl', () => {
     expect(mockResolveMediaUrl).toHaveBeenCalledWith('https://upload.example.com/photo.jpg')
   })
 
-  it('should fall back to sanitized URL when media cache fails in Tauri', async () => {
+  it('should fall back to sanitized URL when a non-retrieval cache step fails in Tauri', async () => {
     mockIsTauri.mockReturnValue(true)
-    mockResolveMediaUrl.mockRejectedValue(new Error('Fetch failed: 404'))
+    mockResolveMediaUrl.mockRejectedValue(new Error('Cache write failed'))
 
     const { result } = renderHook(() =>
       useProxiedUrl('https://upload.example.com/photo.jpg')

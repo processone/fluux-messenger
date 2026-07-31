@@ -498,7 +498,9 @@
         "copyLinkChoose": "Hvaða tengil á að afrita?",
         "openInBrowser": "Opna í vafra",
         "saveImage": "Vista mynd",
+        "videoFormatUnsupported": "Ekki er hægt að spila þetta myndbandssnið hér",
         "videoUnavailable": "Myndband ekki lengur tiltækt",
+        "audioFormatUnsupported": "Ekki er hægt að spila þetta hljóðsnið hér",
         "audioUnavailable": "Hljóð ekki lengur tiltækt",
         "typing": {
             "one": "{{name}} er að skrifa...",

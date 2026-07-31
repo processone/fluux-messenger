@@ -500,7 +500,9 @@
         "copyLinkChoose": "Koju poveznicu kopirati?",
         "openInBrowser": "Otvori u pregledniku",
         "saveImage": "Spremi sliku",
+        "videoFormatUnsupported": "Ovaj videoformat nije moguće reproducirati ovdje",
         "videoUnavailable": "Video više nije dostupan",
+        "audioFormatUnsupported": "Ovaj audioformat nije moguće reproducirati ovdje",
         "audioUnavailable": "Audio više nije dostupan",
         "typing": {
             "one": "{{name}} tipka...",

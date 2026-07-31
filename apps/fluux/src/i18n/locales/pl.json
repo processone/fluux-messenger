@@ -504,7 +504,9 @@
         "copyLinkChoose": "Który link skopiować?",
         "openInBrowser": "Otwórz w przeglądarce",
         "saveImage": "Zapisz obraz",
+        "videoFormatUnsupported": "Tego formatu wideo nie można tutaj odtworzyć",
         "videoUnavailable": "Film już niedostępny",
+        "audioFormatUnsupported": "Tego formatu dźwięku nie można tutaj odtworzyć",
         "audioUnavailable": "Audio już niedostępne",
         "typing": {
             "one": "{{name}} pisze...",

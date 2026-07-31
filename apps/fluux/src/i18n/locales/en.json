@@ -498,7 +498,9 @@
         "copyLinkChoose": "Copy which link?",
         "openInBrowser": "Open in browser",
         "saveImage": "Save image",
+        "videoFormatUnsupported": "This video format can't be played here",
         "videoUnavailable": "Video no longer available",
+        "audioFormatUnsupported": "This audio format can't be played here",
         "audioUnavailable": "Audio no longer available",
         "typing": {
             "one": "{{name}} is typing...",

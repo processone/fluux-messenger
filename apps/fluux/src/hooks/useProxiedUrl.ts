@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { isTauri } from '@/utils/tauri'
-import { resolveMediaUrl, resolveWebMediaUrl, resetMediaUrlCache } from '@/utils/mediaCache'
+import {
+  isMediaRetrievalError,
+  resolveMediaUrl,
+  resolveWebMediaUrl,
+  resetMediaUrlCache,
+} from '@/utils/mediaCache'
 
 interface ProxiedUrlState {
   /** The URL to use for the media element */
@@ -50,10 +55,11 @@ export function sanitizeMediaUrl(url: string): string {
 /**
  * Hook that returns a URL suitable for use in img/video/audio elements.
  *
- * - **Web:** Applies path-segment sanitization and returns the direct URL.
+ * - **Web:** Applies path-segment sanitization and uses the Cache API when available.
  * - **Tauri:** Checks the local filesystem cache, fetches and caches on miss,
  *   and returns an `asset.localhost` URL via `convertFileSrc()`.
- *   Falls back to the direct sanitized URL on any error.
+ * - Confirmed retrieval failures are exposed to the caller. Other cache or
+ *   cross-origin fetch failures fall back to the direct sanitized URL.
  *
  * @param originalUrl - The URL to use
  * @param enabled - Whether to return the URL (useful for conditional loading)
@@ -102,8 +108,12 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
           setState({ url: cachedUrl, isLoading: false, error: null })
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
+          if (isMediaRetrievalError(error)) {
+            setState({ url: null, isLoading: false, error: error.message })
+            return
+          }
           // Fall back to direct sanitized URL on cache/fetch error.
           // The fetch() API may fail due to CORS, but <img>/<video>/<audio>
           // elements can still load cross-origin resources directly.

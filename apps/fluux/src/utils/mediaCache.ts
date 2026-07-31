@@ -10,6 +10,32 @@
 import { decryptFile, type FileEncryption } from '@fluux/sdk'
 import { isTauri } from './tauri'
 
+export class MediaRetrievalError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message)
+    this.name = 'MediaRetrievalError'
+  }
+}
+
+export function isMediaRetrievalError(error: unknown): error is MediaRetrievalError {
+  return error instanceof MediaRetrievalError
+}
+
+function classifyNativeDownloadError(error: unknown): MediaRetrievalError | null {
+  const message = error instanceof Error ? error.message : String(error)
+  const statusMatch = /^Download failed: (\d{3})$/.exec(message)
+  if (statusMatch) {
+    return new MediaRetrievalError(message, Number(statusMatch[1]))
+  }
+  if (
+    message.startsWith('download_file: GET request failed:')
+    || message.startsWith('download_file: reading response body failed:')
+  ) {
+    return new MediaRetrievalError(message)
+  }
+  return null
+}
+
 /** In-memory index: original URL → local URL (asset.localhost or blob:) */
 const urlCache = new Map<string, string>()
 
@@ -97,7 +123,8 @@ async function getCacheFilePath(url: string, mimeType?: string): Promise<string>
  * 3. Fetch via the native download_file command → write to cache → return asset URL
  *
  * @returns asset.localhost URL for use in <img>/<video>/<audio> tags
- * @throws on fetch/write failure (caller should fall back to direct URL)
+ * @throws MediaRetrievalError for confirmed HTTP/native retrieval failures;
+ *   other cache or write failures may still be retried through the direct URL.
  */
 export async function resolveMediaUrl(originalUrl: string): Promise<string> {
   // 1. Check in-memory cache
@@ -149,7 +176,13 @@ async function doResolve(originalUrl: string): Promise<string> {
   const { convertFileSrc } = await import('@tauri-apps/api/core')
   const { downloadFileTauri } = await import('./tauriDownload')
 
-  const { bytes, contentType } = await downloadFileTauri({ url: originalUrl })
+  let bytes: Uint8Array
+  let contentType: string | null
+  try {
+    ({ bytes, contentType } = await downloadFileTauri({ url: originalUrl }))
+  } catch (error) {
+    throw classifyNativeDownloadError(error) ?? error
+  }
 
   const finalPath = await getCacheFilePath(originalUrl, contentType ?? undefined)
 
@@ -331,7 +364,10 @@ async function doResolveWeb(originalUrl: string): Promise<string> {
   // Fetch and cache
   const response = await fetch(originalUrl)
   if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
+    throw new MediaRetrievalError(
+      `Fetch failed: ${response.status} ${response.statusText}`,
+      response.status,
+    )
   }
 
   const responseClone = response.clone()

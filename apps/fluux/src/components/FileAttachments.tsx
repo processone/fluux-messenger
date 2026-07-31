@@ -7,10 +7,12 @@ import { ImageLightbox } from './ImageLightbox'
 import { ImageContextMenu } from './ImageContextMenu'
 import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
 import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
+import { UnplayableMediaCard } from './UnplayableMediaCard'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel, isRenderableImageMime } from '@/utils/thumbnail'
 import { downloadAttachment } from '@/utils/download'
+import { isUnsupportedMediaType } from '@/utils/mediaSupport'
 import type { FileAttachment } from '@fluux/sdk'
 
 /**
@@ -23,6 +25,15 @@ import type { FileAttachment } from '@fluux/sdk'
  * Uses a Set for O(1) lookup.
  */
 const failedUrlCache = new Set<string>()
+
+type MediaLoadFailure = 'unsupported' | 'unavailable'
+
+const mediaFailureCache = new Map<string, MediaLoadFailure>()
+const unsupportedMediaErrorCodes = new Set([3, 4])
+
+function classifyMediaLoadFailure(error: MediaError | null): MediaLoadFailure {
+  return error && unsupportedMediaErrorCodes.has(error.code) ? 'unsupported' : 'unavailable'
+}
 
 interface AttachmentProps {
   attachment: FileAttachment
@@ -268,8 +279,9 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
   const { t } = useTranslation()
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
-  // Check if this URL previously failed - initialize state from cache
-  const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
+  const [loadFailure, setLoadFailure] = useState<MediaLoadFailure | null>(
+    () => mediaFailureCache.get(attachment.url) ?? null,
+  )
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
   const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
@@ -331,8 +343,28 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
     )
   }
 
+  // Left unwrapped so TypeScript keeps narrowing `proxiedVideoUrl` through it:
+  // a `Boolean(...)` call would break the aliased-condition narrowing the
+  // `<video src>` below relies on.
+  const retrievalFailed = error !== null || !proxiedVideoUrl
+
+  // Nothing played, but the reason matters: an engine with no decoder for this
+  // container (Matroska on WebKit, for instance) leaves the file intact once it
+  // was retrieved, so the card offers to save it rather than claiming it is gone.
+  if (!retrievalFailed && loadFailure === 'unsupported' && isUnsupportedMediaType(attachment.mediaType)) {
+    return (
+      <UnplayableMediaCard
+        attachment={attachment}
+        variant="box"
+        icon={Film}
+        message={t('chat.videoFormatUnsupported')}
+        aspectRatio={aspectRatio}
+      />
+    )
+  }
+
   // Show error/fallback if fetch failed or video failed to load (404, etc.)
-  if (error || !proxiedVideoUrl || loadError) {
+  if (retrievalFailed || loadFailure) {
     return (
       <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-border" style={containerStyle}>
         <div className="flex flex-col items-center justify-center text-fluux-muted text-sm py-8 gap-2">
@@ -376,9 +408,10 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwn
           // No scroll-notify on metadata load: the box is height-locked (see above), so the load
           // never shifts layout — poking the scroll layer would only run a spurious re-anchor that
           // drifts the reading position (the same creep the ImageAttachment onLoad gate prevents).
-          onError={() => {
-            failedUrlCache.add(attachment.url)
-            setLoadError(true)
+          onError={(event) => {
+            const failure = classifyMediaLoadFailure(event.currentTarget.error)
+            mediaFailureCache.set(attachment.url, failure)
+            setLoadFailure(failure)
           }}
         />
       </div>
@@ -413,8 +446,9 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isAudio = (attachment.mediaType?.startsWith('audio/') ?? false) && !attachment.thumbnail
 
-  // Check if this URL previously failed - initialize state from cache
-  const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
+  const [loadFailure, setLoadFailure] = useState<MediaLoadFailure | null>(
+    () => mediaFailureCache.get(attachment.url) ?? null,
+  )
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
   const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
@@ -446,7 +480,23 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
     )
   }
 
-  const hasError = error || !proxiedAudioUrl || loadError
+  // Unwrapped for the same narrowing reason as the video path above: `hasError`
+  // is what proves `proxiedAudioUrl` non-null for the `<audio src>` below.
+  const retrievalFailed = error !== null || !proxiedAudioUrl
+  const hasError = retrievalFailed || loadFailure !== null
+
+  // Same split as video: a container this engine cannot decode leaves the
+  // retrieved file intact, so offer to save it instead of reporting it as gone.
+  if (!retrievalFailed && loadFailure === 'unsupported' && isUnsupportedMediaType(attachment.mediaType)) {
+    return (
+      <UnplayableMediaCard
+        attachment={attachment}
+        variant="card"
+        icon={Music}
+        message={t('chat.audioFormatUnsupported')}
+      />
+    )
+  }
 
   return (
     <div className="pt-2 max-w-sm">
@@ -492,9 +542,10 @@ export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
           className="w-full rounded-b-lg"
           style={{ height: '40px' }}
           tabIndex={-1}
-          onError={() => {
-            failedUrlCache.add(attachment.url)
-            setLoadError(true)
+          onError={(event) => {
+            const failure = classifyMediaLoadFailure(event.currentTarget.error)
+            mediaFailureCache.set(attachment.url, failure)
+            setLoadFailure(failure)
           }}
         />
       )}

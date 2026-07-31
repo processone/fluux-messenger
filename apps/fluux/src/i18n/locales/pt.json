@@ -502,7 +502,9 @@
         "copyLinkChoose": "Qual link copiar?",
         "openInBrowser": "Abrir no navegador",
         "saveImage": "Guardar imagem",
+        "videoFormatUnsupported": "Este formato de vídeo não pode ser reproduzido aqui",
         "videoUnavailable": "Vídeo já não disponível",
+        "audioFormatUnsupported": "Este formato de áudio não pode ser reproduzido aqui",
         "audioUnavailable": "Áudio já não disponível",
         "typing": {
             "one": "{{name}} está a escrever...",

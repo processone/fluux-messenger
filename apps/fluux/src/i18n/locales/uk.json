@@ -502,7 +502,9 @@
         "copyLinkChoose": "Яке посилання скопіювати?",
         "openInBrowser": "Відкрити у браузері",
         "saveImage": "Зберегти зображення",
+        "videoFormatUnsupported": "Цей формат відео не можна відтворити тут",
         "videoUnavailable": "Відео більше недоступне",
+        "audioFormatUnsupported": "Цей формат аудіо не можна відтворити тут",
         "audioUnavailable": "Аудіо більше недоступне",
         "typing": {
             "one": "{{name}} друкує...",

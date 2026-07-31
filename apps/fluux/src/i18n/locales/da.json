@@ -498,7 +498,9 @@
         "copyLinkChoose": "Hvilket link vil du kopiere?",
         "openInBrowser": "Åbn i browser",
         "saveImage": "Gem billede",
+        "videoFormatUnsupported": "Dette videoformat kan ikke afspilles her",
         "videoUnavailable": "Videoen er ikke længere tilgængelig",
+        "audioFormatUnsupported": "Dette lydformat kan ikke afspilles her",
         "audioUnavailable": "Lyden er ikke længere tilgængelig",
         "typing": {
             "one": "{{name}} skriver...",

@@ -500,7 +500,9 @@
         "copyLinkChoose": "Millist linki kopeerida?",
         "openInBrowser": "Ava brauseris",
         "saveImage": "Salvesta pilt",
+        "videoFormatUnsupported": "Seda videovormingut ei saa siin esitada",
         "videoUnavailable": "Video pole enam saadaval",
+        "audioFormatUnsupported": "Seda helivormingut ei saa siin esitada",
         "audioUnavailable": "Heli pole enam saadaval",
         "typing": {
             "one": "{{name}} kirjutab...",

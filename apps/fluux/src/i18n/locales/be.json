@@ -502,7 +502,9 @@
         "copyLinkChoose": "Якую спасылку капіяваць?",
         "openInBrowser": "Адкрыць у браўзеры",
         "saveImage": "Захаваць выяву",
+        "videoFormatUnsupported": "Гэты фармат відэа немагчыма прайграць тут",
         "videoUnavailable": "Відэа больш недаступнае",
+        "audioFormatUnsupported": "Гэты фармат аўдыя немагчыма прайграць тут",
         "audioUnavailable": "Аўдыё больш недаступнае",
         "typing": {
             "one": "{{name}} друкуе...",

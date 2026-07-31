@@ -502,7 +502,9 @@
         "copyLinkChoose": "Какую ссылку скопировать?",
         "openInBrowser": "Открыть в браузере",
         "saveImage": "Сохранить изображение",
+        "videoFormatUnsupported": "Этот формат видео нельзя воспроизвести здесь",
         "videoUnavailable": "Видео больше недоступно",
+        "audioFormatUnsupported": "Этот формат аудио нельзя воспроизвести здесь",
         "audioUnavailable": "Аудио больше недоступно",
         "typing": {
             "one": "{{name}} печатает...",

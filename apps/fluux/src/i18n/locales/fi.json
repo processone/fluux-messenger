@@ -498,7 +498,9 @@
         "copyLinkChoose": "Mikä linkki kopioidaan?",
         "openInBrowser": "Avaa selaimessa",
         "saveImage": "Tallenna kuva",
+        "videoFormatUnsupported": "Tätä videomuotoa ei voi toistaa tässä",
         "videoUnavailable": "Video ei ole enää saatavilla",
+        "audioFormatUnsupported": "Tätä äänimuotoa ei voi toistaa tässä",
         "audioUnavailable": "Ääni ei ole enää saatavilla",
         "typing": {
             "one": "{{name}} kirjoittaa...",

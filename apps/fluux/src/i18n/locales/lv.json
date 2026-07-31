@@ -501,7 +501,9 @@
         "copyLinkChoose": "Kuru saiti kopēt?",
         "openInBrowser": "Atvērt pārlūkā",
         "saveImage": "Saglabāt attēlu",
+        "videoFormatUnsupported": "Šo video formātu šeit nevar atskaņot",
         "videoUnavailable": "Video vairs nav pieejams",
+        "audioFormatUnsupported": "Šo audio formātu šeit nevar atskaņot",
         "audioUnavailable": "Audio vairs nav pieejams",
         "typing": {
             "one": "{{name}} raksta...",

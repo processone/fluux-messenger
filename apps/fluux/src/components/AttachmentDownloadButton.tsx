@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { downloadAttachment } from '@/utils/download'
+import { isTauri } from '@/utils/tauri'
 import type { FileAttachment } from '@fluux/sdk'
 
 interface Props {
@@ -10,25 +11,30 @@ interface Props {
   className?: string
   /** Classes for the icon glyph. */
   iconClassName?: string
+  /** Optional visible text next to the glyph, for a call-to-action variant. */
+  label?: string
 }
 
 /**
  * A download control that decrypts XEP-0454 (aesgcm) attachments before saving.
  *
- * Plaintext → a plain `<a href download>` so the browser/webview handles it
+ * Plaintext web → a plain `<a href download>` so the browser handles it
  * directly (and cross-client `file_share` URLs are preserved verbatim).
- * Encrypted → a `<button>` that resolves the decrypted bytes on click and
- * saves those; a spinner shows while decrypting. The ciphertext URL is never
- * exposed as an href.
+ * Tauri or encrypted → a `<button>` that resolves the bytes on click and saves
+ * them through the platform download path; a spinner shows while resolving.
+ * Ciphertext URLs are never exposed as an href.
  */
-export function AttachmentDownloadButton({ attachment, className, iconClassName }: Props) {
+export function AttachmentDownloadButton({ attachment, className, iconClassName, label }: Props) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
-  const icon = busy
+  const glyph = busy
     ? <Loader2 className={`${iconClassName ?? ''} animate-spin`} />
     : <Download className={iconClassName} />
+  const content = label
+    ? <>{glyph}<span>{label}</span></>
+    : glyph
 
-  if (!attachment.encryption) {
+  if (!attachment.encryption && !isTauri()) {
     return (
       <a
         href={attachment.url}
@@ -37,7 +43,7 @@ export function AttachmentDownloadButton({ attachment, className, iconClassName 
         aria-label={t('common.download')}
         tabIndex={-1}
       >
-        {icon}
+        {content}
       </a>
     )
   }
@@ -58,7 +64,7 @@ export function AttachmentDownloadButton({ attachment, className, iconClassName 
       aria-label={t('common.download')}
       tabIndex={-1}
     >
-      {icon}
+      {content}
     </button>
   )
 }
