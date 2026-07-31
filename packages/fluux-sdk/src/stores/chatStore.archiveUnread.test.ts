@@ -181,6 +181,20 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(spy).toHaveBeenCalledWith(CID)
+    // Assert the KEY, not just that a recount was scheduled. The fixture above
+    // is a real on-disk blob, so it has to carry the PERSISTED property name
+    // `archiveOrderKey` — the in-memory field is `tiebreak`, and
+    // `deserializeReadPointer` deliberately ignores that never-written name. A
+    // fixture written under the wrong name still restores a pointer, just a
+    // KEYLESS one, so a test that only checks the recount stays green while the
+    // hydrated position silently degrades to the at-or-after-timestamp
+    // fallback. This assertion is what makes that failure loud: the `id` is
+    // reconstructed from `messageId`, so a keyed hydration is only possible
+    // when the fixture used the on-disk name.
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.tiebreak).toEqual({
+      kind: 'chat',
+      id: 'p0',
+    })
     // Restore the un-wrapped action so later tests aren't left with a spy.
     chatStore.setState({ recomputeUnreadForConversation: original })
   })
