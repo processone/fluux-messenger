@@ -1494,7 +1494,7 @@ describe('countUnreadInArchive (chat)', () => {
     expect(res!.unread).toBe(3)
   })
 
-  it('missing tiebreak falls back to strict-after-timestamp (over-counts, safe)', async () => {
+  it('missing tiebreak falls back to at-or-after-timestamp (over-counts, safe)', async () => {
     const t = new Date(5000)
     await messageCache.saveMessages([
       createMockMessage(CONV, { id: 'm1', timestamp: t, isOutgoing: false }),
@@ -1583,7 +1583,7 @@ describe('countRoomUnreadInArchive (room)', () => {
     expect(res).toEqual({ unread: 1 })
   })
 
-  it('missing tiebreak falls back to strict-after-timestamp (over-counts, safe)', async () => {
+  it('missing tiebreak falls back to at-or-after-timestamp (over-counts, safe)', async () => {
     const t = new Date(5000)
     await messageCache.saveRoomMessages([
       createMockRoomMessage(ROOM, { id: 'm1', from: `${ROOM}/alice`, timestamp: t, isOutgoing: false }),
