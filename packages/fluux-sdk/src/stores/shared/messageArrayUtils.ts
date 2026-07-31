@@ -5,7 +5,7 @@
  * to reduce code duplication for common message array operations.
  */
 
-import { compareOrder, makeArchiveOrderKey } from './readState'
+import { compareOrder, makeCacheOrderKey } from './readState'
 
 /**
  * Generic interface for messages with a timestamp.
@@ -186,7 +186,7 @@ export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
 /**
  * Sort messages by timestamp in ascending order (oldest first).
  *
- * Same-millisecond ties break by the archive's own tie-break key
+ * Same-millisecond ties break by the message cache's own tie-break key
  * (`readState.ts`'s `compareOrder`), kind-discriminated: chat by `id` only,
  * room by `from` then `id`. This is deliberately NOT a generic `from`-then-`id`
  * comparator — chat messages carry `from` too, so inferring the tiebreak from
@@ -205,8 +205,8 @@ export function sortMessagesByTimestamp<T extends TimestampedMessage>(
 ): T[] {
   return [...messages].sort((a, b) =>
     compareOrder(
-      { timestamp: a.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(a, kind) },
-      { timestamp: b.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(b, kind) }
+      { timestamp: a.timestamp.getTime(), tiebreak: makeCacheOrderKey(a, kind) },
+      { timestamp: b.timestamp.getTime(), tiebreak: makeCacheOrderKey(b, kind) }
     )
   )
 }

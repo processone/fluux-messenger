@@ -167,7 +167,7 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
         readPointer: {
           messageId: seenMessageId,
           timestamp: seen?.timestamp ?? new Date(0),
-          archiveOrderKey: seen
+          tiebreak: seen
             ? { kind: 'room', from: seen.from, id: seenMessageId }
             : undefined,
         },
@@ -408,7 +408,7 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(
-      chatStore.getState().conversationMeta.get(cid)?.readPointer?.archiveOrderKey
+      chatStore.getState().conversationMeta.get(cid)?.readPointer?.tiebreak
     ).toEqual({ kind: 'chat', id: 'm2' })
     expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
     expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(cid, 's3', 'romeo@montague.example')
@@ -426,7 +426,7 @@ describe('setupMdsSideEffects', () => {
     seedMessages(cid, [msg('m1', 's1'), msg('m3', 's3'), ownMsg('m4', undefined)])
     seedMeta(cid)
     // A pointer migrated from the pre-#1081 lastSeenMessageId + lastReadAt pair
-    // has NO archiveOrderKey, and its timestamp is lastReadAt — documented as at
+    // has NO tiebreak, and its timestamp is lastReadAt — documented as at
     // or behind the message it names (readPointer.ts). Ordering by it therefore
     // under-advances: m3 sits past lastReadAt=2s and must not be selected.
     patchMeta(cid, { readPointer: { messageId: 'm4', timestamp: timeFor('m2') } })
@@ -712,7 +712,7 @@ describe('setupMdsSideEffects', () => {
         readPointer: {
           messageId: newest.id,
           timestamp: newest.timestamp,
-          archiveOrderKey: { kind: 'room', from: newest.from, id: newest.id },
+          tiebreak: { kind: 'room', from: newest.from, id: newest.id },
         },
       })
       return { roomMeta: meta }
@@ -825,7 +825,7 @@ describe('setupMdsSideEffects', () => {
         readPointer: {
           messageId: 'm2',
           timestamp: new Date(2),
-          archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' },
+          tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'm2' },
         },
       })
       return { roomMeta: meta }

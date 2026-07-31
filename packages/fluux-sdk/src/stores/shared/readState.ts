@@ -19,8 +19,13 @@ import type { ReadPointer } from './readPointer'
 export { isRenderableStoredMessage, type RenderabilityCheckFields } from '../../utils/messageRenderability'
 
 /**
- * The archive's own tie-break key for a message, kind-discriminated because
- * chat and room break same-millisecond ties differently:
+ * The IndexedDB message cache's own tie-break key for a message, built from the
+ * CLIENT message id. It has never held an archive id, and could not: XEP-0313
+ * §6.2 makes archive ids opaque strings with no guarantee of being numeric,
+ * sequenced or globally unique, and unique only per archive — they carry no
+ * ordering. This key is chosen to agree with the cache's cursors, and is
+ * kind-discriminated because chat and room break same-millisecond ties
+ * differently:
  *
  * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'`,
  *   `messageCache.ts:140`).
@@ -30,17 +35,17 @@ export { isRenderableStoredMessage, type RenderabilityCheckFields } from '../../
  * would be wrong for chat — the `kind` discriminant is what keeps the two
  * apart. Do not generalise this into a single shape.
  */
-export type ArchiveOrderKey = { kind: 'chat'; id: string } | { kind: 'room'; from: string; id: string }
+export type CacheOrderKey = { kind: 'chat'; id: string } | { kind: 'room'; from: string; id: string }
 
 /** Build the kind-appropriate order key for a message. */
-export function makeArchiveOrderKey(msg: { from?: string; id: string }, kind: 'chat' | 'room'): ArchiveOrderKey {
+export function makeCacheOrderKey(msg: { from?: string; id: string }, kind: 'chat' | 'room'): CacheOrderKey {
   return kind === 'room' ? { kind: 'room', from: msg.from ?? '', id: msg.id } : { kind: 'chat', id: msg.id }
 }
 
 /** A position in archive order: a timestamp, optionally refined by an order key. */
 export interface OrderPosition {
   timestamp: number
-  archiveOrderKey?: ArchiveOrderKey
+  tiebreak?: CacheOrderKey
 }
 
 /**
@@ -51,8 +56,8 @@ export interface OrderPosition {
  */
 export function compareOrder(a: OrderPosition, b: OrderPosition): number {
   if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
-  const ak = a.archiveOrderKey,
-    bk = b.archiveOrderKey
+  const ak = a.tiebreak,
+    bk = b.tiebreak
   if (!ak && !bk) return 0
   if (!ak) return -1 // unresolved sorts first → under-advance → over-count (safe)
   if (!bk) return 1
@@ -106,7 +111,7 @@ export function worthReconcilingOnDeactivate(
 }
 
 /**
- * Runtime guard for an `ArchiveOrderKey` read back from untrusted storage.
+ * Runtime guard for an `CacheOrderKey` read back from untrusted storage.
  *
  * No longer on the hydration path: `deserializeReadPointer` rebuilds the key
  * and takes its `id` from `messageId` instead of validating a persisted one.
@@ -116,7 +121,7 @@ export function worthReconcilingOnDeactivate(
  * fallback (over-count, the safe direction) instead of mis-reading it. That
  * compatibility claim is asserted against this function in `readPointer.test.ts`.
  */
-export function isValidArchiveOrderKey(v: unknown): v is ArchiveOrderKey {
+export function isValidCacheOrderKey(v: unknown): v is CacheOrderKey {
   if (!v || typeof v !== 'object') return false
   const k = v as Record<string, unknown>
   if (k.kind === 'chat') return typeof k.id === 'string'

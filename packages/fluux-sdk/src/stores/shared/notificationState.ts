@@ -25,7 +25,7 @@ import {
   compareOrder,
   computeFloor,
   isRenderableStoredMessage,
-  makeArchiveOrderKey,
+  makeCacheOrderKey,
   type OrderPosition,
   type RenderabilityCheckFields,
 } from './readState'
@@ -91,7 +91,7 @@ export interface NotificationMessage extends RenderabilityCheckFields {
   isOutgoing: boolean
   isDelayed?: boolean
   isMention?: boolean
-  /** Sender's JID — feeds the ROOM archive order key's (from, id) tie-break. */
+  /** Sender's JID — feeds the ROOM cache order key's (from, id) tie-break. */
   from?: string
 }
 
@@ -267,7 +267,7 @@ export function isUnseenIncomingMessage(
  *
  * The divider is **the first message the canonical count would count** (read-state
  * PR C, D5): incoming, renderable, and strictly after the read boundary in
- * `(timestamp, archiveOrderKey)` order. Sharing the count's exact predicate AND
+ * `(timestamp, tiebreak)` order. Sharing the count's exact predicate AND
  * its exact floor is what makes "the divider labels the count" true by
  * construction rather than by coincidence — see `countUnreadInArchive`.
  *
@@ -280,7 +280,7 @@ export function isUnseenIncomingMessage(
  * The old fallback ladder — a `lastReadAt` timestamp probe, an Nth-from-end
  * placement driven by `unreadCount`, and a resume-preserving snap — is gone. All
  * of it existed because the pointer could not be located outside the resident
- * slice, which a durably reconstructible `archiveOrderKey` now solves, and the
+ * slice, which a durably reconstructible `tiebreak` now solves, and the
  * snap was a pointer write inside a function whose job is to place a divider.
  *
  * With neither a pointer nor a `historyFloor` there is no boundary, so there is
@@ -297,7 +297,7 @@ export function onActivate(
   let firstNewMessageId: string | undefined = undefined
   if (floor) {
     const floorPos: OrderPosition = state.readPointer
-      ? { timestamp: state.readPointer.timestamp.getTime(), archiveOrderKey: state.readPointer.archiveOrderKey }
+      ? { timestamp: state.readPointer.timestamp.getTime(), tiebreak: state.readPointer.tiebreak }
       : { timestamp: floor.getTime() }
 
     for (const m of messages) {
@@ -305,7 +305,7 @@ export function onActivate(
       if (!isRenderableStoredMessage(m)) continue
       const pos: OrderPosition = {
         timestamp: m.timestamp.getTime(),
-        archiveOrderKey: makeArchiveOrderKey(m, kind),
+        tiebreak: makeCacheOrderKey(m, kind),
       }
       if (compareOrder(pos, floorPos) > 0) {
         firstNewMessageId = m.id
@@ -435,7 +435,7 @@ export function onWindowBecameVisible(
  * moving on a fabricated timestamp would push a forward-only floor past unread
  * messages for good.
  *
- * A KEYED current pointer (carries `archiveOrderKey`) is ordered by archive
+ * A KEYED current pointer (carries `tiebreak`) is ordered by archive
  * POSITION via `compareOrder`, not by array index — its position is provable
  * without being resident in `messages` (PR C, D4). The off-slice guard and the
  * `atLiveEdge` escape hatch below apply only to a KEYLESS (migrated) pointer,
@@ -471,11 +471,11 @@ export function onMessageSeen(
   // advance. Safe against the resident array because PR B gave
   // `messageArrayUtils` the same `compareOrder` tie-break, so array index and
   // archive order agree.
-  if (state.readPointer.archiveOrderKey) {
+  if (state.readPointer.tiebreak) {
     const target = messages[newIdx]
     return compareOrder(
-      { timestamp: target.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(target, kind) },
-      { timestamp: state.readPointer.timestamp.getTime(), archiveOrderKey: state.readPointer.archiveOrderKey }
+      { timestamp: target.timestamp.getTime(), tiebreak: makeCacheOrderKey(target, kind) },
+      { timestamp: state.readPointer.timestamp.getTime(), tiebreak: state.readPointer.tiebreak }
     ) > 0
       ? advanced()
       : state

@@ -57,7 +57,7 @@ describe('resolveRemoteDisplayed', () => {
 
     // Whole-object assertion: the resolution carries one read position, and its
     // timestamp is the resolved message's own (#1081). toMatchObject rather
-    // than toEqual: the resolved pointer also carries an archiveOrderKey,
+    // than toEqual: the resolved pointer also carries an tiebreak,
     // which is not what this test is about.
     expect(result).toMatchObject({
       kind: 'advanced',

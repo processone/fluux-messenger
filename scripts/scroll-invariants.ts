@@ -2728,7 +2728,7 @@ test.describe('Jump-to-last-read pill', () => {
       const readPointer = {
         messageId: pointerId,
         timestamp: msgs[pIdx].timestamp,
-        archiveOrderKey: { kind: 'room', from: msgs[pIdx].from ?? '', id: pointerId },
+        tiebreak: { kind: 'room', from: msgs[pIdx].from ?? '', id: pointerId },
       }
       const roomMeta = new Map(s.roomMeta)
       const meta = roomMeta.get(jid)

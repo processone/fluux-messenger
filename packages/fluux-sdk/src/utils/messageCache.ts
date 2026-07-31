@@ -12,10 +12,10 @@ import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
 import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
 import {
-  makeArchiveOrderKey,
+  makeCacheOrderKey,
   compareOrder,
   isRenderableStoredMessage,
-  type ArchiveOrderKey,
+  type CacheOrderKey,
   type OrderPosition,
 } from '../stores/shared/readState'
 
@@ -849,7 +849,7 @@ export interface UnreadCountArgs {
   /**
    * The read pointer's position, for a strict-after-POSITION test rather than a
    * timestamp-only test — two messages can share a millisecond. When
-   * `archiveOrderKey` is omitted (a pointer migrated from the pre-#1081 legacy
+   * `tiebreak` is omitted (a pointer migrated from the pre-#1081 legacy
    * fields), `compareOrder` treats the pointer's key as unresolved, and an
    * unresolved key sorts BEFORE any resolved one at an equal timestamp — so
    * every row at the pointer's exact millisecond, including the pointer's own
@@ -860,7 +860,7 @@ export interface UnreadCountArgs {
    * message permanently). Omitting `pointer` entirely counts everything from
    * `floor`.
    */
-  pointer?: { timestamp: Date; archiveOrderKey?: ArchiveOrderKey }
+  pointer?: { timestamp: Date; tiebreak?: CacheOrderKey }
   /** Cap on the reported `unread` count. Default {@link DEFAULT_UNREAD_CAP}. */
   unreadCap?: number
 }
@@ -873,7 +873,7 @@ export interface ArchiveCount {
 
 /** The pointer's position as an `OrderPosition`, or `undefined` when there is no pointer. */
 function toPointerPosition(pointer: UnreadCountArgs['pointer']): OrderPosition | undefined {
-  return pointer ? { timestamp: pointer.timestamp.getTime(), archiveOrderKey: pointer.archiveOrderKey } : undefined
+  return pointer ? { timestamp: pointer.timestamp.getTime(), tiebreak: pointer.tiebreak } : undefined
 }
 
 /**
@@ -927,7 +927,7 @@ export async function countUnreadInArchive(
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
           const position: OrderPosition = {
             timestamp: stored.timestamp,
-            archiveOrderKey: makeArchiveOrderKey(message, 'chat'),
+            tiebreak: makeCacheOrderKey(message, 'chat'),
           }
           if (isStrictlyAfterPointer(position, pointerPosition)) {
             unread++
@@ -1345,7 +1345,7 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
         if (!message.isOutgoing && isRenderableStoredMessage(message)) {
           const position: OrderPosition = {
             timestamp: stored.timestamp,
-            archiveOrderKey: makeArchiveOrderKey(message, 'room'),
+            tiebreak: makeCacheOrderKey(message, 'room'),
           }
           if (isStrictlyAfterPointer(position, pointerPosition)) {
             unread++
@@ -1392,7 +1392,7 @@ export async function resolveArchivePosition(
   if (!message) return null
   return {
     timestamp: message.timestamp.getTime(),
-    archiveOrderKey: makeArchiveOrderKey(message, isRoom ? 'room' : 'chat'),
+    tiebreak: makeCacheOrderKey(message, isRoom ? 'room' : 'chat'),
   }
 }
 

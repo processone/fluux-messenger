@@ -1183,7 +1183,7 @@ describe('chatStore', () => {
           readPointer: {
             messageId: 'msg-150',
             timestamp: new Date(150 * 60_000),
-            archiveOrderKey: { kind: 'chat', id: 'msg-150' },
+            tiebreak: { kind: 'chat', id: 'msg-150' },
           },
         })
         return { conversationMeta: meta }

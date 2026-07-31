@@ -139,7 +139,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 99, // stale — must be overwritten by the exact derivation
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
 
@@ -161,7 +161,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 0,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
 
@@ -171,7 +171,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(2)
   })
 
-  it('a migrated pointer with no archiveOrderKey over-counts same-millisecond rows rather than reporting zero', async () => {
+  it('a migrated pointer with no tiebreak over-counts same-millisecond rows rather than reporting zero', async () => {
     await messageCache.saveRoomMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
@@ -181,7 +181,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 0,
-      // Legacy/migrated shape: no archiveOrderKey at all.
+      // Legacy/migrated shape: no tiebreak at all.
       readPointer: { messageId: 'p0', timestamp: new Date(1000) },
     })
     seedCoverage('anchor-stanza')
@@ -207,7 +207,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   it('a forward MAM merge into a non-active room with new messages triggers a recount', () => {
-    setMeta({ unreadCount: 0, readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } } })
+    setMeta({ unreadCount: 0, readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } } })
     roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
     const original = roomStore.getState().recomputeUnreadForRoom
     const spy = vi.fn(original)
@@ -247,7 +247,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   it('a remote marker advancing a non-active room triggers a recount', () => {
-    setMeta({ unreadCount: 0, readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } } })
+    setMeta({ unreadCount: 0, readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } } })
     roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
     const original = roomStore.getState().recomputeUnreadForRoom
     const spy = vi.fn(original)
@@ -274,7 +274,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
     setMeta({
       unreadCount: 5,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     roomStore.setState({ activeRoomJid: ROOM })
@@ -306,7 +306,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // tell a real recompute from a no-op.
     setMeta({
       unreadCount: 99,
-      readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+      readPointer: { messageId: 'anchor', timestamp: new Date(500), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
     })
     seedCoverage('anchor-stanza')
     roomStore.setState({ activeRoomJid: ROOM })
@@ -383,7 +383,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 5, // the persisted/trusted value
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     // Coverage IS proven and resolvable — but mamQueryStates is left at its
     // default (NOT caught up to live), so the caught-up gate is the single
@@ -404,7 +404,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 7,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     roomStore.setState((state) => {
       const mamQueryStates = new Map(state.mamQueryStates)
@@ -422,7 +422,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([archiveMsg('p0', 1000), archiveMsg('u1', 1001)])
     setMeta({
       unreadCount: 6,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     // bottomId names an archive stanza-id that was never saved — unresolvable.
     seedCoverage('nonexistent-stanza-id')
@@ -453,7 +453,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 8, // trusted — must survive untouched
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('gap-anchor-stanza')
 
@@ -494,7 +494,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // Viewport observer reports zulu's message seen while it is the only resident message.
     roomStore.getState().advanceReadPointer(ROOM, 'm1')
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.messageId).toBe('m1')
-    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.archiveOrderKey).toMatchObject({ from: `${ROOM}/zulu` })
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.tiebreak).toMatchObject({ from: `${ROOM}/zulu` })
 
     // A same-millisecond message from a DIFFERENT occupant arrives live, SECOND.
     roomStore.getState().addMessage(ROOM, archiveMsg('m2', T, { from: `${ROOM}/alice`, nick: 'alice' }))
@@ -543,7 +543,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })])
     setMeta({
       unreadCount: 0,
-      readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+      readPointer: { messageId: 'anchor', timestamp: new Date(500), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
     })
     seedCoverage('anchor-stanza')
     // Active + focused (default windowVisible), but viewportAtLiveEdge is
@@ -592,7 +592,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
     setMeta({
       unreadCount: 0,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
 
@@ -622,7 +622,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 5,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
 
@@ -666,7 +666,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 7,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
 
@@ -705,7 +705,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 5, // stale — the slow recompute below would derive 1 (u1) from THIS pointer
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     roomStore.setState({ activeRoomJid: ROOM })
@@ -729,7 +729,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       meta.set(ROOM, {
         ...meta.get(ROOM)!,
         unreadCount: 0,
-        readPointer: { messageId: 'u1', timestamp: new Date(1001), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'u1' } },
+        readPointer: { messageId: 'u1', timestamp: new Date(1001), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'u1' } },
       })
       return { roomMeta: meta }
     })
@@ -773,7 +773,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([anchor, p0, u1])
     setMeta({
       unreadCount: 99,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     seedActiveWithStaleMarker([anchor, p0, u1])
@@ -797,7 +797,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([anchor, p0, u1])
     setMeta({
       unreadCount: 1,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     roomStore.setState((state) => {
@@ -831,7 +831,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await messageCache.saveRoomMessages([anchor, p0])
     setMeta({
       unreadCount: 99,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     roomStore.setState((state) => {
@@ -867,7 +867,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       setMeta({
         unreadCount: 5,
         mentionsCount: SEEDED_MENTIONS,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
 
@@ -891,7 +891,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       setMeta({
         unreadCount: 3,
         mentionsCount: SEEDED_MENTIONS,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
       vi.mocked(messageCache.countRoomUnreadInArchive).mockResolvedValueOnce(null)
@@ -917,7 +917,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     setMeta({
       unreadCount: 0,
-      readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+      readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
     })
     seedCoverage('anchor-stanza')
     // One never-archived (noLocalStore) message, after the pointer.
@@ -946,7 +946,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await messageCache.saveRoomMessages([archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }), archiveMsg('p0', 1000)])
       setMeta({
         unreadCount: 0,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
     })
@@ -1057,7 +1057,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await messageCache.saveRoomMessages([anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0 derived below
-        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
       })
       seedCoverage('anchor-stanza')
       // Active + focused (default windowVisible), with the full history
@@ -1088,7 +1088,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await messageCache.saveRoomMessages([anchor, m1, m2, m3])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 and the correct 2
-        readPointer: { messageId: 'anchor', timestamp: new Date(500), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
+        readPointer: { messageId: 'anchor', timestamp: new Date(500), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'anchor' } },
       })
       seedCoverage('anchor-stanza')
       roomStore.setState({ activeRoomJid: ROOM })
@@ -1116,7 +1116,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // above) while unreadCount is stale.
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0
-        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
       })
       seedCoverage('anchor-stanza')
       roomStore.getState().addRoom(createRoom('other-room@conference.example.com'))
@@ -1156,7 +1156,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // here), same as the fully-read sibling test above.
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
       roomStore.getState().addRoom(createRoom('other-room@conference.example.com'))
@@ -1249,7 +1249,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       setMeta({
         unreadCount: 3,
         mentionsCount: 4,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
 
@@ -1274,7 +1274,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       setMeta({
         unreadCount: 4,
         mentionsCount: 4,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
 
@@ -1326,7 +1326,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       ])
       setMeta({
         unreadCount: 1,
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
 
@@ -1379,7 +1379,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       // can never schedule a recount. This is the reported defect.
       setMeta({
         unreadCount: 5, // stale — distinct from the correct 0
-        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
       })
       seedCoverage('anchor-stanza')
       seedResident([anchor, m1])
@@ -1413,7 +1413,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       await messageCache.saveRoomMessages([anchor, p0, u1, u2])
       setMeta({
         unreadCount: 5, // stale — distinct from BOTH 0 (naive force-zero) and the correct 2
-        readPointer: { messageId: 'p0', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
+        readPointer: { messageId: 'p0', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } },
       })
       seedCoverage('anchor-stanza')
       seedResident([anchor, p0, u1, u2])
@@ -1438,7 +1438,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       ])
       setMeta({
         unreadCount: 0, // nothing to correct downward
-        readPointer: { messageId: 'm1', timestamp: new Date(1000), archiveOrderKey: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
+        readPointer: { messageId: 'm1', timestamp: new Date(1000), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'm1' } },
       })
       seedCoverage('anchor-stanza')
       vi.mocked(messageCache.countRoomUnreadInArchive).mockClear()

@@ -636,7 +636,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       const readPointer = {
         messageId: 'read-msg',
         timestamp: new Date('2026-06-10T00:00:00Z'),
-        archiveOrderKey: { kind: 'chat' as const, id: 'read-msg' },
+        tiebreak: { kind: 'chat' as const, id: 'read-msg' },
       }
       chatStore.setState((s) => {
         const conversationMeta = new Map(s.conversationMeta)
@@ -667,7 +667,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // the floor (proving coverage reaches at least that far back).
       vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({
         timestamp: new Date('2026-06-09T23:00:00Z').getTime(),
-        archiveOrderKey: { kind: 'chat', id: 'archive-anchor' },
+        tiebreak: { kind: 'chat', id: 'archive-anchor' },
       })
       // Only the genuinely-unread message remains once the reaction ghost drops.
       vi.mocked(messageCache.countUnreadInArchive).mockResolvedValueOnce({ unread: 1 })
@@ -916,7 +916,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       const readPointer = {
         messageId: 'read-msg',
         timestamp: new Date('2026-06-10T00:00:00Z'),
-        archiveOrderKey: { kind: 'room' as const, from: `${ROOM}/alice`, id: 'read-msg' },
+        tiebreak: { kind: 'room' as const, from: `${ROOM}/alice`, id: 'read-msg' },
       }
       roomStore.setState((s) => {
         const roomMeta = new Map(s.roomMeta)
@@ -935,7 +935,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // the floor (proving coverage reaches at least that far back).
       vi.mocked(messageCache.resolveArchivePosition).mockResolvedValueOnce({
         timestamp: new Date('2026-06-09T23:00:00Z').getTime(),
-        archiveOrderKey: { kind: 'room', from: `${ROOM}/alice`, id: 'archive-anchor' },
+        tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'archive-anchor' },
       })
       // Only one message is genuinely unread once the archive is consulted.
       vi.mocked(messageCache.countRoomUnreadInArchive).mockResolvedValueOnce({ unread: 1 })

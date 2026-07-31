@@ -22,7 +22,7 @@ import {
   pointerlessDefers,
   worthReconcilingOnDeactivate,
   compareOrder,
-  makeArchiveOrderKey,
+  makeCacheOrderKey,
   isRenderableStoredMessage,
   type OrderPosition,
 } from './shared/readState'
@@ -50,7 +50,14 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
-import { advance, deserializeReadPointer, makeReadPointer, type ReadPointer } from './shared/readPointer'
+import {
+  advance,
+  deserializeReadPointer,
+  makeReadPointer,
+  toPersistedReadPointer,
+  type PersistedReadPointer,
+  type ReadPointer,
+} from './shared/readPointer'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
@@ -619,8 +626,16 @@ interface LegacyReadState {
   lastReadAt?: Date
 }
 
-type PersistedConversationMetadata = ConversationMetadata & PersistedReadState
-type PersistedConversation = Conversation & PersistedReadState
+/**
+ * On disk the pointer's tie-break keeps its historical property name
+ * `archiveOrderKey`; only the in-memory field is `tiebreak`. This blob is a
+ * verbatim `JSON.stringify` of the live objects, so the boundary has to be in
+ * the persisted TYPE as well as in the value (see {@link PersistedReadPointer}).
+ */
+type PersistedConversationMetadata = Omit<ConversationMetadata, 'readPointer'> &
+  PersistedReadState & { readPointer?: PersistedReadPointer }
+type PersistedConversation = Omit<Conversation, 'readPointer'> &
+  PersistedReadState & { readPointer?: PersistedReadPointer }
 
 /**
  * Legacy read state still waiting to become a `readPointer`, keyed by the
@@ -701,12 +716,16 @@ interface PersistedState {
 function withUnmigratedReadState<T extends { readPointer?: ReadPointer }>(
   entries: Map<string, T>,
   legacy: Map<string, LegacyReadState> | undefined
-): [string, T & PersistedReadState][] {
-  if (!legacy || legacy.size === 0) return Array.from(entries.entries())
-  const out: [string, T & PersistedReadState][] = []
+): [string, Omit<T, 'readPointer'> & PersistedReadState & { readPointer?: PersistedReadPointer }][] {
+  // Every entry passes through `onDisk` so the pointer is written under its
+  // on-disk property name (see {@link PersistedReadPointer}).
+  const onDisk = (value: T): Omit<T, 'readPointer'> & { readPointer?: PersistedReadPointer } =>
+    value.readPointer ? { ...value, readPointer: toPersistedReadPointer(value.readPointer) } : value
+  if (!legacy || legacy.size === 0) return Array.from(entries.entries(), ([id, value]) => [id, onDisk(value)])
+  const out: [string, Omit<T, 'readPointer'> & PersistedReadState & { readPointer?: PersistedReadPointer }][] = []
   for (const [id, value] of entries) {
     const carry = value.readPointer ? undefined : legacy.get(id)
-    out.push(carry ? [id, { ...value, ...carry }] : [id, value])
+    out.push(carry ? [id, { ...onDisk(value), ...carry }] : [id, onDisk(value)])
   }
   return out
 }
@@ -1485,7 +1504,7 @@ export const chatStore = createStore<ChatState>()(
           //
           // The DIVIDER does not depend on this load. `onActivate` derives it by
           // archive POSITION — the first renderable incoming message strictly
-          // after the pointer in `(timestamp, archiveOrderKey)` order — so an
+          // after the pointer in `(timestamp, tiebreak)` order — so an
           // off-slice pointer places it exactly as well as a resident one. The
           // stale-pointer fallback ladder that made an off-slice pointer a
           // degraded case is gone. What a cache miss costs is CONTEXT: the
@@ -1646,7 +1665,7 @@ export const chatStore = createStore<ChatState>()(
           const before = transientCounts(scopeKey, undefined).unread
           const result = noteTransient(
             scopeKey,
-            { position: { timestamp: msg.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(msg, 'chat') } },
+            { position: { timestamp: msg.timestamp.getTime(), tiebreak: makeCacheOrderKey(msg, 'chat') } },
             transientIdentity({ id: msg.id }, 'chat'),
             transientAliases({ id: msg.id }, 'chat')
           )
@@ -1861,7 +1880,7 @@ export const chatStore = createStore<ChatState>()(
           if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
             pruneTransient(chatTransientScopeKey(conversationId), {
               timestamp: updated.readPointer.timestamp.getTime(),
-              archiveOrderKey: updated.readPointer.archiveOrderKey,
+              tiebreak: updated.readPointer.tiebreak,
             })
           }
 
@@ -1905,7 +1924,7 @@ export const chatStore = createStore<ChatState>()(
           // entry to a later recompute trigger.
           pruneTransient(chatTransientScopeKey(conversationId), {
             timestamp: readPointer.timestamp.getTime(),
-            archiveOrderKey: readPointer.archiveOrderKey,
+            tiebreak: readPointer.tiebreak,
           })
 
           const draft = draftConversationMaps(state)
@@ -2010,7 +2029,7 @@ export const chatStore = createStore<ChatState>()(
           if (updated.readPointer) {
             pruneTransient(chatTransientScopeKey(conversationId), {
               timestamp: updated.readPointer.timestamp.getTime(),
-              archiveOrderKey: updated.readPointer.archiveOrderKey,
+              tiebreak: updated.readPointer.tiebreak,
             })
           }
 
@@ -2590,7 +2609,7 @@ export const chatStore = createStore<ChatState>()(
         // coverage bottom sharing its exact millisecond; a historyFloor-derived
         // floor has no such key (unresolved sorts conservatively).
         const floorPos: OrderPosition = metaNow.readPointer
-          ? { timestamp: metaNow.readPointer.timestamp.getTime(), archiveOrderKey: metaNow.readPointer.archiveOrderKey }
+          ? { timestamp: metaNow.readPointer.timestamp.getTime(), tiebreak: metaNow.readPointer.tiebreak }
           : { timestamp: floor.getTime() }
 
         // Task 9 safety net: this recompute is one of the "pointer advance /

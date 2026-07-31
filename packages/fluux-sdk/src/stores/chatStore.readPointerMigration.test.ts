@@ -236,17 +236,17 @@ describe('post-rehydrate readPointer backfill', () => {
   })
 
   // Task 2 (#1102): `deserializeState`'s NEW-FORMAT branch (conversationEntities +
-  // conversationMeta) round-trips the structured archiveOrderKey — asserted
+  // conversationMeta) round-trips the structured tiebreak — asserted
   // directly rather than assumed from the plain messageId/timestamp case above.
-  it('round-trips a persisted archiveOrderKey through the new-format deserialize branch', async () => {
+  it('round-trips a persisted tiebreak through the new-format deserialize branch', async () => {
     persistConversations([
       [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'chat', id: 'm2' } } }],
     ])
 
     await chatStore.persist.rehydrate()
 
-    expect(pointerOf(CONV)?.archiveOrderKey).toEqual({ kind: 'chat', id: 'm2' })
-    expect(chatStore.getState().conversations.get(CONV)?.readPointer?.archiveOrderKey).toEqual({
+    expect(pointerOf(CONV)?.tiebreak).toEqual({ kind: 'chat', id: 'm2' })
+    expect(chatStore.getState().conversations.get(CONV)?.readPointer?.tiebreak).toEqual({
       kind: 'chat',
       id: 'm2',
     })
@@ -255,7 +255,7 @@ describe('post-rehydrate readPointer backfill', () => {
   // The legacy-format branch (no conversationEntities/conversationMeta on disk —
   // pre-Task-6b combined `conversations` map) goes through the same
   // `deserializeReadPointer` call and must round-trip the key too.
-  it('round-trips a persisted archiveOrderKey through the legacy-format deserialize branch', async () => {
+  it('round-trips a persisted tiebreak through the legacy-format deserialize branch', async () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -276,20 +276,37 @@ describe('post-rehydrate readPointer backfill', () => {
 
     await chatStore.persist.rehydrate()
 
-    expect(pointerOf(CONV)?.archiveOrderKey).toEqual({ kind: 'chat', id: 'm2' })
+    expect(pointerOf(CONV)?.tiebreak).toEqual({ kind: 'chat', id: 'm2' })
   })
 
   // A malformed persisted key must be DROPPED at this real persistence surface
   // too, not just at the deserializeReadPointer unit level — the pointer itself
   // (messageId/timestamp) survives.
-  it('drops a malformed persisted archiveOrderKey but keeps the rest of the pointer', async () => {
+  // The chat blob is a verbatim JSON.stringify of the live objects, so renaming
+  // the in-memory field would leak the new name to disk and orphan every stored
+  // pointer. The persisted property stays `archiveOrderKey`.
+  it('persists the tie-break under its on-disk name, not the in-memory one', async () => {
+    persistConversations([
+      [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'chat', id: 'm2' } } }],
+    ])
+
+    await chatStore.persist.rehydrate()
+    chatStore.setState((state) => ({ conversationMeta: new Map(state.conversationMeta) }))
+    flushThrottledStorage()
+
+    const onDisk = diskEntry('conversationMeta', CONV).readPointer as Record<string, unknown>
+    expect(onDisk.archiveOrderKey).toEqual({ kind: 'chat', id: 'm2' })
+    expect('tiebreak' in onDisk).toBe(false)
+  })
+
+  it('drops a malformed persisted tiebreak but keeps the rest of the pointer', async () => {
     persistConversations([
       [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'room', id: 'm2' } } }],
     ])
 
     await chatStore.persist.rehydrate()
 
-    expect(pointerOf(CONV)?.archiveOrderKey).toBeUndefined() // missing `from` → invalid → dropped
+    expect(pointerOf(CONV)?.tiebreak).toBeUndefined() // missing `from` → invalid → dropped
     expect(pointerOf(CONV)?.messageId).toBe('m2')
   })
 })
@@ -392,10 +409,10 @@ describe('unmigrated legacy read state survives the persist', () => {
     persistConversations([[CONV, { lastSeenMessageId: 'm2' }]])
 
     relaunch()
-    // toMatchObject: this path resolves the message from cache and stamps an
-    // archiveOrderKey onto the pointer (unlike the both-fields branch above,
+    // toMatchObject: this path resolves the message from cache and stamps a
+    // tiebreak onto the pointer (unlike the both-fields branch above,
     // which copies the legacy pair through verbatim) — the point of this
-    // assertion is messageId/timestamp, not the archive key's exact shape.
+    // assertion is messageId/timestamp, not the tie-break's exact shape.
     await vi.waitFor(() => expect(pointerOf(CONV)).toMatchObject({ messageId: 'm2', timestamp: at(2000) }), { timeout: 2000 })
     // This assertion means to observe the final persisted blob, not a
     // mid-pass write still sitting in the throttle's pending thunk.

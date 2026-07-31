@@ -44,7 +44,7 @@ describe('room read-state persistence', () => {
       readPointer: {
         messageId: 'm7',
         timestamp: at(7000),
-        archiveOrderKey: { kind: 'room', from: 'room@conf.example.com/alice', id: 'm7' },
+        tiebreak: { kind: 'room', from: 'room@conf.example.com/alice', id: 'm7' },
       },
       historyFloor: at(100),
     })

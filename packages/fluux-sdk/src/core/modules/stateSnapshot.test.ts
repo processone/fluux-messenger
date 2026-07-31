@@ -215,10 +215,10 @@ describe('StateSnapshot', () => {
       expect(persisted?.readPointer).toEqual({ messageId: 'msg-7', timestamp: readAt.getTime() })
     })
 
-    // Task 2 (#1102): the structured archiveOrderKey rides through this
+    // Task 2 (#1102): the structured tiebreak rides through this
     // surface too — round-tripped on both halves (write via flush, read back
     // via hydrate), not assumed from the plain-field case above.
-    it('round-trips the archiveOrderKey through flush and hydrate', async () => {
+    it('round-trips the tiebreak through flush and hydrate', async () => {
       const readAt = new Date('2026-04-21T09:20:00Z')
       const pointer = makeReadPointer({ id: 'msg-8', from: 'room@conf.example.com/alice', timestamp: readAt }, 'room')
       roomStore.getState().addRoom(makeRoom('room@conf.example.com', { readPointer: pointer }))
@@ -230,7 +230,9 @@ describe('StateSnapshot', () => {
       }>
       // The tie-break's `id` is NOT persisted: it is `messageId`, and storing a
       // second copy made a disagreement representable on disk. Only `from`,
-      // which the pointer cannot reconstruct, rides through.
+      // which the pointer cannot reconstruct, rides through. The persisted
+      // property keeps its historical name `archiveOrderKey`; only the
+      // in-memory field is `tiebreak`.
       expect(persisted?.readPointer?.archiveOrderKey).toEqual({
         kind: 'room',
         from: 'room@conf.example.com/alice',
@@ -240,7 +242,7 @@ describe('StateSnapshot', () => {
       // with `id` reconstructed from `messageId`.
       roomStore.getState().removeRoom('room@conf.example.com')
       await snapshot.hydrate('user@example.com')
-      expect(roomStore.getState().rooms.get('room@conf.example.com')?.readPointer?.archiveOrderKey).toEqual({
+      expect(roomStore.getState().rooms.get('room@conf.example.com')?.readPointer?.tiebreak).toEqual({
         kind: 'room',
         from: 'room@conf.example.com/alice',
         id: 'msg-8',

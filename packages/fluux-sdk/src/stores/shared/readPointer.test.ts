@@ -7,23 +7,23 @@ import {
   deserializeReadPointer,
 } from './readPointer'
 import type { ReadPointer } from './readPointer'
-import { isValidArchiveOrderKey } from './readState'
+import { isValidCacheOrderKey } from './readState'
 
 const at = (ms: number) => new Date(ms)
 
 describe('makeReadPointer', () => {
-  it('captures the id and timestamp of the message it names, plus its archive order key', () => {
+  it('captures the id and timestamp of the message it names, plus its cache order key', () => {
     expect(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')).toEqual({
       messageId: 'm1',
       timestamp: at(1000),
-      archiveOrderKey: { kind: 'chat', id: 'm1' },
+      tiebreak: { kind: 'chat', id: 'm1' },
     })
   })
 
-  it('round-trips a room pointer with its archiveOrderKey', () => {
+  it('round-trips a room pointer with its tiebreak', () => {
     const p = makeReadPointer({ id: 'm1', from: 'r@c/alice', timestamp: at(1000) }, 'room')
-    expect(p.archiveOrderKey).toEqual({ kind: 'room', from: 'r@c/alice', id: 'm1' })
-    expect(deserializeReadPointer(serializeReadPointer(p))!.archiveOrderKey)
+    expect(p.tiebreak).toEqual({ kind: 'room', from: 'r@c/alice', id: 'm1' })
+    expect(deserializeReadPointer(serializeReadPointer(p))!.tiebreak)
       .toEqual({ kind: 'room', from: 'r@c/alice', id: 'm1' })
   })
 })
@@ -144,16 +144,16 @@ describe('serialization', () => {
   // The persisted key is untrusted input too: a malformed one must not ride
   // through into ordering comparisons. Dropping only the key (not the whole
   // pointer) keeps the id/timestamp that are otherwise fine.
-  it('drops a malformed persisted archiveOrderKey instead of trusting it', () => {
+  it('drops a malformed persisted tiebreak instead of trusting it', () => {
     const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey: { kind: 'room', id: 'x' } })
-    expect(back!.archiveOrderKey).toBeUndefined() // missing `from` → invalid → dropped
+    expect(back!.tiebreak).toBeUndefined() // missing `from` → invalid → dropped
     expect(back!.messageId).toBe('m') // the pointer itself survives
   })
 
   // A pointer migrated from the pre-#1081 legacy fields has no message
   // position to derive a key from — absence here is legitimate, not corrupt.
-  it('a legacy pointer with no key deserializes with archiveOrderKey undefined', () => {
-    expect(deserializeReadPointer({ messageId: 'm', timestamp: 1000 })!.archiveOrderKey).toBeUndefined()
+  it('a legacy pointer with no key deserializes with tiebreak undefined', () => {
+    expect(deserializeReadPointer({ messageId: 'm', timestamp: 1000 })!.tiebreak).toBeUndefined()
   })
 })
 
@@ -197,7 +197,7 @@ describe('serialization: the tie-break id is not persisted', () => {
   it('reads a legacy on-disk key that still carries its id (lossless)', () => {
     expect(
       deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'chat', id: 'm1' } })
-    ).toEqual({ messageId: 'm1', timestamp: at(1000), archiveOrderKey: { kind: 'chat', id: 'm1' } })
+    ).toEqual({ messageId: 'm1', timestamp: at(1000), tiebreak: { kind: 'chat', id: 'm1' } })
 
     expect(
       deserializeReadPointer({
@@ -208,7 +208,7 @@ describe('serialization: the tie-break id is not persisted', () => {
     ).toEqual({
       messageId: 'm2',
       timestamp: at(1000),
-      archiveOrderKey: { kind: 'room', from: 'room@x/nick', id: 'm2' },
+      tiebreak: { kind: 'room', from: 'room@x/nick', id: 'm2' },
     })
   })
 
@@ -218,7 +218,7 @@ describe('serialization: the tie-break id is not persisted', () => {
     ).toEqual({
       messageId: 'm1',
       timestamp: at(1000),
-      archiveOrderKey: { kind: 'chat', id: 'm1' },
+      tiebreak: { kind: 'chat', id: 'm1' },
     })
   })
 
@@ -232,14 +232,14 @@ describe('serialization: the tie-break id is not persisted', () => {
       timestamp: 1000,
       archiveOrderKey: { kind: 'chat', id: 'm9-ahead' },
     })
-    expect(back!.archiveOrderKey).toEqual({ kind: 'chat', id: 'm1' })
+    expect(back!.tiebreak).toEqual({ kind: 'chat', id: 'm1' })
 
     const roomBack = deserializeReadPointer({
       messageId: 'm1',
       timestamp: 1000,
       archiveOrderKey: { kind: 'room', from: 'room@x/nick', id: 'm9-ahead' },
     })
-    expect(roomBack!.archiveOrderKey).toEqual({ kind: 'room', from: 'room@x/nick', id: 'm1' })
+    expect(roomBack!.tiebreak).toEqual({ kind: 'room', from: 'room@x/nick', id: 'm1' })
   })
 
   // ...and the disagreement cannot be written back out either: what a
@@ -255,7 +255,7 @@ describe('serialization: the tie-break id is not persisted', () => {
   })
 
   // Compatibility 2 — new data, old build. An older build validates the
-  // persisted key with `isValidArchiveOrderKey`, which requires
+  // persisted key with `isValidCacheOrderKey`, which requires
   // `typeof k.id === 'string'`. The id-less form fails that guard, so an old
   // build DROPS the key and degrades to the documented at-or-after-timestamp
   // fallback, which over-counts — the safe, recoverable direction. Asserted
@@ -264,8 +264,8 @@ describe('serialization: the tie-break id is not persisted', () => {
   it('an old build drops the new id-less key rather than mis-reading it', () => {
     const chat = serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'))
     const room = serializeReadPointer(makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room'))
-    expect(isValidArchiveOrderKey(chat.archiveOrderKey)).toBe(false)
-    expect(isValidArchiveOrderKey(room.archiveOrderKey)).toBe(false)
+    expect(isValidCacheOrderKey(chat.archiveOrderKey)).toBe(false)
+    expect(isValidCacheOrderKey(room.archiveOrderKey)).toBe(false)
   })
 
   // The pointer itself must still load on an old build: only the key degrades.
@@ -286,7 +286,43 @@ describe('serialization: the tie-break id is not persisted', () => {
     ['a non-object key', 'chat'],
   ])('drops %s', (_label, archiveOrderKey) => {
     const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey })
-    expect(back!.archiveOrderKey).toBeUndefined()
+    expect(back!.tiebreak).toBeUndefined()
     expect(back!.messageId).toBe('m')
+  })
+})
+
+// The in-memory field is `tiebreak`; the PERSISTED property is still
+// `archiveOrderKey`. Renaming the on-disk name would orphan every stored
+// pointer, so it is deliberately unchanged — asserted against literal JSON so
+// the format cannot drift with the next rename.
+describe('the on-disk property name is not renamed with the field', () => {
+  it('writes the exact bytes the previous build wrote', () => {
+    expect(JSON.stringify(serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'))))
+      .toBe('{"messageId":"m1","timestamp":1000,"archiveOrderKey":{"kind":"chat"}}')
+
+    expect(
+      JSON.stringify(
+        serializeReadPointer(makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(2000) }, 'room'))
+      )
+    ).toBe('{"messageId":"m2","timestamp":2000,"archiveOrderKey":{"kind":"room","from":"room@x/nick"}}')
+  })
+
+  it('never writes the in-memory name to disk', () => {
+    const p = makeReadPointer({ id: 'm1', from: 'room@x/nick', timestamp: at(1000) }, 'room')
+    expect(JSON.stringify(serializeReadPointer(p))).not.toContain('tiebreak')
+  })
+
+  it('hydrates a pointer stored by the previous build', () => {
+    expect(deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'chat' } })).toEqual({
+      messageId: 'm1',
+      timestamp: at(1000),
+      tiebreak: { kind: 'chat', id: 'm1' },
+    })
+  })
+
+  it('ignores a pointer stored under the in-memory name (never a written format)', () => {
+    expect(
+      deserializeReadPointer({ messageId: 'm1', timestamp: 1000, tiebreak: { kind: 'chat' } })!.tiebreak
+    ).toBeUndefined()
   })
 })

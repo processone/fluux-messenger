@@ -68,23 +68,23 @@ function timeFor(id: string): Date {
 
 /**
  * A read pointer as `makeReadPointer` builds one: the named message's own
- * timestamp AND its archive order key. A pointer without a key is the
+ * timestamp AND its cache order key. A pointer without a key is the
  * pre-#1081 migrated shape, covered separately in mdsSideEffects.test.ts.
  */
 function pointerAt(id: string): {
   messageId: string
   timestamp: Date
-  archiveOrderKey: { kind: 'chat'; id: string }
+  tiebreak: { kind: 'chat'; id: string }
 } {
-  return { messageId: id, timestamp: timeFor(id), archiveOrderKey: { kind: 'chat', id } }
+  return { messageId: id, timestamp: timeFor(id), tiebreak: { kind: 'chat', id } }
 }
 
 function roomPointerAt(id: string, from = `${ROOM}/alice`): {
   messageId: string
   timestamp: Date
-  archiveOrderKey: { kind: 'room'; from: string; id: string }
+  tiebreak: { kind: 'room'; from: string; id: string }
 } {
-  return { messageId: id, timestamp: timeFor(id), archiveOrderKey: { kind: 'room', from, id } }
+  return { messageId: id, timestamp: timeFor(id), tiebreak: { kind: 'room', from, id } }
 }
 
 /** A cached (IndexedDB) 1:1 row, incoming so it carries a server stanza-id. */

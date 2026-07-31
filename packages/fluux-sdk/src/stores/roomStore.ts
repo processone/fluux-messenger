@@ -39,7 +39,7 @@ import {
   pointerlessDefers,
   worthReconcilingOnDeactivate,
   compareOrder,
-  makeArchiveOrderKey,
+  makeCacheOrderKey,
   isRenderableStoredMessage,
   type OrderPosition,
 } from './shared/readState'
@@ -1904,7 +1904,7 @@ export const roomStore = createStore<RoomState>()(
       }
       const result = noteTransient(
         scopeKey,
-        { position: { timestamp: messageToAdd.timestamp.getTime(), archiveOrderKey: makeArchiveOrderKey(messageToAdd, 'room') } },
+        { position: { timestamp: messageToAdd.timestamp.getTime(), tiebreak: makeCacheOrderKey(messageToAdd, 'room') } },
         transientIdentity(identityFields, 'room'),
         transientAliases(identityFields, 'room')
       )
@@ -2426,7 +2426,7 @@ export const roomStore = createStore<RoomState>()(
     // coverage bottom sharing its exact millisecond; a historyFloor-derived
     // floor has no such key (unresolved sorts conservatively).
     const floorPos: OrderPosition = metaNow.readPointer
-      ? { timestamp: metaNow.readPointer.timestamp.getTime(), archiveOrderKey: metaNow.readPointer.archiveOrderKey }
+      ? { timestamp: metaNow.readPointer.timestamp.getTime(), tiebreak: metaNow.readPointer.tiebreak }
       : { timestamp: floor.getTime() }
 
     // Task 9 safety net: this recompute is one of the "pointer advance /
@@ -2580,7 +2580,7 @@ export const roomStore = createStore<RoomState>()(
       if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
         pruneTransient(roomTransientScopeKey(roomJid), {
           timestamp: updated.readPointer.timestamp.getTime(),
-          archiveOrderKey: updated.readPointer.archiveOrderKey,
+          tiebreak: updated.readPointer.tiebreak,
         })
       }
 
@@ -2637,7 +2637,7 @@ export const roomStore = createStore<RoomState>()(
       // entry to a later recompute trigger.
       pruneTransient(roomTransientScopeKey(roomJid), {
         timestamp: read.readPointer.timestamp.getTime(),
-        archiveOrderKey: read.readPointer.archiveOrderKey,
+        tiebreak: read.readPointer.tiebreak,
       })
 
       const committed = commitRoomUpdate(state, roomJid, read)
@@ -2871,7 +2871,7 @@ export const roomStore = createStore<RoomState>()(
       //
       // The DIVIDER does not depend on this load. `onActivate` derives it by
       // archive POSITION — the first renderable incoming message strictly after
-      // the pointer in `(timestamp, archiveOrderKey)` order — so an off-slice
+      // the pointer in `(timestamp, tiebreak)` order — so an off-slice
       // pointer places it exactly as well as a resident one. The stale-pointer
       // fallback ladder that made an off-slice pointer a degraded case is gone.
       // What a cache miss costs is CONTEXT: the latest slice is kept, the
@@ -2983,7 +2983,7 @@ export const roomStore = createStore<RoomState>()(
       if (updated.readPointer) {
         pruneTransient(roomTransientScopeKey(roomJid), {
           timestamp: updated.readPointer.timestamp.getTime(),
-          archiveOrderKey: updated.readPointer.archiveOrderKey,
+          tiebreak: updated.readPointer.tiebreak,
         })
       }
 

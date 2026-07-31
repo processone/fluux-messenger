@@ -179,7 +179,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
         readPointer: {
           messageId: 'exact-7',
           timestamp: new Date(7_000),
-          archiveOrderKey: { kind: 'chat', id: 'exact-7' },
+          tiebreak: { kind: 'chat', id: 'exact-7' },
         },
       })
       conversationMeta.set(FALLBACK_CHAT, {
@@ -187,7 +187,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
         readPointer: {
           messageId: 'own-4',
           timestamp: new Date(4_000),
-          archiveOrderKey: { kind: 'chat', id: 'own-4' },
+          tiebreak: { kind: 'chat', id: 'own-4' },
         },
       })
       return { conversationMeta }
@@ -199,7 +199,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
         readPointer: {
           messageId: 'shared-id',
           timestamp: new Date(8_000),
-          archiveOrderKey: { kind: 'room', from: alice, id: 'shared-id' },
+          tiebreak: { kind: 'room', from: alice, id: 'shared-id' },
         },
       })
       return { roomMeta }

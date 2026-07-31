@@ -199,7 +199,7 @@ describe('room read state persistence', () => {
     // The markReadToNewest save is the one under test, and it coalesced behind
     // addRoom's leading edge.
     flushThrottledStorage()
-    // toMatchObject: makeReadPointer also stamps an archiveOrderKey onto the
+    // toMatchObject: makeReadPointer also stamps an tiebreak onto the
     // pointer; this assertion only cares about messageId/timestamp.
     expect(loadRoomReadState(JID).get(ROOM)?.readPointer).toMatchObject({
       messageId: 'm2',

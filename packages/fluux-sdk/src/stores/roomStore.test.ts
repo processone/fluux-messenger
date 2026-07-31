@@ -2506,7 +2506,7 @@ describe('roomStore', () => {
       // roomMeta.readPointer directly mimics a persisted read pointer
       // from a prior session (no live activation has run yet in this test).
       // KEYED, as every persisted pointer is: `makeReadPointer` always writes
-      // the archive order key and `deserializeReadPointer` reads it back.
+      // the cache order key and `deserializeReadPointer` reads it back.
       // Without it the pointer cannot certify its own position, and the message
       // it NAMES sorts after the boundary (a missing key sorts first — see
       // `compareOrder`), so the divider would correctly-but-conservatively land
@@ -2520,7 +2520,7 @@ describe('roomStore', () => {
           readPointer: {
             messageId: 'msg-150',
             timestamp: new Date(150 * 60_000),
-            archiveOrderKey: { kind: 'room', from: `${roomJid}/alice`, id: 'msg-150' },
+            tiebreak: { kind: 'room', from: `${roomJid}/alice`, id: 'msg-150' },
           },
         })
         return { roomMeta: meta }

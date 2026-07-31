@@ -44,7 +44,7 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
  *
  * NOT because a same-millisecond pair can never advance — read-state PR C
  * (task 1) changed exactly that. Two KEYED positions sharing a millisecond now
- * break the tie on the archive order key: `isAhead`
+ * break the tie on the cache order key: `isAhead`
  * (shared/readPointer.ts, ~line 99) does it, and `advanceReadPointer` routes
  * through `onMessageSeen`'s keyed `compareOrder`, which does it too. The bare
  * "equal timestamps are NOT an advance" rule now applies ONLY when either side

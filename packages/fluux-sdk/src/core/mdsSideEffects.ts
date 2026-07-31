@@ -37,7 +37,7 @@ import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
-import { compareOrder, makeArchiveOrderKey, type OrderPosition } from '../stores/shared/readState'
+import { compareOrder, makeCacheOrderKey, type OrderPosition } from '../stores/shared/readState'
 import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
 import { logInfo } from './logger'
@@ -239,7 +239,7 @@ export function setupMdsSideEffects(
    *
    * - It can never be AHEAD of the read position: candidates strictly after the
    *   pointer are filtered out. Ordering uses the pointer's own
-   *   timestamp/`archiveOrderKey` rather than its index, so the pointer's
+   *   timestamp/`tiebreak` rather than its index, so the pointer's
    *   message need not be resident — a newer resident window cannot drag the
    *   result forward. A keyless (#1081-migrated) pointer orders by `lastReadAt`,
    *   which is documented as at or behind the message it names, so it
@@ -261,18 +261,18 @@ export function setupMdsSideEffects(
    */
   function newestResolvableAtOrBehind(
     messages: Array<{ stanzaId?: string; from?: string; id: string; timestamp: Date }>,
-    pointer: { timestamp: Date; archiveOrderKey?: OrderPosition['archiveOrderKey'] }
+    pointer: { timestamp: Date; tiebreak?: OrderPosition['tiebreak'] }
   ): string | undefined {
     const pointerPos: OrderPosition = {
       timestamp: pointer.timestamp.getTime(),
-      archiveOrderKey: pointer.archiveOrderKey,
+      tiebreak: pointer.tiebreak,
     }
     let best: { pos: OrderPosition; stanzaId: string } | undefined
     for (const m of messages) {
       if (!m.stanzaId) continue
       const pos: OrderPosition = {
         timestamp: m.timestamp.getTime(),
-        archiveOrderKey: makeArchiveOrderKey(m, 'chat'),
+        tiebreak: makeCacheOrderKey(m, 'chat'),
       }
       if (compareOrder(pos, pointerPos) > 0) continue // ahead of the pointer — never publish
       if (!best || compareOrder(pos, best.pos) > 0) best = { pos, stanzaId: m.stanzaId }
@@ -288,7 +288,7 @@ export function setupMdsSideEffects(
 
   function pointerIdentity(pointer: ReadPointer | undefined): string | undefined {
     if (!pointer) return undefined
-    const key = pointer.archiveOrderKey
+    const key = pointer.tiebreak
     return JSON.stringify([
       pointer.messageId,
       pointer.timestamp.getTime(),
@@ -308,7 +308,7 @@ export function setupMdsSideEffects(
    */
   function exactRoomPointerTarget(jid: string): { messageId: string; from: string } | undefined {
     const pointer = roomStore.getState().roomMeta.get(jid)?.readPointer
-    const key = pointer?.archiveOrderKey
+    const key = pointer?.tiebreak
     if (!pointer?.messageId || key?.kind !== 'room' || key.from.length === 0) return undefined
     return { messageId: pointer.messageId, from: key.from }
   }

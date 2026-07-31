@@ -92,7 +92,7 @@ export function appendLive<T extends TimelineMessage>(
   // FIX 5 (read-state PR B, final whole-branch review): sort before trimming.
   // Live arrivals land in ARRIVAL order, but the archive orders same-millisecond
   // rows by the shared comparator (id for chat, (from, id) for room — see
-  // `compareOrder`/`makeArchiveOrderKey`). The viewport observer advances the
+  // `compareOrder`/`makeCacheOrderKey`). The viewport observer advances the
   // read pointer by RESIDENT INDEX, so an unsorted resident array can place a
   // same-ms sibling later than the archive would — the pointer then advances
   // past it while the archive walk still counts it as unread: a silent
