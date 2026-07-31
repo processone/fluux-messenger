@@ -25,9 +25,9 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
   meta.set(CID, {
     unreadCount: 0,
     // KEYED, exactly as `makeReadPointer` writes every pointer: the divider is
-    // derived by archive POSITION, and a keyless pointer cannot certify its own
-    // (a missing key sorts first, so the message it NAMES would sort after the
-    // boundary and take the divider itself).
+    // derived by archive POSITION. Under `isAfterBoundary`, a keyless pointer
+    // treats every row at its millisecond as after the boundary, so the message
+    // it NAMES would take the divider itself.
     readPointer: seenMsg ? makeReadPointer(seenMsg, 'chat') : undefined,
   })
   const messages = new Map()

@@ -577,8 +577,8 @@ describe('onActivate', () => {
   // count derives from exactly the same fallback (`computeFloor`).
   describe('no read pointer: the boundary is the historyFloor, never unreadCount', () => {
     it('places the divider at the first message after the floor', () => {
-      // The floor shares msg-2's millisecond and msg-2 still counts as after it
-      // (a keyless floor sorts first) — the same rule the count uses.
+      // The floor shares msg-2's millisecond and msg-2 still counts as after it —
+      // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       const state = makeState({ historyFloor: new Date('2025-01-15T09:30:00Z'), unreadCount: 2 })
       const result = onActivate(state, messages, 'chat')
       expect(result.firstNewMessageId).toBe('msg-2')
@@ -708,8 +708,8 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
     expect(r.firstNewMessageId).toBe('m3')
   })
 
-  // Pointerless: the floor is historyFloor, and a same-ms message counts as
-  // strictly after it (keyless sorts first) — matching the count exactly.
+  // Pointerless: the floor is historyFloor, and `isAfterBoundary` counts a
+  // same-ms message as after that keyless boundary — matching the count exactly.
   it('uses historyFloor when there is no pointer, counting a same-millisecond message as after', () => {
     const state = { unreadCount: 1, mentionsCount: 0, readPointer: undefined,
       historyFloor: new Date(2000), firstNewMessageId: undefined }

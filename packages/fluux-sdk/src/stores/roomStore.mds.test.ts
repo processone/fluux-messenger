@@ -71,9 +71,9 @@ function rmsg(id: string, stanzaId: string, t: number): RoomMessage {
  * The read pointer naming `id`, carrying that message's own timestamp (#1081).
  *
  * KEYED, exactly as `makeReadPointer` writes every pointer: the divider and the
- * unread count are derived by archive POSITION, and a keyless pointer cannot
- * certify its own (a missing key sorts first, so the message it NAMES would
- * sort after the boundary and take the divider itself).
+ * unread count are derived by archive POSITION. Under `isAfterBoundary`, a
+ * keyless pointer treats every row at its millisecond as after the boundary, so
+ * the message it NAMES would take the divider itself.
  */
 function pointerIn(messages: RoomMessage[], id: string): ReadPointer {
   const found = messages.find((m) => m.id === id)

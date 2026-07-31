@@ -2367,8 +2367,8 @@ describe('roomStore', () => {
       // generation and never runs the notification transition.
       roomStore.getState().setActiveRoom(RJID)
 
-      // m2 shares the floor's exact millisecond and still counts as after it
-      // (a keyless floor sorts first) — the same rule the count uses.
+      // m2 shares the floor's exact millisecond and still counts as after it —
+      // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       expect(roomStore.getState().roomMeta.get(RJID)?.readPointer).toBeUndefined()
       expect(roomStore.getState().firstNewMessageMarkers.get(RJID)).toBe('m2')
     })
@@ -2505,12 +2505,11 @@ describe('roomStore', () => {
       // ('msg-150') — the reader left off deep in history. Seeding
       // roomMeta.readPointer directly mimics a persisted read pointer
       // from a prior session (no live activation has run yet in this test).
-      // KEYED, as every persisted pointer is: `makeReadPointer` always writes
-      // the cache order key and `deserializeReadPointer` reads it back.
-      // Without it the pointer cannot certify its own position, and the message
-      // it NAMES sorts after the boundary (a missing key sorts first — see
-      // `isAfterBoundary`), so the divider would correctly-but-conservatively land
-      // on msg-150 itself.
+      // KEYED, as every newly written pointer is: `makeReadPointer` always
+      // writes the cache order key and `deserializeReadPointer` reads it back.
+      // Without it, `isAfterBoundary` treats every row at the keyless pointer's
+      // millisecond as after the boundary, so the divider would
+      // correctly-but-conservatively land on msg-150 itself.
       const roomJid = 'test@conference.example.com'
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
       roomStore.setState((state) => {

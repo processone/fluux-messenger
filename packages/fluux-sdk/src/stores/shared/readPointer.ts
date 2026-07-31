@@ -69,9 +69,10 @@ export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: s
  * The persisted property is `archiveOrderKey`, NOT `tiebreak`. The in-memory
  * field was renamed because the key never held an archive id — it is the
  * IndexedDB cursor tie-break built from the CLIENT message id — but the ON-DISK
- * name is deliberately left alone: every pointer already stored carries
- * `archiveOrderKey`, and renaming it here would silently orphan all of them,
- * degrading each to the keyless at-or-after-timestamp fallback. Do not "finish
+ * name is deliberately left alone: every stored pointer that has this key
+ * carries it as `archiveOrderKey`, and renaming it here would silently orphan
+ * those keys, degrading those pointers to the keyless at-or-after-timestamp
+ * fallback. Do not "finish
  * the rename" on this side without a migration and its own compatibility
  * argument.
  */

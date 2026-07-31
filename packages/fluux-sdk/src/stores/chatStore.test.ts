@@ -1023,8 +1023,8 @@ describe('chatStore', () => {
       // generation and never runs the notification transition.
       chatStore.getState().setActiveConversation(CID)
 
-      // m2 shares the floor's exact millisecond and still counts as after it
-      // (a keyless floor sorts first) — the same rule the count uses.
+      // m2 shares the floor's exact millisecond and still counts as after it —
+      // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
       expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
     })
@@ -1057,8 +1057,8 @@ describe('chatStore', () => {
 
       chatStore.getState().resyncDividerToReadPointer(CID)
 
-      // m2 shares the floor's exact millisecond and must still count as after it
-      // (a keyless floor sorts first) — the same rule the count uses.
+      // m2 shares the floor's exact millisecond and must still count as after it —
+      // `isAfterBoundary` applies the same keyless-boundary rule as the count.
       expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m2')
     })
   })
@@ -1169,11 +1169,10 @@ describe('chatStore', () => {
       // names ('msg-150') — the reader left off deep in history. Seeding
       // conversationMeta.readPointer directly mimics a persisted read pointer
       // from a prior session (no live activation has run yet here). KEYED, as
-      // every persisted pointer is: `makeReadPointer` always writes the archive
-      // order key and `deserializeReadPointer` reads it back. Without it the
-      // pointer cannot certify its own position, and the message it NAMES sorts
-      // after the boundary (a keyless boundary means at-or-after its own
-      // millisecond — see `isAfterBoundary`), so
+      // every newly written pointer is: `makeReadPointer` always writes the
+      // cache order key and `deserializeReadPointer` reads it back. Without it,
+      // `isAfterBoundary` treats every row at the keyless pointer's millisecond
+      // as after the boundary, so
       // the divider would correctly-but-conservatively land on msg-150 itself.
       const A = 'alice@example.com'
       chatStore.getState().addConversation(createConversation(A))

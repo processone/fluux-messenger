@@ -22,9 +22,9 @@ function msg(id: string, opts: { outgoing?: boolean; delayed?: boolean } = {}): 
 function seed(opts: { lastSeen: string | undefined; marker: string | undefined; messages: RoomMessage[] }) {
   const seenMsg = opts.messages.find((m) => m.id === opts.lastSeen)
   // KEYED, exactly as `makeReadPointer` writes every pointer: the divider is
-  // derived by archive POSITION, and a keyless pointer cannot certify its own
-  // (a missing key sorts first, so the message it NAMES would sort after the
-  // boundary and take the divider itself).
+  // derived by archive POSITION. Under `isAfterBoundary`, a keyless pointer
+  // treats every row at its millisecond as after the boundary, so the message
+  // it NAMES would take the divider itself.
   const readPointer = seenMsg ? makeReadPointer(seenMsg, 'room') : undefined
   const rooms = new Map()
   rooms.set(JID, {
