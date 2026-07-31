@@ -60,7 +60,7 @@ const PUBLISH_DEBOUNCE_MS = 1_500
  * re-runs on later store changes.
  *
  * The IndexedDB `conv_timestamp` index bounds these 50 rows by TIMESTAMP ALONE;
- * `newestResolvableAtOrBehind` applies archive-order filtering afterwards.
+ * `newestResolvableAtOrBehind` applies cache-order filtering afterwards.
  * More than 50 rows sharing the pointer's millisecond and sorting after it can
  * therefore crowd the pointer row out. That containment deliberately fails in
  * the safe UNDER-ADVANCE direction: the position stays unresolved and retryable,
