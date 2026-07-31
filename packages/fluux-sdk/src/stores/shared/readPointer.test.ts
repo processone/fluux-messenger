@@ -420,11 +420,15 @@ describe('an old build reading the renamed on-disk form', () => {
     expect(isAhead(sameMsCandidate, seenByOldBuild)).toBe(false)
     expect(advance(seenByOldBuild, sameMsCandidate)).toBe(seenByOldBuild)
 
-    // Same-position comparison over the two: the keyless (old-build) view sorts
-    // FIRST, i.e. at or behind the position actually stored — never ahead of it.
+    // And the counting side of the same degradation: against the KEYLESS
+    // boundary an old build restored, the very message the pointer names still
+    // reads as after the boundary — so it is counted unread again. That is the
+    // at-or-after-timestamp over-count, which a read clears. `stored` comes from
+    // `makeReadPointer`, which always resolves a tie-break, so it is an
+    // ExactPosition; only the boundary may be keyless.
     expect(
       isAfterBoundary(
-        { timestamp: stored.timestamp.getTime(), tiebreak: stored.tiebreak },
+        { timestamp: stored.timestamp.getTime(), tiebreak: stored.tiebreak! },
         { timestamp: seenByOldBuild.timestamp.getTime(), tiebreak: seenByOldBuild.tiebreak }
       )
     ).toBe(true)
