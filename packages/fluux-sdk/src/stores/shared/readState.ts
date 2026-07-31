@@ -194,11 +194,13 @@ export function worthReconcilingOnDeactivate(
  *
  * No longer on the hydration path: `deserializeReadPointer` rebuilds the key
  * and takes its `id` from `messageId` instead of validating a persisted one.
- * It is kept because it still describes how an OLDER build reads today's
- * on-disk form — the `typeof k.id === 'string'` requirement is what makes an
- * old build drop the new id-less key and degrade to the at-or-after-timestamp
- * fallback (over-count, the safe direction) instead of mis-reading it. That
- * compatibility claim is asserted against this function in `readPointer.test.ts`.
+ * It is kept because it describes an OLDER build's second line of defence
+ * against today's on-disk form: since the tie-break's rename that build no
+ * longer even finds the property (it reads `archiveOrderKey` only), and the
+ * `typeof k.id === 'string'` requirement here would reject the id-less key had
+ * it found one. Either way it degrades to the at-or-after-timestamp fallback
+ * (over-count, the safe direction) rather than mis-reading the key. Both halves
+ * of that compatibility claim are asserted in `readPointer.test.ts`.
  */
 export function isValidCacheOrderKey(v: unknown): v is CacheOrderKey {
   if (!v || typeof v !== 'object') return false

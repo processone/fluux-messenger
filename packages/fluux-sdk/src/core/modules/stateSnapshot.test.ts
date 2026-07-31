@@ -226,14 +226,13 @@ describe('StateSnapshot', () => {
       await snapshot.flush()
 
       const [persisted] = adapterData.store.get('user@example.com')!.rooms as Array<{
-        readPointer?: { messageId: string; timestamp: number; archiveOrderKey?: unknown }
+        readPointer?: { messageId: string; timestamp: number; tiebreak?: unknown }
       }>
       // The tie-break's `id` is NOT persisted: it is `messageId`, and storing a
       // second copy made a disagreement representable on disk. Only `from`,
       // which the pointer cannot reconstruct, rides through. The persisted
-      // property keeps its historical name `archiveOrderKey`; only the
-      // in-memory field is `tiebreak`.
-      expect(persisted?.readPointer?.archiveOrderKey).toEqual({
+      // property name matches the in-memory field.
+      expect(persisted?.readPointer?.tiebreak).toEqual({
         kind: 'room',
         from: 'room@conf.example.com/alice',
       })

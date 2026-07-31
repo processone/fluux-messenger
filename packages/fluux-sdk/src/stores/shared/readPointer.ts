@@ -66,20 +66,17 @@ export type SerializedCacheOrderKey = { kind: 'chat' } | { kind: 'room'; from: s
 /**
  * JSON-safe form for localStorage.
  *
- * The persisted property is `archiveOrderKey`, NOT `tiebreak`. The in-memory
- * field was renamed because the key never held an archive id — it is the
- * IndexedDB cursor tie-break built from the CLIENT message id — but the ON-DISK
- * name is deliberately left alone: every stored pointer that has this key
- * carries it as `archiveOrderKey`, and renaming it here would silently orphan
- * those keys, degrading those pointers to the keyless at-or-after-timestamp
- * fallback. Do not "finish
- * the rename" on this side without a migration and its own compatibility
- * argument.
+ * The persisted property is `tiebreak`, matching the in-memory field. Builds
+ * before this one wrote it as `archiveOrderKey` — a name that was always wrong
+ * (the key never held an archive id; it is the IndexedDB cursor tie-break built
+ * from the CLIENT message id). Those blobs are still READ, by the fallback in
+ * {@link deserializeReadPointer}, which is where the condition for eventually
+ * deleting that tolerance is recorded.
  */
 export interface SerializedReadPointer {
   messageId: string
   timestamp: number
-  archiveOrderKey?: SerializedCacheOrderKey
+  tiebreak?: SerializedCacheOrderKey
 }
 
 /** The minimal message shape a pointer can be built from. */
@@ -146,46 +143,23 @@ export function advance(current: ReadPointer | undefined, candidate: ReadPointer
  * {@link SerializedCacheOrderKey}). The in-memory key keeps its full shape;
  * only the on-disk form omits the redundant `id`.
  *
- * An OLDER build reading this format validates the key with the equivalent
- * guard (now called `isValidCacheOrderKey`), which requires
- * `typeof k.id === 'string'` — so it drops the key and degrades to the
- * at-or-after-timestamp fallback, which over-counts rather than under-counts
- * (the safe, recoverable direction). The `messageId` and `timestamp` it needs
- * are untouched.
+ * An OLDER build reading this format finds no tie-break at all: it looks only
+ * under `archiveOrderKey` (and would reject this id-less key anyway, via
+ * `isValidCacheOrderKey`'s `typeof k.id === 'string'` requirement). It
+ * therefore degrades to the at-or-after-timestamp fallback, which over-counts
+ * rather than under-counts — the safe, recoverable direction, since a keyless
+ * pointer can only UNDER-advance. The `messageId` and `timestamp` it needs are
+ * untouched. Asserted in `readPointer.test.ts` against a replica of that
+ * build's read, not assumed.
  */
 export function serializeReadPointer(pointer: ReadPointer): SerializedReadPointer {
   const key = pointer.tiebreak
   return {
     messageId: pointer.messageId,
     timestamp: pointer.timestamp.getTime(),
-    // On-disk name kept as `archiveOrderKey` on purpose — see {@link SerializedReadPointer}.
-    ...(key ? { archiveOrderKey: key.kind === 'room' ? { kind: 'room', from: key.from } : { kind: 'chat' } } : {}),
-  }
-}
-
-/**
- * The pointer as the CHAT storage blob carries it: the live object handed to a
- * plain `JSON.stringify` (so `timestamp` becomes an ISO string on disk, and the
- * tie-break keeps its `id`) — unlike {@link serializeReadPointer}, which is the
- * epoch-ms, id-less form used by room read state and the state snapshot.
- *
- * It exists only to hold the on-disk property name `archiveOrderKey` while the
- * in-memory field is `tiebreak`: the chat store persists its metadata verbatim,
- * so without this the rename would leak to disk and orphan every stored pointer
- * (see {@link SerializedReadPointer}). Nothing else about the shape changes.
- */
-export interface PersistedReadPointer {
-  messageId: string
-  timestamp: Date
-  archiveOrderKey?: CacheOrderKey
-}
-
-/** Rename boundary for the verbatim-persisted chat blob. See {@link PersistedReadPointer}. */
-export function toPersistedReadPointer(pointer: ReadPointer): PersistedReadPointer {
-  return {
-    messageId: pointer.messageId,
-    timestamp: pointer.timestamp,
-    ...(pointer.tiebreak ? { archiveOrderKey: pointer.tiebreak } : {}),
+    // The on-disk name is `tiebreak`, the same as in memory. `archiveOrderKey`
+    // is read back but never written — see {@link deserializeReadPointer}.
+    ...(key ? { tiebreak: key.kind === 'room' ? { kind: 'room', from: key.from } : { kind: 'chat' } } : {}),
   }
 }
 
@@ -220,6 +194,10 @@ function hydrateCacheOrderKey(raw: unknown, messageId: string): CacheOrderKey | 
  * {@link serializeReadPointer} writes epoch ms; the chat storage blob writes an
  * ISO string through its plain `JSON.stringify`.
  *
+ * The tie-break is likewise accepted under either name — `tiebreak` (what we
+ * write) or the historical `archiveOrderKey` — and the condition for eventually
+ * dropping that second name is recorded at the fallback itself.
+ *
  * `tiebreak` is rebuilt by {@link hydrateCacheOrderKey} — never taken
  * verbatim — and DROPPED when what it carries is unusable. Storage is untrusted
  * input, so a corrupt key must not ride through into ordering comparisons.
@@ -230,15 +208,32 @@ function hydrateCacheOrderKey(raw: unknown, messageId: string): CacheOrderKey | 
  */
 export function deserializeReadPointer(raw: unknown): ReadPointer | undefined {
   if (!raw || typeof raw !== 'object') return undefined
-  // `archiveOrderKey` is the on-disk property name, deliberately unchanged by the
-  // in-memory `tiebreak` rename — see {@link SerializedReadPointer}.
-  const { messageId, timestamp, archiveOrderKey } = raw as {
+  const { messageId, timestamp, tiebreak, archiveOrderKey } = raw as {
     messageId?: unknown
     timestamp?: unknown
+    tiebreak?: unknown
     archiveOrderKey?: unknown
   }
   if (typeof messageId !== 'string' || messageId.length === 0) return undefined
-  const validKey = hydrateCacheOrderKey(archiveOrderKey, messageId)
+  // Same shape as the `timestamp` tolerance above: this is the one place that
+  // reads either name back. We still only ever WRITE `tiebreak`; the
+  // `archiveOrderKey` branch is read-only tolerance for blobs written before the
+  // on-disk rename.
+  //
+  // REMOVABLE WHEN storage still holding the old name no longer matters, which
+  // is a bounded condition rather than "forever": every writer re-serializes the
+  // WHOLE blob, not the row that changed — `saveRoomReadState` stringifies the
+  // entire room map, the chat persist adapter re-emits every `conversationMeta`
+  // entry, and the state snapshot re-serializes every room. So the FIRST persist
+  // any build from this one onwards performs sheds `archiveOrderKey` for the
+  // entire account, not merely for the conversation that was read; an account
+  // opened once after upgrading is fully converted, dormant ones are not.
+  // Deleting this branch then costs those dormant pointers their tie-break and
+  // nothing else — `messageId` and `timestamp` still load, so they degrade to
+  // the at-or-after-timestamp fallback (over-count, the recoverable direction),
+  // never to a lost read position. Remove it once that trade is acceptable for
+  // the oldest storage still in the field.
+  const validKey = hydrateCacheOrderKey(tiebreak ?? archiveOrderKey, messageId)
 
   if (typeof timestamp === 'number') {
     return Number.isFinite(timestamp)

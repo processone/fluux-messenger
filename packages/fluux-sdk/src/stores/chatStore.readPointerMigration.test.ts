@@ -97,7 +97,7 @@ const STORAGE_KEY = buildScopedStorageKey('xmpp-chat-storage', JID)
 interface LegacyMeta {
   lastSeenMessageId?: string
   lastReadAt?: string
-  readPointer?: { messageId: string; timestamp: number; archiveOrderKey?: unknown }
+  readPointer?: { messageId: string; timestamp: number; tiebreak?: unknown; archiveOrderKey?: unknown }
   unreadCount?: number
 }
 
@@ -240,7 +240,7 @@ describe('post-rehydrate readPointer backfill', () => {
   // directly rather than assumed from the plain messageId/timestamp case above.
   it('round-trips a persisted tiebreak through the new-format deserialize branch', async () => {
     persistConversations([
-      [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'chat', id: 'm2' } } }],
+      [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, tiebreak: { kind: 'chat', id: 'm2' } } }],
     ])
 
     await chatStore.persist.rehydrate()
@@ -282,26 +282,30 @@ describe('post-rehydrate readPointer backfill', () => {
   // A malformed persisted key must be DROPPED at this real persistence surface
   // too, not just at the deserializeReadPointer unit level — the pointer itself
   // (messageId/timestamp) survives.
-  // The chat blob is a verbatim JSON.stringify of the live objects, so renaming
-  // the in-memory field would leak the new name to disk and orphan every stored
-  // pointer. The persisted property stays `archiveOrderKey`.
-  it('persists the tie-break under its on-disk name, not the in-memory one', async () => {
+  // The on-disk rename, at the real persistence surface: a blob written under
+  // the historical name hydrates through the fallback, and the very next
+  // persist re-emits it under `tiebreak` alone. This is also what makes the
+  // fallback's removal condition true in practice — the whole blob is rewritten,
+  // so one persist sheds the old name for the entire account.
+  it('rewrites a pointer stored under the historical name under `tiebreak`', async () => {
     persistConversations([
       [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'chat', id: 'm2' } } }],
     ])
 
     await chatStore.persist.rehydrate()
+    expect(pointerOf(CONV)?.tiebreak).toEqual({ kind: 'chat', id: 'm2' })
+
     chatStore.setState((state) => ({ conversationMeta: new Map(state.conversationMeta) }))
     flushThrottledStorage()
 
     const onDisk = diskEntry('conversationMeta', CONV).readPointer as Record<string, unknown>
-    expect(onDisk.archiveOrderKey).toEqual({ kind: 'chat', id: 'm2' })
-    expect('tiebreak' in onDisk).toBe(false)
+    expect(onDisk.tiebreak).toEqual({ kind: 'chat', id: 'm2' })
+    expect('archiveOrderKey' in onDisk).toBe(false)
   })
 
   it('drops a malformed persisted tiebreak but keeps the rest of the pointer', async () => {
     persistConversations([
-      [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'room', id: 'm2' } } }],
+      [CONV, { readPointer: { messageId: 'm2', timestamp: 2000, tiebreak: { kind: 'room', id: 'm2' } } }],
     ])
 
     await chatStore.persist.rehydrate()

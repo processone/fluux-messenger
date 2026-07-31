@@ -144,4 +144,55 @@ describe('room read-state persistence', () => {
     )
     expect(loadRoomReadState(JID).has('r@c')).toBe(false)
   })
+
+  // The tie-break's on-disk rename at the room persistence surface. Rows written
+  // by a build before the rename carry `archiveOrderKey` and must still load
+  // with their key intact — losing it here would silently downgrade a real read
+  // position to the at-or-after-timestamp fallback for every room of every
+  // account that upgraded.
+  it('loads a room row written under the historical tie-break name', () => {
+    localStorage.setItem(
+      getRoomReadStateStorageKey(JID),
+      JSON.stringify([
+        ['r@c', { readPointer: { messageId: 'm7', timestamp: 7000, archiveOrderKey: { kind: 'room', from: 'r@c/alice' } } }],
+      ])
+    )
+
+    expect(loadRoomReadState(JID).get('r@c')?.readPointer).toEqual({
+      messageId: 'm7',
+      timestamp: at(7000),
+      tiebreak: { kind: 'room', from: 'r@c/alice', id: 'm7' },
+    })
+  })
+
+  // ...and the evidence behind the fallback's removal condition: a save
+  // re-serializes the WHOLE map, so one write sheds the historical name for
+  // every room of the account, not only the room whose pointer moved.
+  it('a single save rewrites every room under the new name', () => {
+    localStorage.setItem(
+      getRoomReadStateStorageKey(JID),
+      JSON.stringify([
+        ['moved@c', { readPointer: { messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'room', from: 'moved@c/alice' } } }],
+        ['untouched@c', { readPointer: { messageId: 'm2', timestamp: 2000, archiveOrderKey: { kind: 'room', from: 'untouched@c/bob' } } }],
+      ])
+    )
+
+    const state = loadRoomReadState(JID)
+    // Only one room advances — the other is never touched this session.
+    state.set('moved@c', {
+      readPointer: makeReadPointer({ id: 'm9', from: 'moved@c/alice', timestamp: at(9000) }, 'room'),
+    })
+    saveRoomReadState(state, JID)
+    flush()
+
+    const written = localStorage.getItem(getRoomReadStateStorageKey(JID))!
+    expect(written).not.toContain('archiveOrderKey')
+    expect(written).toContain('tiebreak')
+    // The untouched room kept its position; only the property name changed.
+    expect(loadRoomReadState(JID).get('untouched@c')?.readPointer).toEqual({
+      messageId: 'm2',
+      timestamp: at(2000),
+      tiebreak: { kind: 'room', from: 'untouched@c/bob', id: 'm2' },
+    })
+  })
 })

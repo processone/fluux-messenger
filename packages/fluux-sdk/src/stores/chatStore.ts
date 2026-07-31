@@ -54,8 +54,6 @@ import {
   advance,
   deserializeReadPointer,
   makeReadPointer,
-  toPersistedReadPointer,
-  type PersistedReadPointer,
   type ReadPointer,
 } from './shared/readPointer'
 import * as notifState from './shared/notificationState'
@@ -627,15 +625,14 @@ interface LegacyReadState {
 }
 
 /**
- * On disk the pointer's tie-break keeps its historical property name
- * `archiveOrderKey`; only the in-memory field is `tiebreak`. This blob is a
- * verbatim `JSON.stringify` of the live objects, so the boundary has to be in
- * the persisted TYPE as well as in the value (see {@link PersistedReadPointer}).
+ * This blob is a verbatim `JSON.stringify` of the live objects, so the pointer
+ * goes to disk in its in-memory shape: `tiebreak` under its own name, keeping
+ * its `id`, and `timestamp` as an ISO string. That differs from
+ * `serializeReadPointer`'s epoch-ms, id-less form used by room read state and
+ * the state snapshot; `deserializeReadPointer` reads both.
  */
-type PersistedConversationMetadata = Omit<ConversationMetadata, 'readPointer'> &
-  PersistedReadState & { readPointer?: PersistedReadPointer }
-type PersistedConversation = Omit<Conversation, 'readPointer'> &
-  PersistedReadState & { readPointer?: PersistedReadPointer }
+type PersistedConversationMetadata = ConversationMetadata & PersistedReadState
+type PersistedConversation = Conversation & PersistedReadState
 
 /**
  * Legacy read state still waiting to become a `readPointer`, keyed by the
@@ -716,16 +713,12 @@ interface PersistedState {
 function withUnmigratedReadState<T extends { readPointer?: ReadPointer }>(
   entries: Map<string, T>,
   legacy: Map<string, LegacyReadState> | undefined
-): [string, Omit<T, 'readPointer'> & PersistedReadState & { readPointer?: PersistedReadPointer }][] {
-  // Every entry passes through `onDisk` so the pointer is written under its
-  // on-disk property name (see {@link PersistedReadPointer}).
-  const onDisk = (value: T): Omit<T, 'readPointer'> & { readPointer?: PersistedReadPointer } =>
-    value.readPointer ? { ...value, readPointer: toPersistedReadPointer(value.readPointer) } : value
-  if (!legacy || legacy.size === 0) return Array.from(entries.entries(), ([id, value]) => [id, onDisk(value)])
-  const out: [string, Omit<T, 'readPointer'> & PersistedReadState & { readPointer?: PersistedReadPointer }][] = []
+): [string, T & PersistedReadState][] {
+  if (!legacy || legacy.size === 0) return Array.from(entries.entries())
+  const out: [string, T & PersistedReadState][] = []
   for (const [id, value] of entries) {
     const carry = value.readPointer ? undefined : legacy.get(id)
-    out.push(carry ? [id, { ...onDisk(value), ...carry }] : [id, onDisk(value)])
+    out.push(carry ? [id, { ...value, ...carry }] : [id, value])
   }
   return out
 }

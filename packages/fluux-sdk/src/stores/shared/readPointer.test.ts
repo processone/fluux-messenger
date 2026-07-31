@@ -7,7 +7,7 @@ import {
   deserializeReadPointer,
 } from './readPointer'
 import type { ReadPointer } from './readPointer'
-import { isValidCacheOrderKey } from './readState'
+import { isAfterBoundary, isValidCacheOrderKey } from './readState'
 
 const at = (ms: number) => new Date(ms)
 
@@ -152,7 +152,7 @@ describe('serialization', () => {
   // through into ordering comparisons. Dropping only the key (not the whole
   // pointer) keeps the id/timestamp that are otherwise fine.
   it('drops a malformed persisted tiebreak instead of trusting it', () => {
-    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey: { kind: 'room', id: 'x' } })
+    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, tiebreak: { kind: 'room', id: 'x' } })
     expect(back!.tiebreak).toBeUndefined() // missing `from` → invalid → dropped
     expect(back!.messageId).toBe('m') // the pointer itself survives
   })
@@ -174,12 +174,12 @@ describe('serialization', () => {
 describe('serialization: the tie-break id is not persisted', () => {
   it('omits `id` from a persisted chat key', () => {
     const p = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
-    expect(serializeReadPointer(p).archiveOrderKey).toEqual({ kind: 'chat' })
+    expect(serializeReadPointer(p).tiebreak).toEqual({ kind: 'chat' })
   })
 
   it('omits `id` from a persisted room key but keeps `from` (the room tie-break needs it)', () => {
     const p = makeReadPointer({ id: 'm1', from: 'room@x/nick', timestamp: at(1000) }, 'room')
-    expect(serializeReadPointer(p).archiveOrderKey).toEqual({ kind: 'room', from: 'room@x/nick' })
+    expect(serializeReadPointer(p).tiebreak).toEqual({ kind: 'room', from: 'room@x/nick' })
   })
 
   it('no persisted pointer carries an id beside the messageId', () => {
@@ -187,7 +187,7 @@ describe('serialization: the tie-break id is not persisted', () => {
     const room = makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room')
     for (const p of [chat, room]) {
       const onDisk = JSON.parse(JSON.stringify(serializeReadPointer(p)))
-      expect(onDisk.archiveOrderKey).not.toHaveProperty('id')
+      expect(onDisk.tiebreak).not.toHaveProperty('id')
     }
   })
 
@@ -267,12 +267,14 @@ describe('serialization: the tie-break id is not persisted', () => {
   // build DROPS the key and degrades to the documented at-or-after-timestamp
   // fallback, which over-counts — the safe, recoverable direction. Asserted
   // here rather than assumed, because shipping a format an older build
-  // mis-read in the unsafe direction would be unrecoverable.
+  // mis-read in the unsafe direction would be unrecoverable. Since the on-disk
+  // rename, an old build does not even find this value; the guard is asserted
+  // anyway so the id-less form stays independently unreadable by it.
   it('an old build drops the new id-less key rather than mis-reading it', () => {
     const chat = serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'))
     const room = serializeReadPointer(makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(1000) }, 'room'))
-    expect(isValidCacheOrderKey(chat.archiveOrderKey)).toBe(false)
-    expect(isValidCacheOrderKey(room.archiveOrderKey)).toBe(false)
+    expect(isValidCacheOrderKey(chat.tiebreak)).toBe(false)
+    expect(isValidCacheOrderKey(room.tiebreak)).toBe(false)
   })
 
   // The pointer itself must still load on an old build: only the key degrades.
@@ -291,45 +293,148 @@ describe('serialization: the tie-break id is not persisted', () => {
     ['a room key with no from', { kind: 'room' }],
     ['a room key with a non-string from', { kind: 'room', from: 7 }],
     ['a non-object key', 'chat'],
-  ])('drops %s', (_label, archiveOrderKey) => {
-    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, archiveOrderKey })
+  ])('drops %s', (_label, tiebreak) => {
+    const back = deserializeReadPointer({ messageId: 'm', timestamp: 1000, tiebreak })
     expect(back!.tiebreak).toBeUndefined()
     expect(back!.messageId).toBe('m')
   })
 })
 
-// The in-memory field is `tiebreak`; the PERSISTED property is still
-// `archiveOrderKey`. Renaming the on-disk name would orphan every stored
-// pointer, so it is deliberately unchanged — asserted against literal JSON so
-// the format cannot drift with the next rename.
-describe('the on-disk property name is not renamed with the field', () => {
-  it('writes the exact bytes the previous build wrote', () => {
+// The on-disk property is now `tiebreak`, matching the in-memory field. The
+// historical name `archiveOrderKey` is still READ, never written — see the
+// removal condition documented at the fallback in `deserializeReadPointer`.
+describe('the on-disk tie-break property', () => {
+  it('writes only `tiebreak`, never the historical name', () => {
     expect(JSON.stringify(serializeReadPointer(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'))))
-      .toBe('{"messageId":"m1","timestamp":1000,"archiveOrderKey":{"kind":"chat"}}')
+      .toBe('{"messageId":"m1","timestamp":1000,"tiebreak":{"kind":"chat"}}')
 
     expect(
       JSON.stringify(
         serializeReadPointer(makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(2000) }, 'room'))
       )
-    ).toBe('{"messageId":"m2","timestamp":2000,"archiveOrderKey":{"kind":"room","from":"room@x/nick"}}')
+    ).toBe('{"messageId":"m2","timestamp":2000,"tiebreak":{"kind":"room","from":"room@x/nick"}}')
   })
 
-  it('never writes the in-memory name to disk', () => {
+  it('never writes the historical name to disk', () => {
     const p = makeReadPointer({ id: 'm1', from: 'room@x/nick', timestamp: at(1000) }, 'room')
-    expect(JSON.stringify(serializeReadPointer(p))).not.toContain('tiebreak')
+    expect(JSON.stringify(serializeReadPointer(p))).not.toContain('archiveOrderKey')
   })
 
-  it('hydrates a pointer stored by the previous build', () => {
-    expect(deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: { kind: 'chat' } })).toEqual({
+  // Rename compatibility 1 — NEW build, OLD data. A pointer written under the
+  // historical name is found by the fallback and hydrates identically to one
+  // written under the new name. Lossless: nothing degrades, nothing is rewritten.
+  it.each([
+    ['chat', { kind: 'chat' }, { kind: 'chat', id: 'm1' }],
+    ['room', { kind: 'room', from: 'room@x/nick' }, { kind: 'room', from: 'room@x/nick', id: 'm1' }],
+  ])('reads a %s pointer stored under the historical name (lossless)', (_label, onDiskKey, expected) => {
+    expect(deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: onDiskKey })).toEqual({
       messageId: 'm1',
       timestamp: at(1000),
-      tiebreak: { kind: 'chat', id: 'm1' },
+      tiebreak: expected,
     })
+    // ...and identically to the same key stored under the new name.
+    expect(deserializeReadPointer({ messageId: 'm1', timestamp: 1000, archiveOrderKey: onDiskKey })).toEqual(
+      deserializeReadPointer({ messageId: 'm1', timestamp: 1000, tiebreak: onDiskKey })
+    )
   })
 
-  it('ignores a pointer stored under the in-memory name (never a written format)', () => {
+  it('prefers `tiebreak` when a blob somehow carries both names', () => {
     expect(
-      deserializeReadPointer({ messageId: 'm1', timestamp: 1000, tiebreak: { kind: 'chat' } })!.tiebreak
-    ).toBeUndefined()
+      deserializeReadPointer({
+        messageId: 'm1',
+        timestamp: 1000,
+        tiebreak: { kind: 'chat' },
+        archiveOrderKey: { kind: 'room', from: 'stale@x/nick' },
+      })!.tiebreak
+    ).toEqual({ kind: 'chat', id: 'm1' })
+  })
+
+  // Rename compatibility 3 — new build writes, new build reads. Unchanged.
+  it('round-trips a pointer written and read by this build', () => {
+    for (const p of [
+      makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'),
+      makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(2000) }, 'room'),
+    ]) {
+      expect(deserializeReadPointer(JSON.parse(JSON.stringify(serializeReadPointer(p))))).toEqual(p)
+    }
+  })
+})
+
+// Rename compatibility 2 — OLD build, NEW data. This is the direction that
+// matters: an older build looks for `archiveOrderKey` and only for that, so it
+// finds nothing. Asserted against a replica of that build's read rather than
+// assumed, because a format an old build mis-read in the UNSAFE direction (an
+// over-advanced forward-only pointer) would be unrecoverable.
+describe('an old build reading the renamed on-disk form', () => {
+  /**
+   * How every build before the rename read the tie-break: `raw.archiveOrderKey`
+   * through the hydration step. Both halves are reproduced here — a test that
+   * only asserted "the property is absent" would not show what the absence
+   * COSTS, which is the whole compatibility claim.
+   */
+  const oldBuildRead = (raw: Record<string, unknown>): ReadPointer | undefined => {
+    const { messageId, timestamp, archiveOrderKey } = raw as {
+      messageId?: string
+      timestamp?: number
+      archiveOrderKey?: unknown
+    }
+    if (typeof messageId !== 'string' || typeof timestamp !== 'number') return undefined
+    // The old hydration reconstructed the id from `messageId` exactly as today's
+    // does; what it could not do is look under any other property name.
+    const k = archiveOrderKey && typeof archiveOrderKey === 'object' ? (archiveOrderKey as Record<string, unknown>) : undefined
+    const tiebreak =
+      k?.kind === 'chat'
+        ? ({ kind: 'chat', id: messageId } as const)
+        : k?.kind === 'room' && typeof k.from === 'string'
+          ? ({ kind: 'room', from: k.from, id: messageId } as const)
+          : undefined
+    return { messageId, timestamp: new Date(timestamp), ...(tiebreak ? { tiebreak } : {}) }
+  }
+
+  const onDisk = (p: ReadPointer) => JSON.parse(JSON.stringify(serializeReadPointer(p)))
+
+  it('still loads the read position itself — only the tie-break is lost', () => {
+    for (const p of [
+      makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat'),
+      makeReadPointer({ id: 'm2', from: 'room@x/nick', timestamp: at(2000) }, 'room'),
+    ]) {
+      const seen = oldBuildRead(onDisk(p))!
+      expect(seen.messageId).toBe(p.messageId)
+      expect(seen.timestamp).toEqual(p.timestamp)
+      expect(seen.tiebreak).toBeUndefined()
+    }
+  })
+
+  // The consequence, stated as behaviour rather than as a missing property: a
+  // keyless pointer cannot be overtaken by a same-millisecond candidate, so the
+  // forward-only position UNDER-advances. That is the at-or-after-timestamp
+  // fallback — it over-counts unread, which a read clears. The unsafe direction
+  // would be an over-advanced pointer, which nothing can recover.
+  it('degrades in the over-count direction, never the over-advance direction', () => {
+    const stored = makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')
+    const seenByOldBuild = oldBuildRead(onDisk(stored))!
+    const sameMsCandidate = makeReadPointer({ id: 'm2-later-id', timestamp: at(1000) }, 'chat')
+
+    // A keyed candidate sharing the millisecond does NOT overtake the keyless
+    // pointer the old build restored.
+    expect(isAhead(sameMsCandidate, seenByOldBuild)).toBe(false)
+    expect(advance(seenByOldBuild, sameMsCandidate)).toBe(seenByOldBuild)
+
+    // Same-position comparison over the two: the keyless (old-build) view sorts
+    // FIRST, i.e. at or behind the position actually stored — never ahead of it.
+    expect(
+      isAfterBoundary(
+        { timestamp: stored.timestamp.getTime(), tiebreak: stored.tiebreak },
+        { timestamp: seenByOldBuild.timestamp.getTime(), tiebreak: seenByOldBuild.tiebreak }
+      )
+    ).toBe(true)
+  })
+
+  // The old build's own key guard would have rejected the value anyway (the
+  // id-less form shipped in the previous step), so nothing about the rename
+  // makes it MORE likely to mis-read the key: it has no key to read at all.
+  it('has no key to validate at all', () => {
+    expect(isValidCacheOrderKey(onDisk(makeReadPointer({ id: 'm1', timestamp: at(1000) }, 'chat')).archiveOrderKey))
+      .toBe(false)
   })
 })
