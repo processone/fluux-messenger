@@ -83,6 +83,13 @@ cancellation, and anchor/fallback pixel writes under the controller lease. The h
 invokes the adapter and supplies lifecycle completion callbacks. The coordinator imports no DOM,
 virtualizer, frame scheduler, positioning controller, or pixel-write capability.
 
+Saved-position reconciliation likewise runs through a dedicated browser adapter. It owns
+reachability probes, bounded legacy-offset writes, bottom-fraction anchor positioning, and the
+restore frame-loop port, while the hook supplies cache loading, live-window recentering, live-edge
+fallback, and completion callbacks. The shared bottom-fraction adapter keeps saved restoration and
+fixed-anchor preservation on the same row-rect/virtualizer geometry without giving either a second
+positioning lifecycle.
+
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
 remeasurement moves the target makes convergence samples unreliable and recreates scroll fighting.
@@ -301,9 +308,9 @@ measurement, or MDS completion cannot revive cancelled work.
 ## Reconciler responsibilities
 
 The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
-model; browser-specific geometry remains in leased imperative executors. Directional-history
-mechanics now live behind a dedicated browser adapter, while the remaining executors are still in
-the hook:
+model; browser-specific geometry remains in leased imperative executors. Directional-history and
+saved-position mechanics now live behind dedicated browser adapters, while the remaining executors
+are still in the hook:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -501,8 +508,10 @@ kinetic scrolling and stale-paint behavior.
    - [ ] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
      - [x] Extract directional-history capture, settlement scheduling, reachability, kinetic
        cancellation, and anchor/fallback writes behind its leased browser adapter.
-     - [ ] Extract the remaining saved, marker/target, live-edge, fixed-anchor, and resident-top
-       browser executors.
+     - [x] Extract saved-position reachability, legacy-offset and bottom-fraction writes behind its
+       leased browser adapter, with shared bottom-fraction geometry for fixed anchors.
+     - [ ] Extract the remaining marker/target, live-edge, fixed-anchor, and resident-top browser
+       executors.
    - [ ] Leave the React hook as thin lifecycle orchestration.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove

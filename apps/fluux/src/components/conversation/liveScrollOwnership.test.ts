@@ -53,6 +53,20 @@ const directionalBrowserAdapterPath = resolve(
 const directionalBrowserAdapterSource = existsSync(directionalBrowserAdapterPath)
   ? readFileSync(directionalBrowserAdapterPath, 'utf8')
   : ''
+const bottomFractionBrowserAdapterPath = resolve(
+  process.cwd(),
+  'src/components/conversation/bottomFractionAnchorBrowserAdapter.ts',
+)
+const bottomFractionBrowserAdapterSource = existsSync(bottomFractionBrowserAdapterPath)
+  ? readFileSync(bottomFractionBrowserAdapterPath, 'utf8')
+  : ''
+const savedPositionBrowserAdapterPath = resolve(
+  process.cwd(),
+  'src/components/conversation/savedPositionBrowserAdapter.ts',
+)
+const savedPositionBrowserAdapterSource = existsSync(savedPositionBrowserAdapterPath)
+  ? readFileSync(savedPositionBrowserAdapterPath, 'utf8')
+  : ''
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -177,6 +191,18 @@ describe('live message-list scroll ownership', () => {
     )
     expect(hookSource).not.toMatch(
       /\b(?:cancelKineticScroll|findAnchorElement|createDirectionalHistoryExecutor|directionalReleaseFramesRef|scheduleDirectionalHistorySettlement)\b/,
+    )
+  })
+
+  it('keeps saved-position DOM and virtualizer mechanics behind browser adapters', () => {
+    expect(existsSync(bottomFractionBrowserAdapterPath)).toBe(true)
+    expect(existsSync(savedPositionBrowserAdapterPath)).toBe(true)
+    expect(bottomFractionBrowserAdapterSource).toMatch(browserOrPixelAuthority)
+    expect(savedPositionBrowserAdapterSource).toMatch(browserOrPixelAuthority)
+    expect(bottomFractionBrowserAdapterSource).not.toMatch(/\bPositioningController\b/)
+    expect(savedPositionBrowserAdapterSource).not.toMatch(/\bPositioningController\b/)
+    expect(hookSource).not.toMatch(
+      /\b(?:restoreToAnchor|applyVirtualizedAnchorFrame|createSavedPositionExecutor)\b/,
     )
   })
 

@@ -53,6 +53,8 @@ import {
   DirectionalHistoryBrowserAdapter,
   type DirectionalHistoryBrowserCapture,
 } from './directionalHistoryBrowserAdapter'
+import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
+import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
 import {
   PositioningController,
   type DirectionalHistoryExecutor,
@@ -62,7 +64,6 @@ import {
   type LiveEdgeCompletion,
   type PositionExecutionLease,
   type ResidentTopExecutor,
-  type SavedPositionExecutionLease,
   type SavedPositionExecutor,
   type UnreadMarkerExecutor,
 } from './positioningController'
@@ -81,7 +82,6 @@ import {
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
   type ReachabilityFacts,
-  type SavedPositionRequest,
   type UnreadMarkerRequest,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
@@ -237,32 +237,6 @@ function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
   const topRel = rect.top - sTop
   return { messageId, fraction: clamp01((viewportH - topRel) / height) }
 }
-
-/**
- * Restore scroll so the viewport bottom sits at the saved FRACTION through the anchor message,
- * using the message's CURRENT measured height. Returns false if the anchor message isn't currently
- * mounted (scrolled up beyond the re-hydrated/virtualized window) so the caller can fall back.
- *
- * Measured with getBoundingClientRect, NOT offsetTop — the exact inverse of the basis
- * {@link findBottomAnchor} captures on, and for the same reason it documents. `offsetTop` is
- * relative to the element's offsetParent, which under virtualization is the row's own
- * `position:absolute` `[data-index]` wrapper (so it reads ~0 for EVERY row) and in normal flow is
- * whichever positioned ancestor happens to be nearest — not necessarily the scroller. A rect-based
- * capture paired with an offsetTop-based restore was therefore never a true inverse. Deriving both
- * sides from rects makes an unchanged capture→restore an exact no-op, so repeated restorations
- * cannot accumulate error.
- */
-function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
-  const el = scroller.querySelector(
-    `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
-  ) as HTMLElement | null
-  if (!el || el.offsetHeight <= 0) return false
-  const rect = el.getBoundingClientRect()
-  const contentTop = rect.top - scroller.getBoundingClientRect().top + scroller.scrollTop
-  scroller.scrollTop = contentTop + anchor.fraction * rect.height - scroller.clientHeight
-  return true
-}
-
 
 // ============================================================================
 // TYPES
@@ -471,6 +445,8 @@ export function useMessageListScroll({
   }
   const directionalHistoryBrowserRef =
     useRef<DirectionalHistoryBrowserAdapter | null>(null)
+  const bottomFractionAnchorBrowserRef =
+    useRef<BottomFractionAnchorBrowserAdapter | null>(null)
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -546,8 +522,8 @@ export function useMessageListScroll({
   const unmountDeactivationTokenRef = useRef<object | null>(null)
   // Generation-aware semantic controller. All live-conversation positioning slices, including
   // directional history, are authoritative. Pixel writes stay in leased imperative executors;
-  // directional-history mechanics live behind their browser adapter. The module-private generation
-  // allocator survives StrictMode remounts.
+  // directional-history and saved-position mechanics live behind their browser adapters. The
+  // module-private generation allocator survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -924,51 +900,6 @@ export function useMessageListScroll({
 
   const { setScrollContainerRef, setContentRef } = stableSettersRef.current
 
-  // Apply one virtualized bottom-fraction anchor write from CURRENT measurements. Saved-position
-  // restoration and fixed-anchor media/layout preservation share this browser geometry while the
-  // positioning controller owns every frame-loop lifecycle.
-  const applyVirtualizedAnchorFrame = useCallback((anchor: ScrollAnchor): number | null => {
-    const v = virtualizerRef.current
-    const s = scrollerRef.current
-    if (!v || !s) return null
-    const idx = v.getIndexForMessageId(anchor.messageId)
-    if (idx === null) return null
-    // Issue the fractional target as the ONLY scroll write per frame. The old code ALSO called
-    // scrollToIndex(idx,'end') every frame; the two targets differ by (1-fraction)*rowHeight, and
-    // for a tall anchor at a mid fraction that per-frame kick knocks the row across the
-    // virtualization window boundary — its height flips between estimate and measured, the offsets
-    // shift, and the loop never converges ([ScrollReassertLoop] 'restore-anchor', observed as a
-    // ~253px scrollTop ping-pong). scrollToOffset re-windows just like scrollToIndex, so the
-    // fractional write alone both positions the anchor AND keeps it mounted, so it settles.
-    const item =
-      anchor.fraction < 1 ? v.getVirtualItems().find((vi) => vi.index === idx) : undefined
-    const size = item?.size
-    const start = size ? v.getOffsetForMessageId(anchor.messageId) : null
-    if (size && start !== null) {
-      // Measure the ROW when it is mounted, not the virtualizer's item. `findBottomAnchor` captures
-      // the fraction against the `.message-row` rect, while `start`/`size` describe the enclosing
-      // `[data-index]` wrapper — they differ by the inter-row gap, so capture and restore are not
-      // inverses and each preservation leaves a small residual behind. Invisible once; across a
-      // burst of arrivals it compounds into a visible drift. Deriving the target from the row's own
-      // rect makes an unchanged capture→restore an exact no-op. The WRITE still goes through the
-      // virtualizer (never a raw scrollTop), so it re-windows and cannot fight @tanstack's pending
-      // scroll reconciler.
-      const row = s.querySelector(
-        `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
-      ) as HTMLElement | null
-      const rect = row && row.offsetHeight > 0 ? row.getBoundingClientRect() : null
-      const target = rect
-        ? rect.top - s.getBoundingClientRect().top + s.scrollTop + anchor.fraction * rect.height - s.clientHeight
-        : start + anchor.fraction * size - s.clientHeight
-      v.scrollToOffset(Math.max(0, target))
-    } else {
-      // Anchor not yet in the measured window (or fraction===1): mount it / pin its bottom to the
-      // viewport bottom. Once it measures in, later frames take the fractional branch above.
-      v.scrollToIndex(idx, { align: 'end' })
-    }
-    return s.scrollTop
-  }, [])
-
   const beginControllerFrameLoop = useCallback((
     label: ReassertLoopLabel,
     lease: PositionExecutionLease,
@@ -995,6 +926,17 @@ export function useMessageListScroll({
       },
       lifecycle,
     })
+  }, [])
+
+  const getBottomFractionAnchorBrowser = useCallback(() => {
+    if (bottomFractionAnchorBrowserRef.current === null) {
+      bottomFractionAnchorBrowserRef.current =
+        new BottomFractionAnchorBrowserAdapter({
+          getScroller: () => scrollerRef.current,
+          getVirtualizer: () => virtualizerRef.current,
+        })
+    }
+    return bottomFractionAnchorBrowserRef.current
   }, [])
 
   const getDirectionalHistoryBrowser = useCallback(() => {
@@ -1316,25 +1258,11 @@ export function useMessageListScroll({
         ) {
           return { kind: 'unavailable' }
         }
-        const scroller = scrollerRef.current
-        if (!scroller) return { kind: 'unavailable' }
         const anchor: ScrollAnchor = {
           messageId: request.desired.messageId,
           fraction: request.desired.placement.fraction,
         }
-        if (virtualizerRef.current) {
-          const scrollTop = applyVirtualizedAnchorFrame(anchor)
-          return scrollTop === null
-            ? { kind: 'unavailable' }
-            : { kind: 'positioned', scrollTop, reassert: true }
-        }
-        return restoreToAnchor(scroller, anchor)
-          ? {
-              kind: 'positioned',
-              scrollTop: scroller.scrollTop,
-              reassert: false,
-            }
-          : { kind: 'unavailable' }
+        return getBottomFractionAnchorBrowser().position(anchor)
       },
       complete: (request, outcome) => {
         if (activeConversationIdRef.current !== request.conversationId) return
@@ -1357,9 +1285,9 @@ export function useMessageListScroll({
       },
     }),
     [
-      applyVirtualizedAnchorFrame,
       beginControllerFrameLoop,
       firstMessageId,
+      getBottomFractionAnchorBrowser,
       isAtBottomRef,
       messageCount,
       rememberCurrentScrollSnapshot,
@@ -1621,128 +1549,68 @@ export function useMessageListScroll({
     [],
   )
 
-  const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
-    liveEdge: createLiveEdgeExecutor('restore-fallback'),
-    reachability: (desired, loadAround) => {
-      const scroller = scrollerRef.current
-      const virtualizer = virtualizerRef.current
-      const legacyOffsetViable =
-        desired.kind !== 'legacy-offset' ||
-        Boolean(
-          virtualizer ||
-          (
-            scroller &&
-            scroller.scrollHeight - scroller.clientHeight > 0 &&
-            desired.offsetPx >= 0 &&
-            desired.offsetPx <= scroller.scrollHeight - scroller.clientHeight
-          )
-        )
-      return deriveReachabilityForDesired({
-        desired,
+  const buildSavedPositionExecutor = useCallback((): SavedPositionExecutor => {
+    const browser = new SavedPositionBrowserAdapter({
+      getScroller: () => scrollerRef.current,
+      getVirtualizer: () => virtualizerRef.current,
+      getWindowFacts: () => ({
         hasRows: messageCount > 0 && firstMessageId !== undefined,
         windowAtLiveEdge: windowAtLiveEdge !== false,
-        virtualizer,
-        scroller,
-        loadAround,
         canRecenter: Boolean(onLoadNewer),
-        legacyOffsetViable,
-      })
-    },
-    loadAround: onLoadAroundRef.current
-      ? (messageId, signal) => {
-          if (signal.aborted) return
-          isAtBottomRef.current = false
-          debugLog('RESTORE: anchor not loaded, requesting cache slice around it', {
-            messageId,
-            conversationId,
-          })
-          return onLoadAroundRef.current?.(messageId)
-        }
-      : undefined,
-    recenterVersion: [
-      windowAtLiveEdge === false ? 'slid' : 'live',
-      isLoadingNewer ? 'loading' : 'idle',
-      messageCount,
-      lastMessageId ?? '',
-    ].join(':'),
-    recenterLiveEdge: onLoadNewer
-      ? (signal) => {
-          if (signal.aborted) return 'unavailable'
-          if (isLoadingNewer) return 'waiting'
-          onLoadNewer()
-          return 'requested'
-        }
-      : undefined,
-    beginLoop: (lease) => beginControllerFrameLoop('restore-anchor', lease),
-    positionFrame: (request: SavedPositionRequest, lease: SavedPositionExecutionLease) => {
-      if (!lease.isCurrent()) return { kind: 'unavailable' }
-      const scroller = scrollerRef.current
-      if (!scroller) return { kind: 'unavailable' }
-
-      let restored = false
-      let reassert = false
-      if (request.desired.kind === 'anchor') {
-        const anchor: ScrollAnchor = {
-          messageId: request.desired.messageId,
-          fraction: request.desired.placement.fraction,
-        }
-        if (virtualizerRef.current) {
-          restored = applyVirtualizedAnchorFrame(anchor) !== null
-          reassert = restored
-        } else {
-          restored = restoreToAnchor(scroller, anchor)
-        }
-      } else if (request.desired.kind === 'legacy-offset') {
-        const virtualizer = virtualizerRef.current
-        if (virtualizer) {
-          virtualizer.scrollToOffset(request.desired.offsetPx)
-          restored = true
-        } else {
-          const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
-          if (
-            maxScrollTop > 0 &&
-            request.desired.offsetPx >= 0 &&
-            request.desired.offsetPx <= maxScrollTop
-          ) {
-            scroller.scrollTop = request.desired.offsetPx
-            restored = true
+      }),
+      beginLoop: (lease) => beginControllerFrameLoop('restore-anchor', lease),
+      anchorAdapter: getBottomFractionAnchorBrowser(),
+    })
+    return browser.createExecutor({
+      liveEdge: createLiveEdgeExecutor('restore-fallback'),
+      loadAround: onLoadAroundRef.current
+        ? (messageId, signal) => {
+            if (signal.aborted) return
+            isAtBottomRef.current = false
+            debugLog('RESTORE: anchor not loaded, requesting cache slice around it', {
+              messageId,
+              conversationId,
+            })
+            return onLoadAroundRef.current?.(messageId)
           }
-        }
-      } else if (request.desired.kind === 'live-edge') {
-        // Live-edge fallbacks transfer to the dedicated controller execution before this executor
-        // is driven. Treat a stale call as unavailable rather than creating a second scroll owner.
-        return { kind: 'unavailable' }
-      }
-
-      if (!restored || !lease.isCurrent()) return { kind: 'unavailable' }
-      return {
-        kind: 'positioned',
-        scrollTop: scroller.scrollTop,
-        reassert,
-      }
-    },
-    complete: (request, outcome) => {
-      const scroller = scrollerRef.current
-      if (!scroller) return
-      setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
-      rememberCurrentScrollSnapshot()
-      viewportSessionRef.current?.recordProgrammaticWrite(
-        request.conversationId,
-        Date.now(),
-      )
-      debugLog('RESTORE: controller completed position', {
-        conversationId,
-        generation: request.generation,
-        desired: request.desired,
-        outcome,
-      })
-    },
-  }), [
-    applyVirtualizedAnchorFrame,
+        : undefined,
+      recenterVersion: [
+        windowAtLiveEdge === false ? 'slid' : 'live',
+        isLoadingNewer ? 'loading' : 'idle',
+        messageCount,
+        lastMessageId ?? '',
+      ].join(':'),
+      recenterLiveEdge: onLoadNewer
+        ? (signal) => {
+            if (signal.aborted) return 'unavailable'
+            if (isLoadingNewer) return 'waiting'
+            onLoadNewer()
+            return 'requested'
+          }
+        : undefined,
+      complete: (request, outcome) => {
+        const scroller = scrollerRef.current
+        if (!scroller) return
+        setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
+        rememberCurrentScrollSnapshot()
+        viewportSessionRef.current?.recordProgrammaticWrite(
+          request.conversationId,
+          Date.now(),
+        )
+        debugLog('RESTORE: controller completed position', {
+          conversationId,
+          generation: request.generation,
+          desired: request.desired,
+          outcome,
+        })
+      },
+    })
+  }, [
     beginControllerFrameLoop,
     conversationId,
     createLiveEdgeExecutor,
     firstMessageId,
+    getBottomFractionAnchorBrowser,
     isAtBottomRef,
     isLoadingNewer,
     lastMessageId,
@@ -2931,7 +2799,7 @@ export function useMessageListScroll({
           ? positioningControllerRef.current?.beginSavedPositionEntry({
               conversationId,
               entryFacts: entryExecutionFacts,
-              executor: createSavedPositionExecutor(),
+              executor: buildSavedPositionExecutor(),
             })
           : null
         if (!request) {
@@ -3014,7 +2882,7 @@ export function useMessageListScroll({
   }, [
     conversationId,
     createLiveEdgeExecutor,
-    createSavedPositionExecutor,
+    buildSavedPositionExecutor,
     createUnreadMarkerExecutor,
     emergencyLiveEdgeWrite,
     firstNewMessageId,
@@ -3138,14 +3006,14 @@ export function useMessageListScroll({
     if (controller.refreshSavedPosition({
       conversationId,
       generation: status.request.generation,
-      executor: createSavedPositionExecutor(),
+      executor: buildSavedPositionExecutor(),
     })) {
       prevMessageCountRef.current = messageCount
       prevLastMessageIdRef.current = lastMessageId
     }
   }, [
     conversationId,
-    createSavedPositionExecutor,
+    buildSavedPositionExecutor,
     firstMessageId,
     lastMessageId,
     messageCount,
