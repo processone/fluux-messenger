@@ -67,6 +67,20 @@ const savedPositionBrowserAdapterPath = resolve(
 const savedPositionBrowserAdapterSource = existsSync(savedPositionBrowserAdapterPath)
   ? readFileSync(savedPositionBrowserAdapterPath, 'utf8')
   : ''
+const unreadMarkerBrowserAdapterPath = resolve(
+  process.cwd(),
+  'src/components/conversation/unreadMarkerBrowserAdapter.ts',
+)
+const unreadMarkerBrowserAdapterSource = existsSync(unreadMarkerBrowserAdapterPath)
+  ? readFileSync(unreadMarkerBrowserAdapterPath, 'utf8')
+  : ''
+const explicitTargetBrowserAdapterPath = resolve(
+  process.cwd(),
+  'src/components/conversation/explicitTargetBrowserAdapter.ts',
+)
+const explicitTargetBrowserAdapterSource = existsSync(explicitTargetBrowserAdapterPath)
+  ? readFileSync(explicitTargetBrowserAdapterPath, 'utf8')
+  : ''
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -203,6 +217,18 @@ describe('live message-list scroll ownership', () => {
     expect(savedPositionBrowserAdapterSource).not.toMatch(/\bPositioningController\b/)
     expect(hookSource).not.toMatch(
       /\b(?:restoreToAnchor|applyVirtualizedAnchorFrame|createSavedPositionExecutor)\b/,
+    )
+  })
+
+  it('keeps unread-marker and explicit-target browser mechanics behind leased adapters', () => {
+    expect(existsSync(unreadMarkerBrowserAdapterPath)).toBe(true)
+    expect(existsSync(explicitTargetBrowserAdapterPath)).toBe(true)
+    expect(unreadMarkerBrowserAdapterSource).toMatch(browserOrPixelAuthority)
+    expect(explicitTargetBrowserAdapterSource).toMatch(browserOrPixelAuthority)
+    expect(unreadMarkerBrowserAdapterSource).not.toMatch(/\bPositioningController\b/)
+    expect(explicitTargetBrowserAdapterSource).not.toMatch(/\bPositioningController\b/)
+    expect(hookSource).not.toMatch(
+      /\b(?:createUnreadMarkerExecutor|createExplicitTargetExecutor)\b/,
     )
   })
 

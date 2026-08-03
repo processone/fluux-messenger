@@ -308,9 +308,9 @@ measurement, or MDS completion cannot revive cancelled work.
 ## Reconciler responsibilities
 
 The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
-model; browser-specific geometry remains in leased imperative executors. Directional-history and
-saved-position mechanics now live behind dedicated browser adapters, while the remaining executors
-are still in the hook:
+model; browser-specific geometry remains in leased imperative executors. Directional-history,
+saved-position, unread-marker, and explicit-target mechanics now live behind dedicated browser
+adapters, while the remaining executors are still in the hook:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -510,8 +510,9 @@ kinetic scrolling and stale-paint behavior.
        cancellation, and anchor/fallback writes behind its leased browser adapter.
      - [x] Extract saved-position reachability, legacy-offset and bottom-fraction writes behind its
        leased browser adapter, with shared bottom-fraction geometry for fixed anchors.
-     - [ ] Extract the remaining marker/target, live-edge, fixed-anchor, and resident-top browser
-       executors.
+     - [x] Extract unread-marker and explicit-target reachability, passive conversation handoff,
+       leased positioning, around loading, and target completion behind dedicated browser adapters.
+     - [ ] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
    - [ ] Leave the React hook as thin lifecycle orchestration.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove

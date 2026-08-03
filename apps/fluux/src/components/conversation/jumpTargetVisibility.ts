@@ -3,8 +3,8 @@
  *
  * Lives with the scroll code rather than under `src/anomaly/`, for two reasons. It is
  * a scroll invariant — the same kind of pure decision as `fabVisibility.ts` — and its
- * only caller is `useMessageListScroll`, which ships in release builds and therefore
- * must not import the anomaly tree at all. A static import there would pull the
+ * only caller is `ExplicitTargetBrowserAdapter`, which ships in release builds and
+ * therefore must not import the anomaly tree at all. A static import there would pull the
  * recorder and serializer into the production bundle even behind a dead branch.
  *
  * The check is not timed: the explicit-target executor has an exact settle point

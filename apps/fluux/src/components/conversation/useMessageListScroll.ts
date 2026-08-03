@@ -37,7 +37,6 @@ import { decideRowGrowth } from './rowGrowthDecision'
 import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { signalAnomaly } from '@/utils/anomalySignal'
-import { evaluateJumpTarget } from './jumpTargetVisibility'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
@@ -55,17 +54,20 @@ import {
 } from './directionalHistoryBrowserAdapter'
 import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
 import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
+import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
+import {
+  ExplicitTargetBrowserAdapter,
+  TARGET_HIGHLIGHT_MS,
+} from './explicitTargetBrowserAdapter'
 import {
   PositioningController,
   type DirectionalHistoryExecutor,
-  type ExplicitTargetExecutor,
   type AnchorPreservationExecutor,
   type LiveEdgeExecutor,
   type LiveEdgeCompletion,
   type PositionExecutionLease,
   type ResidentTopExecutor,
   type SavedPositionExecutor,
-  type UnreadMarkerExecutor,
 } from './positioningController'
 import {
   deriveAtLiveEdge,
@@ -82,7 +84,6 @@ import {
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
   type ReachabilityFacts,
-  type UnreadMarkerRequest,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
@@ -139,9 +140,6 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
-// How long a jumped-to message keeps its highlight tint, for both the controller-owned live path
-// and the scoped static-preview path (they must flash identically).
-const TARGET_HIGHLIGHT_MS = 1500
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -522,8 +520,8 @@ export function useMessageListScroll({
   const unmountDeactivationTokenRef = useRef<object | null>(null)
   // Generation-aware semantic controller. All live-conversation positioning slices, including
   // directional history, are authoritative. Pixel writes stay in leased imperative executors;
-  // directional-history and saved-position mechanics live behind their browser adapters. The
-  // module-private generation allocator survives StrictMode remounts.
+  // directional-history, saved-position, unread-marker, and explicit-target mechanics live behind
+  // their browser adapters. The module-private generation allocator survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -1621,266 +1619,67 @@ export function useMessageListScroll({
     windowAtLiveEdge,
   ])
 
-  const createUnreadMarkerExecutor = useCallback((): UnreadMarkerExecutor => ({
-    liveEdge: createLiveEdgeExecutor('marker-fallback'),
-    reachability: (desired) => deriveReachabilityForDesired({
-      desired,
-      hasRows: messageCount > 0 && firstMessageId !== undefined,
-      windowAtLiveEdge: windowAtLiveEdge !== false,
-      virtualizer: virtualizerRef.current,
-      scroller: scrollerRef.current,
-      loadAround: 'unavailable',
-      canRecenter: false,
-    }),
-    beginLoop: (lease: PositionExecutionLease) =>
-      beginControllerFrameLoop('marker', lease),
-    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
-    positionFrame: (
-      request: UnreadMarkerRequest,
-      lease: PositionExecutionLease,
-    ) => {
-      if (!lease.isCurrent()) return { kind: 'unavailable' }
-      const scroller = scrollerRef.current
-      if (!scroller) return { kind: 'unavailable' }
-
-      // Entry waits until the passive latest-value handoff has installed the new conversation's
-      // virtualizer. Reading the synchronous render ref here can act on a transient pre-paint
-      // window and advance viewport-derived read state before the new list is settled.
-      const latest = latestRef.current
-      if (latest.conversationId !== request.conversationId) {
-        return { kind: 'waiting' }
-      }
-      const virtualizer = latest.virtualizer
-      const markerId = request.desired.messageId
-      const markerIndex = virtualizer
-        ? virtualizer.getIndexForMessageId(markerId)
-        : null
-      let offset: number | null = null
-      if (virtualizer) {
-        if (markerIndex === null) {
-          // An unindexed marker is transient only while the item set is still being
-          // built — then the next frame can resolve it. Once the window HAS rows and
-          // the divider is still absent, it names a message outside the resident
-          // slice (rooms load 100 messages on activation; a read pointer synced from
-          // another device can predate that). No retry can succeed, so `waiting`
-          // would park the list at scrollTop 0 — the oldest loaded message — for the
-          // rest of the visit, with entry's `isAtBottom = false` freezing the read
-          // pointer and counting every later message unread. Terminal instead, so the
-          // controller's live-edge fallback takes over.
-          return virtualizer.itemCount === 0
-            ? { kind: 'waiting' }
-            : { kind: 'unavailable' }
-        }
-        offset = virtualizer.getOffsetForMessageId(markerId)
-      } else {
-        const element = scroller.querySelector(
-          `[data-message-id="${CSS.escape(markerId)}"]`,
-        ) as HTMLElement | null
-        if (element) offset = element.offsetTop
-      }
-      if (offset === null) return { kind: 'waiting' }
-
-      // Avoid a target at scrollTop=0: handleScroll treats that as an explicit request for older
-      // history. For all/mostly-unread windows, preserve the established live-edge fallback.
-      if (offset <= scroller.clientHeight / 3) {
-        return { kind: 'unavailable' }
-      }
-      if (!lease.isCurrent()) return { kind: 'unavailable' }
-
-      if (virtualizer && markerIndex !== null) {
-        virtualizer.scrollToIndex(markerIndex, { align: 'start' })
-      } else {
-        const top =
-          request.desired.align === 'top-third'
-            ? Math.max(0, offset - scroller.clientHeight / 3)
-            : offset
-        scroller.scrollTop = top
-      }
-
-      const scrollTop = scroller.scrollTop
-      const distanceFromBottom =
-        scroller.scrollHeight - scrollTop - scroller.clientHeight
-      const atLiveEdge = distanceFromBottom < AT_BOTTOM_THRESHOLD
-      setMeasuredAtBottom(atLiveEdge)
-      debugLog('UNREAD MARKER: controller positioned frame', {
-        conversationId: request.conversationId,
-        generation: request.generation,
-        markerId,
-        markerIndex,
-        offset,
-        scrollTop,
-        distanceFromBottom,
-        atLiveEdge,
-      })
-      return { kind: 'positioned', scrollTop, atLiveEdge }
-    },
-  }), [
-    firstMessageId,
+  const buildUnreadMarkerExecutor = useCallback(() => {
+    const browser = new UnreadMarkerBrowserAdapter({
+      getScroller: () => scrollerRef.current,
+      getVirtualizer: () => virtualizerRef.current,
+      getWindowFacts: () => ({
+        hasRows:
+          liveWindowRef.current.messageCount > 0 &&
+          liveWindowRef.current.firstMessageId !== undefined,
+        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
+      }),
+      getPassiveContext: () => ({
+        conversationId: latestRef.current.conversationId,
+        virtualizer: latestRef.current.virtualizer,
+      }),
+      beginLoop: (lease) => beginControllerFrameLoop('marker', lease),
+      setMeasuredAtBottom,
+      log: debugLog,
+    })
+    return browser.createExecutor(createLiveEdgeExecutor('marker-fallback'))
+  }, [
     beginControllerFrameLoop,
     createLiveEdgeExecutor,
-    messageCount,
     setMeasuredAtBottom,
-    windowAtLiveEdge,
   ])
 
-  const createExplicitTargetExecutor = useCallback((
+  const buildExplicitTargetExecutor = useCallback((
     messageReference: string,
     consumeStoreTarget: boolean,
-  ): ExplicitTargetExecutor => ({
-    reachability: (desired, loadAround) => {
-      const scroller = scrollerRef.current
-      const virtualizer = virtualizerRef.current
-      const element = scroller
-        ? findMessageTargetElement(scroller, desired.messageId)
-        : null
-      if (element) {
-        return {
-          kind: 'available',
-          index: virtualizer?.getIndexForMessageId(desired.messageId) ?? 0,
-          mounted: true,
-          placement: 'viable',
-        }
-      }
-      const facts = deriveReachabilityForDesired({
-        desired,
-        hasRows: messageCount > 0 && firstMessageId !== undefined,
-        windowAtLiveEdge: windowAtLiveEdge !== false,
-        virtualizer,
-        scroller,
-        loadAround,
-        canRecenter: false,
-      })
-      // Unlike ordinary entry hydration, an explicit target is meaningful even when the resident
-      // window is empty: it can name the cache slice that must be loaded.
-      return facts.kind === 'empty-window'
-        ? { kind: 'target-absent', loadAround }
-        : facts
-    },
-    loadAround: onLoadAroundRef.current
-      ? (messageId, signal) => {
-          if (
-            signal.aborted ||
-            activeConversationIdRef.current !== conversationId
-          ) {
-            return
-          }
-          isAtBottomRef.current = false
-          debugLog('TARGET MESSAGE: requesting cache slice around target', {
-            conversationId,
-            messageId,
-          })
-          return onLoadAroundRef.current?.(messageId)
-        }
-      : undefined,
-    beginLoop: (lease) => beginControllerFrameLoop('target', lease),
-    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
-    positionFrame: (
-      request: ExplicitTargetRequest,
-      lease: PositionExecutionLease,
-    ) => {
-      if (!lease.isCurrent()) return { kind: 'unavailable' }
-      const scroller = scrollerRef.current
-      if (!scroller) return { kind: 'unavailable' }
-
-      // The request may be submitted during entry. Wait for the passive handoff so a stale
-      // virtualizer from the room we left cannot receive the first center write.
-      const latest = latestRef.current
-      if (latest.conversationId !== request.conversationId) {
-        return { kind: 'waiting' }
-      }
-
-      const targetId = request.desired.messageId
-      const virtualizer = latest.virtualizer
-      const index = virtualizer?.getIndexForMessageId(targetId) ?? null
-      const element = findMessageTargetElement(scroller, targetId)
-      if (index === null && !element) return { kind: 'waiting' }
-      if (!lease.isCurrent()) return { kind: 'unavailable' }
-
-      if (index !== null && virtualizer) {
-        virtualizer.scrollToIndex(index, { align: 'center' })
-      } else {
-        element?.scrollIntoView({ block: 'center' })
-      }
-      const scrollTop = scroller.scrollTop
-      const distanceFromBottom =
-        scroller.scrollHeight - scrollTop - scroller.clientHeight
-      setMeasuredAtBottom(distanceFromBottom < AT_BOTTOM_THRESHOLD)
-      debugLog('TARGET MESSAGE: controller positioned frame', {
-        conversationId: request.conversationId,
-        generation: request.generation,
-        targetId,
-        index,
-        scrollTop,
-        distanceFromBottom,
-      })
-      return { kind: 'positioned', scrollTop, wrote: true }
-    },
-    complete: (request, outcome, applied) => {
-      if (
-        activeConversationIdRef.current !== request.conversationId ||
-        request.desired.messageId !== messageReference
-      ) {
-        return
-      }
-      if (
-        consumeStoreTarget &&
-        targetMessageIdRef.current !== request.desired.messageId
-      ) {
-        return
-      }
-
-      const element = scrollerRef.current
-        ? findMessageTargetElement(
-            scrollerRef.current,
-            request.desired.messageId,
-          )
-        : null
-      if (element && applied) {
-        element.classList.add('message-highlight')
-        setTimeout(() => element.classList.remove('message-highlight'), TARGET_HIGHLIGHT_MS)
-      }
-      debugLog('TARGET MESSAGE: controller completed', {
-        conversationId: request.conversationId,
-        generation: request.generation,
-        targetId: request.desired.messageId,
-        outcome,
-        highlighted: Boolean(element && applied),
-      })
-
-      // The jump has settled, which makes this the one moment the claim "the target
-      // is on screen" can be checked. Measured from the live rects rather than from
-      // any scroll bookkeeping, so a wrong offset cannot hide behind agreeing state.
-      if (__FLUUX_ANOMALY__) {
-        const settledScroller = scrollerRef.current
-        if (settledScroller) {
-          const viewport = settledScroller.getBoundingClientRect()
-          const target = element?.getBoundingClientRect() ?? null
-          const miss = evaluateJumpTarget({
-            outcome,
-            applied,
-            target: target ? { top: target.top, bottom: target.bottom } : null,
-            viewport: { top: viewport.top, bottom: viewport.bottom },
-          })
-          if (miss) {
-            signalAnomaly({
-              name: 'scroll/jump-target-miss',
-              offBy: Math.round(miss.offBy),
-              messageId: request.desired.messageId,
-            })
-          }
-        }
-      }
-
-      if (consumeStoreTarget) onTargetMessageConsumedRef.current?.()
-    },
-  }), [
+  ) => {
+    const browser = new ExplicitTargetBrowserAdapter({
+      getScroller: () => scrollerRef.current,
+      getVirtualizer: () => virtualizerRef.current,
+      getWindowFacts: () => ({
+        hasRows:
+          liveWindowRef.current.messageCount > 0 &&
+          liveWindowRef.current.firstMessageId !== undefined,
+        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
+      }),
+      getPassiveContext: () => ({
+        conversationId: latestRef.current.conversationId,
+        virtualizer: latestRef.current.virtualizer,
+      }),
+      getActiveConversationId: () => activeConversationIdRef.current,
+      getStoreTargetMessageId: () => targetMessageIdRef.current,
+      beginLoop: (lease) => beginControllerFrameLoop('target', lease),
+      setMeasuredAtBottom,
+      markNotAtBottom: () => { isAtBottomRef.current = false },
+      consumeStoreTarget: () => onTargetMessageConsumedRef.current?.(),
+      log: debugLog,
+    })
+    return browser.createExecutor({
+      conversationId,
+      messageReference,
+      consumeStoreTarget,
+      loadAround: onLoadAroundRef.current,
+    })
+  }, [
     beginControllerFrameLoop,
     conversationId,
-    firstMessageId,
     isAtBottomRef,
-    messageCount,
     setMeasuredAtBottom,
-    windowAtLiveEdge,
   ])
 
   const requestMessageTargetImpl = useCallback((messageReference: string) => {
@@ -1904,11 +1703,11 @@ export function useMessageListScroll({
     positioningControllerRef.current?.beginExplicitTarget({
       conversationId,
       messageId: messageReference,
-      executor: createExplicitTargetExecutor(messageReference, false),
+      executor: buildExplicitTargetExecutor(messageReference, false),
     })
   }, [
     conversationId,
-    createExplicitTargetExecutor,
+    buildExplicitTargetExecutor,
     isAtBottomRef,
     staticMode,
   ])
@@ -1975,7 +1774,7 @@ export function useMessageListScroll({
       const request = positioningControllerRef.current?.beginUnreadMarkerNavigation({
         conversationId,
         navigationFacts,
-        executor: createUnreadMarkerExecutor(),
+        executor: buildUnreadMarkerExecutor(),
       })
       if (request) {
         return
@@ -1991,7 +1790,7 @@ export function useMessageListScroll({
   }, [
     conversationId,
     createLiveEdgeExecutor,
-    createUnreadMarkerExecutor,
+    buildUnreadMarkerExecutor,
     emergencyLiveEdgeWrite,
     firstNewMessageId,
   ])
@@ -2821,7 +2620,7 @@ export function useMessageListScroll({
           ? positioningControllerRef.current?.beginUnreadMarkerEntry({
             conversationId,
             entryFacts: entryExecutionFacts,
-            executor: createUnreadMarkerExecutor(),
+            executor: buildUnreadMarkerExecutor(),
           })
           : null
         if (!request) {
@@ -2883,7 +2682,7 @@ export function useMessageListScroll({
     conversationId,
     createLiveEdgeExecutor,
     buildSavedPositionExecutor,
-    createUnreadMarkerExecutor,
+    buildUnreadMarkerExecutor,
     emergencyLiveEdgeWrite,
     firstNewMessageId,
     isAtBottomRef,
@@ -3121,7 +2920,7 @@ export function useMessageListScroll({
     }
 
     isAtBottomRef.current = false
-    const executor = createExplicitTargetExecutor(targetMessageId, true)
+    const executor = buildExplicitTargetExecutor(targetMessageId, true)
     if (
       previous &&
       previous.conversationId === conversationId &&
@@ -3145,7 +2944,7 @@ export function useMessageListScroll({
     targetMessageId,
     messageCount,
     conversationId,
-    createExplicitTargetExecutor,
+    buildExplicitTargetExecutor,
     isAtBottomRef,
     staticMode,
   ])
@@ -3664,9 +3463,9 @@ export function useMessageListScroll({
         unreadMarkerNeedsVisit: true,
         unreadMarkerAlign: virtualizerRef.current ? 'start' : 'top-third',
       },
-      executor: createUnreadMarkerExecutor(),
+      executor: buildUnreadMarkerExecutor(),
     })
-  }, [firstNewMessageId, conversationId, createUnreadMarkerExecutor])
+  }, [firstNewMessageId, conversationId, buildUnreadMarkerExecutor])
 
   // ==========================================================================
   // RETURN
