@@ -39,7 +39,7 @@ budget, and user cancellation. Media growth, unread-divider movement, and delaye
 insertions while reading history share one fixed-anchor execution machine with the former
 90-frame/8-stable-frame/8px contract. Divider movement and delayed insertion have distinct
 `layout-preservation` reasons and are ambient: they are rejected rather than superseding an
-unsettled entry restore, explicit target, or user navigation. Hook executors
+unsettled entry restore, explicit target, or user navigation. Leased imperative executors
 translate accepted requests into browser/virtualizer writes, and every frame must hold the current
 controller lease before it can write. Directional history is accepted before a load begins, remains
 pending until the first resident ID changes or the load settles without a window shift, then either
@@ -77,9 +77,11 @@ and false-to-true live-window cleanup. A loader promise bounds only the snapshot
 settlement from an older superseded load cannot release the current request, while an in-flight
 load keeps its snapshot until its own first-id shift can reconcile. Conversation entry drops the
 departed conversation's snapshot, and delayed settlement or window observation from that snapshot
-cannot mutate the active conversation. The hook currently supplies the DOM measurements and
-one-frame browser settlement callback; the coordinator imports no DOM, virtualizer, frame
-scheduler, positioning controller, or pixel-write capability.
+cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
+anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
+cancellation, and anchor/fallback pixel writes under the controller lease. The hook constructs and
+invokes the adapter and supplies lifecycle completion callbacks. The coordinator imports no DOM,
+virtualizer, frame scheduler, positioning controller, or pixel-write capability.
 
 Explicit target convergence uses immediate center writes. The former reply/poll/find helper's
 native smooth animation is intentionally not retained: restarting a smooth animation while
@@ -299,7 +301,9 @@ measurement, or MDS completion cannot revive cancelled work.
 ## Reconciler responsibilities
 
 The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
-model; browser-specific geometry remains in leased hook executors:
+model; browser-specific geometry remains in leased imperative executors. Directional-history
+mechanics now live behind a dedicated browser adapter, while the remaining executors are still in
+the hook:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -495,6 +499,10 @@ kinetic scrolling and stale-paint behavior.
    - [x] Extract directional history load eligibility, invocation, and completion into a window
      coordinator that owns no positioning.
    - [ ] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
+     - [x] Extract directional-history capture, settlement scheduling, reachability, kinetic
+       cancellation, and anchor/fallback writes behind its leased browser adapter.
+     - [ ] Extract the remaining saved, marker/target, live-edge, fixed-anchor, and resident-top
+       browser executors.
    - [ ] Leave the React hook as thin lifecycle orchestration.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove

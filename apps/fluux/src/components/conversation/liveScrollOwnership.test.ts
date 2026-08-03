@@ -46,6 +46,13 @@ const directionalWindowCoordinatorSource = readFileSync(
   ),
   'utf8',
 )
+const directionalBrowserAdapterPath = resolve(
+  process.cwd(),
+  'src/components/conversation/directionalHistoryBrowserAdapter.ts',
+)
+const directionalBrowserAdapterSource = existsSync(directionalBrowserAdapterPath)
+  ? readFileSync(directionalBrowserAdapterPath, 'utf8')
+  : ''
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -160,6 +167,17 @@ describe('live message-list scroll ownership', () => {
       }
     `
     expect(competingOwner).toMatch(browserOrPixelAuthority)
+  })
+
+  it('keeps directional DOM, virtualizer, and frame mechanics behind a browser adapter', () => {
+    expect(existsSync(directionalBrowserAdapterPath)).toBe(true)
+    expect(directionalBrowserAdapterSource).toMatch(browserOrPixelAuthority)
+    expect(directionalBrowserAdapterSource).not.toMatch(
+      /\b(?:DirectionalHistoryWindowCoordinator|PositioningController)\b/,
+    )
+    expect(hookSource).not.toMatch(
+      /\b(?:cancelKineticScroll|findAnchorElement|createDirectionalHistoryExecutor|directionalReleaseFramesRef|scheduleDirectionalHistorySettlement)\b/,
+    )
   })
 
   it('persists the outgoing viewport before resetting the session for entry', () => {

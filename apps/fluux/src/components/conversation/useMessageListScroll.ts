@@ -5,7 +5,7 @@
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
  * 2. PositioningController owns every live-list positioning generation. Directional window-load
  *    eligibility/lifetime lives in a value-only coordinator; browser writes stay imperative in
- *    leased hook executors
+ *    leased browser adapters
  * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
  * 4. The controller owns generations and migrated-position arbitration, not React state or geometry
  *
@@ -50,6 +50,10 @@ import {
   type DirectionalHistorySnapshot,
 } from './directionalHistoryWindowCoordinator'
 import {
+  DirectionalHistoryBrowserAdapter,
+  type DirectionalHistoryBrowserCapture,
+} from './directionalHistoryBrowserAdapter'
+import {
   PositioningController,
   type DirectionalHistoryExecutor,
   type ExplicitTargetExecutor,
@@ -73,7 +77,6 @@ import {
   messageFraction,
   pixelOffset,
   type AnchorPreservationRequest,
-  type DirectionalHistoryRequest,
   type DesiredPosition,
   type ExplicitTargetRequest,
   type LiveEdgeRequest,
@@ -181,26 +184,6 @@ function useStableCallback<Args extends unknown[]>(
   const latest = useRef(callback)
   latest.current = callback
   return useCallback((...args: Args) => latest.current(...args), [])
-}
-
-// ============================================================================
-// KINETIC SCROLL
-// ============================================================================
-
-/**
- * Cancel an in-flight or boundary-parked kinetic (momentum) scroll on `el`.
- *
- * Toggling overflow to hidden and forcing a reflow cancels WebKit's momentum animation; the
- * caller restores the scroll position immediately after. Used by the MAM-prepend restore so a
- * fast scroll-up fling's residual velocity can't resume into the freshly prepended content and
- * overshoot the anchor (blank window / jump to bottom on Tauri WebKitGTK). `overflowY = ''`
- * yields the property back to the element's CSS class (overflow-y-auto). No-op for programmatic
- * scrolls, which carry no momentum — so it cannot be exercised by the Playwright/preview harness.
- */
-export function cancelKineticScroll(el: HTMLElement): void {
-  el.style.overflowY = 'hidden'
-  void el.offsetHeight // force reflow so the overflow change (and momentum cancel) takes effect
-  el.style.overflowY = ''
 }
 
 // ============================================================================
@@ -486,6 +469,8 @@ export function useMessageListScroll({
   if (directionalWindowRef.current === null) {
     directionalWindowRef.current = new DirectionalHistoryWindowCoordinator()
   }
+  const directionalHistoryBrowserRef =
+    useRef<DirectionalHistoryBrowserAdapter | null>(null)
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -560,8 +545,9 @@ export function useMessageListScroll({
   // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
   const unmountDeactivationTokenRef = useRef<object | null>(null)
   // Generation-aware semantic controller. All live-conversation positioning slices, including
-  // directional history, are authoritative. Pixel writes stay in hook executors, while the
-  // module-private generation allocator survives StrictMode remounts.
+  // directional history, are authoritative. Pixel writes stay in leased imperative executors;
+  // directional-history mechanics live behind their browser adapter. The module-private generation
+  // allocator survives StrictMode remounts.
   const positioningControllerRef = useRef<PositioningController | null | undefined>(undefined)
   if (positioningControllerRef.current === undefined) {
     positioningControllerRef.current = runScrollShadowSafely({
@@ -604,17 +590,6 @@ export function useMessageListScroll({
       },
     })
   }
-  // Browser frames on which the value-only directional coordinator is told to adjudicate a load
-  // that settled without shifting the resident window. The coordinator owns request identity and
-  // cancellation policy; this hook retains only the browser scheduling mechanism until the browser
-  // adapter extraction in the next architecture slice.
-  // A set, not a single slot: two loads can be in flight across a fast re-trigger and settle in
-  // either order, so one request's frame must never displace another's. Cancelled on unmount.
-  // Same lazy-ref idiom as pinBottomClaim below — stable identity, no per-render allocation.
-  const directionalReleaseFramesRef = useRef<Set<number> | null>(null)
-  const directionalReleaseFrames = () =>
-    (directionalReleaseFramesRef.current ??= new Set<number>())
-
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
   // a single scroll correction at the end to avoid jitter.
@@ -1021,6 +996,22 @@ export function useMessageListScroll({
       lifecycle,
     })
   }, [])
+
+  const getDirectionalHistoryBrowser = useCallback(() => {
+    if (directionalHistoryBrowserRef.current === null) {
+      directionalHistoryBrowserRef.current =
+        new DirectionalHistoryBrowserAdapter({
+          getScroller: () => scrollerRef.current,
+          getVirtualizer: () => virtualizerRef.current,
+          getActiveConversationId: () => activeConversationIdRef.current,
+          beginLoop: (lease) => beginControllerFrameLoop('prepend', lease),
+          requestFrame: (callback) => requestAnimationFrame(callback),
+          cancelFrame: (id) => cancelAnimationFrame(id),
+          log: debugLog,
+        })
+    }
+    return directionalHistoryBrowserRef.current
+  }, [beginControllerFrameLoop])
 
   const createLiveEdgeExecutor = useCallback((
     trigger: string,
@@ -1590,169 +1581,44 @@ export function useMessageListScroll({
     messageCount,
   ])
 
-  const createDirectionalHistoryExecutor = useCallback(
-    (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor => {
-      let initialized = false
-      let previousTarget = 0
-      let usedFallback = false
-
-      return {
-        reachability: (desired) => {
-          const scroller = scrollerRef.current
-          const virtualizer = virtualizerRef.current
-          return deriveReachabilityForDesired({
-            desired,
-            hasRows: Boolean(
-              (virtualizer && virtualizer.itemCount > 0) ||
-              scroller?.querySelector('[data-message-id]'),
-            ),
-            windowAtLiveEdge: true,
-            virtualizer,
-            scroller,
-            loadAround: 'unavailable',
-            canRecenter: false,
-          })
-        },
-        beginLoop: (lease) => beginControllerFrameLoop('prepend', lease),
-        positionFrame: (
-          request: DirectionalHistoryRequest,
-          lease: PositionExecutionLease,
-        ) => {
-          if (
-            !lease.isCurrent() ||
-            activeConversationIdRef.current !== request.conversationId
-          ) {
-            return { kind: 'unavailable' }
-          }
-          const scroller = scrollerRef.current
-          if (!scroller) return { kind: 'unavailable' }
-          const virtualizer = virtualizerRef.current
-
-          if (!initialized) {
-            // Preserve the pre-paint WebKit momentum cancellation from the former layout effect.
-            void scroller.offsetHeight
-            cancelKineticScroll(scroller)
-          }
-
-          let target: number | null = null
-          let usedMethod = 'none'
-          if (request.desired.messageId) {
-            const virtualOffset =
-              virtualizer?.getOffsetForMessageId(
-                request.desired.messageId,
-              ) ?? null
-            if (virtualOffset !== null) {
-              target =
-                virtualOffset - request.desired.placement.offsetPx
-              usedMethod = 'virtualizer-offset'
-            } else {
-              const anchorElement = scroller.querySelector(
-                `[data-message-id="${CSS.escape(request.desired.messageId)}"]`,
-              ) as HTMLElement | null
-              if (anchorElement) {
-                target =
-                  anchorElement.offsetTop -
-                  request.desired.placement.offsetPx
-                usedMethod = 'element-based'
-              }
-            }
-          }
-
-          if (target === null) {
-            if (initialized) {
-              // The former loop kept its full late-measurement budget if an already-applied anchor
-              // temporarily disappeared. Do not switch fallback policy after the initial landing.
-              return {
-                kind: 'positioned',
-                scrollTop: scroller.scrollTop,
-                wrote: false,
-                reassert: Boolean(virtualizer && !usedFallback),
-              }
-            }
-            target =
-              scroller.scrollHeight -
-              scroller.clientHeight -
-              request.onUnavailable.distancePx
-            usedMethod = 'distance-from-bottom'
-            usedFallback = true
-          }
-
-          const maxScrollTop = Math.max(
-            0,
-            scroller.scrollHeight - scroller.clientHeight,
+  const createDirectionalHistoryCompletion = useCallback(
+    (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor['complete'] =>
+      (request, outcome) => {
+        if (activeConversationIdRef.current !== request.conversationId) return
+        if (outcome === 'applied') {
+          const restored = directionalWindowRef.current?.markRestored(
+            saved.requestId,
+            Date.now(),
           )
-          const boundedTarget = Math.max(
-            0,
-            Math.min(target, maxScrollTop),
+          const restoredAt = restored?.restoredAt
+          if (restoredAt === undefined) return
+          prevMessageCountRef.current = messageCountRef.current
+          viewportSessionRef.current?.recordProgrammaticWrite(
+            request.conversationId,
+            restoredAt,
           )
-          const targetMoved =
-            initialized && Math.abs(boundedTarget - previousTarget) > 2
-          const geometryDrift =
-            initialized && Math.abs(scroller.scrollTop - boundedTarget) > 5
-          const shouldWrite = !initialized || targetMoved || geometryDrift
-          if (shouldWrite) {
-            if (virtualizer) {
-              virtualizer.scrollToOffset(boundedTarget)
-            } else {
-              scroller.scrollTop = boundedTarget
-            }
-          }
-          previousTarget = boundedTarget
-          initialized = true
-
-          debugLog('DIRECTIONAL HISTORY POSITION', {
-            generation: request.generation,
-            usedMethod,
-            target: boundedTarget,
-            targetMoved,
-            geometryDrift,
-            wrote: shouldWrite,
-          })
-          return {
-            kind: 'positioned',
-            scrollTop: scroller.scrollTop,
-            wrote: shouldWrite,
-            reassert: Boolean(virtualizer && !usedFallback),
-          }
-        },
-        complete: (request, outcome) => {
-          if (activeConversationIdRef.current !== request.conversationId) return
-          if (outcome === 'applied') {
-            const restored = directionalWindowRef.current?.markRestored(
+          setTimeout(() => {
+            directionalWindowRef.current?.expireRestored(
               saved.requestId,
-              Date.now(),
-            )
-            const restoredAt = restored?.restoredAt
-            if (restoredAt === undefined) return
-            prevMessageCountRef.current = messageCountRef.current
-            viewportSessionRef.current?.recordProgrammaticWrite(
-              request.conversationId,
               restoredAt,
             )
-            setTimeout(() => {
-              directionalWindowRef.current?.expireRestored(
-                saved.requestId,
-                restoredAt,
-              )
-            }, DIRECTIONAL_HISTORY_COOLDOWN_MS)
-          } else {
-            directionalWindowRef.current?.finishPosition(saved.requestId)
-          }
-          if (outcome !== 'applied') {
-            viewportSessionRef.current?.recordProgrammaticWrite(
-              request.conversationId,
-              Date.now(),
-            )
-          }
-          debugLog('DIRECTIONAL HISTORY COMPLETE', {
-            generation: request.generation,
-            outcome,
-            restored: Boolean(saved.restored),
-          })
-        },
-      }
-    },
-    [beginControllerFrameLoop],
+          }, DIRECTIONAL_HISTORY_COOLDOWN_MS)
+        } else {
+          directionalWindowRef.current?.finishPosition(saved.requestId)
+        }
+        if (outcome !== 'applied') {
+          viewportSessionRef.current?.recordProgrammaticWrite(
+            request.conversationId,
+            Date.now(),
+          )
+        }
+        debugLog('DIRECTIONAL HISTORY COMPLETE', {
+          generation: request.generation,
+          outcome,
+          restored: Boolean(saved.restored),
+        })
+      },
+    [],
   )
 
   const createSavedPositionExecutor = useCallback((): SavedPositionExecutor => ({
@@ -2361,107 +2227,6 @@ export function useMessageListScroll({
   // LOAD OLDER MESSAGES
   // ==========================================================================
 
-  // Find the first visible message element and its offset from the viewport top
-  const findAnchorElement = () => {
-    const scroller = scrollerRef.current
-    if (!scroller) return null
-
-    const scrollTop = scroller.scrollTop
-    const virt = virtualizerRef.current
-
-    // Virtualized path: DOM order ≠ visual order (items are absolutely positioned and
-    // the DOM retains the previous render's window until React re-renders). Instead,
-    // find the topmost visible message using the virtualizer's sorted item list.
-    //
-    // Special case: at scrollTop=0, the anchor is always firstMessageId (the topmost
-    // message in the list). This is reliable even when the old virtualizer window
-    // (from the previous scrollTop) hasn't been replaced yet.
-    if (virt) {
-      if (scrollTop === 0 && firstMessageId) {
-        const virtOffset = virt.getOffsetForMessageId(firstMessageId) ?? 0
-        const result = { id: firstMessageId, offsetFromTop: virtOffset }
-        debugLog('FIND ANCHOR: scrollTop=0, using firstMessageId', result)
-        return result
-      }
-
-      // For non-zero scrollTop, use getVirtualItems() (current window in visual order)
-      // to find the first item at or near the viewport top.
-      const virtualItems = virt.getVirtualItems()
-      for (const vi of virtualItems) {
-        const viewportOffset = vi.start - scrollTop
-        if (viewportOffset >= -vi.size / 2) {
-          // Find the [data-message-id] inside this virtualizer row wrapper
-          const wrapper = scroller.querySelector(`[data-index="${vi.index}"]`)
-          const messageEl = wrapper?.querySelector('[data-message-id]') as HTMLElement | null
-          if (!messageEl) continue  // skip non-message items (header, separator, footer)
-          const result = { id: messageEl.dataset.messageId!, offsetFromTop: viewportOffset }
-          debugLog('FIND ANCHOR: virtualizer item', { ...result, viIndex: vi.index, viStart: vi.start, scrollTop })
-          return result
-        }
-      }
-
-      // Nothing found in current window (edge case: window hasn't settled yet)
-      if (firstMessageId) {
-        const virtOffset = virt.getOffsetForMessageId(firstMessageId) ?? 0
-        const result = { id: firstMessageId, offsetFromTop: virtOffset - scrollTop }
-        debugLog('FIND ANCHOR: fallback to firstMessageId', result)
-        return result
-      }
-      return null
-    }
-
-    // Non-virtualized path: iterate DOM elements in order (they ARE in visual order)
-    const messages = scroller.querySelectorAll('[data-message-id]')
-
-    if (messages.length === 0) {
-      debugLog('FIND ANCHOR: no messages found')
-      return null
-    }
-
-    const scrollerRect = scroller.getBoundingClientRect()
-
-    for (const msg of messages) {
-      const element = msg as HTMLElement
-      const rect = element.getBoundingClientRect()
-      const offsetFromViewportTop = rect.top - scrollerRect.top
-
-      // First message whose top is at or below the viewport top (with half-height tolerance)
-      if (offsetFromViewportTop >= -rect.height / 2) {
-        const result = {
-          id: element.dataset.messageId!,
-          offsetFromTop: element.offsetTop - scrollTop,
-        }
-        debugLog('FIND ANCHOR: found', {
-          id: result.id,
-          offsetFromTop: result.offsetFromTop,
-          offsetFromViewportTop,
-          scrollTop,
-          elementOffsetTop: element.offsetTop,
-        })
-        return result
-      }
-    }
-
-    // Fallback: use the first message
-    const firstMsg = messages[0] as HTMLElement
-    if (firstMsg) {
-      const result = {
-        id: firstMsg.dataset.messageId!,
-        offsetFromTop: firstMsg.offsetTop - scrollTop,
-      }
-      debugLog('FIND ANCHOR: using first message as fallback', {
-        id: result.id,
-        offsetFromTop: result.offsetFromTop,
-        scrollTop,
-        elementOffsetTop: firstMsg.offsetTop,
-      })
-      return result
-    }
-
-    debugLog('FIND ANCHOR: no anchor found')
-    return null
-  }
-
   const applyDirectionalReleaseDecision = useCallback(
     (decision: DirectionalHistoryReleaseDecision) => {
       if (decision.kind !== 'cancel') return
@@ -2480,36 +2245,32 @@ export function useMessageListScroll({
     [],
   )
 
-  const scheduleDirectionalHistorySettlement = (requestId: number) => {
-    const frames = directionalReleaseFrames()
-    // The handle is only known AFTER requestAnimationFrame returns, but the callback can run
-    // BEFORE it does — jsdom suites stub rAF synchronously. Track it only while genuinely pending.
-    let frame: number | null = null
-    let pending = true
-    frame = requestAnimationFrame(() => {
-      pending = false
-      if (frame !== null) frames.delete(frame)
-      const activeConversationId = activeConversationIdRef.current
-      applyDirectionalReleaseDecision(
-        directionalWindowRef.current?.releaseSettledWithoutShift({
-          requestId,
-          conversationId: activeConversationId,
-          firstMessageId: liveWindowRef.current.firstMessageId ?? '',
-        }) ?? { kind: 'none' },
-      )
-    })
-    if (pending) frames.add(frame)
-  }
+  const settleDirectionalHistoryAfterFrame = useCallback(
+    (browser: DirectionalHistoryBrowserAdapter, requestId: number) => {
+      browser.scheduleSettlement(() => {
+        const activeConversationId = activeConversationIdRef.current
+        applyDirectionalReleaseDecision(
+          directionalWindowRef.current?.releaseSettledWithoutShift({
+            requestId,
+            conversationId: activeConversationId,
+            firstMessageId: liveWindowRef.current.firstMessageId ?? '',
+          }) ?? { kind: 'none' },
+        )
+      })
+    },
+    [applyDirectionalReleaseDecision],
+  )
 
   const beginDirectionalHistoryLoad = (
-    scroller: HTMLDivElement,
     direction: 'older' | 'newer',
     mode: 'automatic' | 'explicit',
   ): {
     saved: DirectionalHistorySnapshot
-    anchor: { id: string; offsetFromTop: number } | null
+    capture: DirectionalHistoryBrowserCapture | null
   } | null => {
-    let anchor: { id: string; offsetFromTop: number } | null = null
+    const browser = getDirectionalHistoryBrowser()
+    if (!browser.isAvailable()) return null
+    let capture: DirectionalHistoryBrowserCapture | null = null
     const result = directionalWindowRef.current?.begin({
       conversationId,
       direction,
@@ -2527,11 +2288,11 @@ export function useMessageListScroll({
           direction === 'older' ? 'top' : 'bottom',
         ) ?? false,
       capture: () => {
-        anchor = findAnchorElement()
-        return {
-          anchorMessageId: anchor?.id ?? '',
-          anchorOffsetFromTop: anchor?.offsetFromTop ?? 0,
-          distanceFromBottom: getDistanceFromBottom(scroller),
+        capture = browser.capture(firstMessageId ?? '', messageCount)
+        return capture?.facts ?? {
+          anchorMessageId: '',
+          anchorOffsetFromTop: 0,
+          distanceFromBottom: 0,
           firstMessageId: firstMessageId ?? '',
           messageCount,
         }
@@ -2565,7 +2326,9 @@ export function useMessageListScroll({
           },
         },
         distanceFromBottom: pixelOffset(saved.distanceFromBottom),
-        executor: createDirectionalHistoryExecutor(saved),
+        executor: browser.createExecutor(
+          createDirectionalHistoryCompletion(saved),
+        ),
       }) ?? null,
     })
     if (request) {
@@ -2574,37 +2337,32 @@ export function useMessageListScroll({
         request.generation,
       )
     }
-    return { saved, anchor }
+    return { saved, capture }
   }
 
   const runDirectionalHistoryLoad = (
     saved: DirectionalHistorySnapshot,
     run: () => unknown,
   ): void => {
+    const browser = getDirectionalHistoryBrowser()
     directionalWindowRef.current?.invokeLoad(
       saved,
       run,
-      scheduleDirectionalHistorySettlement,
+      (requestId) => settleDirectionalHistoryAfterFrame(browser, requestId),
     )
   }
 
   const triggerLoadOlder = () => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const started = beginDirectionalHistoryLoad(
-      scroller,
-      'older',
-      'automatic',
-    )
+    const started = beginDirectionalHistoryLoad('older', 'automatic')
     if (!started) return
-    const { saved, anchor } = started
+    const { saved, capture } = started
 
     debugLog('PREPEND START', {
-      anchor,
+      anchor: capture?.anchor ?? null,
       distanceFromBottom: saved.distanceFromBottom,
-      scrollHeight: scroller.scrollHeight,
-      scrollTop: scroller.scrollTop,
-      clientHeight: scroller.clientHeight,
+      scrollHeight: capture?.geometry.scrollHeight,
+      scrollTop: capture?.geometry.scrollTop,
+      clientHeight: capture?.geometry.clientHeight,
       firstMessageId,
       messageCount,
     })
@@ -2619,34 +2377,22 @@ export function useMessageListScroll({
   // viewport steady. The evicted rows are the OLDEST — far above the viewport — so the top-visible
   // anchor survives, making the anchor-based restore direction-agnostic.
   const triggerLoadNewer = () => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const started = beginDirectionalHistoryLoad(
-      scroller,
-      'newer',
-      'automatic',
-    )
+    const started = beginDirectionalHistoryLoad('newer', 'automatic')
     if (!started) return
     runDirectionalHistoryLoad(started.saved, () => onLoadNewer?.())
   }
 
   const handleLoadEarlier = () => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const started = beginDirectionalHistoryLoad(
-      scroller,
-      'older',
-      'explicit',
-    )
+    const started = beginDirectionalHistoryLoad('older', 'explicit')
     if (!started) return
-    const { saved, anchor } = started
+    const { saved, capture } = started
 
     debugLog('LOAD EARLIER', {
-      anchor,
+      anchor: capture?.anchor ?? null,
       distanceFromBottom: saved.distanceFromBottom,
-      scrollHeight: scroller.scrollHeight,
-      scrollTop: scroller.scrollTop,
-      clientHeight: scroller.clientHeight,
+      scrollHeight: capture?.geometry.scrollHeight,
+      scrollTop: capture?.geometry.scrollTop,
+      clientHeight: capture?.geometry.clientHeight,
       firstMessageId,
       messageCount,
     })
@@ -3555,10 +3301,10 @@ export function useMessageListScroll({
         cancelAnimationFrame(correctionRafRef.current)
         correctionRafRef.current = null
       }
-      const pendingReleaseFrames = directionalReleaseFramesRef.current
-      if (pendingReleaseFrames) {
-        for (const frame of pendingReleaseFrames) cancelAnimationFrame(frame)
-        pendingReleaseFrames.clear()
+      const directionalBrowser = directionalHistoryBrowserRef.current
+      directionalBrowser?.dispose()
+      if (directionalHistoryBrowserRef.current === directionalBrowser) {
+        directionalHistoryBrowserRef.current = null
       }
     }
   }, [])
@@ -3630,13 +3376,16 @@ export function useMessageListScroll({
     positioningControllerRef.current?.reconcileDirectionalHistory({
       conversationId,
       generation: decision.generation,
-      executor: createDirectionalHistoryExecutor(saved),
+      executor: getDirectionalHistoryBrowser().createExecutor(
+        createDirectionalHistoryCompletion(saved),
+      ),
     })
 
   }, [
     conversationId,
-    createDirectionalHistoryExecutor,
+    createDirectionalHistoryCompletion,
     firstMessageId,
+    getDirectionalHistoryBrowser,
     messageCount,
     staticMode,
   ])
