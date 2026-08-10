@@ -1,5 +1,5 @@
 /**
- * useMessageListScroll - Simple, imperative scroll management
+ * useMessageListScroll - Message-list scroll lifecycle orchestration
  *
  * DESIGN PRINCIPLES:
  * 1. Production scroll state lives in REFS, not React state (prevents render loops)
@@ -19,18 +19,11 @@
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
-import { createResizeLoopMonitor, resizeLoopSignal } from './resizeLoopMonitor'
-import { createSlowCorrectionMonitor, slowCorrectionSignal } from './slowCorrectionMonitor'
-import {
-  createReassertLoopMonitor,
-  reassertLoopSignal,
-  type ReassertLoopLabel,
-} from './reassertLoopMonitor'
-import {
-  createControllerFrameLoop,
-  type ControllerFrameLoopLifecycle,
-  type ControllerFrameLoopRegistration,
-} from './controllerFrameLoop'
+// Still used by the composer/container resize observer below, a separate owner from the content
+// observer that moved into useScrollContainerBinding.
+import { createResizeLoopMonitor } from './resizeLoopMonitor'
+import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
+import { useScrollContainerBinding } from './useScrollContainerBinding'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
 import { signalAnomaly } from '@/utils/anomalySignal'
@@ -40,40 +33,18 @@ import { notifyUserInput } from '@/utils/renderLoopDetector'
 import { ViewportSession } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import {
-  DIRECTIONAL_HISTORY_COOLDOWN_MS,
   DirectionalHistoryWindowCoordinator,
   type DirectionalHistoryReleaseDecision,
   type DirectionalHistorySnapshot,
 } from './directionalHistoryWindowCoordinator'
-import {
+import type {
   DirectionalHistoryBrowserAdapter,
-  type DirectionalHistoryBrowserCapture,
+  DirectionalHistoryBrowserCapture,
 } from './directionalHistoryBrowserAdapter'
-import { BottomFractionAnchorBrowserAdapter } from './bottomFractionAnchorBrowserAdapter'
-import { SavedPositionBrowserAdapter } from './savedPositionBrowserAdapter'
-import { UnreadMarkerBrowserAdapter } from './unreadMarkerBrowserAdapter'
-import {
-  ExplicitTargetBrowserAdapter,
-  TARGET_HIGHLIGHT_MS,
-} from './explicitTargetBrowserAdapter'
-import {
-  BOTTOM_PIN_TOLERANCE,
-  LiveEdgeBrowserAdapter,
-} from './liveEdgeBrowserAdapter'
-import {
-  AnchorPreservationBrowserAdapter,
-  type AnchorPreservationLoopLabel,
-} from './anchorPreservationBrowserAdapter'
-import { ResidentTopBrowserAdapter } from './residentTopBrowserAdapter'
-import {
-  PositioningController,
-  type DirectionalHistoryExecutor,
-  type AnchorPreservationExecutor,
-  type LiveEdgeExecutor,
-  type PositionExecutionLease,
-  type ResidentTopExecutor,
-  type SavedPositionExecutor,
-} from './positioningController'
+import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
+import { BOTTOM_PIN_TOLERANCE } from './liveEdgeBrowserAdapter'
+import { useScrollExecutors } from './useScrollExecutors'
+import { PositioningController } from './positioningController'
 import {
   deriveAtLiveEdge,
   deriveEntryPositionFacts,
@@ -366,22 +337,14 @@ export function useMessageListScroll({
   // REFS - All scroll state lives here, NOT in React state
   // ==========================================================================
 
+  // The content wrapper, its ResizeObserver, the correction frame and their diagnostic monitors are
+  // owned by useScrollContainerBinding; only the scroller itself is read across this hook.
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const contentRef = useRef<HTMLDivElement | null>(null)
-  const contentObserverRef = useRef<ResizeObserver | null>(null)
-  // Pending rAF id for the coalesced scroll correction (content ResizeObserver).
-  const correctionRafRef = useRef<number | null>(null)
-  // Diagnostic-only monitor for runaway ResizeObserver fire rates (WebKitGTK).
-  const resizeMonitorRef = useRef<ReturnType<typeof createResizeLoopMonitor> | null>(null)
-  // Diagnostic-only monitor for SLOW corrections (reflow cost, not fire rate).
-  const slowCorrectionMonitorRef = useRef<ReturnType<typeof createSlowCorrectionMonitor> | null>(null)
-  // Diagnostic-only monitor for the controller-owned rAF scroll re-assert loops:
-  // surfaces a non-converging loop or two overlapping loops fighting over scrollTop on WebKit
-  // (frame-coupled, so invisible to the headless harness and the other monitors). Never cancels.
-  const reassertMonitorRef = useRef<ReturnType<typeof createReassertLoopMonitor> | null>(null)
   // In-flight controller-owned scroll re-assert loop (rAF id + idempotent terminal cleanup). Starting any loop
   // supersedes whatever is in flight so bottom, message, restore, media, and history targets cannot
   // fight over scrollTop. Single-flight: latest accepted generation wins with a fresh budget.
+  // Owned here rather than in useScrollExecutors because the scroll handler reads it to tell a
+  // controller-owned scroll from genuine user input.
   const reassertLoopRef = useRef<ControllerFrameLoopRegistration | null>(null)
   // Whether a pin-bottom re-assert loop is in flight. The row-growth re-pin defers to an active loop
   // (it re-checks scrollHeight every frame and picks the change up itself) instead of restarting it
@@ -389,14 +352,9 @@ export function useMessageListScroll({
   // lifecycle releases this claim on every terminal path; its deadline remains browser/scheduler
   // defense in depth. See pinLoopClaim.ts.
   const pinBottomClaimRef = useRef<PinLoopClaim | null>(null)
-  // Lazy-ref idiom shared with the browser adapters below: a ref is stable, so reading it at the use
-  // sites keeps the exhaustive-deps rule satisfied without a dependency.
+  // Lazy-ref idiom shared with the extracted browser-adapter hook: a ref is stable, so reading it
+  // at the use sites keeps the exhaustive-deps rule satisfied without a dependency.
   const pinBottomClaim = () => (pinBottomClaimRef.current ??= createPinLoopClaim())
-  // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
-  // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
-  const supersedeReassertLoopRef = useRef(() => {
-    reassertLoopRef.current?.finish()
-  })
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -414,14 +372,6 @@ export function useMessageListScroll({
   if (directionalWindowRef.current === null) {
     directionalWindowRef.current = new DirectionalHistoryWindowCoordinator()
   }
-  const directionalHistoryBrowserRef =
-    useRef<DirectionalHistoryBrowserAdapter | null>(null)
-  const bottomFractionAnchorBrowserRef =
-    useRef<BottomFractionAnchorBrowserAdapter | null>(null)
-  // Held once, unlike the per-request browser adapters built inside their executor factories: the
-  // repaint-burst coalescer and pin-cost probe must span a burst of superseding content-arrival
-  // pins, so one instance has to outlive any single executor.
-  const liveEdgeBrowserRef = useRef<LiveEdgeBrowserAdapter | null>(null)
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -467,8 +417,8 @@ export function useMessageListScroll({
 
   // Latest MAM-loading state (forward catch-up on entry, or backward "load older" pagination) for
   // the active conversation, read imperatively inside the live-edge executor —
-  // see the repaint-suppression note in writePin below. Updated synchronously in the render body
-  // (same pattern as virtualizerRef) so it is never stale when the pin loop reads it mid-run.
+  // see the repaint-suppression note in LiveEdgeBrowserAdapter. Updated synchronously in the render
+  // body (same pattern as virtualizerRef) so it is never stale when the pin loop reads it mid-run.
   const isLoadingOlderRef = useRef(isLoadingOlder)
   isLoadingOlderRef.current = isLoadingOlder
 
@@ -489,9 +439,6 @@ export function useMessageListScroll({
   useEffect(() => {
     previousReadPositionRef.current = readPointerId
   }, [conversationId, readPointerId])
-  // Teardown for the native user-input listeners attached to the scroller (set them via addEventListener
-  // so touch/keyboard scrolls — which don't go through the React onWheel handler — also count).
-  const userInputCleanupRef = useRef<(() => void) | null>(null)
   // React StrictMode replays layout-effect cleanup/setup without unmounting the DOM. Defer controller
   // deactivation by one microtask and cancel it if setup replays, while real unmount still aborts.
   const unmountDeactivationTokenRef = useRef<object | null>(null)
@@ -641,360 +588,95 @@ export function useMessageListScroll({
   // CALLBACK REFS: scroll container + content wrapper
   // ==========================================================================
   //
-  // Using a callback ref for the content wrapper ensures the ResizeObserver is
-  // connected as soon as the wrapper mounts, even if it mounts after initial
-  // render (e.g., MUC rooms that show a loading state before revealing
-  // messages).
-  //
-  // Two constraints shape the implementation:
-  //
-  // 1. ATTACH ORDER: React attaches refs child-first within a commit. When the
-  //    list mounts WITH messages already present, the content-wrapper ref runs
-  //    before the scroller ref is set. Observer setup is therefore late-bound:
-  //    both setters call trySetupContentObserver(), and whichever attaches
-  //    last completes the setup.
-  //
-  // 2. IDENTITY STABILITY: both setters are created once (lazy useRef), NOT
-  //    re-created per render. An unstable callback ref makes React detach
-  //    (null) + reattach it on EVERY render, tearing down and recreating the
-  //    observer each time — a forced-reflow amplifier in busy rooms. Per-render
-  //    values they need are read through latestRef (updated each render via
-  //    effect), never closed over.
+  // The dedicated binding owns ref identity, attach-order handling, native input listeners, and
+  // the non-virtualized content observer. Its module comment documents those local invariants.
 
   const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround })
   useEffect(() => {
     latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround }
   })
 
-  const stableSettersRef = useRef<{
-    setScrollContainerRef: (el: HTMLDivElement | null) => void
-    setContentRef: (el: HTMLDivElement | null) => void
-  } | null>(null)
-
-  if (stableSettersRef.current === null) {
-    const teardownContentObserver = () => {
-      if (contentObserverRef.current) {
-        contentObserverRef.current.disconnect()
-        contentObserverRef.current = null
+  const {
+    setScrollContainerRef,
+    setContentRef,
+    teardownContentObserver,
+    detachUserInputListeners,
+  } = useScrollContainerBinding({
+    setScroller: (el) => {
+      scrollerRef.current = el
+      const external = latestRef.current.externalScrollerRef
+      if (external) {
+        (external as React.MutableRefObject<HTMLElement | null>).current = el
       }
-      if (correctionRafRef.current !== null) {
-        cancelAnimationFrame(correctionRafRef.current)
-        correctionRafRef.current = null
-      }
-    }
+    },
+    getScroller: () => scrollerRef.current,
+    getVirtualizer: () => latestRef.current.virtualizer,
+    isStaticMode: () => latestRef.current.staticMode,
+    isAtBottom: () => latestRef.current.isAtBottomRef.current,
+    getActiveConversationId: () => activeConversationIdRef.current,
+    getLoggedConversationId: () => latestRef.current.conversationId,
+    isDirectionalHistoryPending: (id) =>
+      positioningControllerRef.current?.isDirectionalHistoryPending(id) ?? false,
+    isMediaLoadBatchActive: () => mediaLoadSnapshotRef.current !== null,
+    reconcileLiveEdge: (trigger) => { reconcileLiveEdgeRef.current(trigger) },
+    recordUserInput: (id, at) =>
+      viewportSessionRef.current?.recordUserInput(id, at),
+    observeUserInput: (id) =>
+      positioningControllerRef.current?.observeUserInput(id),
+    log: debugLog,
+  })
 
-    const trySetupContentObserver = () => {
-      const scroller = scrollerRef.current
-      const element = contentRef.current
-      if (!scroller || !element || contentObserverRef.current) return
-
-      // Conversation entry owns initial bottom placement through the controller's live-edge
-      // executor. In particular, its non-virtualized switch path retains the historical immediate
-      // plus deferred repair, so this observer must not issue a second pair of mount-time writes.
-
-      // Set up content ResizeObserver
-      let lastHeight = scroller.scrollHeight
-
-      // The actual measure + scroll-correction. Run at most once per frame via
-      // the rAF-coalescing in the observer callback below.
-      const runCorrection = () => {
-        correctionRafRef.current = null
-        const currentScroller = scrollerRef.current
-        if (!currentScroller) return
-
-        // Time the whole correction (including the skip paths — the
-        // scrollHeight read below is the reflow that costs, whatever branch
-        // follows). The frequency monitor in the observer callback cannot see
-        // this failure mode: slow corrections fire only a few times a second.
-        const correctionStart = performance.now()
-        try {
-          runCorrectionBody(currentScroller)
-        } finally {
-          const correctionEnd = performance.now()
-          if (!slowCorrectionMonitorRef.current) {
-            slowCorrectionMonitorRef.current = createSlowCorrectionMonitor()
-          }
-          const slow = slowCorrectionMonitorRef.current.record(
-            correctionEnd - correctionStart,
-            correctionEnd,
-          )
-          if (slow) {
-            // Context reads are warn-path only (rate-limited): querySelectorAll
-            // over the backlog is not free.
-            const rows = currentScroller.querySelectorAll('.message-row').length
-            console.warn(
-              `[SlowScrollCorrection] scroll correction took ${Math.round(correctionEnd - correctionStart)}ms ` +
-              `(rows=${rows}, scrollHeight=${currentScroller.scrollHeight}, ` +
-              `conversation=${latestRef.current.conversationId}) — ` +
-              `reflow cost scales with the rendered backlog.`
-            )
-            if (__FLUUX_ANOMALY__) {
-              signalAnomaly(
-                slowCorrectionSignal(slow, Math.round(correctionEnd - correctionStart), rows),
-              )
-            }
-          }
-        }
-      }
-
-      const runCorrectionBody = (currentScroller: HTMLDivElement) => {
-        const newHeight = currentScroller.scrollHeight
-
-        // When virtualized, the content wrapper IS the @tanstack spacer, whose height
-        // churns on every row measurement; a stick-to-bottom correction here feeds back
-        // into the virtualizer and loops. Stick-to-bottom is handled by the new-message /
-        // typing / reactions effects + the virtualizer instead.
-        if (latestRef.current.virtualizer) {
-          lastHeight = newHeight
-          return
-        }
-
-        const currentScrollTop = currentScroller.scrollTop
-
-        // Skip during prepend that's actively in progress (not yet restored)
-        if (
-          positioningControllerRef.current?.isDirectionalHistoryPending(
-            activeConversationIdRef.current,
-          )
-        ) {
-          debugLog('RESIZE SKIP (prepend in progress)', {
-            newHeight,
-            lastHeight,
-            currentScrollTop,
-          })
-          lastHeight = newHeight
-          return
-        }
-
-        // Skip during media load batch - let the debounced handler manage it
-        if (mediaLoadSnapshotRef.current) {
-          debugLog('RESIZE SKIP (media load batch in progress)', {
-            newHeight,
-            lastHeight,
-            currentScrollTop,
-          })
-          lastHeight = newHeight
-          return
-        }
-
-        const { staticMode, isAtBottomRef } = latestRef.current
-
-        // Content grew and we were at bottom -> stay at bottom. Re-open the current live-edge
-        // generation so the controller remains the only owner even on the non-virtualized path.
-        if (newHeight > lastHeight && isAtBottomRef.current && !staticMode) {
-          debugLog('RESIZE SCROLL TO BOTTOM', {
-            newHeight,
-            lastHeight,
-            isAtBottom: isAtBottomRef.current,
-            scrollTopBefore: currentScrollTop,
-          })
-          reconcileLiveEdgeRef.current('content-growth')
-        } else if (newHeight !== lastHeight) {
-          debugLog('RESIZE NO SCROLL', {
-            newHeight,
-            lastHeight,
-            isAtBottom: isAtBottomRef.current,
-            currentScrollTop,
-          })
-        }
-
-        lastHeight = newHeight
-      }
-
-      const observer = new ResizeObserver(() => {
-        // When virtualized, skip entirely: the wrapper is the @tanstack spacer whose
-        // height churns on every row measurement, and correcting scroll here loops back
-        // into the virtualizer (re-measure → spacer change → RO → scroll → re-render).
-        if (latestRef.current.virtualizer) return
-        // Diagnostic only: surface a runaway fire rate. WebKitGTK can oscillate
-        // a <video controls> height continuously, firing this hundreds of times
-        // a second — a pure main-thread loop the React render-loop detector
-        // can't see. Log-rate-limited; never disconnects.
-        if (!resizeMonitorRef.current) resizeMonitorRef.current = createResizeLoopMonitor()
-        const warning = resizeMonitorRef.current.record(performance.now())
-        if (warning) {
-          console.warn(warning.message)
-          if (__FLUUX_ANOMALY__) signalAnomaly(resizeLoopSignal(warning))
-        }
-
-        // Coalesce the measure + correction into a single rAF no matter how many
-        // times the observer fires this frame. This breaks the read-scrollHeight
-        // -> write-scrollTop -> reflow -> re-fire feedback and caps the expensive
-        // work to once per frame.
-        if (correctionRafRef.current === null) {
-          correctionRafRef.current = requestAnimationFrame(runCorrection)
-        }
-      })
-
-      observer.observe(element)
-      contentObserverRef.current = observer
-    }
-
-    stableSettersRef.current = {
-      setScrollContainerRef: (el: HTMLDivElement | null) => {
-        scrollerRef.current = el
-        const externalScrollerRef = latestRef.current.externalScrollerRef
-        if (externalScrollerRef) {
-          (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
-        }
-        // Native user-input listeners: mark a GENUINE user scroll so the viewport session's save
-        // gate opens. wheel covers mouse/trackpad, touchstart covers
-        // mobile, keydown covers PageUp/Down/arrows/Space when the list is focused. These are
-        // distinct from media/measurement-driven scroll events, which must NOT open the gate.
-        userInputCleanupRef.current?.()
-        userInputCleanupRef.current = null
-        if (el) {
-          const markUserScrolled = () => {
-            viewportSessionRef.current?.recordUserInput(
-              activeConversationIdRef.current,
-              Date.now(),
-            )
-            positioningControllerRef.current?.observeUserInput(
-              activeConversationIdRef.current,
-            )
-          }
-          el.addEventListener('wheel', markUserScrolled, { passive: true })
-          el.addEventListener('touchstart', markUserScrolled, { passive: true })
-          el.addEventListener('keydown', markUserScrolled)
-          userInputCleanupRef.current = () => {
-            el.removeEventListener('wheel', markUserScrolled)
-            el.removeEventListener('touchstart', markUserScrolled)
-            el.removeEventListener('keydown', markUserScrolled)
-          }
-          trySetupContentObserver()
-        }
+  // Executor construction is delegated to useScrollExecutors. Its factory identities intentionally
+  // churn with the live window so dependent effects below re-run when the window moves.
+  const {
+    createLiveEdgeExecutor,
+    createAnchorPreservationExecutor,
+    buildDirectionalHistoryExecutor,
+    buildSavedPositionExecutor,
+    buildUnreadMarkerExecutor,
+    buildExplicitTargetExecutor,
+    createResidentTopExecutor,
+    // Not construction: an availability probe and the one-frame settlement scheduler, both of which
+    // the directional load flow drives directly.
+    getDirectionalHistoryBrowser,
+    resetLiveEdgeRepaintDebt,
+    disposeDirectionalHistoryBrowser,
+  } = useScrollExecutors({
+    ports: {
+      getScroller: () => scrollerRef.current,
+      getVirtualizer: () => virtualizerRef.current,
+      getActiveConversationId: () => activeConversationIdRef.current,
+      getLiveWindow: () => liveWindowRef.current,
+      getPassiveContext: () => ({
+        conversationId: latestRef.current.conversationId,
+        virtualizer: latestRef.current.virtualizer,
+      }),
+      isLoadingOlder: () => isLoadingOlderRef.current,
+      getLoadAround: () => onLoadAroundRef.current,
+      getStoreTargetMessageId: () => targetMessageIdRef.current,
+      consumeStoreTarget: () => onTargetMessageConsumedRef.current?.(),
+      recordProgrammaticWrite: (id, at) =>
+        viewportSessionRef.current?.recordProgrammaticWrite(id, at),
+      getDirectionalWindow: () => directionalWindowRef.current,
+      syncPrevMessageCount: () => {
+        prevMessageCountRef.current = messageCountRef.current
       },
-      setContentRef: (element: HTMLDivElement | null) => {
-        if (element === contentRef.current) return
-        teardownContentObserver()
-        contentRef.current = element
-        if (element) trySetupContentObserver()
-      },
-    }
-  }
-
-  const { setScrollContainerRef, setContentRef } = stableSettersRef.current
-
-  const beginControllerFrameLoop = useCallback((
-    label: ReassertLoopLabel,
-    lease: PositionExecutionLease,
-    lifecycle?: ControllerFrameLoopLifecycle,
-  ) => {
-    if (!lease.isCurrent()) return null
-    return createControllerFrameLoop({
-      lease,
-      supersede: supersedeReassertLoopRef.current,
-      beginHandle: () => (reassertMonitorRef.current ??=
-        createReassertLoopMonitor()).begin(label, performance.now()),
-      registry: reassertLoopRef,
-      // Native WebKit/Chromium scheduler methods require Window as their receiver. Keep them behind
-      // closures when passing into the extracted adapter; an unbound method throws before the first
-      // convergence frame and strands the requested position.
-      requestFrame: (callback) => requestAnimationFrame(callback),
-      cancelFrame: (id) => cancelAnimationFrame(id),
-      now: () => performance.now(),
-      // The adapter forwards whatever the monitor produced; deciding what to do with it
-      // belongs here. Fan-out, not re-pointing: the prose is untouched.
-      warn: (warning) => {
-        console.warn(warning.message)
-        if (__FLUUX_ANOMALY__) signalAnomaly(reassertLoopSignal(warning))
-      },
-      lifecycle,
-    })
-  }, [])
-
-  const getBottomFractionAnchorBrowser = useCallback(() => {
-    if (bottomFractionAnchorBrowserRef.current === null) {
-      bottomFractionAnchorBrowserRef.current =
-        new BottomFractionAnchorBrowserAdapter({
-          getScroller: () => scrollerRef.current,
-          getVirtualizer: () => virtualizerRef.current,
-        })
-    }
-    return bottomFractionAnchorBrowserRef.current
-  }, [])
-
-  const getDirectionalHistoryBrowser = useCallback(() => {
-    if (directionalHistoryBrowserRef.current === null) {
-      directionalHistoryBrowserRef.current =
-        new DirectionalHistoryBrowserAdapter({
-          getScroller: () => scrollerRef.current,
-          getVirtualizer: () => virtualizerRef.current,
-          getActiveConversationId: () => activeConversationIdRef.current,
-          beginLoop: (lease) => beginControllerFrameLoop('prepend', lease),
-          requestFrame: (callback) => requestAnimationFrame(callback),
-          cancelFrame: (id) => cancelAnimationFrame(id),
-          log: debugLog,
-        })
-    }
-    return directionalHistoryBrowserRef.current
-  }, [beginControllerFrameLoop])
-
-  const getLiveEdgeBrowser = useCallback(() => {
-    if (liveEdgeBrowserRef.current === null) {
-      liveEdgeBrowserRef.current = new LiveEdgeBrowserAdapter({
-        getScroller: () => scrollerRef.current,
-        getVirtualizer: () => virtualizerRef.current,
-        getActiveConversationId: () => activeConversationIdRef.current,
-        // Window facts come from the ref, not the render that built the executor. A live-edge
-        // executor can outlive that render: the unread-marker fallback carries one from entry and
-        // promotes it from inside a rAF frame, long after the cached slice landed. See the ref's
-        // declaration and the adapter's `getWindowFacts` contract.
-        getWindowFacts: () => ({
-          hasRows:
-            liveWindowRef.current.messageCount > 0 &&
-            liveWindowRef.current.firstMessageId !== undefined,
-          windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
-        }),
-        isLoadingOlder: () => isLoadingOlderRef.current,
-        beginLoop: (lease) => {
-          const claim = pinBottomClaim()
-          return beginControllerFrameLoop('pin-bottom', lease, {
-            onStart: claim.renew,
-            onFrame: claim.renew,
-            onFinish: claim.release,
-          })
-        },
-        setMeasuredAtBottom,
-        recordProgrammaticWrite: (id) =>
-          viewportSessionRef.current?.recordProgrammaticWrite(id, Date.now()),
-        log: debugLog,
-      })
-    }
-    return liveEdgeBrowserRef.current
-  }, [beginControllerFrameLoop, setMeasuredAtBottom])
-
-  const createLiveEdgeExecutor = useCallback((
-    trigger: string,
-    smoothNonVirtualized = false,
-  ): LiveEdgeExecutor => getLiveEdgeBrowser().createExecutor({
-    trigger,
-    smoothNonVirtualized,
-    rememberBottomIntent,
-    canRecenter: Boolean(onLoadNewer),
-    recenterVersion: [
-      windowAtLiveEdge === false ? 'slid' : 'live',
-      isLoadingNewer ? 'loading' : 'idle',
-      messageCount,
-      lastMessageId ?? '',
-    ].join(':'),
-    recenter: onLoadNewer
-      ? (signal) => {
-          if (signal.aborted) return 'unavailable'
-          if (isLoadingNewer) return 'waiting'
-          onLoadNewer()
-          return 'requested'
-        }
-      : undefined,
-  }), [
-    getLiveEdgeBrowser,
-    isLoadingNewer,
-    lastMessageId,
+      pinBottomClaim,
+      reassertLoopRegistry: reassertLoopRef,
+      log: debugLog,
+    },
+    conversationId,
     messageCount,
-    onLoadNewer,
-    rememberBottomIntent,
+    firstMessageId,
+    lastMessageId,
     windowAtLiveEdge,
-  ])
+    isLoadingNewer,
+    onLoadNewer,
+    isAtBottomRef,
+    setMeasuredAtBottom,
+    rememberBottomIntent,
+    rememberCurrentScrollSnapshot,
+  })
 
   const reconcileLiveEdge = useCallback((trigger: string): boolean => {
     const controller = positioningControllerRef.current
@@ -1024,35 +706,6 @@ export function useMessageListScroll({
     }
     rememberBottomIntent()
   }, [rememberBottomIntent])
-
-  const createAnchorPreservationExecutor = useCallback(
-    (loopLabel: AnchorPreservationLoopLabel): AnchorPreservationExecutor =>
-      new AnchorPreservationBrowserAdapter({
-        getScroller: () => scrollerRef.current,
-        getVirtualizer: () => virtualizerRef.current,
-        getActiveConversationId: () => activeConversationIdRef.current,
-        getWindowFacts: () => ({
-          hasRows: messageCount > 0 && firstMessageId !== undefined,
-          windowAtLiveEdge: windowAtLiveEdge !== false,
-        }),
-        beginLoop: (label, lease) => beginControllerFrameLoop(label, lease),
-        anchorAdapter: getBottomFractionAnchorBrowser(),
-        setAtBottom: (atBottom) => { isAtBottomRef.current = atBottom },
-        rememberScrollSnapshot: rememberCurrentScrollSnapshot,
-        recordProgrammaticWrite: (id) =>
-          viewportSessionRef.current?.recordProgrammaticWrite(id, Date.now()),
-        log: debugLog,
-      }).createExecutor(loopLabel),
-    [
-      beginControllerFrameLoop,
-      firstMessageId,
-      getBottomFractionAnchorBrowser,
-      isAtBottomRef,
-      messageCount,
-      rememberCurrentScrollSnapshot,
-      windowAtLiveEdge,
-    ],
-  )
 
   // Keep a pre-mutation divider anchor while the reader is scrolled up. On the render where the
   // divider moves, the id mismatch deliberately prevents this effect from replacing the old
@@ -1268,181 +921,6 @@ export function useMessageListScroll({
     messageCount,
   ])
 
-  const createDirectionalHistoryCompletion = useCallback(
-    (saved: DirectionalHistorySnapshot): DirectionalHistoryExecutor['complete'] =>
-      (request, outcome) => {
-        if (activeConversationIdRef.current !== request.conversationId) return
-        if (outcome === 'applied') {
-          const restored = directionalWindowRef.current?.markRestored(
-            saved.requestId,
-            Date.now(),
-          )
-          const restoredAt = restored?.restoredAt
-          if (restoredAt === undefined) return
-          prevMessageCountRef.current = messageCountRef.current
-          viewportSessionRef.current?.recordProgrammaticWrite(
-            request.conversationId,
-            restoredAt,
-          )
-          setTimeout(() => {
-            directionalWindowRef.current?.expireRestored(
-              saved.requestId,
-              restoredAt,
-            )
-          }, DIRECTIONAL_HISTORY_COOLDOWN_MS)
-        } else {
-          directionalWindowRef.current?.finishPosition(saved.requestId)
-        }
-        if (outcome !== 'applied') {
-          viewportSessionRef.current?.recordProgrammaticWrite(
-            request.conversationId,
-            Date.now(),
-          )
-        }
-        debugLog('DIRECTIONAL HISTORY COMPLETE', {
-          generation: request.generation,
-          outcome,
-          restored: Boolean(saved.restored),
-        })
-      },
-    [],
-  )
-
-  const buildSavedPositionExecutor = useCallback((): SavedPositionExecutor => {
-    const browser = new SavedPositionBrowserAdapter({
-      getScroller: () => scrollerRef.current,
-      getVirtualizer: () => virtualizerRef.current,
-      getWindowFacts: () => ({
-        hasRows: messageCount > 0 && firstMessageId !== undefined,
-        windowAtLiveEdge: windowAtLiveEdge !== false,
-        canRecenter: Boolean(onLoadNewer),
-      }),
-      beginLoop: (lease) => beginControllerFrameLoop('restore-anchor', lease),
-      anchorAdapter: getBottomFractionAnchorBrowser(),
-    })
-    return browser.createExecutor({
-      liveEdge: createLiveEdgeExecutor('restore-fallback'),
-      loadAround: onLoadAroundRef.current
-        ? (messageId, signal) => {
-            if (signal.aborted) return
-            isAtBottomRef.current = false
-            debugLog('RESTORE: anchor not loaded, requesting cache slice around it', {
-              messageId,
-              conversationId,
-            })
-            return onLoadAroundRef.current?.(messageId)
-          }
-        : undefined,
-      recenterVersion: [
-        windowAtLiveEdge === false ? 'slid' : 'live',
-        isLoadingNewer ? 'loading' : 'idle',
-        messageCount,
-        lastMessageId ?? '',
-      ].join(':'),
-      recenterLiveEdge: onLoadNewer
-        ? (signal) => {
-            if (signal.aborted) return 'unavailable'
-            if (isLoadingNewer) return 'waiting'
-            onLoadNewer()
-            return 'requested'
-          }
-        : undefined,
-      complete: (request, outcome) => {
-        const scroller = scrollerRef.current
-        if (!scroller) return
-        setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
-        rememberCurrentScrollSnapshot()
-        viewportSessionRef.current?.recordProgrammaticWrite(
-          request.conversationId,
-          Date.now(),
-        )
-        debugLog('RESTORE: controller completed position', {
-          conversationId,
-          generation: request.generation,
-          desired: request.desired,
-          outcome,
-        })
-      },
-    })
-  }, [
-    beginControllerFrameLoop,
-    conversationId,
-    createLiveEdgeExecutor,
-    firstMessageId,
-    getBottomFractionAnchorBrowser,
-    isAtBottomRef,
-    isLoadingNewer,
-    lastMessageId,
-    messageCount,
-    onLoadNewer,
-    rememberCurrentScrollSnapshot,
-    setMeasuredAtBottom,
-    windowAtLiveEdge,
-  ])
-
-  const buildUnreadMarkerExecutor = useCallback(() => {
-    const browser = new UnreadMarkerBrowserAdapter({
-      getScroller: () => scrollerRef.current,
-      getVirtualizer: () => virtualizerRef.current,
-      getWindowFacts: () => ({
-        hasRows:
-          liveWindowRef.current.messageCount > 0 &&
-          liveWindowRef.current.firstMessageId !== undefined,
-        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
-      }),
-      getPassiveContext: () => ({
-        conversationId: latestRef.current.conversationId,
-        virtualizer: latestRef.current.virtualizer,
-      }),
-      beginLoop: (lease) => beginControllerFrameLoop('marker', lease),
-      setMeasuredAtBottom,
-      log: debugLog,
-    })
-    return browser.createExecutor(createLiveEdgeExecutor('marker-fallback'))
-  }, [
-    beginControllerFrameLoop,
-    createLiveEdgeExecutor,
-    setMeasuredAtBottom,
-  ])
-
-  const buildExplicitTargetExecutor = useCallback((
-    messageReference: string,
-    consumeStoreTarget: boolean,
-  ) => {
-    const browser = new ExplicitTargetBrowserAdapter({
-      getScroller: () => scrollerRef.current,
-      getVirtualizer: () => virtualizerRef.current,
-      getWindowFacts: () => ({
-        hasRows:
-          liveWindowRef.current.messageCount > 0 &&
-          liveWindowRef.current.firstMessageId !== undefined,
-        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
-      }),
-      getPassiveContext: () => ({
-        conversationId: latestRef.current.conversationId,
-        virtualizer: latestRef.current.virtualizer,
-      }),
-      getActiveConversationId: () => activeConversationIdRef.current,
-      getStoreTargetMessageId: () => targetMessageIdRef.current,
-      beginLoop: (lease) => beginControllerFrameLoop('target', lease),
-      setMeasuredAtBottom,
-      markNotAtBottom: () => { isAtBottomRef.current = false },
-      consumeStoreTarget: () => onTargetMessageConsumedRef.current?.(),
-      log: debugLog,
-    })
-    return browser.createExecutor({
-      conversationId,
-      messageReference,
-      consumeStoreTarget,
-      loadAround: onLoadAroundRef.current,
-    })
-  }, [
-    beginControllerFrameLoop,
-    conversationId,
-    isAtBottomRef,
-    setMeasuredAtBottom,
-  ])
-
   const requestMessageTargetImpl = useCallback((messageReference: string) => {
     if (staticMode) {
       // Search/activity previews mount their own non-virtualized list beside the live conversation.
@@ -1560,23 +1038,6 @@ export function useMessageListScroll({
   // list — and re-binds the ⌘/Ctrl+↓ listener — on every append.
   const scrollToBottom = useStableCallback(scrollToBottomImpl)
 
-  const createResidentTopExecutor = useCallback((): ResidentTopExecutor =>
-    new ResidentTopBrowserAdapter({
-      getScroller: () => scrollerRef.current,
-      getVirtualizer: () => virtualizerRef.current,
-      getWindowFacts: () => ({
-        hasRows: messageCount > 0 && firstMessageId !== undefined,
-        windowAtLiveEdge: windowAtLiveEdge !== false,
-      }),
-      beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
-      log: debugLog,
-    }).createExecutor(), [
-    beginControllerFrameLoop,
-    firstMessageId,
-    messageCount,
-    windowAtLiveEdge,
-  ])
-
   const scrollToTopImpl = useCallback(() => {
     directionalWindowRef.current?.suppressAutomaticLoads(Date.now())
     if (staticMode) {
@@ -1604,7 +1065,7 @@ export function useMessageListScroll({
   // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
   // that is following along — most importantly when the mobile on-screen keyboard
   // deploys. The keyboard shrinks the scroller's clientHeight WITHOUT changing the
-  // content height, so the content ResizeObserver above never fires and the latest
+  // content height, so the content ResizeObserver binding never fires and the latest
   // message slides out of view behind the composer/keyboard. window 'resize' fires
   // when the layout viewport resizes (Android, resizing webviews); visualViewport
   // 'resize' covers the overlay-keyboard case (iOS). Reasserts directly (no rAF
@@ -1731,9 +1192,7 @@ export function useMessageListScroll({
           },
         },
         distanceFromBottom: pixelOffset(saved.distanceFromBottom),
-        executor: browser.createExecutor(
-          createDirectionalHistoryCompletion(saved),
-        ),
+        executor: buildDirectionalHistoryExecutor(saved),
       }) ?? null,
     })
     if (request) {
@@ -2249,9 +1708,8 @@ export function useMessageListScroll({
     }
     mediaLoadSnapshotRef.current = null
     // Drop any repaint-burst debt from the room we're leaving so it can't flush into the new one.
-    // Read through the ref, not the lazy getter: a list that never pinned owes nothing, and building
-    // the adapter here just to reset it would also add a dependency to this entry effect.
-    liveEdgeBrowserRef.current?.resetRepaintDebt()
+    // The executor hook performs this without constructing an adapter for a list that never pinned.
+    resetLiveEdgeRepaintDebt()
 
     // In static mode (read-only previews), skip all scroll positioning.
     // The parent component handles its own scroll-to-target.
@@ -2429,6 +1887,7 @@ export function useMessageListScroll({
     lastMessageId,
     messageCount,
     readPointerId,
+    resetLiveEdgeRepaintDebt,
     staticMode,
     targetMessageId,
     windowAtLiveEdge,
@@ -2638,10 +2097,9 @@ export function useMessageListScroll({
           previousReadPositionRef.current,
         )
       }
-      userInputCleanupRef.current?.()
-      userInputCleanupRef.current = null
+      detachUserInputListeners()
     }
-  }, [])
+  }, [detachUserInputListeners])
 
   // Store-driven search/activity/reaction targets use the same controller execution as reply,
   // poll, and find-on-page requests. Re-renders refresh the executor for the existing generation;
@@ -2701,20 +2159,10 @@ export function useMessageListScroll({
       if (mediaLoadDebounceRef.current) {
         clearTimeout(mediaLoadDebounceRef.current)
       }
-      if (contentObserverRef.current) {
-        contentObserverRef.current.disconnect()
-      }
-      if (correctionRafRef.current !== null) {
-        cancelAnimationFrame(correctionRafRef.current)
-        correctionRafRef.current = null
-      }
-      const directionalBrowser = directionalHistoryBrowserRef.current
-      directionalBrowser?.dispose()
-      if (directionalHistoryBrowserRef.current === directionalBrowser) {
-        directionalHistoryBrowserRef.current = null
-      }
+      teardownContentObserver()
+      disposeDirectionalHistoryBrowser()
     }
-  }, [])
+  }, [disposeDirectionalHistoryBrowser, teardownContentObserver])
 
   // ==========================================================================
   // EFFECT: Returned to the live edge → drop any stale directional-load anchor.
@@ -2783,16 +2231,13 @@ export function useMessageListScroll({
     positioningControllerRef.current?.reconcileDirectionalHistory({
       conversationId,
       generation: decision.generation,
-      executor: getDirectionalHistoryBrowser().createExecutor(
-        createDirectionalHistoryCompletion(saved),
-      ),
+      executor: buildDirectionalHistoryExecutor(saved),
     })
 
   }, [
+    buildDirectionalHistoryExecutor,
     conversationId,
-    createDirectionalHistoryCompletion,
     firstMessageId,
-    getDirectionalHistoryBrowser,
     messageCount,
     staticMode,
   ])
@@ -3085,7 +2530,7 @@ export function useMessageListScroll({
     // never happens synchronously inside the ResizeObserver delivery cycle —
     // that synchronous write is the literal trigger for WebKitGTK's
     // "ResizeObserver loop completed with undelivered notifications". Parity with
-    // the content observer's rAF coalescing (see setContentRef above).
+    // the content observer's rAF coalescing in useScrollContainerBinding.
     const runCorrection = () => {
       scheduled = false
       rafId = null

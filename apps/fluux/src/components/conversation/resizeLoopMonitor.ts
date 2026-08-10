@@ -103,8 +103,8 @@ export function createResizeLoopMonitor(opts: ResizeLoopMonitorOptions = {}): Re
  * Lives here rather than at the call site because there are TWO observers using
  * this monitor — the content one and the scroller one — and a mapping written
  * twice is a mapping that can disagree with itself. It is also the only way this
- * translation gets a unit test at all: the call sites are buried inside a rAF
- * loop in `useMessageListScroll`.
+ * translation gets a unit test at all: the call sites are buried inside rAF
+ * loops in `useScrollContainerBinding` and `useMessageListScroll`.
  */
 export function resizeLoopSignal(warning: ResizeLoopWarning): AnomalySignal {
   return {

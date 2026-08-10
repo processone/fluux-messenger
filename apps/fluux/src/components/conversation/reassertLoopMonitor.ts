@@ -2,11 +2,11 @@
  * Diagnostic-only monitor for the message list's rAF-driven scroll re-assert
  * loops.
  *
- * Background: useMessageListScroll keeps the virtualized list pinned to the
- * right place by RE-ASSERTING a scroll target across several frames as rows
- * measure asynchronously — the live-edge executor (stick to bottom), the
- * controller-owned unread-marker reconciliation, and the directional-history
- * executor (anchor restore). Each is a `requestAnimationFrame` loop
+ * Background: the message-list positioning executors keep the virtualized list
+ * pinned to the right place by RE-ASSERTING a scroll target across several
+ * frames as rows measure asynchronously — the live-edge executor (stick to
+ * bottom), the controller-owned unread-marker reconciliation, and the
+ * directional-history executor (anchor restore). Each is a `requestAnimationFrame` loop
  * that calls the virtualizer's `scrollToOffset`/`scrollToIndex`, which re-windows
  * and re-renders.
  *

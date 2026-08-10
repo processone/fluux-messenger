@@ -52,8 +52,8 @@ export interface FabSample {
  * hook-internal ref — and hardcoding `false` at the only real call site would ship a
  * tested branch that nothing exercises, which is hollow by a different route.
  *
- * Two guards cover it instead. The hook clears the FAB EAGERLY when a pin loop lands
- * at the bottom (`useMessageListScroll.ts:693`), and the hold window below outlasts
+ * Two guards cover it instead. The hook's `rememberBottomIntent` callback clears the FAB EAGERLY
+ * when a pin loop lands at the bottom, and the hold window below outlasts
  * the few frames a loop spends approaching from beyond the FAB threshold to inside the
  * at-bottom one. And on reflection the suppression was never quite right: a FAB still
  * shown a full second after the viewport reached the bottom IS the staleness this

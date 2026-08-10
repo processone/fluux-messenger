@@ -378,11 +378,19 @@ The controller-owned mechanisms retain leased browser reconcilers for saved anch
 explicit center-aligned targets, live edge, fixed-anchor media/layout preservation, directional
 history, and resident top. These
 reconcilers implement measurement convergence; they are not separate positioning authorities.
-There is no independent positioning frame-loop implementation left inside `useMessageListScroll`:
-the hook constructs each adapter, supplies its value ports, and passes the resulting executor to the
-controller. Exactly three pixel writes remain in the hook, and none of them is a positioning owner —
+There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
+Executor construction lives in `useScrollExecutors` without exception: it supplies each adapter's
+value ports and hands the finished executor back for the hook to submit, so no `createExecutor` call
+appears in `useMessageListScroll`. The hook still reaches the directional-history adapter directly
+for its availability probe and its one-frame settlement scheduler, neither of which builds an
+executor. Exactly three pixel writes remain in the hook, and none of them is a positioning owner —
 the two isolated static-preview operations documented below, and the emergency bottom write that
 keeps the list usable when the controller itself cannot be constructed.
+
+The executor factories' changing callback identities are part of that integration contract because
+dependent effects use them to follow render-scoped window facts. The authoritative explanation and
+dependency rules live with the implementation in
+`apps/fluux/src/components/conversation/useScrollExecutors.ts`.
 
 Ambient layout preservation is entirely inside the scroll owner. `MessageList` receives only the
 store-owned interior-placement version; it receives no raw anchor capture/restore callbacks. The
@@ -530,7 +538,18 @@ kinetic scrolling and stale-paint behavior.
      - [x] Extract unread-marker and explicit-target reachability, passive conversation handoff,
        leased positioning, around loading, and target completion behind dedicated browser adapters.
      - [x] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
-   - [ ] Leave the React hook as thin lifecycle orchestration.
+   - [ ] Leave the React hook as thin lifecycle orchestration. Taken one cohesive unit at a time so
+     each step keeps the scroll invariants as its gate:
+     - [x] Move executor construction — the frame-loop factory, the adapters that outlive one
+       execution, and every `create*`/`build*Executor` — into `useScrollExecutors`.
+     - [x] Extract the scroller/content callback refs, their genuine-input listeners, and the
+       non-virtualized content-growth observer into `useScrollContainerBinding`.
+     - [ ] Extract ambient divider/insertion anchor tracking.
+     - [ ] Extract media-growth snapshotting and debouncing.
+     - [ ] Extract directional-history release and post-frame settling.
+     - [ ] Reduce the scroll event handler to a value-only interpretation of geometry.
+     - [ ] Express conversation-entry arbitration as a pure model over facts, leaving a thin effect
+       that applies its verdict.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove
 one previous source of scroll authority.
