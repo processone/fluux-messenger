@@ -31,11 +31,8 @@ import {
   type ControllerFrameLoopLifecycle,
   type ControllerFrameLoopRegistration,
 } from './controllerFrameLoop'
-import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
-import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
-import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { signalAnomaly } from '@/utils/anomalySignal'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
@@ -60,11 +57,19 @@ import {
   TARGET_HIGHLIGHT_MS,
 } from './explicitTargetBrowserAdapter'
 import {
+  BOTTOM_PIN_TOLERANCE,
+  LiveEdgeBrowserAdapter,
+} from './liveEdgeBrowserAdapter'
+import {
+  AnchorPreservationBrowserAdapter,
+  type AnchorPreservationLoopLabel,
+} from './anchorPreservationBrowserAdapter'
+import { ResidentTopBrowserAdapter } from './residentTopBrowserAdapter'
+import {
   PositioningController,
   type DirectionalHistoryExecutor,
   type AnchorPreservationExecutor,
   type LiveEdgeExecutor,
-  type LiveEdgeCompletion,
   type PositionExecutionLease,
   type ResidentTopExecutor,
   type SavedPositionExecutor,
@@ -82,7 +87,6 @@ import {
   type AnchorPreservationRequest,
   type DesiredPosition,
   type ExplicitTargetRequest,
-  type LiveEdgeRequest,
   type ReachabilityFacts,
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
@@ -140,30 +144,7 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
-// While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
-// above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
-// the frame where the last row's measurement settles — coalesced height deltas, or a height delta
-// captured into the previous frame's baseline — leaving the view a row short with no further change
-// to react to. WebKit (the desktop WKWebView) hits this intermittently; Chromium masks it via
-// overflow-anchor. Re-asserting on measured distance self-heals it: scrollToIndex(last,'end') is a
-// no-op once truly pinned, so this converges and cannot oscillate. Sub-row tolerance keeps it from
-// firing on harmless subpixel rounding.
-const BOTTOM_PIN_TOLERANCE = 4
-// A pin run whose cumulative forced work (layout flushes + scroll writes + repaints) reaches this
-// is worth one rate-limited [PinLoopProbe] line in fluux.log — it attributes the layoutPaint cost
-// RenderCostProbe can only measure in aggregate. ~3 frame budgets; healthy runs stay far below.
-const PIN_PROBE_THRESHOLD_MS = 50
-// Pin triggers that represent NEW CONTENT landing at the bottom (as opposed to a user/layout event
-// like a conversation switch, FAB tap, or viewport resize). Only these feed the repaint-burst
-// coalescer: a rapid run of them — live chatter, a reaction storm, images decoding, or a reconnect
-// flushing queued messages — is exactly the burst whose per-arrival forced repaints freeze WebKitGTK.
-const CONTENT_ARRIVAL_TRIGGERS: ReadonlySet<string> = new Set([
-  'new-message',
-  'content-growth',
-  'media-load',
-  'row-growth',
-  'mam-catchup-complete',
-])
+// BOTTOM_PIN_TOLERANCE is imported from liveEdgeBrowserAdapter, which owns bottom-pin geometry.
 
 /**
  * Freeze a callback's identity while always invoking its latest version.
@@ -408,17 +389,9 @@ export function useMessageListScroll({
   // lifecycle releases this claim on every terminal path; its deadline remains browser/scheduler
   // defense in depth. See pinLoopClaim.ts.
   const pinBottomClaimRef = useRef<PinLoopClaim | null>(null)
-  // Same lazy-ref idiom as pinRunProbeRef / pinRepaintBurstRef below: a ref is stable, so reading it
-  // at the use sites keeps the exhaustive-deps rule satisfied without a dependency.
+  // Lazy-ref idiom shared with the browser adapters below: a ref is stable, so reading it at the use
+  // sites keeps the exhaustive-deps rule satisfied without a dependency.
   const pinBottomClaim = () => (pinBottomClaimRef.current ??= createPinLoopClaim())
-  // Rate-limits the [PinLoopProbe] fluux.log line to one per cooldown (like RenderCostProbe).
-  const pinRunProbeRef = useRef<RenderCostProbe | null>(null)
-  // Coalesces forced repaints across a BURST of content-arrival pins (each superseding the last).
-  // On WebKitGTK the overflow-toggle repaint is ~50–150ms; without this, a burst of new messages /
-  // reactions / images fires one per arrival and freezes the main thread. Suppresses the
-  // intermediate repaints (scroll position still written, layout stays correct) and forces exactly
-  // one trailing repaint once arrival quiesces — see pinRepaintBurst.ts.
-  const pinRepaintBurstRef = useRef<PinRepaintBurst | null>(null)
   // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
   // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
   const supersedeReassertLoopRef = useRef(() => {
@@ -445,6 +418,10 @@ export function useMessageListScroll({
     useRef<DirectionalHistoryBrowserAdapter | null>(null)
   const bottomFractionAnchorBrowserRef =
     useRef<BottomFractionAnchorBrowserAdapter | null>(null)
+  // Held once, unlike the per-request browser adapters built inside their executor factories: the
+  // repaint-burst coalescer and pin-cost probe must span a burst of superseding content-arrival
+  // pins, so one instance has to outlive any single executor.
+  const liveEdgeBrowserRef = useRef<LiveEdgeBrowserAdapter | null>(null)
 
   // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
@@ -953,255 +930,69 @@ export function useMessageListScroll({
     return directionalHistoryBrowserRef.current
   }, [beginControllerFrameLoop])
 
+  const getLiveEdgeBrowser = useCallback(() => {
+    if (liveEdgeBrowserRef.current === null) {
+      liveEdgeBrowserRef.current = new LiveEdgeBrowserAdapter({
+        getScroller: () => scrollerRef.current,
+        getVirtualizer: () => virtualizerRef.current,
+        getActiveConversationId: () => activeConversationIdRef.current,
+        // Window facts come from the ref, not the render that built the executor. A live-edge
+        // executor can outlive that render: the unread-marker fallback carries one from entry and
+        // promotes it from inside a rAF frame, long after the cached slice landed. See the ref's
+        // declaration and the adapter's `getWindowFacts` contract.
+        getWindowFacts: () => ({
+          hasRows:
+            liveWindowRef.current.messageCount > 0 &&
+            liveWindowRef.current.firstMessageId !== undefined,
+          windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
+        }),
+        isLoadingOlder: () => isLoadingOlderRef.current,
+        beginLoop: (lease) => {
+          const claim = pinBottomClaim()
+          return beginControllerFrameLoop('pin-bottom', lease, {
+            onStart: claim.renew,
+            onFrame: claim.renew,
+            onFinish: claim.release,
+          })
+        },
+        setMeasuredAtBottom,
+        recordProgrammaticWrite: (id) =>
+          viewportSessionRef.current?.recordProgrammaticWrite(id, Date.now()),
+        log: debugLog,
+      })
+    }
+    return liveEdgeBrowserRef.current
+  }, [beginControllerFrameLoop, setMeasuredAtBottom])
+
   const createLiveEdgeExecutor = useCallback((
     trigger: string,
     smoothNonVirtualized = false,
-  ): LiveEdgeExecutor => {
-    const burst = (pinRepaintBurstRef.current ??= createPinRepaintBurst())
-    const run = createPinRunTracker()
-    const repaintMode = readPinRepaintMode(
-      typeof window === 'undefined' ? undefined : window.localStorage,
-    )
-    let initialized = false
-    let lastHeight = 0
-    let wroteAny = false
-
-    const flushTailLayout = () => {
-      const scroller = scrollerRef.current
-      if (!scroller) return
-      const started = performance.now()
-      scroller.getBoundingClientRect()
-      const rows = scroller.querySelectorAll('[data-message-id]')
-      for (let i = Math.max(0, rows.length - 3); i < rows.length; i++) {
-        rows[i].getBoundingClientRect()
-      }
-      run.addMs('flush', performance.now() - started)
-    }
-
-    const forceRepaint = () => {
-      const scroller = scrollerRef.current
-      if (!scroller) return
-      const started = performance.now()
-      scroller.style.overflowY = 'hidden'
-      void scroller.offsetHeight
-      scroller.style.overflowY = ''
-      run.addMs('repaint', performance.now() - started)
-    }
-
-    const repaintCoalesced = (moved: boolean) => {
-      if (!shouldForceRepaint(moved, repaintMode, isLoadingOlderRef.current)) return
-      if (repaintMode === 'on-write' && burst.suppress(performance.now())) {
-        burst.markSuppressed()
-        return
-      }
-      forceRepaint()
-    }
-
-    const writeVirtualizedPin = (): boolean => {
-      const scroller = scrollerRef.current
-      const virtualizer = virtualizerRef.current
-      if (!scroller || !virtualizer || virtualizer.itemCount === 0) return false
-      const before = scroller.scrollTop
-      const started = performance.now()
-      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
-      run.addMs('scroll', performance.now() - started)
-      const moved = scroller.scrollTop !== before
-      wroteAny ||= moved
-      repaintCoalesced(moved)
-      return moved
-    }
-
-    const flushOwedRepaint = () => {
-      if (!burst.owed()) return
-      forceRepaint()
-      console.warn(pinBurstProbeLine(trigger, burst.settle()))
-    }
-
-    return {
-      // Window facts come from the ref, not this render's props. A live-edge executor can outlive
-      // the render that built it: the unread-marker fallback carries one from entry and promotes it
-      // from inside a rAF frame, long after the cached slice landed. Describing the entry window
-      // there reports `empty-window` for a window that has since filled, which parks the promoted
-      // execution in `pending` with no frame loop — and no later stimulus revives it, because the
-      // refresh effect already ran before the fallback existed. See the ref's declaration.
-      reachability: () => deriveReachabilityForDesired({
-        desired: { kind: 'live-edge', follow: true },
-        hasRows:
-          liveWindowRef.current.messageCount > 0 &&
-          liveWindowRef.current.firstMessageId !== undefined,
-        windowAtLiveEdge: liveWindowRef.current.windowAtLiveEdge !== false,
-        virtualizer: virtualizerRef.current,
-        scroller: scrollerRef.current,
-        loadAround: 'unavailable',
-        canRecenter: Boolean(onLoadNewer),
-      }),
-      recenterVersion: [
-        windowAtLiveEdge === false ? 'slid' : 'live',
-        isLoadingNewer ? 'loading' : 'idle',
-        messageCount,
-        lastMessageId ?? '',
-      ].join(':'),
-      recenter: onLoadNewer
-        ? (signal) => {
-            if (signal.aborted) return 'unavailable'
-            if (isLoadingNewer) return 'waiting'
-            onLoadNewer()
-            return 'requested'
-          }
-        : undefined,
-      beginLoop: (lease) => {
-        const claim = pinBottomClaim()
-        return beginControllerFrameLoop('pin-bottom', lease, {
-          onStart: claim.renew,
-          onFrame: claim.renew,
-          onFinish: claim.release,
-        })
-      },
-      positionFrame: (
-        request: LiveEdgeRequest,
-        lease: PositionExecutionLease,
-      ) => {
-        if (
-          !lease.isCurrent() ||
-          activeConversationIdRef.current !== request.conversationId
-        ) {
-          return { kind: 'unavailable' }
+  ): LiveEdgeExecutor => getLiveEdgeBrowser().createExecutor({
+    trigger,
+    smoothNonVirtualized,
+    rememberBottomIntent,
+    canRecenter: Boolean(onLoadNewer),
+    recenterVersion: [
+      windowAtLiveEdge === false ? 'slid' : 'live',
+      isLoadingNewer ? 'loading' : 'idle',
+      messageCount,
+      lastMessageId ?? '',
+    ].join(':'),
+    recenter: onLoadNewer
+      ? (signal) => {
+          if (signal.aborted) return 'unavailable'
+          if (isLoadingNewer) return 'waiting'
+          onLoadNewer()
+          return 'requested'
         }
-        const scroller = scrollerRef.current
-        if (!scroller) return { kind: 'unavailable' }
-        const virtualizer = virtualizerRef.current
-
-        if (!virtualizer) {
-          const firstFrame = !initialized
-          const before = scroller.scrollTop
-          if (smoothNonVirtualized && firstFrame) {
-            scroller.scrollTo({
-              top: scroller.scrollHeight,
-              behavior: 'smooth',
-            })
-          } else {
-            scroller.scrollTop = scroller.scrollHeight
-          }
-          initialized = true
-          rememberBottomIntent()
-          return {
-            kind: 'positioned',
-            scrollTop: scroller.scrollTop,
-            atLiveEdge: true,
-            wrote: scroller.scrollTop !== before,
-            // Conversation entry historically issued one deferred raw write after the immediate
-            // layout-effect write. Keep that exact two-write edge-case repair under controller
-            // scheduling; all other non-virtualized stimuli remain one-shot.
-            reassert: firstFrame && trigger === 'switch',
-          }
-        }
-        if (virtualizer.itemCount === 0) return { kind: 'unavailable' }
-
-        if (!initialized) {
-          initialized = true
-          if (CONTENT_ARRIVAL_TRIGGERS.has(trigger)) {
-            burst.note(performance.now())
-          }
-          flushTailLayout()
-          writeVirtualizedPin()
-          lastHeight = scroller.scrollHeight
-          rememberBottomIntent()
-          debugLog('PIN start', {
-            trigger,
-            itemCount: virtualizer.itemCount,
-            distFromBottom: getDistanceFromBottom(scroller),
-          })
-          return {
-            kind: 'positioned',
-            scrollTop: scroller.scrollTop,
-            atLiveEdge:
-              getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD,
-            wrote: true,
-            reassert: true,
-          }
-        }
-
-        flushTailLayout()
-        const height = scroller.scrollHeight
-        const distance = getDistanceFromBottom(scroller)
-        const needsWrite =
-          height !== lastHeight || distance > BOTTOM_PIN_TOLERANCE
-        if (needsWrite) {
-          debugLog('PIN re-assert', {
-            distFromBottom: distance,
-            heightChanged: height !== lastHeight,
-          })
-          lastHeight = height
-          writeVirtualizedPin()
-        }
-        run.frame(needsWrite)
-        return {
-          kind: 'positioned',
-          scrollTop: scroller.scrollTop,
-          atLiveEdge:
-            getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD,
-          wrote: needsWrite,
-          reassert: true,
-        }
-      },
-      complete: (
-        request: LiveEdgeRequest,
-        outcome: LiveEdgeCompletion,
-      ) => {
-        if (activeConversationIdRef.current !== request.conversationId) return
-        const scroller = scrollerRef.current
-        if (
-          outcome === 'user-takeover' ||
-          outcome === 'superseded'
-        ) {
-          // Cancellation abandons this executor's paint obligation. Carrying the debt into a newer
-          // generation could repaint after genuine user takeover or charge unrelated content.
-          burst.reset()
-        } else if (outcome === 'best-effort' && scroller) {
-          flushTailLayout()
-          if (burst.owed()) {
-            flushOwedRepaint()
-          } else if (
-            shouldForceRepaint(
-              wroteAny,
-              repaintMode,
-              isLoadingOlderRef.current,
-            )
-          ) {
-            forceRepaint()
-          }
-        } else if (outcome === 'settled') {
-          flushOwedRepaint()
-        }
-
-        if (scroller) {
-          setMeasuredAtBottom(getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD)
-          viewportSessionRef.current?.recordProgrammaticWrite(
-            request.conversationId,
-            Date.now(),
-          )
-        }
-        const probe = (pinRunProbeRef.current ??= createRenderCostProbe({
-          thresholdMs: PIN_PROBE_THRESHOLD_MS,
-        }))
-        if (probe.record(run.totalForcedMs(), performance.now())) {
-          console.warn(run.summaryLine(trigger))
-        }
-        debugLog('PIN completed', {
-          trigger,
-          outcome,
-          distFromBottom: scroller ? getDistanceFromBottom(scroller) : null,
-        })
-      },
-    }
-  }, [
-    beginControllerFrameLoop,
+      : undefined,
+  }), [
+    getLiveEdgeBrowser,
     isLoadingNewer,
     lastMessageId,
     messageCount,
     onLoadNewer,
     rememberBottomIntent,
-    setMeasuredAtBottom,
     windowAtLiveEdge,
   ])
 
@@ -1235,53 +1026,23 @@ export function useMessageListScroll({
   }, [rememberBottomIntent])
 
   const createAnchorPreservationExecutor = useCallback(
-    (loopLabel: 'media-anchor' | 'divider-anchor' | 'insertion-anchor'): AnchorPreservationExecutor => ({
-      reachability: (desired) => deriveReachabilityForDesired({
-        desired,
-        hasRows: messageCount > 0 && firstMessageId !== undefined,
-        windowAtLiveEdge: windowAtLiveEdge !== false,
-        virtualizer: virtualizerRef.current,
-        scroller: scrollerRef.current,
-        loadAround: 'unavailable',
-        canRecenter: false,
-      }),
-      beginLoop: (lease) => beginControllerFrameLoop(loopLabel, lease),
-      positionFrame: (
-        request: AnchorPreservationRequest,
-        lease: PositionExecutionLease,
-      ) => {
-        if (
-          !lease.isCurrent() ||
-          activeConversationIdRef.current !== request.conversationId
-        ) {
-          return { kind: 'unavailable' }
-        }
-        const anchor: ScrollAnchor = {
-          messageId: request.desired.messageId,
-          fraction: request.desired.placement.fraction,
-        }
-        return getBottomFractionAnchorBrowser().position(anchor)
-      },
-      complete: (request, outcome) => {
-        if (activeConversationIdRef.current !== request.conversationId) return
-        const scroller = scrollerRef.current
-        if (scroller) {
-          isAtBottomRef.current =
-            getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
-          rememberCurrentScrollSnapshot()
-        }
-        viewportSessionRef.current?.recordProgrammaticWrite(
-          request.conversationId,
-          Date.now(),
-        )
-        debugLog('ANCHOR: controller completed preservation', {
-          conversationId: request.conversationId,
-          generation: request.generation,
-          source: request.source.kind,
-          outcome,
-        })
-      },
-    }),
+    (loopLabel: AnchorPreservationLoopLabel): AnchorPreservationExecutor =>
+      new AnchorPreservationBrowserAdapter({
+        getScroller: () => scrollerRef.current,
+        getVirtualizer: () => virtualizerRef.current,
+        getActiveConversationId: () => activeConversationIdRef.current,
+        getWindowFacts: () => ({
+          hasRows: messageCount > 0 && firstMessageId !== undefined,
+          windowAtLiveEdge: windowAtLiveEdge !== false,
+        }),
+        beginLoop: (label, lease) => beginControllerFrameLoop(label, lease),
+        anchorAdapter: getBottomFractionAnchorBrowser(),
+        setAtBottom: (atBottom) => { isAtBottomRef.current = atBottom },
+        rememberScrollSnapshot: rememberCurrentScrollSnapshot,
+        recordProgrammaticWrite: (id) =>
+          viewportSessionRef.current?.recordProgrammaticWrite(id, Date.now()),
+        log: debugLog,
+      }).createExecutor(loopLabel),
     [
       beginControllerFrameLoop,
       firstMessageId,
@@ -1799,40 +1560,17 @@ export function useMessageListScroll({
   // list — and re-binds the ⌘/Ctrl+↓ listener — on every append.
   const scrollToBottom = useStableCallback(scrollToBottomImpl)
 
-  const createResidentTopExecutor = useCallback((): ResidentTopExecutor => ({
-    reachability: () => deriveReachabilityForDesired({
-      desired: { kind: 'resident-top' },
-      hasRows: messageCount > 0 && firstMessageId !== undefined,
-      windowAtLiveEdge: windowAtLiveEdge !== false,
-      virtualizer: virtualizerRef.current,
-      scroller: scrollerRef.current,
-      loadAround: 'unavailable',
-      canRecenter: false,
-    }),
-    beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
-    start: (_request, lease) => {
-      const scroller = scrollerRef.current
-      if (!lease.isCurrent() || !scroller) return { kind: 'unavailable' }
-      const virtualizer = virtualizerRef.current
-      // One smooth write either way — but on the virtualized path it must be issued THROUGH the
-      // virtualizer. Cancelling the superseded live-edge execution only retires our own lease and
-      // frame loop; @tanstack's pending-scroll reconciler stays armed on the live edge for
-      // several more seconds and re-applies it whenever late row measurement moves its target,
-      // overriding this animation with no controller event to observe. Issuing the write through
-      // the virtualizer retargets that reconciler onto resident top instead of racing it.
-      if (virtualizer) virtualizer.beginAnimatedScrollToOffset(0)
-      else scroller.scrollTo({ top: 0, behavior: 'smooth' })
-      return { kind: 'started' }
-    },
-    readScrollTop: () => scrollerRef.current?.scrollTop ?? null,
-    complete: (request, outcome) => {
-      debugLog('RESIDENT TOP: controller completed', {
-        conversationId: request.conversationId,
-        generation: request.generation,
-        outcome,
-      })
-    },
-  }), [
+  const createResidentTopExecutor = useCallback((): ResidentTopExecutor =>
+    new ResidentTopBrowserAdapter({
+      getScroller: () => scrollerRef.current,
+      getVirtualizer: () => virtualizerRef.current,
+      getWindowFacts: () => ({
+        hasRows: messageCount > 0 && firstMessageId !== undefined,
+        windowAtLiveEdge: windowAtLiveEdge !== false,
+      }),
+      beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
+      log: debugLog,
+    }).createExecutor(), [
     beginControllerFrameLoop,
     firstMessageId,
     messageCount,
@@ -2511,7 +2249,9 @@ export function useMessageListScroll({
     }
     mediaLoadSnapshotRef.current = null
     // Drop any repaint-burst debt from the room we're leaving so it can't flush into the new one.
-    pinRepaintBurstRef.current?.reset()
+    // Read through the ref, not the lazy getter: a list that never pinned owes nothing, and building
+    // the adapter here just to reset it would also add a dependency to this entry effect.
+    liveEdgeBrowserRef.current?.resetRepaintDebt()
 
     // In static mode (read-only previews), skip all scroll positioning.
     // The parent component handles its own scroll-to-target.
