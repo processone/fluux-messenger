@@ -773,26 +773,6 @@ describe('ChatView', () => {
       // - onFileDrop callback is called synchronously (no async upload)
       // - No upload happens until user clicks Send
     })
-
-    it('should document that MessageInput.handleSend calls uploadFile before sending', () => {
-      /**
-       * The handleSend function in ChatView.MessageInput component:
-       *
-       * 1. If pendingAttachment exists and uploadFile is available:
-       *    - Calls: attachment = await uploadFile(pendingAttachment.file)
-       *    - If upload fails (returns null): returns false, message NOT sent
-       *    - If upload succeeds: continues with sending
-       *
-       * 2. Sends message with attachment (if any)
-       * 3. Clears pending attachment via onRemovePendingAttachment()
-       *
-       * See ChatView.tsx lines 808-825 for implementation
-       *
-       * This is tested at the unit level via MessageComposer.test.tsx (pending attachment display)
-       * and useDragAndDrop.test.tsx (file staging behavior)
-       */
-      expect(true).toBe(true) // Documentation test - behavior verified in other test files
-    })
   })
 
   describe('Link preview suppression in encrypted conversations', () => {
