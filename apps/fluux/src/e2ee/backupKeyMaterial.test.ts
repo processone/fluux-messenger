@@ -4,13 +4,20 @@
  * because openpgp.js performs realm-sensitive Uint8Array checks that fail
  * under jsdom.
  */
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { PrivateKey } from 'openpgp'
 import {
   isArmoredKeyText,
   splitArmorBlocks,
   parseSecretKeysFromBackupPayload,
 } from './backupKeyMaterial'
+
+// The shared fixture key below is generated once in `beforeAll`, so the real
+// openpgp.js cost lands on the hook rather than on any single test — it is
+// `hookTimeout` (10s by default), not `testTimeout`, that bounds it. Key
+// generation is CPU-bound and inflates several-fold under the contention of a
+// full `npm test`. See WebOpenPGPPlugin.test.ts.
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 })
 
 const enc = (s: string) => new TextEncoder().encode(s)
 

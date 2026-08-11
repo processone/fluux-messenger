@@ -15,7 +15,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   InMemoryStorageBackend,
   createPluginStorage,
@@ -25,6 +25,12 @@ import {
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+
+// Decrypting and verifying the Sequoia fixtures is real openpgp.js work, so
+// the tests are CPU-bound and inflate several-fold under the contention of a
+// full `npm test`. Timing is not what they assert, and the 5s default left too
+// little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
+vi.setConfig({ testTimeout: 30_000 })
 
 const FIXTURES_DIR = resolve(__dirname, 'fixtures')
 const META_PATH = resolve(FIXTURES_DIR, 'sequoia_meta.json')

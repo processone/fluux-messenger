@@ -25,6 +25,12 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 
+// The cross-device verification-sync tests drive real openpgp.js work, so they
+// are CPU-bound and inflate several-fold under the contention of a full
+// `npm test`. Timing is not what they assert, and the 5s default left too
+// little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
+vi.setConfig({ testTimeout: 30_000 })
+
 /**
  * Wrap a body string in the `<payload xmlns='jabber:client'><body>…</body></payload>`
  * envelope the plugin now expects as its plaintext input. Matches what Chat.ts
