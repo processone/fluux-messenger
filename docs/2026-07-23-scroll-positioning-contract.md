@@ -79,8 +79,9 @@ load keeps its snapshot until its own first-id shift can reconcile. Conversation
 departed conversation's snapshot, and delayed settlement or window observation from that snapshot
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
-cancellation, and anchor/fallback pixel writes under the controller lease. The hook constructs and
-invokes the adapter and supplies lifecycle completion callbacks. The coordinator imports no DOM,
+cancellation, and anchor/fallback pixel writes under the controller lease.
+`useDirectionalHistoryLoads` invokes the adapter and supplies lifecycle completion callbacks; the
+orchestration hook only wires its ports and consumes its triggers. The coordinator imports no DOM,
 virtualizer, frame scheduler, positioning controller, or pixel-write capability.
 
 Saved-position reconciliation likewise runs through a dedicated browser adapter. It owns
@@ -381,9 +382,10 @@ reconcilers implement measurement convergence; they are not separate positioning
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
 Executor construction lives in `useScrollExecutors` without exception: it supplies each adapter's
 value ports and hands the finished executor back for the hook to submit, so no `createExecutor` call
-appears in `useMessageListScroll`. The hook still reaches the directional-history adapter directly
-for its availability probe and its one-frame settlement scheduler, neither of which builds an
-executor. Exactly three pixel writes remain in the hook, and none of them is a positioning owner —
+appears in `useMessageListScroll`. Directional-history availability probes and one-frame settlement
+scheduling are encapsulated by `useDirectionalHistoryLoads`, which builds no executor and owns no
+pixel write. Exactly three pixel writes remain in the orchestration hook, and none is a positioning
+owner —
 the two isolated static-preview operations documented below, and the emergency bottom write that
 keeps the list usable when the controller itself cannot be constructed.
 
@@ -538,18 +540,27 @@ kinetic scrolling and stale-paint behavior.
      - [x] Extract unread-marker and explicit-target reachability, passive conversation handoff,
        leased positioning, around loading, and target completion behind dedicated browser adapters.
      - [x] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
-   - [ ] Leave the React hook as thin lifecycle orchestration. Taken one cohesive unit at a time so
+   - [x] Leave the React hook as thin lifecycle orchestration. Taken one cohesive unit at a time so
      each step keeps the scroll invariants as its gate:
      - [x] Move executor construction — the frame-loop factory, the adapters that outlive one
        execution, and every `create*`/`build*Executor` — into `useScrollExecutors`.
      - [x] Extract the scroller/content callback refs, their genuine-input listeners, and the
        non-virtualized content-growth observer into `useScrollContainerBinding`.
-     - [ ] Extract ambient divider/insertion anchor tracking.
-     - [ ] Extract media-growth snapshotting and debouncing.
-     - [ ] Extract directional-history release and post-frame settling.
-     - [ ] Reduce the scroll event handler to a value-only interpretation of geometry.
-     - [ ] Express conversation-entry arbitration as a pure model over facts, leaving a thin effect
-       that applies its verdict.
+     - [x] Extract ambient divider/insertion anchor tracking into
+       `useAmbientAnchorPreservation`, with every branch decision as a pure function in
+       `ambientAnchorDecisions`.
+     - [x] Extract media-growth snapshotting and debouncing into
+       `useMediaGrowthPreservation`, with the settled-batch outcome and the genuine-scroll
+       discriminator as pure functions in `mediaGrowthDecisions`.
+     - [x] Extract directional-history load start, release and post-frame settling into
+       `useDirectionalHistoryLoads`. It adds no eligibility rule of its own: the coordinator still
+       decides, and the browser adapter still captures and writes.
+     - [x] Reduce the scroll and wheel handlers to a value-only interpretation of geometry in
+       `scrollEventDecisions`, leaving the handlers to read facts once and apply the plan.
+     - [x] Express conversation-entry arbitration as a pure model over facts in
+       `entryArbitration`, leaving a thin effect that applies its verdict. The five-condition
+       synced-live-edge predicate and its late-resolving twin are now separately testable, including
+       the empty-conversation case where a bare pointer comparison would discard a saved position.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove
 one previous source of scroll authority.
