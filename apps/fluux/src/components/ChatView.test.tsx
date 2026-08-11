@@ -815,6 +815,35 @@ describe('ChatView', () => {
 
       expect(mockProcessMessageForLinkPreview).not.toHaveBeenCalled()
     })
+
+    it('clears the send-animation timer on unmount', async () => {
+      // The send animation arms a 400 ms timer that resets React state. Left
+      // armed past unmount it fires into a torn-down environment, which surfaces
+      // as an intermittent "window is not defined" unhandled error whenever the
+      // suite finishes within that window.
+      mockEncryptionState = { kind: 'disabled' }
+      const setSpy = vi.spyOn(globalThis, 'setTimeout')
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout')
+
+      try {
+        const { unmount } = render(<ChatView />)
+        fireEvent.click(screen.getByTestId('send-button'))
+
+        await waitFor(() => {
+          expect(setSpy.mock.calls.some(([, delay]) => delay === 400)).toBe(true)
+        })
+
+        const animationTimerIndex = setSpy.mock.calls.findIndex(([, delay]) => delay === 400)
+        const animationTimerId = setSpy.mock.results[animationTimerIndex].value
+
+        unmount()
+
+        expect(clearSpy).toHaveBeenCalledWith(animationTimerId)
+      } finally {
+        setSpy.mockRestore()
+        clearSpy.mockRestore()
+      }
+    })
   })
 
   describe('Loading state', () => {

@@ -190,6 +190,15 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
   }, [])
 
+  // Drop the pending send-animation timer on unmount: it is the only timer here
+  // that sets React state, so left armed it fires into a torn-down tree.
+  useEffect(() => () => {
+    if (lastSentTimerRef.current) {
+      clearTimeout(lastSentTimerRef.current)
+      lastSentTimerRef.current = null
+    }
+  }, [])
+
   // Note: Media load scroll handling is now managed by useMessageListScroll hook
   // via the handleMediaLoad callback passed through renderMessage. This provides
   // batched scroll correction to avoid jitter when multiple images load.
