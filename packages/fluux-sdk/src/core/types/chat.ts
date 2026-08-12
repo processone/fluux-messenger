@@ -6,7 +6,7 @@
  */
 
 import type { BaseMessage } from './message-base'
-import type { ReadPointer } from '../../stores/shared/readPointer'
+import type { ReadPointer } from './readState'
 
 /**
  * Chat state notification types (XEP-0085).

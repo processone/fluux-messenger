@@ -253,3 +253,59 @@ export interface MAMQueryState {
    */
   coverageBottomUnproven?: boolean
 }
+
+/**
+ * Query direction for MAM queries.
+ *
+ * @category MAM
+ */
+export type MAMQueryDirection = 'backward' | 'forward'
+
+/**
+ * Persisted contiguous-with-live coverage.
+ *
+ * A `CoverageRecord` is POSITIVE, DURABLE data: the archive id of the oldest
+ * entry proven contiguous with the live edge for this device. Unlike a gap
+ * interval (which describes a hole and vanishes when the hole closes) or
+ * {@link MAMQueryState.coverageBottomUnproven} (session-scoped), the record
+ * survives fresh sessions and gap closure, so:
+ * - the read-pointer stitch seeds its backward walk from it and never from a
+ *   disjoint cache island (e.g. a fetchContext window);
+ * - a signal-only fetch-latest walk resumes BELOW prior coverage instead of
+ *   re-walking the same newest pages every session (`topId` marks re-entry
+ *   into covered territory; the walk jumps to `bottomId`).
+ *
+ * Advancing `bottomId` past a page that carries persistable messages must be
+ * gated on the durable IndexedDB commit of that page (same invariant as gap
+ * transitions): the record must never point past data that was never stored.
+ *
+ * @category MAM
+ */
+export interface CoverageRecord {
+  /** Archive id of the OLDEST entry proven contiguous with the live edge. */
+  bottomId: string
+  /** Archive id of the NEWEST entry seen by the fetch-latest walk that
+   *  established this record (page-1 rsm.last). */
+  topId?: string
+}
+
+/**
+ * Extra merge inputs carried on the mam-messages emit (both entity kinds).
+ *
+ * @category MAM
+ */
+export interface MergeArchiveExtras {
+  /** The `before` cursor the query was started with ('' = fetch-latest). */
+  initialBefore?: string
+  /** rsm.last of the FIRST page of a backward walk (newest covered entry). */
+  fetchLatestTopId?: string
+  /** The walk contained the existing coverage record's top entry — the only
+   *  accepted proof of contiguity with the record (Codex r4 #3). */
+  sawCoverageTop?: boolean
+  /** The walk carried corrections/retractions/reactions/fastenings, whose
+   *  cache effects are fire-and-forget — certification is blocked (r4 #2). */
+  walkCarriedModifications?: boolean
+  /** FORWARD only: the `after` cursor the catch-up resumed from — the bootstrap
+   *  anchor when that catch-up reports complete. */
+  initialAfter?: string
+}

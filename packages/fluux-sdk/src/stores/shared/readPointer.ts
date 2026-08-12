@@ -31,56 +31,20 @@
  * All functions here are pure.
  */
 
-import { mayAdvanceTo, exactPosition, type CacheOrderKey, type PointerOrder } from './readState'
+import { mayAdvanceTo, exactPosition } from './readState'
+import type {
+  CacheOrderKey,
+  PointerIdentity,
+  ReadPointer,
+} from '../../core/types/readState'
 
 /**
- * How a read position can be NAMED.
- *
- * `messageId` is on both variants — it always exists, and it is the pointer's
- * ONE local name. `archiveId` exists only on `addressable`, so reaching for it
- * forces the consumer to say what it does when the position has no wire name.
- *
- * - **`addressable`** — the named message carried an XEP-0359 archive id when
- *   the pointer was minted. Publishable as-is: the XEP-0490 publisher reads
- *   `archiveId` and is done, with no lookup, no residency requirement and no
- *   cache read.
- * - **`local`** — degraded, and EXPLICITLY so. The archive id genuinely does not
- *   exist yet (or, for the user's own 1:1 sends, may never: the server does not
- *   echo them back, so the only id they ever have is a client-generated
- *   `origin-id`, which is not publishable). No model can conjure one. What the
- *   variant buys is that the state is named once instead of being rediscovered
- *   at each consumer, and that the publisher's at-or-behind fallback (#1189) is
- *   the DEFINITION of this branch rather than a patch bolted onto it.
- *
- * XEP-0359's `by` is deliberately NOT stored: it is a function of the entity
- * (`isRoom(jid) ? jid : ownBareJid()`), so storing it would be a second
- * derivable copy of something the publisher already knows.
+ * The pointer types are declared in `core/types/readState.ts` — they are domain
+ * types on the SDK's public surface, and `core/types` must not depend on a
+ * store. They are re-exported here because this module owns the constructors
+ * and comparators, and every consumer of those wants both.
  */
-export type PointerIdentity =
-  | { readonly state: 'addressable'; readonly messageId: string; readonly archiveId: string }
-  | { readonly state: 'local'; readonly messageId: string }
-
-/**
- * Where the user has read to. Written atomically or not at all.
- *
- * ONE deliberate exception to "the timestamp is the message's own": pointers
- * built by the #1081 migration from a legacy `lastSeenMessageId` + `lastReadAt`
- * PAIR carry `lastReadAt` as the timestamp, which is not necessarily the
- * timestamp of the message the identity names. Those pointers carry a
- * `role: 'floor'` order, which says exactly that: "at least here". That is the
- * status quo preserved exactly — `lastReadAt` is the floor today's unread
- * derivation already counts from, and it is at or behind the named message. Do
- * not "fix" this by resolving the message's real timestamp: that could move the
- * floor FORWARD, and the pointer is forward-only, so a position lost that way is
- * unrecoverable. Only `order` is used for ordering; nothing derives a message
- * from it.
- */
-export interface ReadPointer {
-  /** Where this position sits in message-cache order. NEVER rewritten. */
-  readonly order: PointerOrder
-  /** What this position is called — locally, and on the wire when we can. */
-  readonly identity: PointerIdentity
-}
+export type { PointerIdentity, ReadPointer } from '../../core/types/readState'
 
 /**
  * The order as it is written to disk: everything the tie-break needs EXCEPT its

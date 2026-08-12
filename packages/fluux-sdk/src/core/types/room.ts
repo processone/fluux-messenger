@@ -8,7 +8,7 @@
 import type { PresenceShow } from './roster'
 import type { MentionReference } from './chat'
 import type { BaseMessage } from './message-base'
-import type { ReadPointer } from '../../stores/shared/readPointer'
+import type { ReadPointer } from './readState'
 
 /**
  * Room affiliation level (XEP-0045).

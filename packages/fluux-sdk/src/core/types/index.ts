@@ -98,12 +98,25 @@ export type {
   MAMQueryOptions,
   MAMResult,
   MAMQueryState,
+  MAMQueryDirection,
+  CoverageRecord,
+  MergeArchiveExtras,
   RoomMAMQueryOptions,
   RoomMAMResult,
   MAMSearchOptions,
   RoomMAMSearchOptions,
   MAMPagingSearchOptions,
 } from './pagination'
+
+// Read-state types (cache order and read pointer)
+export type {
+  CacheOrderKey,
+  ExactPosition,
+  FloorPosition,
+  PointerOrder,
+  PointerIdentity,
+  ReadPointer,
+} from './readState'
 
 // Admin types
 export type {

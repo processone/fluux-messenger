@@ -18,7 +18,7 @@ import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { RSMResponse } from './pagination'
-import type { MAMQueryDirection } from '../../stores/shared/mamState'
+import type { MAMQueryDirection } from './pagination'
 import type { SystemNotificationType } from './events'
 import type { XMPPErrorType, XMPPStanzaError } from '../../utils/xmppError'
 

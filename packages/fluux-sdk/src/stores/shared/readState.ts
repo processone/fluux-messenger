@@ -9,7 +9,12 @@
  * All functions here are pure.
  */
 
-import type { ReadPointer } from './readPointer'
+import type {
+  CacheOrderKey,
+  ExactPosition,
+  PointerOrder,
+  ReadPointer,
+} from '../../core/types/readState'
 
 /**
  * Re-exported so the live `+1` fast path (`notificationState.ts`) and the
@@ -20,78 +25,17 @@ import type { ReadPointer } from './readPointer'
 export { isRenderableStoredMessage, type RenderabilityCheckFields } from '../../utils/messageRenderability'
 
 /**
- * The IndexedDB message cache's own tie-break key for a message, built from the
- * CLIENT message id. It has never held an archive id, and could not: XEP-0313
- * §6.2 makes archive ids opaque strings with no guarantee of being numeric,
- * sequenced or globally unique, and unique only per archive — they carry no
- * ordering. This key is chosen to agree with the cache's cursors, and is
- * kind-discriminated because chat and room break same-millisecond ties
- * differently:
- *
- * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'`,
- *   `messageCache.ts:140`).
- * - Room breaks ties by `from` then `id` (the `room_ts_from_id` index).
- *
- * Chat messages also carry `from`, so a generic "from then id" comparator
- * would be wrong for chat — the `kind` discriminant is what keeps the two
- * apart. Do not generalise this into a single shape.
+ * The cache-order types are declared in `core/types/readState.ts` — they are
+ * domain types on the SDK's public surface, and `core/types` must not depend on
+ * a store. They are re-exported here because this module owns the comparators
+ * that operate on them, and every consumer of a comparator wants both.
  */
-export type CacheOrderKey = { kind: 'chat'; id: string } | { kind: 'room'; from: string; id: string }
+export type { CacheOrderKey, ExactPosition, FloorPosition, PointerOrder } from '../../core/types/readState'
 
 /** Build the kind-appropriate order key for a message. */
 export function makeCacheOrderKey(msg: { from?: string; id: string }, kind: 'chat' | 'room'): CacheOrderKey {
   return kind === 'room' ? { kind: 'room', from: msg.from ?? '', id: msg.id } : { kind: 'chat', id: msg.id }
 }
-
-/**
- * A position that is exactly located in message-cache order: a timestamp
- * refined by the tie-break that resolves its millisecond.
- *
- * Every real message yields one, because {@link makeCacheOrderKey} always
- * produces a key — use {@link exactPosition} rather than assembling the literal.
- *
- * `role` is not redundant with the presence of `tiebreak`: it is what makes
- * {@link PointerOrder} a DISCRIMINATED union, so narrowing reads as
- * `order.role === 'floor'` at every consumer instead of as an incidental
- * "the optional field happens to be missing" test. A weaker position cannot be
- * passed where an exact one is required (#1173).
- */
-export interface ExactPosition {
-  readonly role: 'exact'
-  readonly timestamp: number
-  readonly tiebreak: CacheOrderKey
-}
-
-/**
- * A position known only to a millisecond: "at least here", not "exactly here".
- *
- * This is what a pointer migrated from the pre-#1081 `lastSeenMessageId` +
- * `lastReadAt` pair carries — `lastReadAt` sits at or behind the message the
- * pointer names, with no provable position inside its millisecond. It is also
- * where an {@link ExactPosition} degrades when its persisted tie-break comes
- * back unusable: dropping to a floor over-counts (the safe direction) rather
- * than trusting a key we cannot rebuild.
- *
- * Deliberately has NO `tiebreak` property at all rather than an optional one:
- * with `role` discriminating, `order.tiebreak` does not typecheck on this
- * variant, so nothing can read a key off a floor and nothing can smuggle one in.
- */
-export interface FloorPosition {
-  readonly role: 'floor'
-  readonly timestamp: number
-}
-
-/**
- * Where a read pointer sits in message-cache order — see {@link ReadPointer}.
- *
- * The two variants are the two things a stored position can honestly claim, and
- * every comparator below answers them differently on purpose. Note that
- * `readonly` here stops a position being MUTATED, not rebuilt: a consumer can
- * still construct a fresh order object with a different timestamp. Never moving
- * a stored position stays a review concern (`readPointer.ts`), which the type
- * makes visible — you have to name `order` — rather than impossible.
- */
-export type PointerOrder = ExactPosition | FloorPosition
 
 /**
  * The exact cache-order position of a real message.
