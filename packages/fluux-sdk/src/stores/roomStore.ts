@@ -381,9 +381,7 @@ function savePendingRetractionsToStorage(pending: Map<string, PendingRetraction[
   }
 }
 
-// Per-room serialization of archive-page writes (Codex r4 #4): a deferred
-// gap/coverage commit applies only when every earlier in-flight page for the
-// room committed too. See shared/archiveSaveChain.ts.
+// Serializes this store's archive-page writes; see shared/archiveSaveChain.ts.
 const roomArchiveSaves = createArchiveSaveChain()
 
 // Cache epoch (Codex r4 #5): bumped whenever the room cache lifecycle resets
@@ -1757,10 +1755,8 @@ export const roomStore = createStore<RoomState>()(
     // loadRoomReadState(A) against a blob predating A's last mutations, and
     // that stale load becomes the live state.
     flushThrottledStorage()
-    // Structural baselines are keyed by resolved storage key, so they cannot be
-    // read across accounts — but they are dropped anyway, and it is free to do
-    // so: the flush above closed every window, so the next write's force-flush
-    // finds no pending thunk and writes nothing extra.
+    // Free after the flush above: every window is closed, so the next write's
+    // force-flush finds no pending thunk.
     forgetAllDurableMapBaselines()
     // In-flight archive-save gates belong to the previous account; their
     // deferred commits must not land in the new account's maps.
@@ -1918,10 +1914,8 @@ export const roomStore = createStore<RoomState>()(
       if (result.added) {
         overlayUnreadDelta = Math.max(0, transientCounts(scopeKey, undefined).unread - before)
       }
-      // A coalesce or moved-earlier position (added: false) changes the
-      // overlay's contribution WITHOUT a synchronous +1 — only the
-      // archive-derived recompute (scheduled after the set() below) can fold
-      // that back into the stored count correctly.
+      // Handled by the archive-derived recompute scheduled after the set()
+      // below; see `noteTransient`'s doc on `requiresRecount`.
       overlayRequiresRecount = result.requiresRecount
     }
 
@@ -2116,10 +2110,9 @@ export const roomStore = createStore<RoomState>()(
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
     })
 
-    // Task 9: a coalesce/moved-earlier overlay change doesn't get a
-    // synchronous count update above — only the archive-derived recompute
-    // can fold it back into the stored count correctly (see `noteTransient`'s
-    // doc on `requiresRecount`). No-ops for the active room.
+    // See `noteTransient`'s doc on `requiresRecount`: only the archive-derived
+    // recompute can fold this change back into the stored count. No-ops for
+    // the active room.
     if (overlayRequiresRecount) {
       void get().recomputeUnreadForRoom(roomJid)
     }
@@ -2449,9 +2442,9 @@ export const roomStore = createStore<RoomState>()(
     // says so (unresolved sorts conservatively).
     const floorPos: PointerOrder = metaNow.readPointer?.order ?? { role: 'floor', timestamp: floor.getTime() }
 
-    // Task 9 safety net: this recompute is one of the "pointer advance /
-    // content settled" triggers — bound the transient overlay's memory here
-    // too, since not every trigger path calls pruneTransient directly.
+    // Safety net: this recompute is one of the "pointer advance / content
+    // settled" triggers, and not every trigger path calls pruneTransient
+    // directly.
     pruneTransient(roomTransientScopeKey(roomJid), floorPos)
 
     // A BOUNDARY test: a FLOOR (migrated) boundary reads as at-or-after its
@@ -2607,10 +2600,9 @@ export const roomStore = createStore<RoomState>()(
       // Skip update if no change
       if (updated === notifInput) return {}
 
-      // Task 9: the read pointer just moved (or the counts were cleared) —
-      // bound the transient overlay's memory now rather than waiting for a
-      // later recompute trigger. Pruning is a memory bound only:
-      // transientCounts already excludes entries at/behind the boundary.
+      // The read pointer just moved (or the counts were cleared) — bound the
+      // transient overlay's memory now rather than waiting for a later
+      // recompute trigger.
       if (updated.readPointer && updated.readPointer !== notifInput.readPointer) {
         pruneTransient(roomTransientScopeKey(roomJid), updated.readPointer.order)
       }
@@ -2663,9 +2655,9 @@ export const roomStore = createStore<RoomState>()(
         mentionsCount: 0,
       }
 
-      // Task 9: mark-all-read jumps the pointer straight to the newest
-      // message — prune the overlay now rather than leaving every noted
-      // entry to a later recompute trigger.
+      // Mark-all-read jumps the pointer straight to the newest message —
+      // prune the overlay now rather than leaving every noted entry to a
+      // later recompute trigger.
       pruneTransient(roomTransientScopeKey(roomJid), read.readPointer.order)
 
       const committed = commitRoomUpdate(state, roomJid, read)
@@ -3004,10 +2996,8 @@ export const roomStore = createStore<RoomState>()(
 
       pointerAdvanced = true
 
-      // Task 9: the viewport-driven pointer just advanced — bound the
-      // transient overlay's memory. Safe to call unconditionally: a
-      // pruned-away entry was already excluded from transientCounts by the
-      // boundary comparison, this just reclaims the memory.
+      // The viewport-driven pointer just advanced — bound the transient
+      // overlay's memory.
       if (updated.readPointer) {
         pruneTransient(roomTransientScopeKey(roomJid), updated.readPointer.order)
       }
@@ -3928,11 +3918,9 @@ export const roomStore = createStore<RoomState>()(
       const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
       if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
-      // Persisted coverage record (Codex r3 #3/#4) — positive durable twin of
-      // the gap machinery; see mamCoverage.ts. Advancing the bottom past a
-      // page with persistable messages must wait for the durable commit: the
-      // record must never point past unstored data. A merge with nothing
-      // persistable (signal-only give-up) applies now.
+      // Persisted coverage record; see mamCoverage.ts for the durability
+      // invariant this defers on. A merge with nothing persistable
+      // (signal-only give-up) applies now.
       const { coverage: newCoverage, transition: coverageTransition } = syncCoverageAfterArchiveMerge({
         coverage: state.roomCoverage,
         id: roomJid,
