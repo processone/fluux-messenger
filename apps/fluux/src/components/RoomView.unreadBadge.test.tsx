@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * FIX 1 (PR B final whole-branch review) — regression guard for rooms' in-list unread
+ * Regression guard for rooms' in-list unread
  * surfaces being frozen. RoomView.tsx used to read `unreadCount={room.unreadCount}` where
  * `room` is `stableRoom ?? activeRoom` — a deliberately frozen memo (RoomView.tsx ~341-360)
  * that refreshes only when jid/nickname/joined/supportsReactions/isIrcGateway/occupants/

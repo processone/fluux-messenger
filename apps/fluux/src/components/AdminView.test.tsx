@@ -184,7 +184,7 @@ describe('AdminView mobile section sheet', () => {
   })
 })
 
-// Locks the Task 4 header: the AdminView header renders the AdminBreadcrumb
+// Locks the header: the AdminView header renders the AdminBreadcrumb
 // (clickable home crumb + category trail), NOT the old getIcon()+<h2>{getTitle()}</h2>.
 // This is screenshot-independent — it asserts the actual rendered breadcrumb DOM.
 describe('AdminView breadcrumb', () => {

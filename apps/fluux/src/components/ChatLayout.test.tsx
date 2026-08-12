@@ -693,7 +693,7 @@ describe('ChatLayout - Tab Memory', () => {
   })
 
   describe('Messages tab memory', () => {
-    // TODO Phase 2.5: Update this test to work with URL-based navigation
+    // TODO: update this test to work with URL-based navigation
     // The test needs to use proper router testing patterns where rerender
     // doesn't reset the MemoryRouter state
     it.skip('should restore conversation when returning to Messages tab', async () => {
@@ -751,7 +751,7 @@ describe('ChatLayout - Tab Memory', () => {
   })
 
   describe('Rooms tab memory', () => {
-    // TODO Phase 2.5: Update to work with URL-based navigation
+    // TODO: update to work with URL-based navigation
     it.skip('should restore room when returning to Rooms tab', async () => {
       setMockState({ activeRoomJid: null })
 
@@ -806,7 +806,7 @@ describe('ChatLayout - Tab Memory', () => {
   })
 
   describe('Directory/Connections tab memory', () => {
-    // TODO Phase 2.5: Update to work with URL-based navigation
+    // TODO: update to work with URL-based navigation
     it.skip('should restore contact profile when returning to Directory tab', async () => {
       render(<ChatLayoutWithRouter />)
 
@@ -866,7 +866,7 @@ describe('ChatLayout - Tab Memory', () => {
   })
 
   describe('Cross-tab switching', () => {
-    // TODO Phase 2.5: Update to work with URL-based navigation
+    // TODO: update to work with URL-based navigation
     it.skip('should handle Messages -> Rooms -> Directory -> Messages flow', async () => {
       // Start with conversation in Messages
       setMockState({ activeConversationId: 'bob@example.com', activeRoomJid: null })
@@ -939,7 +939,7 @@ describe('ChatLayout - Tab Memory', () => {
   })
 
   describe('Tab state persistence within session', () => {
-    // TODO Phase 2.5: Update to work with URL-based navigation
+    // TODO: update to work with URL-based navigation
     it.skip('should maintain separate state for each tab', async () => {
       render(<ChatLayoutWithRouter />)
 

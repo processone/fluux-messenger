@@ -8,12 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import {
-  ALLOWED_BY_DESIGN,
-  commentText,
-  compareToBaseline,
-  findProvenance,
-} from './check-comment-provenance.mjs'
+import { ALLOWED_BY_DESIGN, commentText, findProvenance } from './check-comment-provenance.mjs'
 
 const families = (source) => findProvenance(source).map((match) => match.text)
 
@@ -105,35 +100,4 @@ test('commentText returns the comment only', () => {
   assert.equal(commentText('const x = 1 // note'), '// note')
   assert.equal(commentText('   * body of a block'), '* body of a block')
   assert.equal(commentText('const x = 1'), '')
-})
-
-test('baseline: at or below passes, above fails', () => {
-  const baseline = { 'a.ts': 3 }
-  assert.deepEqual(compareToBaseline({ 'a.ts': 3 }, baseline).regressions, [])
-  assert.deepEqual(compareToBaseline({ 'a.ts': 2 }, baseline).regressions, [])
-  assert.deepEqual(compareToBaseline({ 'a.ts': 4 }, baseline).regressions, [
-    { file: 'a.ts', count: 4, allowed: 3 },
-  ])
-})
-
-test('baseline: a file absent from the baseline may not introduce any', () => {
-  assert.deepEqual(compareToBaseline({ 'new.ts': 1 }, {}).regressions, [
-    { file: 'new.ts', count: 1, allowed: 0 },
-  ])
-})
-
-test('baseline: a clean tree passes against any baseline', () => {
-  assert.deepEqual(compareToBaseline({}, { 'a.ts': 3 }).regressions, [])
-})
-
-test('baseline: removals are reported as improvements, not failures', () => {
-  const { regressions, improvements } = compareToBaseline({ 'a.ts': 1 }, { 'a.ts': 3 })
-  assert.deepEqual(regressions, [])
-  assert.deepEqual(improvements, [{ file: 'a.ts', count: 1, allowed: 3 }])
-})
-
-test('baseline: a deleted file is stale, never a failure', () => {
-  const { regressions, stale } = compareToBaseline({}, { 'gone.ts': 2 })
-  assert.deepEqual(regressions, [])
-  assert.deepEqual(stale, ['gone.ts'])
 })

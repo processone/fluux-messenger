@@ -97,7 +97,7 @@ describe('read pointer migration', () => {
 
 // ---------------------------------------------------------------------------
 // The post-rehydrate pass. `deserializeState` is synchronous, so the backfill
-// is fire-and-forget: Task 6b deletes the legacy fields, and a conversation the
+// is fire-and-forget: the migration deletes the legacy fields, and a conversation the
 // pass skipped would come back with no read position at all.
 // ---------------------------------------------------------------------------
 const OTHER = 'other@example.com'
@@ -260,7 +260,7 @@ describe('post-rehydrate readPointer backfill', () => {
     expect(chatStore.getState().conversations.get(CONV)?.unreadCount).toBe(4)
   })
 
-  // Task 2 (#1102): `deserializeState`'s NEW-FORMAT branch (conversationEntities +
+  // #1102: `deserializeState`'s NEW-FORMAT branch (conversationEntities +
   // conversationMeta) round-trips the structured tiebreak — asserted
   // directly rather than assumed from the plain messageId/timestamp case above.
   it('round-trips a persisted tiebreak through the new-format deserialize branch', async () => {
@@ -511,7 +511,7 @@ describe('unmigrated legacy read state survives the persist', () => {
 //
 // This is the EXPECTED sequel to a failed probe, not a corner case: the probe
 // fails because the cache cannot resolve the position yet, and MAM catch-up is
-// precisely what fills the cache. PR C, D6 deleted that snap entirely (no
+// precisely what fills the cache. That snap is deleted entirely (no
 // merge and no recount writes the pointer any more), so these tests now pin the
 // unconditional form of the same guarantee — the un-migrated conversation, and
 // a genuinely fresh one alongside it, both come through pointerless.
@@ -566,10 +566,10 @@ describe('catch-up hydration does not fabricate a pointer over un-migrated read 
     await vi.waitFor(() => expect(pointerOf(LATE)).toMatchObject({ order: { timestamp: 1500 }, identity: { messageId: 'l1' } }), { timeout: 2000 })
   })
 
-  // Control, inverted by PR C, D6. It used to assert that a conversation with
+  // Control, inverted. It no longer asserts that a conversation with
   // NO legacy read state still got the fresh-entity snap — proving the
   // per-conversation legacy stand-down was not a blanket disable. Both the snap
-  // and that stand-down are deleted now (D6 and Task 6b), so the control's job
+  // and that stand-down are deleted now, so the control's job
   // is the complement: FRESH carries no un-migrated read state at all, and it
   // still comes out of the merge pointerless. This is what keeps "pointerless"
   // from being an artefact of LATE's legacy state — a future change that

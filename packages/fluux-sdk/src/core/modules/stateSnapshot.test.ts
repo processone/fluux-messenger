@@ -178,7 +178,7 @@ describe('StateSnapshot', () => {
       expect(roomStore.getState().roomMeta.get('room@conf.example.com')?.readPointer).toEqual(restored)
     })
 
-    // PR B (Task 8, cold-start rehydrate trigger): a room restored here may
+    // Cold-start rehydrate trigger: a room restored here may
     // carry a stale `unreadCount` (the value this device last wrote, before
     // whatever arrived while the app was closed). `hydrate()` schedules an
     // archive-derived recompute for every restored room, mirroring
@@ -221,7 +221,7 @@ describe('StateSnapshot', () => {
       })
     })
 
-    // Task 2 (#1102): the structured tiebreak rides through this
+    // #1102: the structured tiebreak rides through this
     // surface too — round-tripped on both halves (write via flush, read back
     // via hydrate), not assumed from the plain-field case above.
     it('round-trips the tiebreak through flush and hydrate', async () => {

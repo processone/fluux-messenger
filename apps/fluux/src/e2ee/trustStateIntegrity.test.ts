@@ -9,7 +9,7 @@ const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
 const OWN_PUBLIC = 'OWN-PUBLIC-ARMOR'
 const passthroughEncrypt = async (plaintext: string) => plaintext
 
-// Predicate the plugin will supply (see Task 2). Inlined here to test the gate.
+// Predicate the plugin will supply. Inlined here to test the gate.
 const isKeyUnavailable = (err: unknown) =>
   err instanceof E2EEPluginError && (err.code === 'key-unrecoverable' || err.code === 'key-locked')
 

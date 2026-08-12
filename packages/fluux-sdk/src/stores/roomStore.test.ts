@@ -1097,7 +1097,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
     })
 
-    // PR C, D1: the outgoing early return is gone — an outgoing message only
+    // The outgoing early return is gone — an outgoing message only
     // clears unread state via `userSeesMessage`, same as any visible message.
     // "Sending a message" only means something as evidence of reading when the
     // room is genuinely active AND at the live edge, so the fixture must drive
@@ -1163,7 +1163,7 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         unreadCount: 7,
       }))
-      // PR C, D1: only reaches `userSeesMessage` — and so only advances the
+      // Only reaches `userSeesMessage` — and so only advances the
       // pointer/clears the count — once the room is genuinely active at the
       // live edge (real activation path, not raw `setState`).
       roomStore.getState().setActiveRoom('test@conference.example.com')
@@ -1180,7 +1180,7 @@ describe('roomStore', () => {
       expect(meta?.readPointer?.identity.messageId).toBe('msg-outgoing')
     })
 
-    // PR C, D1 — the NEGATIVE control for the two tests above, and the vector
+    // The NEGATIVE control for the two tests above, and the vector
     // #1081 exists to close. `isOutgoing` in a MUC is attributed by NICK, so a
     // reflection of somebody else's message (or of our own message sent from
     // another device) can arrive flagged outgoing at a room the user is not
@@ -2299,10 +2299,10 @@ describe('roomStore', () => {
       expect(roomStore.getState().activeRoomJid).toBe('test@conference.example.com')
     })
 
-    // Read-state PR B, final whole-branch-review FIX 2: this used to protect
+    // This used to protect
     // "activating a room force-zeroes unreadCount". That behaviour is removed —
     // the canonical count is derived exclusively from the archive
-    // (recomputeUnreadForRoom) and converges to 0 only through Task 11's
+    // (recomputeUnreadForRoom) and converges to 0 only through the
     // live-edge convergence, never as a side effect of merely opening the room.
     // This test now protects the opposite: setActiveRoom must leave the count
     // untouched.
@@ -2323,7 +2323,7 @@ describe('roomStore', () => {
     })
   })
 
-  // Twin of chatStore's "floor-derived divider plumbing" suite (read-state PR C,
+  // Twin of chatStore's "floor-derived divider plumbing" suite
   // D5). Both controls use a POINTERLESS room, because `computeFloor` is
   // pointer-wins and a pointer would make the deliberate break inert.
   describe('floor-derived divider plumbing (PR C, D5)', () => {
@@ -4667,7 +4667,7 @@ describe('roomStore', () => {
       expect(room?.mentionsCount).toBe(2)
     })
 
-    // Was 'snaps the pointer (fresh-join guard)'. PR C, D6 deleted that snap:
+    // Was 'snaps the pointer (fresh-join guard)'. That snap is gone:
     // a merge inferring "you have read everything I just downloaded" writes the
     // forward-only pointer past history the user never saw, and there is no way
     // back. A pointerless room now counts from its `historyFloor` creation
@@ -6368,7 +6368,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
    * The read message, timestamped EXPLICITLY and before the history below.
    * `createMessage`'s default `new Date()` would make the "already read" message
    * the NEWEST in the fixture while sitting first in the array — an ordering the
-   * resident array never has in production (PR B gave `messageArrayUtils` the
+   * resident array never has in production (`messageArrayUtils` uses the
    * same `compareExact` tie-break, so index order and cache order agree).
    */
   const seenMsg = (): RoomMessage =>
@@ -6394,7 +6394,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     // Same setup WITHOUT seeding a readPointer or unreadCount. `addRoom` stamps
     // the join watermark at "now", and the replayed history predates it, so
     // nothing sits after the boundary — that watermark, not `isDelayed`, is
-    // what keeps a fresh join marker-free (PR C, D5/D8).
+    // what keeps a fresh join marker-free.
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
       messages: [

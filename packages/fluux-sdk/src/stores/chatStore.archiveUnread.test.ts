@@ -1,5 +1,5 @@
 /**
- * Task 7 — chatStore.recomputeUnreadForConversation: archive-derived
+ * chatStore.recomputeUnreadForConversation: archive-derived
  * unread, coverage-gated, latest-wins, mentionsCount-preserving, divider-
  * rederiving.
  *
@@ -275,11 +275,11 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     chatStore.setState({ recomputeUnreadForConversation: original })
   })
 
-  // FIX 3 (final whole-branch review): resolveRemoteDisplayed resolves
+  // resolveRemoteDisplayed resolves
   // 'advanced-with-divider' — not 'advanced' — for the ACTIVE conversation,
   // and that branch used to be exempted from triggering a recount on the
-  // premise that an active entity's count was "already zero" (true before
-  // FIX 2). A spy-only assertion ("was recomputeUnreadForConversation
+  // premise that an active entity's count was "already zero"
+  // A spy-only assertion ("was recomputeUnreadForConversation
   // called?") would pass even if the guard inside still bailed early — the
   // real regression is that the count never actually changes — so this test
   // drives a REAL archive derivation (fake-indexeddb) end to end and asserts
@@ -364,7 +364,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
   }
 
-  // Rewritten for PR C, Task 6b: this used to assert the count FROZE at its
+  // This no longer asserts the count FROZE at its
   // persisted value while the legacy migration stayed unresolved. That
   // stand-down (`hasUnmigratedLegacyReadState`) is deleted — it was introduced
   // against a recount that could WRITE the pointer, and D6 deleted that pass, so
@@ -403,7 +403,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('p0')
   })
 
-  // Task 6b, residual state (a): pointerless, migration outstanding, persisted
+  // Residual state (a): pointerless, migration outstanding, persisted
   // count 0. The derivation counts from `historyFloor`, which for a pre-#1081
   // conversation is either absent (deferred by `if (!floor) return`) or stamped
   // at its first post-upgrade re-add — never BEHIND the legacy read position —
@@ -433,7 +433,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).toBeUndefined()
   })
 
-  // Task 6b control: retiring the legacy stand-down must NOT open the pointerless
+  // Control: retiring the legacy stand-down must NOT open the pointerless
   // path it used to overlap with. Same stuck-migration fixture as the two tests
   // above — the only difference is the nonzero persisted count, which is exactly
   // what `pointerlessDefers` exists to protect. Neutralise that check and this
@@ -505,7 +505,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(readRecountDeferrals()['chat:pointerless-defer']).toBe(1)
   })
 
-  // The reviewer's control, rewritten for PR C's D6 deletion.
+  // The reviewer's control.
   // It used to prove "the count is discarded" by showing the legacy guard pass
   // moved the POINTER while the count stayed put; that pass no longer exists,
   // so the control is rebuilt around the surviving mechanism: coverage IS
@@ -577,7 +577,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(readRecountDeferrals()['chat:coverage-unresolvable']).toBe(1)
   })
 
-  // FIX 4 (final whole-branch review, Minor (r)): the coverage gate's fourth
+  // The coverage gate's fourth
   // branch — a RESOLVED coverage bottom that sits ABOVE (i.e. strictly after)
   // the floor, meaning proven-contiguous coverage does not reach all the way
   // down to the floor — was the only one of the gate's four branches with no
@@ -610,7 +610,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   // ---------------------------------------------------------------------
-  // FIX 5 (final whole-branch review): same-millisecond live-arrival ordering
+  // Same-millisecond live-arrival ordering
   // ---------------------------------------------------------------------
 
   // appendLive used to append live arrivals in ARRIVAL order (never sorted),
@@ -661,7 +661,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   // ---------------------------------------------------------------------
-  // FIX 6 (final whole-branch review): active-but-scrolled-up noLocalStore
+  // Active-but-scrolled-up noLocalStore
   // arrivals must be recorded in the overlay
   // ---------------------------------------------------------------------
 
@@ -717,7 +717,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     await chatStore.getState().recomputeUnreadForConversation(CID)
 
     // The real archive has NO row for the ephemeral message (it was never
-    // saved) — without FIX 6 the overlay would be empty here too, and the
+    // saved) — without the transient overlay the overlay would be empty here too, and the
     // count would silently drop to 0.
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
   })
@@ -918,7 +918,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // divider rederivation
   // ---------------------------------------------------------------------
 
-  // Rewritten for PR C, D6: the rederivation scans the RESIDENT array now
+  // The rederivation scans the RESIDENT array now
   // (the guard pass's cache-window read went with the guard pass), so this
   // test drives the path that actually reaches it — an `allowActive` recount
   // on the ACTIVE conversation. That is the only path in production: a marker
@@ -1228,7 +1228,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   // ---------------------------------------------------------------------
   // final-fix-2: the previous fix wave removed onActivate's force-zero for
   // the active entity but added no replacement trigger — a pointer that
-  // advances (Task 11 live-edge convergence) or an entity that deactivates
+  // advances (live-edge convergence) or an entity that deactivates
   // never re-derived the COUNT to match. These tests pin the two triggers
   // this fix adds: advanceReadPointer and setActiveConversation's
   // deactivation branch. Every seed below is a NONZERO value distinct from
@@ -1370,7 +1370,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
   })
 
   // ---------------------------------------------------------------------
-  // PR C, D6: the pointer-writing recount (recomputeCountsFromPointer) is
+  // The pointer-writing recount (recomputeCountsFromPointer) is
   // gone. Both of its pointer effects — the fresh-entity snap and the
   // outgoing-boundary advance — were heuristics that could move the
   // forward-only read pointer past messages the user never saw.
@@ -1499,7 +1499,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
       expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(2)
     })
 
-    // Carried from PR B: the race the no-mistakes gate's round-2 fix already
+    // The race the no-mistakes gate's round-2 fix already
     // closed. This PIN proves the input-version guard is load-bearing, so a later
     // refactor cannot quietly drop it.
     it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
@@ -1570,7 +1570,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
     // Discrimination control, per final-fix-3 above: seed-5/assert-0 would
     // also be satisfied by a force-zero on activation — the very behaviour
-    // FIX 2 walked back. With the pointer SHORT of newest, force-zero lands on
+    // that was walked back. With the pointer SHORT of newest, force-zero lands on
     // 0 (wrong), a missing trigger leaves 5 (wrong), only a real derivation
     // lands on 2.
     it('opening a conversation with the pointer short of the newest message derives the true remainder, not zero', async () => {

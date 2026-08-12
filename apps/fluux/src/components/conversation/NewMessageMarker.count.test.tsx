@@ -1,5 +1,5 @@
 /**
- * NewMessageMarker's count-driven label (Read-state PR B, Task 12). Uses the REAL react-i18next
+ * NewMessageMarker's count-driven label. Uses the REAL react-i18next
  * (via the global test-setup.ts init), unlike NewMessageMarker.test.tsx's `t: (k) => k` echo mock,
  * because these assertions need the actual interpolated/pluralized text.
  */

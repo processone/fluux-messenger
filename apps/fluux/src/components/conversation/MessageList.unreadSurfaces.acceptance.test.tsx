@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * Read-state PR B, Task 12 — acceptance scenarios 1-7 from
+ * Acceptance scenarios 1-7 from
  * docs/superpowers/specs/2026-07-23-read-state-unread-count-single-source-acceptance.md,
  * implemented verbatim at the MessageList component boundary: every numeric surface
  * (sidebar excluded here — see ConversationList.badge.test.tsx / roomTooltip.test.ts)
@@ -153,7 +153,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     // FAB badge shows the same canonical number.
     expect(fabBadge(scrollCtx.container)?.textContent).toBe('2')
 
-    // FIX 7 (final whole-branch review): the title promises "(and pill)" but this test never
+    // The title promises "(and pill)" but this test never
     // asserted it — scroll PAST the divider (its pixel offset now behind the current scrollTop,
     // the pill's own visibility condition) so it actually renders, and assert its OWN text. This
     // is a REAL break check (distinct from the FAB/divider assertions above): a stale or

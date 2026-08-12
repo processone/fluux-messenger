@@ -119,7 +119,7 @@ describe('messageTimeline', () => {
     //
     // A "delayed" arrival reaches appendLive on the LIVE path but carries an
     // older timestamp: offline replay, gateway/MUC history, the MAM `{ids}`
-    // fetch behind deferred poll-closed verification. FIX 5's sort is a total
+    // fetch behind deferred poll-closed verification. appendLive's sort is a total
     // order over the whole resident array, so it does not distinguish these
     // from same-millisecond siblings — it repositions them too. The two tests
     // below pin that consequence, which no test covered before.

@@ -26,7 +26,7 @@ import { makeReadPointer, type ReadPointer } from './readPointer'
  * Default timestamp is "now" so freshness checks pass in shouldNotify tests.
  * Default `body` is non-empty so every test using this helper represents an
  * ordinary renderable message unless it deliberately overrides `body` (or
- * another renderability field) to exercise the Task 9 guard itself.
+ * another renderability field) to exercise the guard itself.
  */
 function makeMsg(overrides: Partial<NotificationMessage> = {}): NotificationMessage {
   return {
@@ -99,7 +99,7 @@ const ACTIVE_HIDDEN: EntityContext = { isActive: true, windowVisible: false, unr
 const INACTIVE_VISIBLE: EntityContext = { isActive: false, windowVisible: true, unreadCount: 1 }
 const INACTIVE_HIDDEN: EntityContext = { isActive: false, windowVisible: false, unreadCount: 1 }
 // Active + focused, but the viewport is scrolled up (not at the live edge) —
-// the Task 11 negative control: `onMessageReceived` must NOT advance the
+// the negative control: `onMessageReceived` must NOT advance the
 // pointer here, unlike the pre-Task-11 code (which treated ACTIVE_VISIBLE's
 // isActive+windowVisible alone as "seen").
 const ACTIVE_VISIBLE_SCROLLED_UP: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1, viewportAtLiveEdge: false }
@@ -124,7 +124,7 @@ describe('onMessageReceived', () => {
       expect(result.readPointer).toMatchObject({ order: { timestamp: msg.timestamp.getTime() }, identity: { messageId: msg.id } })
     })
 
-    // Superseded by PR C, D1: the outgoing early return that used to clear
+    // The outgoing early return that used to clear
     // state unconditionally is gone. A backgrounded outgoing message (a carbon
     // from another device, or a nick-misattributed MUC reflection) is exactly
     // the vector #1081 exists to close — it must NOT clear the unread count.
@@ -416,15 +416,15 @@ describe('onActivate', () => {
     expect(result.firstNewMessageId).toBeUndefined()
   })
 
-  // Read-state PR B, final whole-branch-review FIX 2: activation used to force
+  // Activation used to force
   // unreadCount to 0 unconditionally, as if opening an entity were the same
   // event as reading it. It is not — the one canonical count is derived
   // exclusively from the archive (recomputeUnreadForConversation /
-  // recomputeUnreadForRoom) and converges to 0 only through Task 11's
+  // recomputeUnreadForRoom) and converges to 0 only through the
   // live-edge convergence. This test used to protect "activation zeroes both
   // counts"; it now protects the opposite for unreadCount — activation must
-  // leave it exactly as given. mentionsCount is untouched by this fix (out of
-  // PR B's scope, see Task 4R) and still clears on open.
+  // leave it exactly as given. mentionsCount is untouched (out of
+  // scope) and still clears on open.
   it('leaves unreadCount unchanged but clears mentionsCount', () => {
     const state = makeState({ unreadCount: 5, mentionsCount: 2, readPointer: seenIn(messages, 'msg-2') })
     const result = onActivate(state, messages, 'chat')
@@ -703,7 +703,7 @@ describe('onActivate — floor-derived divider (PR C, D5)', () => {
   //
   // Pointer m2@2000 (keyed, absent from the slice); m3@2000 is resident.
   //   before -> ladder finds the first message strictly after 2000 => 'm4'
-  //   PR C   -> mayAdvanceTo ranks m3 after m2 at the same ms  => 'm3'
+  //   now    -> mayAdvanceTo ranks m3 after m2 at the same ms  => 'm3'
   it('places the divider on a same-millisecond sibling of a NON-RESIDENT pointer', () => {
     const state = { unreadCount: 2, mentionsCount: 0,
       readPointer: makeReadPointer({ id: 'm2', timestamp: new Date(2000) }, 'chat'),
@@ -1154,7 +1154,7 @@ describe('onMessageSeen — position comparison (PR C, D4)', () => {
   // BEHIND the read boundary. The boundary is forward-only, so that is
   // permanent: those messages will never carry the divider or a `+1` again.
   //
-  // This was raised by the PR C whole-branch review and ACCEPTED by the plan
+  // This was raised in review and accepted
   // owner: the observer only ever reports a row the user is actually looking at,
   // and the same skip already happens within a resident slice (jump to the top of
   // a loaded window, scroll to its bottom, everything between is marked read).
@@ -1343,7 +1343,7 @@ describe('lifecycle sequences', () => {
     // Start: user has seen m1, messages m2 and m3 arrived while away
     let state = makeState({ readPointer: seenIn(messages, 'm1'), unreadCount: 2 })
 
-    // User opens conversation. FIX 2: opening is not reading — the divider is
+    // User opens conversation. Opening is not reading — the divider is
     // positioned but unreadCount passes through untouched (2, not force-zeroed).
     // The count only converges to 0 once the archive derivation re-runs off the
     // pointer `onMessageSeen` below advances — a store-layer concern this pure
@@ -1614,7 +1614,7 @@ describe('readPointer is the whole read position (#1081)', () => {
     id, timestamp: new Date(ms), isOutgoing: false, ...over,
   })
 
-  // PR C, D1: an outgoing message only ever advances the pointer via the
+  // An outgoing message only ever advances the pointer via the
   // `userSeesMessage` branch now (there is no more outgoing early return), so
   // this fixture must supply live-edge evidence — a backgrounded context would
   // leave the pointer untouched and this assertion would be testing nothing.

@@ -253,7 +253,7 @@ describe('coverage (de)serialization', () => {
 })
 
 describe('isCaughtUpForCounting', () => {
-  // Task 5's whole point: this gate is STRICTER than the publisher's
+  // The gate's whole point: this gate is STRICTER than the publisher's
   // `archiveIsTrustworthy` (mdsSideEffects.ts:200), which treats "never
   // queried and not loading" as trustworthy. That shortcut is correct for a
   // freshly-created entity (nothing to misreport) but unsafe here: a

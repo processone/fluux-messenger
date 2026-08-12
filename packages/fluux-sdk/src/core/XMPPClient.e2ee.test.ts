@@ -26,7 +26,7 @@ vi.mock('../utils/messageCache', () => ({
   getMessagesWithEncryptedPayload: vi.fn().mockResolvedValue([]),
   getMessage: vi.fn().mockResolvedValue(null),
   getMessageByStanzaId: vi.fn().mockResolvedValue(null),
-  // PR B (archive-derived unread): recomputeUnreadForConversation's coverage
+  // recomputeUnreadForConversation's coverage
   // gate resolves the coverage bottom and counts through these — tests that
   // exercise the phantom-badge fix past the gate override them.
   countUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
@@ -625,7 +625,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // Model the catch-up state: read pointer at 'read-msg', with the two later
       // incoming messages (the real one + the phantom reaction) counted as unread.
       //
-      // PR B (archive-derived unread): recomputeUnreadForConversation now
+      // recomputeUnreadForConversation now
       // derives the corrected count from the durable archive instead of the
       // resident window, gated on proven MAM coverage — so this also models a
       // conversation whose catch-up already completed (isCaughtUpToLive, a
@@ -633,7 +633,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // is the realistic state by the time a deferred decrypt runs. Without
       // this the derivation would correctly DEFER (see chatStore.test.ts's
       // "phantom-badge cleanup" describe for that control) and the badge
-      // fix below would not apply — this test proves the fix survives PR B.
+      // fix below would not apply — this test proves the fix survives the recount.
       const readPointer: ReadPointer = {
         order: {
           role: 'exact',
@@ -868,7 +868,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
   })
 
   describe('deferred-decrypt room recount (Task 8)', () => {
-    // The room-side gap this task closes: before Task 8, retryPending()
+    // The room-side gap this task closes: retryPending() once
     // resolved an encrypted room message (decrypted / rejected / unsupported)
     // but called NO recount — recomputeUnreadForRoom did not exist. A room's
     // badge can be stale for reasons unrelated to any one message (a prior

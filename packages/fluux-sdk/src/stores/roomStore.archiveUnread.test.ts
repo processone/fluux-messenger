@@ -1,5 +1,5 @@
 /**
- * Task 8 — roomStore.recomputeUnreadForRoom: archive-derived unread,
+ * roomStore.recomputeUnreadForRoom: archive-derived unread,
  * coverage-gated, latest-wins, mentionsCount-preserving, divider-rederiving.
  *
  * Mirrors chatStore.archiveUnread.test.ts — see that file for the
@@ -299,10 +299,10 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(5)
   })
 
-  // FIX 3 (final whole-branch review): resolveRemoteDisplayed resolves
+  // resolveRemoteDisplayed resolves
   // 'advanced-with-divider' — not 'advanced' — for the ACTIVE room, and that
   // branch used to be exempted from triggering a recount on the premise that
-  // an active entity's count was "already zero" (true before FIX 2). A
+  // an active entity's count was "already zero". A
   // spy-only assertion ("was recomputeUnreadForRoom called?") would pass even
   // if the default active-room no-op above still applied to it — the real
   // regression is that the count never actually changes — so this test
@@ -399,8 +399,8 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(readRecountDeferrals()['room:pointerless-defer']).toBe(1)
   })
 
-  // The reviewer's control (requirement 1, mirrored from Task 7), rewritten
-  // for PR C's D6 deletion. It used to prove "the count is discarded" by
+  // The reviewer's control
+  // for the deleted pointer-writing pass. It no longer proves "the count is discarded" by
   // showing the legacy guard pass moved the POINTER while the count stayed
   // put; that pass no longer exists, so the control is rebuilt around the
   // surviving mechanism: coverage IS seeded and resolvable and the archive IS
@@ -472,7 +472,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(readRecountDeferrals()['room:coverage-unresolvable']).toBe(1)
   })
 
-  // FIX 4 (final whole-branch review, Minor (r)): the coverage gate's fourth
+  // The coverage gate's fourth
   // branch — a RESOLVED coverage bottom that sits ABOVE (i.e. strictly after)
   // the floor, meaning proven-contiguous coverage does not reach all the way
   // down to the floor — was the only one of the gate's four branches with no
@@ -509,7 +509,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
 
   // ---------------------------------------------------------------------
-  // FIX 5 (final whole-branch review): same-millisecond live-arrival ordering
+  // Same-millisecond live-arrival ordering
   // ---------------------------------------------------------------------
 
   // appendLive used to append live arrivals in ARRIVAL order (never sorted),
@@ -566,7 +566,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // ---------------------------------------------------------------------
-  // FIX 6 (final whole-branch review): active-but-scrolled-up noLocalStore
+  // Active-but-scrolled-up noLocalStore
   // arrivals must be recorded in the overlay
   // ---------------------------------------------------------------------
 
@@ -622,7 +622,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
 
     // The real archive has NO row for the ephemeral message (it was never
-    // saved) — without FIX 6 the overlay would be empty here too, and the
+    // saved) — without the transient overlay the overlay would be empty here too, and the
     // count would silently drop to 0.
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
   })
@@ -804,7 +804,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
   }
 
-  // Rewritten for PR C, D6: the rederivation scans the RESIDENT array now
+  // The rederivation scans the RESIDENT array now
   // (the guard pass's cache-window read went with the guard pass), so this
   // test drives the path that actually reaches it — an `allowActive` recount
   // on the ACTIVE room. That is the only path in production: a marker survives
@@ -1077,7 +1077,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // ---------------------------------------------------------------------
   // final-fix-2: the previous fix wave removed onActivate's force-zero for
   // the active entity but added no replacement trigger — a pointer that
-  // advances (Task 11 live-edge convergence) or an entity that deactivates
+  // advances (live-edge convergence) or an entity that deactivates
   // never re-derived the COUNT to match. These tests pin the two triggers
   // this fix adds: advanceReadPointer and setActiveRoom's deactivation
   // branch — the room twins of chatStore.archiveUnread.test.ts's. Every seed
@@ -1221,7 +1221,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // ---------------------------------------------------------------------
-  // PR C, D6: the pointer-writing recount (recomputeCountsFromPointer) is
+  // The pointer-writing recount (recomputeCountsFromPointer) is
   // gone. Both of its pointer effects — the fresh-entity snap and the
   // outgoing-boundary advance — were heuristics that could move the
   // forward-only read pointer past messages the user never saw. In a MUC the
@@ -1360,7 +1360,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
       expect(roomStore.getState().roomMeta.get(ROOM)?.mentionsCount).toBe(4)
     })
 
-    // Carried from PR B: the race the no-mistakes gate's round-2 fix already
+    // The race the no-mistakes gate's round-2 fix already
     // closed. This PIN proves the input-version guard is load-bearing, so a later
     // refactor cannot quietly drop it.
     it('a live arrival during an in-flight recount is not clobbered by the stale result', async () => {
@@ -1446,7 +1446,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The discrimination control, in the spirit of final-fix-3 above: the test
     // above seeds 5 and asserts 0, which a naive "force-zero on activation"
     // would also satisfy — and force-zeroing on activation is exactly the
-    // behaviour FIX 2 walked back. Here the pointer stops SHORT of the newest
+    // behaviour that was walked back. Here the pointer stops SHORT of the newest
     // message, so genuinely unread messages remain: force-zero lands on 0
     // (wrong), a missing trigger leaves the stale 5 (wrong), and only a real
     // archive derivation lands on 2.

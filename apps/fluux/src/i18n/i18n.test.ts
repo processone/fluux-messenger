@@ -219,8 +219,8 @@ describe('i18n', () => {
       expect(testI18n.t('presence.yearsAgo', { count: 3 })).toBe('3y ago')
     })
 
-    // `count` (numeric) drives i18next's plural-form selection; `displayCount` (Read-state PR B,
-    // Task 12's formatUnreadCount) is what actually gets interpolated into the template — real
+    // `count` (numeric) drives i18next's plural-form selection; `displayCount`
+    // (formatUnreadCount) is what actually gets interpolated into the template — real
     // call sites (roomTooltip.ts, JumpToLastReadPill, NewMessageMarker) always pass both.
     it('should use English singular and plural for unread messages', async () => {
       await testI18n.changeLanguage('en')

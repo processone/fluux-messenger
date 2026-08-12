@@ -3021,7 +3021,7 @@ describe('SequoiaPgpPlugin', () => {
       const { getTrustStateStatus } = await import('@/stores/trustStateStatusStore')
       const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
 
-      // Phase 1 — a first plugin instance seals the trust state. A pin makes the
+      // Step 1 — a first plugin instance seals the trust state. A pin makes the
       // stores non-empty so a real seal (encrypted-to-self) is written, and a
       // secret-key backup is published so the later recovery can restore it.
       const { ctx: ctxA } = makeContext('me@example.com')
@@ -3040,7 +3040,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(backup).toBeTruthy()
       expect(getTrustStateStatus()).toBe('sealed')
 
-      // Phase 2 — a fresh plugin (same JID + key + seal) initialises, then its
+      // Step 2 — a fresh plugin (same JID + key + seal) initialises, then its
       // seal check is driven while the secret key is momentarily unusable: the
       // decrypt throws key-unrecoverable, so the verdict defers to
       // `awaiting-key`. We arm the one-shot failure immediately before invoking
@@ -3065,7 +3065,7 @@ describe('SequoiaPgpPlugin', () => {
       await passthroughB.verifyTrustStateOnInit()
       expect(getTrustStateStatus()).toBe('awaiting-key')
 
-      // Phase 3 — recovery restores the same cert; the recovery completion must
+      // Step 3 — recovery restores the same cert; the recovery completion must
       // re-run the seal check, which now decrypts cleanly against the unchanged
       // cert and resolves to `sealed`. The re-verify is fire-and-forget
       // (`void this.verifyTrustStateOnInit()`), so flush the microtask/timer

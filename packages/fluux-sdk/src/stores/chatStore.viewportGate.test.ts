@@ -1,5 +1,5 @@
 /**
- * Task 11 — SDK-owned generation-scoped viewport evidence gates the
+ * SDK-owned generation-scoped viewport evidence gates the
  * on-arrival pointer advance.
  *
  * Exercised against the REAL chatStore (not just the pure `notificationState`

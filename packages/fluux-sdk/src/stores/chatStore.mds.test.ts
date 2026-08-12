@@ -207,7 +207,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
 
   // Inbound read-state sync (spec §4): a marker published by another client
   // advances a backgrounded conversation's read POSITION immediately (the
-  // pointer is unconditional, forward-only). PR B (archive-derived unread)
+  // pointer is unconditional, forward-only). The archive-derived recount
   // no longer derives the COUNT from the page-scoped slice this method was
   // handed — that undercounts a multi-page pointer-stitch walk (see the next
   // test's comment) and can never be trusted as "exact". The count is instead
@@ -236,7 +236,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(3)
   })
 
-  // PR C, D3 widening — at the store layer, where it actually bites. The store
+  // The widening — at the store layer, where it actually bites. The store
   // CHOOSES the array: `mergeMAMMessages` hands `applyRemoteDisplayed` a single
   // trimmed MAM page (`mergedForMarker`, chatStore.ts:2954), and the pointer's
   // own message need not be in it. Before D3 that was `undefined`/undecidable and
@@ -271,7 +271,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
   // Multi-page background walk: the pointer resolves against only the FINAL
   // page (mergedForMarker), which undercounts a walk spanning several pages
   // (the fetch-latest page, earlier backward pages) — the badge would read
-  // ~9 instead of the true 19. PR B fixes this architecturally rather than by
+  // ~9 instead of the true 19. The archive-derived recount fixes this architecturally rather than by
   // re-reading a wider cache window: the archive-derived recount
   // (recomputeUnreadForConversation) cursors the DURABLE ARCHIVE from the
   // floor forward, so it has no page-boundary undercount to begin with. It
@@ -309,7 +309,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     chatStore.getState().mergeMAMMessages(cid, backwardPage, { first: 's-ptr' }, false, 'backward')
 
     // Pointer resolved at p0 (forward-only sync is unconditional and
-    // unaffected by PR B).
+    // unaffected by the archive-derived count).
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('p0')
 
     // The archive-derived recount runs (fire-and-forget) but defers: no
@@ -899,7 +899,7 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(5)
   })
 
-  // Control for the test above, inverted by PR C, D6. It used to assert that
+  // Control for the test above, inverted. It no longer asserts that
   // WITHOUT a pending marker the merge snapped the pointer to 'm10' — proving
   // the marker check was what suppressed the snap. That snap is deleted, so the
   // control now proves the complement, which is the stronger statement: the

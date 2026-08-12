@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  *
  * Tests for the scroll-to-bottom FAB (floating action button):
- * - Badge shows the ONE canonical `unreadCount` prop (Read-state PR B, Task 12) — never a
+ * - Badge shows the ONE canonical `unreadCount` prop — never a
  *   recount of the resident/below-viewport message array. Scrolling is navigation, not read
  *   state: the badge must not react to scroll position at all.
  * - Two-step scroll behavior (marker first, then bottom) — geometry-driven, unchanged by the
@@ -366,7 +366,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge()?.textContent).toBe('3')
     })
 
-    // Each numeric surface needs a 998/999/1000 test (Read-state PR B, Task 12): the store
+    // Each numeric surface needs a 998/999/1000 test: the store
     // saturates at 999 and never reaches 1000, so `formatUnreadCount` must render 999 as "999+",
     // not the exact "999".
     it('caps the badge at 999+ for a saturated canonical count (998/999/1000)', () => {

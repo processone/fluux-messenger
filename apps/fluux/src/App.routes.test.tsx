@@ -2,7 +2,6 @@
  * Tests for App routing configuration.
  *
  * Verifies that routes are set up correctly and render ChatLayout.
- * Phase 2+ will test actual route-based view selection.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
