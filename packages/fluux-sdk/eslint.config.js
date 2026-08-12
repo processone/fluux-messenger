@@ -1,6 +1,27 @@
 import eslint from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
+// The stores barrel is for consumers only. Internal modules must import the
+// concrete store file, otherwise stores/index.ts lands back in an import cycle
+// with core/ and Rollup emits "reexported through ... circular dependency
+// between chunks" warnings when it bundles the type declarations.
+const noStoresBarrel = {
+  // Only the barrel itself ('./stores', '../stores', '../../stores'),
+  // never the concrete modules underneath it ('../stores/chatStore').
+  regex: '^(\\.{1,2}/)+stores$',
+  message:
+    "Import the concrete store module (e.g. '../stores/chatStore') instead of the '../stores' barrel - the barrel is the public entry point and re-exporting through it creates an import cycle with core/.",
+}
+
+// Mirror restriction, applied inside stores/ only: the core barrel re-exports
+// XMPPClient, so a store reaching for a TYPE through it drags the whole client
+// into the graph and puts the store back inside core's dependency cycle.
+const noCoreBarrel = {
+  regex: '^(\\.{1,2}/)+core$',
+  message:
+    "Import from '../core/types' (or the declaring module) instead of the '../core' barrel - the barrel re-exports XMPPClient, so a store importing through it re-creates the core/stores import cycle.",
+}
+
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -29,24 +50,14 @@ export default tseslint.config(
       'prefer-const': 'error',
       // Allow console - SDK needs logging for debugging and error reporting
       'no-console': 'off',
-      // The stores barrel is for consumers only. Internal modules must import the
-      // concrete store file, otherwise stores/index.ts lands back in an import cycle
-      // with core/ and Rollup emits "reexported through ... circular dependency
-      // between chunks" warnings when it bundles the type declarations.
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              // Only the barrel itself ('./stores', '../stores', '../../stores'),
-              // never the concrete modules underneath it ('../stores/chatStore').
-              regex: '^(\\.{1,2}/)+stores$',
-              message:
-                "Import the concrete store module (e.g. '../stores/chatStore') instead of the '../stores' barrel - the barrel is the public entry point and re-exporting through it creates an import cycle with core/.",
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': ['error', { patterns: [noStoresBarrel] }],
+    },
+  },
+  {
+    // Stores sit BELOW core: they may name core's types, never reach its client.
+    files: ['src/stores/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [noStoresBarrel, noCoreBarrel] }],
     },
   },
   {

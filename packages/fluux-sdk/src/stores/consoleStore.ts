@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import type { XmppPacket } from '../core'
+import type { XmppPacket } from '../core/types'
 import { generateUUID } from '../utils/uuid'
 
 const MAX_ENTRIES = 2000

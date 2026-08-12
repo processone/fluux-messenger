@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core'
+import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
