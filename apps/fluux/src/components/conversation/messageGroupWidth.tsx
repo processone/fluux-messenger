@@ -101,7 +101,7 @@ export class OwnGroupWidthRegistry {
     this.dirty.clear()
     if (entries.length === 0) return
 
-    // Phase 1 (write): free every member to its natural width so we can read it.
+    // Step 1 (write): free every member to its natural width so we can read it.
     // Reset any prior `min-width` too, or a stale pin would inflate the reading
     // and the group max could only ever ratchet upward.
     for (const g of entries) {
@@ -110,7 +110,7 @@ export class OwnGroupWidthRegistry {
         el.style.minWidth = '0'
       }
     }
-    // Phase 2 (read): a single forced layout for the whole batch, then the max
+    // Step 2 (read): a single forced layout for the whole batch, then the max
     // natural width per group. `max-content` is still clamped by the box's
     // `max-w-full`, so a long/wrapping line reads as the available width and its
     // group becomes full-width — exactly as before.
@@ -122,7 +122,7 @@ export class OwnGroupWidthRegistry {
       }
       return max
     })
-    // Phase 3 (write): size every member to the group max via `min-width`, not a
+    // Step 3 (write): size every member to the group max via `min-width`, not a
     // hard `width`, and release the measurement width back to the CSS `w-fit`.
     // `min(${max}px, 100%)`: shorter rows stretch UP to the group max so the tint
     // reads as one clean rectangle, but a row whose content is wider than a

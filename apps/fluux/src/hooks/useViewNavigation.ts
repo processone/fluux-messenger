@@ -1,7 +1,7 @@
 /**
  * useViewNavigation - Consolidated navigation state coordination hook
  *
- * Phase 3: Extracts complex navigation state from ChatLayout into a reusable hook.
+ * Extracts complex navigation state from ChatLayout into a reusable hook.
  *
  * Responsibilities:
  * - Per-tab memory (remembers last selection when switching tabs)

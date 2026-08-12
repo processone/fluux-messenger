@@ -42,9 +42,8 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
  * `timestamp` defaults to `new Date()` for the existing call sites, but pass it
  * EXPLICITLY whenever a test advances a read pointer across two messages.
  *
- * NOT because a same-millisecond pair can never advance — read-state PR C
- * (task 1) changed exactly that. Two EXACT positions sharing a millisecond now
- * break the tie on the cache order key: `isAhead` (shared/readPointer.ts) does
+ * NOT because a same-millisecond pair can never advance. Two EXACT positions
+ * sharing a millisecond break the tie on the cache order key: `isAhead` (shared/readPointer.ts) does
  * it, and `advanceReadPointer` routes through `onMessageSeen`'s exact-order
  * `mayAdvanceTo`, which does it too. The bare "equal timestamps are NOT an
  * advance" rule now applies ONLY when either side is a FLOOR — i.e. a pointer

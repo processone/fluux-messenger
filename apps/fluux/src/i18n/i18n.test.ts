@@ -241,7 +241,7 @@ describe('i18n', () => {
       expect(testI18n.t('rooms.unreadMessages', { count: 12, displayCount: '12' })).toBe('12 nieprzeczytanych wiadomości')
     })
 
-    // Read-state PR B, Task 12: the store saturates at 999, and formatUnreadCount renders that
+    // The store saturates at 999, and formatUnreadCount renders that
     // (and anything past it) as "999+" while `count` keeps driving plural selection.
     it('renders the capped displayCount for a saturated unread count (998/999/1000)', async () => {
       await testI18n.changeLanguage('en')

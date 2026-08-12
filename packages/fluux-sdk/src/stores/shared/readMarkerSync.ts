@@ -56,13 +56,12 @@ export type RemoteDisplayedResolution =
 /**
  * Decide whether the remote marker `match` is a forward advance over `current`.
  *
- * Three branches (read-state PR C, D3), because the no-pointer case is NOT the
+ * Three branches, because the no-pointer case is NOT the
  * same as the floor one:
  *
- * - **No pointer** — any resolvable marker is an advance. This is what the code
- *   did before PR C (an undefined pointer made the residency check vacuously
- *   true, so `onMessageSeen` took its own no-pointer path); it is preserved
- *   explicitly so it cannot be lost by refactoring.
+ * - **No pointer** — any resolvable marker is an advance. Stated explicitly,
+ *   rather than falling out of a vacuously-true residency check, so it cannot
+ *   be lost by refactoring.
  * - **Exact pointer** — decide by cache position, with no residency
  *   requirement. An exact order certifies that the pointer's timestamp is its
  *   named message's own, which is exactly the guarantee the old comment here
@@ -137,7 +136,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   // forward scan). No `historyFloor` is threaded here, deliberately: this branch
   // is reached only after an advance, so `readPointer` is always defined and
   // `computeFloor` is pointer-wins — a floor would be a field no code path could
-  // read (read-state PR C, D5).
+  // read.
   //
   // If the pointer caught up and the scan finds no new boundary, keep the active
   // visit's parked divider (`divider ?? currentFirstNewMessageId` below): pointer

@@ -1416,7 +1416,7 @@ describe('live paths — identity-resolving upsert + alias lookups + mutations',
 })
 
 // =============================================================================
-// Task 4: archive count primitive (countUnreadInArchive / countRoomUnreadInArchive)
+// Archive count primitive (countUnreadInArchive / countRoomUnreadInArchive)
 // =============================================================================
 
 describe('countUnreadInArchive (chat)', () => {

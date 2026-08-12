@@ -1,5 +1,5 @@
 /**
- * Task 7 (PR B) — chatStore.recomputeUnreadForConversation: archive-derived
+ * Task 7 — chatStore.recomputeUnreadForConversation: archive-derived
  * unread, coverage-gated, latest-wins, mentionsCount-preserving, divider-
  * rederiving.
  *
@@ -322,7 +322,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('p0')
     // The divider was positioned at the first message after the new pointer.
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('u1')
-    // FIX 3: the count is re-derived from the archive (u1, u2, u3), not left
+    // The count is re-derived from the archive (u1, u2, u3), not left
     // at the stale 99 a guard that still exempted the active entity would
     // produce. The recount is fire-and-forget (cache read, coverage resolve,
     // and countUnreadInArchive are all real async calls against
@@ -505,7 +505,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(readRecountDeferrals()['chat:pointerless-defer']).toBe(1)
   })
 
-  // The reviewer's control (requirement 1), rewritten for PR C's D6 deletion.
+  // The reviewer's control, rewritten for PR C's D6 deletion.
   // It used to prove "the count is discarded" by showing the legacy guard pass
   // moved the POINTER while the count stayed put; that pass no longer exists,
   // so the control is rebuilt around the surviving mechanism: coverage IS
@@ -705,7 +705,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // The live +1 fires (correct at the time — onMessageReceived's own gate
     // refused the pointer advance since viewportAtLiveEdge isn't 'at-edge').
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(1)
-    // FIX 6: also recorded in the overlay — a noLocalStore message's ONLY
+    // Also recorded in the overlay — a noLocalStore message's ONLY
     // durable representation, since it is never archived.
     expect(
       transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: CID }, undefined).unread
@@ -788,7 +788,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',
   // which blocked on the guard pass's cache read. That read is gone with the
-  // guard pass (PR C, D6), so the same invariant — a derivation computed under
+  // guard pass, so the same invariant — a derivation computed under
   // one account must never commit into another's state — is now pinned on the
   // remaining await, the archive count. Nothing else about the recount context
   // changes across the swap here (no switchAccount, so the cache epoch, the

@@ -30,7 +30,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
     msgs.find((m) => m.id === id) ?? msgs.find((m) => m.stanzaId === id),
 }))
 
-// Cache reads moved to the @fluux/sdk/cache escape-hatch subpath (Phase 2).
+// Cache reads moved to the @fluux/sdk/cache escape-hatch subpath.
 vi.mock('@fluux/sdk/cache', () => ({
   getMessage: (...args: unknown[]) => mockGetCachedMessage(...args),
   getMessageByStanzaId: (...args: unknown[]) => mockGetCachedMessageByStanzaId(...args),

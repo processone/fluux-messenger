@@ -30,7 +30,7 @@ vi.mock('../utils/messageCache', () => ({
   // gate resolves the coverage bottom and counts through these — tests that
   // exercise the phantom-badge fix past the gate override them.
   countUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
-  // PR B (Task 8): recomputeUnreadForRoom's room counterpart.
+  // RecomputeUnreadForRoom's room counterpart.
   countRoomUnreadInArchive: vi.fn().mockResolvedValue({ unread: 0 }),
   resolveArchivePosition: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),

@@ -5,7 +5,7 @@
  * - useDeepLink: when opening xmpp: URIs
  * - useDesktopNotifications: when clicking notifications
  *
- * Phase 2.4: Uses React Router for navigation instead of callback handlers.
+ * Uses React Router for navigation instead of callback handlers.
  */
 import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router'

@@ -86,7 +86,7 @@ describe('chatStore', () => {
     // Reset store state before each test
     localStorageMock.clear()
     chatStore.setState({
-      // Reset separated maps (Phase 6)
+      // Reset separated maps
       conversationEntities: new Map(),
       conversationMeta: new Map(),
       // Reset combined map
@@ -117,13 +117,13 @@ describe('chatStore', () => {
     // against it leaking noted entries across `it()` blocks (roomStore's twin
     // suite hit exactly this with fixed message ids reused across tests).
     _clearAllTransientForTesting()
-    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // Viewport evidence is ALSO a module-level Map outside any store —
     // same leakage risk across `it()` blocks reusing the same conversation id.
     _clearAllViewportEvidenceForTesting()
   })
 
   /**
-   * Task 11: simulate the view reporting "genuinely at the live edge" for the
+   * Simulate the view reporting "genuinely at the live edge" for the
    * CURRENT activation generation — mirrors what `ChatView`'s `reportLiveEdge`
    * callback does in the real app after `setActiveConversation` runs. Tests
    * that pre-date Task 11 assumed `isActive && windowVisible` alone meant
@@ -985,7 +985,7 @@ describe('chatStore', () => {
 
   // The divider is the first message the canonical count would count, derived
   // from the read BOUNDARY (`computeFloor`) rather than from a resident-slice
-  // ladder (read-state PR C, D5). These two controls cover the chat store's two
+  // ladder. These two controls cover the chat store's two
   // plumbed `historyFloor` sites; both use a POINTERLESS conversation, because
   // `computeFloor` is pointer-wins and a pointer would make the break inert.
   describe('floor-derived divider plumbing (PR C, D5)', () => {
@@ -1379,7 +1379,7 @@ describe('chatStore', () => {
     it('should not increment unreadCount when conversation is active AND at the live edge', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().setActiveConversation('alice@example.com')
-      // Task 11: "active" alone is no longer sufficient — the view must also have
+      // "active" alone is no longer sufficient — the view must also have
       // reported the viewport as genuinely at the live edge for THIS activation.
       reportAtLiveEdge('alice@example.com')
 
@@ -1983,7 +1983,7 @@ describe('chatStore', () => {
         timestamp: messageTimestamp,
         isOutgoing: false,
       })
-      // Task 11: the pointer advance now also requires viewport evidence that the
+      // The pointer advance now also requires viewport evidence that the
       // reader is genuinely at the live edge. Activate through the REAL store action
       // (sole caller of beginViewportGeneration) so the report lands on the current
       // generation — a raw setState would leave it stale and silently ignored.
@@ -2034,7 +2034,7 @@ describe('chatStore', () => {
         isOutgoing: false,
       })
 
-      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // Viewport evidence for the CURRENT activation generation is now a
       // precondition of the advance (see the fixture note above).
       chatStore.getState().setActiveConversation('alice@example.com')
       reportAtLiveEdge('alice@example.com')
@@ -2064,7 +2064,7 @@ describe('chatStore', () => {
         isOutgoing: false,
       })
 
-      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // Viewport evidence for the CURRENT activation generation is now a
       // precondition of the advance (see the fixture note above).
       chatStore.getState().setActiveConversation('alice@example.com')
       reportAtLiveEdge('alice@example.com')
@@ -3014,7 +3014,7 @@ describe('chatStore', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       chatStore.getState().addConversation(createConversation('bob@example.com'))
 
-      // View Alice's conversation, genuinely at the live edge (Task 11).
+      // View Alice's conversation, genuinely at the live edge.
       chatStore.getState().setActiveConversation('alice@example.com')
       reportAtLiveEdge('alice@example.com')
 
@@ -3887,7 +3887,7 @@ describe('chatStore', () => {
       chatStore.setState({ activeConversationId: 'other@example.com' })
     })
 
-    // PR B: a forward merge into a non-active conversation no longer writes a
+    // A forward merge into a non-active conversation no longer writes a
     // page-scoped count synchronously — it schedules recomputeUnreadForConversation
     // (fire-and-forget), which derives the badge from the durable archive instead
     // (see chatStore.archiveUnread.test.ts for the exact-outcome path). With no

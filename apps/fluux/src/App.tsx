@@ -454,8 +454,7 @@ function App() {
   }
 
   // Show main chat interface when online or reconnecting
-  // Routes are defined but ChatLayout still handles view logic internally (Phase 1)
-  // Phase 2 will migrate view selection to route-based rendering
+  // Routes are defined but ChatLayout still handles view logic internally
   return (
     <>
       {/* No overlay TitleBar here: the desktop AppBar (rendered inside ChatLayout)

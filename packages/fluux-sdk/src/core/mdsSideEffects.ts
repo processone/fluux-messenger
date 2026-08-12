@@ -543,7 +543,7 @@ export function setupMdsSideEffects(
    *
    * The original reason — "a read position derived mid-catch-up is computed
    * against a partial window" — no longer applies: catch-up stopped being a
-   * pointer writer in read-state PR C, so no position originates here any more.
+   * pointer writer, so no position originates here.
    *
    * The gate stays as a PUBLISH-SIDE backstop, which is a different and still
    * valid job. Every local writer that remains (viewport, remote marker,

@@ -1,7 +1,7 @@
 /**
  * Tests for App routing configuration.
  *
- * Phase 1: Verifies that routes are set up correctly and render ChatLayout.
+ * Verifies that routes are set up correctly and render ChatLayout.
  * Phase 2+ will test actual route-based view selection.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'

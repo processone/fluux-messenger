@@ -87,7 +87,7 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Recompute the divider from the read pointer (called when the reader scrolls back up). */
   onResyncDivider?: (conversationId: string) => void
   /**
-   * Read-state PR B, Task 12: the ONE canonical unread count (the store's pointer-derived
+   * The ONE canonical unread count (the store's pointer-derived
    * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), fed to every numeric surface this
    * component renders (the "New messages" divider, the floating jump-to-last-read pill, and the
    * FAB badge) through the shared `formatUnreadCount`. No surface recomputes its own count from
@@ -119,7 +119,7 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Ref to track if scroll is at bottom (shared with keyboard navigation) */
   isAtBottomRef?: React.MutableRefObject<boolean>
   /**
-   * Read-state PR B, Task 11: reports whether the viewport is genuinely at the
+   * Reports whether the viewport is genuinely at the
    * live edge, from REAL measured geometry only (never a stale/assumed
    * default) — see `useMessageListScroll`'s `onLiveEdgeMeasured` doc. The
    * caller (ChatView/RoomView) forwards this straight to
@@ -736,7 +736,7 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
-  // Read-state PR B, Task 12: the FAB badge is the ONE canonical count (never a resident-array or
+  // The FAB badge is the ONE canonical count (never a resident-array or
   // below-viewport recount) — scrolling is navigation, not read state. Visibility (fabVisible,
   // above) is purely viewport-driven and independent of this; a fully-read conversation the reader
   // has scrolled up in shows a visible FAB with NO badge.

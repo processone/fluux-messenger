@@ -110,7 +110,7 @@ export type {
   RecountEntityKind,
 } from './stores/shared/recountDiagnostics'
 
-// Fine-grained metadata subscription hooks (Phase 6)
+// Fine-grained metadata subscription hooks
 export {
   // Chat metadata hooks
   useConversationEntity,
@@ -224,7 +224,7 @@ export type {
 export type { PointerSource } from './stores/shared/readPointer'
 export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
 
-// Viewport evidence (read-state PR B, Task 11): SDK-owned, generation-scoped
+// Viewport evidence: SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`
 // is deliberately NOT exported here — the SDK's activation path
 // (setActiveConversation/setActiveRoom) is its sole caller; the app only ever

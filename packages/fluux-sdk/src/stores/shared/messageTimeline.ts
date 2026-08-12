@@ -89,7 +89,7 @@ export function appendLive<T extends TimelineMessage>(
 
   if (!atLiveEdge) return { kind: 'gated' }
 
-  // FIX 5 (read-state PR B, final whole-branch review): sort before trimming.
+  // Sort before trimming.
   // Live arrivals land in ARRIVAL order, but the cache orders same-millisecond
   // rows by the shared comparator (id for chat, (from, id) for room — see
   // `compareExact`/`makeCacheOrderKey`). The viewport observer advances the

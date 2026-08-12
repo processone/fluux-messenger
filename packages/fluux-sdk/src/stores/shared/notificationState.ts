@@ -124,8 +124,7 @@ export interface EntityContext {
    * at the edge": missing / stale / unknown viewport evidence must never
    * authorize {@link onMessageReceived} to advance the read pointer — an
    * active, focused conversation scrolled up into history is exactly the case
-   * this field exists to distinguish from one genuinely parked at the bottom
-   * (read-state PR B, Task 11).
+   * this field exists to distinguish from one genuinely parked at the bottom.
    */
   viewportAtLiveEdge?: boolean
 }
@@ -159,7 +158,7 @@ export interface MessageReceivedOptions {
  * - Outgoing: never increments unread or mentions, and always clears the divider on the
  *   branches it reaches
  *
- * There is NO outgoing early return (read-state PR C, D1). "I sent this, so I must have
+ * There is NO outgoing early return. "I sent this, so I must have
  * read up to here" is an inference, and `isOutgoing` is true for a carbon from another
  * device and for a nick-misattributed MUC reflection — the vector #1081 exists to close.
  * An outgoing message now advances the pointer only via `userSeesMessage`, i.e. for the
@@ -167,7 +166,7 @@ export interface MessageReceivedOptions {
  * message: it returns at the delayed guard, so a MUC history replay of our own message no
  * longer dismisses the divider (deliberate — see the spec's D1 table).
  *
- * "User sees message" (Task 11) requires all three of: the entity is active,
+ * "User sees message" requires all three of: the entity is active,
  * the window is visible/focused, AND the viewport is demonstrably at the live
  * edge for the CURRENT activation generation (`ctx.viewportAtLiveEdge ===
  * true`). An active, focused conversation the user has scrolled UP in is
@@ -251,11 +250,9 @@ export function onMessageReceived(
  * inline, which is exactly the kind of drift this module exists to prevent.
  *
  * `ctx.viewportAtLiveEdge` mirrors {@link onMessageReceived}'s own
- * `userSeesMessage` three-way check EXACTLY (read-state PR B, final
- * whole-branch-review FIX 6 — Task 11 added the viewport-evidence dimension
- * to `onMessageReceived` but left this helper on the coarser `isActive &&
- * windowVisible`, a deliberately-scoped gap at the time). An active,
- * focused, but SCROLLED-UP conversation now correctly counts as unseen here
+ * `userSeesMessage` three-way check EXACTLY, viewport-evidence dimension
+ * included rather than the coarser `isActive && windowVisible`. An active,
+ * focused, but SCROLLED-UP conversation correctly counts as unseen here
  * too: `onMessageReceived` already does the live `+1` for it (it never
  * advances the pointer without `viewportAtLiveEdge === true`), but a
  * `noLocalStore` message can ONLY ever be represented by the transient
@@ -277,8 +274,8 @@ export function isUnseenIncomingMessage(
 /**
  * Compute new notification state when the user opens/activates an entity.
  *
- * The divider is **the first message the canonical count would count** (read-state
- * PR C, D5): incoming, renderable, and strictly after the read boundary in
+ * The divider is **the first message the canonical count would count**:
+ * incoming, renderable, and strictly after the read boundary in
  * `(timestamp, tiebreak)` order. Sharing the count's exact predicate AND
  * its exact floor is what makes "the divider labels the count" true by
  * construction rather than by coincidence — see `countUnreadInArchive`.
@@ -328,7 +325,7 @@ export function onActivate(
   // mentionsCount stays zeroed here: clearing the @-mention badge on open is
   // pre-existing behaviour, unrelated to the read pointer. unreadCount is
   // DELIBERATELY left unchanged — the canonical count is archive-derived and
-  // converges to 0 only through genuine live-edge convergence (PR B, FIX 2).
+  // converges to 0 only through genuine live-edge convergence.
   return {
     unreadCount: state.unreadCount,
     mentionsCount: 0,
@@ -367,7 +364,7 @@ export function onDeactivate(
  * XEP-0490 publisher never speaks past what they saw.
  *
  * Picking the message from the two independent live-edge facts is this
- * function's job (read-state PR C, D8).
+ * function's job.
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
@@ -448,7 +445,7 @@ export function onWindowBecameVisible(
  *
  * An EXACT current pointer (`order.role === 'exact'`) is ordered by cache
  * POSITION via `mayAdvanceTo`, not by array index — its position is provable
- * without being resident in `messages` (PR C, D4). The off-slice guard and the
+ * without being resident in `messages`. The off-slice guard and the
  * `atLiveEdge` escape hatch below apply only to a FLOOR (migrated) pointer,
  * whose bare timestamp cannot certify a position.
  *
@@ -479,8 +476,8 @@ export function onMessageSeen(
 
   // EXACT pointer: compare cache POSITIONS. The pointer no longer has to be
   // resident, and a same-millisecond sibling that sorts after it is a genuine
-  // advance. Safe against the resident array because PR B gave
-  // `messageArrayUtils` the same tie-break, so array index and cache order
+  // advance. Safe against the resident array because `messageArrayUtils`
+  // uses the same tie-break, so array index and cache order
   // agree.
   const current = state.readPointer.order
   if (current.role === 'exact') {

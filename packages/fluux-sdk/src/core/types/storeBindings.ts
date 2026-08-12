@@ -105,7 +105,7 @@ export interface ChatBindings {
 
   /**
    * Reconcile a non-active conversation's unread count against the durable
-   * archive (PR B): a coverage-gated cursor count from the effective read
+   * archive: a coverage-gated cursor count from the effective read
    * boundary, plus the transient (`noLocalStore`) overlay, capped at 999 —
    * never a bounded resident/cache slice. Commits only on an exact
    * derivation; every uncertain case (un-migrated/pending read state,
@@ -122,12 +122,11 @@ export interface ChatBindings {
    * No-op for the active conversation by default: most triggers (message
    * arrival, deferred-decrypt, transient-overlay changes) are already
    * reconciled for the active conversation by their own synchronous path
-   * (`onMessageReceived`'s live-edge convergence, Task 11), so racing an async
+   * (`onMessageReceived`'s live-edge convergence), so racing an async
    * archive recompute against that would be redundant at best. The one
-   * exception is `{ allowActive: true }` (read-state PR B, final
-   * whole-branch-review FIX 3): a remote XEP-0490 marker can advance the
-   * ACTIVE entity's read position without that convergence path running at
-   * all, and since FIX 2 removed activation's unconditional zero, nothing
+   * exception is `{ allowActive: true }`: a remote XEP-0490 marker can advance
+   * the ACTIVE entity's read position without that convergence path running at
+   * all, and activation writes no unconditional zero, so nothing
    * else re-derives the active entity's count after such an advance — pass
    * `allowActive: true` ONLY from that trigger.
    */
@@ -370,7 +369,7 @@ export interface RoomBindings {
 
   /**
    * Reconcile a non-active room's unread count against the durable archive
-   * (PR B): a coverage-gated cursor count from the effective read boundary,
+   *: a coverage-gated cursor count from the effective read boundary,
    * plus the transient (`noLocalStore`) overlay, capped at 999 — never a
    * bounded resident/cache slice. Commits only on an exact derivation; every
    * uncertain case (pointerless-with-count, incomplete coverage) leaves the
@@ -387,11 +386,10 @@ export interface RoomBindings {
    *
    * No-op for the active room by default: most triggers are already
    * reconciled for the active room by their own synchronous path
-   * (`onMessageReceived`'s live-edge convergence, Task 11). The one exception
-   * is `{ allowActive: true }` (read-state PR B, final whole-branch-review
-   * FIX 3): a remote XEP-0490 marker can advance the ACTIVE room's read
-   * position without that convergence path running at all, and since FIX 2
-   * removed activation's unconditional zero, nothing else re-derives the
+   * (`onMessageReceived`'s live-edge convergence). The one exception
+   * is `{ allowActive: true }`: a remote XEP-0490 marker can advance the
+   * ACTIVE room's read position without that convergence path running at
+   * all, and activation writes no unconditional zero, so nothing re-derives the
    * active room's count after such an advance — pass `allowActive: true`
    * ONLY from that trigger.
    */

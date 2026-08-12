@@ -146,7 +146,7 @@ export function useRowMetrics(
     const c = measureChromeFor('cont')
     if (c != null) chrome.continuation = c
 
-    // Structural rows tagged by kind (added in Task 6).
+    // Structural rows tagged by kind.
     const dateEl = root.querySelector<HTMLElement>('[data-row-kind="date"]')
     if (dateEl) chrome.date = Math.round(dateEl.getBoundingClientRect().height)
     const footEl = root.querySelector<HTMLElement>('[data-row-kind="footer"]')

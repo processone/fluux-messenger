@@ -1,5 +1,5 @@
 /**
- * Task 11 (PR B) — SDK-owned generation-scoped viewport evidence gates the
+ * Task 11 — SDK-owned generation-scoped viewport evidence gates the
  * on-arrival pointer advance. Room-side twin of chatStore.viewportGate.test.ts
  * — see that file for the shared mechanism's full rationale.
  *

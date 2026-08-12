@@ -3193,7 +3193,7 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('trust-state verdict instrumentation', () => {
-    // Task 4: After computing the trust-state verdict, the plugin must log it
+    // After computing the trust-state verdict, the plugin must log it
     // via ctx.logger.info so it lands in both the webview console (fluux.log)
     // and the in-app console store (via the E2EE diagnostic logger fan-out).
 

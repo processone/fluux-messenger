@@ -1,5 +1,5 @@
 /**
- * Read-state PR B, Task 12: the ONE shared formatter every numeric unread surface renders
+ * The ONE shared formatter every numeric unread surface renders
  * through — the sidebar counter (`ConversationList`), the "New messages" divider
  * (`NewMessageMarker`), the floating marker pill (`JumpToLastReadPill`), the scroll-to-bottom
  * FAB badge (`MessageList`), the room row tooltip (`utils/roomTooltip.ts`), and the coalesced

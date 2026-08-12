@@ -206,7 +206,7 @@ function deserializeRoom(r: SerializedRoom): Room {
 }
 
 /**
- * Cold-start recount trigger (PR B): a room restored from the snapshot may
+ * Cold-start recount trigger: a room restored from the snapshot may
  * carry a stale `unreadCount` — trusted at the moment this device wrote it,
  * but potentially stale by however much arrived while the app was closed.
  * Schedule an archive-derived recompute for every restored room so the badge

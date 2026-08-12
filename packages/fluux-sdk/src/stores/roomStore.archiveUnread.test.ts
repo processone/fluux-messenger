@@ -1,8 +1,8 @@
 /**
- * Task 8 (PR B) — roomStore.recomputeUnreadForRoom: archive-derived unread,
+ * Task 8 — roomStore.recomputeUnreadForRoom: archive-derived unread,
  * coverage-gated, latest-wins, mentionsCount-preserving, divider-rederiving.
  *
- * Mirrors chatStore.archiveUnread.test.ts (Task 7) — see that file for the
+ * Mirrors chatStore.archiveUnread.test.ts — see that file for the
  * shared derivation's full rationale. This file additionally covers the
  * room-specific control: two messages sharing an `id` but sent by different
  * occupants (`from`) are two distinct cache positions, not one.
@@ -164,7 +164,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(3)
   })
 
-  // Room-specific control (Task 8): room ids are not unique per sender — a
+  // Room-specific control: room ids are not unique per sender — a
   // reflected/relayed id collision from two different occupants must count
   // as two distinct positions, never deduped to one.
   it('two messages sharing an id but sent by different occupants count as two distinct positions', async () => {
@@ -346,7 +346,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
     // The divider was positioned at the first message after the new pointer.
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
-    // FIX 3: the count is re-derived from the archive (u1, u2, u3), not left
+    // The count is re-derived from the archive (u1, u2, u3), not left
     // at the stale 99 a guard that still exempted the active room would
     // produce. The recount is fire-and-forget (cache read, coverage resolve,
     // and countRoomUnreadInArchive are all real async calls against
@@ -610,7 +610,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // The live +1 fires (correct at the time — onMessageReceived's own gate
     // refused the pointer advance since viewportAtLiveEdge isn't 'at-edge').
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
-    // FIX 6: also recorded in the overlay — a noLocalStore message's ONLY
+    // Also recorded in the overlay — a noLocalStore message's ONLY
     // durable representation, since it is never archived.
     expect(
       transientCounts({ accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: ROOM }, undefined).unread
@@ -689,7 +689,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',
   // which blocked on the guard pass's cache read. That read is gone with the
-  // guard pass (PR C, D6), so the same invariant — a derivation computed under
+  // guard pass, so the same invariant — a derivation computed under
   // one account must never commit into another's state — is now pinned on the
   // remaining await, the archive count. Nothing else about the recount context
   // changes across the swap here (no switchAccount, so the cache epoch, the

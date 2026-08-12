@@ -1,5 +1,5 @@
 /**
- * SDK-owned, generation-scoped viewport evidence (read-state PR B, Task 11).
+ * SDK-owned, generation-scoped viewport evidence.
  *
  * `onMessageReceived` (`notificationState.ts`) used to treat `isActive &&
  * windowVisible` as "the user saw this" and advance the read pointer on

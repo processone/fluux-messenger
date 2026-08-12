@@ -99,7 +99,7 @@ interface MessageCacheSchema extends DBSchema {
       ids: string
       timestamp: number
       room_timestamp: [string, number]
-      // Stable room order key (roomJid, timestamp, from, id) for Task 4's read path.
+      // Stable room order key (roomJid, timestamp, from, id) for the archive read path.
       room_ts_from_id: [string, number, string, string]
     }
   }
@@ -342,7 +342,7 @@ async function upsertStoredRoomRow(
   await store.put(merged)
 }
 
-/** Insert or merge a live-arriving message by identity (migration + Task 4 write path). */
+/** Insert or merge a live-arriving message by identity (migration + archive write path). */
 async function upsertRoomRowByIdentity(store: RoomStoreLike, message: RoomMessage): Promise<void> {
   await upsertStoredRoomRow(store, serializeRoomMessage(message))
 }
@@ -843,7 +843,7 @@ export async function getMessageCount(conversationId: string): Promise<number> {
 }
 
 // =============================================================================
-// PR B: archive count primitive (unread only — mentions stay on the live +1 path)
+// Archive count primitive (unread only — mentions stay on the live +1 path)
 // =============================================================================
 
 /** Default cap on the reported `unread` count — the badge saturates here. */

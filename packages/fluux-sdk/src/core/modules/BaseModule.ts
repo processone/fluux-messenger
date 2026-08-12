@@ -27,7 +27,7 @@ export interface ModuleDependencies {
     ...args: Parameters<XMPPClientEvents[K]>
   ) => void
   /**
-   * Emit SDK events for store bindings (Phase 0.3 of event-based decoupling).
+   * Emit SDK events for store bindings.
    * These events are subscribed to by XMPPProvider to update Zustand stores.
    */
   emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => void

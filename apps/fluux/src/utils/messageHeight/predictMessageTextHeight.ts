@@ -46,7 +46,7 @@ function heuristicPrediction(body: string, lineBoxPx: number): MessagePrediction
  * Returns the exact wrapped line count and a height of `lineCount * lineBoxPx`, where
  * `lineBoxPx` is the engine's RENDERED per-line box height (Math.floor(lineHeight) on WebKit,
  * which floors line boxes; ~= lineHeight on Chromium). Passing lineBoxPx explicitly keeps this
- * util pure and engine-agnostic; the caller measures the real line box once (Task 5).
+ * util pure and engine-agnostic; the caller measures the real line box once.
  *
  * Requires a working Canvas 2D. In an environment without one (jsdom) it degrades to a hard-line
  * count rather than throwing, so the size estimate never crashes a render.

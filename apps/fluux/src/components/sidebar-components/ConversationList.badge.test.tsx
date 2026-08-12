@@ -116,7 +116,7 @@ describe('ConversationItem unread badge placement', () => {
     expect(screen.queryByText('0')).toBeNull()
   })
 
-  // Read-state PR B, Task 12: the sidebar counter is one of the five numeric surfaces
+  // The sidebar counter is one of the five numeric surfaces
   // routed through the shared formatUnreadCount — the store saturates at 999 (never
   // reaching 1000), so 999 must render as "999+", not the exact "999".
   it('renders 998 verbatim', () => {

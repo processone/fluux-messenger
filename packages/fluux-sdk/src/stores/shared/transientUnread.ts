@@ -4,7 +4,7 @@ import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../
 /**
  * Transient overlay for `noLocalStore` messages (MUC ephemera, Quick Chat):
  * messages that are never written to IndexedDB but must still count as
- * unread. PR B derives `unreadCount` from the archive (see `readState.ts`),
+ * unread. `unreadCount` is derived from the archive (see `readState.ts`),
  * but an archive-only count silently erases these messages — they have no
  * row to scan. This overlay holds them in memory, position-aware, so Tasks
  * 7/8 can add its contribution on top of the archive-derived count:
@@ -257,7 +257,7 @@ export function clearTransientScope(accountScope: string): void {
  * Test-only: drop every scope, across every account. This module's state is a
  * plain top-level `Map` — it is not part of any Zustand store, so resetting a
  * store's state between tests does not touch it. Now that chatStore/roomStore
- * genuinely wire `noteTransient` into the live message path (Task 9), a test
+ * genuinely wire `noteTransient` into the live message path, a test
  * fixture reusing the same message id/room across `it()` blocks would
  * otherwise find it already noted from an earlier test and see `added: false`
  * where the test expects `true`.

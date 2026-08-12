@@ -100,7 +100,7 @@ interface Args {
 
 /**
  * MessageVirtualizer backed by @tanstack/react-virtual (v3). Spike-gated: if prepend
- * anchoring can't be made pixel-accurate (Task 5), this is swapped for a custom impl
+ * anchoring can't be made pixel-accurate, this is swapped for a custom impl
  * behind the same interface, leaving the scroll-hook integration untouched.
  *
  * `getItemKey = items[i].key` (the message id) binds the measurement cache to the message,

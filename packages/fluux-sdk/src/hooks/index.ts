@@ -23,7 +23,7 @@ export { useContactTime } from './useContactTime'
 export { useLastActivity } from './useLastActivity'
 export { useSearch, type SearchResult } from './useSearch'
 
-// Fine-grained metadata subscription hooks (Phase 6)
+// Fine-grained metadata subscription hooks
 export {
   // Chat metadata hooks
   useConversationEntity,

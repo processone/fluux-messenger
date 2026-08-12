@@ -283,7 +283,7 @@ function ChatLayoutContent() {
   } : null)
   const isSelectedContactInRoster = !!selectedRosterContact
 
-  // Phase 3: Use consolidated navigation hook for per-tab memory and modal management
+  // Use consolidated navigation hook for per-tab memory and modal management
   const {
     sidebarView,
     navigateToView,
@@ -352,7 +352,7 @@ function ChatLayoutContent() {
   const viewRestoredRef = useRef(false)
 
   // Restore view state on mount (before connection is established)
-  // Phase 2: Uses router navigation to restore view
+  // Uses router navigation to restore view
   useEffect(() => {
     if (viewRestoredRef.current) return
     viewRestoredRef.current = true
@@ -627,7 +627,7 @@ function ChatLayoutContent() {
   }
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
-  // Phase 3: Per-tab memory and side effects now handled by the hook
+  // Per-tab memory and side effects now handled by the hook
   const handleSidebarViewChange = (newView: SidebarView) => {
     // Clear selected contact when switching views
     setSelectedContactJid(null)

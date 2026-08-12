@@ -87,7 +87,7 @@ describe('useConversationEncryptionState', () => {
   })
 
   it('subscribes to connection via the narrow useConnectionStatus, not the broad useConnection', () => {
-    // Perf guard (Phase 1.1): this hook is mounted per active conversation and reads
+    // Perf guard: this hook is mounted per active conversation and reads
     // only `status`. useConnection subscribes to ~16 connection fields, so unrelated
     // churn (ownAvatar, reconnectAttempt, serverInfo, ...) would re-render the chip.
     // useConnectionStatus subscribes to status/jid/error only.

@@ -34,7 +34,7 @@ describe('roomTooltipParts', () => {
     expect(spy).toHaveBeenCalledWith('rooms.unreadMessages', { count: 1, displayCount: '1' })
   })
 
-  // Read-state PR B, Task 12: every numeric unread surface — including this tooltip
+  // Every numeric unread surface — including this tooltip
   // headline — renders the store's saturated count identically via formatUnreadCount.
   it('caps the displayCount at 999+ while count keeps driving plural selection (998/999/1000)', () => {
     expect(roomTooltipParts(makeRoom({ unreadCount: 998 }), t).headline)

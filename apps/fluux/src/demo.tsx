@@ -136,7 +136,7 @@ if (stressScenario) {
 
 const perfParam = params.get('perf')
 if (perfParam !== null && perfParam !== '0' && perfParam !== 'false') {
-  // ?perf=1 installs the cheap detector-tally harness + Phase 0 scenario drivers.
+  // ?perf=1 installs the cheap detector-tally harness + baseline scenario drivers.
   // ?perf=scan additionally loads react-scan for per-component attribution.
   void installPerfHarness({ scan: perfParam === 'scan' || params.get('scan') === '1' })
 }

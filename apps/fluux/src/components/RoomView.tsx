@@ -468,7 +468,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [roomJid, advanceReadPointer])
 
-  // Read-state PR B, Task 11: gate the on-arrival read-pointer advance on a
+  // Gate the on-arrival read-pointer advance on a
   // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
   // alone — see ChatView's twin for the full rationale. `setActiveRoom` is the
   // SOLE caller of `beginViewportGeneration`; this view only reads the current
@@ -947,7 +947,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   // deliberately freezes on jid/nickname/joined/occupants/etc and does NOT refresh
   // on unreadCount, so addMessage's count bump would never reach the in-list
   // divider/pill/FAB badge if this were read from `room` instead. See RoomView
-  // final-review FIX 1. Optional (mirrors MessageList's own `unreadCount?: number`)
+  // Optional (mirrors MessageList's own `unreadCount?: number`)
   // so unrelated presence/memo tests that don't care about the badge need no changes.
   unreadCount?: number
   contactsByJid: Map<string, ContactIdentity>

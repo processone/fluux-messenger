@@ -313,7 +313,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     }
   }
 
-  // Read-state PR B, Task 11: gate the on-arrival read-pointer advance on a
+  // Gate the on-arrival read-pointer advance on a
   // REAL viewport-at-live-edge signal instead of `isActive && windowVisible`
   // alone (which wrongly treated a scrolled-up-but-focused conversation as
   // "seen"). The SDK's `setActiveConversation` is the SOLE caller of
@@ -732,7 +732,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
   readPointerId?: string
-  /** Read-state PR B, Task 12: the canonical unread count fed to every numeric surface
+  /** The canonical unread count fed to every numeric surface
    *  MessageList renders (divider, floating pill, FAB badge) via the shared formatUnreadCount. */
   unreadCount?: number
   targetMessageId?: string | null

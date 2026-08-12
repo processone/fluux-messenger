@@ -452,7 +452,7 @@ describe('roomSelectors', () => {
   })
 
   // ============================================================
-  // METADATA SELECTORS TESTS (Phase 6)
+  // METADATA SELECTORS TESTS
   // ============================================================
 
   describe('entityById', () => {

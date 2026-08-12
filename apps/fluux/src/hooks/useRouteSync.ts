@@ -1,7 +1,7 @@
 /**
  * Hook to sync React Router URL with view state.
  *
- * Phase 2.1: Provides URL-derived state and navigation helpers.
+ * Provides URL-derived state and navigation helpers.
  * ChatLayout can use this to read view state from URL instead of useState.
  *
  * URL Structure:

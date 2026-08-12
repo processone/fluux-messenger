@@ -355,7 +355,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
       new Promise<Message[]>((resolve) => { releaseCache = resolve })
     )
     chatStore.getState().mergeMAMMessages(cid, page, { first: 's-ptr' }, false, 'backward')
-    // PR B: the pointer resolves synchronously, but the count is no longer
+    // The pointer resolves synchronously, but the count is no longer
     // written synchronously from this page — the archive-derived recount is
     // still pending on the gated cache read below, so the count is untouched.
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('p0')
@@ -867,7 +867,7 @@ describe('chatStore fresh-instance catch-up preserves the remote read position',
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
-  // PR B: the count is no longer written synchronously from this page — it is
+  // The count is no longer written synchronously from this page — it is
   // archive-derived (recomputeUnreadForConversation, triggered fire-and-forget
   // by both the forward-merge and the marker-resolution paths). With no
   // mamQueryStates/conversationCoverage seeded, that derivation defers, so the

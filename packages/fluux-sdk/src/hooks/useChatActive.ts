@@ -103,7 +103,7 @@ export function useChatActive() {
     if (!s.activeConversationId) return false
     return chatSelectors.firstNewMessageIsProvisionalFor(s.activeConversationId)(s)
   })
-  // Read-state PR B, Task 12: the canonical, pointer-derived unread count for the active
+  // The canonical, pointer-derived unread count for the active
   // conversation — used to feed the ONE shared count into every UI surface (sidebar,
   // divider, floating pill, FAB badge) via ChatView. Previously hardcoded to 0 here
   // ("not used by active view components"); that force-zero is exactly what the single

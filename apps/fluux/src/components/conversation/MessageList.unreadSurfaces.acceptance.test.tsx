@@ -236,7 +236,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
   // Scenario 5: Reach the live edge while active and focused (component-level reduction)
   // -----------------------------------------------------------------------
   // The convergence itself (pointer advance without waiting on MDS publish) is store-level and
-  // covered by chatStore.viewportGate.test.ts / roomStore.viewportGate.test.ts (Task 11). At the
+  // covered by chatStore.viewportGate.test.ts / roomStore.viewportGate.test.ts. At the
   // MessageList boundary, convergence means: unreadCount becomes 0, firstNewMessageId clears, and
   // the viewport is at the live edge (FAB hidden).
   it('scenario 5 — converged state (count 0, no divider, at the live edge): every surface is cleared', () => {

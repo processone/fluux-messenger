@@ -247,7 +247,7 @@ export const chatSelectors = {
   },
 
   // ============================================================
-  // METADATA SELECTORS - Fine-grained subscriptions (Phase 6)
+  // METADATA SELECTORS - Fine-grained subscriptions
   // ============================================================
   // These selectors use the separated entity/metadata maps to enable
   // subscriptions that only re-render when specific data changes.

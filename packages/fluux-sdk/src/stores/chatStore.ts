@@ -413,7 +413,7 @@ interface ChatState {
   removeMessage: (conversationId: string, messageId: string) => void
   /**
    * Reconcile a non-active conversation's unread count against the durable
-   * archive (PR B): a coverage-gated cursor count from the effective read
+   * archive: a coverage-gated cursor count from the effective read
    * boundary, plus the transient (`noLocalStore`) overlay, capped at 999 —
    * never a bounded resident/cache slice. Commits only on an exact
    * derivation; every uncertain case (un-migrated/pending read state,
@@ -430,12 +430,11 @@ interface ChatState {
    * No-op for the active conversation by default: most triggers (message
    * arrival, deferred-decrypt, transient-overlay changes) are already
    * reconciled for the active conversation by their own synchronous path
-   * (`onMessageReceived`'s live-edge convergence, Task 11), so racing an async
+   * (`onMessageReceived`'s live-edge convergence), so racing an async
    * archive recompute against that would be redundant at best. The one
-   * exception is `{ allowActive: true }` (read-state PR B, final
-   * whole-branch-review FIX 3): a remote XEP-0490 marker can advance the
-   * ACTIVE entity's read position without that convergence path running at
-   * all, and since FIX 2 removed activation's unconditional zero, nothing
+   * exception is `{ allowActive: true }`: a remote XEP-0490 marker can advance
+   * the ACTIVE entity's read position without that convergence path running at
+   * all, and activation writes no unconditional zero, so nothing
    * else re-derives the active entity's count after such an advance — pass
    * `allowActive: true` ONLY from that trigger.
    */
@@ -551,7 +550,7 @@ interface ChatState {
 // Serializes this store's archive-page writes; see shared/archiveSaveChain.ts.
 const conversationArchiveSaves = createArchiveSaveChain()
 
-// PR B: per-entity recount version for `recomputeUnreadForConversation`'s
+// Per-entity recount version for `recomputeUnreadForConversation`'s
 // latest-wins commit. Two recounts for the same conversation can race (a slow
 // cursor started before a fast one) — bumping this BEFORE either awaits and
 // re-checking it immediately before the final commit means an older recount
@@ -580,7 +579,7 @@ function bumpChatUnreadInputVersion(conversationId: string): void {
 let chatCacheEpoch = 0
 
 /**
- * Task 9: the account scope this store last saw its OWN transient-overlay
+ * The account scope this store last saw its OWN transient-overlay
  * entries filed under. Tracked separately from `getStorageScopeJid()` because
  * by the time `switchAccount` runs, the global scope has ALREADY flipped to
  * the incoming account (XMPPClient calls `setStorageScopeJid` before
@@ -656,7 +655,7 @@ type PersistedConversation = Conversation & PersistedReadState
 const unmigratedLegacyReadState = new Map<string, Map<string, LegacyReadState>>()
 
 /**
- * The transient-overlay scope key for a conversation (PR B). `accountScope`
+ * The transient-overlay scope key for a conversation. `accountScope`
  * mirrors {@link unmigratedLegacyReadState}'s own per-account keying: a bare
  * conversation id can collide across accounts (two accounts chatting with the
  * same contact), so the overlay — like the legacy-read-state map — is scoped
@@ -667,7 +666,7 @@ function chatTransientScopeKey(conversationId: string): TransientScopeKey {
 }
 
 /**
- * The viewport-evidence key for a conversation (Task 11). Same shape/rationale
+ * The viewport-evidence key for a conversation. Same shape/rationale
  * as {@link chatTransientScopeKey}: scoped by account JID so a bare
  * conversation id can't collide across accounts.
  */
@@ -679,7 +678,7 @@ function chatViewportEvidenceKey(conversationId: string): ViewportEvidenceKey {
 // Note: messages are NOT persisted in localStorage - they're in IndexedDB
 // Only conversations metadata, archivedConversations, and drafts are persisted here
 interface PersistedState {
-  // New separated storage (Phase 6)
+  // New separated storage
   conversationEntities?: [string, ConversationEntity][]
   conversationMeta?: [string, PersistedConversationMetadata][]
   // Legacy combined storage, read-only: blobs written before the entity/meta
@@ -730,7 +729,7 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
   // Un-migrated legacy read state belonging to THIS blob (see the map's doc).
   const legacy = unmigratedLegacyReadState.get(storageKey)
   return {
-    // Serialize separated maps (Phase 6). The `conversations` compat map is
+    // Serialize separated maps. The `conversations` compat map is
     // deliberately NOT written: `deserializeState` rebuilds it from these two
     // (see its new-format branch), and `shared/conversationMaps` guarantees the
     // live map is nothing but that rebuild, so the copy was pure duplication.
@@ -920,13 +919,13 @@ function scheduleReadPointerBackfill(
     // insurance against a future ASYNC storage, where `set` would land in a
     // later task and the both-fields branch below (which needs no cache read)
     // could otherwise write a pointer into a conversation that does not exist
-    // yet — a silent no-op, and exactly the loss Task 6b cannot survive. It also
+    // yet — a silent no-op, and exactly the loss this backfill cannot survive. It also
     // keeps the store reference off the module's own evaluation stack.
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     for (const [conversationId, legacy] of pending) {
       // Isolated per conversation: an unhandled throw here would cancel the pass
-      // for every conversation still queued, and Task 6b deletes the legacy
+      // for every conversation still queued, and the migration deletes the legacy
       // fields — a skipped conversation loses its read position for good.
       try {
         const migrated = await migrateReadPointer(conversationId, legacy)
@@ -939,12 +938,10 @@ function scheduleReadPointerBackfill(
         // self-limiting: the set only ever holds pre-#1081 conversations
         // (legacy fields are never written fresh).
         //
-        // Being stuck no longer costs the conversation its count. PR C, Task 6b
-        // retired the `hasUnmigratedLegacyReadState` stand-down that used to sit
-        // ahead of the whole derivation in recomputeUnreadForConversation: it
-        // was introduced against a recount that could WRITE the pointer, and D6
-        // deleted that pass, leaving it suppressing a count and nothing else. So
-        // a stuck conversation IS reconciled by the archive recount, the Task 9
+        // Being stuck does not cost the conversation its count: no
+        // `hasUnmigratedLegacyReadState` stand-down sits ahead of the derivation
+        // in recomputeUnreadForConversation, which writes no pointer. So
+        // a stuck conversation IS reconciled by the archive recount, the
         // coalesce/overlay fold-in, and every later cold-start recount, exactly
         // like any other entity — from its readPointer if a direct path
         // (activation, markAsRead, XEP-0490) has written one, otherwise from its
@@ -980,7 +977,7 @@ function scheduleReadPointerBackfill(
 }
 
 /**
- * Cold-start recount trigger (PR B): the persisted `unreadCount` restored by
+ * Cold-start recount trigger: the persisted `unreadCount` restored by
  * `deserializeState` is the last count this device wrote — trusted at the
  * moment it was written, but potentially stale by however much arrived while
  * the app was closed. Schedule an archive-derived recompute for every
@@ -1140,7 +1137,7 @@ function deserializeState(persisted: PersistedState, storageKey: string): Pick<C
   // message cache and this function is synchronous.
   scheduleReadPointerBackfill(conversationMeta, legacyReadState, storageKey)
 
-  // PR B recount trigger (cold-start rehydrate): reconcile every restored
+  // Recount trigger (cold-start rehydrate): reconcile every restored
   // conversation's badge against the archive once this session's MAM catch-up
   // proves coverage (see scheduleColdStartRecounts's doc).
   scheduleColdStartRecounts(conversationMeta, storageKey)
@@ -1378,7 +1375,7 @@ export const chatStore = createStore<ChatState>()(
         }
 
         if (id) {
-          // Task 11: begin a fresh viewport-evidence generation SYNCHRONOUSLY, before
+          // Begin a fresh viewport-evidence generation SYNCHRONOUSLY, before
           // the `set()` calls below make this activation visible to subscribers/renders.
           // This is the SOLE call site for `beginViewportGeneration` — the view only
           // ever reads the generation it produces (`currentViewportGeneration`) and
@@ -1397,8 +1394,8 @@ export const chatStore = createStore<ChatState>()(
               readPointer: meta?.readPointer ?? conv.readPointer,
               // The read BOUNDARY, not just the pointer: a conversation that has
               // never been read has no pointer, and the creation watermark is
-              // then the only floor the divider can derive from (read-state
-              // PR C, D5). `computeFloor` is pointer-wins, so this only matters
+              // then the only floor the divider can derive from.
+              // `computeFloor` is pointer-wins, so this only matters
               // for the pointerless case.
               historyFloor: meta?.historyFloor ?? conv.historyFloor,
               firstNewMessageId: undefined,
@@ -1431,7 +1428,7 @@ export const chatStore = createStore<ChatState>()(
               void get().recomputeUnreadForConversation(prevId)
             }
             // ...and reconcile the entity we just ENTERED — the room twin of
-            // this trigger carries the full rationale. In short: Task 11's
+            // this trigger carries the full rationale. In short: the
             // convergence is a side effect of the read pointer MOVING, and
             // onMessageSeen returns its input unchanged once the pointer sits
             // on the newest loaded message. Opening a conversation already at
@@ -1440,8 +1437,8 @@ export const chatStore = createStore<ChatState>()(
             // a stale badge for as long as the conversation stays open.
             // Activation was the one entry point without a recount of its own.
             //
-            // A DERIVATION against the current pointer, not FIX 2's removed
-            // unconditional zero: real unread keeps a real count, and the
+            // A DERIVATION against the current pointer, not an unconditional
+            // zero: real unread keeps a real count, and the
             // divider is repositioned rather than retired while active.
             if (activated.unreadCount > 0) {
               void get().recomputeUnreadForConversation(id, { allowActive: true })
@@ -1452,7 +1449,7 @@ export const chatStore = createStore<ChatState>()(
         // Default case: conversation not found, just set active
         set({ activeConversationId: id })
         // final-fix-2: deactivation is the other trigger this fix adds (the
-        // twin of advanceReadPointer's live-edge trigger below). Task 11's
+        // twin of advanceReadPointer's live-edge trigger below). The
         // convergence advances the READ POINTER while an entity is active but
         // never re-derives the COUNT for it — advanceReadPointer now schedules
         // that recount itself while still active, but a conversation that
@@ -1645,7 +1642,7 @@ export const chatStore = createStore<ChatState>()(
         const msg = arrival.messages[0]
         if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
-        // Task 9: `noLocalStore` messages (Quick Chat) are never archived, so
+        // `noLocalStore` messages (Quick Chat) are never archived, so
         // the transient overlay is their ONLY source of unread truth —
         // computed once, here, before the state update below, so
         // `noteTransient` (a side-effecting Map mutation) runs exactly once
@@ -1654,7 +1651,7 @@ export const chatStore = createStore<ChatState>()(
         // have incremented for anyway — mirrors that pure function's own
         // branching exactly (see its doc).
         //
-        // FIX 6 (final whole-branch review): `viewportAtLiveEdge` is read here
+        // `viewportAtLiveEdge` is read here
         // too (not just inside `onMessageReceived`'s own `set()` below) so
         // `isUnseenIncomingMessage` sees the SAME evidence and genuinely
         // mirrors `onMessageReceived`'s `userSeesMessage` check — an active,
@@ -1773,7 +1770,7 @@ export const chatStore = createStore<ChatState>()(
           if (conv && meta) {
             const isActive = state.activeConversationId === msg.conversationId
             const windowVisible = connectionStore.getState().windowVisible
-            // Task 11: the on-arrival pointer advance requires DEMONSTRABLY being at
+            // The on-arrival pointer advance requires DEMONSTRABLY being at
             // the live edge for the CURRENT activation generation — missing/stale/
             // unknown evidence (a conversation that has never reported, or whose only
             // reports were rejected as stale) reads 'unknown' here, which is NOT
@@ -1811,8 +1808,8 @@ export const chatStore = createStore<ChatState>()(
             //   history) can be older than what we already know. This compares
             //   `msg` directly against `meta.lastMessage` rather than reading
             //   array position, so it holds regardless of where appendLive
-            //   places the message (FIX 5 now sorts its result into archive
-            //   order instead of always appending at the end) — and for a
+            //   places the message (appendLive sorts its result into archive
+            //   order rather than always appending at the end) — and for a
             //   backgrounded conversation the resident array is empty anyway,
             //   so dedupe has nothing to compare against either way. Without
             //   this guard a delayed arrival drags the sidebar back to an
@@ -2007,7 +2004,7 @@ export const chatStore = createStore<ChatState>()(
         // observer reports what is PAINTED, and the list auto-scrolls to arriving
         // messages whether or not the user is at the window. Rendered is not seen.
         //
-        // Re-decided in read-state PR C (D7): kept. This gate is independent of
+        // This gate is independent of
         // where the count comes from — painted is not seen — so nothing in the
         // derived-count model makes it redundant.
         if (!connectionStore.getState().windowVisible) return
@@ -2049,7 +2046,7 @@ export const chatStore = createStore<ChatState>()(
           return draft.commit()
         })
 
-        // final-fix-2 (PR B, Task 11 gap): onMessageSeen only ever moves the
+        // onMessageSeen only ever moves the
         // pointer — it never recomputes unreadCount, and nothing else did
         // either once onActivate stopped force-zeroing the active entity. Without
         // this trigger, live-edge convergence (acceptance scenario 5: scroll an
@@ -2069,10 +2066,9 @@ export const chatStore = createStore<ChatState>()(
         // Set when the resolution advanced the pointer on a NON-active
         // conversation — triggers the exact cache recount below.
         let advancedNonActive = false
-        // FIX 3 (read-state PR B, final whole-branch-review): set when the
-        // resolution advanced the pointer on the ACTIVE conversation. Since
-        // FIX 2 removed activation's unconditional zero, the active entity's
-        // count is no longer "already zero" here — it needs the same
+        // Set when the resolution advanced the pointer on the ACTIVE
+        // conversation. Activation writes no unconditional zero, so the active
+        // entity's count is not "already zero" here — it needs the same
         // archive-derived re-derivation as the non-active case, just with the
         // active-conversation skip in recomputeUnreadForConversation
         // explicitly bypassed (`allowActive: true`).
@@ -2117,15 +2113,14 @@ export const chatStore = createStore<ChatState>()(
           // Inbound read-state sync (spec §4): a marker published by another
           // client advances this conversation's read position now, not on the
           // next activation. The pointer keeps the forward-only position
-          // resolved above (metaPatch.readPointer) — PR B no longer derives
-          // the unread COUNT from this page-scoped slice (it may be a single
+          // resolved above (metaPatch.readPointer) — the unread COUNT is not
+          // derived from this page-scoped slice (it may be a single
           // merged page of a multi-page pointer-stitch walk, which
           // undercounts): both advance kinds instead schedule the
           // archive-derived recount below, which is ALSO what makes a
           // not-yet-caught-up entity defer rather than commit a wrong number.
-          // 'advanced-with-divider' (the active entity — FIX 3) used to be
-          // exempted here on the premise that its counts were "already zero";
-          // FIX 2 removed that zero, so the active entity needs this
+          // 'advanced-with-divider' (the active entity) is NOT exempted here:
+          // its counts are not "already zero", so the active entity needs this
           // re-derivation exactly as much as a non-active one does.
           if (resolution.kind === 'advanced') {
             advancedNonActive = true
@@ -2145,7 +2140,7 @@ export const chatStore = createStore<ChatState>()(
           return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
         })
 
-        // Archive-derived recount (PR B, trigger: pointer advance / inbound
+        // Archive-derived recount (trigger: pointer advance / inbound
         // marker). recomputeUnreadForConversation re-derives the count from
         // the durable archive (its own resident-or-cache slice, independent of
         // `messages`/`messagesOverride` above), deferring — leaving the last
@@ -2154,7 +2149,7 @@ export const chatStore = createStore<ChatState>()(
         if (advancedNonActive) {
           void get().recomputeUnreadForConversation(conversationId)
         } else if (advancedActive) {
-          // FIX 3: the active entity gets the SAME re-derivation, with the
+          // The active entity gets the SAME re-derivation, with the
           // active-conversation skip explicitly bypassed — see this method's
           // doc and recomputeUnreadForConversation's.
           void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
@@ -2356,7 +2351,7 @@ export const chatStore = createStore<ChatState>()(
             void searchIndex.updateMessage(updatedMessage)
           }
 
-          // Task 9: a retraction may target a `noLocalStore` message noted in
+          // A retraction may target a `noLocalStore` message noted in
           // the transient overlay (e.g. a Quick Chat message) — drop it so it
           // stops contributing, and schedule a recount if it actually left
           // (safe to call for every retraction: removeTransient is a no-op
@@ -2493,7 +2488,7 @@ export const chatStore = createStore<ChatState>()(
           void searchIndex.removeMessage(removed)
           void messageCache.deleteMessage(removed.id)
 
-          // Task 9: this may be dropping a noted `noLocalStore` message (a
+          // This may be dropping a noted `noLocalStore` message (a
           // bodiless placeholder never resolves to noLocalStore in practice,
           // but removeTransient is a harmless no-op when the alias was never
           // noted, so it is safe to call unconditionally here too).
@@ -2531,9 +2526,9 @@ export const chatStore = createStore<ChatState>()(
           recordRecountDeferral('chat', reason)
         const allowActive = options?.allowActive ?? false
         // Active conversation counts are usually reconciled by their own
-        // synchronous path (Task 11's live-edge convergence) — skip here to
+        // synchronous path (the live-edge convergence) — skip here to
         // avoid a redundant race, UNLESS the caller explicitly opted in
-        // (FIX 3: a remote XEP-0490 advance on the active entity, which that
+        // (a remote XEP-0490 advance on the active entity, which that
         // convergence path never runs for).
         if (!allowActive && get().activeConversationId === conversationId) return defer('active-skipped')
 
@@ -2570,7 +2565,7 @@ export const chatStore = createStore<ChatState>()(
         // cannot be told apart from a real "all read", and the count it would
         // overwrite was accumulated live.
         //
-        // This derivation NEVER writes the read pointer (read-state PR C, D6).
+        // This derivation NEVER writes the read pointer.
         // The pointer-writing recount that used to run here — snapping a
         // pointerless entity to the newest message, and advancing the pointer
         // onto any outgoing message in range — is gone: both were inferences
@@ -2583,7 +2578,7 @@ export const chatStore = createStore<ChatState>()(
         if (metaNow.pendingRemoteDisplayedStanzaId !== undefined) return defer('pending-remote-displayed')
         if (pointerlessDefers(metaNow.readPointer, metaNow.unreadCount)) return defer('pointerless-defer')
 
-        // Latest-wins (requirement 3): bumped once this call is committed to
+        // Latest-wins: bumped once this call is committed to
         // running — AFTER the defers above, so a call that stands down cannot
         // cancel a recount already in flight for the same conversation — and
         // still before the first await, then re-checked immediately before
@@ -2615,7 +2610,7 @@ export const chatStore = createStore<ChatState>()(
         const floor = computeFloor(metaNow.readPointer, metaNow.historyFloor)
         if (!floor) return defer('no-floor')
 
-        // --- Coverage gate: every uncertain branch defers (requirement 4) -
+        // --- Coverage gate: every uncertain branch defers -
         const mam = mamState.getMAMQueryState(get().mamQueryStates, conversationId)
         if (!isCaughtUpForCounting(mam)) return defer('mam-not-caught-up')
 
@@ -2654,7 +2649,7 @@ export const chatStore = createStore<ChatState>()(
         if (countContextDeferral) return defer(countContextDeferral)
         if (res === null) return defer('cache-unavailable') // unavailable — IndexedDB error
 
-        // --- Latest-wins commit (requirement 3) ---------------------------
+        // --- Latest-wins commit ---------------------------
         if (chatRecountVersion.get(conversationId) !== version) return defer('recount-superseded')
         if ((chatUnreadInputVersion.get(conversationId) ?? 0) !== unreadInputVersionAtCompute) {
           return defer('input-version-changed')
@@ -2694,7 +2689,7 @@ export const chatStore = createStore<ChatState>()(
             return state
           }
 
-          // Rederive the divider (requirement 5): the boundary may have moved
+          // Rederive the divider: the boundary may have moved
           // since a marker was last parked here (a remote pointer advance).
           //
           // Reposition-only while the conversation is ACTIVE: a pointer that
@@ -2716,7 +2711,7 @@ export const chatStore = createStore<ChatState>()(
             // when a marker is still parked, and deactivation deletes the marker
             // for every non-active conversation — so the only recounts that get
             // here are the `allowActive` ones, both triggered by a pointer
-            // advance. `computeFloor` is pointer-wins (read-state PR C, D5).
+            // advance. `computeFloor` is pointer-wins.
             // This also reads only the resident `messages` array, with no cache
             // fallback. For an entity holding a parked marker over an EMPTY
             // resident array `onActivate` finds no divider position, and the
@@ -2744,7 +2739,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           // unreadCount commits unconditionally on `exact`; mentionsCount is
-          // never written (requirement 2) — the spread below preserves it
+          // never written — the spread below preserves it
           // (and anything else on `meta`) untouched.
           if (meta.unreadCount === unreadCount && newMarkers === state.firstNewMessageMarkers) return state
 
@@ -2812,7 +2807,7 @@ export const chatStore = createStore<ChatState>()(
         // Captured from inside set() so the post-set MDS marker resolution can read the
         // merged array even for a non-active conversation (whose array isn't in RAM).
         let mergedForMarker: Message[] = []
-        // PR B recount trigger (forward MAM merge past the floor): set inside
+        // Recount trigger (forward MAM merge past the floor): set inside
         // set() when a forward catch-up merge landed new messages for a
         // NON-active conversation — the archive-derived recount runs after
         // set() returns (see bottom of this action).
@@ -3050,7 +3045,7 @@ export const chatStore = createStore<ChatState>()(
             // regain its badge after catch-up — the COUNT is derived from the
             // archive (see recomputeUnreadForConversation), never from this
             // page-scoped merged slice. The merge itself writes NO read
-            // pointer (read-state PR C, D6): the fresh-entity snap it used to
+            // pointer: the fresh-entity snap it used to
             // apply here is replaced by the entity's `historyFloor`, and the
             // outgoing-message advance was an inference the forward-only
             // pointer cannot take back. Backward merges only prepend older
@@ -3104,7 +3099,7 @@ export const chatStore = createStore<ChatState>()(
           get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)
         }
 
-        // Archive-derived recount (PR B, trigger: forward MAM merge past the
+        // Archive-derived recount (trigger: forward MAM merge past the
         // floor). A forward catch-up merge for a non-active conversation may
         // have extended contiguous history past the read pointer — re-derive
         // the badge from the archive rather than trusting this page alone.
@@ -3377,12 +3372,12 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
-        // Task 9: tear down the OUTGOING account's transient overlay entries
+        // Tear down the OUTGOING account's transient overlay entries
         // before adopting the new scope — see lastChatTransientScope's doc for
         // why this can't just read getStorageScopeJid() here.
         if (lastChatTransientScope !== null) {
           clearTransientScope(lastChatTransientScope)
-          // Task 11: viewport evidence is scoped the same way — same teardown timing.
+          // Viewport evidence is scoped the same way — same teardown timing.
           clearViewportEvidence(lastChatTransientScope)
         }
         lastChatTransientScope = getStorageScopeJid()
@@ -3395,13 +3390,13 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
-        // Task 9: logout tears down this account's transient overlay too.
+        // Logout tears down this account's transient overlay too.
         // Unlike switchAccount, nothing flips the global scope before reset()
         // runs (clearLocalData calls it directly), so getStorageScopeJid()
         // here is still the account being logged out — read it directly
         // rather than through lastChatTransientScope.
         clearTransientScope(getStorageScopeJid() ?? '')
-        // Task 11: viewport evidence, same account-scoped teardown.
+        // Viewport evidence, same account-scoped teardown.
         clearViewportEvidence(getStorageScopeJid() ?? '')
         lastChatTransientScope = null
         // New session → the XEP-0490 synced read marker may be folded again on first open.
@@ -3478,7 +3473,7 @@ export const chatStore = createStore<ChatState>()(
         },
       },
       partialize: (state) => ({
-        // Persist separated maps (Phase 6)
+        // Persist separated maps
         conversationEntities: state.conversationEntities,
         conversationMeta: state.conversationMeta,
         // Empty, like `messages` below: the partialized shape has to match what

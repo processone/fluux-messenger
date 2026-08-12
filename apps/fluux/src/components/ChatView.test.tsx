@@ -62,7 +62,7 @@ vi.mock('@fluux/sdk', () => ({
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
   useReferencedMessage: () => undefined,
-  // Read-state PR B, Task 11: viewport-evidence generation plumbing. A fixed
+  // Viewport-evidence generation plumbing. A fixed
   // scope + generation is enough for these render tests — none of them
   // exercise the SDK's real activation path, so the generation never moves.
   getStorageScopeJid: () => null,

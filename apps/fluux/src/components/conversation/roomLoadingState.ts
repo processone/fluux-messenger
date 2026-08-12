@@ -23,10 +23,10 @@ export function selectRoomInitialLoading(args: {
 }): boolean {
   const { isJoining, joined, isCatchingUp, messageCount } = args
 
-  // Phase 1: still joining.
+  // Still joining.
   if (isJoining && !joined) return true
 
-  // Phase 2: joined, first history fetch in flight, nothing to show yet.
+  // Joined, first history fetch in flight, nothing to show yet.
   if (joined && isCatchingUp && messageCount === 0) return true
 
   return false

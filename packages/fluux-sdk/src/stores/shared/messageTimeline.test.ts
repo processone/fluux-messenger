@@ -76,7 +76,7 @@ describe('messageTimeline', () => {
       }
     })
 
-    // FIX 5 (read-state PR B, final whole-branch review): appendLive used to
+    // appendLive used to
     // append in ARRIVAL order (`[...messages, incoming]`, never sorted), while
     // the archive orders same-millisecond rows by the shared comparator (chat:
     // id). Since the viewport observer advances the read pointer by RESIDENT

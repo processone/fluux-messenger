@@ -308,7 +308,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(room?.mentionsCount).toBe(1)
   })
 
-  // PR B: the count is no longer written synchronously from this page-scoped
+  // The count is no longer written synchronously from this page-scoped
   // slice — it is archive-derived (recomputeUnreadForRoom, fire-and-forget).
   // With no mamQueryStates/roomCoverage seeded, that derivation defers, so the
   // count stays at its seeded stale value (3/1) rather than snapping to this
@@ -359,7 +359,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
   // Multi-page background walk: the pointer resolves against only the FINAL
   // page (mergedForMarker), which undercounts a walk spanning several pages
   // (the fetch-latest page, earlier backward pages) — the badge would read
-  // ~9 instead of the true 19. PR B (Task 8) fixes this architecturally
+  // ~9 instead of the true 19. PR B fixes this architecturally
   // rather than by re-reading a wider cache window: the archive-derived
   // recount (recomputeUnreadForRoom) cursors the DURABLE ARCHIVE from the
   // floor forward, so it has no page-boundary undercount to begin with. It
@@ -436,7 +436,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
       new Promise<RoomMessage[]>((resolve) => { releaseCache = resolve })
     )
     roomStore.getState().mergeRoomMAMMessages(ROOM, page, { first: 's-ptr' }, false, 'backward')
-    // PR B: the pointer resolves synchronously, but the count is no longer
+    // The pointer resolves synchronously, but the count is no longer
     // written synchronously from this page — the archive-derived recount is
     // still pending on the gated cache read below, so the count is untouched.
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
@@ -975,7 +975,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
-  // PR B (Task 8): the count is no longer written synchronously from this
+  // The count is no longer written synchronously from this
   // page — it is archive-derived (recomputeUnreadForRoom, triggered
   // fire-and-forget by both the forward-merge and the marker-resolution
   // paths). With no mamQueryStates/roomCoverage seeded, that derivation
@@ -1104,7 +1104,7 @@ describe('roomStore pending-marker guard edges', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
   })
 
-  // PR B: the count is archive-derived rather than written synchronously from
+  // The count is archive-derived rather than written synchronously from
   // this page; it defers without proven coverage. The exact-outcome
   // equivalent (real coverage + archive rows, proving mentions are counted
   // from the resolved marker rather than the start of the page) lives in

@@ -209,10 +209,10 @@ export interface UseMessageListScrollOptions {
   staticMode?: boolean
   /** When present (virtualization flag ON), scroll math uses this interface instead
    *  of reading the DOM directly — so it works for unmounted rows. Absent → unchanged
-   *  DOM-based behavior. Wired in Task 7. */
+   *  DOM-based behavior. */
   virtualizer?: MessageVirtualizer
   /**
-   * Read-state PR B, Task 11: reports whether the viewport is genuinely at the
+   * Reports whether the viewport is genuinely at the
    * live edge, invoked EVERY time `isAtBottomRef.current` is assigned from a
    * REAL measured geometry read (a `scrollHeight - scrollTop - clientHeight`
    * comparison against `AT_BOTTOM_THRESHOLD`, taken after the scroll write it
@@ -328,14 +328,14 @@ export function useMessageListScroll({
     directionalWindowRef.current = new DirectionalHistoryWindowCoordinator()
   }
 
-  // Read-state PR B, Task 11: latest `onLiveEdgeMeasured` callback, read imperatively
+  // Latest `onLiveEdgeMeasured` callback, read imperatively
   // by `setMeasuredAtBottom` below (never closed over directly, so a caller passing a
   // fresh inline function each render still reaches the CURRENT one).
   const onLiveEdgeMeasuredRef = useRef(onLiveEdgeMeasured)
   onLiveEdgeMeasuredRef.current = onLiveEdgeMeasured
 
   // Set `isAtBottomRef` from a REAL measured geometry read, AND report that same
-  // measurement to the SDK's viewport-evidence channel (Task 11). Every call site
+  // measurement to the SDK's viewport-evidence channel. Every call site
   // below has just read `scrollHeight - scrollTop - clientHeight` (or an equivalent
   // virtualizer-aware distance) against `AT_BOTTOM_THRESHOLD` — never an
   // assumed/decided default. Must NOT be used for: `rememberBottomIntent` (sets

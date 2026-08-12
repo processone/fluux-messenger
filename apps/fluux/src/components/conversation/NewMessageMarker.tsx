@@ -9,7 +9,7 @@ import { formatUnreadCount } from '@/utils/formatUnreadCount'
  * synced XEP-0490 read position is still unresolved — it may move or vanish
  * once the marker resolves, so it renders muted instead of the accent color.
  *
- * `count`: the canonical unread count (Read-state PR B, Task 12) — the divider is a real
+ * `count`: the canonical unread count — the divider is a real
  * numeric surface, not just a positional line. When provided it labels the count (e.g. "2 new
  * messages"), through the same shared `formatUnreadCount` every other unread surface uses.
  * Undefined keeps the generic "New messages" label. MessageList deliberately uses that fallback

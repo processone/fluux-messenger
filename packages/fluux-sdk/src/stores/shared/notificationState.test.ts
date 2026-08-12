@@ -88,7 +88,7 @@ function seenIn(msgs: NotificationMessage[], id: string): ReadPointer {
  */
 const NO_READ_TIME = new Date(0)
 
-// `viewportAtLiveEdge: true` on ACTIVE_VISIBLE (Task 11): every existing usage
+// `viewportAtLiveEdge: true` on ACTIVE_VISIBLE: every existing usage
 // below represents the user genuinely watching the live edge (either directly
 // testing the "sees it" branch, or an outgoing-message context where the
 // viewport precondition doesn't matter since `isOutgoing` short-circuits
@@ -405,7 +405,7 @@ describe('onActivate', () => {
     const state = makeState({ readPointer: seenIn(msgs, 'a') })
     const result = onActivate(state, msgs, 'chat')
     // Delayed messages are valid new messages (offline delivery in 1:1 chats).
-    // `isDelayed` no longer discriminates at all (PR C, D8): anything after the
+    // `isDelayed` no longer discriminates at all: anything after the
     // boundary is new.
     expect(result.firstNewMessageId).toBe('b')
   })
@@ -451,7 +451,7 @@ describe('onActivate', () => {
     expect(result.readPointer?.identity.messageId).toBe('msg-2')
   })
 
-  // FIX 2: an empty slice gives onActivate nothing to derive a divider from —
+  // An empty slice gives onActivate nothing to derive a divider from —
   // it must not fabricate a "fully read" 0 either; the seeded 3 passes through.
   it('handles empty messages array', () => {
     const state = makeState({ readPointer: seenIn(messages, 'msg-1'), unreadCount: 3 })
@@ -635,7 +635,7 @@ describe('onActivate', () => {
   })
 
   // Replaces 'room mode (treatDelayedAsNew=false): delayed = history replay,
-  // not new'. Under the unified rule (PR C, D8) `isDelayed` no longer
+  // not new'. Under the unified rule `isDelayed` no longer
   // discriminates anywhere in the divider: what keeps a freshly joined room
   // from opening in the middle of replayed history is the JOIN WATERMARK, which
   // sits after that history. Gating on `isDelayed` was a proxy for it, and a
@@ -1447,7 +1447,7 @@ describe('lifecycle sequences', () => {
     })
 
     // First activation: marker at msg-103. The pointer is NOT moved — activation
-    // places a divider and writes no read position (PR C, D5). The resume-
+    // places a divider and writes no read position. The resume-
     // preserving snap that used to land it on msg-102 is gone.
     state = onActivate(state, msgs, 'chat')
     expect(state.firstNewMessageId).toBe('msg-103')
@@ -1759,7 +1759,7 @@ describe('readPointer on the remaining pointer-writing transitions (#1081)', () 
 })
 
 // ---------------------------------------------------------------------------
-// onMessageReceived — outgoing collapse (PR C, D1)
+// onMessageReceived — outgoing collapse
 // ---------------------------------------------------------------------------
 
 describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
@@ -1862,7 +1862,7 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
     expect(r.firstNewMessageId).toBeUndefined()
   })
 
-  // Deliberate behaviour change (PR C, D1). Joining a MUC replays our own
+  // Deliberate behaviour change. Joining a MUC replays our own
   // <delay/>-stamped messages; a history replay is not evidence of reading, so
   // the divider must survive. Today this clears it.
   it('a DELAYED outgoing message does NOT clear the divider in a ROOM (history replay)', () => {

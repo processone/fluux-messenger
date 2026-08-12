@@ -63,7 +63,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 import * as messageCache from '../utils/messageCache'
 
 /**
- * Task 11: simulate the view reporting "genuinely at the live edge" for the
+ * Simulate the view reporting "genuinely at the live edge" for the
  * CURRENT activation generation — mirrors what `RoomView`'s `reportLiveEdge`
  * callback does in the real app after `setActiveRoom` runs. Requires the REAL
  * `setActiveRoom` to have run first (it is the sole caller of
@@ -110,7 +110,7 @@ describe('roomStore', () => {
     // fixtures below reuse the same room jid + message id across `it()`
     // blocks, which would otherwise resolve to an already-noted entry.
     _clearAllTransientForTesting()
-    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // Viewport evidence is ALSO a module-level Map outside any store —
     // same leakage risk across `it()` blocks reusing the same room jid.
     _clearAllViewportEvidenceForTesting()
   })
@@ -1064,7 +1064,7 @@ describe('roomStore', () => {
 
     it('should not increment unread count for active room AND at the live edge', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      // Task 11: use the REAL setActiveRoom (not a raw activeRoomJid setState) so it
+      // Use the REAL setActiveRoom (not a raw activeRoomJid setState) so it
       // actually begins a viewport-evidence generation, then report the live edge for it.
       roomStore.getState().setActiveRoom('test@conference.example.com')
       reportAtLiveEdge('test@conference.example.com')
@@ -1863,7 +1863,7 @@ describe('roomStore', () => {
         ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello'),
         timestamp: msgTimestamp,
       })
-      // Task 11: the pointer advance now also requires viewport evidence that the
+      // The pointer advance now also requires viewport evidence that the
       // reader is genuinely at the live edge. Activate through the REAL store action
       // (sole caller of beginViewportGeneration) so the report lands on the current
       // generation — a raw setState would leave it stale and silently ignored.
@@ -1908,7 +1908,7 @@ describe('roomStore', () => {
         timestamp: msgTimestamp,
       })
 
-      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // Viewport evidence for the CURRENT activation generation is now a
       // precondition of the advance (see the fixture note above).
       roomStore.getState().setActiveRoom('test@conference.example.com')
       reportAtLiveEdge('test@conference.example.com')
@@ -1933,7 +1933,7 @@ describe('roomStore', () => {
         timestamp: msgTimestamp,
       })
 
-      // Task 11: viewport evidence for the CURRENT activation generation is now a
+      // Viewport evidence for the CURRENT activation generation is now a
       // precondition of the advance (see the fixture note above).
       roomStore.getState().setActiveRoom('test@conference.example.com')
       reportAtLiveEdge('test@conference.example.com')
@@ -2097,7 +2097,7 @@ describe('roomStore', () => {
 
     it('should not increment mentions count for active room AND at the live edge', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      // Task 11: use the REAL setActiveRoom so a viewport-evidence generation
+      // Use the REAL setActiveRoom so a viewport-evidence generation
       // actually begins, then report the live edge for it.
       roomStore.getState().setActiveRoom('test@conference.example.com')
       reportAtLiveEdge('test@conference.example.com')
@@ -4106,7 +4106,7 @@ describe('roomStore', () => {
       roomStore.getState().addRoom(createRoom('room1@conference.example.com'))
       roomStore.getState().addRoom(createRoom('room2@conference.example.com'))
 
-      // View Room 1, genuinely at the live edge (Task 11).
+      // View Room 1, genuinely at the live edge.
       roomStore.getState().setActiveRoom('room1@conference.example.com')
       reportAtLiveEdge('room1@conference.example.com')
 
@@ -4593,7 +4593,7 @@ describe('roomStore', () => {
       roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
     })
 
-    // PR B (Task 8): a forward merge into a non-active room no longer writes a
+    // A forward merge into a non-active room no longer writes a
     // page-scoped count synchronously — it schedules recomputeUnreadForRoom
     // (fire-and-forget), which derives the badge from the durable archive
     // instead (see roomStore.archiveUnread.test.ts for the exact-outcome
@@ -6326,7 +6326,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     // fixtures below reuse the same room jid + message id across `it()`
     // blocks, which would otherwise resolve to an already-noted entry.
     _clearAllTransientForTesting()
-    // Task 11: viewport evidence is ALSO a module-level Map outside any store —
+    // Viewport evidence is ALSO a module-level Map outside any store —
     // same leakage risk across `it()` blocks reusing the same room jid.
     _clearAllViewportEvidenceForTesting()
   })
@@ -6377,7 +6377,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
   it('places the divider on delayed history after lastSeen (unified with chats)', () => {
     // Rooms treat delayed (MAM/history-replay) messages exactly as chats do:
     // `isDelayed` plays no part at all, only the position relative to the
-    // read boundary (PR C, D8).
+    // read boundary.
     const marker = activateWith(
       [
         seenMsg(),

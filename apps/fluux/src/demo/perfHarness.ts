@@ -72,7 +72,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
   const det = await import('../utils/renderLoopDetector').catch(() => null)
 
   // ---------------------------------------------------------------------------
-  // Phase 0 baseline scenarios (Codex render-perf plan).
+  // Render-perf baseline scenarios.
   // Each scenario reads live entities from the vanilla stores, targets a
   // NON-active conversation/room where relevant, fires a deterministic burst,
   // then reports cumulative render counts for the components Codex flagged.

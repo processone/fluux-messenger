@@ -66,7 +66,7 @@ describe('MessageList — new-message divider plumbing', () => {
     expect(container.querySelectorAll('[data-new-message-marker]')).toHaveLength(0)
   })
 
-  // Read-state PR B, Task 12: the divider's PRESENCE stays governed solely by firstNewMessageId
+  // The divider's PRESENCE stays governed solely by firstNewMessageId
   // (unchanged) — unreadCount only supplies its label. firstNewMessageMarkers and unreadCount can
   // be transiently out of step (reactivation's synchronous marker vs. an async archive recount),
   // so the divider must still render — with the generic label, not a misleading "0 new messages"

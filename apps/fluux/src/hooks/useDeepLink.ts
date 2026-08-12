@@ -4,7 +4,7 @@
  * Listens for xmpp: URI scheme events in Tauri and navigates
  * to the appropriate conversation or room.
  *
- * Phase 2.4: Uses React Router for navigation instead of callback handlers.
+ * Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'

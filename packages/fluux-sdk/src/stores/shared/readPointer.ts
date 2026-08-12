@@ -159,7 +159,7 @@ export function withArchiveId(pointer: ReadPointer, archiveId: string): ReadPoin
  *
  * This is the ADVANCE question, so it is answered by {@link mayAdvanceTo}: a
  * same-millisecond tie is broken by the cache order key ONLY when both sides are
- * `exact` (read-state PR C, D2), and otherwise it refuses to move. An exact
+ * `exact`, and otherwise it refuses to move. An exact
  * order is what certifies that a pointer's timestamp is its named message's
  * own — pointers built by `makeReadPointer` always have one, while a pointer
  * migrated from the pre-#1081 `lastSeenMessageId` + `lastReadAt` pair carries
