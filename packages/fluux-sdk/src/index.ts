@@ -311,8 +311,7 @@ export type {
   PollSettings,
   PollClosedData,
 
-  // Client types
-  XMPPClientConfig,
+  // Client types (XMPPClientConfig is exported separately, below)
   XMPPClientEvents,
   StoreBindings,
   PresenceOptions,
@@ -346,6 +345,11 @@ export type {
   MAMResult,
   MAMQueryState,
 } from './core/types'
+
+// Client construction options. Exported from `core/clientConfig` rather than
+// the type barrel: it carries a live store bundle, and `core/types` is a leaf
+// layer that must not name a concrete store.
+export type { XMPPClientConfig } from './core/clientConfig'
 
 // Events types
 export type { SubscriptionRequest, StrangerMessage, MucInvitation, SystemNotification, SystemNotificationType } from './core/types'

@@ -6,145 +6,27 @@
  */
 
 import type { Element } from '@xmpp/client'
-import type { ConnectionStatus } from './connection'
 import type { Message } from './chat'
-import type { RoomMessage } from './room'
 import type { PresenceStatus, Contact } from './roster'
-import type { ServerInfo } from './discovery'
-import type { HttpUploadService } from './upload'
-import type { WebPushService } from './webpush'
-import type { AdminCommand, AdminSession } from './admin'
-import type { StorageAdapter } from './storage'
-import type { ProxyAdapter } from './proxy'
-import type { ConnectionState } from '../../stores/connectionStore'
-import type { ChatState } from '../../stores/chatStore'
-import type { RosterState } from '../../stores/rosterStore'
-import type { ConsoleState } from '../../stores/consoleStore'
-import type { EventsState } from '../../stores/eventsStore'
-import type { RoomState } from '../../stores/roomStore'
-import type { AdminState } from '../../stores/adminStore'
-import type { BlockingState } from '../../stores/blockingStore'
-import type { SDKStores } from '../../stores/sdkStores'
-import {
-  connectionBindingMethodKeys,
-  chatBindingMethodKeys,
-  rosterBindingMethodKeys,
-  consoleBindingMethodKeys,
-  eventsBindingMethodKeys,
-  roomBindingMethodKeys,
-  adminBindingMethodKeys,
-  blockingBindingMethodKeys,
-} from '../storeBindingKeys'
 
 // ============================================================================
 // Store Bindings (Internal)
 // ============================================================================
 
-/**
- * Store bindings interface for injecting store methods into XMPPClient.
- *
- * The bulk of each namespace is DERIVED from the corresponding store state
- * type via the key lists in storeBindingKeys.ts — the store's method
- * signature is the binding's signature, by construction. Only three kinds of
- * members are declared here by hand:
- *
- * - presence-machine bridge members (`Required<PresenceOptions>`) — they come
- *   from an external state machine, not a store
- * - plain state getters (`getStatus`, `getJid`, …)
- * - composite getters with real logic (`getAllConversations`, …)
- *
- * @internal
- * This interface is used internally by XMPPProvider to bind Zustand stores
- * to the XMPP client. Application code should use the React hooks instead.
- *
- * @category Internal
- */
-export interface StoreBindings {
-  connection: Pick<ConnectionState, (typeof connectionBindingMethodKeys)[number]> & {
-      // State getters
-      getStatus: () => ConnectionStatus
-      getOwnNickname: () => string | null
-      getJid: () => string | null
-      getHttpUploadService: () => HttpUploadService | null
-      getWebPushServices: () => WebPushService[]
-      getWebPushEnabled: () => boolean
-      // Server info getter (for MAM support detection)
-      getServerInfo?: () => ServerInfo | null
-    }
-  chat: Pick<ChatState, (typeof chatBindingMethodKeys)[number]> & {
-    // Get all conversations for MAM catch-up
-    getAllConversations: () => Array<{ id: string; messages: Message[] }>
-    // Persisted forward-gap boundary for automatic catch-up recovery
-    getConversationGapStart?: (conversationId: string) => number | undefined
-    // Archive id of the recorded gap's coverage edge (GapInterval.startId) —
-    // id-exact resume cursor, preferred over the timestamp fallback above.
-    getConversationGapStartId?: (conversationId: string) => string | undefined
-    // Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
-    // the proven upper edge of the contiguous-from-live region.
-    getConversationGapEndId?: (conversationId: string) => string | undefined
-    // True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
-    // as unproven (no gap edge, no resident boundary) — the seeder must not
-    // trust cache-oldest as contiguous-to-live (finding 10).
-    getConversationCoverageUnproven?: (conversationId: string) => boolean | undefined
-    // XEP-0490 stanza-id of the remote read position, kept unresolved when it
-    // can't be matched locally — seeds a forward `after` catch-up on an
-    // empty-cache new device.
-    getConversationPendingStanzaId?: (conversationId: string) => string | undefined
-    // Currently ACTIVE conversation id (null when none). Re-checked at every
-    // Phase B iteration of the pointer-stitch walk: backward pages into the
-    // active resident window would keep-oldest-evict its live edge.
-    getActiveConversationId?: () => string | null
-    // Smart MAM: archived conversation preview refresh
-    getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
-    getLastMessage?: (conversationId: string) => Message | undefined
-    // Every stored conversation (archived INCLUDED) with its in-memory
-    // messages. Read seam for the deferred-decrypt engine, which must retry
-    // pending encrypted payloads regardless of archive state — unlike
-    // getAllConversations, which returns only the active set.
-    getAllStoredMessages: () => Array<{ id: string; messages: Message[] }>
-    // In-memory messages for a single conversation (archived included). Read
-    // seam for peer-scoped deferred-decrypt retry on a PEP key change.
-    getConversationMessages: (conversationId: string) => Message[]
-    // Every conversation whose sidebar preview still carries an
-    // `encryptedPayload` (archived INCLUDED). Read seam for the deferred-decrypt
-    // engine's preview-level heal: a preview can hold ciphertext that no message
-    // store reaches (its message evicted, already decrypted in IndexedDB, or set
-    // preview-only) — so it must be re-decrypted straight from its own stash.
-    getEncryptedPreviews?: () => Array<{ conversationId: string; lastMessage: Message }>
-  }
-  roster: Pick<RosterState, (typeof rosterBindingMethodKeys)[number]>
-  console: Pick<ConsoleState, (typeof consoleBindingMethodKeys)[number]>
-  events: Pick<EventsState, (typeof eventsBindingMethodKeys)[number]>
-  room: Pick<RoomState, (typeof roomBindingMethodKeys)[number]> & {
-    // Persisted forward-gap boundary for automatic catch-up recovery
-    getRoomGapStart?: (roomJid: string) => number | undefined
-    // Archive id of the recorded gap's coverage edge (GapInterval.startId) —
-    // id-exact resume cursor, preferred over the timestamp fallback above.
-    getRoomGapStartId?: (roomJid: string) => string | undefined
-    // Archive id of the recorded gap's contiguous-coverage bottom (GapInterval.endId) —
-    // the proven upper edge of the contiguous-from-live region.
-    getRoomGapEndId?: (roomJid: string) => string | undefined
-    // True when a disjoint fetch-latest flagged the contiguous coverage BOTTOM
-    // as unproven (no gap edge, no resident boundary) — the seeder must not
-    // trust cache-oldest as contiguous-to-live (finding 10).
-    getRoomCoverageUnproven?: (roomJid: string) => boolean | undefined
-    // XEP-0490 stanza-id of the remote read position, kept unresolved when it
-    // can't be matched locally — seeds a forward `after` catch-up on an
-    // empty-cache new device.
-    getRoomPendingStanzaId?: (roomJid: string) => string | undefined
-    // Every room with its in-memory runtime messages. Read seam for the
-    // deferred-decrypt engine (mirrors chat.getAllStoredMessages for MUC).
-    getAllRoomMessages: () => Array<{ jid: string; messages: RoomMessage[] }>
-  }
-  admin: Pick<AdminState, (typeof adminBindingMethodKeys)[number]> & {
-    // State getters
-    getCommands: () => AdminCommand[]
-    getCurrentSession: () => AdminSession | null
-    getMucServiceJid: () => string | null
-    selectedVhost: string | null
-  }
-  blocking: Pick<BlockingState, (typeof blockingBindingMethodKeys)[number]>
-}
+// The port itself lives in `./storeBindings`, declared in domain terms with no
+// dependency on a store. Re-exported here so the historical import path — and
+// the `core/types` barrel — keep working unchanged.
+export type {
+  StoreBindings,
+  ConnectionBindings,
+  ChatBindings,
+  RosterBindings,
+  ConsoleBindings,
+  EventsBindings,
+  RoomBindings,
+  AdminBindings,
+  BlockingBindings,
+} from './storeBindings'
 
 // ============================================================================
 // XMPP Client Events
@@ -248,89 +130,4 @@ export interface PrivacyOptions {
    * @default false
    */
   disableOccupantAvatarsInAnonymousRooms?: boolean
-}
-
-/**
- * XMPPClient configuration options.
- *
- * @category Core
- */
-export interface XMPPClientConfig {
-  /** Enable debug logging */
-  debug?: boolean
-  /**
-   * Store bundle backing this client. Defaults to the process-wide singletons
-   * ({@link defaultStores}).
-   *
-   * @internal Partial seam — NOT a supported multi-account switch yet, and not
-   * part of the public API. A custom {@link SDKStores} bundle is honored by
-   * `connect()` account-switch and the SDK event → store bindings, but the
-   * store-based side effects (MAM catch-up, read-marker / MDS sync, background
-   * sync), the SM-resumable state snapshot, and the Poll module still read and
-   * write the process-global singletons regardless of what is passed here.
-   * Two clients with different bundles therefore cross-contaminate on that
-   * state — do not use this to run multiple accounts. Full isolation also needs
-   * a `createStores()` factory and a per-instance storage scope; see the
-   * checklist in `stores/sdkStores.ts`. Single-account apps must omit this.
-   */
-  stores?: SDKStores
-  /**
-   * Options for integrating an external presence state machine.
-   * Only needed when using XState for presence management (e.g., in React apps).
-   * Bots typically don't need this - default presence handling is sufficient.
-   */
-  presenceOptions?: PresenceOptions
-  /**
-   * Privacy options for controlling data exposure.
-   * @see {@link PrivacyOptions}
-   */
-  privacyOptions?: PrivacyOptions
-  /**
-   * Storage adapter for session persistence.
-   *
-   * Provides platform-specific storage for:
-   * - XEP-0198 Stream Management session state (for fast reconnection)
-   * - User credentials (for "Remember Me" functionality)
-   * - Cached roster, rooms, and server info (for faster startup)
-   *
-   * The SDK provides `sessionStorageAdapter` as a default for web apps.
-   * Desktop apps can provide a custom adapter using OS keychain.
-   *
-   * @example
-   * ```tsx
-   * // Web app - uses default sessionStorageAdapter
-   * <XMPPProvider>
-   *   <App />
-   * </XMPPProvider>
-   *
-   * // Desktop app with OS keychain
-   * <XMPPProvider storageAdapter={tauriStorageAdapter}>
-   *   <App />
-   * </XMPPProvider>
-   * ```
-   */
-  storageAdapter?: StorageAdapter
-  /**
-   * Proxy adapter for WebSocket-to-TCP bridging.
-   *
-   * Desktop apps can provide a proxy adapter to enable native TCP/TLS
-   * connections to XMPP servers instead of WebSocket.
-   *
-   * When provided, the SDK will use this adapter to start/stop the proxy
-   * for each connection. When not provided, connections use WebSocket directly.
-   *
-   * @example
-   * ```tsx
-   * <XMPPProvider proxyAdapter={tauriProxyAdapter}>
-   *   <App />
-   * </XMPPProvider>
-   * ```
-   */
-  proxyAdapter?: ProxyAdapter
-  /**
-   * Pull-based predicate the SDK evaluates before each automatic reconnect
-   * attempt. Return `false` to suppress auto-reconnect (e.g., after an
-   * explicit logout). Evaluated live — no cached copy. Defaults to always-on.
-   */
-  shouldAutoReconnect?: () => boolean
 }

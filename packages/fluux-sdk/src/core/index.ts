@@ -8,10 +8,13 @@ export { createDefaultStoreBindings } from './defaultStoreBindings'
 export { xml } from '@xmpp/client'
 export type { Element } from '@xmpp/client'
 
+// Client construction options (carries the store bundle, so it lives outside
+// the leaf type layer).
+export type { XMPPClientConfig } from './clientConfig'
+
 // Types
 export type {
   ConnectOptions,
-  XMPPClientConfig,
   XMPPClientEvents,
   StoreBindings,
   PresenceOptions,

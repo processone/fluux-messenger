@@ -140,14 +140,29 @@ export type {
   LastActivityEntry,
 } from './admin'
 
-// Client types
+// Client types.
+//
+// `XMPPClientConfig` is deliberately NOT here: it carries a live `SDKStores`
+// bundle, so re-exporting it would make this leaf barrel depend on a concrete
+// store. It is exported from `core/clientConfig` instead.
 export type {
   StoreBindings,
   XMPPClientEvents,
-  XMPPClientConfig,
   PresenceOptions,
   PrivacyOptions,
 } from './client'
+
+// The store-binding port, declared in domain terms (see `./storeBindings`).
+export type {
+  ConnectionBindings,
+  ChatBindings,
+  RosterBindings,
+  ConsoleBindings,
+  EventsBindings,
+  RoomBindings,
+  AdminBindings,
+  BlockingBindings,
+} from './storeBindings'
 
 // Storage types
 export type {

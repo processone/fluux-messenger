@@ -1,11 +1,11 @@
 import { Client, Element } from '@xmpp/client'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
+import type { XMPPClientConfig } from './clientConfig'
 import type {
   ConnectOptions,
   StoreBindings,
   XMPPClientEvents,
-  XMPPClientConfig,
   SDKEvents,
   SDKEventHandler,
   StorageAdapter,
