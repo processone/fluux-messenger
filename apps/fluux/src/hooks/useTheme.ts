@@ -3,9 +3,8 @@ import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
 import { resolveTransparency } from '@/themes/transparency'
-import { isLinux } from '@/utils/tauri'
+import { platform } from '@/platform'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 /**
  * Returns '#000000' or '#ffffff' depending on which provides better WCAG contrast
@@ -263,7 +262,7 @@ export function useTheme() {
     updateThemeColorMeta(resolved)
 
     // 5. Sync Tauri native title bar
-    if (isTauri) {
+    if (platform().syncsNativeTitleBarTheme) {
       void import('@tauri-apps/api/window')
         .then(({ getCurrentWindow }) => {
           const tauriTheme = mode === 'system' ? null : resolved
@@ -338,7 +337,7 @@ export function useTheme() {
   // therefore keeps a solid modal surface; see the .fluux-glass rules in
   // index.css.
   useEffect(() => {
-    document.documentElement.dataset.platform = isLinux() ? 'linux' : 'default'
+    document.documentElement.dataset.platform = platform().os === 'linux' ? 'linux' : 'default'
   }, [])
 
   // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;

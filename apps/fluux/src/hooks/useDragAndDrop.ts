@@ -79,10 +79,10 @@ export function useDragAndDrop({
   }
 
   // Tauri native file drop (for desktop app)
-  const { isDragging: isTauriDragging, isTauri } = useTauriFileDrop(handleTauriFileDrop, isUploadSupported)
+  const { isDragging: nativeDragging, nativeFileDrop } = useTauriFileDrop(handleTauriFileDrop, isUploadSupported)
 
   // Combined drag state: use Tauri's native drag in desktop, HTML5 in browser
-  const isDragging = isTauri ? isTauriDragging : isHtmlDragging
+  const isDragging = nativeFileDrop ? nativeDragging : isHtmlDragging
 
   // HTML5 Drag-and-drop handlers (for web browser only - Tauri intercepts these)
   const handleDragEnter = (e: React.DragEvent) => {
@@ -98,7 +98,7 @@ export function useDragAndDrop({
     const hasFiles = types.includes('Files')
     const isInternalDrag = types.includes('text/html') || types.includes('text/uri-list')
 
-    if (hasFiles && !isInternalDrag && isUploadSupported && !isTauri) {
+    if (hasFiles && !isInternalDrag && isUploadSupported && !nativeFileDrop) {
       setIsHtmlDragging(true)
     }
   }
@@ -124,7 +124,7 @@ export function useDragAndDrop({
     setIsHtmlDragging(false)
 
     // Only handle in browser - Tauri uses native drop handler
-    if (!isTauri) {
+    if (!nativeFileDrop) {
       // Ignore internal drags (images dragged from within the app)
       const types = Array.from(e.dataTransfer.types)
       const isInternalDrag = types.includes('text/html') || types.includes('text/uri-list')

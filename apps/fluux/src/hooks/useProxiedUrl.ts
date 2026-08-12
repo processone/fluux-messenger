@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import {
   isMediaRetrievalError,
   resolveMediaUrl,
@@ -66,7 +66,7 @@ export function sanitizeMediaUrl(url: string): string {
  */
 export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean = true): ProxiedUrlState {
   // Check if web Cache API is available (not in all test environments)
-  const hasWebCache = !isTauri() && typeof caches !== 'undefined'
+  const hasWebCache = !platform().nativeMediaCache && typeof caches !== 'undefined'
 
   // Synchronous initialization: use sanitized URL immediately when no async
   // cache is involved (web without Cache API). Otherwise start as loading.
@@ -74,7 +74,7 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
     if (!originalUrl || !enabled) {
       return { url: null, isLoading: false, error: null }
     }
-    if (!isTauri() && !hasWebCache) {
+    if (!platform().nativeMediaCache && !hasWebCache) {
       // No async cache available — use direct URL
       return { url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null }
     }
@@ -91,7 +91,7 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
     const sanitized = sanitizeMediaUrl(originalUrl)
 
     // Web without Cache API: direct URL passthrough
-    if (!isTauri() && !hasWebCache) {
+    if (!platform().nativeMediaCache && !hasWebCache) {
       setState({ url: sanitized, isLoading: false, error: null })
       return
     }
@@ -100,7 +100,7 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
     let cancelled = false
     setState({ url: null, isLoading: true, error: null })
 
-    const resolve = isTauri() ? resolveMediaUrl : resolveWebMediaUrl
+    const resolve = platform().nativeMediaCache ? resolveMediaUrl : resolveWebMediaUrl
 
     resolve(originalUrl)
       .then(cachedUrl => {

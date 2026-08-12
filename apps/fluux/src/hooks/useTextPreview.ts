@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 /** Maximum bytes to fetch for text preview */
 const MAX_PREVIEW_BYTES = 1024
@@ -90,7 +90,7 @@ export function useTextPreview(url: string | undefined, enabled: boolean = true)
 
       try {
         // Use Tauri HTTP plugin in desktop, browser fetch in web
-        const { text, isTruncated: wasRangeTruncated } = isTauri()
+        const { text, isTruncated: wasRangeTruncated } = platform().nativeHttpFetch
           ? await fetchViaTauri(url)
           : await fetchViaBrowser(url)
 

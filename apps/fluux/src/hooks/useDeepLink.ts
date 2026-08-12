@@ -13,9 +13,9 @@ import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
 import { useToastStore } from '@/stores/toastStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
+import { platform } from '@/platform'
 
 // Tauri detection
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 /**
  * Hook that listens for XMPP deep links and navigates accordingly.
@@ -144,7 +144,7 @@ export function useDeepLink() {
 
   // Set up deep link listener
   useEffect(() => {
-    if (!isTauri) return
+    if (!platform().hasDeepLinkEvents) return
 
     let cleanup: (() => void) | undefined
     let cleanedUp = false

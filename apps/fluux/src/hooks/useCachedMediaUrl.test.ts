@@ -7,9 +7,16 @@ const { peekMediaCacheSpy, peekWebMediaCacheSpy, peekEncryptedSpy, peekWebEncryp
   peekEncryptedSpy: vi.fn(),
   peekWebEncryptedSpy: vi.fn(),
 }))
-const mockIsTauri = vi.fn()
 
-vi.mock('@/utils/tauri', () => ({ isTauri: () => mockIsTauri() }))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the hook under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
+
 vi.mock('@/utils/mediaCache', () => ({
   peekMediaCache: (u: string) => peekMediaCacheSpy(u),
   peekWebMediaCache: (u: string) => peekWebMediaCacheSpy(u),
@@ -22,7 +29,7 @@ import { useCachedMediaUrl } from './useCachedMediaUrl'
 describe('useCachedMediaUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
     peekWebMediaCacheSpy.mockResolvedValue(null)
     peekMediaCacheSpy.mockResolvedValue(null)
     peekEncryptedSpy.mockResolvedValue(null)
@@ -59,8 +66,9 @@ describe('useCachedMediaUrl', () => {
     expect(peekWebMediaCacheSpy).not.toHaveBeenCalled()
   })
 
-  it('uses the Tauri peek when isTauri()', async () => {
-    mockIsTauri.mockReturnValue(true)
+  it('uses the native peek where the media cache is native', async () => {
+    usePlatform('desktop')
+    usePlatform('desktop')
     peekMediaCacheSpy.mockResolvedValue('https://asset.localhost/x')
     const { result } = renderHook(() => useCachedMediaUrl('https://x/a.png', undefined, true))
     await waitFor(() => expect(result.current.isPeeking).toBe(false))

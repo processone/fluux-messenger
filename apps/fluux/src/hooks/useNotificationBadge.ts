@@ -3,15 +3,11 @@ import { useEvents, computeBadgeCount } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { setWebAppBadge } from '@/utils/appBadge'
-
-// Check if running in Tauri (v2 uses __TAURI_INTERNALS__)
-const isTauri = () => {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
+import { platform } from '@/platform'
 
 // Set Tauri dock/taskbar badge
 async function setTauriBadge(count: number): Promise<void> {
-  if (!isTauri()) return
+  if (!platform().hasNativeAppBadge) return
 
   try {
     const { getCurrentWindow } = await import('@tauri-apps/api/window')
@@ -130,7 +126,7 @@ export function useNotificationBadge(): void {
 
   // Initialize favicon badge handler (browser only)
   useEffect(() => {
-    if (!isTauri() && typeof document !== 'undefined') {
+    if (!platform().hasNativeAppBadge && typeof document !== 'undefined') {
       faviconBadgeRef.current = new FaviconBadge()
     }
 
@@ -157,7 +153,7 @@ export function useNotificationBadge(): void {
       },
     })
 
-    if (isTauri()) {
+    if (platform().hasNativeAppBadge) {
       void setTauriBadge(totalCount)
     } else {
       faviconBadgeRef.current?.setBadge(totalCount)

@@ -27,9 +27,8 @@ const SERVER = 'example.com'
 // Force the Tauri code path and a present-but-wrong stored credential.
 // JID/server are inlined here: vi.mock factories are hoisted above module
 // consts, so they cannot reference JID/SERVER.
-vi.mock('@/utils/tauri', () => ({
-  isTauri: () => true,
-}))
+import { setPlatformForTesting } from '@/platform'
+setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 vi.mock('@/utils/keychain', () => ({
   hasSavedCredentials: () => true,
   getCredentials: vi.fn().mockResolvedValue({ jid: 'user@example.com', password: 'stale-password', server: 'example.com' }),

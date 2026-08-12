@@ -13,10 +13,12 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 import { dismissNotification } from './dismissNotification'
+import { setPlatformForTesting } from '@/platform'
 
+let restorePlatform: (() => void) | undefined
 function setTauri(on: boolean) {
-  if (on) (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
-  else delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell: on ? 'desktop' : 'web', os: 'macos' })
 }
 
 describe('dismissNotification', () => {
@@ -24,7 +26,10 @@ describe('dismissNotification', () => {
     vi.clearAllMocks()
     isMobileTauri.mockResolvedValue(false)
   })
-  afterEach(() => setTauri(false))
+  afterEach(() => {
+    restorePlatform?.()
+    restorePlatform = undefined
+  })
 
   it('desktop: invokes the native command with the scoped conversation', async () => {
     setTauri(true)

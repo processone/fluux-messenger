@@ -2,6 +2,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useIsMobileWeb, isMobileWeb, isSmallScreen } from './useIsMobileWeb'
 
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the hook under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os: 'macos' })
+}
+afterEach(() => {
+  restorePlatform?.()
+  restorePlatform = undefined
+})
+
 // Helper type for mocked matchMedia
 type MockedMatchMedia = ReturnType<typeof vi.fn> & ((query: string) => MediaQueryList)
 
@@ -46,7 +59,7 @@ describe('useIsMobileWeb', () => {
     beforeEach(() => {
       // Ensure no Tauri
        
-      delete (global.window as any).__TAURI_INTERNALS__
+      usePlatform('web')
     })
 
     it('returns true when viewport is below 768px', () => {
@@ -128,12 +141,12 @@ describe('useIsMobileWeb', () => {
     beforeEach(() => {
       // Simulate Tauri environment
        
-      (global.window as any).__TAURI_INTERNALS__ = {}
+      usePlatform('desktop')
     })
 
     afterEach(() => {
        
-      delete (global.window as any).__TAURI_INTERNALS__
+      usePlatform('web')
     })
 
     it('always returns false in Tauri, even on small viewport', () => {
@@ -161,7 +174,7 @@ describe('useIsMobileWeb', () => {
 describe('isMobileWeb (non-reactive)', () => {
   beforeEach(() => {
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
   })
 
   it('returns true when not Tauri and viewport < 768px', () => {
@@ -176,44 +189,44 @@ describe('isMobileWeb (non-reactive)', () => {
 
   it('returns false in Tauri regardless of viewport', () => {
      
-    (global.window as any).__TAURI_INTERNALS__ = {}
+    usePlatform('desktop')
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isMobileWeb()).toBe(false)
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
   })
 })
 
 describe('isSmallScreen (platform-agnostic)', () => {
   it('returns true when viewport < 768px (not Tauri)', () => {
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isSmallScreen()).toBe(true)
   })
 
   it('returns false when viewport >= 768px (not Tauri)', () => {
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
     Object.defineProperty(global.window, 'innerWidth', { value: 1024, writable: true })
     expect(isSmallScreen()).toBe(false)
   })
 
   it('returns true in Tauri when viewport < 768px', () => {
      
-    (global.window as any).__TAURI_INTERNALS__ = {}
+    usePlatform('desktop')
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isSmallScreen()).toBe(true)
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
   })
 
   it('returns false in Tauri when viewport >= 768px', () => {
      
-    (global.window as any).__TAURI_INTERNALS__ = {}
+    usePlatform('desktop')
     Object.defineProperty(global.window, 'innerWidth', { value: 1024, writable: true })
     expect(isSmallScreen()).toBe(false)
      
-    delete (global.window as any).__TAURI_INTERNALS__
+    usePlatform('web')
   })
 })

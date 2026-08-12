@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
+import { platform } from '@/platform'
 
 // Tauri detection
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 // Shared state to avoid multiple listeners
 let sharedFullscreenState = false
@@ -17,7 +17,7 @@ function notifyListeners(isFullscreen: boolean) {
 }
 
 async function setupFullscreenDetection() {
-  if (!isTauri || unlisten || setupInProgress) return
+  if (!platform().hasWindowFullscreenEvents || unlisten || setupInProgress) return
   setupInProgress = true
 
   try {
@@ -65,7 +65,7 @@ export function useFullscreen(): boolean {
   const [isFullscreen, setIsFullscreen] = useState(sharedFullscreenState)
 
   useEffect(() => {
-    if (!isTauri) return
+    if (!platform().hasWindowFullscreenEvents) return
 
     // Subscribe to fullscreen changes
     listeners.add(setIsFullscreen)

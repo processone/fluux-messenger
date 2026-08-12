@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { isUpdaterEnabled } from '@/utils/tauri'
 import { createDownloadProgressTracker, type UpdaterDownloadEvent } from './downloadProgressTracker'
+import { platform } from '@/platform'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 // In-app updates are disabled on Linux - users update through their distro package manager
-const updaterEnabled = isUpdaterEnabled()
+const updaterEnabled = platform().hasInAppUpdates
 
 // Cap download-progress re-renders to ~10/sec. The updater emits a Progress
 // event per network chunk (hundreds/sec on a fast link); updating React state on
@@ -150,7 +149,6 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
     downloadAndInstall,
     relaunchApp,
     dismissUpdate,
-    isTauri,
     /** Whether in-app updates are enabled (Tauri on macOS/Windows, not Linux) */
     updaterEnabled,
   }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
-import { isTauri } from '../utils/tauri'
+import { platform } from '@/platform'
 import type { ReconnectIntent } from '../utils/reconnectIntent'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { startWakeGracePeriod, startSyncGracePeriod } from '../utils/renderLoopDetector'
@@ -235,9 +235,9 @@ export function isKeepaliveWakeTick(sleptMs: number | undefined): boolean {
  */
 export function shouldReloadWebviewOnWake(
   durationMs: number | undefined,
-  isTauriMode: boolean
+  webviewStallsAfterSleep: boolean
 ): boolean {
-  if (!isTauriMode) return false
+  if (!webviewStallsAfterSleep) return false
   if (durationMs === undefined) return false
   return durationMs >= SLEEP_THRESHOLD_MS
 }
@@ -258,9 +258,9 @@ export function shouldReloadWebviewOnWake(
 export function shouldReloadOnVisibilityWake(
   hiddenDurationMs: number,
   heartbeatGapMs: number,
-  isTauriMode: boolean
+  webviewStallsAfterSleep: boolean
 ): boolean {
-  if (!shouldReloadWebviewOnWake(hiddenDurationMs, isTauriMode)) return false
+  if (!shouldReloadWebviewOnWake(hiddenDurationMs, webviewStallsAfterSleep)) return false
   if (heartbeatGapMs < SLEEP_THRESHOLD_MS) return false
   return true
 }
@@ -376,7 +376,7 @@ export function usePlatformState() {
    */
   const maybeReloadOnLongWake = useCallback(
     (durationMs: number | undefined, source: string): boolean => {
-      if (!shouldReloadWebviewOnWake(durationMs, isTauri())) return false
+      if (!shouldReloadWebviewOnWake(durationMs, platform().webviewStallsAfterSleep)) return false
       const secs = Math.round((durationMs ?? 0) / 1000)
       console.log(`[PlatformState] Wake from sleep (${source}, ${secs}s), reloading webview to restore rendering`)
       logEvent(`Wake from sleep (${source}, ${secs}s), reloading webview`)
@@ -426,8 +426,8 @@ export function usePlatformState() {
     }
     lastActivityEventRef.current = now
 
-    // In Tauri, verify with OS idle time before signaling
-    if (isTauri() && !osIdleUnavailableRef.current) {
+    // Where the OS reports idle time, verify against it before signalling.
+    if (platform().hasOSIdleDetection && !osIdleUnavailableRef.current) {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const idleSeconds = await invoke<number>('get_idle_time')
@@ -454,7 +454,7 @@ export function usePlatformState() {
     let idleMs: number
     let idleSource: string
 
-    if (isTauri() && !osIdleUnavailableRef.current) {
+    if (platform().hasOSIdleDetection && !osIdleUnavailableRef.current) {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const idleSeconds = await invoke<number>('get_idle_time')
@@ -468,7 +468,7 @@ export function usePlatformState() {
           consoleStore.getState().addEvent(`[checkIdle] Tauri get_idle_time failed: ${err}, falling back to DOM`, 'presence')
         }
       }
-    } else if (isTauri()) {
+    } else if (platform().hasOSIdleDetection) {
       idleMs = Date.now() - lastActivityRef.current
       idleSource = 'DOM (Tauri fallback cached)'
     } else {
@@ -529,7 +529,8 @@ export function usePlatformState() {
   // reconnection. client.notifySystemState() checks connection state internally.
 
   useEffect(() => {
-    if (!isTauri()) return
+    // Listening for OS wake only matters where the webview stalls through it.
+    if (!platform().webviewStallsAfterSleep) return
 
     let cancelled = false
     let unlistenWake: UnlistenFn | undefined
@@ -664,7 +665,7 @@ export function usePlatformState() {
       // (machine awake, app merely hidden) — no rendering loss, no reload.
       // Route through maybeReloadOnLongWake so the decision/marker write is
       // shared with the OS-wake path and unit-testable.
-      if (shouldReloadOnVisibilityWake(hiddenDuration, heartbeatGap, isTauri())) {
+      if (shouldReloadOnVisibilityWake(hiddenDuration, heartbeatGap, platform().webviewStallsAfterSleep)) {
         if (maybeReloadOnLongWake(hiddenDuration, 'visibility')) return
       }
 
@@ -710,7 +711,7 @@ export function usePlatformState() {
   // ── Effect 5: Tauri native events (keepalive + proxy watchdog) ────────────
 
   useEffect(() => {
-    if (!isTauri()) return
+    if (!platform().hasNativeConnectionKeepalive) return
 
     let unlistenKeepalive: UnlistenFn | undefined
     let unlistenProxyClosed: UnlistenFn | undefined
@@ -790,7 +791,7 @@ export function usePlatformState() {
       presenceConnect()
 
       // Check if user is active after connection established
-      if (isTauri() && !osIdleUnavailableRef.current) {
+      if (platform().hasOSIdleDetection && !osIdleUnavailableRef.current) {
         void import('@tauri-apps/api/core').then(({ invoke }) => {
           invoke<number>('get_idle_time').then((idleSeconds) => {
             if (idleSeconds < 60) {
@@ -809,7 +810,7 @@ export function usePlatformState() {
             notifyActive()
           })
         })
-      } else if (isTauri()) {
+      } else if (platform().hasOSIdleDetection) {
         logEvent('Connection restored, OS idle unavailable (DOM fallback), triggering activity')
         notifyActive()
       } else {

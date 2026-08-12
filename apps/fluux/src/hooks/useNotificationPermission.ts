@@ -5,8 +5,9 @@ import {
   requestPermission,
 } from '@tauri-apps/plugin-notification'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
+import { platform } from '@/platform'
 
-export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 
 // Module-level shared state — the single source of truth for "may we post a
 // desktop notification". Consumers read it via getNotificationPermissionGranted()
@@ -31,7 +32,7 @@ export function getNotificationPermissionGranted(): boolean {
  * Notification API.
  */
 async function readPermission(): Promise<boolean> {
-  if (isTauri) {
+  if (platform().notificationsManagedByOS) {
     if (await isMacOSDesktop()) {
       const { invoke } = await import('@tauri-apps/api/core')
       return (await invoke<string>('notification_permission_state')) === 'granted'
@@ -44,7 +45,7 @@ async function readPermission(): Promise<boolean> {
 
 /** Prompt for permission, showing the OS dialog when the state is undetermined. */
 async function promptPermission(): Promise<boolean> {
-  if (isTauri) {
+  if (platform().notificationsManagedByOS) {
     if (await isMacOSDesktop()) {
       const { invoke } = await import('@tauri-apps/api/core')
       return (await invoke<string>('request_notification_permission')) === 'granted'

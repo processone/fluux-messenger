@@ -17,7 +17,6 @@ const {
   mockClientHandleKeepaliveTick,
   mockGetReconnectIntent,
   mockConnectionStatus,
-  mockIsTauriMode,
   tauriListeners,
   tauriIpc,
   tauriEventPluginInternals,
@@ -88,40 +87,22 @@ const {
     mockClientHandleKeepaliveTick: vi.fn(),
     mockGetReconnectIntent: vi.fn(() => 'active' as 'active' | 'logged-out'),
     mockConnectionStatus: { current: 'online' },
-    // Drives the mocked `isTauri()` (see vi.mock('../utils/tauri') below).
-    // Decoupling the Tauri-mode decision from `window.__TAURI_INTERNALS__`
-    // lets us keep a functional IPC stub installed for the WHOLE file (so the
-    // real `transformCallback` never throws on a leaked async resolution)
-    // while individual web-mode tests still report isTauri() === false.
-    mockIsTauriMode: { current: false },
     tauriListeners: listeners,
     tauriIpc: ipc,
     tauriEventPluginInternals: eventPluginInternals,
   }
 })
 
-/** Flip the hook into Tauri mode for a describe block / test. `isTauri()` is
- *  mocked to read `mockIsTauriMode` (see below), so this is independent of
- *  `window.__TAURI_INTERNALS__` — which stays installed for the whole file so
- *  the real `listen()`/`transformCallback` can never throw on a leaked async
- *  resolution. */
+/** Flip the hook onto the desktop platform for a describe block / test.
+ *  The capability record is independent of `window.__TAURI_INTERNALS__`, which
+ *  stays installed as a functional IPC stub for the whole file so a leaked
+ *  async `listen()` resolution can never call `transformCallback` on an
+ *  undefined global. */
 function installTauriIpc() {
-  mockIsTauriMode.current = true
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 }
 
-// `isTauri()` is decoupled from `window.__TAURI_INTERNALS__` here: the global
-// must remain a functional IPC stub at all times (a real `listen()` resolution
-// that survives a test or the whole file would otherwise call
-// `transformCallback` on an undefined global and surface as an unhandled
-// rejection — including bleeding into sibling test files in the same worker).
-// `mockIsTauriMode` carries the web-vs-Tauri decision instead.
-vi.mock('../utils/tauri', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/tauri')>()
-  return {
-    ...actual,
-    isTauri: () => mockIsTauriMode.current,
-  }
-})
 
 // Mock only `@tauri-apps/api/core` with the functional IPC stub. The real
 // `@tauri-apps/api/event` module is left intact so EVERY `listen()` (from both
@@ -178,6 +159,7 @@ vi.mock('@/utils/reconnectIntent', () => ({
 }))
 
 // Import after mocks are set up
+import { setPlatformForTesting } from '@/platform'
 import {
   usePlatformState,
   shouldHandleProxyClosedStatus,
@@ -194,6 +176,8 @@ import {
   isKeepaliveWakeTick,
 } from './usePlatformState'
 
+let restorePlatform: (() => void) | undefined
+
 describe('usePlatformState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -202,7 +186,8 @@ describe('usePlatformState', () => {
     tauriListeners.clear()
     // Default to web mode (isTauri() === false): the activity/idle tests rely
     // on it. Tauri-mode describe blocks call installTauriIpc() to flip it on.
-    mockIsTauriMode.current = false
+    restorePlatform?.()
+    restorePlatform = setPlatformForTesting({ shell: 'web' })
     // The IPC stub + event-plugin internals stay installed for the WHOLE file
     // (never deleted) so any real `@tauri-apps/api/event` `listen()` /
     // `_unlisten()` that resolves async — even after a test or the whole file

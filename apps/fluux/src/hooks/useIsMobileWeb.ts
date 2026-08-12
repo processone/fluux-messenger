@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { platform } from '@/platform'
 
 /**
  * Detects if the app is running as a mobile web/PWA (not Tauri desktop app).
@@ -14,13 +15,6 @@ import { useState, useEffect } from 'react'
 const MOBILE_BREAKPOINT = 768 // Tailwind 'md' breakpoint
 
 /**
- * Check if running inside Tauri (desktop app)
- */
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
-
-/**
  * Hook that returns true when running as mobile web/PWA.
  * Reactive - updates when viewport crosses the breakpoint.
  */
@@ -28,13 +22,13 @@ export function useIsMobileWeb(): boolean {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false
     // On Tauri, never consider it mobile (desktop app)
-    if (isTauri()) return false
+    if (platform().shell !== 'web') return false
     return window.innerWidth < MOBILE_BREAKPOINT
   })
 
   useEffect(() => {
-    // Tauri apps are never considered mobile web
-    if (isTauri()) return
+    // The desktop app is never mobile web, whatever its window size.
+    if (platform().shell !== 'web') return
 
     const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
 
@@ -58,7 +52,7 @@ export function useIsMobileWeb(): boolean {
  */
 export function isMobileWeb(): boolean {
   if (typeof window === 'undefined') return false
-  if (isTauri()) return false
+  if (platform().shell !== 'web') return false
   return window.innerWidth < MOBILE_BREAKPOINT
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type FileEncryption } from '@fluux/sdk'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import {
   peekMediaCache,
   peekWebMediaCache,
@@ -42,7 +42,7 @@ export function useCachedMediaUrl(
     setState({ cachedUrl: null, isPeeking: true })
 
     const isEncrypted = Boolean(encryption)
-    const peek = isTauri()
+    const peek = platform().nativeMediaCache
       ? (isEncrypted ? peekEncryptedMediaCache : peekMediaCache)
       : (isEncrypted ? peekWebEncryptedMediaCache : peekWebMediaCache)
 

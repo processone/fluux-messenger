@@ -48,7 +48,6 @@ vi.mock('./useNavigateToTarget', () => ({
   useNavigateToTarget: () => ({ navigateToConversation, navigateToRoom, navigateToContact: vi.fn() }),
 }))
 vi.mock('./useNotificationPermission', () => ({
-  isTauri: true,
   useNotificationPermission: () => {},
   getNotificationPermissionGranted,
 }))

@@ -21,9 +21,8 @@ import { sweepExpiredPassphrases } from './e2ee/webPassphraseCache'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
+import { platform } from './platform'
 
-// Check if running in Tauri
-const isTauri = '__TAURI_INTERNALS__' in window
 
 // Mark the desktop app on <html> (synchronously, before first paint) so CSS can
 // exclude it from the mobile safe-area insets. On macOS the overlay title bar
@@ -33,17 +32,18 @@ const isTauri = '__TAURI_INTERNALS__' in window
 // window's top edge, so the fixed-position dots read as too high in the bar.
 // Desktop windows have no notch/home-indicator, so dropping the insets there is
 // purely correct; the web PWA keeps them.
-if (isTauri) document.documentElement.dataset.tauri = 'true'
+if (platform().shell === 'desktop') document.documentElement.dataset.tauri = 'true'
 
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
-const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
+const proxyAdapter =
+  platform().shell === 'desktop' && !disableTcpProxy ? tauriProxyAdapter : undefined
 
 // Register service worker only in browser (not Tauri).
 // Tauri uses a custom protocol that doesn't support service workers.
 // registerServiceWorker also wires auto-reload-on-update so deployed updates
 // land without needing to reinstall an installed PWA (see serviceWorkerUpdate.ts).
-if (!isTauri) {
+if (platform().shell === 'web') {
   registerServiceWorker()
   // Purge any cached passphrases past their 24h expiry as early as possible
   // (covers reopen-after-24h and stale cross-account records).
@@ -57,7 +57,7 @@ if (!isTauri) {
 // Web: capture any login-prefill params from the launch URL (e.g. a shared
 // link) and stash them for LoginScreen to seed. Desktop uses the xmpp: deep
 // link path instead. Runs once at boot, before React mounts.
-if (!isTauri) {
+if (platform().shell === 'web') {
   const webPrefill = captureWebLoginPrefill()
   if (webPrefill) {
     useLoginPrefillStore.getState().setPrefill(webPrefill)

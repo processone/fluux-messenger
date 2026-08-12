@@ -4,7 +4,7 @@ import { useDragAndDrop } from './useDragAndDrop'
 
 // Mock useTauriFileDrop
 vi.mock('./useTauriFileDrop', () => ({
-  useTauriFileDrop: vi.fn(() => ({ isDragging: false, isTauri: false })),
+  useTauriFileDrop: vi.fn(() => ({ isDragging: false, nativeFileDrop: false })),
 }))
 
 // Mock file utilities
@@ -40,7 +40,7 @@ describe('useDragAndDrop', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUseTauriFileDrop.mockReturnValue({ isDragging: false, isTauri: false, resetDragging: vi.fn() })
+    mockUseTauriFileDrop.mockReturnValue({ isDragging: false, nativeFileDrop: false, resetDragging: vi.fn() })
   })
 
   describe('initialization', () => {
@@ -201,7 +201,7 @@ describe('useDragAndDrop', () => {
 
   describe('Tauri integration', () => {
     it('should use Tauri drag state when in Tauri environment', () => {
-      mockUseTauriFileDrop.mockReturnValue({ isDragging: true, isTauri: true, resetDragging: vi.fn() })
+      mockUseTauriFileDrop.mockReturnValue({ isDragging: true, nativeFileDrop: true, resetDragging: vi.fn() })
 
       const { result } = renderHook(() =>
         useDragAndDrop({ onFileDrop: mockOnFileDrop, isUploadSupported: true })
@@ -211,7 +211,7 @@ describe('useDragAndDrop', () => {
     })
 
     it('should not set HTML dragging state in Tauri environment', () => {
-      mockUseTauriFileDrop.mockReturnValue({ isDragging: false, isTauri: true, resetDragging: vi.fn() })
+      mockUseTauriFileDrop.mockReturnValue({ isDragging: false, nativeFileDrop: true, resetDragging: vi.fn() })
 
       const { result } = renderHook(() =>
         useDragAndDrop({ onFileDrop: mockOnFileDrop, isUploadSupported: true })
@@ -228,7 +228,7 @@ describe('useDragAndDrop', () => {
     })
 
     it('should not call onFileDrop from HTML drop in Tauri environment', () => {
-      mockUseTauriFileDrop.mockReturnValue({ isDragging: false, isTauri: true, resetDragging: vi.fn() })
+      mockUseTauriFileDrop.mockReturnValue({ isDragging: false, nativeFileDrop: true, resetDragging: vi.fn() })
 
       const { result } = renderHook(() =>
         useDragAndDrop({ onFileDrop: mockOnFileDrop, isUploadSupported: true })

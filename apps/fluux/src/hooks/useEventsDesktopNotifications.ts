@@ -3,9 +3,9 @@ import { useEvents, usePresence, getLocalPart } from '@fluux/sdk'
 import {
   useNotificationPermission,
   getNotificationPermissionGranted,
-  isTauri,
 } from './useNotificationPermission'
 import { postPluginNotification } from '@/utils/postPluginNotification'
+import { platform } from '@/platform'
 
 /**
  * Hook to show desktop notifications for new events (subscription requests).
@@ -38,7 +38,7 @@ export function useEventsDesktopNotifications(): void {
         const title = 'Contact Request'
         const body = `${senderName} wants to add you as a contact`
 
-        if (isTauri) {
+        if (platform().notificationsManagedByOS) {
           void postPluginNotification({ title, body })
         } else {
           if (typeof Notification === 'undefined') continue

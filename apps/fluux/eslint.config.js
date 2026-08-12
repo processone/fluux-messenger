@@ -66,25 +66,37 @@ export default tseslint.config(
     // instead, so a call site says WHY it branches and a new target can be
     // described rather than guessed at.
     //
-    // Scoped to the layers that have been migrated. `hooks/` is the last one
-    // left; widen this when it follows, and do not add exceptions.
-    files: ['src/utils/**/*.ts', 'src/components/**/*.ts', 'src/components/**/*.tsx', 'src/App.tsx'],
-    // `tauri.ts` owns the remaining probes; its own test has to import them.
-    ignores: ['src/utils/tauri.ts', '**/*.test.ts', '**/*.test.tsx'],
+    // The whole app is migrated and `utils/tauri` is gone; this keeps it gone.
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    // Detection itself lives in src/platform; its own module must probe.
+    ignores: ['src/platform/**', '**/*.test.ts', '**/*.test.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              // Any path landing on utils/tauri: './tauri', './utils/tauri',
-              // '../utils/tauri', '@/utils/tauri'. Never '@tauri-apps/*', and
-              // never '@/utils/tauriPlatform'.
-              regex: '(^|/)tauri$',
+              // Any path landing on a re-created utils/tauri. Deliberately not
+              // a bare `tauri$`: `anomaly/sinks/tauri.ts` is a log sink, not a
+              // platform probe. Never matches '@tauri-apps/*' either.
+              regex: '(^|/)utils/tauri$',
               message:
                 "Branch on a named capability from '@/platform' (e.g. platform().nativeKeychain) rather than on isTauri() - the platform is not binary, and the capability name is what tells the next reader why this code differs per host.",
             },
           ],
+        },
+      ],
+
+      // The import rule alone would not have stopped what actually happened:
+      // ten modules grew their own `'__TAURI_INTERNALS__' in window` rather
+      // than importing anything. Detection belongs in `src/platform` and
+      // nowhere else, so the probe itself is what is banned.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Literal[value='__TAURI_INTERNALS__']",
+          message:
+            "Detect the platform once, in 'src/platform'. Read a named capability from platform() here instead of probing the global - a local probe answers 'is this Tauri', which is not the question any call site actually has.",
         },
       ],
     },

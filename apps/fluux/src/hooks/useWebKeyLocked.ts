@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { isKeyLocked, subscribeKeyLockState } from '@/e2ee/webPassphraseStore'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 /**
  * Reactive view of the web E2EE session-passphrase lock state.
@@ -21,6 +21,6 @@ export function useWebKeyLocked(): boolean {
     // "unlocked" state during hydration without confirmation.
     () => true,
   )
-  if (isTauri()) return false
+  if (!platform().keyNeedsSessionPassphrase) return false
   return locked
 }

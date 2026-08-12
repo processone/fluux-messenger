@@ -5,7 +5,9 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { useMcpBridge, resetMcpToken, __resetServerOpQueueForTests } from './useMcpBridge'
 import { useMcpBridgeStore } from '@/stores/mcpBridgeStore'
 
-vi.mock('@/utils/tauri', () => ({ isTauri: () => true }))
+// The MCP bridge is a desktop-only server.
+import { setPlatformForTesting } from '@/platform'
+setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 
 const invokeMock = vi.fn()
 const listenMock = vi.fn()

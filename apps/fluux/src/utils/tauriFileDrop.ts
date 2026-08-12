@@ -88,6 +88,6 @@ export function getIsDragging(): boolean {
 /**
  * Check if running in Tauri.
  */
-export function getIsTauri(): boolean {
+export function hasNativeFileDrop(): boolean {
   return isRunningInTauri
 }

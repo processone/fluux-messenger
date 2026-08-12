@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type FileEncryption } from '@fluux/sdk'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } from '@/utils/mediaCache'
 
 interface DecryptedUrlState {
@@ -40,7 +40,7 @@ export function useDecryptedMediaUrl(
     let cancelled = false
     setState({ url: null, isLoading: true, error: null })
 
-    const resolve = isTauri() ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
+    const resolve = platform().nativeMediaCache ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
 
     void resolve(url, encryption).then(
       resolvedUrl => {

@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { getResource } from '@/utils/xmppResource'
 
 const CHANNEL_NAME = 'fluux-tab-coordination'
@@ -35,7 +35,7 @@ export interface TabCoordinationResult {
   releaseConnection: () => void
 }
 
-const skipCoordination = isTauri() || typeof BroadcastChannel === 'undefined'
+const skipCoordination = !platform().needsTabCoordination || typeof BroadcastChannel === 'undefined'
 
 export function useTabCoordination(onTakenOver?: () => void): TabCoordinationResult {
   const [blocked, setBlocked] = useState(false)

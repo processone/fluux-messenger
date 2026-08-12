@@ -3,7 +3,7 @@ import {
   subscribeToDragState,
   subscribeToFileDrop,
   getIsDragging,
-  getIsTauri,
+  hasNativeFileDrop,
 } from '@/utils/tauriFileDrop'
 
 /**
@@ -24,7 +24,7 @@ export function useTauriFileDrop(
   // Initialize with current global state (may already be dragging)
   const [isDragging, setIsDragging] = useState(getIsDragging)
   const onFileDropRef = useRef(onFileDrop)
-  const isTauri = getIsTauri()
+  const nativeFileDrop = hasNativeFileDrop()
 
   // Keep ref updated to avoid stale closures
   useEffect(() => {
@@ -33,7 +33,7 @@ export function useTauriFileDrop(
 
   // Subscribe to global drag state and file drop events
   useEffect(() => {
-    if (!isTauri || !enabled) return
+    if (!nativeFileDrop || !enabled) return
 
     const unsubscribeDrag = subscribeToDragState(setIsDragging)
     const unsubscribeDrop = subscribeToFileDrop((paths) => {
@@ -44,15 +44,15 @@ export function useTauriFileDrop(
       unsubscribeDrag()
       unsubscribeDrop()
     }
-  }, [isTauri, enabled])
+  }, [nativeFileDrop, enabled])
 
   const resetDragging = () => {
     setIsDragging(false)
   }
 
   return {
-    isDragging: isTauri ? isDragging : false,
-    isTauri,
+    isDragging: nativeFileDrop ? isDragging : false,
+    nativeFileDrop,
     resetDragging,
   }
 }

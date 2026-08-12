@@ -4,7 +4,7 @@ import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getD
 import { useRosterStore, useConnectionStore } from '@fluux/sdk/react'
 import type { Contact, ServerInfo, HttpUploadService, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 
@@ -444,7 +444,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       // Room joining is now handled by the SDK's readStateStorage, not sessionStorage
       const joinedRoomInfos: JoinedRoomInfo[] | undefined = undefined
       const resource = getResource()
-      const disableSmKeepalive = isTauri()
+      const disableSmKeepalive = platform().hasNativeConnectionKeepalive
       console.log('[Auth] Reconnecting on page reload with password (SDK will attempt SM resumption first)')
 
       // Preserve "Remember Me" preference so the SDK persists rotated FAST
@@ -515,7 +515,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         // password is only used when FAST is unavailable. Web has no keychain
         // — the FAST-only path remains unchanged.
         let fallbackPassword: string | undefined
-        if (isTauri() && hasSavedCredentials()) {
+        if (platform().nativeKeychain && hasSavedCredentials()) {
           try {
             const creds = await getCredentials()
             if (creds && getBareJid(creds.jid) === getBareJid(savedJid)) {
@@ -601,7 +601,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       }
       return
     }
-    if (!isTauri() || !hasSavedCredentials()) return
+    if (!platform().nativeKeychain || !hasSavedCredentials()) return
     if (keychainRetryAttempted.current) return
 
     const savedJid = localStorage.getItem('xmpp-last-jid')

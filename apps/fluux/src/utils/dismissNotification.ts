@@ -1,13 +1,14 @@
 import { connectionStore, getBareJid } from '@fluux/sdk'
 import { isMobileTauri } from '@/utils/tauriPlatform'
 import { webTag, type NavType } from './notificationNavigation'
+import { platform } from '@/platform'
 
 export type { NavType }
 
-/** Running inside the Tauri desktop app. Checked at call time (not module load)
- *  so tests can toggle it. */
+/** Notifications live in the OS notification centre, so dismissal is native.
+ *  Read at call time so a test can state a host per case. */
 function inTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  return platform().notificationsManagedByOS
 }
 
 /**

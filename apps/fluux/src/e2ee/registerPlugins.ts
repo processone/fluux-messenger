@@ -12,7 +12,7 @@
 
 import { E2EEPluginError } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
-import { isTauri } from '../utils/tauri'
+import { platform } from '@/platform'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { classifyBoundaryError } from './OpenPGPPluginBase'
@@ -25,7 +25,7 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   if (manager.getPlugin('openpgp')) return
 
   try {
-    if (isTauri()) {
+    if (platform().nativeKeychain) {
       // Desktop: Rust crypto via Tauri IPC. Key is managed by the OS keychain;
       // no user passphrase needed for day-to-day use.
       const { invoke } = await import('@tauri-apps/api/core')

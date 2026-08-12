@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
-// Mock isTauri to return false so BroadcastChannel coordination is active
-vi.mock('@/utils/tauri', () => ({
-  isTauri: () => false,
-}))
+// The web build is the one that coordinates tabs.
+import { setPlatformForTesting } from '@/platform'
+setPlatformForTesting({ shell: 'web' })
 
 // Mock getResource to return a stable tab ID
 vi.mock('@/utils/xmppResource', () => ({

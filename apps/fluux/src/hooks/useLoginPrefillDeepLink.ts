@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { loginPrefillFromXmppUri } from '@/utils/loginPrefillSources'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
+import { platform } from '@/platform'
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 /**
  * Desktop-only: while the user is on the login screen, route incoming xmpp:
@@ -15,7 +15,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
  */
 export function useLoginPrefillDeepLink(): void {
   useEffect(() => {
-    if (!isTauri) return
+    if (!platform().hasDeepLinkEvents) return
 
     let cleanup: (() => void) | undefined
     let cleanedUp = false

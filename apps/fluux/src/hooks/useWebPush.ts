@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { connectionStore } from '@fluux/sdk'
 import { useXMPPContext } from '@fluux/sdk'
 import type { WebPushService } from '@fluux/sdk'
+import { platform } from '@/platform'
 
 /**
  * Whether Web Push is supported in the current environment.
@@ -9,7 +10,7 @@ import type { WebPushService } from '@fluux/sdk'
  */
 export const isWebPushSupported =
   typeof window !== 'undefined' &&
-  !('__TAURI_INTERNALS__' in window) &&
+  platform().usesWebPush &&
   'serviceWorker' in navigator &&
   'PushManager' in window
 

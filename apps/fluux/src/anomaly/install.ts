@@ -18,7 +18,7 @@
 import { chatStore, getStorageScopeJid, readRecountDeferrals, roomStore } from '@fluux/sdk'
 import { clearAnomalySignalHandler, setAnomalySignalHandler } from '../utils/anomalySignal'
 import type { ViewportKind } from '../utils/viewportAtBottom'
-import { isTauri } from '../utils/tauri'
+import { platform } from '@/platform'
 import { recordForSignal } from './detectors/signalRecords'
 import { browserWorld, startDetectorTick, type DetectorTick } from './detectors/tick'
 import { markAnomalyBuild } from './gate'
@@ -152,7 +152,7 @@ function runtime(): Recorder {
   if (!recorder) {
     recorder = createRecorder({
       // The web and demo builds have no filesystem; the sidecar is desktop-only.
-      sink: isTauri() ? createTauriSink(createPluginFsWriter()) : createMemorySink(),
+      sink: platform().hasNativeLogFiles ? createTauriSink(createPluginFsWriter()) : createMemorySink(),
       now: () => Date.now(),
       build: `${__APP_VERSION__}+${__GIT_COMMIT__}`,
       sid: sessionId,

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { isTauri } from '../utils/tauri'
+import { platform } from '@/platform'
 
 /**
  * Native context-menu suppression for the desktop app.
@@ -57,7 +57,7 @@ export function shouldSuppressNativeMenu(
  */
 export function useNativeContextMenuSuppression(): void {
   useEffect(() => {
-    if (!isTauri() || !import.meta.env.PROD) return
+    if (!platform().hasNativeContextMenu || !import.meta.env.PROD) return
     const handler = (event: MouseEvent) => {
       if (shouldSuppressNativeMenu(event.target, window.getSelection(), event.defaultPrevented)) {
         event.preventDefault()

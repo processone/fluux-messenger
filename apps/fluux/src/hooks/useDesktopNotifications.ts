@@ -12,7 +12,6 @@ import { useNavigateToTarget } from './useNavigateToTarget'
 import {
   useNotificationPermission,
   getNotificationPermissionGranted,
-  isTauri,
 } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { newMessagesText } from '@/utils/swMessages'
@@ -26,6 +25,7 @@ import { dismissNotification } from '@/utils/dismissNotification'
 import { postPluginNotification } from '@/utils/postPluginNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 import { requestAttention } from '@/utils/attention'
+import { platform } from '@/platform'
 
 /** Duration of the post-reconnect window during which offline-delivery
  *  notifications are coalesced to one per conversation. */
@@ -91,7 +91,7 @@ export function useDesktopNotifications(): void {
   // the click source — registerListener only exists on iOS/Android, so guard
   // it there. Web routes clicks in sw.ts and is untouched here.
   useEffect(() => {
-    if (!isTauri) return
+    if (!platform().notificationsManagedByOS) return
 
     const route = (payload: unknown) => {
       const p = (payload ?? {}) as {
@@ -196,7 +196,7 @@ export function useDesktopNotifications(): void {
     const contact = rosterStore.getState().getContact(conv.id)
     const avatarUrl = await getNotificationAvatarUrl(contact?.avatar, contact?.avatarHash)
 
-    if (isTauri) {
+    if (platform().notificationsManagedByOS) {
       const accountId = currentAccountId()
       if (!(await isMobileTauri())) {
         await postNativeDesktopNotification({
@@ -268,7 +268,7 @@ export function useDesktopNotifications(): void {
     // Get room avatar
     const avatarUrl = await getNotificationAvatarUrl(room.avatar, room.avatarHash)
 
-    if (isTauri) {
+    if (platform().notificationsManagedByOS) {
       const accountId = currentAccountId()
       if (!(await isMobileTauri())) {
         await postNativeDesktopNotification({

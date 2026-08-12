@@ -12,7 +12,9 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 
 // Force the desktop path: no dynamic IndexedDB/openpgp.js imports, and the
 // SequoiaPgpPlugin constructor is stubbed below.
-vi.mock('../utils/tauri', () => ({ isTauri: () => true }))
+// The desktop build registers the keychain-backed plugin.
+import { setPlatformForTesting } from '@/platform'
+setPlatformForTesting({ shell: 'desktop', os: 'macos' })
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('./SequoiaPgpPlugin', () => ({
   SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {

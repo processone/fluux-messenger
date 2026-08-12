@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { useMcpBridgeStore, type McpActivityEntry } from '@/stores/mcpBridgeStore'
 import { listConversations, getHistory, sendMessageTool, type McpToolName } from '@/utils/mcpTools'
 
@@ -71,7 +71,7 @@ export function __resetServerOpQueueForTests(): void {
  * in-flight lifecycle change. No-op on web builds.
  */
 export async function resetMcpToken(): Promise<void> {
-  if (!isTauri()) return
+  if (!platform().hasMcpBridge) return
   const { setServerInfo, setPreferredPort } = useMcpBridgeStore.getState()
   const info = await enqueueServerOp(() =>
     invoke<{ port: number; token: string }>('mcp_reset_token', {
@@ -94,7 +94,7 @@ export function useMcpBridge(client: XMPPClient): void {
   const logActivity = useMcpBridgeStore((s) => s.logActivity)
 
   useEffect(() => {
-    if (!isTauri()) return
+    if (!platform().hasMcpBridge) return
 
     if (!enabled) {
       enqueueServerOp(() => invoke('mcp_stop_server')).catch(() => undefined)

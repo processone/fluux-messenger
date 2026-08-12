@@ -137,6 +137,30 @@ export interface PlatformCapabilities {
    * (tauri-apps/wry#184).
    */
   readonly needsWebviewReloadBeforeRelogin: boolean
+  /**
+   * The webview can come back from a long machine sleep with a dead socket and
+   * stalled timers, so a wake past a threshold is recovered by reloading.
+   */
+  readonly webviewStallsAfterSleep: boolean
+
+  // ----- Shell integration -----
+
+  /** The OS reports how long the user has been idle. */
+  readonly hasOSIdleDetection: boolean
+  /** Deep links arrive as shell events rather than as a page load. */
+  readonly hasDeepLinkEvents: boolean
+  /** Window fullscreen state is owned by the shell, not the Fullscreen API. */
+  readonly hasWindowFullscreenEvents: boolean
+  /** The shell draws a title bar that follows the app's light/dark theme. */
+  readonly syncsNativeTitleBarTheme: boolean
+  /** The unread count goes on a dock or taskbar badge. */
+  readonly hasNativeAppBadge: boolean
+  /** A native context menu opens on right-click unless suppressed. */
+  readonly hasNativeContextMenu: boolean
+  /** Uploads are streamed by the native side rather than by fetch. */
+  readonly nativeUploads: boolean
+  /** The local MCP bridge server can run. */
+  readonly hasMcpBridge: boolean
 }
 
 /**
@@ -188,5 +212,16 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     // Connection.
     hasNativeConnectionKeepalive: desktop,
     needsWebviewReloadBeforeRelogin: desktop,
+    webviewStallsAfterSleep: desktop,
+
+    // Shell integration.
+    hasOSIdleDetection: desktop,
+    hasDeepLinkEvents: desktop,
+    hasWindowFullscreenEvents: desktop,
+    syncsNativeTitleBarTheme: desktop,
+    hasNativeAppBadge: desktop,
+    hasNativeContextMenu: desktop,
+    nativeUploads: desktop,
+    hasMcpBridge: desktop,
   }
 }

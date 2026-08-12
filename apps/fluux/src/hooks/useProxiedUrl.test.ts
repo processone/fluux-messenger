@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
-// Mock tauri detection — default to non-Tauri (web)
-const mockIsTauri = vi.fn(() => false)
-vi.mock('@/utils/tauri', () => ({
-  isTauri: () => mockIsTauri(),
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the hook under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
+
 
 // Mock mediaCache
 const mockResolveMediaUrl = vi.fn()
@@ -80,7 +84,7 @@ describe('sanitizeMediaUrl', () => {
 describe('useProxiedUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
   })
 
   // --- Web mode tests ---
@@ -208,7 +212,7 @@ describe('useProxiedUrl', () => {
   // --- Tauri mode tests ---
 
   it('should resolve via media cache in Tauri mode', async () => {
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockResolveMediaUrl.mockResolvedValue('https://asset.localhost/cached/abc.jpg')
 
     const { result } = renderHook(() =>
@@ -228,7 +232,7 @@ describe('useProxiedUrl', () => {
   })
 
   it('should fall back to sanitized URL when a non-retrieval cache step fails in Tauri', async () => {
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockResolveMediaUrl.mockRejectedValue(new Error('Cache write failed'))
 
     const { result } = renderHook(() =>
@@ -248,7 +252,7 @@ describe('useProxiedUrl', () => {
   })
 
   it('should not update state after unmount (cancelled)', async () => {
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     // Slow resolve that will complete after unmount
     let resolvePromise: (value: string) => void
     mockResolveMediaUrl.mockReturnValue(new Promise(resolve => {

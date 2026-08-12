@@ -22,7 +22,7 @@ import {
   getEffectiveMimeType,
   type ThumbnailResult,
 } from '@/utils/thumbnail'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { uploadFileTauri } from '@/utils/tauriUpload'
 import { createUploadProgressReporter } from './uploadProgressReporter'
 
@@ -78,7 +78,7 @@ async function uploadBlobViaSlot(
 
   const slot = await requestSlot(uploadFilename, uploadSize, uploadMimeType)
 
-  if (isTauri()) {
+  if (platform().nativeUploads) {
     const encryption = await uploadFileTauri({
       bytes: await blob.arrayBuffer(),
       putUrl: slot.putUrl,
