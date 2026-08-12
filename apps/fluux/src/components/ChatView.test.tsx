@@ -773,26 +773,6 @@ describe('ChatView', () => {
       // - onFileDrop callback is called synchronously (no async upload)
       // - No upload happens until user clicks Send
     })
-
-    it('should document that MessageInput.handleSend calls uploadFile before sending', () => {
-      /**
-       * The handleSend function in ChatView.MessageInput component:
-       *
-       * 1. If pendingAttachment exists and uploadFile is available:
-       *    - Calls: attachment = await uploadFile(pendingAttachment.file)
-       *    - If upload fails (returns null): returns false, message NOT sent
-       *    - If upload succeeds: continues with sending
-       *
-       * 2. Sends message with attachment (if any)
-       * 3. Clears pending attachment via onRemovePendingAttachment()
-       *
-       * See ChatView.tsx lines 808-825 for implementation
-       *
-       * This is tested at the unit level via MessageComposer.test.tsx (pending attachment display)
-       * and useDragAndDrop.test.tsx (file staging behavior)
-       */
-      expect(true).toBe(true) // Documentation test - behavior verified in other test files
-    })
   })
 
   describe('Link preview suppression in encrypted conversations', () => {
@@ -834,6 +814,35 @@ describe('ChatView', () => {
       })
 
       expect(mockProcessMessageForLinkPreview).not.toHaveBeenCalled()
+    })
+
+    it('clears the send-animation timer on unmount', async () => {
+      // The send animation arms a 400 ms timer that resets React state. Left
+      // armed past unmount it fires into a torn-down environment, which surfaces
+      // as an intermittent "window is not defined" unhandled error whenever the
+      // suite finishes within that window.
+      mockEncryptionState = { kind: 'disabled' }
+      const setSpy = vi.spyOn(globalThis, 'setTimeout')
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout')
+
+      try {
+        const { unmount } = render(<ChatView />)
+        fireEvent.click(screen.getByTestId('send-button'))
+
+        await waitFor(() => {
+          expect(setSpy.mock.calls.some(([, delay]) => delay === 400)).toBe(true)
+        })
+
+        const animationTimerIndex = setSpy.mock.calls.findIndex(([, delay]) => delay === 400)
+        const animationTimerId = setSpy.mock.results[animationTimerIndex].value
+
+        unmount()
+
+        expect(clearSpy).toHaveBeenCalledWith(animationTimerId)
+      } finally {
+        setSpy.mockRestore()
+        clearSpy.mockRestore()
+      }
     })
   })
 

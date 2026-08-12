@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
-import type { XMPPClientConfig } from '../core/types/client'
+import type { XMPPClientConfig } from '../core/clientConfig'
 
 const { capturedConfigs, makeStubClient } = vi.hoisted(() => {
   const configs: Array<XMPPClientConfig | undefined> = []

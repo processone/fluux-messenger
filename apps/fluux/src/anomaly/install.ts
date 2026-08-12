@@ -243,8 +243,8 @@ export function install(): () => void {
   if (attachRefs === 1) {
     attachments++
 
-    // The sentinels in `useMessageListScroll` and `stallSentinel` cannot import
-    // this tree — they ship in release builds. They signal into a neutral seam
+    // The message-list scroll sentinels and `stallSentinel` cannot import this
+    // tree — they ship in release builds. They signal into a neutral seam
     // instead, and this is where the seam is connected. Registration is idempotent
     // (the handler is a fresh closure over the same runtime), so a StrictMode
     // remount replaces it rather than stacking a second one.

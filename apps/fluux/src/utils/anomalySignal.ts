@@ -1,7 +1,7 @@
 /**
  * The neutral observation seam into the dev-only anomaly runtime.
  *
- * The sentinels live in production code — `useMessageListScroll` and
+ * The sentinels live in production code — the message-list scroll subsystem and
  * `stallSentinel` ship in every build, because their `console.warn` prose is the
  * troubleshooting path in `fluux.log`. They must therefore never import anything
  * under `src/anomaly/`: a static import would put the recorder, the serializer and

@@ -210,16 +210,19 @@ export type { EntityNotificationState, NotificationMessage, EntityContext, Badge
 // carries the XEP-0359 archive id that XEP-0490 publishes, `local` says the
 // position has no wire name yet — so a consumer that wants to publish a position
 // has to say what it does when there isn't one. `order` is likewise `exact` or
-// `floor`. See `stores/shared/readPointer.ts` for why neither name can replace
-// the other.
-export type { ReadPointer, PointerIdentity, PointerSource } from './stores/shared/readPointer'
-export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
+// `floor`. The shapes are declared in `core/types/readState.ts`, which explains
+// why neither name can replace the other; the constructors and comparators live
+// in `stores/shared/readPointer.ts`.
 export type {
+  ReadPointer,
+  PointerIdentity,
   CacheOrderKey,
   PointerOrder,
   ExactPosition,
   FloorPosition,
-} from './stores/shared/readState'
+} from './core/types'
+export type { PointerSource } from './stores/shared/readPointer'
+export { makeReadPointer, withArchiveId, isAhead, advance } from './stores/shared/readPointer'
 
 // Viewport evidence (read-state PR B, Task 11): SDK-owned, generation-scoped
 // "is the viewport genuinely at the live edge" state. `beginViewportGeneration`
@@ -308,8 +311,7 @@ export type {
   PollSettings,
   PollClosedData,
 
-  // Client types
-  XMPPClientConfig,
+  // Client types (XMPPClientConfig is exported separately, below)
   XMPPClientEvents,
   StoreBindings,
   PresenceOptions,
@@ -343,6 +345,11 @@ export type {
   MAMResult,
   MAMQueryState,
 } from './core/types'
+
+// Client construction options. Exported from `core/clientConfig` rather than
+// the type barrel: it carries a live store bundle, and `core/types` is a leaf
+// layer that must not name a concrete store.
+export type { XMPPClientConfig } from './core/clientConfig'
 
 // Events types
 export type { SubscriptionRequest, StrangerMessage, MucInvitation, SystemNotification, SystemNotificationType } from './core/types'

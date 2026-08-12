@@ -1,16 +1,19 @@
 /**
- * Single source of truth for the store methods exposed through {@link StoreBindings}.
+ * The store methods that are passed through to XMPPClient verbatim.
  *
- * Each list enumerates the methods of one Zustand store that are passed
- * through to XMPPClient verbatim. Three artifacts are derived from it:
+ * Each list names the members of one {@link StoreBindings} namespace that a
+ * store implements by simple delegation, so two artifacts can be generated
+ * from it instead of hand-written three times:
  *
- * - the `StoreBindings` interface (`Pick<State, key>` in types/client.ts)
  * - `createDefaultStoreBindings()` (late-bound delegation to the global store)
  * - `createMockStores()` (a `vi.fn()` per key in test-utils)
  *
- * Adding a store method to the client surface = add it to the store, then add
- * its name here. The `satisfies` clauses reject typos at compile time, and
- * storeBindingKeys.test.ts keeps the three artifacts in lockstep.
+ * The `satisfies` clauses check the names against the PORT, not against the
+ * store: the contract is `types/storeBindings.ts`, and a store proves it
+ * conforms in `stores/storeBindingsConformance.ts`. Adding a method to the
+ * client surface therefore means declaring it in the port, implementing it in
+ * the store, and adding its name here — the compiler rejects any two of the
+ * three without the last.
  *
  * NOT listed here: presence-machine bridge members (they come from
  * PresenceOptions, not a store), plain state getters (`getStatus`,
@@ -22,14 +25,7 @@
  * @module Core
  */
 
-import type { ConnectionState } from '../stores/connectionStore'
-import type { ChatState } from '../stores/chatStore'
-import type { RosterState } from '../stores/rosterStore'
-import type { ConsoleState } from '../stores/consoleStore'
-import type { EventsState } from '../stores/eventsStore'
-import type { RoomState } from '../stores/roomStore'
-import type { AdminState } from '../stores/adminStore'
-import type { BlockingState } from '../stores/blockingStore'
+import type { StoreBindings } from './types/storeBindings'
 
 export const connectionBindingMethodKeys = [
   'setStatus',
@@ -53,7 +49,7 @@ export const connectionBindingMethodKeys = [
   // Web Push (p1:push)
   'setWebPushStatus',
   'setWebPushServices',
-] as const satisfies readonly (keyof ConnectionState)[]
+] as const satisfies readonly (keyof StoreBindings['connection'])[]
 
 export const chatBindingMethodKeys = [
   'addMessage',
@@ -83,7 +79,7 @@ export const chatBindingMethodKeys = [
   'archiveConversation',
   'unarchiveConversation',
   'mergeServerConversations',
-] as const satisfies readonly (keyof ChatState)[]
+] as const satisfies readonly (keyof StoreBindings['chat'])[]
 
 export const rosterBindingMethodKeys = [
   'setContacts',
@@ -99,12 +95,12 @@ export const rosterBindingMethodKeys = [
   'getOfflineContacts',
   'sortedContacts',
   'resetAllPresence',
-] as const satisfies readonly (keyof RosterState)[]
+] as const satisfies readonly (keyof StoreBindings['roster'])[]
 
 export const consoleBindingMethodKeys = [
   'addPacket',
   'addEvent',
-] as const satisfies readonly (keyof ConsoleState)[]
+] as const satisfies readonly (keyof StoreBindings['console'])[]
 
 export const eventsBindingMethodKeys = [
   'addSubscriptionRequest',
@@ -115,7 +111,7 @@ export const eventsBindingMethodKeys = [
   'removeMucInvitation',
   'addSystemNotification',
   'clearSystemNotifications',
-] as const satisfies readonly (keyof EventsState)[]
+] as const satisfies readonly (keyof StoreBindings['events'])[]
 
 export const roomBindingMethodKeys = [
   'addRoom',
@@ -159,7 +155,7 @@ export const roomBindingMethodKeys = [
   'hydratePreviewsFromCache',
   'mergeRoomMembers',
   'updateMemberAffiliation',
-] as const satisfies readonly (keyof RoomState)[]
+] as const satisfies readonly (keyof StoreBindings['room'])[]
 
 export const adminBindingMethodKeys = [
   'setIsAdmin',
@@ -172,7 +168,7 @@ export const adminBindingMethodKeys = [
   'setVhosts',
   'setSelectedVhost',
   'reset',
-] as const satisfies readonly (keyof AdminState)[]
+] as const satisfies readonly (keyof StoreBindings['admin'])[]
 
 export const blockingBindingMethodKeys = [
   'setBlocklist',
@@ -181,4 +177,4 @@ export const blockingBindingMethodKeys = [
   'clearBlocklist',
   'isBlocked',
   'getBlockedJids',
-] as const satisfies readonly (keyof BlockingState)[]
+] as const satisfies readonly (keyof StoreBindings['blocking'])[]

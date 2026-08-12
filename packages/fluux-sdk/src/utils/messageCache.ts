@@ -8,7 +8,12 @@
  */
 
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
-import type { Message, RoomMessage } from '../core/types'
+// Imported from the declaring modules rather than the `core/types` barrel:
+// the barrel also re-exports the store-binding port, which names
+// `GetMessagesOptions` from this file, so going through it would make the two
+// mutually recursive.
+import type { Message } from '../core/types/chat'
+import type { RoomMessage } from '../core/types/room'
 import { getStorageScopeJid } from './storageScope'
 import { roomCanonicalKey, roomIdentityKeys, roomStanzaKey, roomOriginKey } from './roomMessageIdentity'
 import {

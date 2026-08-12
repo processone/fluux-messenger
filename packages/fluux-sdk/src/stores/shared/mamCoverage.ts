@@ -1,34 +1,19 @@
-import { resolveArchivePosition } from '../../utils/messageCache'
-import type { ExactPosition } from './readState'
-
 /**
- * Persisted contiguous-with-live coverage (Codex r3 #3/#4).
- *
- * A `CoverageRecord` is POSITIVE, DURABLE data: the archive id of the oldest
- * entry proven contiguous with the live edge for this device. Unlike a
- * `GapInterval` (which describes a hole and vanishes when the hole closes) or
- * `coverageBottomUnproven` (session-scoped), the record survives fresh
- * sessions and gap closure, so:
- * - Phase B (read-pointer stitch) seeds its backward walk from it and never
- *   from a disjoint cache island (e.g. a fetchContext window);
- * - a signal-only fetch-latest walk resumes BELOW prior coverage instead of
- *   re-walking the same newest pages every session (`topId` marks re-entry
- *   into covered territory; the walk jumps to `bottomId`).
- *
- * Advancing `bottomId` past a page that carries persistable messages must be
- * gated on the durable IndexedDB commit of that page (same invariant as gap
- * transitions): the record must never point past data that was never stored.
+ * Coverage transitions for the persisted contiguous-with-live record
+ * ({@link CoverageRecord}, Codex r3 #3/#4).
  *
  * @module Stores/Shared/MamCoverage
  */
 
-export interface CoverageRecord {
-  /** Archive id of the OLDEST entry proven contiguous with the live edge. */
-  bottomId: string
-  /** Archive id of the NEWEST entry seen by the fetch-latest walk that
-   *  established this record (page-1 rsm.last). */
-  topId?: string
-}
+import { resolveArchivePosition } from '../../utils/messageCache'
+import type { CoverageRecord, ExactPosition } from '../../core/types'
+
+/**
+ * The coverage shapes are declared in `core/types/pagination.ts` — they ride on
+ * SDK events, so `core/types` must be able to name them without depending on a
+ * store. Re-exported here, where the transition logic lives.
+ */
+export type { CoverageRecord, MergeArchiveExtras } from '../../core/types'
 
 /**
  * What a merge did to the record — the persistence layer's durability input.
@@ -63,23 +48,6 @@ export interface CoverageSyncResult {
   /** Copy-on-write: the SAME reference as the input when nothing changed. */
   coverage: Map<string, CoverageRecord>
   transition: CoverageTransition
-}
-
-/** Extra merge inputs carried on the mam-messages emit (both entity kinds). */
-export interface MergeArchiveExtras {
-  /** The `before` cursor the query was started with ('' = fetch-latest). */
-  initialBefore?: string
-  /** rsm.last of the FIRST page of a backward walk (newest covered entry). */
-  fetchLatestTopId?: string
-  /** The walk contained the existing coverage record's top entry — the only
-   *  accepted proof of contiguity with the record (Codex r4 #3). */
-  sawCoverageTop?: boolean
-  /** The walk carried corrections/retractions/reactions/fastenings, whose
-   *  cache effects are fire-and-forget — certification is blocked (r4 #2). */
-  walkCarriedModifications?: boolean
-  /** FORWARD only: the `after` cursor the catch-up resumed from — the bootstrap
-   *  anchor when that catch-up reports complete. */
-  initialAfter?: string
 }
 
 /** Serialize the coverage map for localStorage (`[id, CoverageRecord][]`). */

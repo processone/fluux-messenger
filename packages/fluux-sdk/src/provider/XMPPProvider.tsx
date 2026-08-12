@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useEffect, useMemo, type ReactNode } from 'react'
 import { XMPPClient } from '../core/XMPPClient'
-import type { XMPPClientConfig } from '../core/types/client'
+import type { XMPPClientConfig } from '../core/clientConfig'
 import type { StorageAdapter } from '../core/types/storage'
 import type { ProxyAdapter } from '../core/types/proxy'
 import { sessionStorageAdapter } from '../utils/sessionStorageAdapter'

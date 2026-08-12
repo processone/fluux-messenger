@@ -139,6 +139,22 @@ objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplicat
 objc2-user-notifications = { version = "0.3", features = ["UNUserNotificationCenter", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotification", "UNNotificationTrigger", "UNNotificationAttachment", "UNNotificationSettings", "UNError", "block2"] }
 block2 = "0.6"
 
+[profile.dev]
+# Backtraces keep file and line; only type information is dropped. Full debug
+# info over an 850-crate dependency tree dominates both the size of
+# target/debug and the time spent linking.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Dependencies are never stepped through in a debugger, so they carry no debug
+# info at all.
+debug = false
+
+[profile.dev.build-override]
+# Same rule for build scripts and proc macros, which Cargo builds with the dev
+# profile by default.
+debug = false
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

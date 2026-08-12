@@ -13,7 +13,7 @@
  * - `isCaughtUpToLive`: Synced with real-time (no gap to present)
  */
 
-import type { MAMQueryState } from '../../core/types'
+import type { MAMQueryDirection, MAMQueryState } from '../../core/types'
 
 /**
  * Default MAM query state for conversations/rooms that haven't been queried yet.
@@ -88,9 +88,10 @@ export function setCoverageBottomUnproven(
 }
 
 /**
- * Query direction for MAM queries.
+ * Query direction for MAM queries. Declared in `core/types/pagination.ts` and
+ * re-exported here, where the helpers that consume it live.
  */
-export type MAMQueryDirection = 'backward' | 'forward'
+export type { MAMQueryDirection } from '../../core/types'
 
 /**
  * Newest fetched message timestamp (epoch ms), for gap marker positioning by

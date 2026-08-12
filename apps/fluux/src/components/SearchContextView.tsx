@@ -187,8 +187,8 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   // The target row and the rows above it size asynchronously (avatars, media, link previews),
   // so a single scroll computed from the first, unsettled layout lands the target off-position
   // — often well above the fold once the content grows. We therefore re-assert the position
-  // across frames until the landing point stops moving (mirrors the live path's marker/pin
-  // re-assert loops in useMessageListScroll), bailing the moment the user takes over.
+  // across frames until the landing point stops moving (mirrors the live message-list path's
+  // marker/pin re-assert loops), bailing the moment the user takes over.
   // Keyed on the TARGET (previewResult) + the initial load flag — NOT on messages.length.
   // loadMessages sets `messages` and clears `isLoading` in one batched update, so this fires
   // exactly once when the target's context is ready. Loading OLDER context on scroll-to-top

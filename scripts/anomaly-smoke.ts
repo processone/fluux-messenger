@@ -31,6 +31,74 @@ async function openDemoRoom(page: Page): Promise<void> {
 }
 
 /**
+ * Give the page the focus transitions a headless browser never gets.
+ *
+ * The app marks the active view read on the focus TRANSITION
+ * (`useWindowVisibility.ts`, gated on the viewport being at the bottom), and a headless
+ * page starts already focused, so that transition never happens on its own. Without it
+ * the demo sits on a permanently unread room and `unread-survives-focus` reports
+ * correctly on a state no real user would be in.
+ *
+ * Driven from INSIDE the page, on a timer armed before the app boots, rather than by an
+ * `evaluate` from the test. That is the whole point, not a style choice:
+ * `unread-survives-focus` fires when a count outlives 2s of the user looking at the
+ * newest message, and its clock starts when the room settles at the live edge — which
+ * the demo's sidebar does on its own, while the test is still awaiting `activateRoom`.
+ * Every step the test takes between those two moments is a CDP round trip, so a
+ * test-driven transition races the detector on exactly the axis that separates a
+ * developer's machine from a loaded 2-core runner. This one is one page timer away from
+ * the settle no matter how slow the harness is. The original fixed 2s settle wait lost
+ * that race in CI (`heldMs: 2753`, then `unread-focus-cleared` a second later — the
+ * detector watching a healthy app clear its badge slightly too slowly for the test's own
+ * choreography).
+ *
+ * `handleFocusChange` reads `document.hasFocus()` rather than the event type, so a bare
+ * synthetic blur changes nothing — the transition has to be driven through that reading.
+ * Both overrides are applied and undone inside one synchronous block, so no detector
+ * tick can observe the window as unfocused.
+ *
+ * Idle while nothing is unread, so a healthy session is left alone: the transition costs
+ * two store writes and is skipped entirely unless the active entity actually has a count
+ * to clear. Self-re-arming for the same reason — a demo message arriving later is
+ * cleared the same way rather than being left to trip the detector mid-test.
+ */
+async function driveFocusRegainInPage(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    interface Meta {
+      unreadCount: number
+    }
+    const w = window as unknown as {
+      __roomStore?: { getState(): { activeRoomJid?: string; roomMeta: Map<string, Meta> } }
+      __chatStore?: {
+        getState(): { activeConversationId?: string; conversationMeta: Map<string, Meta> }
+      }
+    }
+
+    const hasUnread = (): boolean => {
+      const rooms = w.__roomStore?.getState()
+      if (rooms?.activeRoomJid) {
+        if ((rooms.roomMeta.get(rooms.activeRoomJid)?.unreadCount ?? 0) > 0) return true
+      }
+      const chats = w.__chatStore?.getState()
+      if (chats?.activeConversationId) {
+        if ((chats.conversationMeta.get(chats.activeConversationId)?.unreadCount ?? 0) > 0)
+          return true
+      }
+      return false
+    }
+
+    setInterval(() => {
+      if (!hasUnread()) return
+      const real = document.hasFocus.bind(document)
+      Object.defineProperty(document, 'hasFocus', { value: () => false, configurable: true })
+      window.dispatchEvent(new Event('blur'))
+      Object.defineProperty(document, 'hasFocus', { value: real, configurable: true })
+      window.dispatchEvent(new Event('focus'))
+    }, 250)
+  })
+}
+
+/**
  * The bundle checks prove the anomaly code is PRESENT in a Dev build. They cannot
  * prove it RUNS — a module that ships but never installs would satisfy both of
  * them. This is the only gate that exercises the runtime end to end.
@@ -152,6 +220,12 @@ test.describe('anomaly runtime', () => {
     // healthy too — that the world it reads is the world it thinks it reads. A
     // detector wired to a wrong reading fires on a working app, and by the design's
     // own rule would then be deleted rather than fixed.
+
+    // Armed BEFORE the app boots, because the demo's sidebar auto-selects a room and
+    // settles it at the live edge on its own — the detector's clock can start before the
+    // test has issued its first command. See the helper for why this cannot be an
+    // `evaluate` from here.
+    await driveFocusRegainInPage(page)
     await page.goto('/demo.html?tutorial=false')
 
     await expect
@@ -169,29 +243,9 @@ test.describe('anomaly runtime', () => {
     // Open a room so the sampler has something to look at.
     await openDemoRoom(page)
 
-    // Let the list settle at the live edge FIRST. The mark-read below is gated on the
-    // viewport actually being at the bottom, so firing it mid-settle is skipped.
-    await page.waitForTimeout(2000)
-
-    // Then drive a real blur → focus transition. This is not test decoration: the app
-    // marks the active view read on the focus TRANSITION
-    // (`useWindowVisibility.ts`, gated on the viewport being at the bottom), and a
-    // headless page starts already focused, so that transition never happens on its
-    // own. Without it the demo sits on a permanently unread room and
-    // unread-survives-focus reports correctly on a state no real user would be in.
-    // `handleFocusChange` reads `document.hasFocus()` rather than the event type, so a
-    // bare synthetic blur changes nothing — the transition has to be driven through
-    // that reading.
-    await page.evaluate(() => {
-      const real = document.hasFocus.bind(document)
-      Object.defineProperty(document, 'hasFocus', { value: () => false, configurable: true })
-      window.dispatchEvent(new Event('blur'))
-      Object.defineProperty(document, 'hasFocus', { value: real, configurable: true })
-      window.dispatchEvent(new Event('focus'))
-    })
-
-    // Prove the mark-read actually landed. Otherwise a future change to that gate
-    // would turn this control test into an assertion that nothing was watching.
+    // Prove the mark-read actually landed. Otherwise a future change to that gate would
+    // turn this control test into an assertion that nothing was watching — and the
+    // driver above would be dispatching focus events into a void.
     await expect
       .poll(
         async () =>

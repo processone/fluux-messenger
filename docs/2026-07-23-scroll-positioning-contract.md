@@ -79,8 +79,9 @@ load keeps its snapshot until its own first-id shift can reconcile. Conversation
 departed conversation's snapshot, and delayed settlement or window observation from that snapshot
 cannot mutate the active conversation. A dedicated `DirectionalHistoryBrowserAdapter` owns visual
 anchor capture, the one-frame settlement scheduler, reachability probes, WebKit kinetic-scroll
-cancellation, and anchor/fallback pixel writes under the controller lease. The hook constructs and
-invokes the adapter and supplies lifecycle completion callbacks. The coordinator imports no DOM,
+cancellation, and anchor/fallback pixel writes under the controller lease.
+`useDirectionalHistoryLoads` invokes the adapter and supplies lifecycle completion callbacks; the
+orchestration hook only wires its ports and consumes its triggers. The coordinator imports no DOM,
 virtualizer, frame scheduler, positioning controller, or pixel-write capability.
 
 Saved-position reconciliation likewise runs through a dedicated browser adapter. It owns
@@ -100,6 +101,19 @@ repaint suppression, and the `overflowY` stale-paint repair. These remain execut
 than competing lifecycle owners. A settled or best-effort generation flushes any owed trailing
 repaint; user takeover or supersession deliberately discards that debt so it cannot repaint after
 the reader takes control or leak into unrelated content.
+
+They live in a `LiveEdgeBrowserAdapter` whose repaint-burst coalescer and pin-cost probe are
+adapter-scoped rather than per-executor: a burst is precisely a run of arrivals each superseding the
+last, so state that ended with one executor could never coalesce. Window facts are re-read per call
+because a live-edge executor outlives the render that built it, while forward-window availability
+and the conversation whose bottom intent is recorded stay per-execution — they are facts of the
+request, not live geometry. Conversation entry drops any owed repaint debt so it cannot flush into
+the room being opened.
+
+Fixed-anchor preservation and resident-top navigation likewise reconcile through
+`AnchorPreservationBrowserAdapter` and `ResidentTopBrowserAdapter`. The first routes all three
+ambient stimuli through the shared bottom-fraction geometry under distinct frame-loop labels; the
+second issues one animated write and thereafter only observes `scrollTop`.
 
 Resident-top navigation starts one native smooth write from its leased executor, then observes
 `scrollTop` without reissuing the target. It settles after two frames within 1px of the resident
@@ -308,9 +322,9 @@ measurement, or MDS completion cannot revive cancelled work.
 ## Reconciler responsibilities
 
 The controller-owned reconcilers own the difficult runtime work below. None belongs in the pure
-model; browser-specific geometry remains in leased imperative executors. Directional-history,
-saved-position, unread-marker, and explicit-target mechanics now live behind dedicated browser
-adapters, while the remaining executors are still in the hook:
+model; browser-specific geometry remains in leased imperative executors. Every slice now reconciles
+behind a dedicated browser adapter — directional history, saved position, unread marker, explicit
+target, live edge, fixed anchor, and resident top:
 
 - resolve IDs against the loaded item set;
 - request an around slice and resume when it arrives;
@@ -366,6 +380,19 @@ explicit center-aligned targets, live edge, fixed-anchor media/layout preservati
 history, and resident top. These
 reconcilers implement measurement convergence; they are not separate positioning authorities.
 There is no independent positioning frame-loop implementation left inside `useMessageListScroll`.
+Executor construction lives in `useScrollExecutors` without exception: it supplies each adapter's
+value ports and hands the finished executor back for the hook to submit, so no `createExecutor` call
+appears in `useMessageListScroll`. Directional-history availability probes and one-frame settlement
+scheduling are encapsulated by `useDirectionalHistoryLoads`, which builds no executor and owns no
+pixel write. Exactly three pixel writes remain in the orchestration hook, and none is a positioning
+owner —
+the two isolated static-preview operations documented below, and the emergency bottom write that
+keeps the list usable when the controller itself cannot be constructed.
+
+The executor factories' changing callback identities are part of that integration contract because
+dependent effects use them to follow render-scoped window facts. The authoritative explanation and
+dependency rules live with the implementation in
+`apps/fluux/src/components/conversation/useScrollExecutors.ts`.
 
 Ambient layout preservation is entirely inside the scroll owner. `MessageList` receives only the
 store-owned interior-placement version; it receives no raw anchor capture/restore callbacks. The
@@ -505,15 +532,35 @@ kinetic scrolling and stale-paint behavior.
      viewport-session snapshots.
    - [x] Extract directional history load eligibility, invocation, and completion into a window
      coordinator that owns no positioning.
-   - [ ] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
+   - [x] Move DOM/virtualizer reconciliation mechanics behind explicit browser adapters.
      - [x] Extract directional-history capture, settlement scheduling, reachability, kinetic
        cancellation, and anchor/fallback writes behind its leased browser adapter.
      - [x] Extract saved-position reachability, legacy-offset and bottom-fraction writes behind its
        leased browser adapter, with shared bottom-fraction geometry for fixed anchors.
      - [x] Extract unread-marker and explicit-target reachability, passive conversation handoff,
        leased positioning, around loading, and target completion behind dedicated browser adapters.
-     - [ ] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
-   - [ ] Leave the React hook as thin lifecycle orchestration.
+     - [x] Extract the remaining live-edge, fixed-anchor, and resident-top browser executors.
+   - [x] Leave the React hook as thin lifecycle orchestration. Taken one cohesive unit at a time so
+     each step keeps the scroll invariants as its gate:
+     - [x] Move executor construction — the frame-loop factory, the adapters that outlive one
+       execution, and every `create*`/`build*Executor` — into `useScrollExecutors`.
+     - [x] Extract the scroller/content callback refs, their genuine-input listeners, and the
+       non-virtualized content-growth observer into `useScrollContainerBinding`.
+     - [x] Extract ambient divider/insertion anchor tracking into
+       `useAmbientAnchorPreservation`, with every branch decision as a pure function in
+       `ambientAnchorDecisions`.
+     - [x] Extract media-growth snapshotting and debouncing into
+       `useMediaGrowthPreservation`, with the settled-batch outcome and the genuine-scroll
+       discriminator as pure functions in `mediaGrowthDecisions`.
+     - [x] Extract directional-history load start, release and post-frame settling into
+       `useDirectionalHistoryLoads`. It adds no eligibility rule of its own: the coordinator still
+       decides, and the browser adapter still captures and writes.
+     - [x] Reduce the scroll and wheel handlers to a value-only interpretation of geometry in
+       `scrollEventDecisions`, leaving the handlers to read facts once and apply the plan.
+     - [x] Express conversation-entry arbitration as a pure model over facts in
+       `entryArbitration`, leaving a thin effect that applies its verdict. The five-condition
+       synced-live-edge predicate and its late-resolving twin are now separately testable, including
+       the empty-conversation case where a bare pointer comparison would discard a saved position.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove
 one previous source of scroll authority.

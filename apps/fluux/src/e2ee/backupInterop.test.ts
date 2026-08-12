@@ -15,7 +15,7 @@
  * would break Rust↔Web interop, even if the web→web round-trip still
  * passes.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   InMemoryStorageBackend,
   createPluginStorage,
@@ -25,6 +25,12 @@ import {
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+
+// These round-trips generate and re-wrap real OpenPGP keys, so the tests are
+// CPU-bound and inflate several-fold under the contention of a full
+// `npm test`. Timing is not what they assert, and the 5s default left too
+// little headroom on a loaded runner. See WebOpenPGPPlugin.test.ts.
+vi.setConfig({ testTimeout: 30_000 })
 
 class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
   callBackupEncrypt(jid: string, pp: string) {

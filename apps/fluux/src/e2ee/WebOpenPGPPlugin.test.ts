@@ -27,6 +27,24 @@ import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import type { KeyBundle } from './OpenPGPPluginBase'
 
+// Every test here generates real OpenPGP keys, so each one is CPU-bound and
+// contends with the rest of the suite for cores. Isolated, the slowest is
+// ~130ms; under a full `npm test` the same test measured 1477ms — the slowest
+// in the whole app suite — and a smaller or busier CI runner inflates it
+// further. The 5s default left too little headroom and the key-expiration
+// tests (which generate a key, then re-sign it) flaked. Timing is not what
+// any of these assert, so give the file room rather than trading correctness
+// signal for a deadline.
+vi.setConfig({ testTimeout: 30_000 })
+
+// Budget for the `vi.waitFor` polls in the pending-signature-buffer tests,
+// whose drain runs a fire-and-forget openpgp.js verify. `waitFor` carries its
+// own deadline, so `testTimeout` above does not cover it — at the previous
+// 5000ms a loaded run gave up on a drain that was still progressing. Keep this
+// comfortably below `testTimeout` so a genuine stall still surfaces as the
+// failing assertion inside `waitFor` rather than an opaque test timeout.
+const DRAIN_POLL_TIMEOUT_MS = 20_000
+
 const FIXTURES_DIR = resolve(__dirname, 'fixtures')
 
 // Expose the crypto-layer protected methods so we can round-trip
@@ -2341,7 +2359,7 @@ describe('WebOpenPGPPlugin', () => {
         // poll for the resulting update rather than guessing a fixed number of
         // event-loop turns — `flushAsync`'s fixed tick budget flakes under the
         // CPU contention of a full parallel test run.
-        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
+        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: DRAIN_POLL_TIMEOUT_MS })
         expect(bob.securityUpdates[0].securityContext.trust).toBe('tofu')
         expect(bob.securityUpdates[0].messageId).toBe('m-drain')
       })
@@ -2396,7 +2414,7 @@ describe('WebOpenPGPPlugin', () => {
         setSessionPassphrase('bob-strong-pp')
         bob.plugin.onPeerKeysChanged('alice@example.com')
 
-        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
+        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: DRAIN_POLL_TIMEOUT_MS })
         expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
         expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
       })
@@ -2429,7 +2447,7 @@ describe('WebOpenPGPPlugin', () => {
         // Wait until the re-verify decrypt was actually attempted (and rejected)
         // before restoring the mock — that ordering is the real dependency, not a
         // fixed number of ticks. Then let the rejection's catch handler settle.
-        await vi.waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: 5000 })
+        await vi.waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: DRAIN_POLL_TIMEOUT_MS })
         await flushAsync()
         spy.mockRestore()
 
@@ -2442,7 +2460,7 @@ describe('WebOpenPGPPlugin', () => {
         bob.plugin.onPeerKeysChanged('alice@example.com')
         await vi.waitFor(
           () => expect(bob.securityUpdates.filter((u) => u.securityContext.trust === 'tofu')).toHaveLength(1),
-          { timeout: 5000 },
+          { timeout: DRAIN_POLL_TIMEOUT_MS },
         )
         const upgrades = bob.securityUpdates.filter((u) => u.securityContext.trust === 'tofu')
         expect(upgrades[0].messageId).toBe('m-transient')

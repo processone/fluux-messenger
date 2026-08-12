@@ -33,6 +33,7 @@
 
 import { test, expect, type Page } from '@playwright/test'
 import { bootDemo } from './e2e/demoBoot'
+import { withPinWindow, type PinGrowthStep } from './e2e/pinWindow'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -151,52 +152,6 @@ async function enableScrollTrace(page: Page): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(window as any).__fluuxScrollDebug?.(true)
   })
-}
-
-/**
- * Run `trigger`, then resolve once the bottom-pin frame loop reports it has FINISHED — settled or
- * bailed. Requires the scroll-decision trace (`__fluuxScrollDebug(true)`), the same seam the
- * marker-reentry and resident-top invariants already read.
- *
- * Why not a sleep: the pin converges over frames, so its duration is frame-rate bound, not
- * wall-clock bound. On a loaded CI runner (two workers, four browser projects) frames stretch far
- * enough that a fixed 700ms expired mid-convergence and the assertion read a half-settled geometry —
- * which is how `TWO scroll events` failed CI at distFromBottom=928 and then passed, unchanged, on
- * retry.
- *
- * This waits for the loop to STOP, never for the test to pass: a pin that bails reports completion
- * too, so a genuine bail still reaches the geometry assertions and still fails them. If no
- * completion arrives, the premise itself (growth modelled INSIDE the pin window) did not hold, and
- * saying so beats asserting on a geometry nobody was driving.
- */
-async function withPinSettled(
-  page: Page,
-  expectedTrigger: 'switch' | 'new-message',
-  trigger: () => Promise<void>,
-): Promise<void> {
-  let completions = 0
-  const onConsole = (message: { text: () => string }) => {
-    const text = message.text()
-    if (
-      text.includes('PIN completed') &&
-      text.includes(`trigger: ${expectedTrigger},`) &&
-      /\boutcome: (?:settled|best-effort)(?:,|})/.test(text)
-    ) {
-      completions++
-    }
-  }
-  page.on('console', onConsole)
-  try {
-    await trigger()
-    await expect
-      .poll(() => completions, {
-        message: 'the bottom-pin loop never reported completion after the modelled growth',
-        timeout: 15_000,
-      })
-      .toBeGreaterThan(0)
-  } finally {
-    page.off('console', onConsole)
-  }
 }
 
 /** Get the scrollTop of the message-list scroll container. */
@@ -515,7 +470,7 @@ test.describe('Controller-owned resident-top navigation', () => {
     // edge over anything written underneath it. Waiting for the loop to report completion — rather
     // than for navigateToStressRoom's fixed settle to elapse — is what keeps the setup below from
     // being undone on a slow runner (CI run 30466867270 read 4372 here, the live edge).
-    await withPinSettled(page, 'switch', () => navigateToStressRoom(page))
+    await withPinWindow(page, { trigger: 'switch' }, () => navigateToStressRoom(page))
     const entryDistanceFromBottom = await page.evaluate(() => {
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : null
@@ -1577,6 +1532,52 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     }, id)
   }
 
+  /**
+   * "Stuck" for a row that can be TALLER than the viewport: its top may be above the fold, so the
+   * claim is that its BOTTOM edge sits at the viewport bottom.
+   */
+  async function bottomEdgeStuck(
+    page: Page,
+    id: string,
+  ): Promise<{ bottomVisible: boolean; distFromBottom: number }> {
+    return page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { bottomVisible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      return {
+        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+  }
+
+  /**
+   * Append an outgoing message whose predecessor is from the OTHER party, so it renders as a
+   * group-START row (avatar + sender header) — the taller row whose post-paint growth is what the
+   * two WebKit models below drive.
+   */
+  async function appendGroupStartSend(page: Page, jid: string, id: string): Promise<void> {
+    await page.evaluate(([j, msgId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = (window as any).__chatStore
+      const st = cs.getState()
+      const msgs = (st.messages.get(j) ?? []).slice()
+      msgs.push({
+        type: 'chat', conversationId: j, from: 'me@fluux.chat', to: j, id: msgId,
+        body: 'my reply — starts a new bubble group', isOutgoing: true, timestamp: new Date(),
+      })
+      const m = new Map(st.messages)
+      m.set(j, msgs)
+      cs.setState({ messages: m })
+    }, [jid, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+  }
+
+  /** Model the post-paint growth of the just-sent row: taller than AT_BOTTOM_THRESHOLD (150). */
+  const GROWTH_TO_PX = 600
+
   test('plain: incoming message (same day) while at bottom stays visible', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)
@@ -1666,17 +1667,7 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
 
     // For a tall message, "stuck" means its BOTTOM edge is at the viewport bottom (its top may be
     // above the fold if the message is taller than the viewport).
-    const res = await page.evaluate((msgId) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      if (!s) return { bottomVisible: false, distFromBottom: -1 }
-      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      const sRect = s.getBoundingClientRect()
-      const r = el?.getBoundingClientRect()
-      return {
-        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
-        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
-      }
-    }, id)
+    const res = await bottomEdgeStuck(page, id)
     expect(res.bottomVisible, `tall incoming message "${id}" bottom not at viewport bottom — distFromBottom=${res.distFromBottom}`).toBe(true)
     expect(res.distFromBottom, 'view not pinned to the bottom after tall incoming message').toBeLessThan(AT_BOTTOM_OK_PX)
   })
@@ -1691,57 +1682,31 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
   // engine condition deterministically: grow the just-sent row and dispatch a 'scroll' event during
   // the pin's settle window. RED with the unconditional isAtBottomRef write; GREEN once handleScroll
   // ignores scroll events fired while a programmatic re-assert loop owns scrollTop.
+  //
+  // The model is armed BEFORE the append and runs from the pin's own `PIN start`, one frame in, so
+  // "inside the pin window" is a frame fact rather than a wall-clock race against CDP round-trips —
+  // see scripts/e2e/pinWindow.ts for why driving this from Node made the invariant load-sensitive.
   test('group-start send survives a growth-driven scroll event during the pin (WebKitGTK model)', async ({ page }) => {
     await loadDemo(page)
     await enableScrollTrace(page)
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
-    // A send whose previous message is from the OTHER party → a group-START row (taller).
     const id = `send-groupstart-${Date.now()}`
-    await page.evaluate(([jid, msgId]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cs = (window as any).__chatStore
-      const st = cs.getState()
-      const msgs = (st.messages.get(jid) ?? []).slice()
-      msgs.push({
-        type: 'chat', conversationId: jid, from: 'me@fluux.chat', to: jid, id: msgId,
-        body: 'my reply — starts a new bubble group', isOutgoing: true, timestamp: new Date(),
-      })
-      const m = new Map(st.messages)
-      m.set(jid, msgs)
-      cs.setState({ messages: m })
-    }, [AVA, id] as const)
-    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    // WebKitGTK: the row grows tall AFTER paint (scrollHeight up, scrollTop unchanged →
+    // distFromBottom large) and the engine fires a scroll event.
+    const growthModel: PinGrowthStep[] = [
+      { label: 'post-paint growth + scroll event', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
+    ]
+    const outcome = await withPinWindow(
+      page,
+      { trigger: 'new-message', messageId: id, steps: growthModel },
+      () => appendGroupStartSend(page, AVA, id),
+    )
 
-    // While the pin-bottom loop is still settling, model WebKitGTK: the row grows tall AFTER paint
-    // (scrollHeight up, scrollTop unchanged → distFromBottom large) and the engine fires a scroll
-    // event. One rAF in keeps us inside the 60-frame pin window.
-    await withPinSettled(page, 'new-message', () => page.evaluate((msgId) => new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        const s = document.querySelector('[data-message-list]') as HTMLElement | null
-        const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-        if (s && el) {
-          el.style.minHeight = '600px' // grow the bottom row well past AT_BOTTOM_THRESHOLD (150)
-          s.dispatchEvent(new Event('scroll', { bubbles: true }))
-        }
-        resolve()
-      })
-    }), id))
-
-    const res = await page.evaluate((msgId) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      if (!s) return { bottomVisible: false, distFromBottom: -1 }
-      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      const sRect = s.getBoundingClientRect()
-      const r = el?.getBoundingClientRect()
-      return {
-        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
-        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
-      }
-    }, id)
-    expect(res.bottomVisible, `group-start send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}`).toBe(true)
-    expect(res.distFromBottom, 'pin bailed on a growth-driven scroll event — send not stuck').toBeLessThan(AT_BOTTOM_OK_PX)
+    const res = await bottomEdgeStuck(page, id)
+    expect(res.bottomVisible, `group-start send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}, pin outcome=${outcome}`).toBe(true)
+    expect(res.distFromBottom, `pin bailed on a growth-driven scroll event (outcome=${outcome}) — send not stuck`).toBeLessThan(AT_BOTTOM_OK_PX)
   })
 
   // ROOT-CAUSE MODEL #2 (the RESIDUAL send-stick hole the single-event #760 fix does NOT close): on
@@ -1762,56 +1727,24 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     await activateChat(page, AVA)
     await scrollToBottom(page)
 
-    // A send whose previous message is from the OTHER party → a group-START row (taller).
     const id = `send-twophase-${Date.now()}`
-    await page.evaluate(([jid, msgId]) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cs = (window as any).__chatStore
-      const st = cs.getState()
-      const msgs = (st.messages.get(jid) ?? []).slice()
-      msgs.push({
-        type: 'chat', conversationId: jid, from: 'me@fluux.chat', to: jid, id: msgId,
-        body: 'my reply — starts a new bubble group', isOutgoing: true, timestamp: new Date(),
-      })
-      const m = new Map(st.messages)
-      m.set(jid, msgs)
-      cs.setState({ messages: m })
-    }, [AVA, id] as const)
-    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
-
     // Two-phase growth settle, both events inside the pin window:
     //   event 1 (growth frame): scrollHeight UP vs prev → discriminator absorbs it (isAtBottom kept).
-    //   event 2 (one frame later): SAME height, scrollTop short → discriminator misses → current code
-    //   flips isAtBottom false and the pin bails. The intent-gated pin re-pins through it.
-    await withPinSettled(page, 'new-message', () => page.evaluate((msgId) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      if (!s || !el) return
-      requestAnimationFrame(() => {
-        el.style.minHeight = '600px' // grow the bottom row well past AT_BOTTOM_THRESHOLD
-        s.dispatchEvent(new Event('scroll', { bubbles: true })) // event 1: height > prev (absorbed)
-        // Two frames later the height has settled; model the engine reporting a short scrollTop with
-        // a second scroll event at the unchanged height — the case the discriminator cannot catch.
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          s.scrollTop = Math.max(0, s.scrollTop - 400)
-          s.dispatchEvent(new Event('scroll', { bubbles: true })) // event 2: height === prev (slips guard)
-        }))
-      })
-    }, id))
+    //   event 2 (two frames later): SAME height, scrollTop short → discriminator misses → the
+    //   position-gated pin flips isAtBottom false and bails. The intent-gated pin re-pins through it.
+    const growthModel: PinGrowthStep[] = [
+      { label: 'event 1: height > prev (absorbed)', afterFrames: 1, growRowToPx: GROWTH_TO_PX },
+      { label: 'event 2: height === prev (slips guard)', afterFrames: 2, scrollTopDelta: -400 },
+    ]
+    const outcome = await withPinWindow(
+      page,
+      { trigger: 'new-message', messageId: id, steps: growthModel },
+      () => appendGroupStartSend(page, AVA, id),
+    )
 
-    const res = await page.evaluate((msgId) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      if (!s) return { bottomVisible: false, distFromBottom: -1 }
-      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
-      const sRect = s.getBoundingClientRect()
-      const r = el?.getBoundingClientRect()
-      return {
-        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
-        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
-      }
-    }, id)
-    expect(res.bottomVisible, `two-phase-growth send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}`).toBe(true)
-    expect(res.distFromBottom, 'pin bailed on a height-unchanged growth-settle scroll event — send not stuck').toBeLessThan(AT_BOTTOM_OK_PX)
+    const res = await bottomEdgeStuck(page, id)
+    expect(res.bottomVisible, `two-phase-growth send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}, pin outcome=${outcome}`).toBe(true)
+    expect(res.distFromBottom, `pin bailed on a height-unchanged growth-settle scroll event (outcome=${outcome}) — send not stuck`).toBeLessThan(AT_BOTTOM_OK_PX)
   })
 
   test('outgoing new-day: a sent message that inserts a date divider sticks to the bottom', async ({ page }) => {
