@@ -13,7 +13,7 @@
  *   as independent clients, while a page reload reconnects with the same resource.
  */
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 const RESOURCE_KEY = 'xmpp-resource'
 
@@ -48,7 +48,7 @@ export function isValidResource(resource: string): boolean {
  * from before the random suffix system), it is regenerated.
  */
 export function getResource(): string {
-  if (isTauri()) {
+  if (platform().hasStableInstallIdentity) {
     // Desktop: Use persistent random resource (survives app restarts)
     let resource = localStorage.getItem(RESOURCE_KEY)
     if (!resource || !isValidResource(resource)) {

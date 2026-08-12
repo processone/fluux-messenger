@@ -5,13 +5,13 @@
  * so it's ready before any React components render.
  */
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 type DragStateListener = (isDragging: boolean) => void
 type FileDropListener = (paths: string[]) => void
 
 // Evaluate once at module load time
-const isRunningInTauri = isTauri()
+const isRunningInTauri = platform().nativeFileDrop
 
 // Global state
 let isDragging = false

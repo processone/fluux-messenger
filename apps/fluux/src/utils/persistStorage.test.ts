@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// Control platform detection per test.
-const isTauri = vi.fn(() => false)
-vi.mock('./tauri', () => ({ isTauri: () => isTauri() }))
-
+import { setPlatformForTesting } from '@/platform'
 import { requestPersistentStorage } from './persistStorage'
+
+// Control the platform per test: only the web build asks for persistence.
+let restorePlatform: () => void
 
 function stubStorage(storage: unknown) {
   vi.stubGlobal('navigator', { storage })
@@ -12,10 +12,11 @@ function stubStorage(storage: unknown) {
 
 describe('requestPersistentStorage', () => {
   beforeEach(() => {
-    isTauri.mockReturnValue(false)
+    restorePlatform = setPlatformForTesting({ shell: 'web' })
   })
 
   afterEach(() => {
+    restorePlatform()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -44,7 +45,7 @@ describe('requestPersistentStorage', () => {
   })
 
   it('is a no-op under Tauri', async () => {
-    isTauri.mockReturnValue(true)
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     const persist = vi.fn().mockResolvedValue(true)
     stubStorage({ persist, persisted: vi.fn().mockResolvedValue(false) })
 

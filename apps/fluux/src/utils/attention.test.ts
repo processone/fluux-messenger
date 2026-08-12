@@ -1,16 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { setPlatformForTesting } from '@/platform'
 
 const mockRequestUserAttention = vi.fn().mockResolvedValue(undefined)
-let mockTauri = true
-let mockWindows = true
 let mockWindowVisible = false
+let restorePlatform: () => void
 
 vi.mock('@fluux/sdk', () => ({
   connectionStore: { getState: () => ({ windowVisible: mockWindowVisible }) },
-}))
-vi.mock('./tauri', () => ({
-  isTauri: () => mockTauri,
-  isWindows: () => mockWindows,
 }))
 vi.mock('@tauri-apps/api/window', () => ({
   UserAttentionType: { Critical: 1 },
@@ -21,10 +18,13 @@ import { requestAttention } from './attention'
 
 describe('requestAttention', () => {
   beforeEach(() => {
-    mockTauri = true
-    mockWindows = true
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'windows' })
     mockWindowVisible = false
     mockRequestUserAttention.mockClear()
+  })
+
+  afterEach(() => {
+    restorePlatform()
   })
 
   it('requests critical attention on unfocused Windows Tauri', async () => {
@@ -39,10 +39,9 @@ describe('requestAttention', () => {
   })
 
   it('does nothing outside Windows Tauri', () => {
-    mockWindows = false
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     requestAttention()
-    mockWindows = true
-    mockTauri = false
+    restorePlatform = setPlatformForTesting({ shell: 'web', os: 'windows' })
     requestAttention()
     expect(mockRequestUserAttention).not.toHaveBeenCalled()
   })

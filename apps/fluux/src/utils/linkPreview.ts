@@ -4,7 +4,7 @@
  */
 
 // Note: invoke is imported dynamically inside functions to avoid loading Tauri APIs in web mode
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 export interface UrlMetadata {
   url: string
@@ -19,7 +19,7 @@ export interface UrlMetadata {
  * Returns null if not running in Tauri or if fetch fails
  */
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
-  if (!isTauri()) {
+  if (!platform().nativeHttpFetch) {
     console.warn('Link preview is only available in the desktop app')
     return null
   }

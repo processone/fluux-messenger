@@ -6,7 +6,7 @@
  * blob URLs to temp files for Tauri, with caching to avoid rewrites.
  */
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 // Cache of hash -> file path to avoid rewriting same avatars
 const avatarFileCache = new Map<string, string>()
@@ -27,7 +27,7 @@ export async function getNotificationAvatarUrl(
   if (!blobUrl) return undefined
 
   // Web notifications can use blob URLs directly
-  if (!isTauri()) {
+  if (!platform().notificationsNeedFileUrls) {
     return blobUrl
   }
 

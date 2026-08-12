@@ -7,14 +7,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 const {
-  isTauriMock,
   saveMock,
   writeFileMock,
   resolvePlaintextTauriMock,
   resolveTauriMock,
   resolveWebMock,
 } = vi.hoisted(() => ({
-  isTauriMock: vi.fn(),
   saveMock: vi.fn(),
   writeFileMock: vi.fn(),
   resolvePlaintextTauriMock: vi.fn(),
@@ -22,7 +20,16 @@ const {
   resolveWebMock: vi.fn(),
 }))
 
-vi.mock('./tauri', () => ({ isTauri: isTauriMock }))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform: `usePlatform` swaps the capability record, and the
+// derivation decides what that host can do.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
+
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: saveMock }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: writeFileMock }))
 vi.mock('./mediaCache', () => ({
@@ -58,7 +65,7 @@ describe('downloadAttachment', () => {
   })
 
   it('Tauri: encrypted → resolves decrypted URL and saves that, never the ciphertext URL', async () => {
-    isTauriMock.mockReturnValue(true)
+    usePlatform('desktop')
     resolveTauriMock.mockResolvedValue('asset://localhost/decrypted.dec')
     saveMock.mockResolvedValue('/Users/me/doc.pdf')
 
@@ -77,7 +84,7 @@ describe('downloadAttachment', () => {
   })
 
   it('web: encrypted → resolves via the web resolver', async () => {
-    isTauriMock.mockReturnValue(false)
+    usePlatform('web')
     resolveWebMock.mockResolvedValue('blob:decrypted')
     const createEl = vi.spyOn(document, 'createElement')
 
@@ -95,7 +102,7 @@ describe('downloadAttachment', () => {
   })
 
   it('Tauri: plaintext → resolves through the native cache before saving', async () => {
-    isTauriMock.mockReturnValue(true)
+    usePlatform('desktop')
     resolvePlaintextTauriMock.mockResolvedValue('asset://localhost/cached.txt')
     saveMock.mockResolvedValue('/Users/me/note.txt')
 
@@ -108,7 +115,7 @@ describe('downloadAttachment', () => {
   })
 
   it('web: plaintext → keeps the direct URL without invoking a resolver', async () => {
-    isTauriMock.mockReturnValue(false)
+    usePlatform('web')
     const createEl = vi.spyOn(document, 'createElement')
 
     await downloadAttachment({ url: 'https://up/note.txt', name: 'note.txt' })
@@ -124,7 +131,7 @@ describe('downloadAttachment', () => {
   })
 
   it('encrypted resolve failure → error toast, nothing written', async () => {
-    isTauriMock.mockReturnValue(true)
+    usePlatform('desktop')
     resolveTauriMock.mockRejectedValue(new Error('auth tag mismatch'))
 
     await downloadAttachment(

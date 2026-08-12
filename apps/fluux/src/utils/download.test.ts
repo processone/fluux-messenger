@@ -6,22 +6,25 @@
  * fetch can fail (or return a non-OK status). Those must surface as an error
  * toast — a cancelled save dialog must NOT.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 const { saveMock, writeFileMock } = vi.hoisted(() => ({
   saveMock: vi.fn(),
   writeFileMock: vi.fn(),
 }))
 
-vi.mock('./tauri', () => ({ isTauri: () => true }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: saveMock }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: writeFileMock }))
 
+import { setPlatformForTesting } from '@/platform'
 import { downloadFile } from './download'
 import { useToastStore } from '@/stores/toastStore'
 
 describe('downloadFile error feedback', () => {
+  let restorePlatform: () => void
+
   beforeEach(() => {
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     useToastStore.setState({ toasts: [] })
     saveMock.mockReset()
     writeFileMock.mockReset()
@@ -30,6 +33,10 @@ describe('downloadFile error feedback', () => {
       status: 200,
       arrayBuffer: async () => new ArrayBuffer(4),
     }) as unknown as typeof fetch
+  })
+
+  afterEach(() => {
+    restorePlatform()
   })
 
   it('shows an error toast when the write fails (e.g. saving outside $HOME)', async () => {

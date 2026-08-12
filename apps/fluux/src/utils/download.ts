@@ -1,4 +1,4 @@
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 import { useToastStore } from '@/stores/toastStore'
 import type { FileAttachment } from '@fluux/sdk'
 
@@ -19,7 +19,7 @@ export async function downloadFile(
   options?: { errorMessage?: string },
 ): Promise<void> {
   try {
-    if (isTauri()) {
+    if (platform().nativeDownloads) {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const { writeFile } = await import('@tauri-apps/plugin-fs')
 
@@ -68,9 +68,9 @@ export async function downloadAttachment(
     let resolvedUrl = attachment.url
     if (attachment.encryption) {
       const { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } = await import('./mediaCache')
-      const resolve = isTauri() ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
+      const resolve = platform().nativeDownloads ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
       resolvedUrl = await resolve(attachment.url, attachment.encryption)
-    } else if (isTauri()) {
+    } else if (platform().nativeDownloads) {
       const { resolveMediaUrl } = await import('./mediaCache')
       resolvedUrl = await resolveMediaUrl(attachment.url)
     }

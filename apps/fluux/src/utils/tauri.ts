@@ -1,6 +1,12 @@
 /**
- * Tauri platform detection utilities
+ * Tauri platform detection utilities.
+ *
+ * Superseded by `@/platform`, which derives every platform-dependent answer
+ * once and names it. These probes remain for the hooks and components that
+ * still branch on them directly; do not add callers.
  */
+
+import { platform } from '@/platform'
 
 /**
  * Check if running in Tauri (desktop app) vs web browser
@@ -33,5 +39,5 @@ export function isWindows(): boolean {
  * Enabled only in Tauri on macOS and Windows (not Linux, not web).
  */
 export function isUpdaterEnabled(): boolean {
-  return isTauri() && !isLinux()
+  return platform().hasInAppUpdates
 }

@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// Mock the tauri utility before importing keychain
-const mockIsTauri = vi.fn()
-vi.mock('./tauri', () => ({
-  isTauri: () => mockIsTauri(),
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform: `usePlatform` swaps the capability record, and the
+// derivation decides what that host can do.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 // Mock the Tauri invoke function
 const mockInvoke = vi.fn()
@@ -21,10 +25,11 @@ describe('keychain utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
   })
 
   afterEach(() => {
+    restorePlatform?.()
     localStorage.clear()
   })
 
@@ -46,7 +51,7 @@ describe('keychain utilities', () => {
 
   describe('saveCredentials', () => {
     it('should not call invoke when not in Tauri', async () => {
-      mockIsTauri.mockReturnValue(false)
+      usePlatform('web')
       // Silence expected console.warn
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -88,7 +93,7 @@ describe('keychain utilities', () => {
 
   describe('getCredentials', () => {
     it('should return null when not in Tauri', async () => {
-      mockIsTauri.mockReturnValue(false)
+      usePlatform('web')
 
       const result = await getCredentials()
 
@@ -144,7 +149,7 @@ describe('keychain utilities', () => {
   describe('deleteCredentials', () => {
     it('should clear localStorage flag on skip path', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
-      mockIsTauri.mockReturnValue(false)
+      usePlatform('web')
 
       await deleteCredentials()
 

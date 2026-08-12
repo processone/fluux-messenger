@@ -3,9 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // The handler dynamically imports the Tauri shell plugin; capture the mock.
 const openMock = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: openMock }))
-// Force the Tauri branch so the handler actually registers.
-vi.mock('./tauri', () => ({ isTauri: () => true }))
 
+import { setPlatformForTesting } from '@/platform'
 import { setupExternalLinkHandler } from './externalLinkHandler'
 
 function click(el: Element) {
@@ -14,14 +13,18 @@ function click(el: Element) {
 
 describe('setupExternalLinkHandler', () => {
   let cleanup: (() => void) | undefined
+  let restorePlatform: () => void
 
   beforeEach(() => {
+    // The handler only registers where in-app navigation is intercepted.
+    restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
     openMock.mockClear()
     cleanup = setupExternalLinkHandler()
   })
 
   afterEach(() => {
     cleanup?.()
+    restorePlatform()
     document.body.innerHTML = ''
   })
 

@@ -5,7 +5,7 @@
 
 // Note: invoke is imported dynamically inside functions to avoid loading Tauri APIs in web mode
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 export interface StoredCredentials {
   jid: string
@@ -41,7 +41,7 @@ export async function saveCredentials(
   password: string,
   server: string | null
 ): Promise<void> {
-  if (!isTauri()) {
+  if (!platform().nativeKeychain) {
     console.warn('Keychain storage is only available in the desktop app')
     return
   }
@@ -59,7 +59,7 @@ export async function saveCredentials(
  * Returns null if no credentials are stored or if not running in Tauri
  */
 export async function getCredentials(): Promise<StoredCredentials | null> {
-  if (!isTauri()) {
+  if (!platform().nativeKeychain) {
     return null
   }
 
@@ -95,7 +95,7 @@ export async function deleteCredentials(options: DeleteCredentialsOptions = {}):
   // stale local state.
   const hadCredentials = localStorage.getItem(STORAGE_KEY_HAS_CREDENTIALS) === 'true'
 
-  if (!isTauri() || (!hadCredentials && !force)) {
+  if (!platform().nativeKeychain || (!hadCredentials && !force)) {
     localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
     console.log('[Fluux] Keychain: delete skipped (no credentials flag, not Tauri, or not forced)')
     return

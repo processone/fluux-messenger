@@ -6,7 +6,7 @@
  * tauri-plugin-clipboard-manager to read images directly from the system clipboard.
  */
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 /**
  * Attempt to read an image from the system clipboard using Tauri's native plugin.
@@ -16,7 +16,7 @@ import { isTauri } from './tauri'
  * where WebKitGTK's clipboard support for images is incomplete.
  */
 export async function readClipboardImage(): Promise<File | null> {
-  if (!isTauri()) return null
+  if (!platform().nativeClipboardImages) return null
 
   try {
     const { readImage } = await import('@tauri-apps/plugin-clipboard-manager')

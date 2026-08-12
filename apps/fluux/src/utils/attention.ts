@@ -1,9 +1,9 @@
 import { connectionStore } from '@fluux/sdk'
-import { isTauri, isWindows } from './tauri'
+import { platform } from '@/platform'
 
 /** Request persistent Windows taskbar attention for an unfocused Fluux window. */
 export function requestAttention(): void {
-  if (!isTauri() || !isWindows() || connectionStore.getState().windowVisible) return
+  if (!platform().canRequestWindowAttention || connectionStore.getState().windowVisible) return
 
   void import('@tauri-apps/api/window')
     .then(({ getCurrentWindow, UserAttentionType }) =>

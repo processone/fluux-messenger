@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock tauri detection
-const mockIsTauri = vi.fn()
-vi.mock('./tauri', () => ({
-  isTauri: () => mockIsTauri(),
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform: `usePlatform` swaps the capability record, and the
+// derivation decides what that host can do.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 // Mock Tauri path API
 const mockAppCacheDir = vi.fn()
@@ -63,7 +67,7 @@ describe('mediaCache', () => {
     vi.clearAllMocks()
     resetMediaUrlCache()
 
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockAppCacheDir.mockResolvedValue('/Users/test/Library/Caches/com.processone.fluux')
     mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
     mockExists.mockResolvedValue(false)
@@ -194,7 +198,7 @@ describe('mediaCache', () => {
 
   describe('getMediaCacheSize', () => {
     it('should return 0 when not in Tauri', async () => {
-      mockIsTauri.mockReturnValue(false)
+      usePlatform('web')
       const size = await getMediaCacheSize()
       expect(size).toBe(0)
     })
@@ -219,7 +223,7 @@ describe('peekMediaCache (Tauri, network-free)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockAppCacheDir.mockResolvedValue('/cache/com.processone.fluux')
     mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
     mockMkdir.mockResolvedValue(undefined)
@@ -245,7 +249,7 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockAppCacheDir.mockResolvedValue('/cache/com.processone.fluux')
     mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
     mockExists.mockResolvedValue(false)
@@ -323,7 +327,7 @@ describe('peekEncryptedMediaCache (Tauri, network-free)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(true)
+    usePlatform('desktop')
     mockAppCacheDir.mockResolvedValue('/cache/com.processone.fluux')
     mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
     mockMkdir.mockResolvedValue(undefined)
@@ -350,7 +354,7 @@ describe('peekWebMediaCache (web Cache API, network-free)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
     matchResult = undefined
     vi.stubGlobal('caches', {
       open: async () => ({ match: async () => matchResult }),
@@ -384,7 +388,7 @@ describe('resolveWebEncryptedMediaUrl (web Cache API, scheme safety)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
     store = new Map()
     // Faithful Cache API mock: like a real browser, put() rejects any request
     // whose URL scheme is not http/https. This is what catches a cache key
@@ -450,7 +454,7 @@ describe('resolveWebMediaUrl (web Cache API, scheme safety)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
     store = new Map()
     // Same faithful Cache API mock as the encrypted suite: put() rejects any
     // request whose URL scheme is not http/https, mirroring the real browser.
@@ -518,7 +522,7 @@ describe('peekWebEncryptedMediaCache (web Cache API, encrypted, network-free)', 
   beforeEach(() => {
     vi.clearAllMocks()
     resetMediaUrlCache()
-    mockIsTauri.mockReturnValue(false)
+    usePlatform('web')
     matchResult = undefined
     vi.stubGlobal('caches', {
       open: async () => ({ match: async () => matchResult }),

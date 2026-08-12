@@ -59,6 +59,34 @@ export default tseslint.config(
     },
   },
   {
+    // `isTauri()` reads as one question but answers at least six, and the real
+    // answers already diverge: in-app updates are desktop-except-Linux, the tray
+    // preference is desktop-on-Windows-and-Linux, taskbar attention is
+    // desktop-on-Windows-only. Branch on a named capability from '@/platform'
+    // instead, so a call site says WHY it branches and a new target can be
+    // described rather than guessed at.
+    //
+    // Scoped to the layer that has been migrated. Widen it to hooks and
+    // components as they follow; do not add exceptions.
+    files: ['src/utils/**/*.ts'],
+    // `tauri.ts` owns the remaining probes; its own test has to import them.
+    ignores: ['src/utils/tauri.ts', 'src/utils/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^(\\.{1,2}/)*(@/utils/)?tauri$',
+              message:
+                "Branch on a named capability from '@/platform' (e.g. platform().nativeKeychain) rather than on isTauri() - the platform is not binary, and the capability name is what tells the next reader why this code differs per host.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Relaxed rules for test files
     files: ['**/*.test.ts', '**/*.test.tsx'],
     rules: {

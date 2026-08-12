@@ -4,7 +4,7 @@
  * default browser. In web mode, links open normally.
  */
 
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 function isExternalUrl(href: string): boolean {
   try {
@@ -26,7 +26,7 @@ async function openInSystemBrowser(url: string): Promise<void> {
  * Returns a cleanup function, or undefined in web mode.
  */
 export function setupExternalLinkHandler(): (() => void) | undefined {
-  if (!isTauri()) return undefined
+  if (!platform().interceptsInAppNavigation) return undefined
 
   const handler = (event: MouseEvent) => {
     const target = event.target as Element | null

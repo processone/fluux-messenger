@@ -1,4 +1,4 @@
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 /**
  * Open a URL in the user's default browser.
@@ -8,7 +8,7 @@ import { isTauri } from './tauri'
  * back to `window.open` with `noopener,noreferrer`.
  */
 export async function openInBrowser(url: string): Promise<void> {
-  if (isTauri()) {
+  if (platform().opensLinksInSystemBrowser) {
     const { open } = await import('@tauri-apps/plugin-shell')
     await open(url)
   } else {

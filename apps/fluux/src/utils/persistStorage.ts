@@ -1,4 +1,4 @@
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 /**
  * Best-effort request for persistent storage on the web/PWA build.
@@ -15,7 +15,7 @@ import { isTauri } from './tauri'
  * persistent after the call.
  */
 export async function requestPersistentStorage(): Promise<boolean> {
-  if (isTauri()) return false
+  if (platform().storageIsDurable) return false
 
   const storage = typeof navigator !== 'undefined' ? navigator.storage : undefined
   if (!storage || typeof storage.persist !== 'function') return false

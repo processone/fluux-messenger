@@ -8,7 +8,7 @@
  */
 
 import { decryptFile, type FileEncryption } from '@fluux/sdk'
-import { isTauri } from './tauri'
+import { platform } from '@/platform'
 
 export class MediaRetrievalError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -495,7 +495,7 @@ export async function clearMediaCache(): Promise<void> {
     }
   }
 
-  if (!isTauri()) return
+  if (!platform().nativeMediaCache) return
 
   try {
     const { remove, mkdir } = await import('@tauri-apps/plugin-fs')
@@ -516,7 +516,7 @@ export async function getMediaCacheSize(): Promise<number> {
   let totalSize = 0
 
   // Web Cache API size estimation
-  if (!isTauri() && typeof caches !== 'undefined') {
+  if (!platform().nativeMediaCache && typeof caches !== 'undefined') {
     try {
       const cache = await caches.open(WEB_CACHE_NAME)
       const keys = await cache.keys()
@@ -533,7 +533,7 @@ export async function getMediaCacheSize(): Promise<number> {
     return totalSize
   }
 
-  if (!isTauri()) return 0
+  if (!platform().nativeMediaCache) return 0
 
   try {
     const { readDir, stat } = await import('@tauri-apps/plugin-fs')

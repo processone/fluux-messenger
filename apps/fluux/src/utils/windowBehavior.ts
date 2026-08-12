@@ -1,12 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
-import { isLinux, isTauri, isWindows } from './tauri'
+import { platform } from '@/platform'
 
 export interface TrayStatus {
   enabled: boolean
   available: boolean
 }
 export function supportsTrayPreference(): boolean {
-  return isTauri() && (isWindows() || isLinux())
+  return platform().canKeepInSystemTray
 }
 
 export async function setKeepInSystemTray(enabled: boolean): Promise<TrayStatus | null> {
