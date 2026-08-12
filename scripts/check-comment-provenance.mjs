@@ -212,6 +212,11 @@ function main() {
     console.error('decision needs a durable trail, reference a GitHub issue (#1234) instead.')
     console.error('See AGENTS.md -> Code style -> Comments, and #1236.')
     console.error(`\nDeliberately allowed, do not add as patterns: ${ALLOWED_BY_DESIGN.join(', ')}.`)
+    // A merge that brings a file in from main lands occurrences this branch did
+    // not write, against a baseline recorded before that file existed. Refreshing
+    // is the right answer there, and only there.
+    console.error('\nIf these arrived from main rather than from this branch, refresh the')
+    console.error('baseline: node scripts/check-comment-provenance.mjs --update')
     process.exit(1)
   }
 

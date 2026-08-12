@@ -1,5 +1,5 @@
 {
-  "total": 377,
+  "total": 387,
   "files": {
     "apps/fluux/src/App.routes.test.tsx": 2,
     "apps/fluux/src/App.tsx": 2,
@@ -44,6 +44,7 @@
     "packages/fluux-sdk/src/core/modules/BaseModule.ts": 1,
     "packages/fluux-sdk/src/core/modules/stateSnapshot.test.ts": 3,
     "packages/fluux-sdk/src/core/modules/stateSnapshot.ts": 1,
+    "packages/fluux-sdk/src/core/types/storeBindings.ts": 10,
     "packages/fluux-sdk/src/core/XMPPClient.e2ee.test.ts": 6,
     "packages/fluux-sdk/src/hooks/index.ts": 1,
     "packages/fluux-sdk/src/hooks/useChatActive.ts": 2,
