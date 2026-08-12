@@ -9,7 +9,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { TextInput, TextArea } from './ui/TextInput'
 import { Tooltip } from './Tooltip'
 import { ModalOverlay } from './ModalOverlay'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
@@ -475,7 +475,7 @@ export function XmppConsole() {
     const defaultFilename = `xmpp-log-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.txt`
 
     // Use native save dialog in Tauri, fallback to blob download for web
-    if (isTauri()) {
+    if (platform().nativeDownloads) {
       try {
         const { save } = await import('@tauri-apps/plugin-dialog')
         const { writeTextFile } = await import('@tauri-apps/plugin-fs')

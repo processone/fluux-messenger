@@ -71,6 +71,72 @@ export interface PlatformCapabilities {
    * web every tab is an independent client, so the resource is per-session.
    */
   readonly hasStableInstallIdentity: boolean
+
+  // ----- Encryption -----
+
+  /**
+   * The secret key sits in browser storage and a passphrase unlocks it for the
+   * session, rather than living in the OS keychain.
+   *
+   * Drives the unlock prompt, the remember-passphrase choice, and the
+   * "locked" state the settings pane shows.
+   */
+  readonly keyNeedsSessionPassphrase: boolean
+  /**
+   * Key rotation is offered.
+   *
+   * Tracks the plugin behind the shell rather than the host itself: the web
+   * build runs openpgp.js v6, whose rotation is deferred. Move this off the
+   * platform record once the two plugins agree.
+   */
+  readonly supportsKeyRotation: boolean
+
+  // ----- Notifications -----
+
+  /**
+   * Notification permission is granted and revoked through the OS, so the app
+   * reads it from the system and can send the user to the OS settings pane —
+   * rather than requesting it in-page.
+   */
+  readonly notificationsManagedByOS: boolean
+  /** Push arrives over Web Push rather than the OS notification centre. */
+  readonly usesWebPush: boolean
+
+  // ----- Window and process -----
+
+  /**
+   * The app draws its own title bar and must reserve room for the window
+   * controls. macOS only: Windows and Linux keep a native title bar.
+   */
+  readonly hasCustomTitleBar: boolean
+  /** The app is launched from a command line and can be passed flags. */
+  readonly hasCommandLineFlags: boolean
+  /** Diagnostic logs are written to files the user can open. */
+  readonly hasNativeLogFiles: boolean
+  /**
+   * Several instances can share one storage origin, so they must agree on
+   * which of them owns the session.
+   *
+   * True on web, where every tab is an instance.
+   */
+  readonly needsTabCoordination: boolean
+
+  // ----- Connection -----
+
+  /**
+   * Keepalive is driven outside the JS event loop, so the SDK's own Stream
+   * Management interval would be redundant — and, unlike the native timer, is
+   * subject to background throttling.
+   */
+  readonly hasNativeConnectionKeepalive: boolean
+  /**
+   * The webview must be reloaded before a second login in the same process.
+   *
+   * A WebKit/wry limitation: a websocket opened after a prior session's
+   * teardown does not connect until the context is recreated
+   * (tauri-apps/wry#184).
+   */
+  readonly needsWebviewReloadBeforeRelogin: boolean
 }
 
 /**
@@ -101,5 +167,26 @@ export function deriveCapabilities(shell: PlatformShell, os: PlatformOS): Platfo
     hasInAppUpdates: desktop && os !== 'linux',
     storageIsDurable: desktop,
     hasStableInstallIdentity: desktop,
+
+    // Encryption. The key is in the OS keychain on desktop, so nothing has to
+    // be unlocked per session there.
+    keyNeedsSessionPassphrase: !desktop,
+    supportsKeyRotation: desktop,
+
+    // Notifications.
+    notificationsManagedByOS: desktop,
+    usesWebPush: !desktop,
+
+    // Window and process. Only macOS overlays its window controls on the
+    // content; Windows and Linux keep a native title bar.
+    hasCustomTitleBar: desktop && os === 'macos',
+    hasCommandLineFlags: desktop,
+    hasNativeLogFiles: desktop,
+    // Every browser tab is an instance sharing one origin.
+    needsTabCoordination: !desktop,
+
+    // Connection.
+    hasNativeConnectionKeepalive: desktop,
+    needsWebviewReloadBeforeRelogin: desktop,
   }
 }

@@ -24,7 +24,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 // Web context (not Tauri, not macOS) so the in-page "Request permission" button renders.
 vi.mock('./types', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./types')>()
-  return { ...actual, isTauri: () => false }
+  return { ...actual }
 })
 vi.mock('@/utils/tauriPlatform', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/tauriPlatform')>()

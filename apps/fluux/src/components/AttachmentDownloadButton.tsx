@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { downloadAttachment } from '@/utils/download'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import type { FileAttachment } from '@fluux/sdk'
 
 interface Props {
@@ -34,7 +34,7 @@ export function AttachmentDownloadButton({ attachment, className, iconClassName,
     ? <>{glyph}<span>{label}</span></>
     : glyph
 
-  if (!attachment.encryption && !isTauri()) {
+  if (!attachment.encryption && !platform().nativeDownloads) {
     return (
       <a
         href={attachment.url}

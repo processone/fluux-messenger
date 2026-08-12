@@ -14,11 +14,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // Mutable mock state — `mock`-prefixed so vitest permits referencing them
 // inside the hoisted vi.mock factories.
-let mockIsTauri = true
 let mockIsMac = true
 let mockPermState = 'granted'
-let mockIsWindows = false
-let mockIsLinux = false
 const mockGetTrayStatus = vi.fn().mockResolvedValue({ enabled: true, available: true })
 const mockInvoke = vi.fn(async (cmd: string) =>
   cmd === 'notification_permission_state' ? mockPermState : undefined,
@@ -41,20 +38,19 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   }
 })
 
-vi.mock('./types', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./types')>()
-  return { ...actual, isTauri: () => mockIsTauri }
-})
-
 vi.mock('@/utils/tauriPlatform', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/tauriPlatform')>()
   return { ...actual, isMacOSDesktop: () => Promise.resolve(mockIsMac) }
 })
 
-vi.mock('@/utils/tauri', () => ({
-  isWindows: () => mockIsWindows,
-  isLinux: () => mockIsLinux,
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 vi.mock('@/utils/windowBehavior', () => ({
   getTrayStatus: () => mockGetTrayStatus(),
@@ -79,11 +75,9 @@ const LINK = 'settings.openSystemNotificationSettings'
 
 describe('NotificationsSettings — system notification settings link', () => {
   beforeEach(() => {
-    mockIsTauri = true
+    usePlatform('desktop')
     mockIsMac = true
     mockPermState = 'granted'
-    mockIsWindows = false
-    mockIsLinux = false
     mockGetTrayStatus.mockReset().mockResolvedValue({ enabled: true, available: true })
     useSettingsStore.setState({ keepInSystemTray: true })
     mockInvoke.mockClear()
@@ -166,7 +160,7 @@ describe('NotificationsSettings — system notification settings link', () => {
   })
 
   it('does not render the link in the web build (not Tauri)', async () => {
-    mockIsTauri = false
+    usePlatform('web')
     mockIsMac = false
 
     render(<NotificationsSettings />)
@@ -187,7 +181,7 @@ describe('NotificationsSettings — system notification settings link', () => {
   })
 
   it('shows and updates the tray preference on Windows', async () => {
-    mockIsWindows = true
+    usePlatform('desktop', 'windows')
     mockIsMac = false
     render(<NotificationsSettings />)
 
@@ -201,7 +195,7 @@ describe('NotificationsSettings — system notification settings link', () => {
   })
 
   it('keeps Linux close-to-tray unavailable without a StatusNotifier host', async () => {
-    mockIsLinux = true
+    usePlatform('desktop', 'linux')
     mockIsMac = false
     mockGetTrayStatus.mockResolvedValue({ enabled: true, available: false })
     render(<NotificationsSettings />)

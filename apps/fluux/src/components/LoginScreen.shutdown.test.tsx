@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
 import { markConnectActive } from '@/utils/reconnectIntent'
@@ -19,7 +19,17 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/hooks', () => ({ useWindowDrag: () => ({ dragRegionProps: {} }) }))
 vi.mock('@/hooks/useSessionPersistence', () => ({ saveSession: vi.fn() }))
 vi.mock('@/utils/xmppResource', () => ({ getResource: () => 'test-resource' }))
-vi.mock('@/utils/tauri', () => ({ isTauri: () => true }))
+import { setPlatformForTesting } from '@/platform'
+
+// These suites describe the desktop app: keychain auto-connect and the
+// webview reload before a second login are both desktop-only behaviours.
+let restorePlatform: (() => void) | undefined
+beforeEach(() => {
+  restorePlatform = setPlatformForTesting({ shell: 'desktop', os: 'macos' })
+})
+afterEach(() => {
+  restorePlatform?.()
+})
 vi.mock('@/utils/keychain', () => ({
   hasSavedCredentials: () => true,
   getCredentials: vi.fn().mockResolvedValue({

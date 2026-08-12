@@ -24,7 +24,7 @@ import {
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 type PluginStatus =
   | 'disabled'
@@ -191,7 +191,8 @@ export function EncryptionSettings() {
   // A typed registration failure means no plugin got registered at all —
   // it outranks the web "locked" state, whose unlock flow needs a
   // registered plugin to act on.
-  const webLocked = !isTauri() && openpgpEnabled && isKeyLocked() && !registrationError
+  const webLocked =
+    platform().keyNeedsSessionPassphrase && openpgpEnabled && isKeyLocked() && !registrationError
   const pluginStatus: PluginStatus = !openpgpEnabled
     ? 'disabled'
     : !online
@@ -346,7 +347,7 @@ export function EncryptionSettings() {
   // `keychainBacked: false` means IndexedDB + session passphrase, not
   // cleartext on disk.
   useEffect(() => {
-    if (!isTauri() || !fingerprint) {
+    if (!platform().nativeKeychain || !fingerprint) {
       setKeychainBacked(null)
       return
     }
@@ -382,7 +383,7 @@ export function EncryptionSettings() {
         return
       }
       const bareJid = jid ? getBareJid(jid) : null
-      if (!isTauri()) {
+      if (!platform().nativeKeychain) {
         // Web: same defence-in-depth as desktop — never silently generate
         // when the server already advertises an OpenPGP identity for this
         // account. The crypto-layer guard in WebOpenPGPPlugin would refuse
@@ -1257,7 +1258,7 @@ export function EncryptionSettings() {
 
         {/* Rotation — primary fingerprint stays stable so peer trust survives.
             Not available on web (openpgp.js v6 key rotation is MVP-deferred). */}
-        {pluginStatus === 'ready' && isTauri() && (
+        {pluginStatus === 'ready' && platform().supportsKeyRotation && (
           <div className="space-y-2 pt-2 border-t border-fluux-hover">
             <div className="flex items-center gap-1.5">
               <label className="text-sm font-medium text-fluux-text">
@@ -1290,7 +1291,7 @@ export function EncryptionSettings() {
             </button>
           </div>
         )}
-        {pluginStatus === 'ready' && !isTauri() && (
+        {pluginStatus === 'ready' && !platform().supportsKeyRotation && (
           <div className="pt-2 border-t border-fluux-hover">
             <p className="text-xs text-fluux-muted leading-snug">
               {t('settings.encryption.rotateNotSupportedWeb')}

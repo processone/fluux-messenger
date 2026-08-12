@@ -6,6 +6,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useFullscreen } from '@/hooks/useFullscreen'
 import { useModalStore } from '@/stores/modalStore'
+import { platform } from '@/platform'
 
 // Minimal shape of the Tauri window methods we drive for window dragging.
 type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () => Promise<void> }
@@ -13,7 +14,6 @@ type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () 
 // macOS detection — only macOS overlays native traffic lights onto the webview,
 // so only there does the bar need to reserve space at its start. Tauri detection
 // is read at render time (see component body) so tests can toggle it.
-const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
 // Width reserved at the bar's start for the macOS traffic lights so the first
 // control (the back arrow) never overlaps them. The lights cluster spans ~70px
@@ -61,14 +61,15 @@ export const AppBar = memo(function AppBar() {
   const { t } = useTranslation()
   const toggleModal = useModalStore((s) => s.toggle)
 
-  // Read at render time (not module scope) so tests can toggle it per case.
-  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  // Read at render time (not module scope) so a test can state a host per case.
+  const { shell, os, hasCustomTitleBar } = platform()
+  const isDesktopShell = shell === 'desktop'
 
   // Pre-resolve the Tauri window so the mousedown drag handler stays synchronous
   // (an async import there would miss the gesture). Null in the browser.
   const dragWindowRef = useRef<DraggableWindow | null>(null)
   useEffect(() => {
-    if (!isTauri) return
+    if (!isDesktopShell) return
     let cancelled = false
     void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
       if (!cancelled) dragWindowRef.current = getCurrentWindow() as unknown as DraggableWindow
@@ -76,7 +77,7 @@ export const AppBar = memo(function AppBar() {
     return () => {
       cancelled = true
     }
-  }, [isTauri])
+  }, [isDesktopShell])
 
   // React Router stores a numeric index in history state; re-read it on every
   // navigation (useLocation re-renders us). `currentIdx` is the position in the
@@ -102,9 +103,9 @@ export const AppBar = memo(function AppBar() {
   // hidden on touch devices even when they're wide — e.g. a phone in landscape
   // (>768px) or a tablet — where its mouse-sized controls would be hard to tap and
   // the single-pane touch affordances own navigation.
-  if (!isTauri && (!isDesktop || !hasHover)) return null
+  if (!isDesktopShell && (!isDesktop || !hasHover)) return null
 
-  const needsTrafficLightInset = isTauri && isMacOS && !isFullscreen
+  const needsTrafficLightInset = hasCustomTitleBar && !isFullscreen
 
   const canGoBack = currentIdx > 0
   const canGoForward = currentIdx < maxIdx
@@ -123,7 +124,7 @@ export const AppBar = memo(function AppBar() {
 
   // macOS convention omits the separator (⌘K); elsewhere join with '+' (Ctrl+K),
   // matching formatShortcutKey used by the shortcut help pane.
-  const shortcutHint = isMacOS ? '⌘K' : 'Ctrl+K'
+  const shortcutHint = os === 'macos' ? '⌘K' : 'Ctrl+K'
   const iconButton =
     'flex items-center justify-center size-7 rounded-md text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/60 transition-colors disabled:opacity-40 disabled:pointer-events-none'
 

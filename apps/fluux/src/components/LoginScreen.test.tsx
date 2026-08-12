@@ -87,8 +87,7 @@ const { mockGetDomainFromJid, mockGetWebsocketUrlForDomain } = vi.hoisted(() => 
 // Keychain + Tauri detection are overridable per-test so the desktop
 // (keychain-backed) paths can be exercised. Defaults keep the web behaviour
 // (not Tauri, no saved credentials) used by the bulk of the suite.
-const { mockIsTauri, mockHasSavedCredentials, mockGetCredentials, mockSaveCredentials, mockDeleteCredentials } = vi.hoisted(() => ({
-    mockIsTauri: vi.fn(() => false),
+const { mockHasSavedCredentials, mockGetCredentials, mockSaveCredentials, mockDeleteCredentials } = vi.hoisted(() => ({
     mockHasSavedCredentials: vi.fn(() => false),
     mockGetCredentials: vi.fn(),
     mockSaveCredentials: vi.fn(),
@@ -102,9 +101,14 @@ vi.mock('@/utils/keychain', () => ({
     deleteCredentials: mockDeleteCredentials,
 }))
 
-vi.mock('@/utils/tauri', () => ({
-    isTauri: mockIsTauri,
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 vi.mock('@/config/wellKnownServers', () => ({
     getDomainFromJid: (...args: unknown[]) => mockGetDomainFromJid(...args),
@@ -451,7 +455,7 @@ describe('LoginScreen', () => {
     // credential over a hiccup, leaving the user to re-enter it every restart.
     describe('keychain credential preservation on auth error (desktop)', () => {
         beforeEach(() => {
-            mockIsTauri.mockReturnValue(true)
+            usePlatform('desktop')
             mockHasSavedCredentials.mockReturnValue(true)
             mockGetCredentials.mockResolvedValue({
                 jid: 'user@example.com',
@@ -462,7 +466,7 @@ describe('LoginScreen', () => {
         })
 
         afterEach(() => {
-            mockIsTauri.mockReturnValue(false)
+            usePlatform('web')
             mockHasSavedCredentials.mockReturnValue(false)
             mockGetCredentials.mockReset()
         })

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Key, Network } from 'lucide-react'
 import { useConnection } from '@fluux/sdk'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { Tooltip } from '../../Tooltip'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { SettingsGroup } from '@/components/ui/SettingsGroup'
@@ -16,7 +16,7 @@ export function AccountSection({ onChangePassword }: AccountSectionProps) {
   const { isConnected, connectionMethod, authMechanism, webPushStatus, supportsPasswordChange } =
     useConnection()
 
-  const showWebPush = !isTauri() && isConnected
+  const showWebPush = platform().usesWebPush && isConnected
   const passwordEnabled = supportsPasswordChange && isConnected
   const passwordTooltip = !isConnected
     ? t('profile.offlineNotice')

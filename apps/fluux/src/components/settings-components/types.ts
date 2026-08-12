@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility, Bot } from 'lucide-react'
-import { isTauri, isUpdaterEnabled } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { MCP_FEATURE_ENABLED } from '@/stores/mcpBridgeStore'
 
 export type SettingsCategory =
@@ -25,14 +25,12 @@ export interface SettingsCategoryConfig {
   icon: LucideIcon
   group: SettingsGroup
   /** Only show in Tauri desktop app */
-  tauriOnly?: boolean
+  desktopOnly?: boolean
   /** Only show when in-app updater is enabled (macOS/Windows, not Linux) */
   updaterOnly?: boolean
   /** Temporarily hidden regardless of platform (feature not ready to ship) */
   disabled?: boolean
 }
-
-export { isTauri }
 
 export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'profile', labelKey: 'settings.categories.profile', icon: User, group: 'account' },
@@ -46,11 +44,11 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'privacy', labelKey: 'settings.categories.privacy', icon: ShieldCheck, group: 'privacy' },
   { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban, group: 'privacy' },
 
-  { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true, group: 'system' },
+  { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, desktopOnly: true, group: 'system' },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true, group: 'system' },
   // MCP bridge is not usable yet: it needs an HTTPS URL that our client cannot
   // easily expose, so the config screen is hidden (and unreachable) for now.
-  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, tauriOnly: true, group: 'system', disabled: !MCP_FEATURE_ENABLED },
+  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, desktopOnly: true, group: 'system', disabled: !MCP_FEATURE_ENABLED },
   { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, group: 'system' },
 ]
 
@@ -58,10 +56,10 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
  * Get visible categories based on platform (web vs Tauri, Linux vs others)
  */
 export function getVisibleCategories(): SettingsCategoryConfig[] {
-  const updaterEnabled = isUpdaterEnabled()
+  const updaterEnabled = platform().hasInAppUpdates
   return SETTINGS_CATEGORIES.filter(cat => {
     if (cat.disabled) return false
-    if (cat.tauriOnly && !isTauri()) return false
+    if (cat.desktopOnly && platform().shell !== 'desktop') return false
     if (cat.updaterOnly && !updaterEnabled) return false
     return true
   })

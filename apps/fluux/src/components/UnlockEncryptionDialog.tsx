@@ -6,7 +6,7 @@ import { getBareJid } from '@fluux/sdk'
 import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
 import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { ModalOverlay } from './ModalOverlay'
 import {
   cachePassphrase,
@@ -126,7 +126,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       // Persist the remember-passphrase choice and (un)cache accordingly. Only
       // meaningful on web; on Tauri the checkbox is not rendered and the jid
       // guard below makes this a no-op anyway.
-      if (mode === 'unlock' && !isTauri()) {
+      if (mode === 'unlock' && platform().keyNeedsSessionPassphrase) {
         const full = client.getJid()
         const bareJid = full ? getBareJid(full) : null
         setRememberPassphrasePreference(rememberPassphrase)
@@ -275,7 +275,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             </>
           )}
 
-          {mode === 'unlock' && !isTauri() && (
+          {mode === 'unlock' && platform().keyNeedsSessionPassphrase && (
             <label className="flex items-start gap-2 mb-3 cursor-pointer select-none">
               <input
                 type="checkbox"

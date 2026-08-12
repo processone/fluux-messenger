@@ -1,7 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { AppBar } from './AppBar'
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 // Reactive gates — toggled per test.
 let mockIsDesktop = true
@@ -37,13 +45,18 @@ function renderAppBar() {
 }
 
 describe('AppBar', () => {
+  afterEach(() => {
+    restorePlatform?.()
+    restorePlatform = undefined
+  })
+
   beforeEach(() => {
     mockIsDesktop = true
     mockHasHover = true
     navigateSpy.mockClear()
     toggleSpy.mockClear()
     // Default to the web build; the desktop-app tests opt in explicitly.
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    usePlatform('web')
     // Reset history position so each test starts at index 0 (start = end).
     window.history.replaceState(null, '')
   })
@@ -62,7 +75,7 @@ describe('AppBar', () => {
   })
 
   it('still renders on the desktop app in a narrow window (Tauri, below the breakpoint)', () => {
-    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    usePlatform('desktop')
     mockIsDesktop = false
     mockHasHover = false
     renderAppBar()

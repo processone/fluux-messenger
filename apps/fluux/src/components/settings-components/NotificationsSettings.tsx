@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
 import { useConnection, useXMPPContext, connectionStore } from '@fluux/sdk'
-import { isTauri } from './types'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import {
   refreshNotificationPermission,
@@ -12,14 +11,14 @@ import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPu
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { Toggle } from '@/components/ui/Toggle'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { isLinux, isWindows } from '@/utils/tauri'
 import { getTrayStatus, type TrayStatus } from '@/utils/windowBehavior'
+import { platform } from '@/platform'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
 
 async function checkNotificationPermission(): Promise<NotificationStatus> {
   try {
-    if (isTauri()) {
+    if (platform().notificationsManagedByOS) {
       // macOS uses the native UNUserNotificationCenter command — the same
       // source of truth as the posting gate — so Settings can't disagree with
       // whether notifications actually fire. It also distinguishes "not yet
@@ -104,7 +103,7 @@ export function NotificationsSettings() {
   const { t } = useTranslation()
   // "Desktop notifications" only makes sense on the desktop (Tauri) build; on
   // web/PWA — including phones — the copy must stay platform-neutral.
-  const desktopBuild = isTauri()
+  const desktopBuild = platform().shell === 'desktop'
   const { client } = useXMPPContext()
   const { webPushStatus, webPushEnabled, isConnected } = useConnection()
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
@@ -114,8 +113,8 @@ export function NotificationsSettings() {
   const keepInSystemTray = useSettingsStore((state) => state.keepInSystemTray)
   const setKeepInSystemTray = useSettingsStore((state) => state.setKeepInSystemTray)
   const [trayStatus, setTrayStatus] = useState<TrayStatus | null>(null)
-  const linuxDesktop = desktopBuild && isLinux()
-  const windowsDesktop = desktopBuild && isWindows()
+  const linuxDesktop = desktopBuild && platform().os === 'linux'
+  const windowsDesktop = desktopBuild && platform().os === 'windows'
   const showTraySetting = linuxDesktop || windowsDesktop
 
   useEffect(() => {
@@ -210,7 +209,7 @@ export function NotificationsSettings() {
           </div>
 
           {/* Web: request permission in-page */}
-          {!isTauri() && notificationStatus === 'default' && (
+          {!platform().notificationsManagedByOS && notificationStatus === 'default' && (
             <button
               type="button"
               onClick={handleRequestPermission}
@@ -247,7 +246,7 @@ export function NotificationsSettings() {
               (granted/denied) so the target pane actually lists the app; hidden
               while still 'default' (never asked), where the in-card Enable button
               is the correct first action. */}
-          {isTauri() &&
+          {platform().notificationsManagedByOS &&
             (notificationStatus === 'granted' || notificationStatus === 'denied') && (
               <>
                 <button

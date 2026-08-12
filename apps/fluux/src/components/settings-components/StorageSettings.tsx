@@ -6,7 +6,7 @@ import { getMediaCacheSize, clearMediaCache } from '@/utils/mediaCache'
 import { rebuildSearchIndex } from '@fluux/sdk'
 import type { RebuildProgress } from '@fluux/sdk'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 export function StorageSettings() {
   const { t } = useTranslation()
@@ -153,7 +153,7 @@ export function StorageSettings() {
         </div>
       </SettingsSection>
 
-      {isTauri() && (
+      {platform().hasNativeLogFiles && (
         <SettingsSection
           title={t('settings.storage.logs')}
           description={t('settings.storage.logsDescription')}

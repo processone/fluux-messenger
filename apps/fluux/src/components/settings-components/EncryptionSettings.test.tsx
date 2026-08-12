@@ -38,11 +38,14 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   }
 })
 
-let mockIsTauri = false
-vi.mock('@/utils/tauri', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/utils/tauri')>()
-  return { ...actual, isTauri: () => mockIsTauri }
-})
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -69,7 +72,7 @@ describe('EncryptionSettings PEP support', () => {
     localStorage.clear()
     mockStatus = 'online'
     mockPlugin = null
-    mockIsTauri = false
+    usePlatform('web')
     mockCheckPepSupport.mockResolvedValue(true)
     useEncryptionSettingsStore.setState({
       openpgpEnabled: false,
@@ -568,7 +571,7 @@ describe('EncryptionSettings PEP support', () => {
       // Over-publishing a backup that did not exist is harmless. Leaving a
       // real one encrypted to the retired key is not, so `unknown` takes the
       // same path as in-sync: through the passphrase dialog.
-      mockIsTauri = true
+      usePlatform('desktop')
 
       render(<EncryptionSettings />)
 
@@ -592,7 +595,7 @@ describe('EncryptionSettings PEP support', () => {
       // The confirmation copy must agree with the routing in
       // handleRotateConfirm: `unknown` re-publishes, so the dialog the user
       // sees before confirming has to say so.
-      mockIsTauri = true
+      usePlatform('desktop')
 
       render(<EncryptionSettings />)
 
@@ -612,7 +615,7 @@ describe('EncryptionSettings PEP support', () => {
       // Control test for the case above: proves the assertion pair
       // discriminates between two live outcomes instead of asserting a
       // constant that would pass regardless of `backupProbe`.
-      mockIsTauri = true
+      usePlatform('desktop')
       mockProbe.mockResolvedValue('absent')
 
       render(<EncryptionSettings />)
@@ -630,7 +633,7 @@ describe('EncryptionSettings PEP support', () => {
     })
 
     it('rotates directly without the passphrase dialog when the probe confirms no backup', async () => {
-      mockIsTauri = true
+      usePlatform('desktop')
       mockProbe.mockResolvedValue('absent')
 
       render(<EncryptionSettings />)
@@ -704,7 +707,7 @@ describe('EncryptionSettings PEP support', () => {
         registrationError: null,
       })
       // The rotate row is desktop-only (openpgp.js v6 rotation is deferred).
-      mockIsTauri = true
+      usePlatform('desktop')
     })
 
     /** Rotate button -> confirm -> acknowledge the passphrase -> publish. */

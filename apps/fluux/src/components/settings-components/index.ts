@@ -17,6 +17,5 @@ export {
   SETTINGS_CATEGORIES,
   getVisibleCategories,
   resolveSettingsCategory,
-  isTauri,
   DEFAULT_SETTINGS_CATEGORY,
 } from './types'

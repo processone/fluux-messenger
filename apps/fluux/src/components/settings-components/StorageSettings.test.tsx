@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { StorageSettings } from './StorageSettings'
 
@@ -41,13 +41,27 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
+
 describe('StorageSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGetMediaCacheSize.mockResolvedValue(0)
     mockClearMediaCache.mockResolvedValue(undefined)
     mockInvoke.mockClear()
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+    usePlatform('web')
+  })
+
+  afterEach(() => {
+    restorePlatform?.()
+    restorePlatform = undefined
   })
 
   it('should show calculating state while loading cache size', () => {
@@ -135,7 +149,7 @@ describe('StorageSettings', () => {
   })
 
   it('opens the logs folder from desktop settings', async () => {
-    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    usePlatform('desktop')
     render(<StorageSettings />)
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.storage.openLogs' }))

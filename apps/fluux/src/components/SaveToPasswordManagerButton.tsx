@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { KeyRound, Check } from 'lucide-react'
 import { saveCredentialToManager } from '@/utils/saveCredentialToManager'
 import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 
 interface SaveToPasswordManagerButtonProps {
   /** Stable credential identifier; matches the dialog's hidden username so save and autofill share an entry. */
@@ -54,7 +54,7 @@ export function SaveToPasswordManagerButton({
     setTimeout(() => setFeedback(null), 2000)
   }, [id, name, passphrase])
 
-  if (!isTauri() || !USE_V6_KEYS) return null
+  if (!platform().nativeKeychain || !USE_V6_KEYS) return null
 
   const isFallback = feedback === 'fallback'
   const isSaved = feedback === 'saved'

@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { getVisibleCategories, getGroupedVisibleCategories, resolveSettingsCategory } from './types'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
+import { setPlatformForTesting } from '@/platform'
 
+let restorePlatform: (() => void) | undefined
 function setTauriEnv(on: boolean) {
-  if (on) (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
-  else delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell: on ? 'desktop' : 'web', os: 'macos' })
 }
 
 describe('getVisibleCategories — advanced category', () => {

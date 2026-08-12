@@ -66,18 +66,21 @@ export default tseslint.config(
     // instead, so a call site says WHY it branches and a new target can be
     // described rather than guessed at.
     //
-    // Scoped to the layer that has been migrated. Widen it to hooks and
-    // components as they follow; do not add exceptions.
-    files: ['src/utils/**/*.ts'],
+    // Scoped to the layers that have been migrated. `hooks/` is the last one
+    // left; widen this when it follows, and do not add exceptions.
+    files: ['src/utils/**/*.ts', 'src/components/**/*.ts', 'src/components/**/*.tsx', 'src/App.tsx'],
     // `tauri.ts` owns the remaining probes; its own test has to import them.
-    ignores: ['src/utils/tauri.ts', 'src/utils/*.test.ts'],
+    ignores: ['src/utils/tauri.ts', '**/*.test.ts', '**/*.test.tsx'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
             {
-              regex: '^(\\.{1,2}/)*(@/utils/)?tauri$',
+              // Any path landing on utils/tauri: './tauri', './utils/tauri',
+              // '../utils/tauri', '@/utils/tauri'. Never '@tauri-apps/*', and
+              // never '@/utils/tauriPlatform'.
+              regex: '(^|/)tauri$',
               message:
                 "Branch on a named capability from '@/platform' (e.g. platform().nativeKeychain) rather than on isTauri() - the platform is not binary, and the capability name is what tells the next reader why this code differs per host.",
             },

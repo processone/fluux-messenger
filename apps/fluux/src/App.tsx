@@ -37,10 +37,9 @@ import { clearLocalData } from './utils/clearLocalData'
 import { startMemoryProbe } from './utils/memoryProbe'
 import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
 import { markConnectActive } from './utils/reconnectIntent'
-import { isTauri } from './utils/tauri'
+import { platform } from './platform'
 
 // macOS detection (for title bar overlay - only applies on macOS)
-const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
 // Fixed title bar height for macOS traffic lights (only used in Tauri on macOS)
 const TITLEBAR_HEIGHT = 28
@@ -48,9 +47,9 @@ const TITLEBAR_HEIGHT = 28
 function TitleBar() {
   const isFullscreen = useFullscreen()
 
-  // Only render on macOS in Tauri (for traffic light spacing)
-  // Windows and Linux use native title bars
-  if (!isTauri() || !isMacOS || isFullscreen) return null
+  // Reserves room for the macOS traffic lights; Windows and Linux keep a
+  // native title bar, so there is nothing to draw.
+  if (!platform().hasCustomTitleBar || isFullscreen) return null
 
   return (
     <div
@@ -96,7 +95,7 @@ function App() {
   // Listen for --clear-storage CLI flag (Tauri only)
   // This clears all local data on startup when the flag is passed
   useEffect(() => {
-    if (!isTauri()) return
+    if (!platform().hasCommandLineFlags) return
 
     let disposed = false
     let unlisten: (() => void) | null = null
@@ -300,7 +299,7 @@ function App() {
         // Web-only: a stored-but-locked key needs the session passphrase.
         // Try the opt-in 24h cache first so the user skips re-entry; fall back
         // to the interactive dialog on miss or any failure (e.g. rotated key).
-        if (!isTauri() && isKeyLocked()) {
+        if (platform().keyNeedsSessionPassphrase && isKeyLocked()) {
           await attemptCachedUnlockOrPrompt({
             accountJid,
             getUnlockPlugin: () =>
@@ -417,7 +416,7 @@ function App() {
   }
 
   // Show tab coordination screen when blocked or taken over (web only)
-  if (!isTauri() && (tabCoordination.blocked || tabCoordination.takenOver)) {
+  if (platform().needsTabCoordination && (tabCoordination.blocked || tabCoordination.takenOver)) {
     return (
       <>
         <TitleBar />

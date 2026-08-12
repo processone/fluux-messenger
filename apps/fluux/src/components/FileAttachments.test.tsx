@@ -19,11 +19,10 @@ function fireMediaError(element: HTMLMediaElement, code: number) {
 }
 
 // Spy created via vi.hoisted so it exists when the hoisted vi.mock factory runs.
-const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadAttachmentSpy, isTauriSpy } = vi.hoisted(() => ({
+const { useAttachmentUrlSpy, useCachedMediaUrlSpy, downloadAttachmentSpy } = vi.hoisted(() => ({
   useAttachmentUrlSpy: vi.fn(),
   useCachedMediaUrlSpy: vi.fn(),
   downloadAttachmentSpy: vi.fn(),
-  isTauriSpy: vi.fn(() => false),
 }))
 
 // Mock react-i18next
@@ -59,14 +58,19 @@ vi.mock('@/utils/download', () => ({
   downloadAttachment: downloadAttachmentSpy,
 }))
 
-vi.mock('@/utils/tauri', () => ({
-  isTauri: isTauriSpy,
-}))
+import { setPlatformForTesting } from '@/platform'
+
+// One seam for the platform, shared with the app code under test.
+let restorePlatform: (() => void) | undefined
+function usePlatform(shell: 'desktop' | 'web', os: 'macos' | 'windows' | 'linux' = 'macos') {
+  restorePlatform?.()
+  restorePlatform = setPlatformForTesting({ shell, os })
+}
 
 describe('FileAttachments', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    isTauriSpy.mockReturnValue(false)
+    usePlatform('web')
     __resetApprovedMediaUrlsForTest()
     // Default: return successful proxied URL
     useAttachmentUrlSpy.mockReturnValue({
@@ -702,7 +706,7 @@ describe('FileAttachmentCard download', () => {
 describe('encrypted media download controls', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    isTauriSpy.mockReturnValue(false)
+    usePlatform('web')
     downloadAttachmentSpy.mockResolvedValue(undefined)
     useAttachmentUrlSpy.mockReturnValue({ url: 'blob:play', isLoading: false, error: null })
     useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
@@ -736,7 +740,7 @@ describe('encrypted media download controls', () => {
   })
 
   it('Tauri plaintext unsupported-media download → uses the native save path', () => {
-    isTauriSpy.mockReturnValue(true)
+    usePlatform('desktop')
     vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockImplementation(
       (type: string) => (type === 'video/mp4' ? 'maybe' : '') as CanPlayTypeResult,
     )

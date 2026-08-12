@@ -9,7 +9,7 @@ import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
-import { isTauri } from '@/utils/tauri'
+import { platform } from '@/platform'
 import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownServers'
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
@@ -36,7 +36,7 @@ const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
  * with visible latency). So we log and move on; never block the user.
  */
 async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
-  if (!isTauri()) return
+  if (!platform().nativeKeychain) return
   if (!isOpenpgpEnabled()) return
   const bareJid = getBareJid(jid)
   if (!bareJid || !bareJid.includes('@')) return
@@ -104,7 +104,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   // After reload, the flag is gone (cleared here before reload) → no loop.
   // See: https://github.com/tauri-apps/wry/issues/184
   useEffect(() => {
-    if (!isTauri()) return
+    if (!platform().needsWebviewReloadBeforeRelogin) return
     // Not while quitting: this mount is the app tearing down, not a live
     // disconnect the user has to keep interacting with. Reloading here destroys
     // the JS context that still owes the shutdown handler its `stop_xmpp_proxy`
@@ -162,8 +162,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     hasLoadedCredentials.current = true
 
     const loadCredentials = async () => {
-      // Check if we're in Tauri
-      const inTauri = isTauri()
+      const inTauri = platform().shell === 'desktop'
       setIsDesktopApp(inTauri)
 
       // Load remember me preference
@@ -347,7 +346,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         // first fingerprint / encrypted send after `online`.
         void prewarmOpenpgpUnlock(jid)
         const resource = getResource()
-        await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: isTauri(), rememberSession: true })
+        await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: true })
         // Save session for auto-reconnect on page reload
         saveSession(jid, password, actualServer)
       } catch {
@@ -409,7 +408,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
       void prewarmOpenpgpUnlock(jid)
       const resource = linkResourceRef.current || getResource()
-      await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: isTauri(), rememberSession: rememberMe })
+      await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: platform().hasNativeConnectionKeepalive, rememberSession: rememberMe })
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)
 

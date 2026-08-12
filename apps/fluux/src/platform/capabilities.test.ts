@@ -3,14 +3,44 @@ import { deriveCapabilities, type PlatformCapabilities } from './capabilities'
 import { platform, setPlatformForTesting, resetPlatformDetection } from './index'
 
 describe('deriveCapabilities', () => {
-  it('grants no native capability on the web, whatever the OS', () => {
+  /**
+   * The web build's whole manifest, listed rather than counted.
+   *
+   * A capability added without a thought for the web lands here as a diff, so
+   * "it defaults to desktop" cannot pass unnoticed — which is the mistake
+   * `isTauri()` made structural.
+   */
+  const WEB_CAPABILITIES = [
+    'keyNeedsSessionPassphrase',
+    'needsTabCoordination',
+    'usesWebPush',
+  ]
+
+  it('grants exactly its own capabilities on the web, whatever the OS', () => {
     for (const os of ['macos', 'windows', 'linux', 'other'] as const) {
-      const web = deriveCapabilities('web', os)
-      const granted = Object.entries(web)
+      const granted = Object.entries(deriveCapabilities('web', os))
         .filter(([key, value]) => value === true && key !== 'shell' && key !== 'os')
         .map(([key]) => key)
-      expect(granted, `web/${os}`).toEqual([])
+        .sort()
+      expect(granted, `web/${os}`).toEqual([...WEB_CAPABILITIES].sort())
     }
+  })
+
+  it('gives desktop and web opposite answers on the ones that pair up', () => {
+    const desktop = deriveCapabilities('desktop', 'macos')
+    const web = deriveCapabilities('web', 'macos')
+    for (const key of WEB_CAPABILITIES) {
+      expect(web[key as keyof typeof web], `web.${key}`).toBe(true)
+      expect(desktop[key as keyof typeof desktop], `desktop.${key}`).toBe(false)
+    }
+  })
+
+  it('reserves the custom title bar for desktop macOS', () => {
+    expect(deriveCapabilities('desktop', 'macos').hasCustomTitleBar).toBe(true)
+    // Windows and Linux keep a native title bar; there is nothing to reserve.
+    expect(deriveCapabilities('desktop', 'windows').hasCustomTitleBar).toBe(false)
+    expect(deriveCapabilities('desktop', 'linux').hasCustomTitleBar).toBe(false)
+    expect(deriveCapabilities('web', 'macos').hasCustomTitleBar).toBe(false)
   })
 
   it('reserves taskbar attention for desktop Windows', () => {
