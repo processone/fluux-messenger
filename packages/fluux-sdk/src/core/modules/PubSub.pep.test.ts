@@ -78,7 +78,9 @@ describe('PubSub.publish', () => {
     const fields = form?.getChildren('field') ?? []
     const byVar = new Map(fields.map((f: Element) => [f.attrs.var, f.getChild('value')?.text()]))
     expect(byVar.get('FORM_TYPE')).toBe('http://jabber.org/protocol/pubsub#publish-options')
-    expect(byVar.get('pubsub#persist_items')).toBe('1')
+    // `true`, not `1`: both are valid xs:boolean (XEP-0004), and this is the
+    // form XEP-0223's examples use and that every other Fluux PEP node sends.
+    expect(byVar.get('pubsub#persist_items')).toBe('true')
     expect(byVar.get('pubsub#access_model')).toBe('whitelist')
     expect(byVar.get('pubsub#max_items')).toBe('1')
   })

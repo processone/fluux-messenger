@@ -1,9 +1,8 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
-import { getBareJid } from '../jid'
-import { generateUUID } from '../../utils/uuid'
-import { NS_PUBSUB, NS_CONVERSATIONS } from '../namespaces'
+import { NS_CONVERSATIONS } from '../namespaces'
 import type { ModuleDependencies } from './BaseModule'
+import { PepNode, type PepCodec, type PublishOptions } from './PepNode'
 
 /**
  * A conversation entry synced to/from the server.
@@ -21,19 +20,35 @@ export interface SyncedConversation {
  * Returns an empty array if the item has no `<conversations>` container.
  */
 export function parseConversationsItem(item: Element | undefined): SyncedConversation[] {
-  const container = item?.getChild('conversations', NS_CONVERSATIONS)
-  if (!container) return []
+  return (item && conversationsCodec.decode(item)) || []
+}
 
-  const conversations: SyncedConversation[] = []
-  for (const convEl of container.getChildren('conversation')) {
-    const jid = convEl.attrs.jid
-    if (!jid) continue
-    conversations.push({
-      jid,
-      archived: convEl.attrs.archived === 'true',
-    })
-  }
-  return conversations
+/** XEP-0223 private storage: owner-only, retained across sessions. */
+const CONVERSATIONS_NODE_OPTIONS: PublishOptions = {
+  persistItems: true,
+  accessModel: 'whitelist',
+}
+
+/** The whole list lives in a single item, so its id is a constant. */
+const CURRENT_ITEM_ID = 'current'
+
+const conversationsCodec: PepCodec<SyncedConversation[]> = {
+  encode: (conversations) => xml('conversations', { xmlns: NS_CONVERSATIONS },
+    ...conversations.map((c) => xml('conversation',
+      c.archived ? { jid: c.jid, archived: 'true' } : { jid: c.jid },
+    )),
+  ),
+  decode: (item) => {
+    const container = item.getChild('conversations', NS_CONVERSATIONS)
+    if (!container) return undefined
+    const conversations: SyncedConversation[] = []
+    for (const convEl of container.getChildren('conversation')) {
+      const jid = convEl.attrs.jid
+      if (!jid) continue
+      conversations.push({ jid, archived: convEl.attrs.archived === 'true' })
+    }
+    return conversations
+  },
 }
 
 /**
@@ -46,79 +61,27 @@ export function parseConversationsItem(item: Element | undefined): SyncedConvers
  * request/response methods for fetching and publishing the conversation list.
  */
 export class ConversationSync {
-  private deps: ModuleDependencies
+  private readonly node: PepNode<SyncedConversation[]>
 
   constructor(deps: ModuleDependencies) {
-    this.deps = deps
+    this.node = new PepNode(deps, NS_CONVERSATIONS, conversationsCodec, CONVERSATIONS_NODE_OPTIONS)
   }
 
   /**
    * Fetch the conversation list from private PEP storage (XEP-0223).
-   * Returns the list of conversations with their archived status,
-   * or an empty array if the node does not exist.
+   * Returns the list of conversations with their archived status, or an empty
+   * array when the node, the item, or the session is missing.
    */
   async fetchConversations(timeoutMs?: number): Promise<SyncedConversation[]> {
-    const currentJid = this.deps.getCurrentJid()
-    if (!currentJid) return []
-
-    const bareJid = getBareJid(currentJid)
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `conv_list_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('items', { node: NS_CONVERSATIONS },
-          xml('item', { id: 'current' })
-        )
-      )
-    )
-
-    try {
-      const result = await this.deps.sendIQ(iq, timeoutMs)
-      const item = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')
-      return parseConversationsItem(item)
-    } catch {
-      // Node may not exist yet, or item not found
-      return []
-    }
+    const lists = await this.node.getOr([], { itemId: CURRENT_ITEM_ID, timeoutMs })
+    return lists[0] ?? []
   }
 
   /**
    * Publish the conversation list to private PEP storage (XEP-0223).
-   * Writes the full list as a single item (id="current"), replacing any previous data.
+   * Writes the full list as a single item, replacing any previous data.
    */
   async publishConversations(conversations: SyncedConversation[]): Promise<void> {
-    if (!this.deps.getCurrentJid()) throw new Error('Not connected')
-
-    const convElements = conversations.map(c => {
-      const attrs: Record<string, string> = { jid: c.jid }
-      if (c.archived) {
-        attrs.archived = 'true'
-      }
-      return xml('conversation', attrs)
-    })
-
-    const iq = xml('iq', { type: 'set', id: `conv_list_set_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: NS_CONVERSATIONS },
-          xml('item', { id: 'current' },
-            xml('conversations', { xmlns: NS_CONVERSATIONS }, ...convElements)
-          )
-        ),
-        // XEP-0223: Publish options for private storage
-        xml('publish-options', {},
-          xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-            xml('field', { var: 'FORM_TYPE', type: 'hidden' },
-              xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')
-            ),
-            xml('field', { var: 'pubsub#persist_items' },
-              xml('value', {}, 'true')
-            ),
-            xml('field', { var: 'pubsub#access_model' },
-              xml('value', {}, 'whitelist')
-            )
-          )
-        )
-      )
-    )
-
-    await this.deps.sendIQ(iq)
+    await this.node.publish(CURRENT_ITEM_ID, conversations)
   }
 }

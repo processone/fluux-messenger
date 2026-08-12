@@ -1,10 +1,8 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
-import { getBareJid } from '../jid'
-import { generateUUID } from '../../utils/uuid'
-import { NS_PUBSUB, NS_MDS, NS_CHAT_MARKERS, NS_STANZA_ID } from '../namespaces'
-import { hasErrorCondition } from '../../utils/xmppError'
+import { NS_MDS, NS_CHAT_MARKERS, NS_STANZA_ID } from '../namespaces'
 import type { ModuleDependencies } from './BaseModule'
+import { PepNode, type PepCodec, type PublishOptions } from './PepNode'
 
 /** A per-conversation last-displayed marker (XEP-0490). */
 export interface DisplayedMarker {
@@ -25,21 +23,6 @@ export type DisplayedMarkerFetchResult =
   | { status: 'unknown' }
 
 /**
- * Is this rejection the server telling us the MDS node does not exist?
- *
- * That answer is AUTHORITATIVE — there is genuinely nothing published — and the
- * distinction matters: a brand-new account has no node, and reading its absence
- * as "unknown" would stop the read-position seed from ever publishing.
- *
- * Uses the shared {@link hasErrorCondition} rather than matching `.condition`
- * directly, so a server that carries the condition only in the error text is
- * still recognised.
- */
-function isMissingNodeError(error: unknown): boolean {
-  return hasErrorCondition(error, 'item-not-found')
-}
-
-/**
  * Parse the `<items/>` of an MDS node into markers.
  * Accepts the XEP-0490 payload (`<displayed xmlns='urn:xmpp:mds:displayed:0'>`
  * wrapping a XEP-0359 `<stanza-id/>`) and, as a migration fallback, the
@@ -48,23 +31,45 @@ function isMissingNodeError(error: unknown): boolean {
  * Exported so PubSub can reuse it for incoming `+notify` events.
  */
 export function parseMdsItems(itemsEl: Element): DisplayedMarker[] {
-  const markers: DisplayedMarker[] = []
-  for (const item of itemsEl.getChildren('item')) {
+  return itemsEl.getChildren('item').flatMap((item) => {
+    const marker = mdsCodec.decode(item)
+    return marker ? [marker] : []
+  })
+}
+
+/**
+ * `max_items='max'` retains one item per conversation rather than a single
+ * current value; `send_last_published_item='never'` keeps our own markers from
+ * being replayed to us on every reconnect.
+ */
+const MDS_NODE_OPTIONS: PublishOptions = {
+  persistItems: true,
+  maxItems: 'max',
+  sendLastPublishedItem: 'never',
+  accessModel: 'whitelist',
+}
+
+/** What a publish carries: the marker plus the archive that issued the id. */
+interface DisplayedMarkerWrite {
+  stanzaId: string
+  /** XEP-0359 `by`: our own bare JID for 1:1, the room JID for MUC. */
+  stanzaIdBy: string
+}
+
+const mdsCodec: PepCodec<DisplayedMarker, DisplayedMarkerWrite> = {
+  encode: ({ stanzaId, stanzaIdBy }) => xml('displayed', { xmlns: NS_MDS },
+    xml('stanza-id', { xmlns: NS_STANZA_ID, id: stanzaId, by: stanzaIdBy }),
+  ),
+  decode: (item) => {
     const conversationJid = item.attrs.id
-    if (!conversationJid) continue
-    const stanzaId = item
-      .getChild('displayed', NS_MDS)
-      ?.getChild('stanza-id', NS_STANZA_ID)?.attrs.id
-    if (stanzaId) {
-      markers.push({ conversationJid, stanzaId })
-      continue
-    }
+    if (!conversationJid) return undefined
+    const stanzaId = item.getChild('displayed', NS_MDS)?.getChild('stanza-id', NS_STANZA_ID)?.attrs.id
+    if (stanzaId) return { conversationJid, stanzaId }
     const legacyStanzaId = item.getChild('displayed', NS_CHAT_MARKERS)?.attrs.id
-    if (legacyStanzaId) {
-      markers.push({ conversationJid, stanzaId: legacyStanzaId, legacy: true })
-    }
-  }
-  return markers
+    return legacyStanzaId
+      ? { conversationJid, stanzaId: legacyStanzaId, legacy: true }
+      : undefined
+  },
 }
 
 /**
@@ -76,47 +81,23 @@ export function parseMdsItems(itemsEl: Element): DisplayedMarker[] {
  * Request/response only — incoming `+notify` events are handled in PubSub.
  */
 export class Mds {
-  private deps: ModuleDependencies
+  private readonly deps: ModuleDependencies
+  private readonly node: PepNode<DisplayedMarker, DisplayedMarkerWrite>
 
   constructor(deps: ModuleDependencies) {
     this.deps = deps
+    this.node = new PepNode(deps, NS_MDS, mdsCodec, MDS_NODE_OPTIONS)
   }
 
   /**
    * Publish the last-displayed stanza-id for a conversation.
-   * The node is created on first publish with current-value semantics
-   * (max_items=max so all conversations are retained; one item per JID).
+   * The node is created on first publish with one item per conversation JID.
    *
    * @param stanzaIdBy - XEP-0359 `by`: the archive that assigned the stanza-id
    *   (our own bare JID for 1:1, the room JID for MUC).
    */
   async publishDisplayed(conversationJid: string, stanzaId: string, stanzaIdBy: string): Promise<void> {
-    if (!this.deps.getCurrentJid()) throw new Error('Not connected')
-
-    const iq = xml('iq', { type: 'set', id: `mds_set_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: NS_MDS },
-          xml('item', { id: conversationJid },
-            xml('displayed', { xmlns: NS_MDS },
-              xml('stanza-id', { xmlns: NS_STANZA_ID, id: stanzaId, by: stanzaIdBy }),
-            ),
-          ),
-        ),
-        xml('publish-options', {},
-          xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-            xml('field', { var: 'FORM_TYPE', type: 'hidden' },
-              xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options'),
-            ),
-            xml('field', { var: 'pubsub#persist_items' }, xml('value', {}, 'true')),
-            xml('field', { var: 'pubsub#max_items' }, xml('value', {}, 'max')),
-            xml('field', { var: 'pubsub#send_last_published_item' }, xml('value', {}, 'never')),
-            xml('field', { var: 'pubsub#access_model' }, xml('value', {}, 'whitelist')),
-          ),
-        ),
-      ),
-    )
-
-    await this.deps.sendIQ(iq)
+    await this.node.publish(conversationJid, { stanzaId, stanzaIdBy })
   }
 
   /**
@@ -127,17 +108,8 @@ export class Mds {
    */
   async retractDisplayed(conversationJid: string): Promise<void> {
     if (!this.deps.getCurrentJid()) return
-
-    const iq = xml('iq', { type: 'set', id: `mds_retract_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('retract', { node: NS_MDS },
-          xml('item', { id: conversationJid }),
-        ),
-      ),
-    )
-
     try {
-      await this.deps.sendIQ(iq)
+      await this.node.retract(conversationJid)
     } catch {
       // Best-effort: item may not exist, or the node may be absent.
     }
@@ -158,28 +130,11 @@ export class Mds {
    * transport, timeout, and unexpected failures are unknown.
    */
   async fetchAllDisplayedResult(timeoutMs?: number): Promise<DisplayedMarkerFetchResult> {
-    const currentJid = this.deps.getCurrentJid()
-    if (!currentJid) return { status: 'unknown' }
-
-    const bareJid = getBareJid(currentJid)
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `mds_get_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('items', { node: NS_MDS }),
-      ),
-    )
-
-    try {
-      const result = await this.deps.sendIQ(iq, timeoutMs)
-      const items = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')
-      if (!items) return { status: 'unknown' }
-      return {
-        status: 'authoritative',
-        markers: parseMdsItems(items),
-      }
-    } catch (error) {
-      return isMissingNodeError(error)
-        ? { status: 'authoritative', markers: [] }
-        : { status: 'unknown' }
+    const result = await this.node.get({ timeoutMs })
+    switch (result.status) {
+      case 'ok': return { status: 'authoritative', markers: result.items }
+      case 'absent': return { status: 'authoritative', markers: [] }
+      case 'unavailable': return { status: 'unknown' }
     }
   }
 }

@@ -28,21 +28,9 @@ import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
 import { parseBookmarkItem } from '../bookmarkItem'
+import { buildPublishOptions, type PublishOptions } from './PepNode'
 
-/**
- * Options accepted by {@link PubSub.publish}. These map to XEP-0060
- * publish-options form fields.
- */
-export interface PublishOptions {
-  /** `pubsub#persist_items` — whether the node retains items between sessions. */
-  persistItems?: boolean
-  /** `pubsub#access_model` — who may read the node. */
-  accessModel?: 'open' | 'whitelist' | 'presence' | 'roster' | 'authorize'
-  /** `pubsub#max_items` — maximum retained items. Use `1` for current-value nodes. */
-  maxItems?: number
-  /** `pubsub#send_last_published_item` — when to replay to new subscribers. */
-  sendLastPublishedItem?: 'never' | 'on_sub' | 'on_sub_and_presence'
-}
+export type { PublishOptions }
 
 const NS_PUBSUB_EVENT = `${NS_PUBSUB}#event`
 
@@ -436,32 +424,3 @@ function parseItems(itemsEl: Element): PEPItem[] {
   })
 }
 
-function buildPublishOptions(options?: PublishOptions) {
-  if (!options) return null
-  const fields: Array<ReturnType<typeof xml>> = []
-  if (options.persistItems !== undefined) {
-    fields.push(formField('pubsub#persist_items', options.persistItems ? '1' : '0'))
-  }
-  if (options.accessModel !== undefined) {
-    fields.push(formField('pubsub#access_model', options.accessModel))
-  }
-  if (options.maxItems !== undefined) {
-    fields.push(formField('pubsub#max_items', String(options.maxItems)))
-  }
-  if (options.sendLastPublishedItem !== undefined) {
-    fields.push(formField('pubsub#send_last_published_item', options.sendLastPublishedItem))
-  }
-  if (fields.length === 0) return null
-  return xml('publish-options', {},
-    xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' },
-        xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options'),
-      ),
-      ...fields,
-    ),
-  )
-}
-
-function formField(varName: string, value: string) {
-  return xml('field', { var: varName }, xml('value', {}, value))
-}

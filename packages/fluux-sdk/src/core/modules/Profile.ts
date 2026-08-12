@@ -1,6 +1,7 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
-import { BaseModule } from './BaseModule'
+import { BaseModule, type ModuleDependencies } from './BaseModule'
+import { PepNode, type PepCodec } from './PepNode'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
 import type { VCardInfo } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
@@ -58,7 +59,23 @@ import {
  *
  * @category Modules
  */
+/** XEP-0172 keeps a single current value, so its item id is a constant. */
+const NICK_ITEM_ID = 'current'
+
+/** Payload is the bare `<nick/>` text; the node carries no publish-options. */
+const nickCodec: PepCodec<string> = {
+  encode: (nickname) => xml('nick', { xmlns: NS_NICK }, nickname),
+  decode: (item) => item.getChild('nick', NS_NICK)?.text() || undefined,
+}
+
 export class Profile extends BaseModule {
+  private readonly nickNode: PepNode<string>
+
+  constructor(deps: ModuleDependencies) {
+    super(deps)
+    this.nickNode = new PepNode(deps, NS_NICK, nickCodec)
+  }
+
   // Note: PubSub events are now handled by the PubSub module.
   // Profile module focuses on outgoing operations (publish avatar, set nickname)
   // and data fetching (fetchAvatarData, fetchVCardAvatar, fetchRoomAvatar).
@@ -531,50 +548,20 @@ export class Profile extends BaseModule {
    * if desired (e.g., in the contact profile view).
    */
   async fetchContactNickname(jid: string): Promise<string | null> {
-    const bareJid = getBareJid(jid)
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `nick_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('items', { node: NS_NICK, max_items: '1' })
-      )
-    )
-
-    try {
-      const result = await this.deps.sendIQ(iq)
-      const nick = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('nick', NS_NICK)?.text()
-      if (nick) {
-        return nick
-      }
-    } catch {
-      // Contact may not have a nickname set
-    }
-    return null
+    const nicks = await this.nickNode.getOr([], { jid: getBareJid(jid), maxItems: 1 })
+    return nicks[0] ?? null
   }
 
   /**
    * Fetch own nickname from PEP (XEP-0172 User Nickname).
    */
   async fetchOwnNickname(): Promise<string | null> {
-    const currentJid = this.deps.getCurrentJid()
-    if (!currentJid) return null
-
-    const bareJid = getBareJid(currentJid)
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `nick_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('items', { node: NS_NICK, max_items: '1' })
-      )
-    )
-
-    try {
-      const result = await this.deps.sendIQ(iq)
-      const nick = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('nick', NS_NICK)?.text()
-      if (nick) {
-        this.deps.emitSDK('connection:own-nickname', { nickname: nick })
-        return nick
-      }
-    } catch {
-      // Own nickname might not be set
-    }
-    return null
+    if (!this.deps.getCurrentJid()) return null
+    const nicks = await this.nickNode.getOr([], { maxItems: 1 })
+    const nick = nicks[0]
+    if (!nick) return null
+    this.deps.emitSDK('connection:own-nickname', { nickname: nick })
+    return nick
   }
 
   /**
@@ -588,16 +575,7 @@ export class Profile extends BaseModule {
       throw new Error('Nickname cannot be empty')
     }
 
-    const iq = xml('iq', { type: 'set', id: `nick_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: NS_NICK },
-          xml('item', { id: 'current' },
-            xml('nick', { xmlns: NS_NICK }, trimmedNickname)
-          )
-        )
-      )
-    )
-    await this.deps.sendIQ(iq)
+    await this.nickNode.publish(NICK_ITEM_ID, trimmedNickname)
     this.deps.emitSDK('connection:own-nickname', { nickname: trimmedNickname })
   }
 
@@ -605,16 +583,7 @@ export class Profile extends BaseModule {
    * Clear/remove own nickname from PEP (XEP-0172).
    */
   async clearOwnNickname(): Promise<void> {
-    if (!this.deps.getCurrentJid()) throw new Error('Not connected')
-
-    const iq = xml('iq', { type: 'set', id: `nick_clear_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('retract', { node: NS_NICK },
-          xml('item', { id: 'current' })
-        )
-      )
-    )
-    await this.deps.sendIQ(iq)
+    await this.nickNode.retract(NICK_ITEM_ID)
     this.deps.emitSDK('connection:own-nickname', { nickname: null })
   }
 
