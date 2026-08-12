@@ -12,7 +12,7 @@
  * @module Core/ConversationSyncSideEffects
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -29,12 +29,12 @@ const PUBLISH_DEBOUNCE_MS = 3_000
  * disabled until the fresh session fetch+merge completes, preventing premature
  * publishes during initialization.
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up all subscriptions
  */
 export function setupConversationSyncSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: SideEffectsOptions = {}
 ): () => void {
   const { debug: _debug = false } = options

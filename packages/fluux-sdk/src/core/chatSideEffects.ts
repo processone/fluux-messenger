@@ -11,7 +11,7 @@
  * @module Core/ChatSideEffects
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { NS_MAM } from './namespaces'
@@ -37,12 +37,12 @@ export interface SideEffectsOptions {
  * 1. Loads messages from IndexedDB cache immediately
  * 2. Triggers background MAM fetch when connected
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up the subscription
  */
 export function setupChatSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: SideEffectsOptions = {}
 ): () => void {
   const { debug = false } = options

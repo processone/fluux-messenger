@@ -18,7 +18,7 @@
  * @module Core/BackgroundSync
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
@@ -60,12 +60,12 @@ import {
  * replayed stanzas. Only joined, inactive rooms that still need archive coverage
  * receive a resume seed query.
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up the subscriptions
  */
 export function setupBackgroundSyncSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: SideEffectsOptions = {}
 ): () => void {
   const { debug: _debug = false } = options

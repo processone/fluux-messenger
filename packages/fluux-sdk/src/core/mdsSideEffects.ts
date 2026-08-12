@@ -36,7 +36,7 @@
  * @module Core/MdsSideEffects
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import type { DisplayedMarker, DisplayedMarkerFetchResult } from './modules/Mds'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
@@ -83,12 +83,12 @@ const CACHE_LOOKBACK = 50
 /**
  * Sets up the MDS read-position publisher side effect.
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up all subscriptions
  */
 export function setupMdsSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: SideEffectsOptions = {}
 ): () => void {
   const { debug: _debug = false } = options

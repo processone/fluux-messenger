@@ -8,7 +8,7 @@
  * @module Core/SideEffects
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import { setupChatSideEffects } from './chatSideEffects'
 import { setupRoomSideEffects } from './roomSideEffects'
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
@@ -29,7 +29,7 @@ export { setupMdsSideEffects } from './mdsSideEffects'
  * subscriptions that respond to state changes and trigger appropriate
  * side effects (loading cache, fetching history, etc.).
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up all subscriptions
  *
@@ -43,7 +43,7 @@ export { setupMdsSideEffects } from './mdsSideEffects'
  * ```
  */
 export function setupStoreSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: { debug?: boolean } = {}
 ): () => void {
   const unsubscribeChat = setupChatSideEffects(client, options)

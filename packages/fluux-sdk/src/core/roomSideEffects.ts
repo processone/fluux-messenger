@@ -14,7 +14,7 @@
  * @module Core/RoomSideEffects
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -47,12 +47,12 @@ import {
  * 2. Triggers foreground MAM catch-up when connected, MAM-enabled, and joined
  *    in the current fresh session (or preserved by a successful SM resume)
  *
- * @param client - The XMPPClient instance
+ * @param client - The client driving these side effects
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up the subscription
  */
 export function setupRoomSideEffects(
-  client: XMPPClient,
+  client: SideEffectHost,
   options: SideEffectsOptions = {}
 ): () => void {
   const { debug = false } = options

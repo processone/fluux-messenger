@@ -16,7 +16,7 @@
  * @module Bindings
  */
 
-import type { XMPPClient } from '../core/XMPPClient'
+import type { SDKEventSource } from '../core/types/eventSource'
 // Import concrete store modules rather than the '../stores' barrel: the barrel
 // sits in an import cycle with core/, so re-exporting through it makes Rollup
 // split the declaration bundle into mutually dependent chunks.
@@ -65,7 +65,7 @@ export type UnsubscribeBindings = () => void
  * Call this once when initializing the XMPP client (e.g., in XMPPProvider).
  * Returns an unsubscribe function to clean up all event subscriptions.
  *
- * @param client - The XMPPClient instance to bind
+ * @param client - The SDK event source to bind to
  * @param getStores - Function that returns current store state (called lazily)
  * @returns Unsubscribe function to remove all bindings
  *
@@ -82,7 +82,7 @@ export type UnsubscribeBindings = () => void
  * ```
  */
 export function createStoreBindings(
-  client: XMPPClient,
+  client: SDKEventSource,
   getStores: () => StoreRefs
 ): UnsubscribeBindings {
   const unsubscribers: Array<() => void> = []

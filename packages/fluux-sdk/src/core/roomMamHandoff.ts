@@ -1,4 +1,4 @@
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 
 type RoomMamHandoffEvent =
   | {
@@ -32,16 +32,16 @@ interface RoomMamForegroundCoverageState {
 }
 
 const roomMamHandoffHandlers = new WeakMap<
-  XMPPClient,
+  SideEffectHost,
   Set<RoomMamHandoffHandler>
 >()
 const roomMamForegroundCoverage = new WeakMap<
-  XMPPClient,
+  SideEffectHost,
   RoomMamForegroundCoverageState
 >()
 
 function getRoomMamForegroundCoverageState(
-  client: XMPPClient,
+  client: SideEffectHost,
 ): RoomMamForegroundCoverageState {
   let state = roomMamForegroundCoverage.get(client)
   if (!state) {
@@ -52,7 +52,7 @@ function getRoomMamForegroundCoverageState(
 }
 
 export function beginRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
   roomJid: string,
   membershipEpoch: number,
 ): RoomMamForegroundCoverage {
@@ -67,7 +67,7 @@ export function beginRoomMamForegroundCoverage(
 }
 
 export function completeRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
   owner: RoomMamForegroundCoverage,
 ): void {
   const state = roomMamForegroundCoverage.get(client)
@@ -88,7 +88,7 @@ export function completeRoomMamForegroundCoverage(
 }
 
 export function releaseRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
   owner: RoomMamForegroundCoverage,
 ): void {
   const state = roomMamForegroundCoverage.get(client)
@@ -102,14 +102,14 @@ export function releaseRoomMamForegroundCoverage(
 }
 
 export function releaseRoomMamForegroundCoverageForRoom(
-  client: XMPPClient,
+  client: SideEffectHost,
   roomJid: string,
 ): void {
   roomMamForegroundCoverage.get(client)?.rooms.delete(roomJid)
 }
 
 export function releaseInFlightRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
 ): void {
   const state = roomMamForegroundCoverage.get(client)
   if (!state) return
@@ -121,7 +121,7 @@ export function releaseInFlightRoomMamForegroundCoverage(
 }
 
 export function resetRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
 ): void {
   const state = getRoomMamForegroundCoverageState(client)
   state.generation += 1
@@ -129,7 +129,7 @@ export function resetRoomMamForegroundCoverage(
 }
 
 export function hasRoomMamForegroundCoverage(
-  client: XMPPClient,
+  client: SideEffectHost,
   roomJid: string,
   membershipEpoch: number,
 ): boolean {
@@ -143,7 +143,7 @@ export function hasRoomMamForegroundCoverage(
 }
 
 export function requestRoomMamHandoff(
-  client: XMPPClient,
+  client: SideEffectHost,
   owner: RoomMamForegroundCoverage,
 ): void {
   roomMamHandoffHandlers.get(client)?.forEach((handler) => {
@@ -156,7 +156,7 @@ export function requestRoomMamHandoff(
 }
 
 export function subscribeRoomMamHandoff(
-  client: XMPPClient,
+  client: SideEffectHost,
   handler: RoomMamHandoffHandler,
 ): () => void {
   let handlers = roomMamHandoffHandlers.get(client)

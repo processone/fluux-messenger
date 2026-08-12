@@ -27,7 +27,7 @@
  * @module Core/EventHook
  */
 
-import type { XMPPClient } from './XMPPClient'
+import type { SDKEventSource } from './types/eventSource'
 import type { SDKEvents, SDKEventHandler } from './types/sdk-events'
 
 /**
@@ -35,7 +35,7 @@ import type { SDKEvents, SDKEventHandler } from './types/sdk-events'
  *
  * Subclass this to create modular event processors that subscribe to
  * SDK events with automatic lifecycle cleanup. Register hooks on
- * `XMPPClient` via `client.registerHook(hook)`.
+ * the client via `client.registerHook(hook)`.
  *
  * @category Core
  */
@@ -45,12 +45,19 @@ export abstract class EventHook {
   /** Human-readable name */
   abstract readonly name: string
 
-  /** The XMPPClient instance this hook is bound to */
-  protected client: XMPPClient
+  /**
+   * The event source this hook is bound to.
+   *
+   * Narrowed to the SDK bus on purpose: a hook reacts to events, and giving it
+   * the whole client would let a hook drive protocol operations from inside an
+   * event handler. Use {@link on} rather than subscribing through this
+   * directly — it registers the cleanup.
+   */
+  protected client: SDKEventSource
 
   private _subscriptions: Array<() => void> = []
 
-  constructor(client: XMPPClient) {
+  constructor(client: SDKEventSource) {
     this.client = client
   }
 

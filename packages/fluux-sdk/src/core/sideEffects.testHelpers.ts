@@ -5,7 +5,7 @@
  */
 import { vi } from 'vitest'
 import { connectionStore } from '../stores/connectionStore'
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 
 // Mock localStorage for tests that need it
 export const localStorageMock = (() => {
@@ -28,7 +28,7 @@ export const localStorageMock = (() => {
 })()
 
 /**
- * Create a minimal mock XMPPClient with event emitter support.
+ * Create a minimal mock side-effect host with event emitter support.
  */
 export function createMockClient() {
   // Internal events (on/emit pattern: 'online', 'resumed', etc.)
@@ -79,7 +79,7 @@ export function createMockClient() {
     },
   }
 
-  return client as typeof client & XMPPClient
+  return client as typeof client & SideEffectHost
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { XMPPClient } from './XMPPClient'
+import type { SideEffectHost } from './sideEffectHost'
 
 interface RoomMembershipState {
   epoch: number
@@ -6,12 +6,12 @@ interface RoomMembershipState {
 }
 
 const clientRoomMemberships = new WeakMap<
-  XMPPClient,
+  SideEffectHost,
   Map<string, RoomMembershipState>
 >()
 
 function getClientRoomMemberships(
-  client: XMPPClient,
+  client: SideEffectHost,
 ): Map<string, RoomMembershipState> {
   let memberships = clientRoomMemberships.get(client)
   if (!memberships) {
@@ -22,7 +22,7 @@ function getClientRoomMemberships(
 }
 
 export function recordRoomMembership(
-  client: XMPPClient,
+  client: SideEffectHost,
   roomJid: string,
   joined: boolean,
 ): number {
@@ -40,13 +40,13 @@ export function recordRoomMembership(
 }
 
 export function getRoomMembershipEpoch(
-  client: XMPPClient,
+  client: SideEffectHost,
   roomJid: string,
 ): number {
   return clientRoomMemberships.get(client)?.get(roomJid)?.epoch ?? 0
 }
 
-export function invalidateRoomMemberships(client: XMPPClient): void {
+export function invalidateRoomMemberships(client: SideEffectHost): void {
   const memberships = clientRoomMemberships.get(client)
   if (!memberships) return
   for (const membership of memberships.values()) {
