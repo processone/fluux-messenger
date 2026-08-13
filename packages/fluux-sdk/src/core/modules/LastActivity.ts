@@ -2,6 +2,7 @@ import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { NS_LAST } from '../namespaces'
 import { getBareJid } from '../jid'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Cached last activity result for a contact.
@@ -40,14 +41,17 @@ export class LastActivity extends BaseModule {
    * Passively watch for available presence stanzas to invalidate cache.
    * When a contact comes back online, their cached last-activity is stale.
    */
-  handle(stanza: Element): boolean | void {
-    if (stanza.is('presence') && !stanza.attrs.type) {
-      const from = stanza.attrs.from
-      if (from) {
-        this.invalidate(getBareJid(from))
-      }
-    }
-    return false
+  /**
+   * Available presence, as an observer rather than a claimant: this module
+   * never consumes a stanza, it only drops a cache entry when a contact comes
+   * back online. Routing it as an observer means Roster claiming the same
+   * presence cannot stop it from running.
+   */
+  readonly observes: readonly StanzaClaim[] = [{ kind: 'presence', type: null }]
+
+  observe(stanza: Element): void {
+    const from = stanza.attrs.from
+    if (from) this.invalidate(getBareJid(from))
   }
 
   /**

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LastActivity } from './LastActivity'
+import { Roster } from './Roster'
 import { createMockElement, createMockStores, createMockPresenceReader } from '../test-utils'
 import type { Element } from '@xmpp/client'
 import type { ModuleDependencies } from './BaseModule'
+import { routeStanza } from '../stanzaRouting'
 
 /** Helper to create a successful last activity IQ response */
 function createLastActivityResponse(seconds: number) {
@@ -48,12 +50,13 @@ describe('LastActivity module', () => {
   let lastActivity: LastActivity
   let mockStores: ReturnType<typeof createMockStores>
   let sendIQ: ReturnType<typeof vi.fn<ModuleDependencies['sendIQ']>>
+  let deps: ModuleDependencies
 
   beforeEach(() => {
     mockStores = createMockStores()
     sendIQ = vi.fn<ModuleDependencies['sendIQ']>()
 
-    lastActivity = new LastActivity({
+    deps = {
       stores: mockStores,
       presence: createMockPresenceReader(),
       sendStanza: vi.fn(),
@@ -62,7 +65,8 @@ describe('LastActivity module', () => {
       emit: vi.fn(),
       emitSDK: vi.fn(),
       getXmpp: () => null,
-    })
+    }
+    lastActivity = new LastActivity(deps)
   })
 
   describe('queryLastActivity', () => {
@@ -232,20 +236,43 @@ describe('LastActivity module', () => {
       await lastActivity.queryLastActivity('alice@example.com')
       expect(lastActivity.getCached('alice@example.com')).not.toBeNull()
 
-      // Simulate contact coming back online
+      // Simulate contact coming back online. Routed rather than calling
+      // observe() directly: the path is what this is about.
       const presenceStanza = createMockElement('presence', {
         from: 'alice@example.com/desktop',
       })
-      lastActivity.handle(presenceStanza as unknown as Element)
+      routeStanza(presenceStanza as unknown as Element, [], [lastActivity])
 
       expect(lastActivity.getCached('alice@example.com')).toBeNull()
     })
 
-    it('returns false (never consumes stanza)', () => {
-      const stanza = createMockElement('presence', {
+    // Regression: Roster claims essentially all presence and consumes it. While
+    // this module was a CLAIMANT ordered after Roster, it never saw an
+    // available presence and the cache was never invalidated — a contact coming
+    // back online kept its stale "last seen". As an observer it runs regardless
+    // of who claimed.
+    it('still invalidates when Roster consumes the same presence', async () => {
+      setupOfflineContact(mockStores, 'alice@example.com')
+      sendIQ.mockResolvedValue(createLastActivityResponse(600) as unknown as Element)
+      await lastActivity.queryLastActivity('alice@example.com')
+      expect(lastActivity.getCached('alice@example.com')).not.toBeNull()
+
+      const roster = new Roster(deps)
+      const presence = createMockElement('presence', {
         from: 'alice@example.com/desktop',
-      })
-      expect(lastActivity.handle(stanza as unknown as Element)).toBe(false)
+      }) as unknown as Element
+
+      routeStanza(presence, [roster], [lastActivity])
+
+      expect(roster.handle(presence)).toBe(true) // Roster does claim it...
+      expect(lastActivity.getCached('alice@example.com')).toBeNull() // ...and it ran anyway
+    })
+
+    it('observes rather than claims, so it cannot consume a stanza', () => {
+      // Structural: an observer has no `claims`/`handle` for the router to
+      // offer a stanza to, so nothing it does can stop another module handling.
+      expect((lastActivity as unknown as { claims?: unknown }).claims).toBeUndefined()
+      expect((lastActivity as unknown as { handle?: unknown }).handle).toBeUndefined()
     })
 
     it('does not invalidate on unavailable presence', async () => {
@@ -257,21 +284,22 @@ describe('LastActivity module', () => {
 
       await lastActivity.queryLastActivity('alice@example.com')
 
-      // type='unavailable' means going offline — cache should stay
+      // type='unavailable' means going offline — cache should stay. The filter
+      // is the declared claim, so route the stanza rather than calling observe.
       const presenceStanza = createMockElement('presence', {
         from: 'alice@example.com/desktop',
         type: 'unavailable',
       })
-      lastActivity.handle(presenceStanza as unknown as Element)
+      routeStanza(presenceStanza as unknown as Element, [], [lastActivity])
 
       expect(lastActivity.getCached('alice@example.com')).not.toBeNull()
     })
 
-    it('ignores non-presence stanzas', () => {
-      const stanza = createMockElement('message', {
-        from: 'alice@example.com/desktop',
-      })
-      expect(lastActivity.handle(stanza as unknown as Element)).toBe(false)
+    it('is not offered non-presence stanzas', () => {
+      const invalidate = vi.spyOn(lastActivity, 'invalidate')
+      const stanza = createMockElement('message', { from: 'alice@example.com/desktop' })
+      routeStanza(stanza as unknown as Element, [], [lastActivity])
+      expect(invalidate).not.toHaveBeenCalled()
     })
   })
 

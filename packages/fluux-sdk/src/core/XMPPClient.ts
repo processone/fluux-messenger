@@ -733,6 +733,7 @@ export class XMPPClient {
       routeStanza(
         stanza,
         [this.pubsub, this.blocking, this.poll, this.chat, this.muc, this.roster],
+        [this.lastActivity],
       )
     })
 
