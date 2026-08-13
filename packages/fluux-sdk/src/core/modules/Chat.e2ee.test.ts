@@ -136,11 +136,26 @@ function makeDeps(options: {
   jid: string
   manager: E2EEManager
   captureStanza: (el: Element) => void
+  /**
+   * Rooms the client is in. Chat asks the room store whether a target JID is a
+   * room, so a test exercising groupchat has to declare it here.
+   */
+  rooms?: string[]
 }): { deps: ModuleDependencies; emitted: unknown[]; sdkEmitted: unknown[] } {
   const emitted: unknown[] = []
   const sdkEmitted: unknown[] = []
+  const rooms = new Set(options.rooms ?? [])
   const deps: ModuleDependencies = {
-    stores: null,
+    stores: rooms.size
+      ? ({
+          room: {
+            getRoom: (jid: string) => (rooms.has(jid) ? { jid } : undefined),
+            // Reaction, correction and retraction all check whether the target
+            // message was a whisper before addressing the room.
+            getMessage: () => undefined,
+          },
+        } as unknown as ModuleDependencies['stores'])
+      : null,
     presence: createPresenceReader(),
     sendStanza: async (stanza) => {
       options.captureStanza(stanza)
@@ -236,7 +251,14 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('sends plaintext for groupchat messages (MUC encryption is a later phase)', async () => {
-      await chat.sendMessage('room@muc.example.com', 'hi room', 'groupchat')
+      // Chat reads the room store to know it is addressing a room.
+      const roomBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: (el) => captured.push(el),
+        rooms: ['room@muc.example.com'],
+      })
+      await new Chat(roomBuilt.deps, stubMAM()).sendMessage('room@muc.example.com', 'hi room')
 
       const sent = captured[0]
       expect(sent.getChild('body')?.text()).toBe('hi room')
@@ -247,7 +269,7 @@ describe('Chat E2EE wiring', () => {
       // Regression: <fallback for="jabber:x:oob"> in the unencrypted stanza root
       // reveals to the XMPP server that an attachment was sent and its URL length.
       // It must be stripped after the OOB element is moved inside the encrypted payload.
-      await chat.sendMessage('bob@example.com', 'Check this file', 'chat', undefined, undefined, {
+      await chat.sendMessage('bob@example.com', 'Check this file', undefined, undefined, {
         url: 'https://upload.example.com/file.bin',
         name: 'photo.jpg',
         mediaType: 'image/jpeg',
@@ -277,7 +299,6 @@ describe('Chat E2EE wiring', () => {
       await chat.sendMessage(
         'bob@example.com',
         'Nice photo!',
-        'chat',
         { id: 'orig-msg-id', to: 'bob@example.com', fallback: { author: 'Bob', body: 'seen this?' } },
         undefined,
         {
@@ -322,7 +343,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'Check this', 'chat', undefined, undefined, {
+      await plainChat.sendMessage('bob@example.com', 'Check this', undefined, undefined, {
         url: 'https://upload.example.com/plain.jpg',
         name: 'plain.jpg',
         mediaType: 'image/jpeg',
@@ -408,7 +429,7 @@ describe('Chat E2EE wiring', () => {
       const guardedChat = new Chat(deps, stubMAM())
 
       await expect(
-        guardedChat.sendMessage('bob@example.com', 'secret photo', 'chat', undefined, undefined, {
+        guardedChat.sendMessage('bob@example.com', 'secret photo', undefined, undefined, {
           url: 'https://upload.example.com/photo.bin',
           name: 'photo.jpg',
           mediaType: 'image/jpeg',
@@ -437,7 +458,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'here is the file', 'chat', undefined, undefined, {
+      await plainChat.sendMessage('bob@example.com', 'here is the file', undefined, undefined, {
         url: 'https://upload.example.com/plain.jpg',
         name: 'plain.jpg',
         mediaType: 'image/jpeg',
@@ -1419,7 +1440,7 @@ describe('Chat E2EE wiring', () => {
       const guardedChat = new Chat(deps, stubMAM())
 
       await expect(
-        guardedChat.sendCorrection('bob@example.com', 'orig-id', 'updated caption', 'chat', {
+        guardedChat.sendCorrection('bob@example.com', 'orig-id', 'updated caption', {
           url: 'https://upload.example.com/edit.bin',
           name: 'edit.jpg',
           mediaType: 'image/jpeg',
@@ -1435,7 +1456,7 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('strips the OOB fallback when encrypting a correction with attachment', async () => {
-      await chat.sendCorrection('bob@example.com', 'orig-id', 'new caption', 'chat', {
+      await chat.sendCorrection('bob@example.com', 'orig-id', 'new caption', {
         url: 'https://upload.example.com/photo.bin',
         name: 'photo.jpg',
         mediaType: 'image/jpeg',
@@ -1460,7 +1481,13 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('groupchat correction sends plaintext (MUC E2EE not supported in this phase)', async () => {
-      await chat.sendCorrection('room@conf.example.com', 'orig-id', 'fixed text', 'groupchat')
+      const roomBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: (el) => captured.push(el),
+        rooms: ['room@conf.example.com'],
+      })
+      await new Chat(roomBuilt.deps, stubMAM()).sendCorrection('room@conf.example.com', 'orig-id', 'fixed text')
 
       expect(captured).toHaveLength(1)
       const sent = captured[0]
@@ -1502,6 +1529,9 @@ describe('Chat E2EE wiring', () => {
             body: options.originalBody,
           } as unknown as import('../types').Message),
         },
+        // Chat asks the room store whether the target is a room. Here it is a
+        // person, so the lookup finds nothing.
+        room: { getRoom: () => undefined },
       } as unknown as import('../types').StoreBindings
       return { deps: built.deps, capturedStanzas, sdkEmitted: built.sdkEmitted }
     }
@@ -1702,6 +1732,9 @@ describe('Chat E2EE wiring', () => {
             body: 'will be retracted',
           } as unknown as import('../types').Message),
         },
+        // Chat asks the room store whether the target is a room. Here it is a
+        // person, so the lookup finds nothing.
+        room: { getRoom: () => undefined },
       } as unknown as import('../types').StoreBindings
       const rxChat = new Chat(rxBuilt.deps, stubMAM())
       rxChat.handle(inbound)
@@ -1835,7 +1868,7 @@ describe('Chat E2EE wiring', () => {
 
     // Build a Chat with no E2EE plugin so the fastening goes out in cleartext and
     // its wire format is directly inspectable.
-    const makePlainChat = () => {
+    const makePlainChat = (rooms?: string[]) => {
       const emptyManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),
         xmpp: stubXmppPrimitives(async () => {}),
@@ -1846,6 +1879,7 @@ describe('Chat E2EE wiring', () => {
         jid: 'me@example.com',
         manager: emptyManager,
         captureStanza: (el) => localCaptured.push(el),
+        rooms,
       })
       return { chat: new Chat(deps, stubMAM()), captured: localCaptured }
     }
@@ -1889,9 +1923,9 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('sends a groupchat preview in cleartext with the interop wire format (no encryption)', async () => {
-      const { chat: plainChat, captured: local } = makePlainChat()
+      const { chat: plainChat, captured: local } = makePlainChat(['room@muc.example.com'])
 
-      await plainChat.sendLinkPreview('room@muc.example.com', 'muc-orig', preview, 'groupchat')
+      await plainChat.sendLinkPreview('room@muc.example.com', 'muc-orig', preview)
 
       const sent = local[0]
       expect(sent.attrs.to).toBe('room@muc.example.com')
@@ -2012,7 +2046,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'sure thing', 'chat', encryptedReply)
+      await plainChat.sendMessage('bob@example.com', 'sure thing', encryptedReply)
 
       const sent = captured[0]
       const body = sent.getChild('body')?.text() ?? ''
@@ -2035,7 +2069,7 @@ describe('Chat E2EE wiring', () => {
 
     it('keeps the quote INSIDE the encrypted payload when the reply is encrypted', async () => {
       // `chat` uses the DummyPlaintextPlugin (registered in beforeEach) → encrypts.
-      await chat.sendMessage('bob@example.com', 'sure thing', 'chat', encryptedReply)
+      await chat.sendMessage('bob@example.com', 'sure thing', encryptedReply)
 
       const sent = captured[0]
       // Outer body is the generic fallback, never the quote.
@@ -2068,7 +2102,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'sure thing', 'chat', {
+      await plainChat.sendMessage('bob@example.com', 'sure thing', {
         id: 'orig',
         to: 'bob@example.com',
         fallback: { author: 'Bob', body: 'hello there' }, // fromEncrypted omitted → false
@@ -2102,7 +2136,6 @@ describe('Chat E2EE wiring', () => {
       await plainChat.sendMessage(
         'bob@example.com',
         'sure thing',
-        'chat',
         { id: 'orig', to: 'bob@example.com', fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true } },
         undefined,
         { url: attachmentUrl, name: 'file.bin', mediaType: 'application/octet-stream' }, // unencrypted attachment → cleartext send
@@ -2136,7 +2169,7 @@ describe('Chat E2EE wiring', () => {
 
   describe('outbound encryption — sendEasterEgg', () => {
     it('moves the easter-egg element inside the encrypted payload and keeps no-store', async () => {
-      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+      await chat.sendEasterEgg('bob@example.com', 'confetti')
 
       expect(captured).toHaveLength(1)
       const sent = captured[0]
@@ -2150,7 +2183,7 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('round-trips an encrypted easter egg back to a chat:animation event', async () => {
-      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+      await chat.sendEasterEgg('bob@example.com', 'confetti')
       const outgoing = captured[0]
 
       const inbound = xml(
@@ -2185,7 +2218,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+      await plainChat.sendEasterEgg('bob@example.com', 'confetti')
 
       const sent = captured[0]
       expect(sent.getChild('easter-egg', 'urn:fluux:easter-egg:0')).toBeDefined()

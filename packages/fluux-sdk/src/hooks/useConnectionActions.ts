@@ -122,10 +122,9 @@ export function useConnectionActions() {
     async (
       to: string,
       originalMessageId: string,
-      preview: LinkPreview,
-      type: 'chat' | 'groupchat' = 'chat'
+      preview: LinkPreview
     ) => {
-      await client.chat.sendLinkPreview(to, originalMessageId, preview, type)
+      await client.chat.sendLinkPreview(to, originalMessageId, preview)
     },
     [client]
   )

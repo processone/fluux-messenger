@@ -30,13 +30,11 @@ export function useLinkPreview() {
    * @param messageId - The ID of the sent message
    * @param body - The message body to scan for URLs
    * @param to - The conversation JID
-   * @param type - Message type ('chat' or 'groupchat')
    */
   const processMessageForLinkPreview = useCallback(async (
     messageId: string,
     body: string,
     to: string,
-    type: 'chat' | 'groupchat'
   ): Promise<void> => {
     // Extract first URL from message
     const url = extractFirstUrl(body)
@@ -65,7 +63,7 @@ export function useLinkPreview() {
       }
 
       // Send the fastening with link preview
-      await client.chat.sendLinkPreview(to, messageId, preview, type)
+      await client.chat.sendLinkPreview(to, messageId, preview)
 
       setState({ isFetching: false, error: null })
     } catch (err) {

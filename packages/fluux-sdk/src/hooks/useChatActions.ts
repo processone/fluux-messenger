@@ -34,7 +34,7 @@ export function useChatActions() {
       }
     ): Promise<string> => {
       // 1:1 chat hook: always a 'chat'-type message (rooms use useRoomActions).
-      return await client.chat.sendMessage(to, body, 'chat', options?.replyTo, undefined, options?.attachment)
+      return await client.chat.sendMessage(to, body, options?.replyTo, undefined, options?.attachment)
     },
     [client]
   )
@@ -73,36 +73,36 @@ export function useChatActions() {
   }, [])
 
   const sendChatState = useCallback(
-    async (to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendChatState(to, state, type)
+    async (to: string, state: ChatStateNotification) => {
+      await client.chat.sendChatState(to, state)
     },
     [client]
   )
 
   const sendReaction = useCallback(
-    async (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendReaction(to, messageId, emojis, type)
+    async (to: string, messageId: string, emojis: string[]) => {
+      await client.chat.sendReaction(to, messageId, emojis)
     },
     [client]
   )
 
   const sendCorrection = useCallback(
     async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(conversationId, messageId, newBody, 'chat', attachment)
+      await client.chat.sendCorrection(conversationId, messageId, newBody, attachment)
     },
     [client]
   )
 
   const retractMessage = useCallback(
     async (conversationId: string, messageId: string) => {
-      await client.chat.sendRetraction(conversationId, messageId, 'chat')
+      await client.chat.sendRetraction(conversationId, messageId)
     },
     [client]
   )
 
   const sendEasterEgg = useCallback(
-    async (to: string, type: 'chat' | 'groupchat', animation: string) => {
-      await client.chat.sendEasterEgg(to, type, animation)
+    async (to: string, animation: string) => {
+      await client.chat.sendEasterEgg(to, animation)
     },
     [client]
   )

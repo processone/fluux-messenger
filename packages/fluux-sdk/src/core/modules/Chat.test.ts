@@ -49,6 +49,9 @@ describe('XMPPClient Message', () => {
     vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
 
     mockStores = createMockStores()
+    // Chat asks the room store whether a JID is a room, so the room these
+    // tests address has to exist, exactly as a join would make it.
+    mockStores.room.getRoom = vi.fn((jid: string) => (jid === 'room@conference.example.com' ? { jid: 'room@conference.example.com', nickname: 'me' } : undefined)) as typeof mockStores.room.getRoom
     xmppClient = new XMPPClient({ debug: false })
     xmppClient.bindStores(mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
@@ -636,7 +639,7 @@ describe('XMPPClient Message', () => {
         subscription: 'both',
       })
 
-      await xmppClient.chat.sendChatState('offline@example.com', 'composing', 'chat')
+      await xmppClient.chat.sendChatState('offline@example.com', 'composing')
 
       // Should NOT have sent any stanza
       expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
@@ -653,7 +656,7 @@ describe('XMPPClient Message', () => {
         subscription: 'both',
       })
 
-      await xmppClient.chat.sendChatState('online@example.com', 'composing', 'chat')
+      await xmppClient.chat.sendChatState('online@example.com', 'composing')
 
       // Should have sent the chat state
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -670,7 +673,7 @@ describe('XMPPClient Message', () => {
         subscription: 'both',
       })
 
-      await xmppClient.chat.sendChatState('away@example.com', 'composing', 'chat')
+      await xmppClient.chat.sendChatState('away@example.com', 'composing')
 
       // Should have sent the chat state (away users can still receive)
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -680,7 +683,7 @@ describe('XMPPClient Message', () => {
       await connectClient()
 
       // For groupchat, we don't check individual presence
-      await xmppClient.chat.sendChatState('room@conference.example.com', 'composing', 'groupchat')
+      await xmppClient.chat.sendChatState('room@conference.example.com', 'composing')
 
       // Should have sent the chat state
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -696,8 +699,8 @@ describe('XMPPClient Message', () => {
         subscription: 'both',
       })
 
-      await xmppClient.chat.sendChatState('online@example.com', 'composing', 'chat')
-      await xmppClient.chat.sendChatState('room@conference.example.com', 'composing', 'groupchat')
+      await xmppClient.chat.sendChatState('online@example.com', 'composing')
+      await xmppClient.chat.sendChatState('room@conference.example.com', 'composing')
 
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
       for (const [sentStanza] of mockXmppClientInstance.send.mock.calls) {
@@ -972,7 +975,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'alice@example.com',
         'Thanks!',
-        'chat',
         { id: 'orig-1', to: 'alice@example.com', fallback: { author: 'alice', body: QUOTED } },
       )
 
@@ -994,7 +996,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'room@conference.example.com',
         body,
-        'groupchat',
         undefined,
         [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
       )
@@ -1017,7 +1018,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'room@conference.example.com',
         typed,
-        'groupchat',
         { id: 'orig-2', to: 'room@conference.example.com/Emma', fallback: { author: 'Emma', body: QUOTED } },
         [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
       )
@@ -1547,7 +1547,7 @@ describe('XMPPClient Message', () => {
         from: 'alice@example.com',
       })
 
-      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍', '❤️'], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍', '❤️'])
 
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
 
@@ -1582,7 +1582,7 @@ describe('XMPPClient Message', () => {
       await connectClient()
 
       // getMessage returns undefined (default mock behavior)
-      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -1611,7 +1611,7 @@ describe('XMPPClient Message', () => {
         from: 'alice@example.com',
       })
 
-      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', [], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', [])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1625,7 +1625,7 @@ describe('XMPPClient Message', () => {
     it('should update local store after sending reaction', async () => {
       await connectClient()
 
-      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'])
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
         isLive: true,
@@ -1640,7 +1640,7 @@ describe('XMPPClient Message', () => {
       await connectClient()
 
       // Send with full JID - should be stripped to bare JID
-      await xmppClient.chat.sendReaction('alice@example.com/mobile', 'msg-123', ['👍'], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com/mobile', 'msg-123', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sentStanza.attrs.to).toBe('alice@example.com')
@@ -1658,7 +1658,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1677,7 +1677,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1690,7 +1690,7 @@ describe('XMPPClient Message', () => {
       mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: 'room@conference.example.com', nickname: 'me' })
       // getMessage returns undefined (default mock behavior)
 
-      await xmppClient.chat.sendReaction('room@conference.example.com', 'unknown-msg-id', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'unknown-msg-id', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1709,7 +1709,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['🎉'], 'groupchat')
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['🎉'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -1744,7 +1744,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'room@conference.example.com',
         'My reply',
-        'groupchat',
         { id: 'client-msg-id', to: 'room@conference.example.com/alice', fallback: { author: 'alice', body: 'Original message' } }
       )
 
@@ -1768,7 +1767,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'room@conference.example.com',
         'My reply',
-        'groupchat',
         { id: 'client-msg-id', to: 'room@conference.example.com/alice' }
       )
 
@@ -1795,7 +1793,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'alice@example.com',
         'My reply',
-        'chat',
         { id: 'client-msg-id', to: 'alice@example.com' }
       )
 
@@ -1826,7 +1823,6 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendMessage(
         'bob@example.com',
         'Nice!',
-        'chat',
         { id: 'a1b2c3d4-uuid-style-id', to: 'bob@example.com', fallback: { author: 'bob', body: 'Check this out' } }
       )
 
@@ -1850,7 +1846,7 @@ describe('XMPPClient Message', () => {
         from: 'alice@example.com',
       })
 
-      await xmppClient.chat.sendReaction('alice@example.com', 'client-msg-id', ['👍'], 'chat')
+      await xmppClient.chat.sendReaction('alice@example.com', 'client-msg-id', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1870,7 +1866,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'])
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
@@ -1892,7 +1888,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: true,
       })
 
-      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo', 'chat')
+      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -1916,7 +1912,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: true,
       })
 
-      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo', 'chat')
+      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -1941,7 +1937,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/me',
       })
 
-      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo', 'groupchat')
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -1965,7 +1961,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/me',
       })
 
-      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo', 'groupchat')
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -1985,7 +1981,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2010,7 +2006,7 @@ describe('XMPPClient Message', () => {
         },
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2034,7 +2030,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find(
@@ -2056,7 +2052,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', url, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', url, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find(
@@ -2085,7 +2081,7 @@ describe('XMPPClient Message', () => {
         },
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
 
       // Body should be empty because the URL is fallback text for OOB
       // (our client understands OOB, so we strip the fallback)
@@ -2117,7 +2113,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', userText, 'chat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', userText, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
@@ -2149,7 +2145,7 @@ describe('XMPPClient Message', () => {
     it('should not include fallback when no attachment', async () => {
       await connectClient()
 
-      await xmppClient.chat.sendMessage('alice@example.com', 'Hello, world!', 'chat')
+      await xmppClient.chat.sendMessage('alice@example.com', 'Hello, world!')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find(
@@ -2159,6 +2155,44 @@ describe('XMPPClient Message', () => {
 
       expect(fallbackEl).toBeUndefined()
       expect(oobEl).toBeUndefined()
+    })
+
+    describe('addressing a room versus a person', () => {
+      // Callers no longer say which one they mean. The room store is the SDK's
+      // record of the rooms it is in, and XEP-0045 requires being in a room
+      // before sending to it, so a JID it knows is a room.
+
+      it('sends groupchat to a JID the room store knows', async () => {
+        await connectClient()
+
+        await xmppClient.chat.sendMessage('room@conference.example.com', 'hello room')
+
+        expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.type).toBe('groupchat')
+      })
+
+      it('sends chat to any other JID', async () => {
+        await connectClient()
+
+        await xmppClient.chat.sendMessage('alice@example.com', 'hello alice')
+
+        expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.type).toBe('chat')
+      })
+
+      it('resolves from the bare JID, so a full occupant JID still reads as its room', async () => {
+        await connectClient()
+
+        await xmppClient.chat.sendReaction('room@conference.example.com/bob', 'msg-1', ['\u{1F44D}'])
+
+        expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.type).toBe('groupchat')
+      })
+
+      it('treats a room it has not joined as a person, which is what the server would enforce', async () => {
+        await connectClient()
+
+        await xmppClient.chat.sendMessage('other@conference.example.com', 'hello')
+
+        expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.type).toBe('chat')
+      })
     })
 
     it('should work with groupchat type', async () => {
@@ -2171,7 +2205,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('room@conference.example.com', attachment.url, 'groupchat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('room@conference.example.com', attachment.url, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -2200,7 +2234,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('room@conference.example.com', userText, 'groupchat', undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('room@conference.example.com', userText, undefined, undefined, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
@@ -2223,7 +2257,7 @@ describe('XMPPClient Message', () => {
   describe('sendCorrection (XEP-0308)', () => {
     it('should throw error if not connected', async () => {
       await expect(
-        xmppClient.chat.sendCorrection('contact@example.com', 'msg-123', 'Fixed message', 'chat')
+        xmppClient.chat.sendCorrection('contact@example.com', 'msg-123', 'Fixed message')
       ).rejects.toThrow('Not connected')
     })
 
@@ -2238,7 +2272,7 @@ describe('XMPPClient Message', () => {
         from: 'me@example.com',
       })
 
-      await xmppClient.chat.sendCorrection('contact@example.com/resource', 'original-msg-123', 'Fixed message', 'chat')
+      await xmppClient.chat.sendCorrection('contact@example.com/resource', 'original-msg-123', 'Fixed message')
 
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
@@ -2284,7 +2318,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Updated caption', 'chat', attachment)
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Updated caption', attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2316,7 +2350,7 @@ describe('XMPPClient Message', () => {
         },
       }
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', '', 'chat', attachment)
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', '', attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2344,7 +2378,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', '', 'chat', attachment)
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', '', attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobFallbackEl = sentStanza.children.find(
@@ -2366,7 +2400,7 @@ describe('XMPPClient Message', () => {
       })
 
       // No attachment passed = attachment removed
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Message without attachment', 'chat')
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Message without attachment')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2398,7 +2432,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', userText, 'chat', attachment)
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', userText, attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
@@ -2445,7 +2479,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Updated', 'chat', attachment)
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Updated', attachment)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
@@ -2469,7 +2503,7 @@ describe('XMPPClient Message', () => {
         attachment: { url: 'https://upload.example.com/old.jpg' },
       })
 
-      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Now just text', 'chat')
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Now just text')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
@@ -2500,7 +2534,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendCorrection('room@conference.example.com', 'original-msg-123', 'Fixed', 'groupchat', attachment)
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'original-msg-123', 'Fixed', attachment)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -2534,7 +2568,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/me',
       })
 
-      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Fixed', 'groupchat')
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Fixed')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -2767,14 +2801,14 @@ describe('XMPPClient Message', () => {
   describe('sendRetraction (XEP-0424)', () => {
     it('should throw error if not connected', async () => {
       await expect(
-        xmppClient.chat.sendRetraction('contact@example.com', 'msg-123', 'chat')
+        xmppClient.chat.sendRetraction('contact@example.com', 'msg-123')
       ).rejects.toThrow('Not connected')
     })
 
     it('should send retraction stanza with correct structure for chat', async () => {
       await connectClient()
 
-      await xmppClient.chat.sendRetraction('contact@example.com/resource', 'original-msg-123', 'chat')
+      await xmppClient.chat.sendRetraction('contact@example.com/resource', 'original-msg-123')
 
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
@@ -2807,7 +2841,7 @@ describe('XMPPClient Message', () => {
     it('should send retraction stanza with full JID for groupchat', async () => {
       await connectClient()
 
-      await xmppClient.chat.sendRetraction('room@conference.example.com', 'original-msg-456', 'groupchat')
+      await xmppClient.chat.sendRetraction('room@conference.example.com', 'original-msg-456')
 
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
@@ -2838,7 +2872,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: true,
       })
 
-      await xmppClient.chat.sendRetraction('contact@example.com', 'original-msg-123', 'chat')
+      await xmppClient.chat.sendRetraction('contact@example.com', 'original-msg-123')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
         conversationId: 'contact@example.com',
@@ -2865,7 +2899,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: true,
       })
 
-      await xmppClient.chat.sendRetraction('room@conference.example.com', 'original-room-msg-456', 'groupchat')
+      await xmppClient.chat.sendRetraction('room@conference.example.com', 'original-room-msg-456')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
         roomJid: 'room@conference.example.com',
@@ -2883,7 +2917,7 @@ describe('XMPPClient Message', () => {
       // Mock that the message doesn't exist
       vi.mocked(mockStores.chat.getMessage).mockReturnValue(undefined)
 
-      await xmppClient.chat.sendRetraction('contact@example.com', 'non-existent-msg', 'chat')
+      await xmppClient.chat.sendRetraction('contact@example.com', 'non-existent-msg')
 
       // Should still send the stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -2897,7 +2931,7 @@ describe('XMPPClient Message', () => {
       // Mock that the message doesn't exist
       vi.mocked(mockStores.room.getMessage).mockReturnValue(undefined)
 
-      await xmppClient.chat.sendRetraction('room@conference.example.com', 'non-existent-msg', 'groupchat')
+      await xmppClient.chat.sendRetraction('room@conference.example.com', 'non-existent-msg')
 
       // Should still send the stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -2929,7 +2963,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: true,
       })
 
-      await xmppClient.chat.sendRetraction('room@conference.example.com', 'client-msg-id', 'groupchat')
+      await xmppClient.chat.sendRetraction('room@conference.example.com', 'client-msg-id')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const retractEl = sentStanza.children.find(
@@ -3252,7 +3286,7 @@ describe('XMPPClient Message', () => {
     it('should include origin-id element in outgoing sendMessage stanza', async () => {
       await connectClient()
 
-      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello', 'chat')
+      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const originIdEl = sentStanza.children.find(
@@ -3266,7 +3300,7 @@ describe('XMPPClient Message', () => {
     it('should set originId on local message object for outgoing sendMessage', async () => {
       await connectClient()
 
-      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello', 'chat')
+      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
         message: expect.objectContaining({
@@ -4264,7 +4298,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
 
     // Should not throw — opportunistic + unverified = silent plaintext fallback.
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).resolves.not.toThrow()
   })
 
@@ -4273,7 +4307,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     xmppClient.e2ee = makeE2EEManager({ isVerified: true }) as any
 
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).rejects.toThrow(E2EEEncryptionRequiredError)
   })
 
@@ -4282,7 +4316,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     xmppClient.e2ee = makeE2EEManager({ policy: 'strict', isVerified: false }) as any
 
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).rejects.toThrow(E2EEEncryptionRequiredError)
   })
 
@@ -4293,7 +4327,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     // A selected plugin failing to encrypt must never fall back to plaintext;
     // the original plugin error propagates so the UI can surface it.
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).rejects.toThrow('plugin boom')
   })
 
@@ -4304,7 +4338,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     // Core downgrade-protection fix: even opportunistic + unverified must NOT
     // silently send plaintext when a selected plugin fails to encrypt.
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).rejects.toThrow('plugin boom')
   })
 
@@ -4317,7 +4351,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     xmppClient.e2ee = mgr as any
 
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).resolves.not.toThrow()
   })
 
@@ -4329,7 +4363,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     xmppClient.e2ee = mgr as any
 
     await expect(
-      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+      xmppClient.chat.sendMessage('bob@example.com', 'hello'),
     ).resolves.not.toThrow()
   })
 })

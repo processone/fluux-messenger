@@ -225,7 +225,7 @@ export function useRoomActive() {
         attachment?: FileAttachment
       }
     ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, 'groupchat', options?.replyTo, options?.references, options?.attachment)
+      return await client.chat.sendMessage(roomJid, body, options?.replyTo, options?.references, options?.attachment)
     },
     [client]
   )
@@ -239,28 +239,28 @@ export function useRoomActive() {
 
   const sendReaction = useCallback(
     async (roomJid: string, messageId: string, emojis: string[]) => {
-      await client.chat.sendReaction(roomJid, messageId, emojis, 'groupchat')
+      await client.chat.sendReaction(roomJid, messageId, emojis)
     },
     [client]
   )
 
   const sendCorrection = useCallback(
     async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
+      await client.chat.sendCorrection(roomJid, messageId, newBody, attachment)
     },
     [client]
   )
 
   const retractMessage = useCallback(
     async (roomJid: string, messageId: string) => {
-      await client.chat.sendRetraction(roomJid, messageId, 'groupchat')
+      await client.chat.sendRetraction(roomJid, messageId)
     },
     [client]
   )
 
   const sendChatState = useCallback(
     async (roomJid: string, state: ChatStateNotification) => {
-      await client.chat.sendChatState(roomJid, state, 'groupchat')
+      await client.chat.sendChatState(roomJid, state)
     },
     [client]
   )
@@ -274,7 +274,7 @@ export function useRoomActive() {
 
   const sendEasterEgg = useCallback(
     async (roomJid: string, animation: string) => {
-      await client.chat.sendEasterEgg(roomJid, 'groupchat', animation)
+      await client.chat.sendEasterEgg(roomJid, animation)
     },
     [client]
   )

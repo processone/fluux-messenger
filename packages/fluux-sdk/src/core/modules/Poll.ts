@@ -202,7 +202,7 @@ export class Poll extends BaseModule {
       newReactions = enforceSingleVote(currentMyReactions, optionEmoji, pollEmojis)
     }
 
-    await this.chat.sendReaction(roomJid, messageId, newReactions, 'groupchat')
+    await this.chat.sendReaction(roomJid, messageId, newReactions)
 
     // Persist vote acknowledgement locally for banner dismissal across page reloads
     if (newReactions.length > 0) {

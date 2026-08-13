@@ -41,7 +41,7 @@ describe('useChatActions.sendMessage (options object)', () => {
     })
 
     expect(mockClient.chat.sendMessage).toHaveBeenCalledWith(
-      'bob@example.com', 'hi', 'chat', undefined, undefined, undefined
+      'bob@example.com', 'hi', undefined, undefined, undefined
     )
   })
 
@@ -55,7 +55,7 @@ describe('useChatActions.sendMessage (options object)', () => {
     })
 
     expect(mockClient.chat.sendMessage).toHaveBeenCalledWith(
-      'bob@example.com', 'see this', 'chat', replyTo, undefined, attachment
+      'bob@example.com', 'see this', replyTo, undefined, attachment
     )
   })
 })

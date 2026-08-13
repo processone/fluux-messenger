@@ -86,12 +86,12 @@ import type { StanzaClaim } from '../stanzaRouting'
  * await client.chat.sendMessage('user@example.com', 'Hello!')
  *
  * // Send a group chat message
- * await client.chat.sendMessage('room@conference.example.com', 'Hello room!', 'groupchat')
+ * await client.chat.sendMessage('room@conference.example.com', 'Hello room!')
  * ```
  *
  * @example Sending a reply
  * ```typescript
- * await client.chat.sendMessage('user@example.com', 'I agree!', 'chat', {
+ * await client.chat.sendMessage('user@example.com', 'I agree!', {
  *   id: 'original-message-id',
  *   to: 'user@example.com',
  *   fallback: { author: 'User', body: 'What do you think?' }
@@ -784,7 +784,6 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param body - Message text content
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    * @param replyTo - Optional reply information for threaded replies (XEP-0461)
    * @param references - Optional mention references (XEP-0372)
    * @param attachment - Optional file attachment (XEP-0066, XEP-0264)
@@ -797,7 +796,7 @@ export class Chat extends BaseModule {
    *
    * @example Message with attachment
    * ```typescript
-   * const msgId = await client.chat.sendMessage('user@example.com', 'Check this out', 'chat', undefined, undefined, {
+   * const msgId = await client.chat.sendMessage('user@example.com', 'Check this out', undefined, undefined, {
    *   url: 'https://example.com/file.pdf',
    *   name: 'document.pdf',
    *   size: 12345,
@@ -808,11 +807,11 @@ export class Chat extends BaseModule {
   async sendMessage(
     to: string,
     body: string,
-    type: 'chat' | 'groupchat' = 'chat',
     replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } },
     references?: MentionReference[],
     attachment?: FileAttachment
   ): Promise<string> {
+    const type = this.conversationKind(to)
     const id = generateUUID()
     const recipient = type === 'chat' ? getBareJid(to) : to
 
@@ -1143,7 +1142,6 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param state - The chat state to send
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    *
    * @example
    * ```typescript
@@ -1162,7 +1160,8 @@ export class Chat extends BaseModule {
    * - Common states: 'composing' (typing), 'paused' (stopped typing),
    *   'active' (focused), 'inactive' (not focused), 'gone' (left)
    */
-  async sendChatState(to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
+  async sendChatState(to: string, state: ChatStateNotification): Promise<void> {
+    const type = this.conversationKind(to)
     const recipient = type === 'chat' ? getBareJid(to) : to
 
     if (type === 'chat') {
@@ -1181,7 +1180,7 @@ export class Chat extends BaseModule {
 
   /**
    * Send a chat state (XEP-0085) privately to a single room occupant — the typing
-   * indicator for a whisper (XEP-0045 §7.5). Unlike sendChatState('groupchat'),
+   * indicator for a whisper (XEP-0045 §7.5). Unlike sendChatState on the room,
    * which broadcasts to the room, this addresses room/nick with the muc#user marker
    * and a no-store hint, so the room never sees that you are whispering.
    */
@@ -1204,7 +1203,6 @@ export class Chat extends BaseModule {
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param messageId - The ID of the message to react to
    * @param emojis - Array of emoji characters (empty array removes reactions)
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    *
    * @example
    * ```typescript
@@ -1215,10 +1213,11 @@ export class Chat extends BaseModule {
    * await client.chat.sendReaction('user@example.com', 'msg-123', [])
    *
    * // React in a MUC room
-   * await client.chat.sendReaction('room@conference.example.com', 'msg-456', ['🎉'], 'groupchat')
+   * await client.chat.sendReaction('room@conference.example.com', 'msg-456', ['🎉'])
    * ```
    */
-  async sendReaction(to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
+  async sendReaction(to: string, messageId: string, emojis: string[]): Promise<void> {
+    const type = this.conversationKind(to)
     // XEP-0045 §7.5: a reaction on a whisper is addressed privately to the one
     // occupant; whispers are <no-store> so the reference is the origin-id.
     const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, messageId) : null
@@ -1301,7 +1300,6 @@ export class Chat extends BaseModule {
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param originalMessageId - The ID of the message to correct
    * @param newBody - The corrected message text
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    * @param attachment - Optional replacement file attachment
    *
    * @example
@@ -1310,7 +1308,7 @@ export class Chat extends BaseModule {
    * await client.chat.sendCorrection('user@example.com', 'msg-123', 'Fixed the typo')
    *
    * // Correct a message in a MUC room
-   * await client.chat.sendCorrection('room@conference.example.com', 'msg-456', 'Updated content', 'groupchat')
+   * await client.chat.sendCorrection('room@conference.example.com', 'msg-456', 'Updated content')
    * ```
    *
    * @remarks
@@ -1318,7 +1316,8 @@ export class Chat extends BaseModule {
    * - The original body is preserved in `originalBody` for display
    * - Corrected messages are marked with `isEdited: true`
    */
-  async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
+  async sendCorrection(to: string, originalMessageId: string, newBody: string, attachment?: FileAttachment): Promise<void> {
+    const type = this.conversationKind(to)
     // XEP-0045 §7.5: if the target is a whisper, address the correction privately
     // to the one occupant (type=chat to room/nick + muc#user + no-store) instead of
     // broadcasting to the room. Throws WhisperCounterpartGoneError if they have left.
@@ -1443,7 +1442,6 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param originalMessageId - The ID of the message to retract
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    *
    * @example
    * ```typescript
@@ -1451,7 +1449,7 @@ export class Chat extends BaseModule {
    * await client.chat.sendRetraction('user@example.com', 'msg-123')
    *
    * // Retract a message in a MUC room
-   * await client.chat.sendRetraction('room@conference.example.com', 'msg-456', 'groupchat')
+   * await client.chat.sendRetraction('room@conference.example.com', 'msg-456')
    * ```
    *
    * @remarks
@@ -1459,7 +1457,8 @@ export class Chat extends BaseModule {
    * - Retracted messages are marked with `isRetracted: true` and `retractedAt`
    * - A fallback message is included for clients that don't support XEP-0424
    */
-  async sendRetraction(to: string, originalMessageId: string, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
+  async sendRetraction(to: string, originalMessageId: string): Promise<void> {
+    const type = this.conversationKind(to)
     // XEP-0045 §7.5: a retraction of a whisper is addressed privately to the one
     // occupant; whispers are <no-store> so the reference is the origin-id.
     const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
@@ -1526,23 +1525,23 @@ export class Chat extends BaseModule {
    * These are ephemeral and not stored in message history.
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    * @param animation - The animation identifier (e.g., 'confetti', 'fireworks')
    *
    * @example
    * ```typescript
    * // Send confetti animation
-   * await client.chat.sendEasterEgg('user@example.com', 'chat', 'confetti')
+   * await client.chat.sendEasterEgg('user@example.com', 'confetti')
    *
    * // Send fireworks in a room
-   * await client.chat.sendEasterEgg('room@conference.example.com', 'groupchat', 'fireworks')
+   * await client.chat.sendEasterEgg('room@conference.example.com', 'fireworks')
    * ```
    *
    * @remarks
    * - Messages are sent with no-store hint (not archived)
    * - The animation is triggered locally immediately
    */
-  async sendEasterEgg(to: string, type: 'chat' | 'groupchat', animation: string): Promise<void> {
+  async sendEasterEgg(to: string, animation: string): Promise<void> {
+    const type = this.conversationKind(to)
     const recipient = type === 'chat' ? getBareJid(to) : to
     const children: Element[] = [
       xml('no-store', { xmlns: NS_HINTS }),
@@ -1586,7 +1585,6 @@ export class Chat extends BaseModule {
    * @param preview.description - The page description
    * @param preview.image - URL to the preview image
    * @param preview.siteName - The site name
-   * @param type - Message type: 'chat' for 1:1, 'groupchat' for MUC
    *
    * @example
    * ```typescript
@@ -1603,7 +1601,8 @@ export class Chat extends BaseModule {
    * - Sent with no-store hint (not archived separately)
    * - Updates the local message with the preview immediately
    */
-  async sendLinkPreview(to: string, originalId: string, preview: any, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
+  async sendLinkPreview(to: string, originalId: string, preview: any): Promise<void> {
+    const type = this.conversationKind(to)
     const recipient = type === 'chat' ? getBareJid(to) : to
     const metaElements: Element[] = [
       xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:url', content: preview.url })
@@ -1814,6 +1813,18 @@ export class Chat extends BaseModule {
    * (occupant-id gone, or nick gone in rooms without occupant-id), it throws
    * WhisperCounterpartGoneError — it must NEVER fall back to the room-broadcast path.
    */
+  /**
+   * Whether a message addressed to `to` is a room message or a one-to-one one.
+   *
+   * This is a fact about the session, not a guess. XEP-0045 §7.4 requires
+   * presence in a room before sending to it, and `MUC.joinRoom` records the
+   * room before it sends that presence, so a JID the room store knows is a
+   * room we are addressing as one, and any other JID is a person.
+   */
+  private conversationKind(to: string): 'chat' | 'groupchat' {
+    return this.deps.stores?.room.getRoom(getBareJid(to)) ? 'groupchat' : 'chat'
+  }
+
   private resolveWhisperRouting(
     roomJid: string,
     messageId: string,

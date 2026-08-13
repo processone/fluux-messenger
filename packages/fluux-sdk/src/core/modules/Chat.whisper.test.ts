@@ -289,7 +289,7 @@ describe('MUC Whispers', () => {
       // Pass the message-id (w-msg-1) to the operation; assert that the protocol
       // reference is the origin-id (w-1). If the code used message-id, this would
       // be 'w-msg-1' and the test would fail — proving origin-id is used.
-      await xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'fixed secret', 'groupchat')
+      await xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'fixed secret')
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(`${ROOM}/bob`)
@@ -310,7 +310,7 @@ describe('MUC Whispers', () => {
         nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
       } as any)
 
-      await xmppClient.chat.sendCorrection(ROOM, 'm-1', 'hi fixed', 'groupchat')
+      await xmppClient.chat.sendCorrection(ROOM, 'm-1', 'hi fixed')
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(ROOM)
@@ -324,7 +324,7 @@ describe('MUC Whispers', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
 
       await expect(
-        xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'x', 'groupchat'),
+        xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'x'),
       ).rejects.toThrow(WhisperCounterpartGoneError)
       expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
     })
@@ -336,7 +336,7 @@ describe('MUC Whispers', () => {
       ])))
       vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
 
-      await xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'fixed', 'groupchat')
+      await xmppClient.chat.sendCorrection(ROOM, 'w-msg-1', 'fixed')
 
       expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.to).toBe(`${ROOM}/bobby`)
     })
@@ -347,7 +347,7 @@ describe('MUC Whispers', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
 
       // Pass the message-id (w-msg-1); the protocol reference must be the origin-id (w-1).
-      await xmppClient.chat.sendReaction(ROOM, 'w-msg-1', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction(ROOM, 'w-msg-1', ['👍'])
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(`${ROOM}/bob`)
@@ -367,7 +367,7 @@ describe('MUC Whispers', () => {
       vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
 
       // Pass the message-id (w-msg-1); the protocol reference must be the origin-id (w-1).
-      await xmppClient.chat.sendRetraction(ROOM, 'w-msg-1', 'groupchat')
+      await xmppClient.chat.sendRetraction(ROOM, 'w-msg-1')
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(`${ROOM}/bob`)
@@ -388,7 +388,7 @@ describe('MUC Whispers', () => {
         from: `${ROOM}/me`, nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
       } as any)
 
-      await xmppClient.chat.sendReaction(ROOM, 'm-1', ['👍'], 'groupchat')
+      await xmppClient.chat.sendReaction(ROOM, 'm-1', ['👍'])
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(ROOM)
@@ -406,7 +406,7 @@ describe('MUC Whispers', () => {
         from: `${ROOM}/me`, nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
       } as any)
 
-      await xmppClient.chat.sendRetraction(ROOM, 'm-1', 'groupchat')
+      await xmppClient.chat.sendRetraction(ROOM, 'm-1')
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(ROOM)

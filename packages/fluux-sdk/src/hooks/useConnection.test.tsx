@@ -458,7 +458,6 @@ describe('useConnection hook', () => {
           'alice@example.com',
           'msg-123',
           preview,
-          'chat'
         )
       })
 
@@ -466,7 +465,6 @@ describe('useConnection hook', () => {
         'alice@example.com',
         'msg-123',
         preview,
-        'chat'
       )
     })
 
@@ -485,7 +483,6 @@ describe('useConnection hook', () => {
           'room@conference.example.com',
           'msg-456',
           preview,
-          'groupchat'
         )
       })
 
@@ -493,7 +490,6 @@ describe('useConnection hook', () => {
         'room@conference.example.com',
         'msg-456',
         preview,
-        'groupchat'
       )
     })
   })

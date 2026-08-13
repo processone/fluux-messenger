@@ -23,11 +23,6 @@ import { loadConfig, routeSdkLogsToStderr } from './config'
 interface Question {
   /** Who to address the answer to: the room, or the person. */
   to: string
-  /**
-   * Room or one-to-one. The SDK needs this on every call below even though it
-   * already knows what `to` is, so the bot has to carry it around.
-   */
-  kind: 'chat' | 'groupchat'
   /** The message being answered, for the acknowledgement and the reply. */
   messageId: string
   text: string
@@ -51,30 +46,22 @@ async function answer(question: string): Promise<string> {
  */
 async function respond(client: XMPPClient, question: Question): Promise<void> {
   // Tell the asker it landed, before anything slow starts.
-  await client.chat.sendReaction(question.to, question.messageId, ['👀'], question.kind)
-  await client.chat.sendChatState(question.to, 'composing', question.kind)
+  await client.chat.sendReaction(question.to, question.messageId, ['👀'])
+  await client.chat.sendChatState(question.to, 'composing')
 
-  const placeholderId = await client.chat.sendMessage(
-    question.to,
-    'Working on it…',
-    question.kind,
-    { id: question.messageId },
-  )
+  const placeholderId = await client.chat.sendMessage(question.to, 'Working on it…', {
+    id: question.messageId,
+  })
 
   try {
     const text = await answer(question.text)
-    await client.chat.sendCorrection(question.to, placeholderId, text, question.kind)
+    await client.chat.sendCorrection(question.to, placeholderId, text)
   } catch (error) {
     // The placeholder is already on everyone's screen, so a failure has to
     // replace it. Leaving it saying "Working on it…" forever is worse than
     // saying the work failed.
     const reason = error instanceof Error ? error.message : String(error)
-    await client.chat.sendCorrection(
-      question.to,
-      placeholderId,
-      `Sorry, that failed: ${reason}`,
-      question.kind,
-    )
+    await client.chat.sendCorrection(question.to, placeholderId, `Sorry, that failed: ${reason}`)
   }
 }
 
@@ -91,7 +78,6 @@ function questionFromChat(message: Message): Question | null {
 
   return {
     to: getBareJid(message.from),
-    kind: 'chat',
     messageId: message.id,
     text: message.body,
   }
@@ -112,7 +98,6 @@ function questionFromRoom(message: RoomMessage, nickname: string): Question | nu
 
   return {
     to: message.roomJid,
-    kind: 'groupchat',
     messageId: message.id,
     text: message.body,
   }

@@ -213,18 +213,18 @@ describe('mcpTools', () => {
       __resetSendRateLimitForTests()
     })
 
-    it('sends to a known chat conversation as type chat', async () => {
+    it('forwards a known chat conversation to the SDK, which decides the wire type', async () => {
       chatStore.setState({ conversations: new Map([['alice@example.com', { id: 'alice@example.com' } as Conversation]]) })
       const sendMessage = vi.fn().mockResolvedValue('msg-123')
       const client = { chat: { sendMessage } } as unknown as XMPPClient
 
       const result = await sendMessageTool(client, 'alice@example.com', 'hi')
 
-      expect(sendMessage).toHaveBeenCalledWith('alice@example.com', 'hi', 'chat')
+      expect(sendMessage).toHaveBeenCalledWith('alice@example.com', 'hi')
       expect(result).toEqual({ messageId: 'msg-123' })
     })
 
-    it('sends to a joined room as type groupchat', async () => {
+    it('forwards a joined room the same way, without classifying it', async () => {
       roomStore.setState({
         rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com', joined: true } as Room]]),
       })
@@ -233,7 +233,7 @@ describe('mcpTools', () => {
 
       await sendMessageTool(client, 'room@conference.example.com', 'hi room')
 
-      expect(sendMessage).toHaveBeenCalledWith('room@conference.example.com', 'hi room', 'groupchat')
+      expect(sendMessage).toHaveBeenCalledWith('room@conference.example.com', 'hi room')
     })
 
     it('rejects sending to a known room the user is not joined to', async () => {

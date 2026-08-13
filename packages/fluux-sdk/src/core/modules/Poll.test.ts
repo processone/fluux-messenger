@@ -237,7 +237,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '2️⃣', [], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', ['2️⃣'], 'groupchat',
+        'room@conf.example.com', 'msg-1', ['2️⃣'],
       )
     })
 
@@ -257,7 +257,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '2️⃣', ['1️⃣'], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', ['2️⃣'], 'groupchat',
+        'room@conf.example.com', 'msg-1', ['2️⃣'],
       )
     })
 
@@ -277,7 +277,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '2️⃣', ['👍', '1️⃣'], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', ['👍', '2️⃣'], 'groupchat',
+        'room@conf.example.com', 'msg-1', ['👍', '2️⃣'],
       )
     })
 
@@ -297,7 +297,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '1️⃣', ['1️⃣'], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', [], 'groupchat',
+        'room@conf.example.com', 'msg-1', [],
       )
     })
 
@@ -318,7 +318,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '2️⃣', ['1️⃣'], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', ['1️⃣', '2️⃣'], 'groupchat',
+        'room@conf.example.com', 'msg-1', ['1️⃣', '2️⃣'],
       )
     })
 
@@ -338,7 +338,7 @@ describe('Poll module', () => {
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '1️⃣', ['1️⃣', '2️⃣'], poll)
 
       expect(sendReactionSpy).toHaveBeenCalledWith(
-        'room@conf.example.com', 'msg-1', ['2️⃣'], 'groupchat',
+        'room@conf.example.com', 'msg-1', ['2️⃣'],
       )
     })
   })
