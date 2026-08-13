@@ -185,10 +185,36 @@ export function isAhead(candidate: ReadPointer, current: ReadPointer | undefined
 /**
  * Forward-only advance. Returns `current` **by reference** when the candidate is
  * not ahead, so Zustand selectors can skip the re-render.
+ *
+ * This is the JOIN over read positions, so it must be order-independent: folding
+ * a set of positions has to reach the same pointer whichever order they arrive
+ * in, or two devices reading the same conversation disagree. {@link isAhead}
+ * alone does not give that, because it is a partial order — see the tie rule in
+ * the body. That is why this is not simply `isAhead ? candidate : current`.
  */
 export function advance(current: ReadPointer | undefined, candidate: ReadPointer): ReadPointer {
   if (!current) return candidate
-  return isAhead(candidate, current) ? candidate : current
+  if (isAhead(candidate, current)) return candidate
+
+  // Neither is ahead of the other. `mayAdvanceTo` is a strict PARTIAL order: a
+  // floor and an exact position inside one millisecond are mutually not-ahead,
+  // because a floor cannot prove where it sits within its own millisecond. Just
+  // keeping `current` would make the result depend on ARRIVAL ORDER, and a fold
+  // over the same set of positions could then land on either one — two devices,
+  // or one device across two launches, disagreeing about the unread count for
+  // the same conversation.
+  //
+  // Resolve toward the floor. It is the weaker claim, so adopting it over-counts
+  // the shared millisecond, which one read clears; preferring the exact position
+  // would claim a read position the floor never proved, and the pointer is
+  // forward-only, so that loss is permanent. Ordering by timestamp, then floor
+  // before exact, then `compareExact` is total, which is what makes the fold a
+  // real maximum and therefore order-independent.
+  const advancedIntoFloor =
+    candidate.order.role === 'floor' &&
+    current.order.role === 'exact' &&
+    candidate.order.timestamp === current.order.timestamp
+  return advancedIntoFloor ? candidate : current
 }
 
 /**
