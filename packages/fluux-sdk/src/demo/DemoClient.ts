@@ -24,6 +24,7 @@
  */
 
 import { XMPPClient } from '../core/XMPPClient'
+import { fromCodePointOffset } from '../utils/xep0426'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
@@ -646,11 +647,13 @@ export class DemoClient extends XMPPClient {
     const fallbackEl = stanza.getChildren('fallback')?.find(
       (f: any) => f.attrs?.for?.includes('reply')
     )
+    // Fallback ranges are code-point offsets (XEP-0426), matching what the real
+    // send path emits; body.slice() indexes UTF-16 units.
     let processedBody = body
     if (fallbackEl) {
       const bodyRange = fallbackEl.getChild('body')
       if (bodyRange?.attrs?.end) {
-        processedBody = body.slice(Number(bodyRange.attrs.end))
+        processedBody = body.slice(fromCodePointOffset(body, Number(bodyRange.attrs.end)))
       }
     }
     // Also strip OOB fallback (URL appended at end)
@@ -660,7 +663,8 @@ export class DemoClient extends XMPPClient {
     if (oobFallbackEl) {
       const bodyRange = oobFallbackEl.getChild('body')
       if (bodyRange?.attrs?.start) {
-        processedBody = processedBody.slice(0, Number(bodyRange.attrs.start)).trimEnd()
+        const start = fromCodePointOffset(processedBody, Number(bodyRange.attrs.start))
+        processedBody = processedBody.slice(0, start).trimEnd()
       }
     }
 

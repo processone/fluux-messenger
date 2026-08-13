@@ -25,6 +25,21 @@ export interface XmppUri {
 }
 
 /**
+ * Percent-decode one URI component, yielding null on a malformed escape
+ * (`%`, `%A`, `%ZZ`) instead of throwing URIError.
+ *
+ * `xmpp:` URIs reach this parser from peer-controlled message bodies, so a bad
+ * escape is untrusted input to reject, not an exceptional condition.
+ */
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Parse an XMPP URI string into its components.
  * Returns null if the URI is invalid.
  *
@@ -70,7 +85,9 @@ export function parseXmppUri(uri: string): XmppUri | null {
   }
 
   // Decode the JID
-  jid = decodeURIComponent(jid)
+  const decodedJid = safeDecode(jid)
+  if (decodedJid === null) return null
+  jid = decodedJid
 
   // Validate JID has at least user@domain format
   if (!jid.includes('@')) {
@@ -79,7 +96,10 @@ export function parseXmppUri(uri: string): XmppUri | null {
 
   // Parse query string
   let action: string | undefined
-  const params: Record<string, string> = {}
+  // Collected as entries, not by assignment: `params['__proto__'] = v` mutates
+  // the prototype instead of creating an own property, silently dropping a
+  // parameter a peer is free to name. Object.fromEntries defines it properly.
+  const entries: Array<[string, string]> = []
 
   if (queryString) {
     // RFC 5122 uses semicolons as parameter separators
@@ -87,31 +107,29 @@ export function parseXmppUri(uri: string): XmppUri | null {
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
-      if (i === 0) {
+      if (i === 0 && !part.includes('=')) {
         // First part is the action (e.g., "message", "join")
-        if (part.includes('=')) {
-          // No action, just parameters
-          const [key, value] = part.split('=', 2)
-          params[decodeURIComponent(key)] = decodeURIComponent(value || '')
-        } else {
-          action = decodeURIComponent(part)
-        }
-      } else {
-        // Subsequent parts are parameters
-        const eqIndex = part.indexOf('=')
-        if (eqIndex !== -1) {
-          const key = decodeURIComponent(part.slice(0, eqIndex))
-          const value = decodeURIComponent(part.slice(eqIndex + 1))
-          params[key] = value
-        } else {
-          // Boolean parameter (presence means true)
-          params[decodeURIComponent(part)] = ''
-        }
+        const decodedAction = safeDecode(part)
+        if (decodedAction === null) return null
+        action = decodedAction
+        continue
       }
+
+      // Everything else is a parameter. A first part containing '=' means the
+      // URI carries parameters with no action.
+      const eqIndex = part.indexOf('=')
+      const rawKey = eqIndex === -1 ? part : part.slice(0, eqIndex)
+      // Boolean parameter (presence means true) when there is no '='
+      const rawValue = eqIndex === -1 ? '' : part.slice(eqIndex + 1)
+
+      const key = safeDecode(rawKey)
+      const value = safeDecode(rawValue)
+      if (key === null || value === null) return null
+      entries.push([key, value])
     }
   }
 
-  return { jid, action, params }
+  return { jid, action, params: Object.fromEntries(entries) }
 }
 
 /**

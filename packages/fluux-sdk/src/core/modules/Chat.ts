@@ -4,6 +4,7 @@ import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
+import { toCodePointOffset, fromCodePointOffset } from '../../utils/xep0426'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -727,8 +728,8 @@ export class Chat extends BaseModule {
           'fallback',
           { xmlns: NS_FALLBACK, for: NS_OOB },
           xml('body', {
-            start: String(oobFallbackStart - fallbackEnd),
-            end: String(oobFallbackEnd - fallbackEnd),
+            start: String(toCodePointOffset(strippedBody, oobFallbackStart - fallbackEnd)),
+            end: String(toCodePointOffset(strippedBody, oobFallbackEnd - fallbackEnd)),
           }),
         )
       }
@@ -857,7 +858,7 @@ export class Chat extends BaseModule {
       if (replyTo.fallback) {
         children.push(
           xml('fallback', { xmlns: NS_FALLBACK, for: NS_REPLY },
-            xml('body', { start: '0', end: String(fallbackEnd) })
+            xml('body', { start: '0', end: String(toCodePointOffset(fullBody, fallbackEnd)) })
           )
         )
       }
@@ -866,10 +867,13 @@ export class Chat extends BaseModule {
     if (references && references.length > 0) {
       let hasMentionAll = false
       for (const ref of references) {
+        // Callers detect mentions in the text the user typed, but a reply
+        // prepends a quote block, so the wire body is `fallbackText + body`.
+        // Shift into that frame before converting to code points.
         children.push(xml('reference', {
           xmlns: NS_REFERENCE,
-          begin: ref.begin.toString(),
-          end: ref.end.toString(),
+          begin: String(toCodePointOffset(fullBody, fallbackEnd + ref.begin)),
+          end: String(toCodePointOffset(fullBody, fallbackEnd + ref.end)),
           type: ref.type,
           uri: ref.uri,
         }))
@@ -897,7 +901,10 @@ export class Chat extends BaseModule {
       children.push(xml('x', { xmlns: NS_OOB }, ...oobChildren))
       // Mark only the URL portion as fallback (preserves user text)
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
-        xml('body', { start: String(oobFallbackStart), end: String(oobFallbackEnd) })
+        xml('body', {
+          start: String(toCodePointOffset(fullBody, oobFallbackStart)),
+          end: String(toCodePointOffset(fullBody, oobFallbackEnd)),
+        })
       ))
 
       // XEP-0446: File Metadata Element (for original dimensions)
@@ -1101,7 +1108,10 @@ export class Chat extends BaseModule {
       }
       children.push(xml('x', { xmlns: NS_OOB }, ...oobChildren))
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
-        xml('body', { start: String(oobFallbackStart), end: String(oobFallbackEnd) })
+        xml('body', {
+          start: String(toCodePointOffset(fullBody, oobFallbackStart)),
+          end: String(toCodePointOffset(fullBody, oobFallbackEnd)),
+        })
       ))
     }
 
@@ -2446,12 +2456,22 @@ export class Chat extends BaseModule {
 
   private parseMentions(stanza: Element): MentionReference[] {
     const refs = stanza.getChildren('reference', NS_REFERENCE)
-    return refs.map(ref => ({
-      begin: parseInt(ref.attrs.begin, 10),
-      end: parseInt(ref.attrs.end, 10),
-      type: ref.attrs.type as 'mention',
-      uri: ref.attrs.uri,
-    })).filter(ref => ref.type === 'mention')
+    // XEP-0372 offsets index the body in code points (XEP-0426). Convert against
+    // the raw <body/>, not the fallback-stripped one: the sender counted the body
+    // as it appears on the wire, and consumers highlight against that same text.
+    const wireBody = stanza.getChildText('body') ?? ''
+    return refs.flatMap(ref => {
+      if (ref.attrs.type !== 'mention') return []
+      const begin = parseInt(ref.attrs.begin, 10)
+      const end = parseInt(ref.attrs.end, 10)
+      if (isNaN(begin) || isNaN(end)) return []
+      return [{
+        begin: fromCodePointOffset(wireBody, begin),
+        end: fromCodePointOffset(wireBody, end),
+        type: 'mention' as const,
+        uri: ref.attrs.uri,
+      }]
+    })
   }
 
   private checkForMentionAll(body: string, hasMentionAllElement: boolean): boolean {

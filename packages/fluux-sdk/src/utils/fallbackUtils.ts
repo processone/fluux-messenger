@@ -16,6 +16,7 @@
 
 import type { Element } from '@xmpp/client'
 import { NS_FALLBACK, NS_FALLBACK_LEGACY, NS_REPLY } from '../core/namespaces'
+import { codePointLength, fromCodePointOffset } from './xep0426'
 
 export interface FallbackProcessingResult {
   processedBody: string
@@ -146,6 +147,8 @@ export function processFallback(
   // Collect applicable ranges and check for entire-body fallbacks
   const ranges: Array<{ start: number; end: number; forNs: string }> = []
   let fallbackBody: string | undefined
+  // Wire offsets are code points (XEP-0426); `body` is indexed in UTF-16 units.
+  const bodyCodePoints = codePointLength(body)
 
   for (const { element, namespace } of fallbacks) {
     const fallbackFor = element.attrs.for
@@ -163,12 +166,21 @@ export function processFallback(
       return { processedBody: '' }
     }
 
-    const start = parseInt(startAttr, 10)
-    const end = parseInt(endAttr, 10)
+    const startCodePoints = parseInt(startAttr, 10)
+    const endCodePoints = parseInt(endAttr, 10)
 
-    if (isNaN(start) || isNaN(end) || start < 0 || end <= start || end > body.length) {
+    if (
+      isNaN(startCodePoints) ||
+      isNaN(endCodePoints) ||
+      startCodePoints < 0 ||
+      endCodePoints <= startCodePoints ||
+      endCodePoints > bodyCodePoints
+    ) {
       continue
     }
+
+    const start = fromCodePointOffset(body, startCodePoints)
+    const end = fromCodePointOffset(body, endCodePoints)
 
     // For replies, extract and save the quoted text (shown in the reply chip
     // when the referenced message isn't in the local store).

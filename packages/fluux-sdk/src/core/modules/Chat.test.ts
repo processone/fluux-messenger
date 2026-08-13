@@ -960,6 +960,218 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  describe('wire offsets are code points (XEP-0426)', () => {
+    // An emoji in the quoted text makes the UTF-16 length exceed the code-point
+    // count, so these assertions only bite on supplementary-plane input.
+    const QUOTED = 'Nice 😀 work'
+    const FALLBACK = `> alice wrote:\n> ${QUOTED}\n`
+
+    it('should emit a reply fallback end counted in code points', async () => {
+      await connectClient()
+
+      await xmppClient.chat.sendMessage(
+        'alice@example.com',
+        'Thanks!',
+        'chat',
+        { id: 'orig-1', to: 'alice@example.com', fallback: { author: 'alice', body: QUOTED } },
+      )
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const fallbackEl = sentStanza.children.find((c: any) => c.name === 'fallback')
+      const range = fallbackEl.children.find((c: any) => c.name === 'body')
+
+      expect(range.attrs.end).toBe(String(Array.from(FALLBACK).length))
+      // The UTF-16 length is what the bug emitted; assert we no longer do.
+      expect(range.attrs.end).not.toBe(String(FALLBACK.length))
+    })
+
+    it('should emit mention reference offsets counted in code points', async () => {
+      await connectClient()
+
+      const body = '😀 hey @bob'
+      const begin = body.indexOf('@bob')
+
+      await xmppClient.chat.sendMessage(
+        'room@conference.example.com',
+        body,
+        'groupchat',
+        undefined,
+        [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
+      )
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const refEl = sentStanza.children.find((c: any) => c.name === 'reference')
+
+      // One supplementary character precedes the mention, so every code-point
+      // offset trails its UTF-16 index by exactly one.
+      expect(refEl.attrs.begin).toBe(String(begin - 1))
+      expect(refEl.attrs.end).toBe(String(begin - 1 + '@bob'.length))
+    })
+
+    it('should shift mention offsets past a prepended reply quote', async () => {
+      await connectClient()
+
+      const typed = 'yes @bob'
+      const begin = typed.indexOf('@bob')
+
+      await xmppClient.chat.sendMessage(
+        'room@conference.example.com',
+        typed,
+        'groupchat',
+        { id: 'orig-2', to: 'room@conference.example.com/Emma', fallback: { author: 'Emma', body: QUOTED } },
+        [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
+      )
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const refEl = sentStanza.children.find((c: any) => c.name === 'reference')
+      const wireBody = sentStanza.children.find((c: any) => c.name === 'body').children[0]
+
+      // The reference must select the mention in the body actually sent, which
+      // begins with the quote block.
+      const from = Array.from(wireBody)
+      expect(from.slice(Number(refEl.attrs.begin), Number(refEl.attrs.end)).join('')).toBe('@bob')
+    })
+
+    it('should read inbound mention reference offsets as code points', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'room',
+        nickname: 'TestUser',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+        occupants: new Map(),
+        messages: [],
+      })
+
+      const body = '😀 hey @TestUser'
+      const utf16Begin = body.indexOf('@TestUser')
+      const codePointBegin = Array.from(body.slice(0, utf16Begin)).length
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'msg-mention-cp',
+      }, [
+        { name: 'body', text: body },
+        {
+          name: 'reference',
+          attrs: {
+            xmlns: 'urn:xmpp:reference:0',
+            type: 'mention',
+            begin: String(codePointBegin),
+            end: String(codePointBegin + '@TestUser'.length),
+            uri: 'xmpp:room@conference.example.com/TestUser',
+          },
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      // Consumers highlight by slicing the JS string, so offsets must come back
+      // as UTF-16 indices — one greater than the code-point offsets on the wire.
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        message: expect.objectContaining({
+          id: 'msg-mention-cp',
+          mentions: [expect.objectContaining({
+            begin: utf16Begin,
+            end: utf16Begin + '@TestUser'.length,
+            type: 'mention',
+          })],
+        })
+      }))
+      expect(body.slice(utf16Begin, utf16Begin + '@TestUser'.length)).toBe('@TestUser')
+    })
+
+    it('should drop a mention reference with malformed offsets', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'room',
+        nickname: 'TestUser',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+        occupants: new Map(),
+        messages: [],
+      })
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'msg-mention-bad',
+      }, [
+        { name: 'body', text: 'hey @TestUser' },
+        {
+          name: 'reference',
+          attrs: {
+            xmlns: 'urn:xmpp:reference:0',
+            type: 'mention',
+            begin: 'not-a-number',
+            end: '',
+            uri: 'xmpp:room@conference.example.com/TestUser',
+          },
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      const call = emitSDKSpy.mock.calls.find(
+        ([event, payload]: any[]) => event === 'room:message' && payload?.message?.id === 'msg-mention-bad',
+      )
+      expect(call).toBeDefined()
+      expect((call as any)[1].message.mentions).toBeUndefined()
+    })
+
+    it('should read inbound reply fallback offsets as code points', async () => {
+      await connectClient()
+
+      const body = `${FALLBACK}Thanks!`
+      const messageStanza = createMockElement('message', {
+        from: 'alice@example.com/res',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-cp-1',
+      }, [
+        { name: 'body', text: body },
+        { name: 'reply', attrs: { xmlns: 'urn:xmpp:reply:0', id: 'orig-1', to: 'alice@example.com' } },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            {
+              name: 'body',
+              attrs: {
+                xmlns: 'urn:xmpp:fallback:0',
+                start: '0',
+                end: String(Array.from(FALLBACK).length),
+              },
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: 'msg-cp-1',
+          body: 'Thanks!',
+          replyTo: expect.objectContaining({ fallbackBody: QUOTED }),
+        })
+      })
+    })
+  })
+
   describe('message replies with fallback (XEP-0461 + XEP-0428)', () => {
     it('should parse reply with fallback and preserve fallback body', async () => {
       await connectClient()

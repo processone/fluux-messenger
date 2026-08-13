@@ -671,6 +671,10 @@ export { generateUUID, generateStableMessageId } from './utils/uuid'
 export { processFallback, getFallbackElement } from './utils/fallbackUtils'
 export type { FallbackProcessingResult, FallbackProcessingOptions } from './utils/fallbackUtils'
 
+// XEP-0426 character counting: wire offsets are code points, JS indices are
+// UTF-16 units. Consumers building their own offset-bearing stanzas need these.
+export { codePointLength, toCodePointOffset, fromCodePointOffset } from './utils/xep0426'
+
 // RFC 6120: XMPP Stanza Error parsing
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
