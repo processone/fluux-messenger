@@ -14,6 +14,7 @@ import {
 import type { PresenceShow, Contact } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import { logInfo } from '../logger'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Roster and presence management module.
@@ -42,10 +43,24 @@ import { logInfo } from '../logger'
  *
  * @category Modules
  */
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const ROSTER_CLAIMS: readonly StanzaClaim[] = [
+    { kind: 'iq', child: { name: 'query', ns: 'jabber:iq:roster' } },
+    { kind: 'presence' },
+  ]
+
 export class Roster extends BaseModule {
   private capsHash: string | null = null
   /** Track JIDs for which we received 'unsubscribed' but haven't seen the roster push yet */
   private _pendingSubscriptionDenials = new Set<string>()
+
+  /**
+   * All presence that is not MUC's. Deliberately broad: MUC's narrower claims
+   * (muc#user, and error presence for an in-flight join) outrank this one, so
+   * the split no longer depends on which module was listed first.
+   */
+  readonly claims = ROSTER_CLAIMS
 
   handle(stanza: Element): boolean | void {
     if (stanza.is('iq')) {

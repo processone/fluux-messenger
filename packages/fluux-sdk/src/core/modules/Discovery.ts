@@ -66,10 +66,6 @@ export class Discovery extends BaseModule {
    */
   private pepSupportProbe: Promise<boolean> | null = null
 
-  handle(_stanza: Element): boolean | void {
-    // Discovery doesn't handle incoming stanzas (responses handled via IQ caller)
-    return false
-  }
 
   /**
    * Whether the logged-in account supports PEP (XEP-0163).

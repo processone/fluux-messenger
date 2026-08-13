@@ -80,9 +80,10 @@ export interface ModuleDependencies {
  * by XMPPClient during store binding and share common dependencies.
  *
  * @remarks
- * Subclasses must implement the `handle()` method to process incoming stanzas.
- * Return `true` from `handle()` to indicate the stanza was processed and should
- * not be passed to other modules.
+ * Handling incoming stanzas is opt-in: a module that routes declares `claims`
+ * and implements `handle()` (see `StanzaClaimant` in `core/stanzaRouting`), or
+ * declares `observes` and implements `observe()` when it only watches. Modules
+ * that are purely request/response — Discovery, Profile — declare neither.
  *
  * @example Creating a custom module
  * ```typescript
@@ -106,11 +107,4 @@ export abstract class BaseModule {
   constructor(deps: ModuleDependencies) {
     this.deps = deps
   }
-
-  /**
-   * Handle incoming stanza.
-   * @param stanza The incoming XMPP stanza
-   * @returns true if the stanza was handled and should not be processed further
-   */
-  abstract handle(stanza: Element): boolean | void
 }

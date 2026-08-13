@@ -2,6 +2,7 @@ import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { NS_BLOCKING } from '../namespaces'
 import { generateUUID } from '../../utils/uuid'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Blocking module (XEP-0191).
@@ -31,11 +32,21 @@ import { generateUUID } from '../../utils/uuid'
  *
  * @category Modules
  */
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const BLOCKING_CLAIMS: readonly StanzaClaim[] = [
+    { kind: 'iq', type: 'set', child: { name: 'block', ns: NS_BLOCKING } },
+    { kind: 'iq', type: 'set', child: { name: 'unblock', ns: NS_BLOCKING } },
+  ]
+
 export class Blocking extends BaseModule {
   /**
    * Handle incoming IQ stanzas related to blocking.
    * Processes blocklist push notifications from the server.
    */
+  /** XEP-0191 blocklist pushes. Disjoint from Roster's iq claim. */
+  readonly claims = BLOCKING_CLAIMS
+
   handle(stanza: Element): boolean | void {
     if (!stanza.is('iq')) return false
 

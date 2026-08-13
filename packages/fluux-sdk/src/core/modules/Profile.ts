@@ -80,13 +80,6 @@ export class Profile extends BaseModule {
   // Profile module focuses on outgoing operations (publish avatar, set nickname)
   // and data fetching (fetchAvatarData, fetchVCardAvatar, fetchRoomAvatar).
 
-  /**
-   * Handle incoming stanzas.
-   * Profile doesn't handle stanzas directly - PubSub module handles PubSub events.
-   */
-  handle(_stanza: Element): boolean {
-    return false
-  }
 
   /**
    * Fetch avatar data from PEP (XEP-0084) or VCard (XEP-0054).
@@ -612,7 +605,7 @@ export class Profile extends BaseModule {
 
     // Fetch current vCard to preserve PHOTO and other unmanaged fields
     const bareJid = getBareJid(this.deps.getCurrentJid()!)
-    let existingVCardEl: import('@xmpp/client').Element | null = null
+    let existingVCardEl: Element | null = null
     try {
       const getIq = xml('iq', { type: 'get', to: bareJid, id: `vcard_get_${generateUUID()}` },
         xml('vCard', { xmlns: NS_VCARD_TEMP })

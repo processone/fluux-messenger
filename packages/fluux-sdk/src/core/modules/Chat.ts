@@ -67,6 +67,7 @@ import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import type { MAM } from './MAM'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Chat module for 1:1 and group messaging.
@@ -149,6 +150,10 @@ interface E2EEOutboundOptions {
   storeHint?: 'store' | 'no-store' | 'none'
 }
 
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const CHAT_CLAIMS: readonly StanzaClaim[] = [{ kind: 'message' }]
+
 export class Chat extends BaseModule {
   private mamModule: MAM
 
@@ -156,6 +161,12 @@ export class Chat extends BaseModule {
     super(deps)
     this.mamModule = mamModule
   }
+
+  /**
+   * Every message. Narrower message claims (PubSub's event payloads) are
+   * offered the stanza first, so this is the fallthrough rather than a race.
+   */
+  readonly claims = CHAT_CLAIMS
 
   handle(stanza: Element): boolean | void {
     if (stanza.is('message')) {

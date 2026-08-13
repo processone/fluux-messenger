@@ -46,6 +46,7 @@ import { RoomJoinError } from '../errors'
 import { toHatCommandError } from '../../utils/hatCommandError'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Multi-User Chat (MUC) module for group chat functionality.
@@ -139,6 +140,13 @@ interface NickChangeDeferred {
   timeoutId: ReturnType<typeof setTimeout>
 }
 
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const MUC_CLAIMS: readonly StanzaClaim[] = [
+    { kind: 'presence', child: { name: 'x', ns: NS_MUC_USER } },
+    { kind: 'presence', type: 'error' },
+  ]
+
 export class MUC extends BaseModule {
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
@@ -164,6 +172,17 @@ export class MUC extends BaseModule {
    * followed by a restart — clears it.
    */
   private membersForbiddenRooms = new Set<string>()
+
+  /**
+   * Room presence, plus error presence generally.
+   *
+   * The second claim is deliberately wider than what MUC consumes: a join or
+   * nick-change error echoes `<x muc/>` (or nothing) rather than `muc#user`, so
+   * it is indistinguishable from a contact presence error by shape alone.
+   * `handle()` consumes it only when a request is in flight for that room and
+   * otherwise declines, and Roster's broader presence claim picks it up.
+   */
+  readonly claims = MUC_CLAIMS
 
   handle(stanza: Element): boolean | void {
     if (stanza.is('presence')) {

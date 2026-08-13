@@ -29,6 +29,7 @@ import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
 import { parseBookmarkItem } from '../bookmarkItem'
 import { buildPublishOptions, type PublishOptions } from './PepNode'
+import type { StanzaClaim } from '../stanzaRouting'
 
 export type { PublishOptions }
 
@@ -45,7 +46,16 @@ const NS_PUBSUB_EVENT = `${NS_PUBSUB}#event`
  *
  * @category Modules
  */
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const PUBSUB_CLAIMS: readonly StanzaClaim[] = [
+    { kind: 'message', child: { name: 'event', ns: NS_PUBSUB_EVENT } },
+  ]
+
 export class PubSub extends BaseModule {
+  /** PEP event payloads ride on ordinary messages; Chat claims the rest. */
+  readonly claims = PUBSUB_CLAIMS
+
   /** `(jid \u0000 node)` → set of user-registered callbacks. */
   private readonly subscriptions = new Map<string, Set<(item: PEPItem) => void>>()
 

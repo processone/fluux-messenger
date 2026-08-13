@@ -30,6 +30,7 @@ import {
   isPollExpired,
 } from '../poll'
 import { roomStore } from '../../stores/roomStore'
+import type { StanzaClaim } from '../stanzaRouting'
 
 /**
  * Lightweight metadata for polls created by the local user.
@@ -56,6 +57,12 @@ interface LocalPollEntry {
  *
  * @category Modules
  */
+/** Stanza shapes this module may handle. Exported so the routing test
+ * checks the real claims rather than a copy of them. */
+export const POLL_CLAIMS: readonly StanzaClaim[] = [
+    { kind: 'iq', type: 'get', child: { name: 'poll-results', ns: NS_POLL } },
+  ]
+
 export class Poll extends BaseModule {
   private chat: Chat
   /** Polls created by the local user, keyed by message ID */
@@ -71,6 +78,8 @@ export class Poll extends BaseModule {
   /**
    * Handle incoming stanzas — intercepts poll-results IQ queries.
    */
+  readonly claims = POLL_CLAIMS
+
   handle(stanza: Element): boolean {
     if (!stanza.is('iq')) return false
 
