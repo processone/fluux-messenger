@@ -9,10 +9,17 @@
  *   "A delayed result from the room just left must never reactivate it."
  *   "a generation-guarded deactivation clears the current conversation, active request, and MDS
  *    eligibility while retaining the watermark."
+ *   "The request's unavailable policy preserves source-specific behavior: ... explicit targets
+ *    wait ..."
  *
  * Example tests pick the interleavings someone thought of. The bugs this model has produced in
  * practice (a latch reopened by a late callback, an entry window surviving a conversation switch)
  * are interleaving bugs, so the sequence is what has to be generated.
+ *
+ * Phases are derived from reachability facts rather than injected, so a generated sequence walks
+ * the lifecycle the client can actually produce. The two describe blocks split along that seam:
+ * the first drives command sequences through the model, the second pins how a single request and
+ * a single set of facts resolve to a phase.
  */
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
@@ -24,10 +31,12 @@ import {
   initialPositioningModel,
   messageFraction,
   pixelOffset,
+  resolveReachability,
   settleUserPosition,
   type PositionRequest,
   type PositioningModel,
   type PositioningPhase,
+  type ReachabilityFacts,
 } from './scrollPositionModel'
 
 // A two-conversation pool maximises interleaving between visits; more ids only dilute the search.
@@ -49,6 +58,76 @@ type GenMode = 'ancient' | 'stale' | 'active' | 'next' | 'jump'
  */
 type ConvMode = 'current' | 'other'
 
+/**
+ * Reachability facts are paired with the request that asked for them. An executor resolving a
+ * live-edge request is handed `global-live-edge` facts; one resolving an anchor or message target is
+ * handed a per-row index or an absence. The client cannot produce the crossed pairings, and feeding
+ * them in would populate the search with impossible states — a message target reported as
+ * `global-live-edge` resolves to `unavailable`, which would defeat the "explicit targets wait" rule
+ * for a reason that cannot happen.
+ */
+const EDGE_SHAPES = [
+  'empty-window',
+  'edge-resident-mounted',
+  'edge-resident-unmounted',
+  'edge-recenter-available',
+  'edge-recentering',
+  'edge-unavailable',
+] as const
+
+const TARGET_SHAPES = [
+  'empty-window',
+  'absent-load-available',
+  'absent-loading',
+  'absent-exhausted',
+  'available-mounted',
+  'available-unmounted',
+  'available-abandoned',
+] as const
+
+type FactsShape = (typeof EDGE_SHAPES)[number] | (typeof TARGET_SHAPES)[number]
+
+const ALL_SHAPES: readonly FactsShape[] = [
+  ...new Set<FactsShape>([...EDGE_SHAPES, ...TARGET_SHAPES]),
+]
+
+function factsFor(desired: PositionRequest['desired'], shape: FactsShape): ReachabilityFacts {
+  const wantsEdge = desired.kind === 'live-edge'
+  const family: readonly FactsShape[] = wantsEdge ? EDGE_SHAPES : TARGET_SHAPES
+  // A shape drawn for the other family is remapped by position rather than dropped, so every draw
+  // still lands somewhere useful instead of collapsing onto one fact.
+  const picked = family.includes(shape)
+    ? shape
+    : family[Math.max(0, ALL_SHAPES.indexOf(shape)) % family.length]
+
+  switch (picked) {
+    case 'empty-window':
+      return { kind: 'empty-window' }
+    case 'absent-load-available':
+      return { kind: 'target-absent', loadAround: 'available' }
+    case 'absent-loading':
+      return { kind: 'target-absent', loadAround: 'loading' }
+    case 'absent-exhausted':
+      return { kind: 'target-absent', loadAround: 'exhausted' }
+    case 'available-mounted':
+      return { kind: 'available', index: 12, mounted: true, placement: 'viable' }
+    case 'available-unmounted':
+      return { kind: 'available', index: 12, mounted: false, placement: 'viable' }
+    case 'available-abandoned':
+      return { kind: 'available', index: 12, mounted: true, placement: 'use-unavailable-policy' }
+    case 'edge-resident-mounted':
+      return { kind: 'global-live-edge', state: { kind: 'resident-tail', index: 42, mounted: true } }
+    case 'edge-resident-unmounted':
+      return { kind: 'global-live-edge', state: { kind: 'resident-tail', index: 42, mounted: false } }
+    case 'edge-recenter-available':
+      return { kind: 'global-live-edge', state: { kind: 'recenter-available' } }
+    case 'edge-recentering':
+      return { kind: 'global-live-edge', state: { kind: 'recentering' } }
+    case 'edge-unavailable':
+      return { kind: 'global-live-edge', state: { kind: 'unavailable' } }
+  }
+}
+
 function resolveConversation(model: PositioningModel, mode: ConvMode): string {
   const current = model.currentConversationId ?? CONVERSATIONS[0]
   if (mode === 'current') return current
@@ -62,7 +141,14 @@ type Cmd =
   | { t: 'lateMds'; conv: ConvMode; gen: GenMode }
   | { t: 'layoutPreservation'; conv: ConvMode; gen: GenMode }
   | { t: 'historyPreservation'; conv: ConvMode; gen: GenMode }
-  | { t: 'advance'; conv: ConvMode; gen: GenMode; phase: PositioningPhase }
+  // Phases are derived, never invented. The controller only ever sets a phase from
+  // resolveReachability, from position-applied, from the directional-history window shift, or from
+  // settling an explicit target. Injecting arbitrary phases would generate sequences the client
+  // cannot produce (settled -> mounting) while missing the ones it does.
+  | { t: 'resolve'; conv: ConvMode; gen: GenMode; facts: FactsShape }
+  | { t: 'markApplied'; conv: ConvMode; gen: GenMode }
+  | { t: 'windowShift'; conv: ConvMode; gen: GenMode }
+  | { t: 'settleExplicit'; conv: ConvMode; gen: GenMode }
   | { t: 'cancelInput'; conv: ConvMode; gen: GenMode }
   | { t: 'settle'; conv: ConvMode; atLiveEdge: boolean; rearm: boolean; gen: GenMode }
   | { t: 'deactivate'; conv: ConvMode; gen: GenMode }
@@ -219,8 +305,20 @@ function apply(model: PositioningModel, cmd: Cmd): PositioningModel {
         },
         onUnavailable: { kind: 'distance-from-bottom', distancePx: pixelOffset(200) },
       })
-    case 'advance':
-      return advancePhaseIfCurrent(model, conv, generation, cmd.phase)
+    case 'resolve': {
+      // An executor resolves reachability for the request it owns, then tries to apply the result.
+      // A stale generation is rejected by advancePhaseIfCurrent, exactly as in the controller.
+      const active = model.active
+      if (!active) return model
+      const phase = resolveReachability(active.request, factsFor(active.request.desired, cmd.facts))
+      return advancePhaseIfCurrent(model, conv, generation, phase)
+    }
+    case 'markApplied':
+      return advancePhaseIfCurrent(model, conv, generation, { kind: 'position-applied' })
+    case 'windowShift':
+      return advancePhaseIfCurrent(model, conv, generation, { kind: 'pending', reason: 'window-shift' })
+    case 'settleExplicit':
+      return advancePhaseIfCurrent(model, conv, generation, { kind: 'settled' })
     case 'cancelInput':
       return cancelReconciliationForUserInput(model, conv, generation)
     case 'settle':
@@ -268,20 +366,7 @@ const advanceGen = fc.oneof(
   { weight: 1, arbitrary: fc.constant<GenMode>('next') },
 )
 
-const phase = fc.oneof(
-  fc.constant<PositioningPhase>({ kind: 'resolving' }),
-  fc.constant<PositioningPhase>({ kind: 'reconciling' }),
-  fc.constant<PositioningPhase>({ kind: 'position-applied' }),
-  fc.constant<PositioningPhase>({ kind: 'settled' }),
-  fc.constant<PositioningPhase>({ kind: 'recentering-live-edge' }),
-  fc.constant<PositioningPhase>({ kind: 'paused-user-input' }),
-  fc.record({ kind: fc.constant('mounting' as const), index: fc.nat({ max: 50 }) }),
-  fc.record({ kind: fc.constant('loading-around' as const), messageId: fc.constant('m-1') }),
-  fc.record({
-    kind: fc.constant('pending' as const),
-    reason: fc.constantFrom('empty-window', 'around-load', 'live-edge-recenter', 'target-not-indexed', 'window-shift'),
-  }) as fc.Arbitrary<PositioningPhase>,
-)
+const factsShape = fc.constantFrom<FactsShape>(...ALL_SHAPES)
 
 const entryCmd: fc.Arbitrary<Cmd> = fc.record({
   t: fc.constant('entry' as const),
@@ -291,26 +376,40 @@ const entryCmd: fc.Arbitrary<Cmd> = fc.record({
 })
 
 const nonEntryCmd: fc.Arbitrary<Cmd> = fc.oneof(
-  fc.record({
-    t: fc.constant('userNav' as const),
-    conv,
-    reason: fc.constantFrom<UserNavReason>('message-target', 'unread-marker', 'live-edge', 'resident-top'),
-    gen,
-  }),
-  fc.record({ t: fc.constant('liveUpdate' as const), conv, gen }),
-  fc.record({ t: fc.constant('lateMds' as const), conv, gen }),
-  fc.record({ t: fc.constant('layoutPreservation' as const), conv, gen }),
-  fc.record({ t: fc.constant('historyPreservation' as const), conv, gen }),
-  fc.record({ t: fc.constant('advance' as const), conv, gen: advanceGen, phase }),
-  fc.record({ t: fc.constant('cancelInput' as const), conv, gen: advanceGen }),
-  fc.record({
-    t: fc.constant('settle' as const),
-    conv,
-    atLiveEdge: fc.boolean(),
-    rearm: fc.boolean(),
-    gen: advanceGen,
-  }),
-  fc.record({ t: fc.constant('deactivate' as const), conv, gen: advanceGen }),
+  // Reachability resolution is weighted up: it is what an executor does most, and the only command
+  // that walks a request through the pending / loading / mounting part of the lifecycle.
+  {
+    weight: 5,
+    arbitrary: fc.record({ t: fc.constant('resolve' as const), conv, gen: advanceGen, facts: factsShape }),
+  },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      t: fc.constant('userNav' as const),
+      conv,
+      reason: fc.constantFrom<UserNavReason>('message-target', 'unread-marker', 'live-edge', 'resident-top'),
+      gen,
+    }),
+  },
+  { weight: 2, arbitrary: fc.record({ t: fc.constant('markApplied' as const), conv, gen: advanceGen }) },
+  { weight: 2, arbitrary: fc.record({ t: fc.constant('cancelInput' as const), conv, gen: advanceGen }) },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      t: fc.constant('settle' as const),
+      conv,
+      atLiveEdge: fc.boolean(),
+      rearm: fc.boolean(),
+      gen: advanceGen,
+    }),
+  },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('liveUpdate' as const), conv, gen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('lateMds' as const), conv, gen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('layoutPreservation' as const), conv, gen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('historyPreservation' as const), conv, gen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('windowShift' as const), conv, gen: advanceGen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('settleExplicit' as const), conv, gen: advanceGen }) },
+  { weight: 1, arbitrary: fc.record({ t: fc.constant('deactivate' as const), conv, gen: advanceGen }) },
 )
 
 const anyCmd: fc.Arbitrary<Cmd> = fc.oneof({ weight: 1, arbitrary: entryCmd }, { weight: 3, arbitrary: nonEntryCmd })
@@ -430,17 +529,23 @@ describe('PositioningModel command sequences (properties)', () => {
     // exact no-op when it arrives late, not merely harmless. A settle carries the generation of the
     // pause it was taken for, so a settle from an earlier pause cannot cancel its successor.
     fc.assert(
-      fc.property(script, conv, phase, (commands, staleConv, stalePhase) => {
+      fc.property(script, conv, factsShape, (commands, staleConv, shape) => {
         const model = run(commands, () => {})
         if (!model.active) return
         const staleGen = model.watermark - 1
         if (staleGen < 1) return
 
-        expect(advancePhaseIfCurrent(model, staleConv, staleGen, stalePhase)).toEqual(model)
-        expect(cancelReconciliationForUserInput(model, staleConv, staleGen)).toEqual(model)
-        expect(deactivateConversation(model, staleConv, staleGen)).toEqual(model)
-        expect(settleUserPosition(model, staleConv, staleGen, true)).toEqual(model)
-        expect(settleUserPosition(model, staleConv, staleGen, false)).toEqual(model)
+        // The phase a late executor would have computed for the request it still believes is its own.
+        const stalePhase: PositioningPhase = resolveReachability(
+          model.active.request,
+          factsFor(model.active.request.desired, shape),
+        )
+        const staleConvId = resolveConversation(model, staleConv)
+        expect(advancePhaseIfCurrent(model, staleConvId, staleGen, stalePhase)).toEqual(model)
+        expect(cancelReconciliationForUserInput(model, staleConvId, staleGen)).toEqual(model)
+        expect(deactivateConversation(model, staleConvId, staleGen)).toEqual(model)
+        expect(settleUserPosition(model, staleConvId, staleGen, true)).toEqual(model)
+        expect(settleUserPosition(model, staleConvId, staleGen, false)).toEqual(model)
       }),
       { numRuns: 2000 },
     )
@@ -476,6 +581,88 @@ describe('PositioningModel command sequences (properties)', () => {
         expect(after).toEqual(model)
       }),
       { numRuns: 2000 },
+    )
+  })
+})
+
+describe('reachability resolution (properties)', () => {
+  // Every request kind the model can hold, paired with facts its own executor could produce.
+  const anyRequest: fc.Arbitrary<PositionRequest> = fc.oneof(
+    fc.constantFrom<EntryReason>('saved-position', 'unread-marker', 'live-edge', 'synced-live-edge').map((r) =>
+      entryRequest(CONVERSATIONS[0], 1, r),
+    ),
+    fc.constantFrom<UserNavReason>('message-target', 'unread-marker', 'live-edge', 'resident-top').map((r) =>
+      userNavRequest(CONVERSATIONS[0], 1, r),
+    ),
+  )
+
+  const resolved = fc
+    .tuple(anyRequest, factsShape)
+    .map(([request, shape]) => ({
+      request,
+      facts: factsFor(request.desired, shape),
+      phase: resolveReachability(request, factsFor(request.desired, shape)),
+    }))
+
+  it('makes an explicit target wait rather than declaring it unavailable', () => {
+    // "explicit targets wait" — a request carrying the wait policy has somewhere to come back to, so
+    // giving up on it would strand a reader who asked to go to a specific message.
+    fc.assert(
+      fc.property(resolved, ({ request, phase }) => {
+        if (request.onUnavailable?.kind !== 'wait') return
+        expect(phase.kind).not.toBe('unavailable')
+      }),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('gives an unavailable phase the policy its request declared', () => {
+    // "The request's unavailable policy preserves source-specific behavior." A resolution may not
+    // substitute a different fallback for the one the source asked for.
+    fc.assert(
+      fc.property(resolved, ({ request, phase }) => {
+        if (phase.kind !== 'unavailable' || request.onUnavailable === undefined) return
+        expect(phase.policy).toEqual(request.onUnavailable)
+      }),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('loads around the message the request actually asked for', () => {
+    fc.assert(
+      fc.property(resolved, ({ request, phase }) => {
+        if (phase.kind !== 'loading-around') return
+        const desired = request.desired
+        expect(desired.kind === 'anchor' || desired.kind === 'message').toBe(true)
+        if (desired.kind === 'anchor' || desired.kind === 'message') {
+          expect(phase.messageId).toBe(desired.messageId)
+        }
+      }),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('never sends a live-edge request to load around a message', () => {
+    // Following the tail has no message to centre on; a loading-around phase here would be a
+    // request waiting on a fetch that can never be issued.
+    fc.assert(
+      fc.property(resolved, ({ request, phase }) => {
+        if (request.desired.kind !== 'live-edge') return
+        expect(phase.kind).not.toBe('loading-around')
+      }),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('treats an empty window as pending for every request kind', () => {
+    fc.assert(
+      fc.property(anyRequest, (request) => {
+        expect(resolveReachability(request, { kind: 'empty-window' })).toEqual({
+          kind: 'pending',
+          reason: 'empty-window',
+        })
+      }),
+      { numRuns: 500 },
     )
   })
 })
