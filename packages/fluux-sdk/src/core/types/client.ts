@@ -33,9 +33,12 @@ export type {
 // ============================================================================
 
 /**
- * Events emitted by XMPPClient.
+ * The client's public event surface, and a compatibility contract.
  *
- * Use `client.on(event, handler)` to subscribe to these events.
+ * `@fluux/sdk/core` is consumed directly by bots and CLIs, for which these
+ * events are the API: removing or changing one breaks them. Anything the SDK
+ * emits purely to talk to itself belongs in {@link InternalClientEvents}
+ * instead, so the two are not mistaken for each other.
  *
  * @example
  * ```typescript
@@ -65,6 +68,23 @@ export interface XMPPClientEvents {
   reconnecting: (attempt: number, delayMs: number) => void
   /** Error occurred */
   error: (error: Error) => void
+}
+
+/**
+ * Signals a module raises for the client itself, not for consumers.
+ *
+ * Every one of these exists so a module can report something without reaching
+ * into `Profile` directly; `XMPPClient` is the only subscriber, and each
+ * handler turns the signal into an avatar or roster fetch. They are deliberately
+ * absent from {@link XMPPClientEvents}: `client.on` does not accept them, so
+ * they carry no promise to anyone outside the SDK and can change freely.
+ *
+ * This is not an unfinished migration to the {@link SDKEvents} bus. That bus
+ * carries state for the store bindings, and nothing binds these to a store.
+ *
+ * @internal
+ */
+export interface InternalClientEvents {
   /** Avatar metadata update received (XEP-0084) - hash is null when avatar removed */
   avatarMetadataUpdate: (jid: string, hash: string | null) => void
   /** Contact presence has empty XEP-0153 photo - may use XEP-0084 instead */
@@ -78,6 +98,14 @@ export interface XMPPClientEvents {
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
 }
+
+/**
+ * Everything the client's legacy bus can carry. Modules emit against this;
+ * only {@link XMPPClientEvents} is reachable through the public `on`.
+ *
+ * @internal
+ */
+export type ClientEvents = XMPPClientEvents & InternalClientEvents
 
 /**
  * Options for integrating an external presence state machine.

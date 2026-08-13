@@ -6,6 +6,8 @@ import type {
   ConnectOptions,
   StoreBindings,
   XMPPClientEvents,
+  InternalClientEvents,
+  ClientEvents,
   SDKEvents,
   SDKEventHandler,
   StorageAdapter,
@@ -356,7 +358,7 @@ export class XMPPClient {
   public connectionActor!: ConnectionActor
 
   private stores: StoreBindings | null = null
-  private eventHandlers: Map<keyof XMPPClientEvents, Set<XMPPClientEvents[keyof XMPPClientEvents]>> = new Map()
+  private eventHandlers: Map<keyof ClientEvents, Set<ClientEvents[keyof ClientEvents]>> = new Map()
 
   /**
    * New SDK event handlers with object payloads.
@@ -654,7 +656,7 @@ export class XMPPClient {
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
       sendIQ: (iq: Element, timeoutMs?: number) => this.sendIQ(iq, timeoutMs),
       getCurrentJid: () => this.currentJid,
-      emit: <K extends keyof XMPPClientEvents>(event: K, ...args: Parameters<XMPPClientEvents[K]>) => this.emit(event, ...args),
+      emit: <K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
@@ -740,7 +742,7 @@ export class XMPPClient {
     // Only set up event listeners once
     if (!this.modulesInitialized) {
       // Listen for MUC join events to fetch room avatars and preview
-      this.on('mucJoined', (roomJid) => {
+      this.onInternal('mucJoined', (roomJid) => {
         const room = this.stores?.room.getRoom(roomJid)
         if (room && !room.avatar && !room.avatarFromPresence) {
           this.profile.fetchRoomAvatar(roomJid).catch(() => {})
@@ -756,13 +758,13 @@ export class XMPPClient {
       })
 
       // Listen for room avatar updates from presence
-      this.on('roomAvatarUpdate', (roomJid, photoHash) => {
+      this.onInternal('roomAvatarUpdate', (roomJid, photoHash) => {
         this.profile.fetchRoomAvatar(roomJid, photoHash).catch(() => {})
       })
 
       // Listen for MUC occupant avatar updates (XEP-0398)
       // Emitted by MUC module when an occupant's presence contains vcard-temp:x:update
-      this.on('occupantAvatarUpdate', (roomJid, nick, hash, realJid, occupantId) => {
+      this.onInternal('occupantAvatarUpdate', (roomJid, nick, hash, realJid, occupantId) => {
         // Only fetch if the avatar hash changed to avoid re-downloading on every presence
         const room = this.stores?.room.getRoom(roomJid)
         const occupant = room?.occupants.get(nick)
@@ -781,7 +783,7 @@ export class XMPPClient {
 
       // Listen for avatar metadata updates (XEP-0084)
       // Emitted by PubSub module for real events or Roster for vcard-temp:x:update
-      this.on('avatarMetadataUpdate', (jid, hash) => {
+      this.onInternal('avatarMetadataUpdate', (jid, hash) => {
         if (hash) {
           // Skip if contact already has this avatar hash with a loaded avatar
           const contact = this.stores?.roster.getContact(jid)
@@ -797,7 +799,7 @@ export class XMPPClient {
 
       // Listen for contacts missing XEP-0153 avatar (empty <photo/> in presence)
       // These contacts may use XEP-0084 (PEP) avatars instead (like Conversations)
-      this.on('contactMissingXep0153Avatar', (jid) => {
+      this.onInternal('contactMissingXep0153Avatar', (jid) => {
         // Only fetch if:
         // 1. Contact doesn't already have an avatar
         // 2. We haven't already checked this contact this session (prevents overfetching)
@@ -809,7 +811,7 @@ export class XMPPClient {
       })
 
       // Restore cached avatar hashes for offline contacts when roster loads
-      this.on('rosterLoaded', () => {
+      this.onInternal('rosterLoaded', () => {
         this.profile.restoreAllContactAvatarHashes().catch(() => {})
       })
 
@@ -855,6 +857,26 @@ export class XMPPClient {
     event: K,
     handler: XMPPClientEvents[K]
   ): () => void {
+    // `ClientEvents` is the intersection, so for a public K the two handler
+    // types are the same; TypeScript cannot see that through the generic.
+    return this.subscribeToBus(event, handler as ClientEvents[K])
+  }
+
+  /**
+   * Subscribe to a signal the client raises for itself. Separate from {@link on}
+   * so the internal events stay off the public surface.
+   */
+  private onInternal<K extends keyof InternalClientEvents>(
+    event: K,
+    handler: InternalClientEvents[K]
+  ): () => void {
+    return this.subscribeToBus(event, handler as ClientEvents[K])
+  }
+
+  private subscribeToBus<K extends keyof ClientEvents>(
+    event: K,
+    handler: ClientEvents[K]
+  ): () => void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set())
     }
@@ -862,14 +884,14 @@ export class XMPPClient {
     return () => this.eventHandlers.get(event)?.delete(handler)
   }
 
-  private emit<K extends keyof XMPPClientEvents>(
+  private emit<K extends keyof ClientEvents>(
     event: K,
-    ...args: Parameters<XMPPClientEvents[K]>
+    ...args: Parameters<ClientEvents[K]>
   ): void {
     this.eventHandlers.get(event)?.forEach((handler) => {
       // Type assertion needed because the Map stores handlers as a union type
       // but we know at runtime that handlers for this event accept these args
-      ;(handler as (...args: Parameters<XMPPClientEvents[K]>) => void)(...args)
+      ;(handler as (...args: Parameters<ClientEvents[K]>) => void)(...args)
     })
   }
 

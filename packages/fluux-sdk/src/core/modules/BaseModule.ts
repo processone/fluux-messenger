@@ -1,5 +1,5 @@
 import type { Client, Element } from '@xmpp/client'
-import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
+import type { StoreBindings, ClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 import type { E2EEManager } from '../e2ee'
 import type { PresenceReader } from '../presenceReader'
 
@@ -22,9 +22,9 @@ export interface ModuleDependencies {
   sendStanza: (stanza: Element) => Promise<void>
   sendIQ: (iq: Element, timeoutMs?: number) => Promise<Element>
   getCurrentJid: () => string | null
-  emit: <K extends keyof XMPPClientEvents>(
+  emit: <K extends keyof ClientEvents>(
     event: K,
-    ...args: Parameters<XMPPClientEvents[K]>
+    ...args: Parameters<ClientEvents[K]>
   ) => void
   /**
    * Emit SDK events for store bindings.

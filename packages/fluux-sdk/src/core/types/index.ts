@@ -148,6 +148,8 @@ export type {
 export type {
   StoreBindings,
   XMPPClientEvents,
+  InternalClientEvents,
+  ClientEvents,
   PresenceOptions,
   PrivacyOptions,
 } from './client'

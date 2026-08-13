@@ -678,7 +678,13 @@ describe('XMPPClient Own Avatar', () => {
 
       // Track emitted events
       const emittedEvents: Array<{ jid: string; hash: string | null }> = []
-      xmppClient.on('avatarMetadataUpdate', (jid, hash) => {
+      // `avatarMetadataUpdate` is an internal signal, deliberately absent from
+      // the public `on` surface. Reaching the bus directly is the point here:
+      // this asserts what the module emits, not what a consumer can subscribe to.
+      const onInternal = xmppClient as unknown as {
+        on: (event: 'avatarMetadataUpdate', handler: (jid: string, hash: string | null) => void) => () => void
+      }
+      onInternal.on('avatarMetadataUpdate', (jid, hash) => {
         emittedEvents.push({ jid, hash })
       })
 
