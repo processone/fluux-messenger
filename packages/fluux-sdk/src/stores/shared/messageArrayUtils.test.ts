@@ -733,31 +733,23 @@ describe('messageArrayUtils', () => {
       expect(merged[3].id).toBe('msg-5')
     })
 
-    it('should place newer messages at wrong position (known limitation for backward queries)', () => {
-      // This test documents a known limitation of prependOlderMessages:
-      // If "older" messages are actually NEWER than existing ones, they end up
-      // at the wrong position (prepended before existing instead of appended after).
-      //
-      // This is why catch-up queries must use forward direction (with 'start' filter)
-      // when cached messages exist — mergeAndProcessMessages does a full sort.
+    it('sorts a batch that turns out to be newer than the resident messages', () => {
+      // A backward page is meant to be older, but nothing enforces it: a message
+      // sent from another client while offline can arrive through this path and
+      // be newer. The merge sorts, so it lands in chronological position rather
+      // than ahead of messages that precede it.
       const existing = [
         createMessage('msg-1', 'Old cached', new Date('2024-01-15T10:00:00Z')),
         createMessage('msg-2', 'Old cached', new Date('2024-01-15T11:00:00Z')),
       ]
 
-      // "Older" messages that are actually newer (e.g., sent from another client while offline)
       const newer = [
         createMessage('msg-3', 'Sent from Gajim', new Date('2024-01-15T12:00:00Z')),
       ]
 
       const { merged } = prependOlderMessages(existing, newer, (m) => [m.id], 'chat')
 
-      // BUG: msg-3 (newer) is placed BEFORE msg-1 and msg-2 (older)
-      // This is why the catch-up cursor fix is essential — it prevents this scenario
-      // by always using forward queries (mergeAndProcessMessages) when cached msgs exist
-      expect(merged[0].id).toBe('msg-3') // Wrong: should be at end
-      expect(merged[1].id).toBe('msg-1')
-      expect(merged[2].id).toBe('msg-2')
+      expect(merged.map((m) => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3'])
     })
 
     describe('prependOlderMessages sliding window', () => {

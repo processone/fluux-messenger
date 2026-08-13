@@ -310,12 +310,17 @@ export function prependOlderMessages<T extends TimestampedMessage>(
     return { merged: existing, newMessages: [] }
   }
 
-  // Sort only the new messages among themselves
-  // (they all go at the front since they're older than existing)
-  const sortedNew = sortMessagesByTimestamp(newMessages, kind)
-
-  // Prepend to existing - no full re-sort needed since new messages are all older
-  let merged = [...sortedNew, ...existing]
+  // A backward page IS older than the resident window, but only to the
+  // millisecond. A same-millisecond group can straddle the page boundary — MAM
+  // pages by archive id, not by time — and the cache breaks those ties by `id`
+  // for chat and `(from, id)` for room. Prepending without a full sort places
+  // such a sibling ahead of a resident one the cache orders first, so the
+  // resident array stops agreeing with the cache walk. Two things then go wrong:
+  // the viewport observer advances the read pointer by RESIDENT INDEX, so it can
+  // move past a message the cache still counts as unread (a silent under-count,
+  // the unrecoverable direction), and `trimMessagesKeepOldest` below evicts by
+  // position, so it drops the wrong row at the window bound.
+  let merged = sortMessagesByTimestamp([...newMessages, ...existing], kind)
 
   // Load-older slides the window: keep the OLDEST maxCount so the just-loaded older
   // batch survives and the newest tail is evicted (was trimMessages = keep-newest,
