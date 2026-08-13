@@ -80,14 +80,14 @@ export interface StoredCredentials {
  * for web apps that uses browser sessionStorage.
  *
  * @example Web app (uses default)
- * ```tsx
+ * ```tsx fragment
  * <XMPPProvider>
  *   <App />
  * </XMPPProvider>
  * ```
  *
  * @example Desktop app with OS keychain
- * ```tsx
+ * ```tsx fragment
  * import { tauriStorageAdapter } from './utils/tauriStorageAdapter'
  *
  * <XMPPProvider storageAdapter={tauriStorageAdapter}>

@@ -16,17 +16,17 @@
  * const status = connectionStore.getState().status
  *
  * // Update state
- * connectionStore.getState().setStatus('connected')
+ * connectionStore.getState().setStatus('online')
  * ```
  *
  * ### React Applications
  * ```tsx
- * import { useConnectionStore, useChatStore } from '@fluux/sdk'
- * // Or: import { useConnectionStore, useChatStore } from '@fluux/sdk/react'
+ * import { useConnectionStore, useChatStore } from '@fluux/sdk/react'
  *
  * function Component() {
  *   const status = useConnectionStore((state) => state.status)
  *   const conversations = useChatStore((state) => state.conversations)
+ *   return <p>{status}: {conversations.size} conversations</p>
  * }
  * ```
  *

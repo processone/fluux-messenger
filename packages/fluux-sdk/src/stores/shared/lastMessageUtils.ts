@@ -174,14 +174,22 @@ export function findLastPreviewableMessage<T extends PreviewableMessage>(
  *
  * @example
  * ```typescript
+ * import { shouldUpdateLastMessage } from './lastMessageUtils'
+ *
+ * declare const meta: { lastMessage?: Message }
+ * declare const room: Room
+ * declare const newMessage: Message
+ * declare const newRoomMessage: RoomMessage
+ *
  * // In chatStore.updateLastMessagePreview
- * if (!shouldUpdateLastMessage(meta.lastMessage, newMessage)) {
- *   return state // Keep existing, new message is older
+ * function updateChatPreview(state: unknown) {
+ *   // Keep the existing preview when the new message is older
+ *   if (!shouldUpdateLastMessage(meta.lastMessage, newMessage)) return state
  * }
  *
  * // In roomStore.updateLastMessagePreview
- * if (!shouldUpdateLastMessage(room.lastMessage, newMessage)) {
- *   return state
+ * function updateRoomPreview(state: unknown) {
+ *   if (!shouldUpdateLastMessage(room.lastMessage, newRoomMessage)) return state
  * }
  * ```
  */

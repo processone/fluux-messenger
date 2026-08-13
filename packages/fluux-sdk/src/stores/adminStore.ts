@@ -48,23 +48,20 @@ const initialEntityListState = <T>(): EntityListState<T> => ({
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useAdminStore } from '@fluux/sdk'
+ * import { adminStore } from '@fluux/sdk'
  *
  * // Check if current user is admin
- * const isAdmin = useAdminStore.getState().isAdmin
+ * const isAdmin = adminStore.getState().isAdmin
  *
  * // Get available commands
- * const commands = useAdminStore.getState().commands
+ * const commands = adminStore.getState().commands
  *
  * // Subscribe to command execution state
- * useAdminStore.subscribe(
- *   (state) => state.currentSession,
- *   (session) => {
- *     if (session?.status === 'completed') {
- *       console.log('Command completed:', session.notes)
- *     }
+ * adminStore.subscribe((state) => {
+ *   if (state.currentSession?.status === 'completed') {
+ *     console.log('Command completed:', state.currentSession.note)
  *   }
- * )
+ * })
  * ```
  *
  * @category Stores

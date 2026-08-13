@@ -32,15 +32,20 @@ export interface TimestampedMessage {
  *
  * @example
  * ```typescript
+ * import { deduplicateMessages } from './messageArrayUtils'
+ *
+ * declare const existingMessages: Message[]
+ * declare const mamMessages: Message[]
+ *
  * // Chat messages: dedupe by stanzaId or from+id combo
- * const newMsgs = deduplicateMessages(
+ * const chatMsgs = deduplicateMessages(
  *   existingMessages,
  *   mamMessages,
  *   (m) => m.stanzaId ? `stanzaId:${m.stanzaId}` : `from:${m.from}:id:${m.id}`
  * )
  *
  * // Room messages: dedupe by stanzaId or id
- * const newMsgs = deduplicateMessages(
+ * const roomMsgs = deduplicateMessages(
  *   existingMessages,
  *   mamMessages,
  *   (m) => m.stanzaId || m.id
@@ -71,6 +76,10 @@ export function deduplicateMessages<T>(
  *
  * @example
  * ```typescript
+ * import { buildMessageKeySet } from './messageArrayUtils'
+ *
+ * declare const existingMessages: Message[]
+ *
  * // Chat messages need to check both stanzaId and from+id
  * const existingIds = buildMessageKeySet(existingMessages, (m) => {
  *   const keys: string[] = []

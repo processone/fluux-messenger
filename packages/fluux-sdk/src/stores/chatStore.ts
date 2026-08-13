@@ -246,15 +246,15 @@ function chatTimelineConfig(): timeline.TimelineConfig<Message> {
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useChatStore } from '@fluux/sdk'
+ * import { chatStore } from '@fluux/sdk'
  *
  * // Get all conversations (combined entity + metadata)
- * const conversations = useChatStore.getState().conversations
+ * const conversations = chatStore.getState().conversations
  *
  * // Subscribe to metadata only (sidebar optimization)
- * useChatStore.subscribe(
+ * chatStore.subscribe(
  *   (state) => state.conversationMeta,
- *   (meta) => console.log('Metadata changed')
+ *   () => console.log('Metadata changed')
  * )
  * ```
  *

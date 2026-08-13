@@ -23,19 +23,18 @@ const BATCH_INTERVAL_MS = 100
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useConsoleStore } from '@fluux/sdk'
+ * import { consoleStore } from '@fluux/sdk'
  *
  * // Toggle console visibility
- * useConsoleStore.getState().toggle()
+ * consoleStore.getState().toggle()
  *
  * // Add a packet entry (typically called by the SDK internals)
- * useConsoleStore.getState().addPacket('outgoing', '<message>...</message>')
+ * consoleStore.getState().addPacket('outgoing', '<message>...</message>')
  *
  * // Subscribe to new entries
- * useConsoleStore.subscribe(
- *   (state) => state.entries,
- *   (entries) => console.log('New entry:', entries[entries.length - 1])
- * )
+ * consoleStore.subscribe((state) => {
+ *   console.log('New entry:', state.entries[state.entries.length - 1])
+ * })
  * ```
  *
  * @category Stores

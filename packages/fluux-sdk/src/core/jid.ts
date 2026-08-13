@@ -152,6 +152,8 @@ export function isQuickChatJid(roomJid: string): boolean {
  *
  * @example
  * ```typescript
+ * declare const room: Room
+ *
  * const count = getUniqueOccupantCount(room.occupants.values())
  * // 2 connections from alice@example.com + 1 from bob@example.com = 2
  * ```

@@ -1359,7 +1359,7 @@ export class MUC extends BaseModule {
    * ])
    *
    * // Create a solo quick chat (invite others later)
-   * const roomJid = await client.muc.createQuickChat('Me', 'Notes')
+   * const soloRoomJid = await client.muc.createQuickChat('Me', 'Notes')
    * ```
    *
    * @remarks

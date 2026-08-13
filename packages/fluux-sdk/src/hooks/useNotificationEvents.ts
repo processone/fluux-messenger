@@ -75,7 +75,7 @@ interface PrevRoomState {
  * @example Desktop notifications
  * ```tsx
  * function NotificationHandler() {
- *   const handlers = useMemo(() => ({
+ *   const handlers: NotificationEventHandlers = useMemo(() => ({
  *     onConversationMessage: (conv, msg) => {
  *       new Notification(conv.name, { body: msg.body })
  *     },

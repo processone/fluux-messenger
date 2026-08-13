@@ -854,6 +854,8 @@ export interface MockSDKClient {
  *
  * @example
  * ```typescript
+ * import { createMockClientWithSDKEvents, createMockStoreRefs } from './test-utils'
+ *
  * const mockClient = createMockClientWithSDKEvents()
  * const stores = createMockStoreRefs()
  *
@@ -863,7 +865,16 @@ export interface MockSDKClient {
  * mockClient.emit('connection:status', { status: 'connecting' })
  * expect(stores.connection.setStatus).toHaveBeenCalledWith('connecting')
  *
- * mockClient.emit('chat:message', { message: { id: '1', body: 'Hello' } })
+ * const message: Message = {
+ *   type: 'chat',
+ *   id: '1',
+ *   conversationId: 'bob@example.com',
+ *   from: 'bob@example.com',
+ *   body: 'Hello',
+ *   timestamp: new Date(),
+ *   isOutgoing: false,
+ * }
+ * mockClient.emit('chat:message', { message })
  * expect(stores.chat.addMessage).toHaveBeenCalled()
  * ```
  */
@@ -904,6 +915,9 @@ export type MockStoreRefs = {
  *
  * @example
  * ```typescript
+ * import { createMockClientWithSDKEvents, createMockStoreRefs } from './test-utils'
+ *
+ * const mockClient = createMockClientWithSDKEvents()
  * const stores = createMockStoreRefs()
  *
  * // Use with createStoreBindings

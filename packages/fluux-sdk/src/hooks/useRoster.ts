@@ -23,7 +23,7 @@ import type { Contact } from '../core'
  *       {sortedContacts.map(contact => (
  *         <li key={contact.jid}>
  *           {contact.name || contact.jid}
- *           <span>{contact.show || 'offline'}</span>
+ *           <span>{contact.presence}</span>
  *         </li>
  *       ))}
  *     </ul>
@@ -54,12 +54,11 @@ import type { Contact } from '../core'
  * @example Handling subscription requests
  * ```tsx
  * function SubscriptionRequests() {
- *   const { acceptSubscription, rejectSubscription } = useRoster()
- *   const { pendingSubscriptions } = useEvents()
+ *   const { acceptSubscription, rejectSubscription, subscriptionRequests } = useEvents()
  *
  *   return (
  *     <ul>
- *       {pendingSubscriptions.map(req => (
+ *       {subscriptionRequests.map(req => (
  *         <li key={req.from}>
  *           {req.from} wants to add you
  *           <button onClick={() => acceptSubscription(req.from)}>Accept</button>

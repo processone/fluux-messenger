@@ -99,6 +99,8 @@ export interface UsePresenceReturn {
  *
  * @example Auto-away integration
  * ```tsx
+ * declare function getIdleTime(): number
+ *
  * function AutoAwayManager() {
  *   const { idleDetected, activityDetected, isAutoAway } = usePresence()
  *

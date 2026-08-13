@@ -65,6 +65,10 @@ export function getBestPresenceShow(showValues: (PresenceShow | null | undefined
  *
  * @example
  * ```typescript
+ * import type { Element } from '@fluux/sdk/xmpp'
+ *
+ * declare const presence: Element
+ *
  * // From a presence stanza handler (after checking type !== 'unavailable')
  * const showElement = presence.getChildText('show')
  * const status = getPresenceFromShow(showElement as PresenceShow | null)

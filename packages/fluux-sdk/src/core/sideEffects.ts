@@ -35,6 +35,8 @@ export { setupMdsSideEffects } from './mdsSideEffects'
  *
  * @example
  * ```typescript
+ * import { setupStoreSideEffects } from '@fluux/sdk/core'
+ *
  * const client = new XMPPClient()
  * const cleanup = setupStoreSideEffects(client)
  *

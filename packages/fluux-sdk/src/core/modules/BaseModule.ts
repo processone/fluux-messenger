@@ -87,6 +87,9 @@ export interface ModuleDependencies {
  *
  * @example Creating a custom module
  * ```typescript
+ * import type { Element } from '@fluux/sdk/xmpp'
+ * import { BaseModule } from './BaseModule'
+ *
  * class CustomModule extends BaseModule {
  *   handle(stanza: Element): boolean {
  *     if (stanza.is('message') && stanza.getChild('custom', 'urn:example:custom')) {

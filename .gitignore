@@ -79,3 +79,7 @@ CLAUDE.md
 
 # Benchmark output (regenerated; the numbers that matter live in the design doc)
 packages/fluux-sdk/bench/results/
+
+# Scratch project written by scripts/check-jsdoc-examples.mjs; removed on exit,
+# but a killed run must not leave it staged.
+packages/fluux-sdk/.jsdoc-examples-*

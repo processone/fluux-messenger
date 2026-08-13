@@ -49,7 +49,7 @@ import { useXMPPContext } from '../provider'
  *   const { fetchBlocklist } = useBlocking()
  *
  *   useEffect(() => {
- *     if (status === 'connected') {
+ *     if (status === 'online') {
  *       fetchBlocklist()
  *     }
  *   }, [status, fetchBlocklist])

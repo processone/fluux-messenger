@@ -38,9 +38,11 @@
  * }
  *
  * function Chat() {
- *   const { connect, isConnected } = useConnection()
- *   const { conversations, sendMessage } = useChat()
- *   // ...
+ *   const { isConnected } = useConnection()
+ *   const { conversations } = useChat()
+ *
+ *   if (!isConnected) return <p>Connecting…</p>
+ *   return <p>{conversations.length} conversations</p>
  * }
  * ```
  *

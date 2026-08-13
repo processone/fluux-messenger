@@ -802,7 +802,7 @@ export class Chat extends BaseModule {
    *     url: 'https://example.com/file.pdf',
    *     name: 'document.pdf',
    *     size: 12345,
-   *     mimeType: 'application/pdf'
+   *     mediaType: 'application/pdf'
    *   }
    * })
    * ```

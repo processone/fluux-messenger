@@ -35,9 +35,9 @@ import { useConsoleStore } from '../react/storeHooks'
  *       <button onClick={clearEntries}>Clear</button>
  *       <ul>
  *         {entries.map((entry, i) => (
- *           <li key={i} className={entry.direction}>
- *             <span>{entry.direction === 'in' ? '←' : '→'}</span>
- *             <pre>{entry.xml}</pre>
+ *           <li key={i} className={entry.type}>
+ *             <span>{entry.type === 'incoming' ? '←' : '→'}</span>
+ *             <pre>{entry.content}</pre>
  *             <time>{entry.timestamp.toISOString()}</time>
  *           </li>
  *         ))}
@@ -52,14 +52,13 @@ import { useConsoleStore } from '../react/storeHooks'
  * function ResizableConsole() {
  *   const { height, setHeight } = useConsole()
  *
- *   const handleDrag = (e: MouseEvent) => {
+ *   const handleDrag = (e: { clientY: number }) => {
  *     setHeight(window.innerHeight - e.clientY)
  *   }
  *
  *   return (
  *     <div style={{ height }}>
- *       <div className="resize-handle" onMouseDown={...} />
- *       <ConsoleContent />
+ *       <div className="resize-handle" onMouseDown={handleDrag} />
  *     </div>
  *   )
  * }

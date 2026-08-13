@@ -17,6 +17,13 @@
  *
  * @example
  * ```typescript
+ * import { executeWithConcurrency } from './concurrencyUtils'
+ *
+ * declare const conversationIds: string[]
+ * declare const roomJids: string[]
+ * declare function fetchPreviewForConversation(id: string): Promise<void>
+ * declare function fetchPreviewForRoom(jid: string): Promise<void>
+ *
  * // Refresh previews for multiple conversations
  * await executeWithConcurrency(
  *   conversationIds,

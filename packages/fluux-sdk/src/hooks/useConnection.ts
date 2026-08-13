@@ -27,7 +27,7 @@ import { useConnectionActions } from './useConnectionActions'
  *
  *   const handleLogin = async () => {
  *     try {
- *       await connect('user@example.com', 'password', 'example.com')
+ *       await connect({ jid: 'user@example.com', password: 'password', server: 'wss://example.com:5443/ws' })
  *     } catch (err) {
  *       console.error('Login failed:', err)
  *     }
@@ -86,7 +86,7 @@ import { useConnectionActions } from './useConnectionActions'
  *   const handleReconnect = async () => {
  *     const saved = sessionStorage.getItem('sm')
  *     const smState = saved ? JSON.parse(saved) : undefined
- *     await connect('user@example.com', 'pass', 'example.com', smState)
+ *     await connect({ jid: 'user@example.com', password: 'pass', server: 'wss://example.com:5443/ws', smState })
  *   }
  * }
  * ```

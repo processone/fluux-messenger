@@ -220,6 +220,9 @@ export function useRoomMetadata(roomJid: string): RoomMetadata | undefined {
  *
  * @example
  * ```tsx
+ * import type { ReactElement } from 'react'
+ * declare function OccupantList(props: { occupants?: Map<string, RoomOccupant> }): ReactElement
+ *
  * function OccupantPanel({ jid }: { jid: string }) {
  *   const runtime = useRoomRuntime(jid)
  *   // Only re-renders when occupants or messages change

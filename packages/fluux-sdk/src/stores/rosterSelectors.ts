@@ -6,11 +6,11 @@
  *
  * @example
  * ```tsx
- * import { useRosterStore, rosterSelectors } from '@fluux/sdk'
- * import { shallow } from 'zustand/shallow'
+ * import { rosterSelectors } from '@fluux/sdk'
+ * import { useRosterStore } from '@fluux/sdk/react'
  *
  * // Only re-renders when contact JIDs change (not when presence/status changes)
- * const contactJids = useRosterStore(rosterSelectors.contactJids, shallow)
+ * const contactJids = useRosterStore(rosterSelectors.contactJids)
  *
  * // Only re-renders when this specific contact changes
  * const contact = useRosterStore(rosterSelectors.contactById('user@example.com'))

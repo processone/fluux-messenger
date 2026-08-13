@@ -752,13 +752,13 @@ export interface StanzaEvents {
  * @example
  * ```typescript
  * // Bot listening to messages
- * client.on('chat:message', ({ message }) => {
+ * client.subscribe('chat:message', ({ message }) => {
  *   console.log(`${message.from}: ${message.body}`)
  * })
  *
  * // React-SDK wiring events to stores
- * client.on('chat:message', ({ message }) => {
- *   useChatStore.getState().addMessage(message)
+ * client.subscribe('chat:message', ({ message }) => {
+ *   chatStore.getState().addMessage(message)
  * })
  * ```
  */

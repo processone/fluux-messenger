@@ -101,7 +101,7 @@ function removeItem(key: string): void {
  * - NO credential storage (web apps should re-prompt for login)
  *
  * @example
- * ```tsx
+ * ```tsx fragment
  * import { XMPPProvider, sessionStorageAdapter } from '@fluux/sdk'
  *
  * // Uses sessionStorageAdapter by default

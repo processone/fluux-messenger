@@ -98,19 +98,22 @@ export interface UseSystemStateReturn {
  *
  * @example Basic usage
  * ```tsx
+ * declare function listen(event: string, handler: () => void): Promise<() => void>
+ * declare function invoke<T>(command: string): Promise<T>
+ *
  * function PlatformIntegration() {
  *   const { notifyIdle, notifyActive, notifyWake, notifySleep } = useSystemState()
  *
  *   useEffect(() => {
  *     // Tauri: listen for system wake
  *     const unlisten = listen('system-did-wake', () => notifyWake())
- *     return () => unlisten.then(fn => fn())
+ *     return () => { void unlisten.then(fn => fn()) }
  *   }, [notifyWake])
  *
  *   useEffect(() => {
  *     // Check OS idle time periodically
  *     const interval = setInterval(async () => {
- *       const idleSeconds = await invoke('get_idle_time')
+ *       const idleSeconds = await invoke<number>('get_idle_time')
  *       if (idleSeconds > 300) {
  *         notifyIdle(new Date(Date.now() - idleSeconds * 1000))
  *       }

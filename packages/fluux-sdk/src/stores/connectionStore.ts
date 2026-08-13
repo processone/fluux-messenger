@@ -30,12 +30,12 @@ export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, Web
  * const { jid, serverInfo } = connectionStore.getState()
  *
  * // Update state
- * connectionStore.getState().setStatus('connected')
+ * connectionStore.getState().setStatus('online')
  * ```
  *
  * @example React usage
  * ```tsx
- * import { useConnectionStore } from '@fluux/sdk'
+ * import { useConnectionStore } from '@fluux/sdk/react'
  *
  * function Component() {
  *   const status = useConnectionStore((state) => state.status)

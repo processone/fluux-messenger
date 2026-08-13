@@ -18,9 +18,11 @@
  * }
  *
  * function Chat() {
- *   const { connect, status } = useConnection()
- *   const { conversations, sendMessage } = useChat()
- *   // ...
+ *   const { status } = useConnection()
+ *   const { conversations } = useChat()
+ *
+ *   if (status !== 'online') return <p>{status}</p>
+ *   return <p>{conversations.length} conversations</p>
  * }
  * ```
  *

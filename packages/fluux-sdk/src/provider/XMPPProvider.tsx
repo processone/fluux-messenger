@@ -42,7 +42,7 @@ export interface XMPPProviderProps {
    * @default sessionStorageAdapter (browser sessionStorage)
    *
    * @example Desktop app with OS keychain
-   * ```tsx
+   * ```tsx fragment
    * <XMPPProvider storageAdapter={tauriStorageAdapter}>
    *   <App />
    * </XMPPProvider>
@@ -56,7 +56,7 @@ export interface XMPPProviderProps {
    * connections to XMPP servers instead of WebSocket.
    *
    * @example Desktop app with TCP proxy
-   * ```tsx
+   * ```tsx fragment
    * <XMPPProvider proxyAdapter={tauriProxyAdapter}>
    *   <App />
    * </XMPPProvider>
@@ -70,7 +70,7 @@ export interface XMPPProviderProps {
    * should be injected into the provider.
    *
    * @example Demo mode with pre-populated data
-   * ```tsx
+   * ```tsx fragment
    * const demoClient = new DemoClient()
    * demoClient.populateDemo()
    *
@@ -99,7 +99,7 @@ export interface XMPPProviderProps {
  * @returns Provider component wrapping children
  *
  * @example Basic usage
- * ```tsx
+ * ```tsx fragment
  * import { XMPPProvider } from '@fluux/sdk'
  *
  * function App() {
@@ -112,7 +112,7 @@ export interface XMPPProviderProps {
  * ```
  *
  * @example With debug mode
- * ```tsx
+ * ```tsx fragment
  * function App() {
  *   return (
  *     <XMPPProvider debug={process.env.NODE_ENV === 'development'}>
@@ -123,7 +123,7 @@ export interface XMPPProviderProps {
  * ```
  *
  * @example Desktop app with custom storage adapter
- * ```tsx
+ * ```tsx fragment
  * import { tauriStorageAdapter } from './utils/tauriStorageAdapter'
  *
  * function App() {

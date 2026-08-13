@@ -52,6 +52,8 @@ interface LocalPollEntry {
  * await client.poll.sendPoll('room@conference.example.com', 'What for lunch?', ['Pizza', 'Sushi', 'Tacos'])
  *
  * // Vote on a poll (single-vote mode)
+ * declare const pollData: PollData
+ *
  * await client.poll.vote('room@conference.example.com', 'msg-123', '2️⃣', ['1️⃣'], pollData)
  * ```
  *

@@ -49,7 +49,7 @@ const EMPTY_TYPING_ARRAY: string[] = []
  *     setText('')
  *   }
  *
- *   return <input value={text} onChange={e => setText(e.target.value)} onKeyDown={...} />
+ *   return <input value={text} onChange={e => setText(e.target.value)} onBlur={handleSend} />
  * }
  * ```
  *
@@ -59,18 +59,20 @@ const EMPTY_TYPING_ARRAY: string[] = []
  *   const { sendChatState, activeConversationId } = useChat()
  *
  *   const handleTyping = () => {
- *     sendChatState(activeConversationId, 'composing')
+ *     if (activeConversationId) sendChatState(activeConversationId, 'composing')
  *   }
  *
  *   const handleStopTyping = () => {
- *     sendChatState(activeConversationId, 'paused')
+ *     if (activeConversationId) sendChatState(activeConversationId, 'paused')
  *   }
+ *
+ *   return <input onFocus={handleTyping} onBlur={handleStopTyping} />
  * }
  * ```
  *
  * @example Message reactions
  * ```tsx
- * function MessageReaction({ messageId, conversationId }) {
+ * function MessageReaction({ messageId, conversationId }: { messageId: string; conversationId: string }) {
  *   const { sendReaction } = useChat()
  *
  *   const handleReact = (emoji: string) => {

@@ -50,6 +50,8 @@ import {
  *
  * @example
  * ```typescript
+ * declare const base64Data: string
+ *
  * // Access via XMPPClient
  * client.profile.publishOwnAvatar(base64Data, 'image/png', 256, 256)
  * client.profile.publishOwnNickname('My Nickname')

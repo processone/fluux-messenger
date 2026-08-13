@@ -1264,6 +1264,8 @@ export class Connection extends BaseModule {
    * @example
    * ```typescript
    * // App detects wake from sleep with duration
+   * declare const sleepGapMs: number
+   *
    * client.notifySystemState('awake', sleepGapMs)
    *
    * // App visibility changed

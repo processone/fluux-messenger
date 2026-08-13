@@ -19,6 +19,7 @@
     "prebuild:app": "npm run guard:sdk-link",
     "build:app": "npm run build -w @xmpp/fluux",
     "check:comments": "node --test scripts/check-comment-provenance.test.mjs && node scripts/check-comment-provenance.mjs",
+    "check:examples": "node --test scripts/check-jsdoc-examples.test.mjs && node scripts/check-jsdoc-examples.mjs",
     "check:anomaly:prod": "npm run build:app && node scripts/check-anomaly-elimination.mjs",
     "check:anomaly:dev": "FLUUX_ANOMALY=1 npm run build:app && FLUUX_ANOMALY=1 node scripts/check-anomaly-elimination.mjs",
     "build:e2e": "npm run build:sdk && node scripts/build-e2e.mjs",

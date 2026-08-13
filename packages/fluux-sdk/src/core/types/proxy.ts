@@ -32,7 +32,7 @@ export interface ProxyStartResult {
  * const tauriProxyAdapter: ProxyAdapter = {
  *   async startProxy(server) {
  *     const { invoke } = await import('@tauri-apps/api/core')
- *     const result = await invoke('start_xmpp_proxy', { server })
+ *     const result = await invoke<{ url: string; connection_method: ConnectionMethod }>('start_xmpp_proxy', { server })
  *     return { url: result.url, connectionMethod: result.connection_method }
  *   },
  *   async stopProxy() {

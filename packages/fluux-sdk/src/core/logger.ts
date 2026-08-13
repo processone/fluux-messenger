@@ -46,6 +46,8 @@ let sink: LogSink | null = null
  * its own output.
  *
  * ```typescript
+ * import { setLogSink } from '@fluux/sdk/core'
+ *
  * setLogSink((level, message) => {
  *   if (level === 'warn' || level === 'error') console.error(`[sdk] ${message}`)
  * })

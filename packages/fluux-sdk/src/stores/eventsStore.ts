@@ -16,19 +16,18 @@ import { generateUUID } from '../utils/uuid'
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useEventsStore } from '@fluux/sdk'
+ * import { eventsStore } from '@fluux/sdk'
  *
  * // Get pending subscription requests
- * const requests = useEventsStore.getState().subscriptionRequests
+ * const requests = eventsStore.getState().subscriptionRequests
  *
  * // Add a subscription request (typically called by the SDK internals)
- * useEventsStore.getState().addSubscriptionRequest('user@example.com')
+ * eventsStore.getState().addSubscriptionRequest('user@example.com')
  *
  * // Subscribe to invitation changes
- * useEventsStore.subscribe(
- *   (state) => state.mucInvitations,
- *   (invitations) => console.log('New invitations:', invitations.length)
- * )
+ * eventsStore.subscribe((state) => {
+ *   console.log('New invitations:', state.mucInvitations.length)
+ * })
  * ```
  *
  * @category Stores

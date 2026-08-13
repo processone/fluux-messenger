@@ -22,6 +22,11 @@ import type { WebPushService } from '../types'
  *
  * @example
  * ```typescript
+ * declare const endpoint: string
+ * declare const p256dh: string
+ * declare const auth: string
+ * declare const appId: string
+ *
  * // Query available push services
  * const services = await client.webPush.queryServices()
  *

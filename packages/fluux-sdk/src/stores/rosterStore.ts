@@ -53,19 +53,18 @@ let _cachedOnlineContactsSource: Map<string, Contact> | null = null
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useRosterStore } from '@fluux/sdk'
+ * import { rosterStore } from '@fluux/sdk'
  *
  * // Get sorted contacts (online first)
- * const contacts = useRosterStore.getState().sortedContacts()
+ * const contacts = rosterStore.getState().sortedContacts()
  *
  * // Subscribe to roster changes
- * useRosterStore.subscribe(
- *   (state) => state.contacts,
- *   (contacts) => console.log('Contacts updated:', contacts.size)
- * )
+ * rosterStore.subscribe((state) => {
+ *   console.log('Contacts updated:', state.contacts.size)
+ * })
  *
  * // Check if JID is a known contact
- * const isContact = useRosterStore.getState().hasContact('user@example.com')
+ * const isContact = rosterStore.getState().hasContact('user@example.com')
  * ```
  *
  * @category Stores

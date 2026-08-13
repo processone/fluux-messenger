@@ -24,7 +24,7 @@ export interface AttachmentDisplay {
  *
  * @example
  * ```typescript
- * getAttachmentEmoji({ mediaType: 'image/png', name: 'photo.png' })
+ * getAttachmentEmoji({ url: 'https://example.com/photo.png', mediaType: 'image/png', name: 'photo.png' })
  * // { emoji: '📷', label: 'Photo' }
  * ```
  */
@@ -257,7 +257,7 @@ export function stripReplyQuote(body: string): string {
  * formatMessagePreview({ body: 'Hello', attachment: undefined })
  * // 'Hello'
  *
- * formatMessagePreview({ body: '', attachment: { mediaType: 'image/png', name: 'photo.png' } })
+ * formatMessagePreview({ body: '', attachment: { url: 'https://example.com/photo.png', mediaType: 'image/png', name: 'photo.png' } })
  * // '📷 photo.png'
  *
  * // Reply with quote still in body (no XEP-0428)

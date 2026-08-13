@@ -58,11 +58,11 @@ const EMPTY_TYPING_ARRAY: string[] = []
  *
  * @example Managing bookmarks
  * ```tsx
- * function RoomSettings({ roomJid }) {
+ * function RoomSettings({ roomJid }: { roomJid: string }) {
  *   const { setBookmark, removeBookmark } = useRoom()
  *
  *   const handleBookmark = () => {
- *     setBookmark(roomJid, 'Room Name', 'mynick', true) // autojoin=true
+ *     setBookmark(roomJid, { name: 'Room Name', nick: 'mynick', autojoin: true })
  *   }
  *
  *   const handleRemove = () => {
@@ -73,7 +73,7 @@ const EMPTY_TYPING_ARRAY: string[] = []
  *
  * @example Inviting users
  * ```tsx
- * function InviteUser({ roomJid }) {
+ * function InviteUser({ roomJid }: { roomJid: string }) {
  *   const { inviteToRoom } = useRoom()
  *
  *   const handleInvite = (userJid: string) => {

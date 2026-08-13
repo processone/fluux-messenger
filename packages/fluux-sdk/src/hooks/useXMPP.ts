@@ -56,8 +56,8 @@ import type { Element } from '@xmpp/client'
  *   const { on } = useXMPP()
  *
  *   useEffect(() => {
- *     const unsubscribe = on('status', (status) => {
- *       console.log('Connection status:', status)
+ *     const unsubscribe = on('online', () => {
+ *       console.log('Connected')
  *     })
  *     return unsubscribe
  *   }, [on])

@@ -236,6 +236,8 @@ export type AnyMessage = Message | RoomMessage
  *
  * @example
  * ```typescript
+ * declare const msg: AnyMessage
+ *
  * if (isChatMessage(msg)) {
  *   console.log('Conversation:', msg.conversationId)
  * }
@@ -255,6 +257,8 @@ export function isChatMessage(msg: AnyMessage): msg is Message {
  *
  * @example
  * ```typescript
+ * declare const msg: AnyMessage
+ *
  * if (isRoomMessage(msg)) {
  *   console.log('Room:', msg.roomJid, 'Nick:', msg.nick)
  * }

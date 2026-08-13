@@ -6,7 +6,7 @@
  * screen recordings, and marketing demos.
  *
  * @example
- * ```tsx
+ * ```tsx fragment
  * import { DemoClient, XMPPProvider } from '@fluux/sdk'
  * import { buildDemoData, buildDemoAnimation } from './demoData'
  *

@@ -71,11 +71,9 @@ export type UnsubscribeBindings = () => void
  *
  * @example
  * ```typescript
- * const unsubscribe = createStoreBindings(client, () => ({
- *   connection: useConnectionStore.getState(),
- *   chat: useChatStore.getState(),
- *   // ... other stores
- * }))
+ * declare const stores: StoreRefs
+ *
+ * const unsubscribe = createStoreBindings(client, () => stores)
  *
  * // Clean up on unmount
  * unsubscribe()

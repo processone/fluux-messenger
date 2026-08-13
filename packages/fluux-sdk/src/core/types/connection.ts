@@ -46,6 +46,8 @@ export type ConnectionMethod = 'proxy' | 'websocket'
  *
  * @example
  * ```typescript
+ * const { notifySystemState } = client
+ *
  * // App detects wake from sleep
  * notifySystemState('awake')
  *

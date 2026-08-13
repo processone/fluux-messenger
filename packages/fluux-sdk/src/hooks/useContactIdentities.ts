@@ -36,9 +36,10 @@ const EMPTY_MAP: Map<string, ContactIdentity> = new Map()
  *
  * @example
  * ```tsx
- * function ChatView() {
+ * function ChatView({ message }: { message: Message }) {
  *   const contactIdentities = useContactIdentities()
  *   const senderName = contactIdentities.get(message.from)?.name ?? message.from
+ *   return <p>{senderName}</p>
  * }
  * ```
  *

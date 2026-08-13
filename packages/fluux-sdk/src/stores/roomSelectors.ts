@@ -6,11 +6,11 @@
  *
  * @example
  * ```tsx
- * import { useRoomStore, roomSelectors } from '@fluux/sdk'
- * import { shallow } from 'zustand/shallow'
+ * import { roomSelectors } from '@fluux/sdk'
+ * import { useRoomStore } from '@fluux/sdk/react'
  *
  * // Only re-renders when room JIDs change (not when occupants/messages change)
- * const roomJids = useRoomStore(roomSelectors.bookmarkedRoomJids, shallow)
+ * const roomJids = useRoomStore(roomSelectors.bookmarkedRoomJids)
  *
  * // Only re-renders when this specific room changes
  * const room = useRoomStore(roomSelectors.roomById('room@conference.example.com'))

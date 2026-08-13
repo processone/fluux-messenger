@@ -55,12 +55,12 @@ import type { Conversation } from '../core'
  *     <ul>
  *       {mucInvitations.map(inv => (
  *         <li key={inv.roomJid}>
- *           {inv.from} invited you to {inv.roomName || inv.roomJid}
+ *           {inv.from} invited you to {inv.roomJid}
  *           {inv.reason && <p>{inv.reason}</p>}
  *           // Rejects with a RoomJoinError when the server refuses the join
  *           // (password required, members-only, …). The invitation is kept, so
  *           // the user can retry — e.g. after supplying a password.
- *           <button onClick={() => acceptInvitation(inv.roomJid).catch(showError)}>Join</button>
+ *           <button onClick={() => acceptInvitation(inv.roomJid).catch(console.error)}>Join</button>
  *           <button onClick={() => declineInvitation(inv.roomJid)}>Decline</button>
  *         </li>
  *       ))}

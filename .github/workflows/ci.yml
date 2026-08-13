@@ -87,6 +87,12 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      # After the type check, because it compiles the doc examples against the
+      # same sources: a broken signature should be reported once, from the code,
+      # before it is reported again from the prose that documents it.
+      - name: Doc examples compile against the API they document
+        run: npm run check:examples
+
       - name: Lint SDK
         run: npm run lint --workspace=@fluux/sdk
 

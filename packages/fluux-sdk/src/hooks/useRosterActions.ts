@@ -17,6 +17,8 @@ import type { Contact } from '../core'
  *
  * @example Removing a contact from a modal
  * ```tsx
+ * declare const onClose: () => void
+ *
  * function ContactProfileModal({ jid }: { jid: string }) {
  *   const { removeContact, renameContact } = useRosterActions()
  *

@@ -62,7 +62,7 @@ export interface XMPPClientConfig {
    * Desktop apps can provide a custom adapter using OS keychain.
    *
    * @example
-   * ```tsx
+   * ```tsx fragment
    * // Web app - uses default sessionStorageAdapter
    * <XMPPProvider>
    *   <App />
@@ -85,7 +85,7 @@ export interface XMPPClientConfig {
    * for each connection. When not provided, connections use WebSocket directly.
    *
    * @example
-   * ```tsx
+   * ```tsx fragment
    * <XMPPProvider proxyAdapter={tauriProxyAdapter}>
    *   <App />
    * </XMPPProvider>

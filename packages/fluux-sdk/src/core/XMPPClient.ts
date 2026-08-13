@@ -132,40 +132,46 @@ import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, d
  * }
  *
  * function Chat() {
- *   const client = useXMPP()
+ *   const { client } = useXMPP()
  *   const { connect, status } = useConnection()
  *
  *   const handleConnect = () => {
- *     connect({ jid: 'user@example.com', password: 'secret', server: 'example.com' })
+ *     connect({ jid: 'user@example.com', password: 'secret', server: 'wss://example.com:5443/ws' })
  *   }
  *
  *   const sendMessage = () => {
  *     client.chat.sendMessage('friend@example.com', 'Hello!')
  *   }
+ *
+ *   if (status !== 'online') return <button onClick={handleConnect}>Connect</button>
+ *   return <button onClick={sendMessage}>Say hello</button>
  * }
  * ```
  *
  * @example Namespace-based module API
  * ```typescript
- * // Chat operations
- * client.chat.sendMessage(to, body)
- * client.chat.sendReaction(to, messageId, emoji)
+ * declare const imageData: string
+ *
+ * // Chat operations. A room is addressed the same way: `chat` reads the room
+ * // store to decide whether it is talking to a room or to a person.
+ * client.chat.sendMessage('bob@example.com', 'Hello!')
+ * client.chat.sendReaction('bob@example.com', 'msg-1', ['\u{1F44D}'])
  *
  * // MUC (Multi-User Chat) operations
- * client.muc.joinRoom(roomJid, nickname)
- * client.muc.sendRoomMessage(roomJid, body)
+ * client.muc.joinRoom('room@conference.example.com', 'alice')
+ * client.chat.sendMessage('room@conference.example.com', 'Hello room!')
  *
  * // Roster operations
- * client.roster.add(jid, name)
- * client.roster.remove(jid)
+ * client.roster.addContact('bob@example.com', 'Bob')
+ * client.roster.removeContact('bob@example.com')
  *
  * // Profile operations
- * client.profile.publishOwnAvatar(base64Data, mimeType)
- * client.profile.setNickname(nickname)
+ * client.profile.publishOwnAvatar(imageData, 'image/png', 64, 64)
+ * client.profile.publishOwnNickname('alice')
  *
  * // Admin operations (XEP-0133)
  * client.admin.discoverAdminCommands()
- * client.admin.executeCommand(node)
+ * client.admin.executeAdminCommand('http://jabber.org/protocol/admin#add-user')
  *
  * // Service discovery
  * client.discovery.fetchServerInfo()
@@ -432,7 +438,7 @@ export class XMPPClient {
    * @example Simple bot
    * ```typescript
    * const client = new XMPPClient()
-   * await client.connect({ jid: 'bot@example.com', password: 'secret' })
+   * await client.connect({ jid: 'bot@example.com', password: 'secret', server: 'wss://example.com:5443/ws' })
    *
    * client.subscribe('chat:message', ({ message }) => {
    *   console.log(`${message.from}: ${message.body}`)
@@ -922,6 +928,8 @@ export class XMPPClient {
    *
    * @example Wiring to custom state management
    * ```typescript
+   * declare const myStore: { setContacts(contacts: Contact[]): void }
+   *
    * client.subscribe('roster:loaded', ({ contacts }) => {
    *   myStore.setContacts(contacts)
    * })
@@ -1032,8 +1040,8 @@ export class XMPPClient {
    * await client.connect({
    *   jid: 'user@example.com',
    *   password: 'secret',
-   *   server: 'example.com',
-   *   smState // Resume previous session
+   *   server: 'wss://example.com:5443/ws',
+   *   smState: smState ?? undefined // Resume the previous session when there is one
    * })
    * ```
    */
@@ -1193,6 +1201,8 @@ export class XMPPClient {
    *
    * @example
    * ```typescript
+   * declare const sleepGapMs: number
+   *
    * // App detects wake from sleep with duration (e.g., via time-gap detection)
    * client.notifySystemState('awake', sleepGapMs)
    *
@@ -1316,6 +1326,12 @@ export class XMPPClient {
    *
    * @example
    * ```typescript
+   * class MyCustomHook extends EventHook {
+   *   readonly id = 'my-hook'
+   *   readonly name = 'My Custom Hook'
+   *   onload() {}
+   * }
+   *
    * const hook = new MyCustomHook(client)
    * client.registerHook(hook)
    * ```
@@ -1487,8 +1503,10 @@ export class XMPPClient {
    * sessionStorage.setItem('sm', JSON.stringify(smState))
    *
    * // Restore on reconnect
-   * const saved = JSON.parse(sessionStorage.getItem('sm'))
-   * await client.connect({ ...options, smState: saved })
+   * declare const options: ConnectOptions
+   *
+   * const stored = sessionStorage.getItem('sm')
+   * await client.connect({ ...options, smState: stored ? JSON.parse(stored) : undefined })
    * ```
    */
   getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {

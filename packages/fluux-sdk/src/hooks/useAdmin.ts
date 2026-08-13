@@ -17,6 +17,9 @@ import { USER_COMMANDS } from './adminCommands'
  *
  * @example Checking admin status
  * ```tsx
+ * import type { ReactElement } from 'react'
+ * declare function AdminDashboard(): ReactElement
+ *
  * function AdminPanel() {
  *   const { isAdmin, hasCommands } = useAdmin()
  *
@@ -78,10 +81,11 @@ import { USER_COMMANDS } from './adminCommands'
  *   }
  *
  *   return (
- *     <form onSubmit={...}>
+ *     <form>
  *       {currentSession.form.fields.map(field => (
- *         <FormField key={field.var} field={field} />
+ *         <div key={field.var}>{field.label}</div>
  *       ))}
+ *       <button type="button" onClick={() => handleSubmit({ nick: 'alice' })}>Send</button>
  *       {canGoBack && <button type="button" onClick={previousStep}>Back</button>}
  *       <button type="submit">Submit</button>
  *       <button type="button" onClick={cancelCommand}>Cancel</button>

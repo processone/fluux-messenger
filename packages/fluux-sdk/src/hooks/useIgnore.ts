@@ -15,7 +15,7 @@ import { useIgnoreStore } from '../react/storeHooks'
  *
  * @example Ignoring an occupant in a room
  * ```tsx
- * function OccupantActions({ roomJid, occupant }: Props) {
+ * function OccupantActions({ roomJid, occupant }: { roomJid: string; occupant: RoomOccupant }) {
  *   const { isIgnored, addIgnored, removeIgnored } = useIgnore()
  *   const identifier = occupant.occupantId || occupant.jid || occupant.nick
  *   const ignored = isIgnored(roomJid, identifier)

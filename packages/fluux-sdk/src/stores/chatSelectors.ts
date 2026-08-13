@@ -6,11 +6,11 @@
  *
  * @example
  * ```tsx
- * import { useChatStore, chatSelectors } from '@fluux/sdk'
- * import { shallow } from 'zustand/shallow'
+ * import { chatSelectors } from '@fluux/sdk'
+ * import { useChatStore } from '@fluux/sdk/react'
  *
  * // Only re-renders when conversation IDs change (not when messages/content change)
- * const conversationIds = useChatStore(chatSelectors.conversationIds, shallow)
+ * const conversationIds = useChatStore(chatSelectors.conversationIds)
  *
  * // Only re-renders when this specific conversation changes
  * const conversation = useChatStore(chatSelectors.conversationById('user@example.com'))

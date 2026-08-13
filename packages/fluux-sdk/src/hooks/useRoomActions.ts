@@ -39,7 +39,7 @@ type RoomSendMessageOptions = Omit<SendMessageOptions, 'replyTo'> & {
  *
  * @example
  * ```tsx
- * function InviteModal({ room }) {
+ * function InviteModal({ room }: { room: Room }) {
  *   const { inviteMultipleToRoom } = useRoomActions()
  *   // No re-render when other rooms update during sync
  * }

@@ -759,19 +759,19 @@ function mergeCachedRoomMessages(
  *
  * @example Direct store access (advanced)
  * ```ts
- * import { useRoomStore } from '@fluux/sdk'
+ * import { roomStore } from '@fluux/sdk'
  *
  * // Get all bookmarked rooms
- * const bookmarked = useRoomStore.getState().bookmarkedRooms()
+ * const bookmarked = roomStore.getState().bookmarkedRooms()
  *
  * // Subscribe to room updates
- * useRoomStore.subscribe(
+ * roomStore.subscribe(
  *   (state) => state.rooms,
  *   (rooms) => console.log('Rooms updated:', rooms.size)
  * )
  *
  * // Get total unread mentions
- * const mentions = useRoomStore.getState().totalMentionsCount()
+ * const mentions = roomStore.getState().totalMentionsCount()
  * ```
  *
  * @category Stores

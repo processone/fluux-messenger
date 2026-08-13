@@ -5,6 +5,10 @@
  *
  * @example
  * ```tsx
+ * import type { ReactElement } from 'react'
+ * declare function Spinner(): ReactElement
+ * declare function SearchResultItem(props: { result: SearchResult }): ReactElement
+ *
  * function SearchPanel() {
  *   const { query, results, mamResults, isSearching, search, searchMAM } = useSearch()
  *
