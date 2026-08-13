@@ -1812,6 +1812,51 @@ export class Chat extends BaseModule {
    * WhisperCounterpartGoneError — it must NEVER fall back to the room-broadcast path.
    */
   /**
+   * Fetch the messages surrounding a point in time in a conversation.
+   *
+   * For opening a search result: the archive holds context the local cache may
+   * not. Whether the target is a room is read from the room store, the same
+   * way sending is.
+   *
+   * @param conversationId - The conversation or room JID.
+   * @param at - ISO timestamp to centre on.
+   * @param size - How many messages to ask for.
+   *
+   * @example
+   * ```typescript
+   * declare const at: string
+   *
+   * const { messages } = await client.chat.fetchContextAround('room@conference.example.com', at, 50)
+   * ```
+   */
+  async fetchContextAround(
+    conversationId: string,
+    at: string,
+    size = 50,
+  ): Promise<{ messages: (Message | RoomMessage)[] }> {
+    return this.mamModule.fetchContext(conversationId, this.conversationKind(conversationId) === 'groupchat', at, size)
+  }
+
+  /**
+   * Page the archive backwards until a point in time is covered.
+   *
+   * Closes the gap between what the cache holds and an older message the user
+   * jumped to. Best-effort and safe to leave unawaited.
+   *
+   * @param conversationId - The conversation or room JID.
+   * @param at - ISO timestamp to reach back to.
+   * @param oldestCached - Oldest timestamp already held locally, when known.
+   */
+  async catchUpTo(conversationId: string, at: string, oldestCached?: string): Promise<void> {
+    await this.mamModule.catchUpToTimestamp(
+      conversationId,
+      this.conversationKind(conversationId) === 'groupchat',
+      at,
+      oldestCached,
+    )
+  }
+
+  /**
    * Whether a message addressed to `to` is a room message or a one-to-one one.
    *
    * This is a fact about the session, not a guess. XEP-0045 §7.4 requires

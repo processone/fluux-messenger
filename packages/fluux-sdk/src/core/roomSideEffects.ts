@@ -111,7 +111,7 @@ export function setupRoomSideEffects(
   /**
    * Triggers MAM fetch for the active room if needed (catchup).
    * Delegates the actual query direction/cursor selection to the shared
-   * latest-first orchestrator (`client.mam.catchUpRoomHistory`) after
+   * latest-first orchestrator (`client.internal.mam.catchUpRoomHistory`) after
    * loading the IndexedDB cache.
    */
   async function fetchMAMForRoom(roomJid: string): Promise<void> {
@@ -213,7 +213,7 @@ export function setupRoomSideEffects(
 
       // Latest-first orchestrator — room twin, Phase A only (active entity).
       const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
-      await client.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
+      await client.internal.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
       }

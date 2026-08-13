@@ -110,6 +110,19 @@ import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
 
 /**
+ * The protocol modules the SDK drives on the consumer's behalf.
+ *
+ * @internal
+ */
+export interface InternalModules {
+  mam: MAM
+  mds: Mds
+  conversationSync: ConversationSync
+  entityTime: EntityTime
+  lastActivity: LastActivity
+}
+
+/**
  * Core XMPP client with namespace-based module API.
  *
  * The XMPPClient provides a high-level interface for XMPP protocol operations,
@@ -276,17 +289,25 @@ export class XMPPClient {
    */
   public poll!: Poll
 
-  /**
-   * Conversation sync module.
-   * Persists 1:1 conversation lists (active + archived) via PEP (XEP-0223 private storage).
-   */
-  public conversationSync!: ConversationSync
+
 
   /**
-   * MDS module (XEP-0490: Message Displayed Synchronization).
-   * Publishes/fetches per-conversation last-displayed stanza-ids via PEP.
+   * Modules the SDK drives itself.
+   *
+   * These speak XMPP the way the protocol names it — MAM, MDS, XEP-0202
+   * entity time — because that is what they implement. They are here rather
+   * than on the client because a consumer never calls them: history catch-up,
+   * read-marker publication and conversation-list sync are driven by the SDK's
+   * own side effects, and what a consumer needs from them is already offered
+   * as a domain verb elsewhere (`useContactTime`, `useLastActivity`,
+   * `muc.resync`).
+   *
+   * NOT a compatibility surface. Reaching in means the domain API is missing
+   * something; say so rather than building on this.
+   *
+   * @internal
    */
-  public mds!: Mds
+  public internal!: InternalModules
 
   /**
    * Web Push module (p1:push).
@@ -294,23 +315,8 @@ export class XMPPClient {
    */
   public webPush!: WebPush
 
-  /**
-   * Entity Time module (XEP-0202).
-   * Queries contacts for their local time and caches timezone offsets.
-   */
-  public entityTime!: EntityTime
 
-  /**
-   * Last Activity module (XEP-0012).
-   * Queries the server for when an offline contact was last active.
-   */
-  public lastActivity!: LastActivity
 
-  /**
-   * Message Archive Management module (XEP-0313).
-   * Handles querying message history for 1:1 conversations and MUC rooms.
-   */
-  public mam!: MAM
 
   /**
    * XState presence actor managing user presence state.
@@ -676,21 +682,22 @@ export class XMPPClient {
     this.connection = new Connection(moduleDeps)
     this.connectionActor = this.connection.getConnectionActor()
     this.pubsub = new PubSub(moduleDeps)
-    this.mam = new MAM(moduleDeps)
-    this.chat = new Chat(moduleDeps, this.mam)
+    const mam = new MAM(moduleDeps)
+    this.chat = new Chat(moduleDeps, mam)
     this.poll = new Poll(moduleDeps, this.chat)
     this.roster = new Roster(moduleDeps)
-    this.muc = new MUC(moduleDeps)
+    this.muc = new MUC(moduleDeps, mam)
     this.admin = new Admin(moduleDeps)
     this.profile = new Profile(moduleDeps)
     this.discovery = new Discovery(moduleDeps)
     this.blocking = new Blocking(moduleDeps)
     this.ignore = new Ignore(moduleDeps)
-    this.conversationSync = new ConversationSync(moduleDeps)
-    this.mds = new Mds(moduleDeps)
+    const conversationSync = new ConversationSync(moduleDeps)
+    const mds = new Mds(moduleDeps)
     this.webPush = new WebPush(moduleDeps)
-    this.entityTime = new EntityTime(moduleDeps)
-    this.lastActivity = new LastActivity(moduleDeps)
+    const entityTime = new EntityTime(moduleDeps)
+    const lastActivity = new LastActivity(moduleDeps)
+    this.internal = { mam, mds, conversationSync, entityTime, lastActivity }
 
     // Post-connection orchestration. Drives the domain modules just built; the
     // churny bits (stores, JID, transport) are read through getters so a
@@ -702,7 +709,7 @@ export class XMPPClient {
       muc: this.muc,
       profile: this.profile,
       webPush: this.webPush,
-      conversationSync: this.conversationSync,
+      conversationSync: this.internal.conversationSync,
       getStores: () => this.stores,
       getCurrentJid: () => this.currentJid,
       getXmpp: () => this.getXmpp(),
@@ -741,7 +748,7 @@ export class XMPPClient {
       routeStanza(
         stanza,
         [this.pubsub, this.blocking, this.poll, this.chat, this.muc, this.roster],
-        [this.lastActivity],
+        [this.internal.lastActivity],
       )
     })
 
@@ -759,7 +766,7 @@ export class XMPPClient {
         // For non-MAM rooms, history is requested via <history maxstanzas="50"/> on join
         // Skip on SM resumption — server already replayed all undelivered stanzas
         if (room?.supportsMAM && !room.isQuickChat && !this.sessionLifecycle.isSmResumed()) {
-          this.mam.fetchPreviewForRoom(roomJid).catch(() => {})
+          this.internal.mam.fetchPreviewForRoom(roomJid).catch(() => {})
         }
       })
 
@@ -1103,8 +1110,8 @@ export class XMPPClient {
     this.currentJid = null
     // Clear session-scoped tracking data
     this.xep0084AvatarChecked.clear()
-    this.entityTime?.clearCache()
-    this.lastActivity?.clearCache()
+    this.internal?.entityTime?.clearCache()
+    this.internal?.lastActivity?.clearCache()
     return this.connection.disconnect(options)
   }
 

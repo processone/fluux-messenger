@@ -41,7 +41,7 @@ export function useContactTime(bareJid: string | null): string | null {
     }
 
     // Check cache first — queryTime handles cache + resource change detection
-    const cached = client.entityTime?.getCached(bareJid)
+    const cached = client.internal.entityTime?.getCached(bareJid)
     if (cached) {
       if (cached.supported) {
         setOffsetMinutes(cached.offsetMinutes)
@@ -59,7 +59,7 @@ export function useContactTime(bareJid: string | null): string | null {
     setTime(null)
     queriedJidRef.current = bareJid
 
-    client.entityTime?.queryTime(bareJid).then((result) => {
+    client.internal.entityTime?.queryTime(bareJid).then((result) => {
       // Only update if we're still looking at the same contact
       if (queriedJidRef.current !== bareJid) return
       if (result?.supported) {

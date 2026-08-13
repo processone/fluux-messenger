@@ -27,7 +27,7 @@ export type LastActivityCacheEntry =
  *
  * @example
  * ```typescript
- * const result = await client.lastActivity.queryLastActivity('alice@example.com')
+ * const result = await client.internal.lastActivity.queryLastActivity('alice@example.com')
  * if (result?.supported) {
  *   console.log(`Alice was last active ${result.seconds} seconds ago`)
  * }

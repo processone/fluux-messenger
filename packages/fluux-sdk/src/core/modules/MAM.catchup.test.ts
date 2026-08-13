@@ -107,7 +107,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([])
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await xmppClient.mam.catchUpAllConversations()
+      await xmppClient.internal.mam.catchUpAllConversations()
 
       // Should not have emitted any console event
       expect(emitSDKSpy).not.toHaveBeenCalledWith(
@@ -140,7 +140,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -163,7 +163,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -198,7 +198,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(30, 100)
       await catchUpPromise
 
@@ -230,7 +230,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ concurrency: 2 })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ concurrency: 2 })
       await waitForAsyncOps(100, 100)
       await catchUpPromise
 
@@ -258,7 +258,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(30, 100)
       await expect(catchUpPromise).resolves.not.toThrow()
 
@@ -275,7 +275,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -306,7 +306,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ exclude: 'bob@example.com' })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ exclude: 'bob@example.com' })
       await waitForAsyncOps(30, 100)
       await catchUpPromise
 
@@ -324,7 +324,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ exclude: null })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ exclude: null })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -370,7 +370,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -412,7 +412,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations()
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -434,9 +434,9 @@ describe('MAM Background Catch-Up', () => {
       ]
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -459,9 +459,9 @@ describe('MAM Background Catch-Up', () => {
       ]
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ sessionStartTime })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -483,9 +483,9 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(gapStart.getTime())
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -501,9 +501,9 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationLastTimestamp!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: false, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: false, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      const catchUpPromise = xmppClient.internal.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -521,13 +521,13 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupChat('mds-ptr')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async () => {
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async () => {
         // The fetch-latest merge resolved the pointer (its message was in the page).
         vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       expect(querySpy).toHaveBeenCalledTimes(1)
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ with: 'alice@example.com', before: '' }))
@@ -538,7 +538,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === 'page-1-first') {
           // Second backward page contained the pointer's message → resolved.
@@ -549,7 +549,7 @@ describe('MAM Background Catch-Up', () => {
         return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom', 'page-1-first'])
     })
@@ -559,13 +559,13 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
         return { messages: [], complete: true, rsm: { first: 'page-1-first' } } // archive start
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       expect(calls).toHaveLength(2)
     })
@@ -575,12 +575,12 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
 
       let n = 0
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async () => {
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async () => {
         n++
         return { messages: [], complete: false, rsm: { first: `page-${n}-first` } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       // 1 fetch-latest + MAM_POINTER_STITCH_MAX_PAGES backward pages
       expect(querySpy).toHaveBeenCalledTimes(1 + 10)
@@ -591,14 +591,14 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr') // the pending pointer never clears in this test
 
       const calls: any[] = []
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         // Every page — including the fetch-latest — returns the SAME cursor:
         // the archive has nothing further to offer this walk.
         return { messages: [], complete: false, rsm: { first: 'stuck' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       // Fetch-latest + exactly ONE backward page — the non-advancing-cursor
       // guard bails instead of looping MAM_POINTER_STITCH_MAX_PAGES times.
@@ -611,11 +611,11 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
       // Default loadMessagesFromCache mock resolves [] — the cache-bottom probe is unavailable.
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive')
         .mockResolvedValue({ messages: [], complete: false, rsm: {} })
 
       await expect(
-        xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+        xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
       ).resolves.not.toThrow()
 
       // Only the fetch-latest ran — with no windowBottom from Phase A, no seed
@@ -628,10 +628,10 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupChat('mds-ptr')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive')
         .mockResolvedValue({ messages: [], complete: false, rsm: { first: 'w-bottom' } })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [])
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [])
 
       expect(querySpy).toHaveBeenCalledTimes(1)
     })
@@ -640,11 +640,11 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupChat(undefined)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive')
         .mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledTimes(1)
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -657,11 +657,11 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupChat(undefined)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive')
         .mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         start: '2026-05-14T09:00:00.000Z',
@@ -674,14 +674,14 @@ describe('MAM Background Catch-Up', () => {
       setupChat(undefined)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start) return { messages: [], complete: false, rsm: { last: 'x' } }
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(calls).toHaveLength(2)
       expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.000Z' })
@@ -702,7 +702,7 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         // Phase A forward from the coverage edge completes in one page —
         // no fetch-latest, so windowBottom would stay unset.
@@ -719,7 +719,7 @@ describe('MAM Background Catch-Up', () => {
         { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
         { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
       ]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, {
         sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         stitchReadPointer: true,
       })
@@ -748,13 +748,13 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
         return { messages: [], complete: false, rsm: { first: 'p1' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com',
         [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
         { sessionStartTime: Date.now(), stitchReadPointer: true })
 
@@ -776,13 +776,13 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
         return { messages: [], complete: false, rsm: { first: 'p1' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com',
         [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
         { sessionStartTime: Date.now(), stitchReadPointer: true })
 
@@ -806,13 +806,13 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
         return { messages: [], complete: false, rsm: { first: 'p1' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com',
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com',
         [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
         { sessionStartTime: Date.now(), stitchReadPointer: true })
 
@@ -827,7 +827,7 @@ describe('MAM Background Catch-Up', () => {
       // Default loadMessagesFromCache mock resolves [] (cache unavailable).
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
         if (opts.before === 'old-1') {
@@ -841,7 +841,7 @@ describe('MAM Background Catch-Up', () => {
         { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
         { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
       ]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, {
         sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         stitchReadPointer: true,
       })
@@ -856,7 +856,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === 'w-bottom') {
           // The user opened the conversation while this backward page was in flight.
@@ -866,7 +866,7 @@ describe('MAM Background Catch-Up', () => {
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       // Fetch-latest + ONE backward page — the walk stops as soon as the
       // entity is active (backward pages would keep-oldest-evict the ACTIVE
@@ -880,9 +880,9 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
       vi.mocked(mockStores.chat.getConversationGapStartId!).mockReturnValue('gap-edge-7')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
     })
@@ -904,7 +904,7 @@ describe('MAM Background Catch-Up', () => {
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'purged-42' }]
       await expect(
-        xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+        xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, {
           sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         })
       ).resolves.not.toThrow()
@@ -918,7 +918,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr') // pending pointer set — exercises Phase B seeding too
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.after) {
           // Phase A's forward query already degraded internally (purged
@@ -932,7 +932,7 @@ describe('MAM Background Catch-Up', () => {
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', cached, {
         sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         stitchReadPointer: true,
       })
@@ -949,13 +949,13 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr') // pending pointer never clears in this test
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         // Empty cache: Phase A's own query IS the fetch-latest (before: '').
         return { messages: [], complete: true, rsm: { first: 'w-bottom' } }
       })
 
-      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
 
       // The fetch-latest exhausted the archive — nothing older exists, so a
       // still-pending pointer was purged, not merely deep. No backward page.
@@ -976,12 +976,12 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupRoom('mds-ptr')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async () => {
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async () => {
         vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
 
       expect(querySpy).toHaveBeenCalledTimes(1)
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ roomJid, before: '' }))
@@ -992,7 +992,7 @@ describe('MAM Background Catch-Up', () => {
       setupRoom('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === 'page-1-first') {
           vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
@@ -1002,7 +1002,7 @@ describe('MAM Background Catch-Up', () => {
         return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
 
       expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom', 'page-1-first'])
     })
@@ -1012,14 +1012,14 @@ describe('MAM Background Catch-Up', () => {
       setupRoom(undefined)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start) return { messages: [], complete: false, rsm: { last: 'x' } }
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
-      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(calls).toHaveLength(2)
       expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.000Z', maxAutoPages: 3 })
@@ -1040,7 +1040,7 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
         if (opts.before === 'bottom-1') {
@@ -1054,7 +1054,7 @@ describe('MAM Background Catch-Up', () => {
         { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
         { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
       ]
-      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, {
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, cached, {
         sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         stitchReadPointer: true,
       })
@@ -1080,13 +1080,13 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
         return { messages: [], complete: false, rsm: { first: 'p1' } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid,
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid,
         [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
         { sessionStartTime: Date.now(), stitchReadPointer: true })
 
@@ -1105,13 +1105,13 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
         return { messages: [], complete: false, rsm: { first: 'p1' } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid,
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid,
         [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'edge' }],
         { sessionStartTime: Date.now(), stitchReadPointer: true })
 
@@ -1128,7 +1128,7 @@ describe('MAM Background Catch-Up', () => {
       // Default loadMessagesFromCache mock resolves [] (cache unavailable).
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
         if (opts.before === 'old-1') {
@@ -1142,7 +1142,7 @@ describe('MAM Background Catch-Up', () => {
         { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
         { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
       ]
-      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, {
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, cached, {
         sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
         stitchReadPointer: true,
       })
@@ -1157,7 +1157,7 @@ describe('MAM Background Catch-Up', () => {
       setupRoom('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === 'w-bottom') {
           // The user opened the room while this backward page was in flight.
@@ -1167,7 +1167,7 @@ describe('MAM Background Catch-Up', () => {
         return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
 
       expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom'])
     })
@@ -1177,13 +1177,13 @@ describe('MAM Background Catch-Up', () => {
       setupRoom('mds-ptr')
 
       const calls: any[] = []
-      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+      vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
         return { messages: [], complete: true, rsm: { first: 'page-1-first' } } // archive start
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
 
       expect(calls).toHaveLength(2)
     })
@@ -1193,12 +1193,12 @@ describe('MAM Background Catch-Up', () => {
       setupRoom('mds-ptr')
 
       let n = 0
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async () => {
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockImplementation(async () => {
         n++
         return { messages: [], complete: false, rsm: { first: `page-${n}-first` } }
       })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
 
       // 1 fetch-latest + MAM_POINTER_STITCH_MAX_PAGES backward pages
       expect(querySpy).toHaveBeenCalledTimes(1 + 10)
@@ -1208,10 +1208,10 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupRoom('mds-ptr')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive')
         .mockResolvedValue({ messages: [], complete: false, rsm: { first: 'w-bottom' } })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [])
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [])
 
       expect(querySpy).toHaveBeenCalledTimes(1)
     })
@@ -1220,11 +1220,11 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupRoom(undefined)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive')
         .mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
-      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledTimes(1)
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -1237,11 +1237,11 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
       setupRoom(undefined)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive')
         .mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
-      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         start: '2026-05-14T09:00:00.000Z',
@@ -1255,9 +1255,9 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
       vi.mocked(mockStores.room.getRoomGapStartId!).mockReturnValue('gap-edge-7')
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      await xmppClient.mam.catchUpRoomHistory(roomJid, [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
+      await xmppClient.internal.mam.catchUpRoomHistory(roomJid, [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
     })
@@ -1290,7 +1290,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
+      const catchUpPromise = xmppClient.internal.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1317,7 +1317,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
+      const catchUpPromise = xmppClient.internal.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1353,9 +1353,9 @@ describe('MAM Background Catch-Up', () => {
 
       // Cursor source = pure cache peek (catchUpRoom uses the return value).
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com', sessionStartTime)
+      const catchUpPromise = xmppClient.internal.mam.catchUpRoom('room1@conference.example.com', sessionStartTime)
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1378,9 +1378,9 @@ describe('MAM Background Catch-Up', () => {
 
       // Cursor source = pure cache peek (catchUpRoom uses the return value).
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.catchUpRoom('room1@conference.example.com')
+      const catchUpPromise = xmppClient.internal.mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1396,7 +1396,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.connection.getStatus).mockReturnValue('disconnected')
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await xmppClient.mam.catchUpRoom('room1@conference.example.com')
+      await xmppClient.internal.mam.catchUpRoom('room1@conference.example.com')
 
       expect(mockStores.room.loadMessagesFromCache).not.toHaveBeenCalled()
       expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
@@ -1410,7 +1410,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.joinedRooms).mockReturnValue([])
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await xmppClient.mam.forceCatchUpAllRooms()
+      await xmppClient.internal.mam.forceCatchUpAllRooms()
 
       expect(emitSDKSpy).not.toHaveBeenCalledWith(
         'console:event',
@@ -1436,7 +1436,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(30, 100)
       await catchUpPromise
 
@@ -1466,7 +1466,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(30, 100)
       await catchUpPromise
 
@@ -1492,7 +1492,7 @@ describe('MAM Background Catch-Up', () => {
         return createFinResponse()
       })
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(30, 100)
       await expect(catchUpPromise).resolves.not.toThrow()
 
@@ -1509,7 +1509,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1527,9 +1527,9 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
 
-      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(xmppClient.internal.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1547,7 +1547,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms()
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1566,7 +1566,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms({ days: 3 })
+      const catchUpPromise = xmppClient.internal.mam.forceCatchUpAllRooms({ days: 3 })
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
@@ -1584,7 +1584,7 @@ describe('MAM Background Catch-Up', () => {
       // complete=false, no rsm cursor → forward pagination stops with isComplete=false
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
 
-      const queryPromise = xmppClient.mam.queryArchive({
+      const queryPromise = xmppClient.internal.mam.queryArchive({
         with: 'alice@example.com',
         start: '2026-05-01T00:00:00.000Z',
         max: 100,
@@ -1608,7 +1608,7 @@ describe('MAM Background Catch-Up', () => {
       // complete=false, no rsm cursor → forward pagination stops with isComplete=false
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
 
-      const queryPromise = xmppClient.mam.queryRoomArchive({
+      const queryPromise = xmppClient.internal.mam.queryRoomArchive({
         roomJid: 'room1@conference.example.com',
         start: '2026-05-01T00:00:00.000Z',
         max: 100,
@@ -1628,7 +1628,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(true))
 
-      const queryPromise = xmppClient.mam.queryRoomArchive({
+      const queryPromise = xmppClient.internal.mam.queryRoomArchive({
         roomJid: 'room1@conference.example.com',
         start: '2026-05-01T00:00:00.000Z',
         max: 100,
@@ -1649,7 +1649,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([])
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await xmppClient.mam.discoverNewConversationsFromRoster()
+      await xmppClient.internal.mam.discoverNewConversationsFromRoster()
 
       expect(emitSDKSpy).not.toHaveBeenCalledWith(
         'console:event',
@@ -1669,7 +1669,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.hasConversation).mockReturnValue(true)
       mockXmppClientInstance.iqCaller.request.mockClear()
 
-      await xmppClient.mam.discoverNewConversationsFromRoster()
+      await xmppClient.internal.mam.discoverNewConversationsFromRoster()
 
       // No MAM queries should have been made
       expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
@@ -1690,7 +1690,7 @@ describe('MAM Background Catch-Up', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      const discoverPromise = xmppClient.internal.mam.discoverNewConversationsFromRoster()
       await waitForAsyncOps(20, 100)
       await discoverPromise
 
@@ -1714,7 +1714,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
-      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      const discoverPromise = xmppClient.internal.mam.discoverNewConversationsFromRoster()
       await waitForAsyncOps(20, 100)
       await discoverPromise
 
@@ -1741,7 +1741,7 @@ describe('MAM Background Catch-Up', () => {
         .mockResolvedValue(createFinResponse())
 
       // Should not throw
-      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      const discoverPromise = xmppClient.internal.mam.discoverNewConversationsFromRoster()
       await waitForAsyncOps(20, 100)
       await discoverPromise
     })
@@ -1757,13 +1757,13 @@ describe('MAM Background Catch-Up', () => {
 
       // Spy on queryArchive to return messages
       const fakeMessage = { id: 'msg-1', from: 'bob@example.com', body: 'Hello', timestamp: new Date() }
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({
         messages: [fakeMessage] as any,
         complete: true,
         rsm: {},
       })
 
-      await xmppClient.mam.discoverNewConversationsFromRoster()
+      await xmppClient.internal.mam.discoverNewConversationsFromRoster()
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:conversation', {
         conversation: expect.objectContaining({
@@ -1786,13 +1786,13 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
 
       // queryArchive returns no messages
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({
         messages: [],
         complete: true,
         rsm: {},
       })
 
-      await xmppClient.mam.discoverNewConversationsFromRoster()
+      await xmppClient.internal.mam.discoverNewConversationsFromRoster()
 
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:conversation', expect.anything())
     })
@@ -1807,13 +1807,13 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
 
       const fakeMessage = { id: 'msg-1', from: 'alice@example.com', body: 'Hi', timestamp: new Date() }
-      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+      vi.spyOn(xmppClient.internal.mam, 'queryArchive').mockResolvedValue({
         messages: [fakeMessage] as any,
         complete: true,
         rsm: {},
       })
 
-      await xmppClient.mam.discoverNewConversationsFromRoster()
+      await xmppClient.internal.mam.discoverNewConversationsFromRoster()
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:conversation', {
         conversation: expect.objectContaining({

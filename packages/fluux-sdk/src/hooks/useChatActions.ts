@@ -162,7 +162,7 @@ export function useChatActions() {
         // the user isn't looking at) SHOULD stitch, so its unread region becomes
         // contiguous with the read pointer instead of leaving a gap.
         const isActive = targetId === chatStore.getState().activeConversationId
-        await client.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {
+        await client.internal.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {
           stitchReadPointer: !isActive,
         })
       } catch (error) {

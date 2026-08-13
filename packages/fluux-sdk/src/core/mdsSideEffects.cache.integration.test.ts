@@ -85,7 +85,7 @@ function makeClient() {
     _emit: (event: string, payload?: unknown) => {
       for (const handler of handlers[event] ?? []) handler(payload)
     },
-    mds,
+    internal: { mds },
   }
 }
 
@@ -169,7 +169,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.waitFor(() => {
-      expect(client.mds.fetchAllDisplayedResult).toHaveBeenCalledTimes(1)
+      expect(client.internal.mds.fetchAllDisplayedResult).toHaveBeenCalledTimes(1)
     })
 
     chatStore.setState((state) => {
@@ -193,9 +193,9 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
       return { roomMeta }
     })
 
-    await waitForPublishes(client.mds.publishDisplayed, 3)
+    await waitForPublishes(client.internal.mds.publishDisplayed, 3)
 
-    const calls = client.mds.publishDisplayed.mock.calls
+    const calls = client.internal.mds.publishDisplayed.mock.calls
     expect(calls).toContainEqual([EXACT_CHAT, 'exact-stanza-7', OWN_BARE])
     expect(calls).toContainEqual([FALLBACK_CHAT, 'fallback-stanza-3', OWN_BARE])
     expect(calls).not.toContainEqual([FALLBACK_CHAT, 'unread-stanza-5', OWN_BARE])

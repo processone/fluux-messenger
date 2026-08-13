@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest'
 import * as main from './index'
 import * as core from './core/index'
 import * as xmpp from './xmpp/index'
+import { XMPPClient } from './core/XMPPClient'
 
 /**
  * The curated entries do not speak XMPP, and the escape hatch does.
@@ -68,6 +69,21 @@ describe('public API surface', () => {
 
   it('still exposes what an app needs to render a delivery error', () => {
     expect(Object.keys(main)).toContain('formatXMPPError')
+  })
+
+  it('keeps the modules the SDK drives itself off the client', () => {
+    // A consumer names conversations and rooms, not MAM or MDS. These are
+    // grouped under `internal` so the protocol vocabulary stays where it
+    // belongs — inside — while the client reads as domain API.
+    const client = new XMPPClient()
+    try {
+      for (const name of ['mam', 'mds', 'conversationSync', 'entityTime', 'lastActivity']) {
+        expect(name in client).toBe(false)
+      }
+      expect(typeof client.internal.mam).toBe('object')
+    } finally {
+      client.destroy()
+    }
   })
 
   it('does not hand the stanza builder back through a hook', () => {

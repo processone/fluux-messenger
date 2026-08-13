@@ -31,7 +31,7 @@ describe('fetchHistory stitchReadPointer active/non-active rule', () => {
   const OTHER = 'bob@example.com'
 
   beforeEach(() => {
-    vi.mocked(mockClient.mam.catchUpConversationHistory).mockReset().mockResolvedValue(undefined)
+    vi.mocked(mockClient.internal.mam.catchUpConversationHistory).mockReset().mockResolvedValue(undefined)
     chatStore.setState({
       conversations: new Map(),
       conversationEntities: new Map(),
@@ -63,7 +63,7 @@ describe('fetchHistory stitchReadPointer active/non-active rule', () => {
       await result.current.fetchHistory(ACTIVE)
     })
 
-    expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+    expect(mockClient.internal.mam.catchUpConversationHistory).toHaveBeenCalledWith(
       ACTIVE,
       expect.anything(),
       expect.objectContaining({ stitchReadPointer: false })
@@ -77,7 +77,7 @@ describe('fetchHistory stitchReadPointer active/non-active rule', () => {
       await result.current.fetchHistory()
     })
 
-    expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+    expect(mockClient.internal.mam.catchUpConversationHistory).toHaveBeenCalledWith(
       ACTIVE,
       expect.anything(),
       expect.objectContaining({ stitchReadPointer: false })
@@ -91,7 +91,7 @@ describe('fetchHistory stitchReadPointer active/non-active rule', () => {
       await result.current.fetchHistory(OTHER)
     })
 
-    expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+    expect(mockClient.internal.mam.catchUpConversationHistory).toHaveBeenCalledWith(
       OTHER,
       expect.anything(),
       expect.objectContaining({ stitchReadPointer: true })

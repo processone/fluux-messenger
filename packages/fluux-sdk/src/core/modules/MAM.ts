@@ -145,7 +145,7 @@ interface UnresolvedModifications {
  *
  * @example Fetch recent 1:1 messages
  * ```typescript
- * const result = await client.mam.queryArchive({
+ * const result = await client.internal.mam.queryArchive({
  *   with: 'user@example.com',
  *   max: 50
  * })
@@ -155,14 +155,14 @@ interface UnresolvedModifications {
  * @example Fetch room messages with pagination
  * ```typescript
  * // Initial fetch
- * const initial = await client.mam.queryRoomArchive({
+ * const initial = await client.internal.mam.queryRoomArchive({
  *   roomJid: 'room@conference.example.com',
  *   max: 50
  * })
  *
  * // Load older messages
  * if (!initial.complete && initial.rsm?.first) {
- *   const older = await client.mam.queryRoomArchive({
+ *   const older = await client.internal.mam.queryRoomArchive({
  *     roomJid: 'room@conference.example.com',
  *     before: initial.rsm.first
  *   })

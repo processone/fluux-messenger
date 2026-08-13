@@ -102,7 +102,7 @@ function reportCurrent(conversationId: string, evidence: 'at-edge' | 'away'): vo
  * `onActivate` (there are no loaded messages in this lightweight test file,
  * so `onActivate` snaps straight to unreadCount 0), so a distinguishing
  * baseline has to be injected AFTER activation, not before — patching state
- * directly (as chatStore.mds.test.ts's `seedWithPointer` does) bypasses that
+ * directly (as chatStore.internal.mds.test.ts's `seedWithPointer` does) bypasses that
  * reset without touching the SDK's own activation code path under test.
  */
 function setPriorReadState(id: string, unreadCount: number, priorMessageId: string): void {

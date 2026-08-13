@@ -38,7 +38,7 @@ export function useLastActivity(bareJid: string | null): void {
     if (queriedJidRef.current === bareJid) return
 
     // Check cache — already queried this session
-    const cached = client.lastActivity?.getCached(bareJid)
+    const cached = client.internal.lastActivity?.getCached(bareJid)
     if (cached) {
       queriedJidRef.current = bareJid
       return
@@ -49,6 +49,6 @@ export function useLastActivity(bareJid: string | null): void {
     if (contact.lastSeen) return
 
     queriedJidRef.current = bareJid
-    client.lastActivity?.queryLastActivity(bareJid)
+    client.internal.lastActivity?.queryLastActivity(bareJid)
   }, [bareJid, client, contact?.presence, contact?.lastSeen])
 }

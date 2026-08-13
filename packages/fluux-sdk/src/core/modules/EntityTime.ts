@@ -62,7 +62,7 @@ export function getBestResource(resources: Map<string, ResourcePresence>): strin
  *
  * @example
  * ```typescript
- * const result = await client.entityTime.queryTime('alice@example.com')
+ * const result = await client.internal.entityTime.queryTime('alice@example.com')
  * if (result?.supported) {
  *   console.log(`Alice's offset: ${result.offsetMinutes} minutes from UTC`)
  * }

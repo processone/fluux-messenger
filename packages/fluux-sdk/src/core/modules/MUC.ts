@@ -1,5 +1,6 @@
 import { xml, Element } from '@xmpp/client'
-import { BaseModule } from './BaseModule'
+import { BaseModule, type ModuleDependencies } from './BaseModule'
+import type { MAM } from './MAM'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
 import { generateUUID } from '../../utils/uuid'
@@ -164,6 +165,18 @@ export class MUC extends BaseModule {
    * This reduces store updates from ~50 to ~1 for large rooms.
    */
   private pendingOccupants = new Map<string, RoomOccupant[]>()
+
+  /**
+   * The archive, for the one room concern that needs it: catching a room's
+   * history back up on demand. MUC owns the verb because a user asks to
+   * resync ROOMS; MAM owns how that is fetched.
+   */
+  private readonly mam: MAM
+
+  constructor(deps: ModuleDependencies, mam: MAM) {
+    super(deps)
+    this.mam = mam
+  }
 
   /**
    * Rooms whose affiliation lists the server refused to share (forbidden).
@@ -1547,6 +1560,24 @@ export class MUC extends BaseModule {
    * await client.muc.setSubject('room@conference.example.com', 'New topic for discussion')
    * ```
    */
+  /**
+   * Re-fetch recent history for every joined room that supports archiving.
+   *
+   * For when a user believes they are missing messages: it re-runs the
+   * catch-up the SDK does on connect, over a wider window.
+   *
+   * @param options - `days` of history to cover (default 45) and how many
+   *   rooms to query at once.
+   *
+   * @example
+   * ```typescript
+   * await client.muc.resync()
+   * ```
+   */
+  async resync(options: { days?: number; concurrency?: number } = {}): Promise<void> {
+    await this.mam.forceCatchUpAllRooms(options)
+  }
+
   async setSubject(roomJid: string, subject: string): Promise<void> {
     const msg = xml(
       'message',

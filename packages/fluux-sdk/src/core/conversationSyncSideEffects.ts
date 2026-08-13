@@ -85,7 +85,7 @@ export function setupConversationSyncSideEffects(
     if (snapshot === lastPublishedSnapshot) return
 
     try {
-      await client.conversationSync.publishConversations(conversations)
+      await client.internal.conversationSync.publishConversations(conversations)
       lastPublishedSnapshot = snapshot
       logInfo('ConversationSync: published conversation list')
     } catch {

@@ -165,7 +165,7 @@ export function setupMdsSideEffects(
   function migrateLegacyMarker(jid: string, stanzaId: string): void {
     const by = stanzaIdBy(jid)
     if (!by) return
-    client.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
+    client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
       // Best-effort — an unconverted marker is republished on the next advance.
     })
   }
@@ -528,7 +528,7 @@ export function setupMdsSideEffects(
       }
       if (decision === 'skip') continue
       try {
-        await client.mds.publishDisplayed(jid, stanzaId, by)
+        await client.internal.mds.publishDisplayed(jid, stanzaId, by)
         recordKnownNodeStanzaId(jid, stanzaId)
       } catch {
         // Best-effort; keep the position handled as documented above.
@@ -733,7 +733,7 @@ export function setupMdsSideEffects(
     for (const jid of trackedJids) {
       if (!current.has(jid)) {
         evictJid(jid)
-        void client.mds.retractDisplayed(jid) // best-effort
+        void client.internal.mds.retractDisplayed(jid) // best-effort
       }
     }
     trackedJids = current
@@ -830,7 +830,7 @@ export function setupMdsSideEffects(
       const seedStartedAtRevision = nodeRevision
       let result: DisplayedMarkerFetchResult
       try {
-        result = await client.mds.fetchAllDisplayedResult()
+        result = await client.internal.mds.fetchAllDisplayedResult()
       } catch {
         result = { status: 'unknown' }
       }

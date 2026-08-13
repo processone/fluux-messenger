@@ -150,7 +150,7 @@ export function setupBackgroundSyncSideEffects(
     if (!isFreshRoomCatchUpEligible(roomJid, generation, membershipEpoch)) {
       return false
     }
-    await client.mam.catchUpRoomHistory(
+    await client.internal.mam.catchUpRoomHistory(
       roomJid,
       messages,
       { sessionStartTime, stitchReadPointer: true },
@@ -305,7 +305,7 @@ export function setupBackgroundSyncSideEffects(
     resumeSeededRooms.add(roomJid)
     logInfo(`Background sync: SM resumption — catching up late-joined room ${roomJid}`)
     try {
-      await client.mam.catchUpRoom(roomJid, sessionStartTime)
+      await client.internal.mam.catchUpRoom(roomJid, sessionStartTime)
     } catch {
       // Best-effort, exactly like the resume pass this mirrors. The seed stays
       // recorded so a failing room can't be retried on every presence change;
@@ -423,19 +423,19 @@ export function setupBackgroundSyncSideEffects(
       try {
         // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
         logInfo('Background sync: conversation catch-up')
-        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
+        await client.internal.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
 
         // Stage 2: Roster discovery (hourly cooldown)
         if (shouldDiscoverRoster()) {
           logInfo('Background sync: roster discovery')
-          await client.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
+          await client.internal.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
           markRosterDiscovered()
         }
 
         // Stage 3: Daily archived conversation check
         if (shouldCheckArchived()) {
           logInfo('Background sync: checking archived conversations')
-          await client.mam.refreshArchivedConversationPreviews()
+          await client.internal.mam.refreshArchivedConversationPreviews()
           markArchivedChecked()
         }
       } catch {

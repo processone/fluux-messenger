@@ -57,8 +57,8 @@ describe('setupConversationSyncSideEffects', () => {
     connectionStore.getState().reset()
     chatStore.getState().reset()
     mockClient = createMockClient()
-    // Add conversationSync mock to the client
-    ;(mockClient as any).conversationSync = {
+    // The module lives under the client's internal group, so the double does too.
+    ;(mockClient as any).internal.conversationSync = {
       fetchConversations: vi.fn().mockResolvedValue([]),
       publishConversations: vi.fn().mockResolvedValue(undefined),
     }
@@ -87,13 +87,13 @@ describe('setupConversationSyncSideEffects', () => {
       })
 
       // Should not publish immediately
-      expect((mockClient as any).conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
 
       // Advance past debounce (3 seconds)
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledWith(
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ jid: 'alice@example.com', archived: false }),
         ])
@@ -121,8 +121,8 @@ describe('setupConversationSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(3_000)
 
       // Should have published once with all three conversations
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
-      const publishedList = (mockClient as any).conversationSync.publishConversations.mock.calls[0][0]
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      const publishedList = (mockClient as any).internal.conversationSync.publishConversations.mock.calls[0][0]
       expect(publishedList).toHaveLength(3)
     })
 
@@ -142,8 +142,8 @@ describe('setupConversationSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledWith(
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ jid: 'alice@example.com', archived: true }),
         ])
@@ -167,8 +167,8 @@ describe('setupConversationSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledWith(
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ jid: 'alice@example.com', archived: false }),
         ])
@@ -194,8 +194,8 @@ describe('setupConversationSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
-      const publishedList = (mockClient as any).conversationSync.publishConversations.mock.calls[0][0]
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      const publishedList = (mockClient as any).internal.conversationSync.publishConversations.mock.calls[0][0]
       expect(publishedList).toHaveLength(1)
       expect(publishedList[0].jid).toBe('bob@example.com')
     })
@@ -217,7 +217,7 @@ describe('setupConversationSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(5_000)
 
       // No publish because snapshot was taken on 'online' and nothing changed
-      expect((mockClient as any).conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     })
   })
 
@@ -235,7 +235,7 @@ describe('setupConversationSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(3_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     })
   })
 
@@ -259,7 +259,7 @@ describe('setupConversationSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(5_000)
 
       // Should not have published because disconnect cancelled the timer
-      expect((mockClient as any).conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     })
 
     it('should not publish when disconnected even if timer fires', async () => {
@@ -278,7 +278,7 @@ describe('setupConversationSyncSideEffects', () => {
       // Advance past debounce
       await vi.advanceTimersByTimeAsync(5_000)
 
-      expect((mockClient as any).conversationSync.publishConversations).not.toHaveBeenCalled()
+      expect((mockClient as any).internal.conversationSync.publishConversations).not.toHaveBeenCalled()
     })
   })
 
@@ -295,7 +295,7 @@ describe('setupConversationSyncSideEffects', () => {
       })
 
       await vi.advanceTimersByTimeAsync(3_000)
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
 
       // Disconnect
       connectionStore.getState().setStatus('disconnected')
@@ -309,13 +309,13 @@ describe('setupConversationSyncSideEffects', () => {
       })
 
       await vi.advanceTimersByTimeAsync(3_000)
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(2)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(2)
     })
   })
 
   describe('error handling', () => {
     it('should not crash if publish fails', async () => {
-      ;(mockClient as any).conversationSync.publishConversations.mockRejectedValue(
+      ;(mockClient as any).internal.conversationSync.publishConversations.mockRejectedValue(
         new Error('network error')
       )
 
@@ -331,7 +331,7 @@ describe('setupConversationSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(3_000)
 
       // Should not throw — error is silently caught
-      expect((mockClient as any).conversationSync.publishConversations).toHaveBeenCalledTimes(1)
+      expect((mockClient as any).internal.conversationSync.publishConversations).toHaveBeenCalledTimes(1)
     })
   })
 })

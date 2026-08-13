@@ -87,11 +87,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
       // Must pass sessionStartTime so the 1:1 forward cursor excludes live messages
       // that arrive during catch-up (parity with rooms / Bug A).
-      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledWith(
         expect.objectContaining({ sessionStartTime: expect.any(Number) })
       )
     })
@@ -103,7 +103,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.catchUpAllConversations).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpAllConversations).not.toHaveBeenCalled()
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -112,7 +112,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -129,7 +129,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setServerInfo({
@@ -139,7 +139,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
     })
 
     it('should reset and re-trigger after disconnect/reconnect cycle', async () => {
@@ -154,14 +154,14 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       simulateFreshSession(mockClient)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setStatus('disconnected')
 
       simulateFreshSession(mockClient)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
       })
     })
 
@@ -181,7 +181,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledWith(
           expect.objectContaining({ exclude: 'alice@example.com' })
         )
       })
@@ -203,10 +203,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
-      expect(mockClient.mam.refreshConversationPreviews).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.refreshConversationPreviews).not.toHaveBeenCalled()
     })
   })
 
@@ -224,7 +224,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -243,11 +243,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.refreshArchivedConversationPreviews).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.refreshArchivedConversationPreviews).not.toHaveBeenCalled()
     })
 
     it('should trigger archived check after 24h', async () => {
@@ -266,7 +266,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
       })
     })
   })
@@ -285,7 +285,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -304,11 +304,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.discoverNewConversationsFromRoster).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.discoverNewConversationsFromRoster).not.toHaveBeenCalled()
     })
 
     it('should trigger roster discovery after 1h', async () => {
@@ -327,7 +327,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -344,7 +344,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
       })
 
       expect(localStorageMock.setItem).toHaveBeenCalledWith(ROSTER_DISCOVERY_KEY, expect.any(String))
@@ -377,12 +377,12 @@ describe('setupBackgroundSyncSideEffects', () => {
       mockClient._emitSDK('room:joined', { roomJid: jid, joined: true })
 
     const caughtUpRooms = () =>
-      (mockClient.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mock.calls
+      (mockClient.internal.mam.catchUpRoomHistory as ReturnType<typeof vi.fn>).mock.calls
         .map(([jid]) => jid as string)
         .sort()
 
     it('should trigger catchUpAllConversations with concurrency 2', async () => {
-      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+      ;(mockClient.internal.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -396,10 +396,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
-      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledWith(
         expect.objectContaining({ concurrency: 2 })
       )
     })
@@ -438,7 +438,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       }
 
       await vi.advanceTimersByTimeAsync(1_000)
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
       await vi.advanceTimersByTimeAsync(10_000)
 
@@ -450,7 +450,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       // Must pass the session-start time so the forward cursor excludes live
       // messages that arrive during the 10s catch-up window (silent-gap fix).
-      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
         'a@conference.example.com',
         expect.any(Array),
         expect.objectContaining({
@@ -465,7 +465,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       // one-shot key-unlock retry already ran its snapshot — would otherwise stay
       // "could not be decrypted" until the next launch. Re-running retryPendingDecrypts
       // when catch-up settles decrypts it in the same session.
-      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+      ;(mockClient.internal.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -479,7 +479,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
       await vi.waitFor(() => {
         expect(mockClient.retryPendingDecrypts).toHaveBeenCalled()
@@ -503,7 +503,7 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Conversation catch-up settles first and triggers its own retry.
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
       await vi.waitFor(() => {
         expect(mockClient.retryPendingDecrypts).toHaveBeenCalled()
@@ -515,7 +515,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       // retry so room messages stashed during that later pass also self-heal in-session.
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
       await vi.waitFor(() => {
         expect(
@@ -544,11 +544,11 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
     })
 
     it('should re-trigger catch-up on reconnect', async () => {
-      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+      ;(mockClient.internal.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
       addRoom('room@conference.example.com')
 
       connectionStore.getState().setServerInfo({
@@ -563,12 +563,12 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
       confirmJoin('room@conference.example.com')
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setStatus('disconnected')
@@ -576,12 +576,12 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
       confirmJoin('room@conference.example.com')
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
+        expect(mockClient.internal.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
       })
 
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(2)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(2)
       })
     })
 
@@ -647,7 +647,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setActiveRoom('b@conference.example.com')
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       roomStore.getState().reset()
     })
 
@@ -697,7 +697,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       await Promise.resolve()
       await Promise.resolve()
 
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       loadSpy.mockRestore()
       roomStore.getState().reset()
     })
@@ -734,7 +734,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       mockClient._emitSDK('room:joined', { roomJid, joined: true })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
       roomStore.getState().reset()
     })
@@ -772,7 +772,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(10_000)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           roomJid,
           expect.any(Array),
           expect.objectContaining({ sessionStartTime: 1_754_000_000_000 }),
@@ -804,7 +804,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       const oldCatchUp = new Promise<void>((resolve) => {
         resolveOldCatchUp = resolve
       })
-      vi.mocked(mockClient.mam.catchUpRoomHistory)
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory)
         .mockReturnValueOnce(oldCatchUp)
         .mockResolvedValue(undefined)
       connectionStore.getState().setServerInfo({
@@ -820,7 +820,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       mockClient._emitSDK('room:joined', { roomJid: oldRoomJid, joined: true })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           oldRoomJid,
           expect.any(Array),
           expect.any(Object),
@@ -838,7 +838,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         joined: true,
       })
       await vi.advanceTimersByTimeAsync(0)
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalledWith(
         replacementRoomJid,
         expect.any(Array),
         expect.any(Object),
@@ -846,7 +846,7 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           replacementRoomJid,
           expect.any(Array),
           expect.any(Object),
@@ -916,11 +916,11 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       resolveFirstCache([])
       await vi.advanceTimersByTimeAsync(0)
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
 
       resolveReplacementCache([])
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
       expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
       loadSpy.mockRestore()
@@ -983,14 +983,14 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(loadSpy.mock.calls.filter(([jid]) => jid === roomJid)).toHaveLength(2)
       })
-      expect(mockClient.mam.catchUpRoomHistory).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoomHistory).not.toHaveBeenCalled()
       expect(roomStore.getState().getRoomMAMQueryState(roomJid).isLoading).toBe(false)
 
       resolveBackgroundCache([])
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledTimes(1)
       })
-      expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
         roomJid,
         [],
         expect.objectContaining({ stitchReadPointer: true }),
@@ -1039,7 +1039,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       const blockingCatchUp = new Promise<void>((resolve) => {
         resolveBlockingCatchUp = resolve
       })
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (roomJid) => {
           if (roomJid === blockingRoomJid) {
             await blockingCatchUp
@@ -1067,7 +1067,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           blockingRoomJid,
           [],
           expect.objectContaining({ stitchReadPointer: true }),
@@ -1082,14 +1082,14 @@ describe('setupBackgroundSyncSideEffects', () => {
         ).toBe(false)
       })
       expect(
-        vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+        vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
           .filter(([jid]) => jid === handoffRoomJid),
       ).toHaveLength(0)
 
       resolveBlockingCatchUp()
       await vi.waitFor(() => {
         expect(
-          vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+          vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
             .filter(([jid]) => jid === handoffRoomJid),
         ).toHaveLength(1)
       })
@@ -1139,7 +1139,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         const blockingCatchUp = new Promise<void>((resolve) => {
           resolveBlockingCatchUp = resolve
         })
-        vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+        vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
           async (roomJid) => {
             if (roomJid === blockingRoomJid) {
               await blockingCatchUp
@@ -1169,7 +1169,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         }
         await vi.advanceTimersByTimeAsync(10_000)
         await vi.waitFor(() => {
-          expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+          expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
             blockingRoomJid,
             [],
             expect.objectContaining({ stitchReadPointer: true }),
@@ -1188,14 +1188,14 @@ describe('setupBackgroundSyncSideEffects', () => {
           })
         }
         expect(
-          vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+          vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
             .filter(([jid]) => jid === targetRoomJid),
         ).toHaveLength(0)
 
         resolveBlockingCatchUp()
         await vi.waitFor(() => {
           expect(
-            vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+            vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
               .filter(([jid]) => jid === targetRoomJid),
           ).toHaveLength(1)
         })
@@ -1232,7 +1232,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         resolveBlockingCatchUp = resolve
       })
       let foregroundCatchUpCount = 0
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (roomJid) => {
           if (roomJid === foregroundRoomJid) {
             foregroundCatchUpCount += 1
@@ -1264,7 +1264,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           blockingRoomJid,
           [],
           expect.objectContaining({ stitchReadPointer: true }),
@@ -1308,7 +1308,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       const blockingCatchUp = new Promise<void>((resolve) => {
         resolveBlockingCatchUp = resolve
       })
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (roomJid) => {
           if (roomJid === blockingRoomJid) {
             await blockingCatchUp
@@ -1331,14 +1331,14 @@ describe('setupBackgroundSyncSideEffects', () => {
       }
       await vi.waitFor(() => {
         expect(
-          vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+          vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
             .filter(([jid]) => jid === foregroundRoomJid),
         ).toHaveLength(1)
       })
       await vi.advanceTimersByTimeAsync(0)
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           blockingRoomJid,
           [],
           expect.objectContaining({ stitchReadPointer: true }),
@@ -1351,7 +1351,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
       })
       expect(
-        vi.mocked(mockClient.mam.catchUpRoomHistory).mock.calls
+        vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
           .filter(([jid]) => jid === foregroundRoomJid),
       ).toHaveLength(1)
       roomStore.getState().reset()
@@ -1379,7 +1379,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         rejectForegroundCatchUp = reject
       })
       let roomCatchUpCount = 0
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (caughtUpRoomJid) => {
           if (caughtUpRoomJid !== roomJid) return
           roomCatchUpCount += 1
@@ -1440,7 +1440,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         rejectForegroundCatchUp = reject
       })
       let roomCatchUpCount = 0
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (caughtUpRoomJid) => {
           if (caughtUpRoomJid !== roomJid) return
           roomCatchUpCount += 1
@@ -1508,7 +1508,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         rejectForegroundCatchUp = reject
       })
       let roomCatchUpCount = 0
-      vi.mocked(mockClient.mam.catchUpRoomHistory).mockImplementation(
+      vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mockImplementation(
         async (caughtUpRoomJid) => {
           if (caughtUpRoomJid !== roomJid) return
           roomCatchUpCount += 1
@@ -1583,13 +1583,13 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Initial 10s pass — room is not MAM-ready, so it's not covered and not retried yet.
       await vi.advanceTimersByTimeAsync(10_000)
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
 
       // Disco resolves AFTER the pass → late retry fires for this room.
       roomStore.getState().updateRoom('late@conference.example.com', { supportsMAM: true })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoomHistory).toHaveBeenCalledWith(
+        expect(mockClient.internal.mam.catchUpRoomHistory).toHaveBeenCalledWith(
           'late@conference.example.com',
           expect.any(Array),
           expect.objectContaining({
@@ -1612,7 +1612,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().updateRoom('active@conference.example.com', { supportsMAM: true })
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalledWith('active@conference.example.com', expect.anything())
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalledWith('active@conference.example.com', expect.anything())
     })
 
     it('does not retry before the initial pass (the pass will cover it)', async () => {
@@ -1627,7 +1627,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().updateRoom('early@conference.example.com', { supportsMAM: true })
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
   })
 
@@ -1676,10 +1676,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoom).toHaveBeenCalledTimes(1)
       })
       expect(
-        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        (mockClient.internal.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
       ).toBe('unseeded@conference.example.com')
     })
 
@@ -1692,7 +1692,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
 
     it('catches up a previewed room that is not caught up to live (open gap)', async () => {
@@ -1706,10 +1706,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoom).toHaveBeenCalledTimes(1)
       })
       expect(
-        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        (mockClient.internal.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
       ).toBe('gap@conference.example.com')
     })
 
@@ -1721,7 +1721,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
 
     it('does not catch up rooms that do not support MAM', async () => {
@@ -1732,7 +1732,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
 
     it('does not catch up the active room (handled by roomSideEffects)', async () => {
@@ -1744,7 +1744,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
       await vi.advanceTimersByTimeAsync(100)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalledWith(
         'active@conference.example.com',
         expect.anything(),
       )
@@ -1769,7 +1769,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateSmResumption(mockClient)
       await vi.advanceTimersByTimeAsync(300)
       // Nothing was eligible at resume time — the room was still unjoined.
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
 
       roomStore.getState().setRoomJoined('late@conference.example.com', true)
       mockClient._emitSDK('room:joined', {
@@ -1777,10 +1777,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoom).toHaveBeenCalledTimes(1)
       })
       expect(
-        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        (mockClient.internal.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
       ).toBe('late@conference.example.com')
     })
 
@@ -1801,15 +1801,15 @@ describe('setupBackgroundSyncSideEffects', () => {
         roomJid: 'latemam@conference.example.com', joined: true,
       })
       await vi.advanceTimersByTimeAsync(100)
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
 
       roomStore.getState().updateRoom('latemam@conference.example.com', { supportsMAM: true })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+        expect(mockClient.internal.mam.catchUpRoom).toHaveBeenCalledTimes(1)
       })
       expect(
-        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+        (mockClient.internal.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
       ).toBe('latemam@conference.example.com')
     })
 
@@ -1833,7 +1833,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(1_000)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
 
     // Second discrimination axis: the seed must be scoped to RESUMED sessions.
@@ -1859,7 +1859,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(30_000)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
 
     // A room joining while the transport is DOWN must not seed either: the
@@ -1881,7 +1881,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(1_000)
 
-      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+      expect(mockClient.internal.mam.catchUpRoom).not.toHaveBeenCalled()
     })
   })
 

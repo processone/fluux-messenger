@@ -7,6 +7,7 @@
  * - Handle privacy options to disable fetching in anonymous rooms
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { MAM } from './MAM'
 import { MUC } from './MUC'
 import { Profile } from './Profile'
 import {
@@ -41,7 +42,7 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
       getXmpp: () => null,
     } as unknown as ModuleDependencies
 
-    muc = new MUC(deps)
+    muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
   })
 
   describe('parsing occupant presence with avatar hash', () => {

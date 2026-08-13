@@ -237,7 +237,7 @@ function makeClient() {
     on: register,
     subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
-    mds,
+    internal: { mds },
   }
 }
 
@@ -302,7 +302,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
       before: new Date(timeFor('m7').getTime() + 1),
       limit: 50,
     })
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -318,7 +318,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: pointerAt('m2') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's2', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's2', OWN_BARE)
     expect(getMessage).not.toHaveBeenCalled()
     expect(getMessages).not.toHaveBeenCalled()
     cleanup()
@@ -338,7 +338,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: pointerAt('m4') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's3', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's3', OWN_BARE)
     cleanup()
   })
 
@@ -357,9 +357,9 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: pointerAt('m4') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's1', OWN_BARE)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's5', OWN_BARE)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's6', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's1', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's5', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's6', OWN_BARE)
     cleanup()
   })
 
@@ -371,7 +371,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: pointerAt('m4') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -399,8 +399,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -423,9 +423,9 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(2)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's8', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's8', OWN_BARE)
     // The superseded position must never be published: the pointer moved.
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -451,12 +451,12 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     // reached the node on its own, not merely been coalesced away.
     first.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     second.resolve([cachedMsg('m8', 's8')])
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's8', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's8', OWN_BARE)
     cleanup()
   })
 
@@ -474,7 +474,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -491,7 +491,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -508,7 +508,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -531,7 +531,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -553,7 +553,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(2)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -566,7 +566,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await flushMicrotasks()
 
     expect(getMessages).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     connectionStore.setState({ status: 'disconnected' } as never)
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)
@@ -574,7 +574,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(2)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -599,13 +599,13 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     expect(vi.getTimerCount()).toBe(idleTimers)
 
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     // The position stayed UNHANDLED, so catch-up completing republishes it
     // without needing a further local read advance (#1142).
     setConvMamState({ hasQueried: true, isCaughtUpToLive: true })
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     cleanup()
   })
 
@@ -630,7 +630,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     gate.resolve([cachedMsg('m7', 's7')])
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -655,7 +655,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     expect(vi.getTimerCount()).toBe(timersAfterTeardown)
 
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
   })
 
   // ==========================================================================
@@ -676,7 +676,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'r5', `${ROOM}/alice`)
     // Rooms publish under the room's own archive (XEP-0359 `by`).
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
     cleanup()
   })
 
@@ -700,8 +700,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', alice)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
   })
 
@@ -728,12 +728,12 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     first.resolve(cachedRoomMsg('shared-id', 'alice-stanza', alice))
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
 
     second.resolve(cachedRoomMsg('shared-id', 'bob-stanza', bob))
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
   })
 
@@ -747,7 +747,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     seedBackgroundedRoom('shared-id', alice)
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'alice-stanza', ROOM)
 
     roomStore.setState((state) => {
       const roomMeta = new Map(state.roomMeta)
@@ -760,8 +760,8 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getRoomMessage).toHaveBeenCalledWith(ROOM, 'shared-id', bob)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(2)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(2)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'bob-stanza', ROOM)
     cleanup()
   })
 
@@ -781,7 +781,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getRoomMessage).not.toHaveBeenCalled()
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
@@ -800,7 +800,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
 
     // The deliberate asymmetry (#1189): MUC reflection supplies the exact
     // stanza-id shortly, so an approximation would degrade a working path.
-    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
   // ==========================================================================
@@ -832,7 +832,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     patchMeta({ readPointer: addressablePointerAt('m7', 's7') })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's7', OWN_BARE)
     // The whole #1175 apparatus is skipped: nothing touched the cache, and
     // nothing needed the resident slice either.
     expect(getMessages).not.toHaveBeenCalled()
@@ -852,7 +852,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     })
     await vi.advanceTimersByTimeAsync(2_000)
 
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 'rs5', ROOM)
     expect(getRoomMessage).not.toHaveBeenCalled()
     cleanup()
   })
@@ -869,7 +869,7 @@ describe('mdsSideEffects — cache-resolved read positions (#1175)', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(getMessages).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's1', OWN_BARE)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(CID, 's1', OWN_BARE)
     cleanup()
   })
 })

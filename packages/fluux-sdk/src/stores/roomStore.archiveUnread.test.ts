@@ -7,7 +7,7 @@
  * room-specific control: two messages sharing an `id` but sent by different
  * occupants (`from`) are two distinct cache positions, not one.
  *
- * Unlike roomStore.test.ts / roomStore.mds.test.ts, this file does NOT fully
+ * Unlike roomStore.test.ts / roomStore.internal.mds.test.ts, this file does NOT fully
  * mock `../utils/messageCache` — `countRoomUnreadInArchive` and
  * `resolveArchivePosition` run for REAL against fake-indexeddb (wrapped in
  * `vi.fn(actual)` only so the latest-wins test can control resolution order

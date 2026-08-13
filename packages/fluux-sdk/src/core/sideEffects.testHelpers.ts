@@ -41,14 +41,16 @@ export function createMockClient() {
       queryMAM: vi.fn().mockResolvedValue(undefined),
       queryRoomMAM: vi.fn().mockResolvedValue(undefined),
     },
-    mam: {
-      refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
-      refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
-      catchUpAllConversations: vi.fn().mockResolvedValue(undefined),
-      catchUpRoom: vi.fn().mockResolvedValue(undefined),
-      catchUpConversationHistory: vi.fn().mockResolvedValue(undefined),
-      catchUpRoomHistory: vi.fn().mockResolvedValue(undefined),
-      discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
+    internal: {
+      mam: {
+        refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
+        refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
+        catchUpAllConversations: vi.fn().mockResolvedValue(undefined),
+        catchUpRoom: vi.fn().mockResolvedValue(undefined),
+        catchUpConversationHistory: vi.fn().mockResolvedValue(undefined),
+        catchUpRoomHistory: vi.fn().mockResolvedValue(undefined),
+        discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
+      },
     },
     muc: {
       queryRoomMembers: vi.fn().mockResolvedValue([]),

@@ -3,7 +3,7 @@
  * unread, coverage-gated, latest-wins, mentionsCount-preserving, divider-
  * rederiving.
  *
- * Unlike chatStore.test.ts / chatStore.mds.test.ts, this file does NOT fully
+ * Unlike chatStore.test.ts / chatStore.internal.mds.test.ts, this file does NOT fully
  * mock `../utils/messageCache` — `countUnreadInArchive` and
  * `resolveArchivePosition` run for REAL against fake-indexeddb (wrapped in
  * `vi.fn(actual)` only so the latest-wins test can control resolution order

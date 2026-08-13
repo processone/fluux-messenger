@@ -322,7 +322,7 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(8)
   })
 
-  // NOTE (final-fix-3, consistency with roomStore.mds.test.ts's twin under
+  // NOTE (final-fix-3, consistency with roomStore.internal.mds.test.ts's twin under
   // final-fix-2): this test's title used to claim it isolated the
   // active-conversation guard ("skips the archive recount commit when the
   // conversation became active meanwhile"). It doesn't: this conversation has

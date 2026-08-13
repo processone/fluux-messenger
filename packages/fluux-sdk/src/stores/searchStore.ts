@@ -424,7 +424,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
       if (supportsFulltext) {
         // Server fulltext search scoped to conversation
         if (isRoom) {
-          const result = await clientRef.mam.searchRoomArchive({
+          const result = await clientRef.internal.mam.searchRoomArchive({
             query,
             roomJid: scope,
             max: 20,
@@ -434,7 +434,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
           hasMore = !result.complete
           mamRsmCursor = result.rsm.first
         } else {
-          const result = await clientRef.mam.searchArchive({
+          const result = await clientRef.internal.mam.searchArchive({
             query,
             with: scope,
             max: 20,
@@ -447,7 +447,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
       } else if (!isRoom) {
         // Paging search (1:1 conversations only, no fulltext required)
         pagingAbortController = new AbortController()
-        const result = await clientRef.mam.searchConversationByPaging(
+        const result = await clientRef.internal.mam.searchConversationByPaging(
           { query, with: scope, maxPages: 20, maxResults: 50 },
           pagingAbortController.signal
         )
@@ -472,7 +472,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         return
       }
 
-      const result = await clientRef.mam.searchArchive({
+      const result = await clientRef.internal.mam.searchArchive({
         query,
         max: 20,
         before: append ? mamRsmCursor : undefined,

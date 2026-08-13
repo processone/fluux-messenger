@@ -3998,7 +3998,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
         // MAM returns original poll confirming the creator
-        const fetchSpy = vi.spyOn(xmppClient.mam, 'fetchRoomMessageById').mockResolvedValue({
+        const fetchSpy = vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockResolvedValue({
           id: pollMsgId,
           nick: 'Creator',
           occupantId: 'occ-1',
@@ -4042,7 +4042,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
         // MAM returns original poll with a different creator
-        vi.spyOn(xmppClient.mam, 'fetchRoomMessageById').mockResolvedValue({
+        vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockResolvedValue({
           id: pollMsgId,
           nick: 'RealCreator',
           occupantId: 'occ-real',
@@ -4075,7 +4075,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
-        vi.spyOn(xmppClient.mam, 'fetchRoomMessageById').mockRejectedValue(new Error('timeout'))
+        vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockRejectedValue(new Error('timeout'))
 
         const stanza = buildPollClosedStanza('Creator', 'occ-1')
         mockXmppClientInstance._emit('stanza', stanza)

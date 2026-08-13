@@ -5,6 +5,7 @@
  * including XEP-0402 bookmark parsing.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { MAM } from './MAM'
 import { MUC } from './MUC'
 import {
   createMockElement,
@@ -40,7 +41,7 @@ describe('MUC Module', () => {
       getCurrentJid: () => 'user@example.com/resource',
     } as unknown as ModuleDependencies
 
-    muc = new MUC(deps)
+    muc = new MUC(deps, { forceCatchUpAllRooms: vi.fn() } as unknown as MAM)
   })
 
   describe('fetchBookmarks', () => {

@@ -93,7 +93,7 @@ describe('XMPPClient', () => {
       expect(client.admin).toBeDefined()
       expect(client.profile).toBeDefined()
       expect(client.discovery).toBeDefined()
-      expect(client.mam).toBeDefined()
+      expect(client.internal.mam).toBeDefined()
       expect(client.blocking).toBeDefined()
     })
 
@@ -2119,7 +2119,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
       vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
-      const convSync = (xmppClient as any).conversationSync
+      const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
       // No previouslyJoinedRooms, no autojoin bookmarks
@@ -2146,7 +2146,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
       vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
-      const convSync = (xmppClient as any).conversationSync
+      const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
       await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(
@@ -2184,7 +2184,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Mock conversation sync
-      const convSync = (xmppClient as any).conversationSync
+      const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) {
         vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       }
@@ -2214,7 +2214,7 @@ describe('XMPPClient', () => {
         roomsToAutojoin: [{ jid: 'public@conf.example.com', nick: 'me' }],
         allRoomJids: ['public@conf.example.com'],
       })
-      const convSync = (xmppClient as any).conversationSync
+      const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       vi.spyOn(xmppClient.muc, 'queryRoomFeatures').mockResolvedValue({
         supportsMAM: false, supportsReactions: true, supportsHats: false,

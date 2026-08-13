@@ -612,7 +612,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockClient.internal.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
         query: 'hello',
         max: 20,
       }))
@@ -627,7 +627,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockClient.internal.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
         query: 'hello',
         with: 'alice@example.com',
       }))
@@ -642,7 +642,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.mam.searchConversationByPaging).toHaveBeenCalledWith(
+      expect(mockClient.internal.mam.searchConversationByPaging).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'hello',
           with: 'alice@example.com',
@@ -679,7 +679,7 @@ describe('searchStore', () => {
 
     it('should handle MAM search errors gracefully', async () => {
       const mockClient = createMockMAMClient()
-      mockClient.mam.searchArchive.mockRejectedValueOnce(new Error('Server error'))
+      mockClient.internal.mam.searchArchive.mockRejectedValueOnce(new Error('Server error'))
       setSearchClient(mockClient as any)
       connectionStore.getState().setMAMFulltextSearch(true)
       searchStore.setState({ query: 'hello', searchScope: null })
@@ -990,30 +990,32 @@ function createMockMAMClient(opts?: {
 }) {
   const results = opts?.searchArchiveResults ?? []
   return {
+    internal: {
     mam: {
-      searchArchive: vi.fn().mockResolvedValue({
-        messages: results.map(r => ({
-          id: r.id,
-          conversationId: r.conversationId,
-          from: r.from,
-          body: r.body,
-          timestamp: r.timestamp,
-          isOutgoing: false,
-          isDelayed: true,
-        })),
-        complete: true,
-        rsm: {},
-      }),
-      searchRoomArchive: vi.fn().mockResolvedValue({
-        messages: [],
-        complete: true,
-        rsm: {},
-      }),
-      searchConversationByPaging: vi.fn().mockResolvedValue({
-        messages: [],
-        complete: true,
-        rsm: {},
-      }),
+        searchArchive: vi.fn().mockResolvedValue({
+          messages: results.map(r => ({
+            id: r.id,
+            conversationId: r.conversationId,
+            from: r.from,
+            body: r.body,
+            timestamp: r.timestamp,
+            isOutgoing: false,
+            isDelayed: true,
+          })),
+          complete: true,
+          rsm: {},
+        }),
+        searchRoomArchive: vi.fn().mockResolvedValue({
+          messages: [],
+          complete: true,
+          rsm: {},
+        }),
+        searchConversationByPaging: vi.fn().mockResolvedValue({
+          messages: [],
+          complete: true,
+          rsm: {},
+        }),
+      },
     },
   }
 }

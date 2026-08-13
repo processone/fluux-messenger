@@ -104,7 +104,7 @@ export function setupChatSideEffects(
       // edge from the resident window; the activation machinery owns the active
       // deep-pointer UX. See MAM.catchUpConversationHistory.
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
-      await client.mam.catchUpConversationHistory(conversationId, cachedMessages, { sessionStartTime })
+      await client.internal.mam.catchUpConversationHistory(conversationId, cachedMessages, { sessionStartTime })
       logInfo('Chat: MAM sync complete')
     } catch (error) {
       // Allow retry on next conversation switch or reconnect
