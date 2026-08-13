@@ -69,6 +69,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
 // Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
+import { clearMarker, lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
@@ -1956,10 +1957,8 @@ export const chatStore = createStore<ChatState>()(
 
       clearFirstNewMessageId: (conversationId) => {
         set((state) => {
-          if (!state.firstNewMessageMarkers.has(conversationId)) return state
-          const newMarkers = new Map(state.firstNewMessageMarkers)
-          newMarkers.delete(conversationId)
-          return { firstNewMessageMarkers: newMarkers }
+          const next = clearMarker(state.firstNewMessageMarkers, conversationId)
+          return next ? { firstNewMessageMarkers: next } : state
         })
       },
 
@@ -2461,12 +2460,7 @@ export const chatStore = createStore<ChatState>()(
 
       getConversationLastTimestamp: (conversationId) => {
         const state = get()
-        // Prefer conversationMeta (frequently-updated); fall back to the combined
-        // conversations map for backward compat with persist/tests.
-        const lastMessage =
-          state.conversationMeta.get(conversationId)?.lastMessage ??
-          state.conversations.get(conversationId)?.lastMessage
-        return lastMessage?.timestamp?.getTime()
+        return lastMessageTimestamp(state.conversationMeta, state.conversations, conversationId)
       },
 
       removeMessage: (conversationId, messageId) => {
@@ -3110,12 +3104,8 @@ export const chatStore = createStore<ChatState>()(
 
       clearConversationGapAnchor: (conversationId, purgedStartId) => {
         set((state) => {
-          const gap = state.conversationGaps.get(conversationId)
-          if (!gap || gap.startId !== purgedStartId) return state
-          const newGaps = new Map(state.conversationGaps)
-          const { startId: _purged, ...withoutAnchor } = gap
-          newGaps.set(conversationId, withoutAnchor)
-          return { conversationGaps: newGaps }
+          const next = clearGapAnchor(state.conversationGaps, conversationId, purgedStartId)
+          return next ? { conversationGaps: next } : state
         })
       },
 
@@ -3123,12 +3113,8 @@ export const chatStore = createStore<ChatState>()(
 
       clearConversationCoverage: (conversationId, ifBottomId) => {
         set((state) => {
-          const existing = state.conversationCoverage.get(conversationId)
-          if (!existing) return state
-          if (ifBottomId !== undefined && existing.bottomId !== ifBottomId) return state
-          const next = new Map(state.conversationCoverage)
-          next.delete(conversationId)
-          return { conversationCoverage: next }
+          const next = clearCoverageEntry(state.conversationCoverage, conversationId, ifBottomId)
+          return next ? { conversationCoverage: next } : state
         })
       },
 

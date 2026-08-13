@@ -83,6 +83,7 @@ import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, n
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
 // getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
 import { getResidentWindowSize } from './shared/residentWindow'
+import { clearMarker, lastMessageTimestamp, clearCoverageEntry, clearGapAnchor } from './shared/keyedMapEdits'
 
 /**
  * Carry a previously-resolved avatar across a presence update.
@@ -2564,12 +2565,7 @@ export const roomStore = createStore<RoomState>()(
 
   getRoomLastTimestamp: (roomJid) => {
     const state = get()
-    // Prefer roomMeta (frequently-updated); fall back to the combined rooms map
-    // for backward compat with persist/tests.
-    const lastMessage =
-      state.roomMeta.get(roomJid)?.lastMessage ??
-      state.rooms.get(roomJid)?.lastMessage
-    return lastMessage?.timestamp?.getTime()
+    return lastMessageTimestamp(state.roomMeta, state.rooms, roomJid)
   },
 
   markAsRead: (roomJid) => {
@@ -2918,10 +2914,8 @@ export const roomStore = createStore<RoomState>()(
 
   clearFirstNewMessageId: (roomJid) => {
     set((state) => {
-      if (!state.firstNewMessageMarkers.has(roomJid)) return state
-      const newMarkers = new Map(state.firstNewMessageMarkers)
-      newMarkers.delete(roomJid)
-      return { firstNewMessageMarkers: newMarkers }
+      const next = clearMarker(state.firstNewMessageMarkers, roomJid)
+      return next ? { firstNewMessageMarkers: next } : state
     })
   },
 
@@ -4107,13 +4101,10 @@ export const roomStore = createStore<RoomState>()(
 
   clearRoomGapAnchor: (roomJid, purgedStartId) => {
     set((state) => {
-      const gap = state.roomGaps.get(roomJid)
-      if (!gap || gap.startId !== purgedStartId) return state
-      const newGaps = new Map(state.roomGaps)
-      const { startId: _purged, ...withoutAnchor } = gap
-      newGaps.set(roomJid, withoutAnchor)
-      saveGapsToStorage(newGaps)
-      return { roomGaps: newGaps }
+      const next = clearGapAnchor(state.roomGaps, roomJid, purgedStartId)
+      if (!next) return state
+      saveGapsToStorage(next)
+      return { roomGaps: next }
     })
   },
 
@@ -4121,11 +4112,9 @@ export const roomStore = createStore<RoomState>()(
 
   clearRoomCoverage: (roomJid, ifBottomId) => {
     set((state) => {
-      const existing = state.roomCoverage.get(roomJid)
-      if (!existing) return state
-      if (ifBottomId !== undefined && existing.bottomId !== ifBottomId) return state
-      const next = new Map(state.roomCoverage)
-      next.delete(roomJid)
+      const next = clearCoverageEntry(state.roomCoverage, roomJid, ifBottomId)
+      if (!next) return state
+      // roomStore has no persist middleware: it writes this map itself.
       saveCoverageToStorage(next)
       return { roomCoverage: next }
     })
