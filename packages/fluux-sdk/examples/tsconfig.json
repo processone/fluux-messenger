@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@fluux/sdk/core": ["../src/core/index.ts"],
+      "@fluux/sdk/xmpp": ["../src/xmpp/index.ts"],
+      "@fluux/sdk": ["../src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "../src/**/*.ts"]
+}
