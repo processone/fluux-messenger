@@ -988,7 +988,8 @@ export function useMessageListScroll({
     }
 
     if (plan.observeGenuineInput) {
-      positioningControllerRef.current?.observeUserInput(conversationId)
+      const pausedGeneration =
+        positioningControllerRef.current?.observeUserInput(conversationId) ?? null
       runScrollShadowSafely({
         event: 'settled-user-geometry',
         conversationId,
@@ -996,6 +997,7 @@ export function useMessageListScroll({
         observe: () => {
           positioningControllerRef.current?.observeSettledUserGeometry({
             conversationId,
+            generation: pausedGeneration,
             atLiveEdge: deriveAtLiveEdge(readScrollGeometry(el)),
           })
         },

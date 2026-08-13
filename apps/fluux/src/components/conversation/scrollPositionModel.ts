@@ -537,10 +537,14 @@ export function cancelReconciliationForUserInput(
  * Resolve a paused live-edge request from settled user geometry. Remaining at the edge preserves
  * its generation; leaving cancels it. Manually returning after another request requires a new,
  * generation-bearing live-edge request supplied by the adapter.
+ *
+ * `generation` identifies the paused request this observation belongs to, so a settle may only
+ * resolve the pause it was taken for. The rearm path carries its own fresh generation instead.
  */
 export function settleUserPosition(
   model: PositioningModel,
   conversationId: string,
+  generation: number,
   atLiveEdge: boolean,
   rearmRequest?: Extract<
     PositionRequest,
@@ -553,6 +557,9 @@ export function settleUserPosition(
     active?.request.desired.kind === 'live-edge' &&
     active.phase.kind === 'paused-user-input'
   ) {
+    // Only the observation belonging to this paused request may resolve it. Without the guard a
+    // settle from an earlier pause cancels whatever request has since taken over.
+    if (!isCurrentGeneration(model, conversationId, generation)) return model
     return atLiveEdge
       ? {
           ...model,

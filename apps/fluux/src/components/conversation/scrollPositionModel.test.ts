@@ -670,8 +670,8 @@ describe('scroll position model', () => {
     })
     expect(shouldReconcileAfterAppend(cancelled, conversationId)).toBe(false)
 
-    const stayedAtEdge = settleUserPosition(cancelled, conversationId, true)
-    const leftEdge = settleUserPosition(cancelled, conversationId, false)
+    const stayedAtEdge = settleUserPosition(cancelled, conversationId, 1, true)
+    const leftEdge = settleUserPosition(cancelled, conversationId, 1, false)
     const rearmRequest: PositionRequest = {
       generation: 2,
       conversationId,
@@ -681,6 +681,7 @@ describe('scroll position model', () => {
     const returnedToEdge = settleUserPosition(
       leftEdge,
       conversationId,
+      1,
       true,
       rearmRequest,
     )
@@ -691,7 +692,24 @@ describe('scroll position model', () => {
       request: rearmRequest,
       phase: { kind: 'settled' },
     })
-    expect(settleUserPosition(cancelled, otherConversationId, false)).toBe(cancelled)
+    expect(settleUserPosition(cancelled, otherConversationId, 1, false)).toBe(cancelled)
+  })
+
+  it('refuses a settle from an older pause than the active request', () => {
+    // A live-edge request paused by user input, then superseded and paused again. The settled
+    // geometry for the first pause must not cancel the request that took over.
+    const first = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
+    const firstPaused = cancelReconciliationForUserInput(first, conversationId, 1)
+    const second = acceptPositionRequest(firstPaused, {
+      generation: 2,
+      conversationId,
+      source: { kind: 'live-update', reason: 'outgoing-message' },
+      desired: liveEdge,
+    })
+    const secondPaused = cancelReconciliationForUserInput(second, conversationId, 2)
+
+    expect(settleUserPosition(secondPaused, conversationId, 1, false)).toBe(secondPaused)
+    expect(settleUserPosition(secondPaused, conversationId, 2, false).active).toBeNull()
   })
 
   it('retains the watermark after cancellation and settlement', () => {

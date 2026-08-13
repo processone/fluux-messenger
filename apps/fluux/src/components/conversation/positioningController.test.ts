@@ -728,6 +728,7 @@ describe('positioning controller live-edge ownership', () => {
 
     controller.observeSettledUserGeometry({
       conversationId,
+      generation: controller.snapshot().active?.request.generation ?? null,
       atLiveEdge: false,
     })
     expect(controller.snapshot().active).toBeNull()

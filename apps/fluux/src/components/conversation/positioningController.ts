@@ -1226,14 +1226,19 @@ export class PositioningController {
     })
   }
 
-  observeUserInput(conversationId: string): void {
-    runScrollShadowSafely({
+  /**
+   * Returns the generation this input paused, or null when there was nothing to pause. The caller
+   * hands it back to {@link observeSettledUserGeometry} so the settle resolves that same pause and
+   * not whichever request has taken over by the time the geometry is read.
+   */
+  observeUserInput(conversationId: string): number | null {
+    return runScrollShadowSafely<number | null>({
       event: 'user-input',
       conversationId,
-      fallback: undefined,
+      fallback: null,
       observe: () => {
         const generation = this.model.active?.request.generation
-        if (generation === undefined) return
+        if (generation === undefined) return null
         const targetExecution = this.explicitTargetExecution
         const targetWasCurrent =
           targetExecution !== null &&
@@ -1266,7 +1271,7 @@ export class PositioningController {
         // until the synchronous initial write has run. Explicit competing position requests still
         // supersede this pending generation through normal request arbitration.
         if (directionalWasCurrent && directionalExecution && !directionalExecution.applied) {
-          return
+          return null
         }
         this.model = cancelReconciliationForUserInput(
           this.model,
@@ -1293,12 +1298,15 @@ export class PositioningController {
           this.cancelResidentTopExecution('user-takeover')
         }
         this.cancelExecutionsIfSuperseded()
+        return generation
       },
     })
   }
 
   observeSettledUserGeometry(input: {
     conversationId: string
+    /** The generation {@link observeUserInput} paused; null when it paused nothing. */
+    generation: number | null
     atLiveEdge: boolean
   }): void {
     runScrollShadowSafely({
@@ -1321,6 +1329,9 @@ export class PositioningController {
         this.model = settleUserPosition(
           this.model,
           input.conversationId,
+          // 0 never matches a live request, so an input that paused nothing cannot resolve a
+          // pause it did not create. The rearm path below does not consult this generation.
+          input.generation ?? 0,
           input.atLiveEdge,
           rearmRequest,
         )
