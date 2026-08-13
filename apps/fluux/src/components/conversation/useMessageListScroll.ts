@@ -40,6 +40,8 @@ import {
 import { findBottomAnchor } from './bottomAnchor'
 import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
+import { decideMdsSettle } from './mdsSettleDecision'
+import { decideTypingIndicator } from './typingIndicatorDecision'
 import { signalAnomaly } from '@/utils/anomalySignal'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
@@ -1406,12 +1408,14 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     const prev = prevSettleRef.current
     prevSettleRef.current = { conv: conversationId, divider: firstNewMessageId }
-    if (staticMode) return
-    if (prev.conv !== conversationId) return
-    if (prev.divider === undefined || firstNewMessageId !== undefined) return
-    if (viewportSessionRef.current?.hasGenuineInput(conversationId)) {
-      return
-    }
+    const decision = decideMdsSettle({
+      staticMode,
+      sameConversation: prev.conv === conversationId,
+      previousDivider: prev.divider,
+      currentDivider: firstNewMessageId,
+      hasGenuineInput: viewportSessionRef.current?.hasGenuineInput(conversationId) ?? false,
+    })
+    if (decision === 'skip') return
     debugLog('MDS SETTLE: divider cleared by late read-sync → settle to bottom', {
       conversationId,
       prevMarker: prev.divider,
@@ -1944,13 +1948,19 @@ export function useMessageListScroll({
     typingConvRef.current = conversationId
     const prevHasTyping = prevHasTypingRef.current
     prevHasTypingRef.current = hasTypingIndicator
-    if (!sameConversation) return // conversation switch → rebaseline, never nudge
-    if (!hasTypingIndicator || prevHasTyping) return // only the off→on edge shrinks the scrollport
 
     const scroller = scrollerRef.current
-    if (!scroller || staticMode) return
-    // Live-geometry gate: only re-pin when genuinely at/near the bottom right now.
-    if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
+    const decision = decideTypingIndicator({
+      staticMode,
+      sameConversation,
+      hasTypingIndicator,
+      hadTypingIndicator: prevHasTyping,
+      // No scroller is no geometry: report a distance nothing can be at the bottom of, so the
+      // decision skips for the same reason a scrolled-up reader does.
+      distanceFromBottom: scroller ? getDistanceFromBottom(scroller) : Number.POSITIVE_INFINITY,
+      atBottomThreshold: AT_BOTTOM_THRESHOLD,
+    })
+    if (decision === 'skip') return
 
     reconcileLiveEdge('typing')
   }, [hasTypingIndicator, conversationId, reconcileLiveEdge, staticMode])

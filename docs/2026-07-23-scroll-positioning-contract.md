@@ -1,9 +1,10 @@
 # Message-list scroll positioning contract
 
-Status: core migration, ownership hardening, and dead-owner cleanup complete. Saved-position
-restoration, unread-marker positioning, explicit message targets, live-edge pinning, fixed-anchor
-layout preservation, directional history preservation, and resident-top navigation are
-authoritative controller slices.
+Status: migration complete. Saved-position restoration, unread-marker positioning, explicit message
+targets, live-edge pinning, fixed-anchor layout preservation, directional history preservation, and
+resident-top navigation are authoritative controller slices, and the orchestration hook holds no
+positioning frame loop of its own. Every branch decision that a test could not otherwise reach is a
+pure function with paired controls.
 
 ## Purpose
 
@@ -504,7 +505,8 @@ kinetic scrolling and stale-paint behavior.
 
 ## Incremental migration after this contract
 
-1. Introduce one generation-aware reconciliation controller without changing existing positioning.
+1. [x] Introduce one generation-aware reconciliation controller without changing existing
+   positioning.
 2. [x] Migrate saved-anchor restoration: delete the legacy restore dispatcher, pending ref, and
    around-load status map; retain the measurement loop only as a generation/operation-leased
    reconciler.
@@ -561,6 +563,10 @@ kinetic scrolling and stale-paint behavior.
        `entryArbitration`, leaving a thin effect that applies its verdict. The five-condition
        synced-live-edge predicate and its late-resolving twin are now separately testable, including
        the empty-conversation case where a bare pointer comparison would discard a saved position.
+     - [x] Express the two remaining ambient re-pins as pure decisions: `mdsSettleDecision` for a
+       divider cleared by a late XEP-0490 read-sync, and `typingIndicatorDecision` for the band that
+       shrinks the scrollport, the twin of `rowGrowthDecision`. The detectors that remain in the
+       hook carry a single condition each, where a decision layer would be ceremony.
 
 Each migration must preserve observable behavior, add a falsifiable regression control, and remove
 one previous source of scroll authority.
