@@ -18,6 +18,11 @@
  * - **`@fluux/sdk/core`** - Core-only: XMPPClient, types (for bots/CLI/other frameworks)
  * - **`@fluux/sdk/stores`** - Direct Zustand store access
  *
+ * None of those describes XMPP on the wire: conversations, rooms, contacts and
+ * presence are the vocabulary, and no XEP has to be read to use them. Raw
+ * namespaces, the stanza builder and the wire parsers are the escape hatch on
+ * **`@fluux/sdk/xmpp`**, for speaking a protocol the SDK does not model yet.
+ *
  * ## Quick Start (React)
  *
  * ```tsx
@@ -389,9 +394,10 @@ export type {
 // Message type guards
 export { isChatMessage, isRoomMessage } from './core/types'
 
-// Re-export xml builder for stanza construction
-export { xml } from '@xmpp/client'
-export type { Element } from '@xmpp/client'
+// The stanza builder (`xml`) and the ltx `Element` type are NOT exported here.
+// Typing consumer code against ltx would couple every app to an internal
+// dependency the SDK wants to keep replaceable. They live on the
+// `@fluux/sdk/xmpp` escape hatch, with the namespaces and the wire parsers.
 
 // =============================================================================
 // E2EE PLUGIN ARCHITECTURE
@@ -558,125 +564,28 @@ export type { WellKnownMucServer } from './core/config'
 // XMPP NAMESPACE CONSTANTS
 // =============================================================================
 
-export {
-  // XEP-0030: Service Discovery
-  NS_DISCO_INFO,
-  NS_DISCO_ITEMS,
-  // XEP-0363: HTTP File Upload
-  NS_HTTP_UPLOAD,
-  // XEP-0066: Out of Band Data
-  NS_OOB,
-  // XEP-0264: Jingle Content Thumbnails
-  NS_THUMBS,
-  // XEP-0085: Chat State Notifications
-  NS_CHATSTATES,
-  // XEP-0115: Entity Capabilities
-  NS_CAPS,
-  // XEP-0054: vcard-temp
-  NS_VCARD_TEMP,
-  // XEP-0153: vCard-Based Avatars
-  NS_VCARD_UPDATE,
-  // XEP-0280: Message Carbons
-  NS_CARBONS,
-  // XEP-0297: Stanza Forwarding
-  NS_FORWARD,
-  // XEP-0393: Message Styling
-  NS_STYLING,
-  // XEP-0428: Fallback Indication
-  NS_FALLBACK,
-  NS_FALLBACK_LEGACY,
-  // XEP-0444: Message Reactions
-  NS_REACTIONS,
-  // XEP-0461: Message Replies
-  NS_REPLY,
-  // XEP-0308: Last Message Correction
-  NS_CORRECTION,
-  // XEP-0424: Message Retraction
-  NS_RETRACT,
-  // XEP-0425: Message Moderation
-  NS_MESSAGE_MODERATE,
-  // XEP-0319: Last User Interaction in Presence
-  NS_IDLE,
-  // PubSub namespaces
-  NS_PUBSUB,
-  NS_PUBSUB_EVENT,
-  // XEP-0084: User Avatar (PEP)
-  NS_AVATAR_DATA,
-  NS_AVATAR_METADATA,
-  NS_AVATAR_METADATA_NOTIFY,
-  // XEP-0172: User Nickname
-  NS_NICK,
-  // XEP-0045: Multi-User Chat (MUC)
-  NS_MUC,
-  NS_MUC_USER,
-  NS_MUC_OWNER,
-  // XEP-0249: Direct MUC Invitations
-  NS_CONFERENCE,
-  // XEP-0402: PEP Native Bookmarks
-  NS_BOOKMARKS,
-  NS_BOOKMARKS_NOTIFY,
-  // XEP-0203: Delayed Delivery
-  NS_DELAY,
-  // XEP-0359: Unique and Stable Stanza IDs
-  NS_STANZA_ID,
-  // XEP-0372: References
-  NS_REFERENCE,
-  // XEP-0334: Message Processing Hints
-  NS_HINTS,
-  // XEP-0422: Message Fastening
-  NS_FASTEN,
-  // XEP-0050: Ad-Hoc Commands
-  NS_COMMANDS,
-  // XEP-0133: Service Administration
-  NS_ADMIN,
-  // XEP-0004: Data Forms
-  NS_DATA_FORMS,
-  // XEP-0059: Result Set Management
-  NS_RSM,
-  // XEP-0313: Message Archive Management
-  NS_MAM,
-  // XEP-0077: In-Band Registration
-  NS_REGISTER,
-  // XEP-0317: Hats
-  NS_HATS,
-  // XEP-0199: XMPP Ping
-  NS_PING,
-  // XEP-0202: Entity Time
-  NS_TIME,
-  // XEP-0191: Blocking Command
-  NS_BLOCKING,
-  // p1:push: ejabberd Push Notifications
-  NS_P1_PUSH,
-  NS_P1_PUSH_WEBPUSH,
-  // Custom: Fluux conversation list sync
-  NS_CONVERSATIONS,
-  // Custom: Fluux cross-device peer-verification sync (PEP node id)
-  NS_FLUUX_VERIFICATIONS,
-} from './core/namespaces'
+// The 73 `NS_*` protocol namespaces are NOT exported here. A consumer that
+// needs one is writing XMPP by hand, which the curated entry does not ask
+// anyone to do; they live on the `@fluux/sdk/xmpp` escape hatch.
 
 // =============================================================================
 // XMPP PROTOCOL UTILITIES
 // =============================================================================
 
-// XEP-0004: Data Form utilities
-export { parseDataForm, getFormFieldValue, getFormFieldValues, buildDataFormSubmit } from './utils/dataForm'
-
-// XEP-0059: Result Set Management utilities
-export { parseRSMResponse, buildRSMElement } from './utils/rsm'
-
 // UUID generation utility
 export { generateUUID, generateStableMessageId } from './utils/uuid'
 
-// XEP-0428: Fallback Indication utilities
-export { processFallback, getFallbackElement } from './utils/fallbackUtils'
-export type { FallbackProcessingResult, FallbackProcessingOptions } from './utils/fallbackUtils'
-
 // XEP-0426 character counting: wire offsets are code points, JS indices are
-// UTF-16 units. Consumers building their own offset-bearing stanzas need these.
+// UTF-16 units. These convert between the two and touch no stanza, so they
+// stay here rather than on the escape hatch.
 export { codePointLength, toCodePointOffset, fromCodePointOffset } from './utils/xep0426'
 
-// RFC 6120: XMPP Stanza Error parsing
-export { parseXMPPError, formatXMPPError } from './utils/xmppError'
+// A stanza delivery error, as carried by `BaseMessage.deliveryError`, and the
+// human-readable rendering of one. Formatting is a product concern: by the time
+// an app holds this value it is an ordinary field of a message. PARSING one out
+// of a stanza is not, and lives on `@fluux/sdk/xmpp` with the other wire
+// parsers (data forms, RSM, fallback indication).
+export { formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
 // The per-key latest-wins coalescing buffer (keyedCoalescer) is a generic,

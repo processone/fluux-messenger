@@ -74,6 +74,18 @@ vi.mock('@/hooks', () => ({
   }),
 }))
 
+/**
+ * Swap one export of a mocked module for the duration of a test.
+ *
+ * The stand-ins below are deliberately partial: the component reads a handful
+ * of fields, and spelling out every member of the real hook return would say
+ * nothing about what is under test. That partiality is what the cast covers,
+ * so restore the original in the same test rather than leaving it installed.
+ */
+function overrideMockedExport<M, K extends keyof M>(module: M, key: K, impl: unknown): void {
+  ;(module as Record<K, unknown>)[key] = impl
+}
+
 describe('BrowseRoomsModal', () => {
   const mockOnClose = vi.fn()
 
@@ -119,11 +131,11 @@ describe('BrowseRoomsModal', () => {
       // Override mock to include ownNickname
       const sdkModule = await import('@fluux/sdk')
       const originalUseConnection = sdkModule.useConnection
-      vi.mocked(sdkModule).useConnection = () => ({
+      overrideMockedExport(sdkModule, 'useConnection', () => ({
         ...originalUseConnection(),
         jid: 'testuser@example.com',
         ownNickname: 'My Display Name',
-      })
+      }))
 
       render(<BrowseRoomsModal onClose={mockOnClose} />)
       await act(async () => {})
@@ -132,7 +144,7 @@ describe('BrowseRoomsModal', () => {
       expect(nicknameInput).toHaveValue('My Display Name')
 
       // Restore original mock
-      vi.mocked(sdkModule).useConnection = originalUseConnection
+      overrideMockedExport(sdkModule, 'useConnection', originalUseConnection)
     })
 
     it('should render search input', async () => {
@@ -629,14 +641,14 @@ describe('BrowseRoomsModal', () => {
         ['general@conference.example.com', { jid: 'general@conference.example.com', joined: true }],
       ])
 
-      vi.mocked(await import('@fluux/sdk')).useRoom = () => ({
+      overrideMockedExport(await import('@fluux/sdk'), 'useRoom', () => ({
         browsePublicRooms: mockBrowsePublicRooms,
         joinRoom: mockJoinRoom,
         joinResult: mockJoinResult,
         getRoom: (jid: string) => mockRoomsMap.get(jid),
         setActiveRoom: mockSetActiveRoom,
         mucServiceJid: 'conference.example.com',
-      })
+      }))
 
       render(<BrowseRoomsModal onClose={mockOnClose} />)
 

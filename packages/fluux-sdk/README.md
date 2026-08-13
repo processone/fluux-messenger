@@ -385,7 +385,6 @@ Low-level access for advanced use cases:
 const {
   client,        // XMPPClient instance
   sendRawXml,    // (xml: string) => void
-  xml,           // xml builder function
   setPresence,   // (show, status?) => void
 } = useXMPP()
 
@@ -393,10 +392,29 @@ const {
 const { sendRawXml } = useXMPP()
 sendRawXml('<iq type="get" id="ping1"><ping xmlns="urn:xmpp:ping"/></iq>')
 
-// Example: Build and send presence
-const { xml, client } = useXMPP()
+// Example: Build and send presence. The stanza builder is protocol
+// vocabulary, so it comes from the escape hatch below, not from the hook.
+import { xml } from '@fluux/sdk/xmpp'
+
+const { client } = useXMPP()
 const presence = xml('presence', {}, xml('show', {}, 'away'))
 client?.send(presence)
+```
+
+### `@fluux/sdk/xmpp` — raw protocol
+
+Namespace constants, the `xml` stanza builder, and the wire parsers (data
+forms, RSM, fallback indication, stanza errors). None of it is on the curated
+entries: the rest of the SDK is meant to be usable without reading a XEP.
+
+Reach for this only to speak a part of XMPP the SDK does not model yet. An
+import from here marks a gap in the high-level API rather than a normal way to
+use the SDK.
+
+```typescript
+import { xml, NS_PING } from '@fluux/sdk/xmpp'
+
+const ping = xml('iq', { type: 'get', to: 'example.com' }, xml('ping', { xmlns: NS_PING }))
 ```
 
 ## Types

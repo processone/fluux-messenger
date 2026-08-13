@@ -8,6 +8,9 @@
  * @module Types
  */
 
+// The SDK's library-independent element shape (see ./stanza)
+export type { XMLElementData } from './stanza'
+
 // Connection types
 export type { ConnectionStatus, ConnectionMethod, ConnectOptions, SystemState } from './connection'
 

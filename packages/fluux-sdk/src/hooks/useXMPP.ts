@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import { useXMPPContext } from '../provider'
-import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 
 /**
@@ -19,8 +18,10 @@ import type { Element } from '@xmpp/client'
  *
  * @example Sending a raw IQ stanza
  * ```tsx
+ * import { xml } from '@fluux/sdk/xmpp'
+ *
  * function CustomIQ() {
- *   const { sendRawXml, xml } = useXMPP()
+ *   const { sendRawXml } = useXMPP()
  *
  *   const sendPing = async () => {
  *     const iq = xml('iq', { type: 'get', to: 'server.com', id: 'ping1' },
@@ -67,8 +68,12 @@ import type { Element } from '@xmpp/client'
  *
  * @example Building stanzas with the xml helper
  * ```tsx
+ * // The builder is protocol vocabulary, so it comes from the escape hatch
+ * // rather than from the hook.
+ * import { xml } from '@fluux/sdk/xmpp'
+ *
  * function MessageBuilder() {
- *   const { xml, sendRawXml } = useXMPP()
+ *   const { sendRawXml } = useXMPP()
  *
  *   const sendCustomMessage = async (to: string) => {
  *     const msg = xml('message', { to, type: 'chat' },
@@ -142,11 +147,6 @@ export function useXMPP() {
      * Set presence status
      */
     setPresence,
-
-    /**
-     * XML builder for constructing stanzas
-     */
-    xml,
 
     /**
      * Check if connected

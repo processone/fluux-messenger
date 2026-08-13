@@ -17,12 +17,12 @@ import {
   createPluginStorage,
   parsePayloadEnvelope,
   serializePayloadEnvelope,
-  xml,
   type PEPItem,
   type PluginContext,
   type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
+import { xml } from '@fluux/sdk/xmpp'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import type { KeyBundle } from './OpenPGPPluginBase'

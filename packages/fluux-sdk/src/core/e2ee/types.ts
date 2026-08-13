@@ -10,6 +10,8 @@
  * (Rust via Tauri commands, WASM).
  */
 
+import type { XMLElementData } from '../types/stanza'
+
 /** Bare JID (`local@domain`, no resource). */
 export type BareJID = string
 
@@ -19,18 +21,9 @@ export interface DeviceIdentifier {
   deviceId: string
 }
 
-/**
- * Minimal structural form of an XMPP element that is JSON-serializable.
- *
- * Plugins emit this shape; the host converts it into an `@xmpp/client`
- * Element before sending. Using a structural form keeps the trait uniform
- * across TS plugins and native plugins bridged over Tauri.
- */
-export interface XMLElementData {
-  name: string
-  attrs: Record<string, string>
-  children: Array<XMLElementData | string>
-}
+// The element shape plugins emit is the SDK-wide one, not an E2EE dialect: the
+// host converts it to an `@xmpp/client` Element before sending.
+export type { XMLElementData }
 
 /** Features a plugin can advertise. Used for strategy selection and UI. */
 export interface ProtocolFeatures {

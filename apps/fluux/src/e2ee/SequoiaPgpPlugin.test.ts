@@ -17,13 +17,13 @@ import {
   isE2EEPluginError,
   parsePayloadEnvelope,
   serializePayloadEnvelope,
-  xml,
   type PEPItem,
   type PluginContext,
   type SecurityContextUpdate,
   type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
+import { xml } from '@fluux/sdk/xmpp'
 
 // The cross-device verification-sync tests drive real openpgp.js work, so they
 // are CPU-bound and inflate several-fold under the contention of a full

@@ -34,7 +34,9 @@
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
-import { buildScopedStorageKey, NS_FLUUX_VERIFICATIONS } from '@fluux/sdk'
+import { buildScopedStorageKey } from '@fluux/sdk'
+// The PEP node id is a raw protocol name, so it comes from the escape hatch.
+import { NS_FLUUX_VERIFICATIONS } from '@fluux/sdk/xmpp'
 import { fingerprintsEqual } from './fingerprintCompare'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */

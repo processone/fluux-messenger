@@ -4,9 +4,9 @@ export { XMPPClient } from './XMPPClient'
 // Default store bindings for headless usage
 export { createDefaultStoreBindings } from './defaultStoreBindings'
 
-// Re-export xml builder from @xmpp/client for raw stanza construction
-export { xml } from '@xmpp/client'
-export type { Element } from '@xmpp/client'
+// This is the bot/CLI bundle, so it is the one that most has to read as
+// "XMPP without the XMPP". The stanza builder and the ltx `Element` type are
+// therefore not here either; they live on `@fluux/sdk/xmpp`.
 
 // Client construction options (carries the store bundle, so it lives outside
 // the leaf type layer).

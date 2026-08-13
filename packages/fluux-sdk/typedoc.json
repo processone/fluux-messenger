@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["./src/index.ts"],
+  "entryPoints": ["./src/index.ts", "./src/xmpp/index.ts"],
   "tsconfig": "./tsconfig.docs.json",
   "out": "./docs",
   "name": "Fluux SDK",

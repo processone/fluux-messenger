@@ -65,6 +65,16 @@
         "types": "./dist/cache/index.d.cts",
         "default": "./dist/cache/index.cjs"
       }
+    },
+    "./xmpp": {
+      "import": {
+        "types": "./dist/xmpp/index.d.ts",
+        "default": "./dist/xmpp/index.js"
+      },
+      "require": {
+        "types": "./dist/xmpp/index.d.cts",
+        "default": "./dist/xmpp/index.cjs"
+      }
     }
   },
   "files": [

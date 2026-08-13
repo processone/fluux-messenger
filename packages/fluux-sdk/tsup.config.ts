@@ -14,6 +14,8 @@ export default defineConfig({
     'demo/index': 'src/demo/index.ts',
     // Cache bundle (low-level IndexedDB escape hatch)
     'cache/index': 'src/cache/index.ts',
+    // Raw XMPP bundle (namespaces, stanza builder, wire parsers — escape hatch)
+    'xmpp/index': 'src/xmpp/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: {
