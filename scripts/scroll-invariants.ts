@@ -1162,6 +1162,101 @@ test.describe('Virtualization scroll invariants', () => {
     ).toBeLessThan(250)
   })
 
+  // invariant-10b: the marker-entry twin of invariant-10.
+  //
+  // invariant-9 and -10 both restore a SAVED position, so they exercise the saved-position executor.
+  // Entering on an unread divider is driven by a different one, and no invariant covered it: the
+  // divider had to survive the estimate→measure correction on nothing but unit coverage.
+  //
+  // Tall rows make that correction deterministic, exactly as in invariant-10: the virtualizer lands
+  // the marker on estimated offsets, the rows then measure ~2.5x taller, and content shifts under a
+  // fixed scrollTop. Whether the divider survives that shift is the whole question.
+  //
+  // What this does NOT cover: the settle-window marking added in #1264. While a re-assert loop runs,
+  // `programmaticScroll = reassertLoopRef.current !== null` already classifies every scroll event as
+  // ours, so recordProgrammaticWrite is redundant here — this test passes with and without it,
+  // verified by removing both calls. The hole that fix closes is the ~250ms after the loop ENDS
+  // (scrollGate's PROGRAMMATIC_SETTLE_MS), which this scenario never reaches. Do not read a green
+  // run here as evidence that the marking is in place.
+  test('invariant-10b: entering on the unread divider holds it through the measurement settle', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    // Read the room for real, then pin lastSeen to the true last row so the activation scan starts
+    // from there (the viewport observer can lag a row on a fast programmatic scroll).
+    await scrollToBottom(page)
+    await page.waitForTimeout(400)
+    const lastId = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const last = msgs[msgs.length - 1]
+      if (last) rs.advanceReadPointer(jid, last.id)
+      return last?.id ?? null
+    }, STRESS_ROOM_JID)
+    expect(lastId, 'stress room must have messages').not.toBeNull()
+
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore.getState().activateRoom(null)
+    })
+    await page.waitForTimeout(300)
+
+    // Enough arrivals while away that the divider lands well ABOVE the live edge: the entry has to
+    // be a real scroll-up write, not a bottom-stick that would never exercise the marker executor.
+    const AWAY_COUNT = 40
+    await page.evaluate(([jid, count]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      for (let i = 0; i < (count as number); i++) {
+        c.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id: `marker-settle-${i}`, from: `${jid}/AwayBot`, nick: 'AwayBot',
+            body: `arrived while away #${i}`,
+            timestamp: new Date(), isOutgoing: false, roomJid: jid,
+          },
+          incrementUnread: true,
+        })
+      }
+    }, [STRESS_ROOM_JID, AWAY_COUNT] as const)
+    await page.waitForTimeout(200)
+
+    // Tall rows AFTER the backlog exists, so the correction lands on the marker entry itself.
+    await page.addStyleTag({ content: '[data-message-list] [data-index] { min-height: 160px; }' })
+
+    await navigateToStressRoom(page)
+    const markerId = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (window as any).__roomStore.getState().firstNewMessageMarkers.get(jid) ?? null
+    }, STRESS_ROOM_JID)
+    expect(markerId, 're-entry must compute an unread divider').not.toBeNull()
+
+    // Where the divider sits once entry has positioned it, before the tall-row settle can move it.
+    const dividerTop = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = document.querySelector('[data-new-message-marker]') as HTMLElement | null
+      if (!s || !el) return null
+      return Math.round(el.getBoundingClientRect().top - s.getBoundingClientRect().top)
+    })
+
+    await page.waitForTimeout(600)  // entry positioning + first re-assert frames
+    const afterEntry = await dividerTop()
+    expect(afterEntry, 'the divider must be positioned and in the DOM after entry').not.toBeNull()
+
+    await page.waitForTimeout(1400) // the measurement settle the bug let through as user input
+    const afterSettle = await dividerTop()
+    expect(afterSettle, 'the divider must survive the settle, not be unmounted by a takeover').not.toBeNull()
+
+    // Untouched by the reader, the divider must stay where entry put it: the re-assert loop has to
+    // hold it while every row below grows ~2.5x its estimate.
+    expect(
+      Math.abs((afterSettle as number) - (afterEntry as number)),
+      `unread divider drifted ${(afterSettle as number) - (afterEntry as number)}px through the measurement settle ` +
+      `(entry ${afterEntry}px → settle ${afterSettle}px) — marker entry not re-pinned across the tall-row correction`,
+    ).toBeLessThan(120)
+  })
+
   // ── 12: A relayout WHILE AWAY (viewport width + view density) holds the reading anchor ──
   //
   // Restore is driven by the CONTENT ANCHOR (the bottom-visible message + the fraction of its height
