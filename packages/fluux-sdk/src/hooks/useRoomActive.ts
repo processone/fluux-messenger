@@ -3,7 +3,7 @@ import { roomStore } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures } from '../core/types'
+import type { Room, RoomMessage, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures, SendMessageOptions, ReplyTarget } from '../core/types'
 import { createFetchOlderHistory, createContinueCatchUp, pickOldestArchiveId } from './shared'
 import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
@@ -14,6 +14,11 @@ import { useRoomManagement } from './useRoomManagement'
  */
 const EMPTY_MESSAGE_ARRAY: RoomMessage[] = []
 const EMPTY_TYPING_ARRAY: string[] = []
+
+/** {@link SendMessageOptions} with the room reply rule applied. */
+type RoomSendMessageOptions = Omit<SendMessageOptions, 'replyTo'> & {
+  replyTo?: ReplyTarget & { to: string }
+}
 
 /**
  * Lightweight hook for components that display the active room.
@@ -219,13 +224,11 @@ export function useRoomActive() {
     async (
       roomJid: string,
       body: string,
-      options?: {
-        replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }
-        references?: MentionReference[]
-        attachment?: FileAttachment
-      }
+      // XEP-0461 §4: a reply in a room names the occupant it answers, so `to`
+      // is required here even though the protocol leaves it optional.
+      options?: RoomSendMessageOptions
     ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, options?.replyTo, options?.references, options?.attachment)
+      return await client.chat.sendMessage(roomJid, body, options)
     },
     [client]
   )

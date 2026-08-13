@@ -52,6 +52,7 @@ import type {
   Message,
   MentionReference,
   FileAttachment,
+  SendMessageOptions,
   ChatStateNotification,
   MAMQueryOptions,
   MAMResult,
@@ -92,9 +93,11 @@ import type { StanzaClaim } from '../stanzaRouting'
  * @example Sending a reply
  * ```typescript
  * await client.chat.sendMessage('user@example.com', 'I agree!', {
- *   id: 'original-message-id',
- *   to: 'user@example.com',
- *   fallback: { author: 'User', body: 'What do you think?' }
+ *   replyTo: {
+ *     id: 'original-message-id',
+ *     to: 'user@example.com',
+ *     fallback: { author: 'User', body: 'What do you think?' }
+ *   }
  * })
  * ```
  *
@@ -784,9 +787,7 @@ export class Chat extends BaseModule {
    *
    * @param to - Recipient JID (user for chat, room for groupchat)
    * @param body - Message text content
-   * @param replyTo - Optional reply information for threaded replies (XEP-0461)
-   * @param references - Optional mention references (XEP-0372)
-   * @param attachment - Optional file attachment (XEP-0066, XEP-0264)
+   * @param options - Reply, mentions and attachment. See {@link SendMessageOptions}.
    * @returns The message ID
    *
    * @example Simple message
@@ -796,21 +797,18 @@ export class Chat extends BaseModule {
    *
    * @example Message with attachment
    * ```typescript
-   * const msgId = await client.chat.sendMessage('user@example.com', 'Check this out', undefined, undefined, {
-   *   url: 'https://example.com/file.pdf',
-   *   name: 'document.pdf',
-   *   size: 12345,
-   *   mimeType: 'application/pdf'
+   * const msgId = await client.chat.sendMessage('user@example.com', 'Check this out', {
+   *   attachment: {
+   *     url: 'https://example.com/file.pdf',
+   *     name: 'document.pdf',
+   *     size: 12345,
+   *     mimeType: 'application/pdf'
+   *   }
    * })
    * ```
    */
-  async sendMessage(
-    to: string,
-    body: string,
-    replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } },
-    references?: MentionReference[],
-    attachment?: FileAttachment
-  ): Promise<string> {
+  async sendMessage(to: string, body: string, options?: SendMessageOptions): Promise<string> {
+    const { replyTo, references, attachment } = options ?? {}
     const type = this.conversationKind(to)
     const id = generateUUID()
     const recipient = type === 'chat' ? getBareJid(to) : to

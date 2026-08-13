@@ -261,6 +261,8 @@ export type {
   Message,
   Conversation,
   ReplyInfo,
+  ReplyTarget,
+  SendMessageOptions,
   ChatStateNotification,
 
   // Roster types

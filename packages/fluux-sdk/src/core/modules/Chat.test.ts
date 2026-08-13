@@ -972,11 +972,7 @@ describe('XMPPClient Message', () => {
     it('should emit a reply fallback end counted in code points', async () => {
       await connectClient()
 
-      await xmppClient.chat.sendMessage(
-        'alice@example.com',
-        'Thanks!',
-        { id: 'orig-1', to: 'alice@example.com', fallback: { author: 'alice', body: QUOTED } },
-      )
+      await xmppClient.chat.sendMessage('alice@example.com', 'Thanks!', { replyTo: { id: 'orig-1', to: 'alice@example.com', fallback: { author: 'alice', body: QUOTED } } })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find((c: any) => c.name === 'fallback')
@@ -993,12 +989,7 @@ describe('XMPPClient Message', () => {
       const body = '😀 hey @bob'
       const begin = body.indexOf('@bob')
 
-      await xmppClient.chat.sendMessage(
-        'room@conference.example.com',
-        body,
-        undefined,
-        [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
-      )
+      await xmppClient.chat.sendMessage('room@conference.example.com', body, { references: [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }] })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const refEl = sentStanza.children.find((c: any) => c.name === 'reference')
@@ -1015,12 +1006,7 @@ describe('XMPPClient Message', () => {
       const typed = 'yes @bob'
       const begin = typed.indexOf('@bob')
 
-      await xmppClient.chat.sendMessage(
-        'room@conference.example.com',
-        typed,
-        { id: 'orig-2', to: 'room@conference.example.com/Emma', fallback: { author: 'Emma', body: QUOTED } },
-        [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }],
-      )
+      await xmppClient.chat.sendMessage('room@conference.example.com', typed, { replyTo: { id: 'orig-2', to: 'room@conference.example.com/Emma', fallback: { author: 'Emma', body: QUOTED } }, references: [{ begin, end: begin + '@bob'.length, type: 'mention', uri: 'xmpp:room@conference.example.com/bob' }] })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const refEl = sentStanza.children.find((c: any) => c.name === 'reference')
@@ -1741,11 +1727,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendMessage(
-        'room@conference.example.com',
-        'My reply',
-        { id: 'client-msg-id', to: 'room@conference.example.com/alice', fallback: { author: 'alice', body: 'Original message' } }
-      )
+      await xmppClient.chat.sendMessage('room@conference.example.com', 'My reply', { replyTo: { id: 'client-msg-id', to: 'room@conference.example.com/alice', fallback: { author: 'alice', body: 'Original message' } } })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
@@ -1764,11 +1746,7 @@ describe('XMPPClient Message', () => {
         from: 'room@conference.example.com/alice',
       })
 
-      await xmppClient.chat.sendMessage(
-        'room@conference.example.com',
-        'My reply',
-        { id: 'client-msg-id', to: 'room@conference.example.com/alice' }
-      )
+      await xmppClient.chat.sendMessage('room@conference.example.com', 'My reply', { replyTo: { id: 'client-msg-id', to: 'room@conference.example.com/alice' } })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
@@ -1790,11 +1768,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: false,
       })
 
-      await xmppClient.chat.sendMessage(
-        'alice@example.com',
-        'My reply',
-        { id: 'client-msg-id', to: 'alice@example.com' }
-      )
+      await xmppClient.chat.sendMessage('alice@example.com', 'My reply', { replyTo: { id: 'client-msg-id', to: 'alice@example.com' } })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
@@ -1820,11 +1794,7 @@ describe('XMPPClient Message', () => {
         isOutgoing: false,
       })
 
-      await xmppClient.chat.sendMessage(
-        'bob@example.com',
-        'Nice!',
-        { id: 'a1b2c3d4-uuid-style-id', to: 'bob@example.com', fallback: { author: 'bob', body: 'Check this out' } }
-      )
+      await xmppClient.chat.sendMessage('bob@example.com', 'Nice!', { replyTo: { id: 'a1b2c3d4-uuid-style-id', to: 'bob@example.com', fallback: { author: 'bob', body: 'Check this out' } } })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
@@ -1981,7 +1951,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2006,7 +1976,7 @@ describe('XMPPClient Message', () => {
         },
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const oobEl = sentStanza.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'jabber:x:oob')
@@ -2030,7 +2000,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find(
@@ -2052,7 +2022,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', url, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const fallbackEl = sentStanza.children.find(
@@ -2081,7 +2051,7 @@ describe('XMPPClient Message', () => {
         },
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', attachment.url, { attachment: attachment })
 
       // Body should be empty because the URL is fallback text for OOB
       // (our client understands OOB, so we strip the fallback)
@@ -2113,7 +2083,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('alice@example.com', userText, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('alice@example.com', userText, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
@@ -2205,7 +2175,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('room@conference.example.com', attachment.url, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('room@conference.example.com', attachment.url, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -2234,7 +2204,7 @@ describe('XMPPClient Message', () => {
         mediaType: 'image/jpeg',
       }
 
-      await xmppClient.chat.sendMessage('room@conference.example.com', userText, undefined, undefined, attachment)
+      await xmppClient.chat.sendMessage('room@conference.example.com', userText, { attachment: attachment })
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')

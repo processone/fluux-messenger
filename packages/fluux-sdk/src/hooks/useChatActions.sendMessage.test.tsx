@@ -33,19 +33,17 @@ describe('useChatActions.sendMessage (options object)', () => {
     mockClient.chat.sendMessage.mockResolvedValue('msg-id-1')
   })
 
-  it('sends a plain message as type "chat" with no reply/attachment', async () => {
+  it('sends a plain message with no options at all', async () => {
     const { result } = renderHook(() => useChatActions(), { wrapper })
 
     await act(async () => {
       await result.current.sendMessage('bob@example.com', 'hi')
     })
 
-    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith(
-      'bob@example.com', 'hi', undefined, undefined, undefined
-    )
+    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith('bob@example.com', 'hi', undefined)
   })
 
-  it('forwards replyTo and attachment from the options object', async () => {
+  it('passes the options object straight through to the SDK', async () => {
     const { result } = renderHook(() => useChatActions(), { wrapper })
 
     const replyTo = { id: 'm1', to: 'bob@example.com', fallback: { author: 'Bob', body: 'earlier' } }
@@ -54,8 +52,9 @@ describe('useChatActions.sendMessage (options object)', () => {
       await result.current.sendMessage('bob@example.com', 'see this', { replyTo, attachment })
     })
 
-    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith(
-      'bob@example.com', 'see this', replyTo, undefined, attachment
-    )
+    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith('bob@example.com', 'see this', {
+      replyTo,
+      attachment,
+    })
   })
 })

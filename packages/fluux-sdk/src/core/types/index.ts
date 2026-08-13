@@ -21,6 +21,8 @@ export type { BaseMessage, MessageSecurityContext, UnsupportedEncryptionInfo, Po
 export type {
   ChatStateNotification,
   ReplyInfo,
+  ReplyTarget,
+  SendMessageOptions,
   MentionReference,
   Message,
   ConversationEntity,

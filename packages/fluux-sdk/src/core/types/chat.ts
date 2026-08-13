@@ -7,6 +7,7 @@
 
 import type { BaseMessage } from './message-base'
 import type { ReadPointer } from './readState'
+import type { FileAttachment } from './upload'
 
 /**
  * Chat state notification types (XEP-0085).
@@ -56,6 +57,41 @@ export interface MentionReference {
   type: 'mention'
   /** XMPP URI: 'xmpp:room@conf/nick' for user, 'xmpp:room@conf' for \@all */
   uri: string
+}
+
+/**
+ * The message an outgoing one replies to (XEP-0461).
+ *
+ * Distinct from {@link ReplyInfo}, which records a reply that already exists:
+ * this is what the SDK needs in order to build one.
+ *
+ * @category Chat
+ */
+export interface ReplyTarget {
+  /** Id of the message being replied to. */
+  id: string
+  /** Author of that message, when the reply has to address them (MUC). */
+  to?: string
+  /**
+   * Text to quote for clients that cannot render a reply. The SDK puts it above
+   * the body and marks the range per XEP-0428, so clients that can render the
+   * reply strip the quote instead of showing it twice.
+   */
+  fallback?: { author: string; body: string; fromEncrypted?: boolean }
+}
+
+/**
+ * Everything optional about an outgoing message.
+ *
+ * @category Chat
+ */
+export interface SendMessageOptions {
+  /** Reply to an earlier message (XEP-0461). */
+  replyTo?: ReplyTarget
+  /** Mentions to mark in the body (XEP-0372). */
+  references?: MentionReference[]
+  /** File to attach (XEP-0066, XEP-0363). */
+  attachment?: FileAttachment
 }
 
 /**

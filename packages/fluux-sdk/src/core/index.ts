@@ -22,6 +22,8 @@ export type {
   ConnectionMethod,
   Message,
   RoomMessage,
+  SendMessageOptions,
+  ReplyTarget,
   AnyMessage,
   MentionReference,
   ReplyInfo,

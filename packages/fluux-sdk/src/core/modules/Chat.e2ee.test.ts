@@ -269,7 +269,7 @@ describe('Chat E2EE wiring', () => {
       // Regression: <fallback for="jabber:x:oob"> in the unencrypted stanza root
       // reveals to the XMPP server that an attachment was sent and its URL length.
       // It must be stripped after the OOB element is moved inside the encrypted payload.
-      await chat.sendMessage('bob@example.com', 'Check this file', undefined, undefined, {
+      await chat.sendMessage('bob@example.com', 'Check this file', { attachment: {
         url: 'https://upload.example.com/file.bin',
         name: 'photo.jpg',
         mediaType: 'image/jpeg',
@@ -278,7 +278,7 @@ describe('Chat E2EE wiring', () => {
           key: new Uint8Array(32).fill(1),
           iv: new Uint8Array(12).fill(2),
         },
-      })
+      } })
 
       expect(captured).toHaveLength(1)
       const sent = captured[0]
@@ -296,12 +296,7 @@ describe('Chat E2EE wiring', () => {
     it('preserves <fallback for="urn:xmpp:reply:0"> when OOB fallback is removed', async () => {
       // Removing the OOB fallback must be surgical — unrelated fallbacks (e.g. reply
       // quote for legacy clients) must not be collateral damage.
-      await chat.sendMessage(
-        'bob@example.com',
-        'Nice photo!',
-        { id: 'orig-msg-id', to: 'bob@example.com', fallback: { author: 'Bob', body: 'seen this?' } },
-        undefined,
-        {
+      await chat.sendMessage('bob@example.com', 'Nice photo!', { replyTo: { id: 'orig-msg-id', to: 'bob@example.com', fallback: { author: 'Bob', body: 'seen this?' } }, attachment: {
           url: 'https://upload.example.com/reply.bin',
           name: 'reply.jpg',
           mediaType: 'image/jpeg',
@@ -310,8 +305,7 @@ describe('Chat E2EE wiring', () => {
             key: new Uint8Array(32).fill(3),
             iv: new Uint8Array(12).fill(4),
           },
-        },
-      )
+        } })
 
       const sent = captured[0]
 
@@ -343,11 +337,11 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'Check this', undefined, undefined, {
+      await plainChat.sendMessage('bob@example.com', 'Check this', { attachment: {
         url: 'https://upload.example.com/plain.jpg',
         name: 'plain.jpg',
         mediaType: 'image/jpeg',
-      })
+      } })
 
       const sent = captured[0]
 
@@ -429,7 +423,7 @@ describe('Chat E2EE wiring', () => {
       const guardedChat = new Chat(deps, stubMAM())
 
       await expect(
-        guardedChat.sendMessage('bob@example.com', 'secret photo', undefined, undefined, {
+        guardedChat.sendMessage('bob@example.com', 'secret photo', { attachment: {
           url: 'https://upload.example.com/photo.bin',
           name: 'photo.jpg',
           mediaType: 'image/jpeg',
@@ -438,7 +432,7 @@ describe('Chat E2EE wiring', () => {
             key: new Uint8Array(32).fill(1),
             iv: new Uint8Array(12).fill(2),
           },
-        }),
+        } }),
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
 
       expect(captured).toHaveLength(0)
@@ -458,11 +452,11 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'here is the file', undefined, undefined, {
+      await plainChat.sendMessage('bob@example.com', 'here is the file', { attachment: {
         url: 'https://upload.example.com/plain.jpg',
         name: 'plain.jpg',
         mediaType: 'image/jpeg',
-      })
+      } })
 
       expect(captured).toHaveLength(1)
       expect(captured[0].getChild('x', 'jabber:x:oob')).toBeDefined()
@@ -2046,7 +2040,7 @@ describe('Chat E2EE wiring', () => {
       })
       const plainChat = new Chat(deps, stubMAM())
 
-      await plainChat.sendMessage('bob@example.com', 'sure thing', encryptedReply)
+      await plainChat.sendMessage('bob@example.com', 'sure thing', { replyTo: encryptedReply })
 
       const sent = captured[0]
       const body = sent.getChild('body')?.text() ?? ''
@@ -2069,7 +2063,7 @@ describe('Chat E2EE wiring', () => {
 
     it('keeps the quote INSIDE the encrypted payload when the reply is encrypted', async () => {
       // `chat` uses the DummyPlaintextPlugin (registered in beforeEach) → encrypts.
-      await chat.sendMessage('bob@example.com', 'sure thing', encryptedReply)
+      await chat.sendMessage('bob@example.com', 'sure thing', { replyTo: encryptedReply })
 
       const sent = captured[0]
       // Outer body is the generic fallback, never the quote.
@@ -2103,9 +2097,11 @@ describe('Chat E2EE wiring', () => {
       const plainChat = new Chat(deps, stubMAM())
 
       await plainChat.sendMessage('bob@example.com', 'sure thing', {
-        id: 'orig',
-        to: 'bob@example.com',
-        fallback: { author: 'Bob', body: 'hello there' }, // fromEncrypted omitted → false
+        replyTo: {
+          id: 'orig',
+          to: 'bob@example.com',
+          fallback: { author: 'Bob', body: 'hello there' }, // fromEncrypted omitted → false
+        },
       })
 
       const sent = captured[0]
@@ -2133,13 +2129,7 @@ describe('Chat E2EE wiring', () => {
       const plainChat = new Chat(deps, stubMAM())
 
       const attachmentUrl = 'https://upload.example.com/file.bin'
-      await plainChat.sendMessage(
-        'bob@example.com',
-        'sure thing',
-        { id: 'orig', to: 'bob@example.com', fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true } },
-        undefined,
-        { url: attachmentUrl, name: 'file.bin', mediaType: 'application/octet-stream' }, // unencrypted attachment → cleartext send
-      )
+      await plainChat.sendMessage('bob@example.com', 'sure thing', { replyTo: { id: 'orig', to: 'bob@example.com', fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true } }, attachment: { url: attachmentUrl, name: 'file.bin', mediaType: 'application/octet-stream' } })
 
       const sent = captured[0]
       const body = sent.getChild('body')?.text() ?? ''

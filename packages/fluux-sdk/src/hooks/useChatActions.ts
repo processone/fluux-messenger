@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
-import type { Conversation, ChatStateNotification, FileAttachment } from '../core'
+import type { Conversation, ChatStateNotification, FileAttachment, SendMessageOptions } from '../core'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 
 /**
@@ -28,13 +28,10 @@ export function useChatActions() {
     async (
       to: string,
       body: string,
-      options?: {
-        replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } }
-        attachment?: FileAttachment
-      }
+      // A 1:1 message carries no mentions: those address room occupants.
+      options?: Omit<SendMessageOptions, 'references'>
     ): Promise<string> => {
-      // 1:1 chat hook: always a 'chat'-type message (rooms use useRoomActions).
-      return await client.chat.sendMessage(to, body, options?.replyTo, undefined, options?.attachment)
+      return await client.chat.sendMessage(to, body, options)
     },
     [client]
   )

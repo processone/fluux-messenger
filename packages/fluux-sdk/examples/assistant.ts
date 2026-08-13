@@ -50,7 +50,7 @@ async function respond(client: XMPPClient, question: Question): Promise<void> {
   await client.chat.sendChatState(question.to, 'composing')
 
   const placeholderId = await client.chat.sendMessage(question.to, 'Working on it…', {
-    id: question.messageId,
+    replyTo: { id: question.messageId },
   })
 
   try {

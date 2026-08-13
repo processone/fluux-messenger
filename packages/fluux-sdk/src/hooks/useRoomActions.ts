@@ -2,15 +2,21 @@ import { useCallback, useMemo } from 'react'
 import { roomStore } from '../stores/roomStore'
 import { useXMPPContext } from '../provider'
 import type {
-  MentionReference,
   ChatStateNotification,
   FileAttachment,
   RoomFeatures,
+  SendMessageOptions,
+  ReplyTarget,
 } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
 import { useRoomManagement } from './useRoomManagement'
+
+/** {@link SendMessageOptions} with the room reply rule applied. */
+type RoomSendMessageOptions = Omit<SendMessageOptions, 'replyTo'> & {
+  replyTo?: ReplyTarget & { to: string }
+}
 
 /**
  * Action-only counterpart to `useRoom()`.
@@ -133,13 +139,11 @@ export function useRoomActions() {
     async (
       roomJid: string,
       body: string,
-      options?: {
-        replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }
-        references?: MentionReference[]
-        attachment?: FileAttachment
-      }
+      // XEP-0461 §4: a reply in a room names the occupant it answers, so `to`
+      // is required here even though the protocol leaves it optional.
+      options?: RoomSendMessageOptions
     ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, options?.replyTo, options?.references, options?.attachment)
+      return await client.chat.sendMessage(roomJid, body, options)
     },
     [client]
   )
