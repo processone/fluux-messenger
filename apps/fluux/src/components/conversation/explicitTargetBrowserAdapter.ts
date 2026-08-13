@@ -35,6 +35,12 @@ export interface ExplicitTargetBrowserAdapterOptions {
   setMeasuredAtBottom: (atLiveEdge: boolean) => void
   markNotAtBottom: () => void
   consumeStoreTarget: () => void
+  /**
+   * Opens the settle window after a scrollTop write. Without it the measurement settle that lands
+   * once the re-assert loop has ended reads as a scrollbar drag: height unchanged, no loop running.
+   * See scrollGate.
+   */
+  recordProgrammaticWrite: (conversationId: string) => void
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -188,6 +194,7 @@ export class ExplicitTargetBrowserAdapter {
     this.options.setMeasuredAtBottom(
       distanceFromBottom < AT_BOTTOM_THRESHOLD,
     )
+    this.options.recordProgrammaticWrite(request.conversationId)
     this.options.log?.('TARGET MESSAGE: controller positioned frame', {
       conversationId: request.conversationId,
       generation: request.generation,

@@ -159,6 +159,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       getPassiveContext: () => ({ conversationId: 'room-a', virtualizer }),
       beginLoop,
       setMeasuredAtBottom: vi.fn(),
+      recordProgrammaticWrite: vi.fn(),
     }).createExecutor(liveEdge)
 
     expect(executor.liveEdge).toBe(liveEdge)
@@ -181,6 +182,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       getPassiveContext: () => ({ conversationId: 'room-a', virtualizer }),
       beginLoop: loopHarness().beginLoop,
       setMeasuredAtBottom: vi.fn(),
+      recordProgrammaticWrite: vi.fn(),
     }).createExecutor({} as LiveEdgeExecutor)
 
     expect(executor.reachability(unreadRequest().desired)).toEqual({
@@ -210,6 +212,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       }),
       beginLoop: loopHarness().beginLoop,
       setMeasuredAtBottom: vi.fn(),
+      recordProgrammaticWrite: vi.fn(),
     })
     const executor = adapter.createExecutor({} as LiveEdgeExecutor)
 
@@ -232,6 +235,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       getPassiveContext: () => ({ conversationId: 'room-a', virtualizer }),
       beginLoop: loopHarness().beginLoop,
       setMeasuredAtBottom: measured,
+      recordProgrammaticWrite: vi.fn(),
     }).createExecutor({} as LiveEdgeExecutor)
 
     expect(executor.positionFrame(unreadRequest(), lease())).toEqual({ kind: 'unavailable' })
@@ -249,6 +253,38 @@ describe('UnreadMarkerBrowserAdapter', () => {
     expect(measured).toHaveBeenLastCalledWith(true)
   })
 
+  it('opens the settle window whenever it moves scrollTop, and only then', () => {
+    // Every executor that writes scrollTop must mark it, or the measurement settle arriving after
+    // the re-assert loop ends is indistinguishable from a scrollbar drag: it opens the save gate on
+    // a drifted position and arms user takeover against the positioning that produced it.
+    const viewport = scrollerHarness({ clientHeight: 600 })
+    const nearTop = virtualizerHarness(viewport.scroller, { offset: 200 }).virtualizer
+    let virtualizer = nearTop
+    const recordWrite = vi.fn()
+    const executor = new UnreadMarkerBrowserAdapter({
+      getScroller: () => viewport.scroller,
+      getVirtualizer: () => virtualizer,
+      getWindowFacts: () => ({ hasRows: true, windowAtLiveEdge: true }),
+      getPassiveContext: () => ({ conversationId: 'room-a', virtualizer }),
+      beginLoop: loopHarness().beginLoop,
+      setMeasuredAtBottom: vi.fn(),
+      recordProgrammaticWrite: recordWrite,
+    }).createExecutor({} as LiveEdgeExecutor)
+
+    // A rejected near-top marker writes nothing, so it must not open the window either.
+    expect(executor.positionFrame(unreadRequest(), lease())).toEqual({ kind: 'unavailable' })
+    expect(recordWrite).not.toHaveBeenCalled()
+
+    virtualizer = virtualizerHarness(viewport.scroller, {
+      offset: 900,
+      landedTop: 1_395,
+    }).virtualizer
+    expect(executor.positionFrame(unreadRequest('start'), lease())).toMatchObject({
+      kind: 'positioned',
+    })
+    expect(recordWrite).toHaveBeenCalledWith('room-a')
+  })
+
   it('applies top-third placement without a virtualizer and never writes under a stale lease', () => {
     const viewport = scrollerHarness({ clientHeight: 600 })
     appendMessage(viewport.scroller, { offsetTop: 800 })
@@ -259,6 +295,7 @@ describe('UnreadMarkerBrowserAdapter', () => {
       getPassiveContext: () => ({ conversationId: 'room-a', virtualizer: undefined }),
       beginLoop: loopHarness().beginLoop,
       setMeasuredAtBottom: vi.fn(),
+      recordProgrammaticWrite: vi.fn(),
     }).createExecutor({} as LiveEdgeExecutor)
 
     expect(executor.positionFrame(unreadRequest(), lease())).toMatchObject({
@@ -288,6 +325,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
     const measured = vi.fn()
     const markNotAtBottom = vi.fn()
     const consumeStoreTarget = vi.fn()
+    const recordWrite = vi.fn()
     const adapter = new ExplicitTargetBrowserAdapter({
       getScroller: () => scroller,
       getVirtualizer: () => input.virtualizer,
@@ -305,6 +343,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
       setMeasuredAtBottom: measured,
       markNotAtBottom,
       consumeStoreTarget,
+      recordProgrammaticWrite: recordWrite,
     })
     return {
       adapter,
@@ -315,6 +354,7 @@ describe('ExplicitTargetBrowserAdapter', () => {
       measured,
       markNotAtBottom,
       consumeStoreTarget,
+      recordWrite,
     }
   }
 
@@ -402,12 +442,17 @@ describe('ExplicitTargetBrowserAdapter', () => {
     })
     expect(scrollToIndex).toHaveBeenCalledWith(5, { align: 'center' })
     expect(result.measured).toHaveBeenCalledWith(false)
+    // The centring write must open the settle window; see the equivalent unread-marker test.
+    expect(result.recordWrite).toHaveBeenCalledWith('room-a')
 
     viewport.scroller.scrollTop = 123
+    result.recordWrite.mockClear()
     expect(executor.positionFrame(explicitRequest(), lease(() => false))).toEqual({
       kind: 'unavailable',
     })
     expect(viewport.scrollTop).toBe(123)
+    // A stale lease writes nothing, so it must not open the window either.
+    expect(result.recordWrite).not.toHaveBeenCalled()
   })
 
   it('falls back to the scoped mounted element when no virtual index exists', () => {

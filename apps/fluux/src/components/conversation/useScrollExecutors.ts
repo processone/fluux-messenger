@@ -466,6 +466,8 @@ export function useScrollExecutors({
       getPassiveContext: () => portsRef.current.getPassiveContext(),
       beginLoop: (lease) => beginControllerFrameLoop('marker', lease),
       setMeasuredAtBottom,
+      recordProgrammaticWrite: (id) =>
+        portsRef.current.recordProgrammaticWrite(id, Date.now()),
       log: (action, data) => portsRef.current.log(action, data),
     })
     return browser.createExecutor(createLiveEdgeExecutor('marker-fallback'))
@@ -498,6 +500,8 @@ export function useScrollExecutors({
       setMeasuredAtBottom,
       markNotAtBottom: () => { isAtBottomRef.current = false },
       consumeStoreTarget: () => portsRef.current.consumeStoreTarget(),
+      recordProgrammaticWrite: (id) =>
+        portsRef.current.recordProgrammaticWrite(id, Date.now()),
       log: (action, data) => portsRef.current.log(action, data),
     })
     return browser.createExecutor({

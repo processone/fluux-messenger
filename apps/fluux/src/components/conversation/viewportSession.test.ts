@@ -166,4 +166,68 @@ describe('ViewportSession', () => {
     expect(session.hasTravelledAway('room-a', 'top')).toBe(false)
     expect(session.hasTravelledAway('room-a', 'bottom')).toBe(true)
   })
+
+  describe('post-write settle window', () => {
+    /**
+     * Replays the sequence every positioning executor produces: it writes scrollTop while its
+     * re-assert loop owns the pixels, the loop ends, and a few frames later the virtualizer's
+     * measurement settle fires one more scroll event at an unchanged height.
+     *
+     * `marksWrite` is the only difference between executors. Those whose adapter or completion
+     * calls recordProgrammaticWrite keep the settle inside the programmatic window; the rest leave
+     * it looking exactly like a scrollbar drag.
+     */
+    function replayPositioningThenSettle(marksWrite: boolean): boolean {
+      const session = new ViewportSession('room-a')
+      const height = 4_000
+      const writeAt = 10_000
+
+      // Baseline: one observation before the write, so previousScrollHeight is known.
+      session.observeScroll({
+        conversationId: 'room-a',
+        geometry: geometry(1_200, height),
+        bottomAnchor: null,
+        controllerOwnsPixels: false,
+        now: writeAt - 500,
+      })
+
+      if (marksWrite) session.recordProgrammaticWrite('room-a', writeAt)
+
+      // The positioning frame itself, while the loop still owns the pixels.
+      session.observeScroll({
+        conversationId: 'room-a',
+        geometry: geometry(800, height),
+        bottomAnchor: null,
+        controllerOwnsPixels: true,
+        now: writeAt,
+      })
+
+      // The loop has ended. The measurement settle lands two frames later, height unchanged.
+      session.observeScroll({
+        conversationId: 'room-a',
+        geometry: geometry(800, height),
+        bottomAnchor: null,
+        controllerOwnsPixels: false,
+        now: writeAt + 32,
+      })
+
+      return session.hasGenuineInput('room-a')
+    }
+
+    it('keeps the settle programmatic when the write was recorded', () => {
+      // The live-edge and anchor-preservation adapters, saved position and directional history all
+      // mark the write, so their settle is correctly not user input.
+      expect(replayPositioningThenSettle(true)).toBe(false)
+    })
+
+    it('cannot tell an unrecorded programmatic settle from a scrollbar drag', () => {
+      // The session has no other evidence to go on: loop finished, height unchanged, no recorded
+      // write. This is why marking the write is mandatory for every executor that moves scrollTop,
+      // and it is what makes an unmarked writer a defect rather than a style difference.
+      //
+      // A genuine-input verdict opens the save gate on a drifted settle position and arms user
+      // takeover against the positioning that produced it.
+      expect(replayPositioningThenSettle(false)).toBe(true)
+    })
+  })
 })
