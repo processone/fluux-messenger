@@ -74,14 +74,14 @@ import { isItemNotFoundError } from '../../hooks/shared/mamCursor'
 import type {
   Message,
   RoomMessage,
-  MAMQueryOptions,
-  MAMResult,
-  RoomMAMQueryOptions,
-  RoomMAMResult,
+  HistoryQueryOptions,
+  HistoryResult,
+  RoomHistoryQueryOptions,
+  RoomHistoryResult,
   RSMResponse,
-  MAMSearchOptions,
-  RoomMAMSearchOptions,
-  MAMPagingSearchOptions,
+  HistorySearchOptions,
+  RoomHistorySearchOptions,
+  HistoryPagingSearchOptions,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { getDomain } from '../jid'
@@ -189,7 +189,7 @@ export class MAM extends BaseModule {
    * @param options.before - RSM cursor for pagination (empty string for latest, or message ID for older)
    * @returns Query result with messages, completion status, and pagination info
    */
-  async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
+  async queryArchive(options: HistoryQueryOptions): Promise<HistoryResult> {
     const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
@@ -244,7 +244,7 @@ export class MAM extends BaseModule {
     let sawCoverageTop = false
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
-    this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
+    this.deps.emitSDK('chat:history-loading', { conversationId, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -304,7 +304,7 @@ export class MAM extends BaseModule {
               // every session — and every "Load missing messages" click —
               // re-anchors on it and re-degrades forever. Keeping the gap's
               // start timestamp lets the next resume fall back to it and progress.
-              this.deps.emitSDK('chat:mam-anchor-purged', { conversationId, after })
+              this.deps.emitSDK('chat:history-anchor-purged', { conversationId, after })
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
@@ -315,7 +315,7 @@ export class MAM extends BaseModule {
               // drop the stale record (this degrade site is the only place that
               // KNOWS the id is gone) and degrade to fetch-latest.
               logInfo(`MAM before-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
-              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: currentBefore })
+              this.deps.emitSDK('chat:history-coverage-purged', { conversationId, before: currentBefore })
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
               return { ...degraded, degradedToFetchLatest: true }
             }
@@ -325,7 +325,7 @@ export class MAM extends BaseModule {
               // aborting the walk — otherwise the record survives and every
               // session re-jumps onto the dead id (Codex r4 #6).
               logInfo(`MAM coverage floor purged mid-walk for ...@${getDomain(conversationId) || '*'} — resuming from pre-jump cursor`)
-              this.deps.emitSDK('chat:mam-coverage-purged', { conversationId, before: coverageRecord.bottomId })
+              this.deps.emitSDK('chat:history-coverage-purged', { conversationId, before: coverageRecord.bottomId })
               currentBefore = preJumpCursor
               preJumpCursor = undefined // one recovery per walk
               continue
@@ -420,7 +420,7 @@ export class MAM extends BaseModule {
         modifications.retractions.length + modifications.corrections.length +
         modifications.fastenings.length + modifications.reactions.length > 0
 
-      this.deps.emitSDK('chat:mam-messages', {
+      this.deps.emitSDK('chat:history-messages', {
         conversationId,
         messages: allMessages,
         rsm: lastRsm,
@@ -462,10 +462,10 @@ export class MAM extends BaseModule {
       } else {
         logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
       }
-      this.deps.emitSDK('chat:mam-error', { conversationId, error: msg })
+      this.deps.emitSDK('chat:history-error', { conversationId, error: msg })
       throw error
     } finally {
-      this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: false })
+      this.deps.emitSDK('chat:history-loading', { conversationId, isLoading: false })
     }
   }
 
@@ -478,7 +478,7 @@ export class MAM extends BaseModule {
    * @param options.before - RSM cursor for pagination (empty string for latest, or message ID for older)
    * @returns Query result with messages, completion status, and pagination info
    */
-  async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
+  async queryRoomArchive(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const roomMamStart = Date.now()
     // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
@@ -531,7 +531,7 @@ export class MAM extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
 
-    this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: true })
+    this.deps.emitSDK('room:history-loading', { roomJid, isLoading: true })
 
     try {
       for (let page = 0; page < maxAutoPages; page++) {
@@ -587,7 +587,7 @@ export class MAM extends BaseModule {
               logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
               // Strip the purged id from the persisted gap anchor — see the
               // 1:1 twin in queryArchive for the full rationale.
-              this.deps.emitSDK('room:mam-anchor-purged', { roomJid, after })
+              this.deps.emitSDK('room:history-anchor-purged', { roomJid, after })
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
@@ -598,7 +598,7 @@ export class MAM extends BaseModule {
               // drop the stale record and degrade to fetch-latest (see the 1:1
               // twin in queryArchive).
               logInfo(`Room MAM before-cursor purged for ${roomJid} — degrading to fetch-latest`)
-              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: currentBefore })
+              this.deps.emitSDK('room:history-coverage-purged', { roomJid, before: currentBefore })
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
               return { ...degraded, degradedToFetchLatest: true }
             }
@@ -606,7 +606,7 @@ export class MAM extends BaseModule {
               // Jumped-to floor purged mid-walk — resume from the pre-jump
               // cursor (see the 1:1 twin in queryArchive; Codex r4 #6).
               logInfo(`Room MAM coverage floor purged mid-walk for ${roomJid} — resuming from pre-jump cursor`)
-              this.deps.emitSDK('room:mam-coverage-purged', { roomJid, before: coverageRecord.bottomId })
+              this.deps.emitSDK('room:history-coverage-purged', { roomJid, before: coverageRecord.bottomId })
               currentBefore = preJumpCursor
               preJumpCursor = undefined // one recovery per walk
               continue
@@ -643,7 +643,7 @@ export class MAM extends BaseModule {
             this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
             // Emit each page's messages immediately so the store can update incrementally
-            this.deps.emitSDK('room:mam-messages', {
+            this.deps.emitSDK('room:history-messages', {
               roomJid,
               messages: collectedMessages,
               rsm,
@@ -724,7 +724,7 @@ export class MAM extends BaseModule {
           (msg, from) => msg.from === from,
           (from) => getResource(from) || from
         )
-        this.deps.emitSDK('room:mam-messages', {
+        this.deps.emitSDK('room:history-messages', {
           roomJid,
           messages: allMessages,
           rsm: lastRsm,
@@ -762,10 +762,10 @@ export class MAM extends BaseModule {
       } else {
         logErr(`Room MAM error: ${roomJid} — ${msg}`)
       }
-      this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
+      this.deps.emitSDK('room:history-error', { roomJid, error: msg })
       throw error
     } finally {
-      this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: false })
+      this.deps.emitSDK('room:history-loading', { roomJid, isLoading: false })
     }
   }
 
@@ -783,7 +783,7 @@ export class MAM extends BaseModule {
    * @param options - Search options
    * @returns Messages matching the query, with pagination info
    */
-  async searchArchive(options: MAMSearchOptions): Promise<MAMResult> {
+  async searchArchive(options: HistorySearchOptions): Promise<HistoryResult> {
     const { query, with: withJid, max = 20, before } = options
     const queryId = `mam_search_${generateUUID()}`
 
@@ -852,7 +852,7 @@ export class MAM extends BaseModule {
    * @param options - Search options
    * @returns Room messages matching the query, with pagination info
    */
-  async searchRoomArchive(options: RoomMAMSearchOptions): Promise<RoomMAMResult> {
+  async searchRoomArchive(options: RoomHistorySearchOptions): Promise<RoomHistoryResult> {
     const { query, roomJid, max = 20, before } = options
     const queryId = `mam_rsearch_${generateUUID()}`
 
@@ -919,9 +919,9 @@ export class MAM extends BaseModule {
    * @returns Matching messages
    */
   async searchConversationByPaging(
-    options: MAMPagingSearchOptions,
+    options: HistoryPagingSearchOptions,
     signal?: AbortSignal
-  ): Promise<MAMResult> {
+  ): Promise<HistoryResult> {
     const { query, with: withJid, end, maxPages = 20, maxResults = 50 } = options
     const parsed = parseSearchQuery(query)
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
@@ -1060,7 +1060,7 @@ export class MAM extends BaseModule {
         : undefined
 
       if (isRoom) {
-        // RoomMAMQueryOptions has no `end` filter (unlike the 1:1 branch below) —
+        // RoomHistoryQueryOptions has no `end` filter (unlike the 1:1 branch below) —
         // rooms rely on RSM pagination + the oldestInPage/targetTime check below
         // to stop at the target instead. `endFilter` is intentionally unused here.
         const result = await this.queryRoomArchive({

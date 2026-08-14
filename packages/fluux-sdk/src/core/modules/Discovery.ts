@@ -361,7 +361,7 @@ export class Discovery extends BaseModule {
       const result = await this.deps.sendIQ(iq)
       const query = result.getChild('query', NS_DISCO_INFO)
       if (!query) {
-        this.deps.emitSDK('connection:mam-fulltext-search', { supported: false })
+        this.deps.emitSDK('connection:history-search', { supported: false })
         return
       }
 
@@ -379,14 +379,14 @@ export class Discovery extends BaseModule {
         }
       }
 
-      this.deps.emitSDK('connection:mam-fulltext-search', { supported: supportsFulltext })
+      this.deps.emitSDK('connection:history-search', { supported: supportsFulltext })
       if (supportsFulltext) {
         logInfo('MAM fulltext search: supported')
       }
     } catch (err) {
       // Disco query failed — assume no fulltext support
       logWarn(`MAM search capability discovery failed: ${err instanceof Error ? err.message : String(err)}`)
-      this.deps.emitSDK('connection:mam-fulltext-search', { supported: false })
+      this.deps.emitSDK('connection:history-search', { supported: false })
     }
   }
 

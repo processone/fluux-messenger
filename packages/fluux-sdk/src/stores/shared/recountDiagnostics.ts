@@ -38,8 +38,8 @@ export type RecountDeferralReason =
   | 'pending-remote-displayed'
   /** Neither a read pointer nor a history floor to count from. */
   | 'no-floor'
-  /** MAM has not caught up, so any count would be derived from partial history. */
-  | 'mam-not-caught-up'
+  /** History has not caught up, so any count would be derived from partial history. */
+  | 'history-not-caught-up'
   /** Cache epoch or storage scope moved under this recount. */
   | 'context-changed'
   /** No coverage record for the entity, so the archive bottom is unknown. */

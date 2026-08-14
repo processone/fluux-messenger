@@ -390,9 +390,9 @@ export class DemoClient extends XMPPClient {
     }
 
     // Roster: load contacts then set presence per-resource
-    this.emitSDK('roster:loaded', { contacts: data.contacts })
+    this.emitSDK('contacts:loaded', { contacts: data.contacts })
     for (const presence of data.presences) {
-      this.emitSDK('roster:presence', presence)
+      this.emitSDK('contacts:presence', presence)
     }
 
     // Conversations: create each, then add messages
@@ -436,7 +436,7 @@ export class DemoClient extends XMPPClient {
     }
 
     // Set MUC service JID so BrowseRoomsModal can discover it
-    this.emitSDK('admin:muc-service', { mucServiceJid: this.conferenceService })
+    this.emitSDK('admin:room-service', { mucServiceJid: this.conferenceService })
 
     // Mark all history as complete so the "load earlier messages" spinner
     // never appears — there is no MAM server to query in demo mode.
@@ -576,7 +576,7 @@ export class DemoClient extends XMPPClient {
         this.emitSDK('chat:reactions', step.data as Parameters<typeof this.emitSDK<'chat:reactions'>>[1])
         break
       case 'presence':
-        this.emitSDK('roster:presence', step.data as Parameters<typeof this.emitSDK<'roster:presence'>>[1])
+        this.emitSDK('contacts:presence', step.data as Parameters<typeof this.emitSDK<'contacts:presence'>>[1])
         break
       case 'room-typing':
         this.emitSDK('room:typing', step.data as Parameters<typeof this.emitSDK<'room:typing'>>[1])

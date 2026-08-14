@@ -38,10 +38,10 @@ describe('recountDiagnostics', () => {
   })
 
   it('is cumulative, leaving windowing to the reader', () => {
-    recordRecountDeferral('room', 'mam-not-caught-up')
-    expect(readRecountDeferrals()['room:mam-not-caught-up']).toBe(1)
-    recordRecountDeferral('room', 'mam-not-caught-up')
-    expect(readRecountDeferrals()['room:mam-not-caught-up']).toBe(2)
+    recordRecountDeferral('room', 'history-not-caught-up')
+    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(1)
+    recordRecountDeferral('room', 'history-not-caught-up')
+    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(2)
   })
 
   it('returns a copy, so a reader cannot mutate the tallies', () => {

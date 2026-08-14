@@ -263,7 +263,7 @@ describe('XMPPClient fetchOwnVCard', () => {
       email: undefined,
       country: undefined,
     })
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-vcard', {
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
       vcard: { fullName: 'My Name', org: 'My Company', email: undefined, country: undefined },
     })
   })
@@ -276,7 +276,7 @@ describe('XMPPClient fetchOwnVCard', () => {
     const result = await xmppClient.profile.fetchOwnVCard()
 
     expect(result).toBeNull()
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-vcard', { vcard: null })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', { vcard: null })
   })
 })
 
@@ -346,7 +346,7 @@ describe('XMPPClient publishOwnVCard', () => {
     expect(vcardCalls.length).toBeGreaterThan(0)
 
     // Verify event emitted with new data
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-vcard', {
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
       vcard: { fullName: 'New Name', email: 'me@test.com' },
     })
   })
@@ -359,7 +359,7 @@ describe('XMPPClient publishOwnVCard', () => {
 
     await xmppClient.profile.publishOwnVCard({ org: 'Acme Corp', country: 'France' })
 
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-vcard', {
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
       vcard: { org: 'Acme Corp', country: 'France' },
     })
   })

@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core/types'
+import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, RSMResponse } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
@@ -8,7 +8,7 @@ import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
-import type { MAMQueryDirection } from './shared/mamState'
+import type { HistoryQueryDirection } from './shared/mamState'
 import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
 import {
   syncCoverageAfterArchiveMerge,
@@ -281,7 +281,7 @@ interface ChatState {
   // Message drafts per conversation (persisted to localStorage)
   drafts: Map<string, string>
   // XEP-0313: MAM query state per conversation (ephemeral, not persisted)
-  mamQueryStates: Map<string, MAMQueryState>
+  mamQueryStates: Map<string, HistoryQueryState>
   // Persisted history-gap intervals per conversation (in the account-scoped chat
   // blob; drives the gap marker). Parity with roomStore.roomGaps.
   conversationGaps: Map<string, GapInterval>
@@ -475,7 +475,7 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -489,7 +489,7 @@ interface ChatState {
   /** Drop the coverage record; with `ifBottomId`, only when it matches
    *  `bottomId` (purge-event guard — the anchor is known gone). */
   clearConversationCoverage: (conversationId: string, ifBottomId?: string) => void
-  getMAMQueryState: (conversationId: string) => MAMQueryState
+  getMAMQueryState: (conversationId: string) => HistoryQueryState
   resetMAMStates: () => void
   /**
    * Update only the lastMessage preview for a conversation without affecting the messages array.
@@ -2606,7 +2606,7 @@ export const chatStore = createStore<ChatState>()(
 
         // --- Coverage gate: every uncertain branch defers -
         const mam = mamState.getMAMQueryState(get().mamQueryStates, conversationId)
-        if (!isCaughtUpForCounting(mam)) return defer('mam-not-caught-up')
+        if (!isCaughtUpForCounting(mam)) return defer('history-not-caught-up')
 
         const record = get().conversationCoverage.get(conversationId)
         const bottom = await resolveCoverageBottom(conversationId, record, false)

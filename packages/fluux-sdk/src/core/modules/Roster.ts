@@ -121,7 +121,7 @@ export class Roster extends BaseModule {
           presence: 'offline',
         }))
         // SDK event only - binding should call store.setContacts
-        this.deps.emitSDK('roster:loaded', { contacts })
+        this.deps.emitSDK('contacts:loaded', { contacts })
 
         // Log roster distribution
         const subs: Record<string, number> = {}
@@ -138,7 +138,7 @@ export class Roster extends BaseModule {
         items.forEach((item: Element) => {
           if (item.attrs.subscription === 'remove') {
             // SDK event only - binding calls store.removeContact
-            this.deps.emitSDK('roster:contact-removed', { jid: item.attrs.jid })
+            this.deps.emitSDK('contacts:contact-removed', { jid: item.attrs.jid })
           } else {
             const contact: Contact = {
               jid: item.attrs.jid,
@@ -152,13 +152,13 @@ export class Roster extends BaseModule {
             // and the contact now has subscription="none", remove the ghost entry.
             if (contact.subscription === 'none' && this._pendingSubscriptionDenials.has(contact.jid)) {
               this._pendingSubscriptionDenials.delete(contact.jid)
-              this.deps.emitSDK('roster:contact-removed', { jid: contact.jid })
+              this.deps.emitSDK('contacts:contact-removed', { jid: contact.jid })
               this.removeContact(contact.jid)
               return
             }
 
             // SDK events only - bindings call store methods
-            this.deps.emitSDK('roster:contact', { contact })
+            this.deps.emitSDK('contacts:contact', { contact })
             this.deps.emitSDK('chat:conversation-name', { conversationId: contact.jid, name: contact.name })
           }
         })
@@ -171,7 +171,7 @@ export class Roster extends BaseModule {
     const errorReason = error ? formatXMPPError(error) : 'Unknown error'
 
     // SDK event only - binding calls store.setPresenceError
-    this.deps.emitSDK('roster:presence-error', { jid: bareFrom, error: errorReason })
+    this.deps.emitSDK('contacts:presence-error', { jid: bareFrom, error: errorReason })
   }
 
   private handleSubscribe(bareFrom: string): void {
@@ -310,12 +310,12 @@ export class Roster extends BaseModule {
 
     if (type === 'unavailable') {
       // SDK event only - binding calls store.removePresence
-      this.deps.emitSDK('roster:presence-offline', { fullJid: from })
+      this.deps.emitSDK('contacts:presence-offline', { fullJid: from })
       const contact = this.deps.stores?.roster.getContact(bareFrom)
       this.deps.emit('presence', bareFrom, contact?.presence || 'offline', contact?.statusMessage)
     } else {
       // SDK event only - binding calls store.updatePresence
-      this.deps.emitSDK('roster:presence', {
+      this.deps.emitSDK('contacts:presence', {
         fullJid: from,
         show,
         priority,

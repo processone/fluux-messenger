@@ -37,7 +37,7 @@ export type {
   FileAttachment,
   FileEncryption,
   ThumbnailInfo,
-  MAMQueryState,
+  HistoryQueryState,
   RSMResponse,
   // Room types (separated for fine-grained subscriptions)
   Room,

@@ -916,7 +916,7 @@ export class XMPPClient {
    * ```typescript
    * declare const myStore: { setContacts(contacts: Contact[]): void }
    *
-   * client.subscribe('roster:loaded', ({ contacts }) => {
+   * client.subscribe('contacts:loaded', ({ contacts }) => {
    *   myStore.setContacts(contacts)
    * })
    * ```

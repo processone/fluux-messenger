@@ -13,12 +13,12 @@
  * - `isCaughtUpToLive`: Synced with real-time (no gap to present)
  */
 
-import type { MAMQueryDirection, MAMQueryState } from '../../core/types'
+import type { HistoryQueryDirection, HistoryQueryState } from '../../core/types'
 
 /**
  * Default MAM query state for conversations/rooms that haven't been queried yet.
  */
-export const DEFAULT_MAM_STATE: MAMQueryState = {
+export const DEFAULT_MAM_STATE: HistoryQueryState = {
   isLoading: false,
   error: null,
   hasQueried: false,
@@ -30,9 +30,9 @@ export const DEFAULT_MAM_STATE: MAMQueryState = {
  * Get MAM query state for a conversation/room, returning default if not found.
  */
 export function getMAMQueryState(
-  states: Map<string, MAMQueryState>,
+  states: Map<string, HistoryQueryState>,
   id: string
-): MAMQueryState {
+): HistoryQueryState {
   return states.get(id) || DEFAULT_MAM_STATE
 }
 
@@ -40,10 +40,10 @@ export function getMAMQueryState(
  * Create a new MAM states map with loading state updated.
  */
 export function setMAMLoading(
-  states: Map<string, MAMQueryState>,
+  states: Map<string, HistoryQueryState>,
   id: string,
   isLoading: boolean
-): Map<string, MAMQueryState> {
+): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
   newStates.set(id, { ...current, isLoading })
@@ -54,10 +54,10 @@ export function setMAMLoading(
  * Create a new MAM states map with error state updated.
  */
 export function setMAMError(
-  states: Map<string, MAMQueryState>,
+  states: Map<string, HistoryQueryState>,
   id: string,
   error: string | null
-): Map<string, MAMQueryState> {
+): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
   newStates.set(id, { ...current, error, isLoading: false })
@@ -76,10 +76,10 @@ export function setMAMError(
  * unchanged rather than rebuilding it from scratch.
  */
 export function setCoverageBottomUnproven(
-  states: Map<string, MAMQueryState>,
+  states: Map<string, HistoryQueryState>,
   id: string,
   value: boolean
-): Map<string, MAMQueryState> {
+): Map<string, HistoryQueryState> {
   const current = states.get(id) || DEFAULT_MAM_STATE
   if (!!current.coverageBottomUnproven === value) return states
   const newStates = new Map(states)
@@ -91,7 +91,7 @@ export function setCoverageBottomUnproven(
  * Query direction for MAM queries. Declared in `core/types/pagination.ts` and
  * re-exported here, where the helpers that consume it live.
  */
-export type { MAMQueryDirection } from '../../core/types'
+export type { HistoryQueryDirection } from '../../core/types'
 
 /**
  * Newest fetched message timestamp (epoch ms), for gap marker positioning by
@@ -102,7 +102,7 @@ export type { MAMQueryDirection } from '../../core/types'
  */
 export function computeNewestFetchedTimestamp(
   fetched: Array<{ timestamp?: Date }>,
-  direction: MAMQueryDirection
+  direction: HistoryQueryDirection
 ): number | undefined {
   return direction === 'forward' && fetched.length > 0
     ? Math.max(...fetched.map(m => m.timestamp?.getTime() ?? 0))
@@ -155,16 +155,16 @@ export function isDisjointFromResidentWindow(
  *   the archive bottom, not the user's visible timeline.
  */
 export function setMAMQueryCompleted(
-  states: Map<string, MAMQueryState>,
+  states: Map<string, HistoryQueryState>,
   id: string,
   complete: boolean,
-  direction: MAMQueryDirection,
+  direction: HistoryQueryDirection,
   oldestFetchedId?: string,
   newestFetchedTimestamp?: number,
   preserveGapMarker = false,
   isFetchLatest = false,
   disjointFromResidentWindow = false
-): Map<string, MAMQueryState> {
+): Map<string, HistoryQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
 

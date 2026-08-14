@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useRoomStore, useAdminStore } from '../react/storeHooks'
-import type { MAMQueryState } from '../core/types'
+import type { HistoryQueryState } from '../core/types'
 import { useRoomActions } from './useRoomActions'
 
 /**
@@ -133,7 +133,7 @@ export function useRoom() {
   })
 
   // Memoize the MAM state object to maintain stable reference
-  const activeMAMState = useMemo((): MAMQueryState | null => {
+  const activeHistoryState = useMemo((): HistoryQueryState | null => {
     if (!activeRoomJid) return null
     return {
       isLoading: mamIsLoading,
@@ -180,7 +180,7 @@ export function useRoom() {
       activeAnimation,
       drafts,
       mucServiceJid,
-      activeMAMState,
+      activeHistoryState,
 
       // Actions (spread memoized actions)
       ...actions,
@@ -201,7 +201,7 @@ export function useRoom() {
       activeAnimation,
       drafts,
       mucServiceJid,
-      activeMAMState,
+      activeHistoryState,
       actions,
     ]
   )

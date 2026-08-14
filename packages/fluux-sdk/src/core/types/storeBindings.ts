@@ -27,8 +27,8 @@ import type { Room, RoomMessage, RoomOccupant, RoomAffiliation } from './room'
 import type { SystemNotificationType } from './events'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type {
-  MAMQueryState,
-  MAMQueryDirection,
+  HistoryQueryState,
+  HistoryQueryDirection,
   CoverageRecord,
   MergeArchiveExtras,
   RSMResponse,
@@ -157,8 +157,8 @@ export interface ChatBindings {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
-  getMAMQueryState: (conversationId: string) => MAMQueryState
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  getMAMQueryState: (conversationId: string) => HistoryQueryState
   resetMAMStates: () => void
 
   /** Persisted contiguous-with-live coverage record, if any. */
@@ -434,8 +434,8 @@ export interface RoomBindings {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
-  getRoomMAMQueryState: (roomJid: string) => MAMQueryState
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  getRoomMAMQueryState: (roomJid: string) => HistoryQueryState
   resetRoomMAMStates: () => void
 
   /** Persisted contiguous-with-live coverage record, if any. */

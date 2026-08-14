@@ -18,7 +18,7 @@ import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { RSMResponse } from './pagination'
-import type { MAMQueryDirection } from './pagination'
+import type { HistoryQueryDirection } from './pagination'
 import type { SystemNotificationType } from './events'
 import type { XMPPErrorType, XMPPStanzaError } from '../../utils/xmppError'
 
@@ -55,7 +55,7 @@ export interface ConnectionEvents {
   }
 
   /** MAM fulltext search capability discovered */
-  'connection:mam-fulltext-search': {
+  'connection:history-search': {
     supported: boolean
   }
 
@@ -71,7 +71,7 @@ export interface ConnectionEvents {
   }
 
   /** Own vCard changed */
-  'connection:own-vcard': {
+  'connection:own-profile': {
     vcard: VCardInfo | null
   }
 
@@ -207,24 +207,24 @@ export interface ChatEvents {
   }
 
   /** MAM loading state changed */
-  'chat:mam-loading': {
+  'chat:history-loading': {
     conversationId: string
     isLoading: boolean
   }
 
   /** MAM error occurred */
-  'chat:mam-error': {
+  'chat:history-error': {
     conversationId: string
     error: string | null
   }
 
   /** MAM messages loaded */
-  'chat:mam-messages': {
+  'chat:history-messages': {
     conversationId: string
     messages: Message[]
     rsm: RSMResponse
     complete: boolean
-    direction: MAMQueryDirection
+    direction: HistoryQueryDirection
     /** When true, leave the gap marker untouched (bounded windowed context queries). */
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
@@ -254,7 +254,7 @@ export interface ChatEvents {
    * the next resume — including "Load missing messages" — uses the timestamp
    * fallback and progresses, instead of re-degrading on the purged id forever.
    */
-  'chat:mam-anchor-purged': {
+  'chat:history-anchor-purged': {
     conversationId: string
     /** The purged archive id the query was anchored on. */
     after: string
@@ -266,7 +266,7 @@ export interface ChatEvents {
    * fetch-latest. Bindings drop the matching coverage record so later
    * resumes don't re-anchor on the dead id forever.
    */
-  'chat:mam-coverage-purged': {
+  'chat:history-coverage-purged': {
     conversationId: string
     /** The purged archive id the query was anchored on. */
     before: string
@@ -440,13 +440,13 @@ export interface RoomEvents {
   }
 
   /** Room MAM loading state */
-  'room:mam-loading': {
+  'room:history-loading': {
     roomJid: string
     isLoading: boolean
   }
 
   /** Room MAM error */
-  'room:mam-error': {
+  'room:history-error': {
     roomJid: string
     error: string | null
   }
@@ -463,12 +463,12 @@ export interface RoomEvents {
   }
 
   /** Room MAM messages loaded */
-  'room:mam-messages': {
+  'room:history-messages': {
     roomJid: string
     messages: RoomMessage[]
     rsm: RSMResponse
     complete: boolean
-    direction: MAMQueryDirection
+    direction: HistoryQueryDirection
     /** When true, leave the gap marker untouched (bounded force-repair queries). */
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
@@ -497,14 +497,14 @@ export interface RoomEvents {
    * a fetch-latest. Bindings strip the matching `startId` from the persisted
    * GapInterval so the timestamp fallback can progress.
    */
-  'room:mam-anchor-purged': {
+  'room:history-anchor-purged': {
     roomJid: string
     /** The purged archive id the query was anchored on. */
     after: string
   }
 
   /** Room twin of `chat:mam-coverage-purged`. */
-  'room:mam-coverage-purged': {
+  'room:history-coverage-purged': {
     roomJid: string
     /** The purged archive id the query was anchored on. */
     before: string
@@ -535,30 +535,30 @@ export interface RoomEvents {
 // Roster Events
 // ============================================================================
 
-export interface RosterEvents {
+export interface ContactsEvents {
   /** Full roster loaded */
-  'roster:loaded': {
+  'contacts:loaded': {
     contacts: Contact[]
   }
 
   /** Contact added or updated */
-  'roster:contact': {
+  'contacts:contact': {
     contact: Contact
   }
 
   /** Contact properties updated */
-  'roster:contact-updated': {
+  'contacts:contact-updated': {
     jid: string
     updates: Partial<Contact>
   }
 
   /** Contact removed */
-  'roster:contact-removed': {
+  'contacts:contact-removed': {
     jid: string
   }
 
   /** Contact presence updated */
-  'roster:presence': {
+  'contacts:presence': {
     fullJid: string
     show: PresenceShow | null
     priority: number
@@ -568,18 +568,18 @@ export interface RosterEvents {
   }
 
   /** Contact went offline */
-  'roster:presence-offline': {
+  'contacts:presence-offline': {
     fullJid: string
   }
 
   /** Presence error for contact */
-  'roster:presence-error': {
+  'contacts:presence-error': {
     jid: string
     error: string
   }
 
   /** Contact avatar updated */
-  'roster:avatar': {
+  'contacts:avatar': {
     jid: string
     avatar: string | null
     avatarHash?: string
@@ -613,7 +613,7 @@ export interface NotificationEvents {
   }
 
   /** MUC invitation received */
-  'events:muc-invitation': {
+  'events:room-invitation': {
     roomJid: string
     from: string
     reason?: string
@@ -623,7 +623,7 @@ export interface NotificationEvents {
   }
 
   /** MUC invitation handled */
-  'events:muc-invitation-removed': {
+  'events:room-invitation-removed': {
     roomJid: string
   }
 
@@ -705,7 +705,7 @@ export interface AdminEvents {
   }
 
   /** MUC service discovered */
-  'admin:muc-service': {
+  'admin:room-service': {
     mucServiceJid: string
   }
 }
@@ -776,7 +776,7 @@ export interface SDKEvents
   extends ConnectionEvents,
     ChatEvents,
     RoomEvents,
-    RosterEvents,
+    ContactsEvents,
     NotificationEvents,
     BlockingEvents,
     AdminEvents,

@@ -308,7 +308,7 @@ describe('XMPPClient Roster', () => {
       // Handler should return truthy to indicate it handled the IQ
       expect(result).toBe(true)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact', {
         contact: {
           jid: 'newcontact@example.com',
           name: 'New Contact',
@@ -349,7 +349,7 @@ describe('XMPPClient Roster', () => {
         'set'
       )
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact-removed', { jid: 'removed@example.com' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact-removed', { jid: 'removed@example.com' })
     })
 
     it('should use JID as name when name attribute is missing', async () => {
@@ -381,7 +381,7 @@ describe('XMPPClient Roster', () => {
         'set'
       )
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact', {
         contact: {
           jid: 'noname@example.com',
           name: 'noname', // Falls back to local part of JID
@@ -1140,8 +1140,8 @@ describe('XMPPClient Roster', () => {
         mockXmppClientInstance._emit('stanza', rosterPush)
 
         // Should emit roster:contact-removed (not roster:contact)
-        expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact-removed', { jid: 'denied@example.com' })
-        expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:contact', expect.anything())
+        expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact-removed', { jid: 'denied@example.com' })
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:contact', expect.anything())
 
         // Should also send roster remove IQ to server
         expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -1178,7 +1178,7 @@ describe('XMPPClient Roster', () => {
         mockXmppClientInstance._emit('stanza', rosterPush)
 
         // Should emit roster:contact normally (not removed)
-        expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact', {
+        expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact', {
           contact: {
             jid: 'newcontact@example.com',
             name: 'New Contact',
@@ -1187,7 +1187,7 @@ describe('XMPPClient Roster', () => {
             groups: [],
           },
         })
-        expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:contact-removed', expect.anything())
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:contact-removed', expect.anything())
       })
     })
   })

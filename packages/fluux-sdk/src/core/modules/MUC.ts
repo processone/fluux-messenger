@@ -1215,7 +1215,7 @@ export class MUC extends BaseModule {
           logInfo(`MUC service: ${jid}`)
 
           // Emit MUC service JID so the admin store can populate it
-          this.deps.emitSDK('admin:muc-service', { mucServiceJid: jid })
+          this.deps.emitSDK('admin:room-service', { mucServiceJid: jid })
 
           return jid
         }

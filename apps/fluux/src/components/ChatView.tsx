@@ -57,7 +57,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   const interiorPlacementVersion = useChatStore((state) => {
     const id = state.activeConversationId
     return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
@@ -214,8 +214,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     handleMouseLeave,
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
     onReachedFirstMessage: fetchOlderHistory,
-    isLoadingOlder: activeMAMState?.isLoading,
-    isHistoryComplete: activeMAMState?.isHistoryComplete,
+    isLoadingOlder: activeHistoryState?.isLoading,
+    isHistoryComplete: activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => { isAtBottomRef.current = false },
   })
@@ -582,14 +582,14 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
           onLoadAround={loadMessagesAround}
-          isLoadingOlder={activeMAMState?.isLoading ?? false}
+          isLoadingOlder={activeHistoryState?.isLoading ?? false}
           onLoadNewer={loadNewer}
           windowAtLiveEdge={windowAtLiveEdge}
           onJumpToLatest={recenterToLatest}
-          isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
-          forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
+          isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
+          forwardGapTimestamp={activeHistoryState?.forwardGapTimestamp}
           onCatchUpHistory={continueChatCatchUp}
-          isCatchingUp={activeMAMState?.isLoading ?? false}
+          isCatchingUp={activeHistoryState?.isLoading ?? false}
           // SDK auto-fetches cache + MAM in background, no blocking spinner needed
           isInitialLoading={false}
           highlightTerms={find.highlightTerms}

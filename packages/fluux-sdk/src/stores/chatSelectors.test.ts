@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { chatSelectors } from './chatSelectors'
 import type { ChatState } from './chatStore'
-import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState } from '../core/types'
+import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState } from '../core/types'
 
 /**
  * Create a minimal ChatState mock for testing selectors.
@@ -274,7 +274,7 @@ describe('chatSelectors', () => {
 
   describe('mamStateFor', () => {
     it('should return MAM state for conversation', () => {
-      const mamState: MAMQueryState = {
+      const mamState: HistoryQueryState = {
         isLoading: true,
         hasQueried: false,
         error: null,
@@ -289,7 +289,7 @@ describe('chatSelectors', () => {
 
   describe('isMAMLoading', () => {
     it('should return true when loading', () => {
-      const mamQueryStates = new Map<string, MAMQueryState>([['user@example.com', {
+      const mamQueryStates = new Map<string, HistoryQueryState>([['user@example.com', {
         isLoading: true,
         hasQueried: false,
         error: null,

@@ -40,7 +40,7 @@ export interface StrangerMessage {
  *
  * @category Events
  */
-export interface MucInvitation {
+export interface RoomInvitation {
   /** Unique invitation ID */
   id: string
   /** Room JID to join */

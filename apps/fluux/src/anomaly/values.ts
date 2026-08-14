@@ -186,7 +186,7 @@ const RECOUNT_DEFERRAL_REASONS = [
   'pointerless-defer',
   'pending-remote-displayed',
   'no-floor',
-  'mam-not-caught-up',
+  'history-not-caught-up',
   'context-changed',
   'coverage-missing',
   'coverage-unresolvable',

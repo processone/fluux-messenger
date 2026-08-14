@@ -3,7 +3,7 @@ import { roomStore } from '../stores/roomStore'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Room, RoomMessage, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures, SendMessageOptions, ReplyTarget } from '../core/types'
+import type { Room, RoomMessage, ChatStateNotification, FileAttachment, HistoryQueryState, RoomFeatures, SendMessageOptions, ReplyTarget } from '../core/types'
 import { createFetchOlderHistory, createContinueCatchUp, pickOldestArchiveId } from './shared'
 import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
@@ -158,7 +158,7 @@ export function useRoomActive() {
   })
 
   // Memoize the MAM state object to maintain stable reference
-  const activeMAMState = useMemo((): MAMQueryState | null => {
+  const activeHistoryState = useMemo((): HistoryQueryState | null => {
     if (!activeRoomJid) return null
     return {
       isLoading: mamIsLoading,
@@ -476,7 +476,7 @@ export function useRoomActive() {
       activeTypingUsers,
       activeAnimation,
       targetMessageId,
-      activeMAMState,
+      activeHistoryState,
       firstNewMessageId: activeFirstNewMessageId,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
       readPointerId: activeReadPointerId,
@@ -492,7 +492,7 @@ export function useRoomActive() {
       activeTypingUsers,
       activeAnimation,
       targetMessageId,
-      activeMAMState,
+      activeHistoryState,
       activeFirstNewMessageId,
       activeFirstNewMessageIsProvisional,
       activeReadPointerId,

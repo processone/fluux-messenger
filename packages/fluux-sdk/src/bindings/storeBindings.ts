@@ -115,7 +115,7 @@ export function createStoreBindings(
     stores.connection.setHttpUploadService(service)
   })
 
-  on('connection:mam-fulltext-search', ({ supported }) => {
+  on('connection:history-search', ({ supported }) => {
     const stores = getStores()
     stores.connection.setMAMFulltextSearch(supported)
   })
@@ -130,7 +130,7 @@ export function createStoreBindings(
     stores.connection.setOwnNickname(nickname)
   })
 
-  on('connection:own-vcard', ({ vcard }) => {
+  on('connection:own-profile', ({ vcard }) => {
     const stores = getStores()
     stores.connection.setOwnVCard(vcard)
   })
@@ -276,24 +276,24 @@ export function createStoreBindings(
     }
   })
 
-  on('chat:mam-loading', ({ conversationId, isLoading }) => {
+  on('chat:history-loading', ({ conversationId, isLoading }) => {
     const stores = getStores()
     stores.chat.setMAMLoading(conversationId, isLoading)
   })
 
-  on('chat:mam-error', ({ conversationId, error }) => {
+  on('chat:history-error', ({ conversationId, error }) => {
     const stores = getStores()
     stores.chat.setMAMError(conversationId, error)
   })
 
-  on('chat:mam-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
+  on('chat:history-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
     const stores = getStores()
     stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter })
   })
 
   // A purged id-exact anchor (item-not-found degrade): strip the matching
   // startId from the persisted gap so the timestamp fallback can progress.
-  on('chat:mam-anchor-purged', ({ conversationId, after }) => {
+  on('chat:history-anchor-purged', ({ conversationId, after }) => {
     const stores = getStores()
     stores.chat.clearConversationGapAnchor(conversationId, after)
   })
@@ -301,7 +301,7 @@ export function createStoreBindings(
   // A purged coverage-record anchor (item-not-found degrade): drop the record
   // so later resumes don't re-anchor on the dead id forever. Guarded on the
   // exact bottomId — a record that already advanced is left untouched.
-  on('chat:mam-coverage-purged', ({ conversationId, before }) => {
+  on('chat:history-coverage-purged', ({ conversationId, before }) => {
     const stores = getStores()
     stores.chat.clearConversationCoverage(conversationId, before)
   })
@@ -467,29 +467,29 @@ export function createStoreBindings(
     }
   })
 
-  on('room:mam-loading', ({ roomJid, isLoading }) => {
+  on('room:history-loading', ({ roomJid, isLoading }) => {
     const stores = getStores()
     stores.room.setRoomMAMLoading(roomJid, isLoading)
   })
 
-  on('room:mam-error', ({ roomJid, error }) => {
+  on('room:history-error', ({ roomJid, error }) => {
     const stores = getStores()
     stores.room.setRoomMAMError(roomJid, error)
   })
 
-  on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
+  on('room:history-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter }) => {
     const stores = getStores()
     stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest, { initialBefore, fetchLatestTopId, sawCoverageTop, walkCarriedModifications, initialAfter })
   })
 
   // Room twin of chat:mam-anchor-purged (see above).
-  on('room:mam-anchor-purged', ({ roomJid, after }) => {
+  on('room:history-anchor-purged', ({ roomJid, after }) => {
     const stores = getStores()
     stores.room.clearRoomGapAnchor(roomJid, after)
   })
 
   // Room twin of chat:mam-coverage-purged (see above).
-  on('room:mam-coverage-purged', ({ roomJid, before }) => {
+  on('room:history-coverage-purged', ({ roomJid, before }) => {
     const stores = getStores()
     stores.room.clearRoomCoverage(roomJid, before)
   })
@@ -510,27 +510,27 @@ export function createStoreBindings(
   // Roster Events
   // ============================================================================
 
-  on('roster:loaded', ({ contacts }) => {
+  on('contacts:loaded', ({ contacts }) => {
     const stores = getStores()
     stores.roster.setContacts(contacts)
   })
 
-  on('roster:contact', ({ contact }) => {
+  on('contacts:contact', ({ contact }) => {
     const stores = getStores()
     stores.roster.addOrUpdateContact(contact)
   })
 
-  on('roster:contact-updated', ({ jid, updates }) => {
+  on('contacts:contact-updated', ({ jid, updates }) => {
     const stores = getStores()
     stores.roster.updateContact(jid, updates)
   })
 
-  on('roster:contact-removed', ({ jid }) => {
+  on('contacts:contact-removed', ({ jid }) => {
     const stores = getStores()
     stores.roster.removeContact(jid)
   })
 
-  on('roster:presence', (payload) => {
+  on('contacts:presence', (payload) => {
     const stores = getStores()
     stores.roster.updatePresence(
       payload.fullJid,
@@ -542,17 +542,17 @@ export function createStoreBindings(
     )
   })
 
-  on('roster:presence-offline', ({ fullJid }) => {
+  on('contacts:presence-offline', ({ fullJid }) => {
     const stores = getStores()
     stores.roster.removePresence(fullJid)
   })
 
-  on('roster:presence-error', ({ jid, error }) => {
+  on('contacts:presence-error', ({ jid, error }) => {
     const stores = getStores()
     stores.roster.setPresenceError(jid, error)
   })
 
-  on('roster:avatar', ({ jid, avatar, avatarHash }) => {
+  on('contacts:avatar', ({ jid, avatar, avatarHash }) => {
     const stores = getStores()
     stores.roster.updateAvatar(jid, avatar, avatarHash)
   })
@@ -581,7 +581,7 @@ export function createStoreBindings(
     stores.events.removeStrangerMessages(from)
   })
 
-  on('events:muc-invitation', (payload) => {
+  on('events:room-invitation', (payload) => {
     const stores = getStores()
     stores.events.addMucInvitation(
       payload.roomJid,
@@ -593,7 +593,7 @@ export function createStoreBindings(
     )
   })
 
-  on('events:muc-invitation-removed', ({ roomJid }) => {
+  on('events:room-invitation-removed', ({ roomJid }) => {
     const stores = getStores()
     stores.events.removeMucInvitation(roomJid)
   })
@@ -666,7 +666,7 @@ export function createStoreBindings(
     stores.admin.setSelectedVhost(vhost)
   })
 
-  on('admin:muc-service', ({ mucServiceJid }) => {
+  on('admin:room-service', ({ mucServiceJid }) => {
     const stores = getStores()
     stores.admin.setMucServiceJid(mucServiceJid)
   })

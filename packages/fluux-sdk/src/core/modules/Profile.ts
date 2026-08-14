@@ -529,7 +529,7 @@ export class Profile extends BaseModule {
     if (bareJid === getBareJid(currentJid ?? '')) {
       this.deps.emitSDK('connection:own-avatar', { avatar, hash })
     } else {
-      this.deps.emitSDK('roster:avatar', { jid: bareJid, avatar, avatarHash: hash ?? undefined })
+      this.deps.emitSDK('contacts:avatar', { jid: bareJid, avatar, avatarHash: hash ?? undefined })
     }
   }
 
@@ -592,7 +592,7 @@ export class Profile extends BaseModule {
 
     const bareJid = getBareJid(currentJid)
     const vcard = await this.fetchVCard(bareJid)
-    this.deps.emitSDK('connection:own-vcard', { vcard })
+    this.deps.emitSDK('connection:own-profile', { vcard })
     return vcard
   }
 
@@ -649,7 +649,7 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
-    this.deps.emitSDK('connection:own-vcard', { vcard: info })
+    this.deps.emitSDK('connection:own-profile', { vcard: info })
   }
 
   /**
@@ -902,7 +902,7 @@ export class Profile extends BaseModule {
     try {
       const cachedUrl = await getCachedAvatar(avatarHash)
       if (cachedUrl) {
-        this.deps.emitSDK('roster:avatar', { jid, avatar: cachedUrl, avatarHash })
+        this.deps.emitSDK('contacts:avatar', { jid, avatar: cachedUrl, avatarHash })
         return true
       }
     } catch (error) {
@@ -964,10 +964,10 @@ export class Profile extends BaseModule {
         if (contact && !contact.avatarHash) {
           const cachedUrl = await getCachedAvatar(mapping.hash)
           if (cachedUrl) {
-            this.deps.emitSDK('roster:avatar', { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash })
+            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: cachedUrl, avatarHash: mapping.hash })
           } else {
             // At least set the hash so we can try fetching later
-            this.deps.emitSDK('roster:avatar', { jid: mapping.jid, avatar: null, avatarHash: mapping.hash })
+            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: null, avatarHash: mapping.hash })
           }
         }
       }
@@ -1043,7 +1043,7 @@ export class Profile extends BaseModule {
           }
           const contact = this.deps.stores?.roster.getContact(mapping.jid)
           if (contact) {
-            this.deps.emitSDK('roster:avatar', { jid: mapping.jid, avatar: url, avatarHash: mapping.hash })
+            this.deps.emitSDK('contacts:avatar', { jid: mapping.jid, avatar: url, avatarHash: mapping.hash })
           }
         } else if (mapping.type === 'room') {
           const room = this.deps.stores?.room.getRoom(mapping.jid)

@@ -63,7 +63,7 @@ describe('createStoreBindings', () => {
 
     it('should handle connection:own-vcard', () => {
       const vcard = { fullName: 'Alice Smith', org: 'Acme Corp', email: 'alice@acme.com', country: 'France' }
-      mockClient.emit('connection:own-vcard', { vcard })
+      mockClient.emit('connection:own-profile', { vcard })
       expect(mockStores.connection.setOwnVCard).toHaveBeenCalledWith(vcard)
     })
 
@@ -207,12 +207,12 @@ describe('createStoreBindings', () => {
 
   describe('MAM anchor-purged events (purged id-exact catch-up cursor)', () => {
     it('chat:mam-anchor-purged strips the matching gap anchor via clearConversationGapAnchor', () => {
-      mockClient.emit('chat:mam-anchor-purged', { conversationId: 'alice@example.com', after: 'purged-id' })
+      mockClient.emit('chat:history-anchor-purged', { conversationId: 'alice@example.com', after: 'purged-id' })
       expect(mockStores.chat.clearConversationGapAnchor).toHaveBeenCalledWith('alice@example.com', 'purged-id')
     })
 
     it('room:mam-anchor-purged strips the matching gap anchor via clearRoomGapAnchor', () => {
-      mockClient.emit('room:mam-anchor-purged', { roomJid: 'room@conference.example.com', after: 'purged-id' })
+      mockClient.emit('room:history-anchor-purged', { roomJid: 'room@conference.example.com', after: 'purged-id' })
       expect(mockStores.room.clearRoomGapAnchor).toHaveBeenCalledWith('room@conference.example.com', 'purged-id')
     })
   })
@@ -533,24 +533,24 @@ describe('createStoreBindings', () => {
   describe('roster events', () => {
     it('should handle roster:loaded', () => {
       const contacts: Contact[] = [{ jid: 'alice@example.com', name: 'Alice', presence: 'offline', subscription: 'both' }]
-      mockClient.emit('roster:loaded', { contacts })
+      mockClient.emit('contacts:loaded', { contacts })
       expect(mockStores.roster.setContacts).toHaveBeenCalledWith(contacts)
     })
 
     it('should handle roster:contact', () => {
       const contact: Contact = { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' }
-      mockClient.emit('roster:contact', { contact })
+      mockClient.emit('contacts:contact', { contact })
       expect(mockStores.roster.addOrUpdateContact).toHaveBeenCalledWith(contact)
     })
 
     it('should handle roster:contact-removed', () => {
-      mockClient.emit('roster:contact-removed', { jid: 'bob@example.com' })
+      mockClient.emit('contacts:contact-removed', { jid: 'bob@example.com' })
       expect(mockStores.roster.removeContact).toHaveBeenCalledWith('bob@example.com')
     })
 
     it('should handle roster:presence', () => {
       const lastInteraction = new Date(1234567890)
-      mockClient.emit('roster:presence', {
+      mockClient.emit('contacts:presence', {
         fullJid: 'alice@example.com/phone',
         show: 'away',
         priority: 0,
@@ -564,17 +564,17 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle roster:presence-offline', () => {
-      mockClient.emit('roster:presence-offline', { fullJid: 'alice@example.com/phone' })
+      mockClient.emit('contacts:presence-offline', { fullJid: 'alice@example.com/phone' })
       expect(mockStores.roster.removePresence).toHaveBeenCalledWith('alice@example.com/phone')
     })
 
     it('should handle roster:presence-error', () => {
-      mockClient.emit('roster:presence-error', { jid: 'alice@example.com', error: 'Remote server not found' })
+      mockClient.emit('contacts:presence-error', { jid: 'alice@example.com', error: 'Remote server not found' })
       expect(mockStores.roster.setPresenceError).toHaveBeenCalledWith('alice@example.com', 'Remote server not found')
     })
 
     it('should handle roster:avatar', () => {
-      mockClient.emit('roster:avatar', {
+      mockClient.emit('contacts:avatar', {
         jid: 'alice@example.com',
         avatar: 'data:image/png...',
         avatarHash: 'hash123',
@@ -605,7 +605,7 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle events:muc-invitation', () => {
-      mockClient.emit('events:muc-invitation', {
+      mockClient.emit('events:room-invitation', {
         roomJid: 'room@conference.example.com',
         from: 'alice@example.com',
         reason: 'Join us!',
@@ -624,7 +624,7 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle events:muc-invitation-removed', () => {
-      mockClient.emit('events:muc-invitation-removed', { roomJid: 'room@conference.example.com' })
+      mockClient.emit('events:room-invitation-removed', { roomJid: 'room@conference.example.com' })
       expect(mockStores.events.removeMucInvitation).toHaveBeenCalledWith('room@conference.example.com')
     })
 
@@ -806,7 +806,7 @@ describe('createStoreBindings', () => {
     it('should unsubscribe all handlers when called', () => {
       // Emit an event before unsubscribe
       const contacts = [{ jid: 'alice@example.com', name: 'Alice', presence: 'online' as const, subscription: 'both' as const }]
-      mockClient.emit('roster:loaded', { contacts })
+      mockClient.emit('contacts:loaded', { contacts })
       expect(mockStores.roster.setContacts).toHaveBeenCalledTimes(1)
 
       // Call unsubscribe
@@ -816,7 +816,7 @@ describe('createStoreBindings', () => {
       vi.mocked(mockStores.roster.setContacts).mockClear()
 
       // Emit the event again - should not be handled
-      mockClient.emit('roster:loaded', { contacts })
+      mockClient.emit('contacts:loaded', { contacts })
       expect(mockStores.roster.setContacts).not.toHaveBeenCalled()
     })
   })

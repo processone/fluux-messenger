@@ -194,7 +194,7 @@ describe('PubSub Module', () => {
 
       mockXmppClientInstance._emit('stanza', pubsubMessage)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact-updated', { jid: 'contact@example.com', updates: { name: 'New Nickname' } })
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:contact-updated', { jid: 'contact@example.com', updates: { name: 'New Nickname' } })
     })
   })
 

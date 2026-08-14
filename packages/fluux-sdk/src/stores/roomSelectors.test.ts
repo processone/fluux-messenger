@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { roomSelectors, roomActivityTone } from './roomSelectors'
 import type { RoomState } from './roomStore'
-import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, MAMQueryState } from '../core/types'
+import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, HistoryQueryState } from '../core/types'
 
 /**
  * Create a minimal RoomState mock for testing selectors.
@@ -365,7 +365,7 @@ describe('roomSelectors', () => {
 
   describe('mamStateFor', () => {
     it('should return MAM state for room', () => {
-      const mamState: MAMQueryState = {
+      const mamState: HistoryQueryState = {
         isLoading: true,
         hasQueried: false,
         error: null,
@@ -380,7 +380,7 @@ describe('roomSelectors', () => {
 
   describe('isMAMLoading', () => {
     it('should return true when loading', () => {
-      const mamQueryStates = new Map<string, MAMQueryState>([['room@conference.example.com', {
+      const mamQueryStates = new Map<string, HistoryQueryState>([['room@conference.example.com', {
         isLoading: true,
         hasQueried: false,
         error: null,

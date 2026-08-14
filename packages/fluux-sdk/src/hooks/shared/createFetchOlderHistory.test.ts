@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFetchOlderHistory, type FetchOlderHistoryDeps } from './createFetchOlderHistory'
-import type { MAMQueryState } from '../../core/types'
+import type { HistoryQueryState } from '../../core/types'
 import { connectionStore } from '../../stores/connectionStore'
 
 // Mock the connection store to return 'online' status.
@@ -23,7 +23,7 @@ describe('createFetchOlderHistory', () => {
     deps = {
       getActiveId: vi.fn(() => 'conv-1'),
       isValidTarget: vi.fn(() => true),
-      getMAMState: vi.fn((): MAMQueryState => ({
+      getMAMState: vi.fn((): HistoryQueryState => ({
         isLoading: false,
         hasQueried: true,
         isHistoryComplete: false,

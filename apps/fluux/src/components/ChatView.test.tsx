@@ -81,7 +81,7 @@ vi.mock('@fluux/sdk', () => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     supportsMAM: mockSupportsMAM,
-    activeMAMState: mockActiveMAMState,
+    activeHistoryState: mockActiveMAMState,
     fetchHistory: mockFetchHistory,
     fetchOlderHistory: vi.fn(),
     // Draft management
@@ -112,7 +112,7 @@ vi.mock('@fluux/sdk', () => ({
     firstNewMessageId: undefined,
     readPointerId: undefined,
     supportsMAM: mockSupportsMAM,
-    activeMAMState: mockActiveMAMState,
+    activeHistoryState: mockActiveMAMState,
     fetchHistory: mockFetchHistory,
     fetchOlderHistory: vi.fn(),
     getDraft: vi.fn(() => ''),

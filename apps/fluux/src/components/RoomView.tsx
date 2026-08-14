@@ -99,7 +99,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
     return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
@@ -297,8 +297,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     handleMouseLeave,
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
     onReachedFirstMessage: fetchOlderHistory,
-    isLoadingOlder: activeMAMState?.isLoading,
-    isHistoryComplete: activeRoom?.supportsMAM === false || activeMAMState?.isHistoryComplete,
+    isLoadingOlder: activeHistoryState?.isLoading,
+    isHistoryComplete: activeRoom?.supportsMAM === false || activeHistoryState?.isHistoryComplete,
     onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => { isAtBottomRef.current = false },
   })
@@ -632,11 +632,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             isDarkMode={resolvedMode === 'dark'}
             onScrollToTop={fetchOlderHistory}
             onLoadAround={loadMessagesAround}
-            isLoadingOlder={activeMAMState?.isLoading}
+            isLoadingOlder={activeHistoryState?.isLoading}
             onLoadNewer={loadNewer}
             windowAtLiveEdge={windowAtLiveEdge}
             onJumpToLatest={recenterToLatest}
-            isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
+            isHistoryComplete={activeRoom.supportsMAM === false || activeHistoryState?.isHistoryComplete}
             onNickContextMenu={handleNickContextMenu}
             onNickTouchStart={handleNickTouchStart}
             onNickTouchEnd={handleNickTouchEnd}
@@ -644,9 +644,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             highlightTerms={find.highlightTerms}
             currentMatchId={find.currentMatchId}
             lastSentMessageId={lastSentMessageId}
-            forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
+            forwardGapTimestamp={activeHistoryState?.forwardGapTimestamp}
             onCatchUpHistory={continueRoomCatchUp}
-            isCatchingUp={activeMAMState?.isLoading}
+            isCatchingUp={activeHistoryState?.isLoading}
             />
           </MediaAutoloadProvider>
         </div>

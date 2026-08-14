@@ -165,7 +165,7 @@ describe('SDK Event Bindings Integration', () => {
       const contacts = [{ jid: 'alice@example.com', name: 'Alice', presence: 'online' }]
 
       // Act - directly call emitSDK to verify the binding works
-      xmppClient['emitSDK']('roster:loaded', { contacts } as any)
+      xmppClient['emitSDK']('contacts:loaded', { contacts } as any)
 
       // Assert
       expect(mockStores.roster.setContacts).toHaveBeenCalledWith(contacts)
@@ -240,7 +240,7 @@ describe('SDK Event Bindings Integration', () => {
       const contacts = [{ jid: 'test@example.com', name: 'Test' }]
 
       // Call emitSDK like the module would
-      roster.deps.emitSDK('roster:loaded', { contacts })
+      roster.deps.emitSDK('contacts:loaded', { contacts })
 
       // Verify the store method was called via the binding
       expect(mockStores.roster.setContacts).toHaveBeenCalledWith(contacts)
@@ -265,7 +265,7 @@ describe('SDK Event Bindings Integration', () => {
       vi.clearAllMocks()
 
       // Try to emit an event
-      xmppClient['emitSDK']('roster:loaded', { contacts: [] })
+      xmppClient['emitSDK']('contacts:loaded', { contacts: [] })
 
       // Should not have been called
       expect(mockStores.roster.setContacts).not.toHaveBeenCalled()
@@ -288,7 +288,7 @@ describe('SDK Event Bindings Integration', () => {
 
       // Use the module's deps.emitSDK like a real module would
       const roster = xmppClient.contacts as any
-      roster.deps.emitSDK('roster:loaded', { contacts })
+      roster.deps.emitSDK('contacts:loaded', { contacts })
 
       // Verify the binding caught the event and called the store
       expect(mockStores.roster.setContacts).toHaveBeenCalledTimes(1)
@@ -325,14 +325,14 @@ describe('SDK Event Bindings Integration', () => {
 
       // Check that we have handlers registered for key events
       // Note: connection:status is NOT handled by storeBindings (handled directly by Connection.ts)
-      expect(client.sdkEventHandlers.has('roster:loaded')).toBe(true)
+      expect(client.sdkEventHandlers.has('contacts:loaded')).toBe(true)
       expect(client.sdkEventHandlers.has('room:added')).toBe(true)
       expect(client.sdkEventHandlers.has('chat:message')).toBe(true)
 
       // Check handler counts - we have 2 handlers per event:
       // 1. Auto-bindings created in XMPPClient constructor (to global Zustand stores)
       // 2. Test bindings created in beforeEach (to mock stores)
-      expect(client.sdkEventHandlers.get('roster:loaded')?.size).toBe(2)
+      expect(client.sdkEventHandlers.get('contacts:loaded')?.size).toBe(2)
       expect(client.sdkEventHandlers.get('room:added')?.size).toBe(2)
     })
   })

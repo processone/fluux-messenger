@@ -59,7 +59,7 @@ export type {
 export type {
   SubscriptionRequest,
   StrangerMessage,
-  MucInvitation,
+  RoomInvitation,
   SystemNotificationType,
   SystemNotification,
 } from './events'
@@ -100,17 +100,17 @@ export type { LinkPreview } from './media'
 export type {
   RSMRequest,
   RSMResponse,
-  MAMQueryOptions,
-  MAMResult,
-  MAMQueryState,
-  MAMQueryDirection,
+  HistoryQueryOptions,
+  HistoryResult,
+  HistoryQueryState,
+  HistoryQueryDirection,
   CoverageRecord,
   MergeArchiveExtras,
-  RoomMAMQueryOptions,
-  RoomMAMResult,
-  MAMSearchOptions,
-  RoomMAMSearchOptions,
-  MAMPagingSearchOptions,
+  RoomHistoryQueryOptions,
+  RoomHistoryResult,
+  HistorySearchOptions,
+  RoomHistorySearchOptions,
+  HistoryPagingSearchOptions,
 } from './pagination'
 
 // Read-state types (cache order and read pointer)
@@ -193,7 +193,7 @@ export type {
   ConnectionEvents,
   ChatEvents,
   RoomEvents,
-  RosterEvents,
+  ContactsEvents,
   NotificationEvents,
   BlockingEvents,
   AdminEvents,

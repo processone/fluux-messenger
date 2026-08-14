@@ -4,7 +4,7 @@ import { chatStore } from '../stores/chatStore'
 import { chatSelectors } from '../stores/chatSelectors'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Conversation, MAMQueryState, Message } from '../core'
+import type { Conversation, HistoryQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { useChatActions } from './useChatActions'
 import { createContinueCatchUp } from './shared'
@@ -182,7 +182,7 @@ export function useChatActive() {
     return s.conversationGaps.get(s.activeConversationId)?.start
   })
 
-  const activeMAMState = useMemo((): MAMQueryState | null => {
+  const activeHistoryState = useMemo((): HistoryQueryState | null => {
     if (!activeConversationId) return null
     return {
       isLoading: mamIsLoading,
@@ -322,14 +322,14 @@ export function useChatActive() {
       activeAnimation,
       targetMessageId,
       supportsMAM,
-      activeMAMState,
+      activeHistoryState,
       windowAtLiveEdge: activeWindowAtLiveEdge,
       ...actions,
     }),
     [
       activeConversationId, activeConversation, activeFirstNewMessageId, activeFirstNewMessageIsProvisional,
       activeReadPointerId, activeMessages,
-      activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeMAMState,
+      activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeHistoryState,
       activeWindowAtLiveEdge, actions,
     ]
   )

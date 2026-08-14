@@ -9,7 +9,7 @@ import type {
   RoomAffiliation,
   RoomMember,
   RoomMessage,
-  MAMQueryState,
+  HistoryQueryState,
   RSMResponse,
 } from '../core/types'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
@@ -22,7 +22,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
-import type { MAMQueryDirection } from './shared/mamState'
+import type { HistoryQueryDirection } from './shared/mamState'
 import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import {
   syncCoverageAfterArchiveMerge,
@@ -800,7 +800,7 @@ export interface RoomState {
   votedPollIds: Map<string, Set<string>>
   dismissedPollIds: Map<string, Set<string>>
   // MAM query states per room (for rooms with MAM enabled)
-  mamQueryStates: Map<string, MAMQueryState>
+  mamQueryStates: Map<string, HistoryQueryState>
   // Persisted history-gap intervals per room (survives reload; drives the gap marker)
   roomGaps: Map<string, GapInterval>
   // Persisted contiguous-with-live coverage per room (positive twin of roomGaps;
@@ -1033,7 +1033,7 @@ export interface RoomState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -1047,7 +1047,7 @@ export interface RoomState {
   /** Drop the coverage record; with `ifBottomId`, only when it matches
    *  `bottomId` (purge-event guard — the anchor is known gone). */
   clearRoomCoverage: (roomJid: string, ifBottomId?: string) => void
-  getRoomMAMQueryState: (roomJid: string) => MAMQueryState
+  getRoomMAMQueryState: (roomJid: string) => HistoryQueryState
   resetRoomMAMStates: () => void
   /** Update only the lastMessage preview without affecting message history */
   updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
@@ -2422,7 +2422,7 @@ export const roomStore = createStore<RoomState>()(
 
     // --- Coverage gate: every uncertain branch defers -
     const mam = mamState.getMAMQueryState(get().mamQueryStates, roomJid)
-    if (!isCaughtUpForCounting(mam)) return defer('mam-not-caught-up')
+    if (!isCaughtUpForCounting(mam)) return defer('history-not-caught-up')
 
     const record = get().roomCoverage.get(roomJid)
     const bottom = await resolveCoverageBottom(roomJid, record, true)

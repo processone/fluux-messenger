@@ -1586,7 +1586,7 @@ describe('MUC Module', () => {
       const result = await muc.discoverMucService()
 
       expect(result).toBe('conference.example.com')
-      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service', { mucServiceJid: 'conference.example.com' })
+      expect(mockEmitSDK).toHaveBeenCalledWith('admin:room-service', { mucServiceJid: 'conference.example.com' })
     })
   })
 

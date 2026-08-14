@@ -244,7 +244,7 @@ describe('XMPPClient', () => {
 
       // Key SDK events should have handlers registered from auto-bindings
       // Note: connection:status is handled directly by Connection.ts (not via storeBindings)
-      expect(handlers.has('roster:loaded')).toBe(true)
+      expect(handlers.has('contacts:loaded')).toBe(true)
       expect(handlers.has('chat:message')).toBe(true)
       expect(handlers.has('room:added')).toBe(true)
     })
@@ -566,7 +566,7 @@ describe('XMPPClient', () => {
 
     it('should handle roster events', () => {
       const handler = vi.fn()
-      xmppClient.subscribe('roster:contact', handler)
+      xmppClient.subscribe('contacts:contact', handler)
 
       const mockContact = {
         jid: 'alice@example.com',
@@ -575,7 +575,7 @@ describe('XMPPClient', () => {
         status: 'online' as const,
       }
 
-      ;(xmppClient as any).emitSDK('roster:contact', { contact: mockContact })
+      ;(xmppClient as any).emitSDK('contacts:contact', { contact: mockContact })
 
       expect(handler).toHaveBeenCalledWith({ contact: mockContact })
     })

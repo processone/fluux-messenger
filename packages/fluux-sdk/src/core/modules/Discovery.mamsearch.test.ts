@@ -104,7 +104,7 @@ describe('Discovery MAM Search Capability', () => {
     await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: true })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: true })
   })
 
   it('should report no fulltext support when MAM form lacks fulltext field', async () => {
@@ -147,7 +147,7 @@ describe('Discovery MAM Search Capability', () => {
     await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 
   it('should report no fulltext support when no MAM form is present', async () => {
@@ -176,7 +176,7 @@ describe('Discovery MAM Search Capability', () => {
     await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 
   it('should handle disco#info failure gracefully', async () => {
@@ -194,7 +194,7 @@ describe('Discovery MAM Search Capability', () => {
     await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 
   it('should ignore non-MAM data forms', async () => {
@@ -235,6 +235,6 @@ describe('Discovery MAM Search Capability', () => {
     await waitForAsyncOps()
 
     // Should not be fooled by fulltext in a non-MAM form
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:history-search', { supported: false })
   })
 })

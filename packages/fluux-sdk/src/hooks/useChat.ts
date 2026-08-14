@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
-import type { MAMQueryState, Message } from '../core'
+import type { HistoryQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { useChatActions } from './useChatActions'
 
@@ -179,7 +179,7 @@ export function useChat() {
   })
 
   // Memoize the MAM state object to maintain stable reference
-  const activeMAMState = useMemo((): MAMQueryState | null => {
+  const activeHistoryState = useMemo((): HistoryQueryState | null => {
     if (!activeConversationId) return null
     return {
       isLoading: mamIsLoading,
@@ -209,7 +209,7 @@ export function useChat() {
       activeAnimation,
       // XEP-0313: MAM state
       supportsMAM,
-      activeMAMState,
+      activeHistoryState,
 
       // Actions (spread memoized actions)
       ...actions,
@@ -224,7 +224,7 @@ export function useChat() {
       activeTypingUsers,
       activeAnimation,
       supportsMAM,
-      activeMAMState,
+      activeHistoryState,
       actions,
     ]
   )

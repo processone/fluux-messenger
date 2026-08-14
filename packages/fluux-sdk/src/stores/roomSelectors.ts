@@ -21,7 +21,7 @@
  */
 
 import type { RoomState } from './roomStore'
-import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, MAMQueryState } from '../core/types'
+import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, HistoryQueryState } from '../core/types'
 
 /**
  * Stable empty references to prevent infinite re-renders.
@@ -207,7 +207,7 @@ export const roomSelectors = {
   /**
    * Get MAM query state for a specific room.
    */
-  mamStateFor: (roomJid: string) => (state: RoomState): MAMQueryState | undefined => {
+  mamStateFor: (roomJid: string) => (state: RoomState): HistoryQueryState | undefined => {
     return state.mamQueryStates.get(roomJid)
   },
 

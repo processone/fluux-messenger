@@ -326,7 +326,7 @@ export class PubSub extends BaseModule {
 
     if (nick) {
       // SDK event only - binding calls store.updateContact
-      this.deps.emitSDK('roster:contact-updated', { jid: bareFrom, updates: { name: nick } })
+      this.deps.emitSDK('contacts:contact-updated', { jid: bareFrom, updates: { name: nick } })
     }
   }
 

@@ -975,7 +975,7 @@ describe('XMPPClient Own Avatar', () => {
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:avatar', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:avatar', {
         jid: 'alice@example.com', avatar: 'blob:fresh-contact1', avatarHash: 'hash-c1',
       })
       expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
@@ -996,7 +996,7 @@ describe('XMPPClient Own Avatar', () => {
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:avatar', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:avatar', expect.anything())
     })
 
     it('should be a no-op when no cached avatars exist', async () => {
@@ -1138,7 +1138,7 @@ describe('XMPPClient Own Avatar', () => {
 
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:avatar', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:avatar', {
         jid: 'seb@example.com', avatar: 'blob:fresh-seb', avatarHash: 'hash-seb',
       })
     })
@@ -1181,7 +1181,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-avatar', {
         avatar: 'blob:fresh-self', hash: 'hash-self',
       })
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:avatar', expect.objectContaining({ jid: 'user@example.com' }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:avatar', expect.objectContaining({ jid: 'user@example.com' }))
     })
   })
 
@@ -1947,7 +1947,7 @@ describe('XMPPClient Own Avatar', () => {
       expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
 
       // Should emit avatar update with cached URL
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:avatar', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:avatar', {
         jid: 'contact@example.com',
         avatar: 'blob:already-cached',
         avatarHash: 'cached-hash',

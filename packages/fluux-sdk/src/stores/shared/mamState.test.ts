@@ -6,7 +6,7 @@ import {
   setMAMError,
   setMAMQueryCompleted,
 } from './mamState'
-import type { MAMQueryState } from '../../core/types'
+import type { HistoryQueryState } from '../../core/types'
 
 describe('mamState utilities', () => {
   describe('DEFAULT_MAM_STATE', () => {
@@ -23,13 +23,13 @@ describe('mamState utilities', () => {
 
   describe('getMAMQueryState', () => {
     it('returns default state when id not found', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = getMAMQueryState(states, 'unknown-id')
       expect(result).toEqual(DEFAULT_MAM_STATE)
     })
 
     it('returns existing state when id is found', () => {
-      const existingState: MAMQueryState = {
+      const existingState: HistoryQueryState = {
         isLoading: true,
         error: null,
         hasQueried: true,
@@ -37,7 +37,7 @@ describe('mamState utilities', () => {
         isCaughtUpToLive: false,
         oldestFetchedId: 'msg-123',
       }
-      const states = new Map<string, MAMQueryState>([['conv-1', existingState]])
+      const states = new Map<string, HistoryQueryState>([['conv-1', existingState]])
       const result = getMAMQueryState(states, 'conv-1')
       expect(result).toEqual(existingState)
     })
@@ -45,7 +45,7 @@ describe('mamState utilities', () => {
 
   describe('setMAMLoading', () => {
     it('creates new state with loading=true for new id', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMLoading(states, 'conv-1', true)
 
       expect(result.get('conv-1')).toEqual({
@@ -57,7 +57,7 @@ describe('mamState utilities', () => {
     })
 
     it('updates existing state with loading=true', () => {
-      const existingState: MAMQueryState = {
+      const existingState: HistoryQueryState = {
         isLoading: false,
         error: 'previous error',
         hasQueried: true,
@@ -65,7 +65,7 @@ describe('mamState utilities', () => {
         isCaughtUpToLive: false,
         oldestFetchedId: 'msg-123',
       }
-      const states = new Map<string, MAMQueryState>([['conv-1', existingState]])
+      const states = new Map<string, HistoryQueryState>([['conv-1', existingState]])
       const result = setMAMLoading(states, 'conv-1', true)
 
       expect(result.get('conv-1')).toEqual({
@@ -75,21 +75,21 @@ describe('mamState utilities', () => {
     })
 
     it('sets loading=false', () => {
-      const existingState: MAMQueryState = {
+      const existingState: HistoryQueryState = {
         isLoading: true,
         error: null,
         hasQueried: false,
         isHistoryComplete: false,
         isCaughtUpToLive: false,
       }
-      const states = new Map<string, MAMQueryState>([['conv-1', existingState]])
+      const states = new Map<string, HistoryQueryState>([['conv-1', existingState]])
       const result = setMAMLoading(states, 'conv-1', false)
 
       expect(result.get('conv-1')?.isLoading).toBe(false)
     })
 
     it('does not mutate the original map', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMLoading(states, 'conv-1', true)
 
       expect(result).not.toBe(states)
@@ -99,14 +99,14 @@ describe('mamState utilities', () => {
 
   describe('setMAMError', () => {
     it('sets error and clears loading state', () => {
-      const existingState: MAMQueryState = {
+      const existingState: HistoryQueryState = {
         isLoading: true,
         error: null,
         hasQueried: false,
         isHistoryComplete: false,
         isCaughtUpToLive: false,
       }
-      const states = new Map<string, MAMQueryState>([['conv-1', existingState]])
+      const states = new Map<string, HistoryQueryState>([['conv-1', existingState]])
       const result = setMAMError(states, 'conv-1', 'Network error')
 
       expect(result.get('conv-1')).toEqual({
@@ -117,21 +117,21 @@ describe('mamState utilities', () => {
     })
 
     it('clears error when set to null', () => {
-      const existingState: MAMQueryState = {
+      const existingState: HistoryQueryState = {
         isLoading: false,
         error: 'Previous error',
         hasQueried: true,
         isHistoryComplete: false,
         isCaughtUpToLive: false,
       }
-      const states = new Map<string, MAMQueryState>([['conv-1', existingState]])
+      const states = new Map<string, HistoryQueryState>([['conv-1', existingState]])
       const result = setMAMError(states, 'conv-1', null)
 
       expect(result.get('conv-1')?.error).toBeNull()
     })
 
     it('creates new state for unknown id', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMError(states, 'conv-1', 'Error')
 
       expect(result.get('conv-1')).toEqual({
@@ -142,7 +142,7 @@ describe('mamState utilities', () => {
     })
 
     it('does not mutate the original map', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMError(states, 'conv-1', 'Error')
 
       expect(result).not.toBe(states)
@@ -152,7 +152,7 @@ describe('mamState utilities', () => {
 
   describe('setMAMQueryCompleted', () => {
     it('sets completed state with oldestFetchedId for backward query', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', true, 'backward', 'msg-oldest')
 
       expect(result.get('conv-1')).toEqual({
@@ -167,7 +167,7 @@ describe('mamState utilities', () => {
     })
 
     it('sets isCaughtUpToLive for forward query', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', true, 'forward', 'msg-newest')
 
       expect(result.get('conv-1')).toEqual({
@@ -182,7 +182,7 @@ describe('mamState utilities', () => {
     })
 
     it('clears an existing forwardGapTimestamp on a completing forward query (default)', () => {
-      const states = new Map<string, MAMQueryState>([
+      const states = new Map<string, HistoryQueryState>([
         ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
       ])
       const result = setMAMQueryCompleted(states, 'room-1', true, 'forward')
@@ -192,7 +192,7 @@ describe('mamState utilities', () => {
     it('preserveGapMarker keeps an existing forwardGapTimestamp on a completing forward query', () => {
       // A bounded force repair must NOT hide a real gap marker just because its
       // own (windowed) forward query happened to complete.
-      const states = new Map<string, MAMQueryState>([
+      const states = new Map<string, HistoryQueryState>([
         ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
       ])
       const result = setMAMQueryCompleted(states, 'room-1', true, 'forward', undefined, undefined, true)
@@ -201,7 +201,7 @@ describe('mamState utilities', () => {
     })
 
     it('preserveGapMarker does not overwrite forwardGapTimestamp on an incomplete forward query', () => {
-      const states = new Map<string, MAMQueryState>([
+      const states = new Map<string, HistoryQueryState>([
         ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
       ])
       // Without preserve this would set forwardGapTimestamp = 5000 (this page's newest).
@@ -210,7 +210,7 @@ describe('mamState utilities', () => {
     })
 
     it('sets isHistoryComplete=false for incomplete backward query', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', false, 'backward', 'msg-123')
 
       expect(result.get('conv-1')?.isHistoryComplete).toBe(false)
@@ -218,14 +218,14 @@ describe('mamState utilities', () => {
     })
 
     it('handles undefined oldestFetchedId', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', true, 'backward')
 
       expect(result.get('conv-1')?.oldestFetchedId).toBeUndefined()
     })
 
     it('does not mutate the original map', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', true, 'backward', 'msg-123')
 
       expect(result).not.toBe(states)
@@ -233,7 +233,7 @@ describe('mamState utilities', () => {
     })
 
     it('preserves existing isHistoryComplete when doing forward query', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       // First, complete backward history
       const afterBackward = setMAMQueryCompleted(states, 'conv-1', true, 'backward', 'msg-oldest')
       expect(afterBackward.get('conv-1')?.isHistoryComplete).toBe(true)
@@ -245,7 +245,7 @@ describe('mamState utilities', () => {
     })
 
     it('preserves existing isCaughtUpToLive when doing backward query', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       // First, catch up to live
       const afterForward = setMAMQueryCompleted(states, 'conv-1', true, 'forward')
       expect(afterForward.get('conv-1')?.isCaughtUpToLive).toBe(true)
@@ -257,7 +257,7 @@ describe('mamState utilities', () => {
     })
 
     it('sets forwardGapTimestamp when forward catch-up is incomplete', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const gapTs = Date.now() - 60_000
       const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, gapTs)
 
@@ -266,7 +266,7 @@ describe('mamState utilities', () => {
     })
 
     it('clears forwardGapTimestamp when forward catch-up completes', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       // First: incomplete catch-up sets the gap
       const withGap = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, Date.now())
       expect(withGap.get('room-1')?.forwardGapTimestamp).toBeDefined()
@@ -278,7 +278,7 @@ describe('mamState utilities', () => {
     })
 
     it('preserves forwardGapTimestamp during backward queries', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const gapTs = Date.now() - 60_000
       const withGap = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, gapTs)
 
@@ -288,7 +288,7 @@ describe('mamState utilities', () => {
     })
 
     it('does not set forwardGapTimestamp when no timestamp is provided', () => {
-      const states = new Map<string, MAMQueryState>()
+      const states = new Map<string, HistoryQueryState>()
       const result = setMAMQueryCompleted(states, 'room-1', false, 'forward')
 
       expect(result.get('room-1')?.forwardGapTimestamp).toBeUndefined()
@@ -299,7 +299,7 @@ describe('mamState utilities', () => {
       // A signal-only page (reactions/receipts only — zero displayable
       // messages) yields no newestFetchedTimestamp. It proves nothing about
       // the hole, so it must not erase the recorded marker.
-      const states = new Map<string, MAMQueryState>([
+      const states = new Map<string, HistoryQueryState>([
         ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
       ])
       const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, undefined)

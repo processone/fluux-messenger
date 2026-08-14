@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next'
-import { getLocalPart, type MucInvitation } from '@fluux/sdk'
+import { getLocalPart, type RoomInvitation } from '@fluux/sdk'
 import { Check, X, DoorOpen } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 
 interface MucInvitationItemProps {
-  invitation: MucInvitation
+  invitation: RoomInvitation
   onAccept: () => void
   onDecline: () => void
 }

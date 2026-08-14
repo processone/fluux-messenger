@@ -368,9 +368,9 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify loading state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-loading', { conversationId: 'alice@example.com', isLoading: true })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: true })
       // Verify loading state was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-loading', { conversationId: 'alice@example.com', isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false })
     })
 
     it('should merge messages into store on success', async () => {
@@ -396,7 +396,7 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify chat:mam-messages was emitted with direction='backward' (no start filter)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
         rsm: expect.any(Object),
@@ -414,9 +414,9 @@ describe('XMPPClient MAM', () => {
       await expect(xmppClient.messages.queryMAM({ with: 'alice@example.com' })).rejects.toThrow('Network error')
 
       // Verify error state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-error', { conversationId: 'alice@example.com', error: 'Network error' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-error', { conversationId: 'alice@example.com', error: 'Network error' })
       // Verify loading was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-loading', { conversationId: 'alice@example.com', isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-loading', { conversationId: 'alice@example.com', isLoading: false })
     })
 
     it('should parse complete=false correctly', async () => {
@@ -2616,7 +2616,7 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'forward' for queries with start filter
       // The store will set isCaughtUpToLive=true but NOT isHistoryComplete
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', {
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
         rsm: expect.any(Object),
@@ -2654,7 +2654,7 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'backward' for queries without start filter
       // The store will set isHistoryComplete=true
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
         rsm: expect.any(Object),
@@ -2696,7 +2696,7 @@ describe('XMPPClient MAM', () => {
 
       expect(result.complete).toBe(true)
       // Forward direction (parity with `start`-anchored catch-up).
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         direction: 'forward',
       }))
     })
@@ -2762,7 +2762,7 @@ describe('XMPPClient MAM', () => {
 
       // Without this, the persisted gap keeps the purged startId: every
       // session re-degrades and "Load missing messages" can never heal.
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-anchor-purged', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-anchor-purged', {
         conversationId: 'alice@example.com',
         after: 'purged-stanza-id',
       })
@@ -2952,7 +2952,7 @@ describe('XMPPClient MAM', () => {
 
       // The single empty emit carries the walk extent: the store records
       // coverage {bottomId: p5-first, topId: p1-last} — the durable resume.
-      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'chat:mam-messages')
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'chat:history-messages')
       expect(mamEmits).toHaveLength(1)
       expect(mamEmits[0][1]).toMatchObject({
         conversationId: 'alice@example.com',
@@ -3066,7 +3066,7 @@ describe('XMPPClient MAM', () => {
 
       // Walk recovered: purge emitted, pre-jump cursor used, message found.
       expect(callCount).toBe(3)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-coverage-purged', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-coverage-purged', {
         conversationId: 'alice@example.com',
         before: 'purged-floor',
       })
@@ -3107,7 +3107,7 @@ describe('XMPPClient MAM', () => {
       expect(retryBeforeEl?.children?.[0]).toBeUndefined() // before:'' — empty element
 
       // The stale record is dropped so later resumes don't re-anchor on it.
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-coverage-purged', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-coverage-purged', {
         conversationId: 'alice@example.com',
         before: 'purged-id',
       })
@@ -3341,8 +3341,8 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify loading state was set and cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-loading', { roomJid, isLoading: true })
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-loading', { roomJid, isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: true })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false })
     })
 
     it('should merge room messages into store on success', async () => {
@@ -3383,7 +3383,7 @@ describe('XMPPClient MAM', () => {
       await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify room:mam-messages was emitted with direction='backward' (no start filter)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
         rsm: expect.objectContaining({ first: 'first-id', last: 'last-id' }),
@@ -3416,9 +3416,9 @@ describe('XMPPClient MAM', () => {
       await expect(xmppClient.messages.queryRoomMAM({ roomJid })).rejects.toThrow('Room MAM not supported')
 
       // Verify error state was set
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-error', { roomJid, error: 'Room MAM not supported' })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-error', { roomJid, error: 'Room MAM not supported' })
       // Verify loading was cleared
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-loading', { roomJid, isLoading: false })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-loading', { roomJid, isLoading: false })
     })
 
     it('should use RSM before parameter for pagination', async () => {
@@ -3505,7 +3505,7 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'forward' for queries with start filter
       // The store will set isCaughtUpToLive=true but NOT isHistoryComplete
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', {
         roomJid,
         messages: expect.any(Array),
         rsm: expect.any(Object),
@@ -3558,7 +3558,7 @@ describe('XMPPClient MAM', () => {
 
       // Direction should be 'backward' for queries with before filter
       // The store will set isHistoryComplete=true
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
         rsm: expect.any(Object),
@@ -3606,7 +3606,7 @@ describe('XMPPClient MAM', () => {
       expect(afterEl?.children?.[0]).toBe('mds-stanza-id')
 
       expect(result.complete).toBe(true)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         direction: 'forward',
       }))
     })
@@ -3729,7 +3729,7 @@ describe('XMPPClient MAM', () => {
       // ONE room:mam-messages emit carrying the accumulated set, still flagged
       // with the ORIGINAL fetch-latest so the page that finally carries
       // messages is seam-checked as part of the fetch-latest.
-      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:mam-messages')
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:history-messages')
       expect(mamEmits).toHaveLength(1)
       expect(mamEmits[0][1]).toMatchObject({
         roomJid,
@@ -3935,7 +3935,7 @@ describe('XMPPClient MAM', () => {
 
       // Same retry cap as the 1:1 backward path.
       expect(callCount).toBe(5)
-      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:mam-messages')
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:history-messages')
       expect(mamEmits).toHaveLength(1)
       expect((mamEmits[0][1] as { messages: unknown[] }).messages).toHaveLength(0)
       expect(result.messages).toHaveLength(0)
@@ -4019,7 +4019,7 @@ describe('XMPPClient MAM', () => {
 
       await xmppClient.messages.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-anchor-purged', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-anchor-purged', {
         roomJid,
         after: 'purged-stanza-id',
       })

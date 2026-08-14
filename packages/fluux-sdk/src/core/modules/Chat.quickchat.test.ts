@@ -758,7 +758,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Verify SDK event was emitted with isQuickChat: true
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'room@conference.example.com',
         from: 'alice@example.com',
         reason: 'Join quick chat: deploy issue',
@@ -793,7 +793,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Verify SDK event was emitted with isQuickChat: false
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'room@conference.example.com',
         from: 'alice@example.com',
         reason: 'Join our room',
@@ -824,7 +824,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Verify SDK event was emitted with isQuickChat: true
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'room@conference.example.com',
         from: 'alice@example.com',
         reason: 'Quick discussion',
@@ -859,7 +859,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Should emit with room JID as fallback for 'from'
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'room@conference.example.com',
         from: 'room@conference.example.com', // Fallback to room JID
         reason: 'Join our room',
@@ -895,7 +895,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Should still detect as quickchat based on JID pattern
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.com',
         from: 'alice@example.com',
         reason: 'Join quick chat: deploy issue',
@@ -925,7 +925,7 @@ describe('XMPPClient Quick Chat', () => {
       mockXmppClientInstance._emit('stanza', invitationStanza)
 
       // Should still detect as quickchat based on JID pattern
-      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:room-invitation', {
         roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.com',
         from: 'alice@example.com',
         reason: 'Quick discussion',

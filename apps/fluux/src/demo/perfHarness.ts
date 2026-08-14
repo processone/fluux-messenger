@@ -124,9 +124,9 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
       jid: `perf${i}@fluux.chat`, name: `Perf User ${i}`, presence: 'offline', subscription: 'both',
     }))
     return measureScenario(`rosterStorm:${count}`, async () => {
-      c.emitSDK('roster:loaded', { contacts: [...existing, ...synth] })
+      c.emitSDK('contacts:loaded', { contacts: [...existing, ...synth] })
       for (let i = 0; i < count; i++) {
-        c.emitSDK('roster:presence', { fullJid: `perf${i}@fluux.chat/web`, show: shows[i % shows.length], priority: 1 })
+        c.emitSDK('contacts:presence', { fullJid: `perf${i}@fluux.chat/web`, show: shows[i % shows.length], priority: 1 })
         await step(stepMs)
       }
     })
@@ -141,7 +141,7 @@ export async function installPerfHarness(opts: { scan?: boolean } = {}): Promise
     const shows: Array<string | null> = [null, 'away']
     return measureScenario(`presenceFlap:${target}`, async () => {
       for (let i = 0; i < times; i++) {
-        c.emitSDK('roster:presence', { fullJid: `${target}/web`, show: shows[i % 2], priority: 1 })
+        c.emitSDK('contacts:presence', { fullJid: `${target}/web`, show: shows[i % 2], priority: 1 })
         await step(stepMs)
       }
     })

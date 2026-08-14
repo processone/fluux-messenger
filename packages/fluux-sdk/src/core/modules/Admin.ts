@@ -935,7 +935,7 @@ export class Admin extends BaseModule {
           // Look for MUC identity (category="conference")
           for (const identity of identities) {
             if (identity.attrs.category === 'conference') {
-              this.deps.emitSDK('admin:muc-service', { mucServiceJid: jid })
+              this.deps.emitSDK('admin:room-service', { mucServiceJid: jid })
               return jid
             }
           }

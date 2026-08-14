@@ -21,7 +21,7 @@
  */
 
 import type { ChatState } from './chatStore'
-import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState } from '../core/types'
+import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState } from '../core/types'
 
 /**
  * Stable empty references to prevent infinite re-renders.
@@ -175,7 +175,7 @@ export const chatSelectors = {
   /**
    * Get MAM query state for a specific conversation.
    */
-  mamStateFor: (conversationId: string) => (state: ChatState): MAMQueryState | undefined => {
+  mamStateFor: (conversationId: string) => (state: ChatState): HistoryQueryState | undefined => {
     return state.mamQueryStates.get(conversationId)
   },
 

@@ -45,7 +45,7 @@ export interface RSMResponse {
  *
  * @category MAM
  */
-export interface MAMQueryOptions {
+export interface HistoryQueryOptions {
   /** Bare JID of conversation partner */
   with: string
   /** Maximum results to return (default 50) */
@@ -82,7 +82,7 @@ export interface MAMQueryOptions {
  *
  * @category MAM
  */
-export interface MAMResult {
+export interface HistoryResult {
   /** Retrieved messages */
   messages: Message[]
   /** True if no more messages before this batch */
@@ -102,7 +102,7 @@ export interface MAMResult {
  *
  * @category MAM
  */
-export interface RoomMAMQueryOptions {
+export interface RoomHistoryQueryOptions {
   /** Room JID to query archive for */
   roomJid: string
   /** Maximum results to return (default 50) */
@@ -132,7 +132,7 @@ export interface RoomMAMQueryOptions {
  *
  * @category MAM
  */
-export interface RoomMAMResult {
+export interface RoomHistoryResult {
   /** Retrieved room messages */
   messages: RoomMessage[]
   /** True if no more messages before this batch */
@@ -152,7 +152,7 @@ export interface RoomMAMResult {
  *
  * @category MAM
  */
-export interface MAMSearchOptions {
+export interface HistorySearchOptions {
   /** Fulltext search query */
   query: string
   /** Optional: scope to a specific conversation (bare JID) */
@@ -168,7 +168,7 @@ export interface MAMSearchOptions {
  *
  * @category MAM
  */
-export interface RoomMAMSearchOptions {
+export interface RoomHistorySearchOptions {
   /** Fulltext search query */
   query: string
   /** Room JID to search */
@@ -186,7 +186,7 @@ export interface RoomMAMSearchOptions {
  *
  * @category MAM
  */
-export interface MAMPagingSearchOptions {
+export interface HistoryPagingSearchOptions {
   /** Text query to match against message bodies */
   query: string
   /** Conversation partner bare JID */
@@ -212,7 +212,7 @@ export interface MAMPagingSearchOptions {
  *
  * @category MAM
  */
-export interface MAMQueryState {
+export interface HistoryQueryState {
   /** True while query is in progress */
   isLoading: boolean
   /** Error message if query failed */
@@ -259,7 +259,7 @@ export interface MAMQueryState {
  *
  * @category MAM
  */
-export type MAMQueryDirection = 'backward' | 'forward'
+export type HistoryQueryDirection = 'backward' | 'forward'
 
 /**
  * Persisted contiguous-with-live coverage.
@@ -267,7 +267,7 @@ export type MAMQueryDirection = 'backward' | 'forward'
  * A `CoverageRecord` is POSITIVE, DURABLE data: the archive id of the oldest
  * entry proven contiguous with the live edge for this device. Unlike a gap
  * interval (which describes a hole and vanishes when the hole closes) or
- * {@link MAMQueryState.coverageBottomUnproven} (session-scoped), the record
+ * {@link HistoryQueryState.coverageBottomUnproven} (session-scoped), the record
  * survives fresh sessions and gap closure, so:
  * - the read-pointer stitch seeds its backward walk from it and never from a
  *   disjoint cache island (e.g. a fetchContext window);

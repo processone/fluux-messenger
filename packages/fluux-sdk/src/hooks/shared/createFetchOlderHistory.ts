@@ -6,7 +6,7 @@
  * store-specific customization.
  */
 
-import type { MAMQueryState } from '../../core/types'
+import type { HistoryQueryState } from '../../core/types'
 import { connectionStore } from '../../stores/connectionStore'
 import { isItemNotFoundError } from './mamCursor'
 
@@ -28,7 +28,7 @@ export interface FetchOlderHistoryDeps {
   /**
    * Get the MAM query state for the target.
    */
-  getMAMState: (id: string) => MAMQueryState
+  getMAMState: (id: string) => HistoryQueryState
 
   /**
    * Set the MAM loading state for the target.

@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import type { SubscriptionRequest, StrangerMessage, MucInvitation, SystemNotification, SystemNotificationType } from '../core/types'
+import type { SubscriptionRequest, StrangerMessage, RoomInvitation, SystemNotification, SystemNotificationType } from '../core/types'
 import { generateUUID } from '../utils/uuid'
 
 /**
@@ -35,7 +35,7 @@ import { generateUUID } from '../utils/uuid'
 interface EventsState {
   subscriptionRequests: SubscriptionRequest[]
   strangerMessages: StrangerMessage[]
-  mucInvitations: MucInvitation[]
+  mucInvitations: RoomInvitation[]
   systemNotifications: SystemNotification[]
 
   // Actions
@@ -54,7 +54,7 @@ interface EventsState {
 const initialState = {
   subscriptionRequests: [] as SubscriptionRequest[],
   strangerMessages: [] as StrangerMessage[],
-  mucInvitations: [] as MucInvitation[],
+  mucInvitations: [] as RoomInvitation[],
   systemNotifications: [] as SystemNotification[],
 }
 

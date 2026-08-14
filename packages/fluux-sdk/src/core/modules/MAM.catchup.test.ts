@@ -148,7 +148,7 @@ describe('MAM Background Catch-Up', () => {
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
 
       // The emitted mam-messages event should have direction='forward' (start filter used)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         direction: 'forward',
       }))
@@ -171,7 +171,7 @@ describe('MAM Background Catch-Up', () => {
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
 
       // The emitted mam-messages event should have direction='backward' (no start filter = before="" query)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         direction: 'backward',
       }))
@@ -375,7 +375,7 @@ describe('MAM Background Catch-Up', () => {
       await catchUpPromise
 
       // Should emit forward query starting from the live message timestamp (08:00), not the delayed one (10:00)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         direction: 'forward',
       }))
@@ -419,7 +419,7 @@ describe('MAM Background Catch-Up', () => {
       // Should use forward query from the newest delayed message timestamp
       // (not fall back to backward query) so merge uses full sort and
       // correctly positions messages sent from other clients while offline
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         direction: 'forward',
       }))
@@ -1301,7 +1301,7 @@ describe('MAM Background Catch-Up', () => {
       expect(mockStores.room.loadMessagesFromCache).toHaveBeenCalledWith('room1@conference.example.com', { limit: 100, peek: true })
 
       // The emitted room:mam-messages event should have direction='forward' (start filter used)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid: 'room1@conference.example.com',
         direction: 'forward',
       }))
@@ -1325,7 +1325,7 @@ describe('MAM Background Catch-Up', () => {
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
 
       // The emitted room:mam-messages event should have direction='backward' (no start = before="" query)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid: 'room1@conference.example.com',
         direction: 'backward',
       }))
@@ -1444,7 +1444,7 @@ describe('MAM Background Catch-Up', () => {
       expect(queriedRooms).toContain('room2@conference.example.com')
 
       // Should use forward direction (start filter = fixed date, not from cache)
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         direction: 'forward',
       }))
     })
@@ -1551,7 +1551,7 @@ describe('MAM Background Catch-Up', () => {
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         preserveGapMarker: true,
       }))
     })
@@ -1719,7 +1719,7 @@ describe('MAM Background Catch-Up', () => {
       await discoverPromise
 
       // The emitted event should have direction='backward' (before="" query)
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'bob@example.com',
         direction: 'backward',
       }))

@@ -86,7 +86,7 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
       // SDK event: roster:presence with show=null (meaning online), priority defaults to 0
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/resource',
         show: null, // null = online
         priority: 0,
@@ -107,7 +107,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/mobile',
         show: 'away',
         priority: 0,
@@ -129,7 +129,7 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
       // xa is passed directly, store handles mapping to PresenceStatus
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/desktop',
         show: 'xa',
         priority: 0,
@@ -150,7 +150,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/work',
         show: 'dnd',
         priority: 0,
@@ -171,10 +171,10 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
       // Unavailable emits roster:presence-offline, not roster:presence
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-offline', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-offline', {
         fullJid: 'contact@example.com/resource'
       })
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
     })
 
     it('should include status message when present', async () => {
@@ -189,7 +189,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/phone',
         show: 'away',
         priority: 0,
@@ -210,7 +210,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/mobile',
         show: null,
         priority: 50,
@@ -251,7 +251,7 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
       // Full JID is passed in SDK event (store extracts bare JID internally)
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/very-long-resource-identifier',
         show: null,
         priority: 0,
@@ -268,8 +268,8 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence-offline', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence-offline', expect.anything())
     })
 
     it('should extract client name from caps element (XEP-0115)', async () => {
@@ -291,7 +291,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/mobile',
         show: null,
         priority: 0,
@@ -320,7 +320,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', presenceStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', {
         fullJid: 'contact@example.com/desktop',
         show: null,
         priority: 0,
@@ -354,7 +354,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-error', {
         jid: 'contact@example.com',
         error: 'User not found'
       })
@@ -381,7 +381,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-error', {
         jid: 'contact@example.com',
         error: 'Service unavailable'
       })
@@ -399,7 +399,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-error', {
         jid: 'contact@example.com',
         error: 'Undefined condition'
       })
@@ -415,7 +415,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-error', {
         jid: 'contact@example.com',
         error: 'Unknown error'
       })
@@ -433,7 +433,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
     })
   })
 
@@ -466,7 +466,7 @@ describe('XMPPClient Presence', () => {
 
       await expect(result).rejects.toMatchObject({ condition: 'not-authorized', errorType: 'auth' })
       // The room must not be filed as a contact presence error either.
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence-error', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence-error', expect.anything())
     })
 
     it('fails the join on a nickname conflict', async () => {
@@ -490,7 +490,7 @@ describe('XMPPClient Presence', () => {
         joinError('contact@example.com/phone', 'service-unavailable', 'cancel')
       )
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence-error', {
         jid: 'contact@example.com',
         error: expect.any(String),
       })
@@ -546,7 +546,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', subscribedStanza)
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
       expect(emitSDKSpy).not.toHaveBeenCalledWith('events:subscription-request', expect.anything())
     })
 
@@ -560,7 +560,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', unsubscribeStanza)
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
     })
 
     it('should handle unsubscribed presence without emitting roster:presence', async () => {
@@ -574,7 +574,7 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance._emit('stanza', unsubscribedStanza)
 
       // Should NOT emit roster:presence (unsubscribed is not a presence update)
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
       // Should emit system notification about the denial
       expect(emitSDKSpy).toHaveBeenCalledWith('events:system-notification', expect.objectContaining({
         type: 'subscription-denied',
@@ -1560,7 +1560,7 @@ describe('XMPPClient Presence', () => {
       })
 
       // Should NOT have emitted roster:presence event
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence', expect.anything())
     })
 
     it('should remove resource when receiving unavailable presence from own JID', async () => {
@@ -1580,7 +1580,7 @@ describe('XMPPClient Presence', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-resource-offline', { resource: 'mobile' })
 
       // Should NOT have emitted roster:presence-offline event
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence-offline', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('contacts:presence-offline', expect.anything())
     })
 
     it('should track online resource (no show element)', async () => {
@@ -1622,7 +1622,7 @@ describe('XMPPClient Presence', () => {
       // Should NOT track this as another resource (no connection:own-resource event)
       expect(emitSDKSpy).not.toHaveBeenCalledWith('connection:own-resource', expect.anything())
       // Should treat it as regular presence (roster:presence event emitted)
-      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence', expect.anything())
+      expect(emitSDKSpy).toHaveBeenCalledWith('contacts:presence', expect.anything())
     })
 
     it('should parse XEP-0319 idle time for own resource', async () => {

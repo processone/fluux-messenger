@@ -1073,7 +1073,7 @@ describe('MAM forward catch-up — cross-page modification resolution (1:1)', ()
 
     await queryPromise
 
-    const mamEvent = h.emitted.find((e) => e.event === 'chat:mam-messages')
+    const mamEvent = h.emitted.find((e) => e.event === 'chat:history-messages')
     expect(mamEvent).toBeDefined()
     const messages = mamEvent!.payload.messages as Array<{
       id: string

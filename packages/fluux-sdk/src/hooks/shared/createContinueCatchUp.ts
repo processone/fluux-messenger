@@ -24,7 +24,7 @@
  */
 
 import { connectionStore } from '../../stores/connectionStore'
-import type { MAMQueryState } from '../../core/types'
+import type { HistoryQueryState } from '../../core/types'
 import {
   selectCatchUpQuery,
   MAM_CACHE_LOAD_LIMIT,
@@ -44,7 +44,7 @@ export interface ContinueCatchUpDeps {
   /**
    * Get the MAM query state for the target.
    */
-  getMAMState: (id: string) => MAMQueryState
+  getMAMState: (id: string) => HistoryQueryState
 
   /**
    * Set the MAM loading state for the target.

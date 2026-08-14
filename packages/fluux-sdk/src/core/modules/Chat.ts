@@ -54,12 +54,12 @@ import type {
   FileAttachment,
   SendMessageOptions,
   ChatStateNotification,
-  MAMQueryOptions,
-  MAMResult,
+  HistoryQueryOptions,
+  HistoryResult,
   MessageSecurityContext,
   RoomMessage,
-  RoomMAMQueryOptions,
-  RoomMAMResult,
+  RoomHistoryQueryOptions,
+  RoomHistoryResult,
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds } from '../types/message-internal'
@@ -1619,7 +1619,7 @@ export class Chat extends BaseModule {
    * - Handles corrections and retractions within the MAM results
    * - Sets loading state in the store during the query
    */
-  async queryMAM(options: MAMQueryOptions): Promise<MAMResult> {
+  async queryMAM(options: HistoryQueryOptions): Promise<HistoryResult> {
     return this.mamModule.queryArchive(options)
   }
 
@@ -1649,7 +1649,7 @@ export class Chat extends BaseModule {
    * - Messages are automatically merged into the room store
    * - The room must be joined to fetch its MAM archive
    */
-  async queryRoomMAM(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
+  async queryRoomMAM(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     return this.mamModule.queryRoomArchive(options)
   }
 
@@ -2034,7 +2034,7 @@ export class Chat extends BaseModule {
         // when forwarding invitations.
         const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
         // SDK event only - binding calls store.addMucInvitation
-        this.deps.emitSDK('events:muc-invitation', {
+        this.deps.emitSDK('events:room-invitation', {
           roomJid,
           from,
           reason: directInvite.attrs.reason,
@@ -2064,7 +2064,7 @@ export class Chat extends BaseModule {
       const isQuickChat = !!invite.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
       if (roomJid) {
         // SDK event only - binding calls store.addMucInvitation
-        this.deps.emitSDK('events:muc-invitation', {
+        this.deps.emitSDK('events:room-invitation', {
           roomJid,
           from: inviteFrom,
           reason,

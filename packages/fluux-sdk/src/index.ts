@@ -354,9 +354,9 @@ export type {
   LastActivityEntry,
 
   // XEP-0313: Message Archive Management
-  MAMQueryOptions,
-  MAMResult,
-  MAMQueryState,
+  HistoryQueryOptions,
+  HistoryResult,
+  HistoryQueryState,
 } from './core/types'
 
 // Client construction options. Exported from `core/clientConfig` rather than
@@ -365,7 +365,7 @@ export type {
 export type { XMPPClientConfig } from './core/clientConfig'
 
 // Events types
-export type { SubscriptionRequest, StrangerMessage, MucInvitation, SystemNotification, SystemNotificationType } from './core/types'
+export type { SubscriptionRequest, StrangerMessage, RoomInvitation, SystemNotification, SystemNotificationType } from './core/types'
 
 // EventHook base class (Obsidian-inspired plugin pattern)
 export { EventHook } from './core/EventHook'
@@ -391,7 +391,7 @@ export type {
   ConnectionEvents,
   ChatEvents,
   RoomEvents,
-  RosterEvents,
+  ContactsEvents,
   NotificationEvents,
   BlockingEvents,
   AdminEvents,
