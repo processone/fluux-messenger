@@ -178,7 +178,7 @@ export function useRoomActions() {
 
   const sendWhisperChatState = useCallback(
     async (roomJid: string, nick: string, state: ChatStateNotification) => {
-      await client.messages.sendWhisperChatState(roomJid, nick, state)
+      await client.rooms.sendWhisperChatState(roomJid, nick, state)
     },
     [client]
   )

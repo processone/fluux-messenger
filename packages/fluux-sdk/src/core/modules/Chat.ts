@@ -991,60 +991,6 @@ export class Chat extends BaseModule {
     return id
   }
 
-  /**
-   * XEP-0045 §7.5: send a private message ("whisper") to a single room
-   * occupant. Unlike {@link sendMessage}, this preserves the `/nick`
-   * resource (sendMessage strips it for type='chat') and emits `room:whisper`
-   * instead of `chat:message` so the message is tracked as a private room
-   * message rather than a 1:1 conversation. The XEP-0334 `<no-store>` hint
-   * keeps it off the server archive; it is still persisted locally.
-   *
-   * @param roomJid bare room JID, e.g. 'room@conference.example.com'
-   * @param nick    target occupant's nickname
-   * @param body    message text
-   * @returns the generated message id
-   */
-  async sendWhisper(roomJid: string, nick: string, body: string): Promise<string> {
-    const id = generateUUID()
-    const to = `${roomJid}/${nick}`
-
-    const message = xml('message', { to, type: 'chat', id },
-      xml('body', {}, body),
-      xml('active', { xmlns: NS_CHATSTATES }),
-      xml('x', { xmlns: NS_MUC_USER }),
-      createOriginIdElement(id),
-      xml('no-store', { xmlns: NS_HINTS }),
-    )
-    await this.deps.sendStanza(message)
-
-    const room = this.deps.stores?.room.getRoom(roomJid)
-    if (!room) logWarn(`sendWhisper: room ${roomJid} not found in store — sender nick will be empty`)
-    const ourNick = room?.nickname || ''
-    // Counterpart's stable occupant-id (XEP-0421), resolved from the live occupant
-    // list, so a persisted thread can be re-bound to the same person later.
-    const targetOccupantId = room?.occupants.get(nick)?.occupantId
-    const whisper: RoomMessage = {
-      type: 'groupchat',
-      id,
-      originId: id,
-      roomJid,
-      from: `${roomJid}/${ourNick}`,
-      nick: ourNick,
-      body,
-      timestamp: new Date(),
-      isOutgoing: true,
-      isPrivate: true,
-      whisperWith: nick,
-      ...(targetOccupantId && { whisperWithOccupantId: targetOccupantId }),
-    }
-    this.deps.emitSDK('room:whisper', {
-      roomJid,
-      message: whisper,
-      incrementUnread: false,
-      incrementMentions: false,
-    })
-    return id
-  }
 
   /**
    * Resend a previously failed message.
@@ -1176,20 +1122,6 @@ export class Chat extends BaseModule {
     await this.deps.sendStanza(message)
   }
 
-  /**
-   * Send a chat state (XEP-0085) privately to a single room occupant — the typing
-   * indicator for a whisper (XEP-0045 §7.5). Unlike sendChatState on the room,
-   * which broadcasts to the room, this addresses room/nick with the muc#user marker
-   * and a no-store hint, so the room never sees that you are whispering.
-   */
-  async sendWhisperChatState(roomJid: string, nick: string, state: ChatStateNotification): Promise<void> {
-    const message = xml('message', { to: `${roomJid}/${nick}`, type: 'chat' },
-      xml(state, { xmlns: NS_CHATSTATES }),
-      xml('x', { xmlns: NS_MUC_USER }),
-      xml('no-store', { xmlns: NS_HINTS }),
-    )
-    await this.deps.sendStanza(message)
-  }
 
   /**
    * Send or update reactions on a message (XEP-0444).

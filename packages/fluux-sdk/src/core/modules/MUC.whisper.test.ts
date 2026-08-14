@@ -66,7 +66,7 @@ describe('MUC Whispers', () => {
       const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
       vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
 
-      const id = await xmppClient.messages.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
+      const id = await xmppClient.rooms.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
 
       expect(typeof id).toBe('string')
       expect(id.length).toBeGreaterThan(0)
@@ -102,7 +102,7 @@ describe('MUC Whispers', () => {
       })
       vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
 
-      await xmppClient.messages.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
+      await xmppClient.rooms.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
         roomJid: 'room@conference.example.com',
@@ -418,7 +418,7 @@ describe('MUC Whispers', () => {
     it('sendWhisperChatState sends a private chat-state to room/nick (muc#user, no-store)', async () => {
       await connectClient()
 
-      await xmppClient.messages.sendWhisperChatState(ROOM, 'bob', 'composing')
+      await xmppClient.rooms.sendWhisperChatState(ROOM, 'bob', 'composing')
 
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
       expect(sent.attrs.to).toBe(`${ROOM}/bob`)

@@ -235,7 +235,7 @@ export function useRoomActive() {
 
   const sendWhisper = useCallback(
     async (roomJid: string, nick: string, body: string): Promise<string> => {
-      return await client.messages.sendWhisper(roomJid, nick, body)
+      return await client.rooms.sendWhisper(roomJid, nick, body)
     },
     [client]
   )
@@ -270,7 +270,7 @@ export function useRoomActive() {
 
   const sendWhisperChatState = useCallback(
     async (roomJid: string, nick: string, state: ChatStateNotification) => {
-      await client.messages.sendWhisperChatState(roomJid, nick, state)
+      await client.rooms.sendWhisperChatState(roomJid, nick, state)
     },
     [client]
   )
