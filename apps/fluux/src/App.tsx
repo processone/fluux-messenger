@@ -5,7 +5,7 @@ import { useConnectionStatus, useXMPPContext, hasFastToken, getBareJid, getDomai
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
 import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
-import { probeRemoteIdentityState, identityChoiceFromProbe } from './e2ee/secretKeyProbe'
+import { probeRemoteIdentityState, identityChoiceFromProbe, pepReaderFor } from './e2ee/secretKeyProbe'
 import type { BackupProbeResult } from './e2ee/OpenPGPPluginBase'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
 import { useToastStore } from './stores/toastStore'
@@ -268,7 +268,7 @@ function App() {
             // missing local key only needs one when the server holds an
             // identity to reconcile against.
             if (recoveryNeeded || hasNoLocal) {
-              const state = await probeRemoteIdentityState(client, accountJid)
+              const state = await probeRemoteIdentityState(pepReaderFor(client), accountJid)
               if (recoveryNeeded || state.hasServerIdentity) {
                 setPendingIdentityChoice({
                   accountJid,

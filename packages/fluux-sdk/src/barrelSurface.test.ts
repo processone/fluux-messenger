@@ -77,13 +77,19 @@ describe('public API surface', () => {
     // belongs — inside — while the client reads as domain API.
     const client = new XMPPClient()
     try {
-      for (const name of ['mam', 'mds', 'conversationSync', 'entityTime', 'lastActivity']) {
+      for (const name of ['mam', 'mds', 'conversationSync', 'entityTime', 'lastActivity', 'pubsub']) {
         expect(name in client).toBe(false)
       }
       expect(typeof client.internal.mam).toBe('object')
     } finally {
       client.destroy()
     }
+  })
+
+  it('offers the raw PEP read on the escape hatch, not on the client', () => {
+    // Reading a node the SDK does not model means naming the node and walking
+    // its payload: protocol work, and `@fluux/sdk/xmpp` is where that lives.
+    expect(Object.keys(xmpp)).toContain('queryPepNode')
   })
 
   it('names its modules after the domain, not after the XEPs they implement', () => {

@@ -20,6 +20,7 @@ import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle, BackupProbeResult } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
+  pepReaderFor,
   identityChoiceFromProbe,
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
@@ -317,7 +318,7 @@ export function EncryptionSettings() {
         reason: 'local-key-unrecoverable'
       }
       try {
-        const state = await probeRemoteIdentityState(client, bareJid)
+        const state = await probeRemoteIdentityState(pepReaderFor(client), bareJid)
         next = {
           accountJid: bareJid,
           ...identityChoiceFromProbe(state),
@@ -409,7 +410,7 @@ export function EncryptionSettings() {
           ? await plugin.hasNoLocalKey()
           : false
         if (hasNoLocal) {
-          const state = await probeRemoteIdentityState(client, bareJid)
+          const state = await probeRemoteIdentityState(pepReaderFor(client), bareJid)
           if (state.hasServerIdentity) {
             setPendingIdentityChoice({
               accountJid: bareJid,
@@ -469,7 +470,7 @@ export function EncryptionSettings() {
           ? await plugin.hasNoLocalKey()
           : false
       if (!recoveryNeeded && !hasNoLocal) return
-      const state = await probeRemoteIdentityState(client, bareJid)
+      const state = await probeRemoteIdentityState(pepReaderFor(client), bareJid)
       // For a missing key we only prompt when the server has an identity to
       // reconcile against; an unrecoverable local key always needs a decision
       // (import/replace remain available even with no server backup).

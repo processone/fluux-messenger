@@ -65,7 +65,6 @@ import {
   type E2EEErrorKind,
 } from '@fluux/sdk'
 import { discoSupportsPep, getBareJid } from '@fluux/sdk'
-import type { XMPPClient } from '@fluux/sdk/core'
 import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
@@ -907,7 +906,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     let publishedFingerprints: string[] = []
     try {
       publishedFingerprints = await probeRemotePublishedFingerprints(
-        this.makePepProbeAdapter(),
+        this.requireCtx().xmpp.queryPEP,
         ctx.account.jid,
       )
     } catch (err) {
@@ -988,7 +987,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     let identityState
     try {
       identityState = await probeRemoteIdentityState(
-        this.makePepProbeAdapter(),
+        this.requireCtx().xmpp.queryPEP,
         accountJid,
       )
     } catch (err) {
@@ -1015,21 +1014,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           `(from the server backup or a file) or explicitly retire the published identity.`,
       )
     }
-  }
-
-  /**
-   * Adapter that lets the standalone PEP probe helpers (which take an
-   * XMPPClient) run against this plugin's `ctx.xmpp.queryPEP`. The
-   * shape match is exact for the one call site they touch (`pubsub.query`).
-   */
-  protected makePepProbeAdapter(): XMPPClient {
-    const ctx = this.requireCtx()
-    return {
-      pubsub: {
-        query: (jid: string, node: string, max?: number) =>
-          ctx.xmpp.queryPEP(jid, node, max),
-      },
-    } as unknown as XMPPClient
   }
 
   async retractPublicKeys(): Promise<void> {

@@ -24,6 +24,24 @@
  */
 
 import type { XMPPClient } from '@fluux/sdk/core'
+// Raw PEP: XEP-0373's nodes are not modelled by the SDK. This is the only
+// place in the app that reaches for the escape hatch, and `pepReaderFor` is
+// what keeps it to one line.
+import { queryPepNode, type PEPItem } from '@fluux/sdk/xmpp'
+
+/**
+ * Reads items from a PEP node.
+ *
+ * The probes take one of these rather than a client, because they run from two
+ * places that have different things in hand: the settings flow has a client
+ * and no plugin yet, and the plugin has `ctx.xmpp.queryPEP` and no client.
+ */
+export type PepReader = (jid: string, node: string, maxItems?: number) => Promise<PEPItem[]>
+
+/** The reader a caller holding a connected client should pass. */
+export function pepReaderFor(client: XMPPClient): PepReader {
+  return (jid, node, maxItems) => queryPepNode(client, jid, node, maxItems)
+}
 import type { BackupProbeResult } from './OpenPGPPluginBase'
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
@@ -57,12 +75,12 @@ export class SecretKeyBackupProbeError extends Error {
  * module docstring for why we refuse to swallow those.
  */
 export async function probeRemoteSecretKeyBackup(
-  client: XMPPClient,
+  readPep: PepReader,
   bareJid: string,
 ): Promise<string | null> {
-  let items: Awaited<ReturnType<XMPPClient['pubsub']['query']>>
+  let items: PEPItem[]
   try {
-    items = await client.pubsub.query(bareJid, SECRET_KEY_NODE, 1)
+    items = await readPep(bareJid, SECRET_KEY_NODE, 1)
   } catch (err) {
     // `item-not-found` is the only error condition that means "the
     // user has never published a backup" — every server we care about
@@ -129,12 +147,12 @@ export interface RemoteIdentityState {
  * let the caller silent-generate over an existing identity.
  */
 export async function probeRemotePublishedFingerprints(
-  client: XMPPClient,
+  readPep: PepReader,
   bareJid: string,
 ): Promise<string[]> {
-  let items: Awaited<ReturnType<XMPPClient['pubsub']['query']>>
+  let items: PEPItem[]
   try {
-    items = await client.pubsub.query(bareJid, PUBLIC_KEYS_METADATA_NODE, 1)
+    items = await readPep(bareJid, PUBLIC_KEYS_METADATA_NODE, 1)
   } catch (err) {
     if (isItemNotFoundError(err)) return []
     throw new SecretKeyBackupProbeError(err)
@@ -177,12 +195,12 @@ export async function probeRemotePublishedFingerprints(
  * silent-fork decision.
  */
 export async function probeRemoteIdentityState(
-  client: XMPPClient,
+  readPep: PepReader,
   bareJid: string,
 ): Promise<RemoteIdentityState> {
   const [backupMessage, publishedFingerprints] = await Promise.all([
-    probeRemoteSecretKeyBackup(client, bareJid),
-    probeRemotePublishedFingerprints(client, bareJid),
+    probeRemoteSecretKeyBackup(readPep, bareJid),
+    probeRemotePublishedFingerprints(readPep, bareJid),
   ])
   return {
     backupMessage,

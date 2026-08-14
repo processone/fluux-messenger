@@ -120,6 +120,7 @@ export interface InternalModules {
   conversationSync: ConversationSync
   entityTime: EntityTime
   lastActivity: LastActivity
+  pubsub: PubSub
 }
 
 /**
@@ -264,12 +265,6 @@ export class XMPPClient {
    * Handles server feature discovery and HTTP upload service discovery.
    */
   public server!: Discovery
-
-  /**
-   * PubSub module (XEP-0060).
-   * Handles incoming PubSub events for avatars, nicknames, and other PEP data.
-   */
-  public pubsub!: PubSub
 
   /**
    * Blocking module (XEP-0191).
@@ -681,7 +676,7 @@ export class XMPPClient {
 
     this.connection = new Connection(moduleDeps)
     this.connectionActor = this.connection.getConnectionActor()
-    this.pubsub = new PubSub(moduleDeps)
+    const pubsub = new PubSub(moduleDeps)
     const mam = new MAM(moduleDeps)
     this.messages = new Chat(moduleDeps, mam)
     this.poll = new Poll(moduleDeps, this.messages)
@@ -697,7 +692,7 @@ export class XMPPClient {
     this.push = new WebPush(moduleDeps)
     const entityTime = new EntityTime(moduleDeps)
     const lastActivity = new LastActivity(moduleDeps)
-    this.internal = { mam, mds, conversationSync, entityTime, lastActivity }
+    this.internal = { mam, mds, conversationSync, entityTime, lastActivity, pubsub }
 
     // Post-connection orchestration. Drives the domain modules just built; the
     // churny bits (stores, JID, transport) are read through getters so a
@@ -747,7 +742,7 @@ export class XMPPClient {
       // not from the position of a module in this list. See core/stanzaRouting.
       routeStanza(
         stanza,
-        [this.pubsub, this.blocking, this.poll, this.messages, this.rooms, this.contacts],
+        [this.internal.pubsub, this.blocking, this.poll, this.messages, this.rooms, this.contacts],
         [this.internal.lastActivity],
       )
     })
@@ -1797,19 +1792,19 @@ export class XMPPClient {
         return this.server.queryInfo(jid)
       },
       publishPEP: async (node, item, options) => {
-        await this.pubsub.publish(node, item, options)
+        await this.internal.pubsub.publish(node, item, options)
       },
       retractPEP: async (node, itemId) => {
-        await this.pubsub.retract(node, itemId)
+        await this.internal.pubsub.retract(node, itemId)
       },
       deletePEP: async (node) => {
-        await this.pubsub.deleteNode(node)
+        await this.internal.pubsub.deleteNode(node)
       },
       queryPEP: async (jid, node, maxItems) => {
-        return this.pubsub.query(jid, node, maxItems)
+        return this.internal.pubsub.query(jid, node, maxItems)
       },
       subscribePEP: (jid, node, cb) => {
-        return this.pubsub.subscribe(jid, node, cb)
+        return this.internal.pubsub.subscribe(jid, node, cb)
       },
     }
   }

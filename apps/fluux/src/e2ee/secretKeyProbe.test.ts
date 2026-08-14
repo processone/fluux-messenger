@@ -14,9 +14,8 @@ import {
   probeRemoteIdentityState,
   SecretKeyBackupProbeError,
   identityChoiceFromProbe,
+  type PepReader,
 } from './secretKeyProbe'
-import type { XMPPClient } from '@fluux/sdk/core'
-import type { PEPItem } from '@fluux/sdk'
 
 const ALICE = 'alice@example.com'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
@@ -28,14 +27,6 @@ const OX_NS = 'urn:xmpp:openpgp:0'
  * the probe touches. The mock is typed via `unknown` cast — building a
  * full XMPPClient stub is overkill for testing one function.
  */
-function makeClient(
-  query: (jid: string, node: string, maxItems?: number) => Promise<PEPItem[]>,
-): XMPPClient {
-  return {
-    pubsub: { query },
-  } as unknown as XMPPClient
-}
-
 function bytesToBinaryString(bytes: Uint8Array): string {
   const chunks: string[] = []
   const chunkSize = 0x8000
@@ -103,7 +94,7 @@ function encodeOpenPgpArmorForXep0373(armored: string): string {
 describe('probeRemoteSecretKeyBackup', () => {
   it('returns the decoded armored backup when one is published', async () => {
     const armored = makeOpenPgpArmor('PGP MESSAGE', 'fake-backup')
-    const client = makeClient(async (jid, node, maxItems) => {
+    const readPep: PepReader = async (jid, node, maxItems) => {
       expect(jid).toBe(ALICE)
       expect(node).toBe(SECRET_KEY_NODE)
       expect(maxItems).toBe(1)
@@ -117,9 +108,9 @@ describe('probeRemoteSecretKeyBackup', () => {
           },
         },
       ]
-    })
+    }
 
-    const recovered = await probeRemoteSecretKeyBackup(client, ALICE)
+    const recovered = await probeRemoteSecretKeyBackup(readPep, ALICE)
     expect(recovered).toContain('BEGIN PGP MESSAGE')
     expect(readOpenPgpArmorPayloadForTest(recovered!)).toBe('fake-backup')
   })
@@ -127,18 +118,18 @@ describe('probeRemoteSecretKeyBackup', () => {
   it('returns null when the server reports item-not-found', async () => {
     // The canonical "this user has never published a backup" outcome.
     // The flow's auto-fresh-generate branch is the correct response here.
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('item-not-found')
-    })
+    }
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBeNull()
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).resolves.toBeNull()
   })
 
   it('returns null when the node exists but has no parseable items', async () => {
     // A node with stray items (or items in an unknown shape) is also a
     // "no usable backup" answer — we got a successful response from the
     // server, just nothing actionable in it.
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'something-else',
         payload: {
@@ -147,40 +138,40 @@ describe('probeRemoteSecretKeyBackup', () => {
           children: [],
         },
       },
-    ])
+    ]
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBeNull()
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).resolves.toBeNull()
   })
 
   it('throws SecretKeyBackupProbeError on a transient transport failure', async () => {
     // This is THE security-relevant case. A network blip used to be
     // swallowed and treated as "no backup" — letting the settings flow
     // overwrite the existing server backup with a fresh identity.
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('Not connected')
-    })
+    }
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).rejects.toBeInstanceOf(
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
 
   it('throws on a permission error from the server', async () => {
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('forbidden')
-    })
+    }
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).rejects.toBeInstanceOf(
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
 
   it('throws on an IQ timeout', async () => {
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('IQ timeout after 30000ms')
-    })
+    }
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).rejects.toBeInstanceOf(
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
@@ -190,7 +181,7 @@ describe('probeRemoteSecretKeyBackup', () => {
     // — there's *something* there, we just can't read it. Auto-generating
     // a fresh key would still clobber the existing backup, so refuse to
     // silently treat as null.
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -199,9 +190,9 @@ describe('probeRemoteSecretKeyBackup', () => {
           children: ['!!not-valid-base64!!'],
         },
       },
-    ])
+    ]
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).rejects.toBeInstanceOf(
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
@@ -210,12 +201,12 @@ describe('probeRemoteSecretKeyBackup', () => {
     // The caller may want to log the underlying error or surface its
     // message. The wrapper captures it via the `cause` field.
     const original = new Error('Socket not available')
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw original
-    })
+    }
 
     try {
-      await probeRemoteSecretKeyBackup(client, ALICE)
+      await probeRemoteSecretKeyBackup(readPep, ALICE)
       expect.fail('expected SecretKeyBackupProbeError to be thrown')
     } catch (err) {
       expect(err).toBeInstanceOf(SecretKeyBackupProbeError)
@@ -231,14 +222,14 @@ describe('probeRemoteSecretKeyBackup', () => {
     const query = vi.fn(async () => {
       throw new Error('item-not-found')
     })
-    const client = makeClient(query)
-    await probeRemoteSecretKeyBackup(client, ALICE)
+    const readPep: PepReader = query
+    await probeRemoteSecretKeyBackup(readPep, ALICE)
     expect(query).toHaveBeenCalledTimes(1)
   })
 
   it('ignores the legacy Fluux <data/> backup shape', async () => {
     const armored = makeOpenPgpArmor('PGP MESSAGE', 'legacy-backup')
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -253,15 +244,15 @@ describe('probeRemoteSecretKeyBackup', () => {
           ],
         },
       },
-    ])
+    ]
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBeNull()
+    await expect(probeRemoteSecretKeyBackup(readPep, ALICE)).resolves.toBeNull()
   })
 })
 
 describe('probeRemotePublishedFingerprints', () => {
   it('returns the fingerprints listed in the metadata node', async () => {
-    const client = makeClient(async (jid, node, maxItems) => {
+    const readPep: PepReader = async (jid, node, maxItems) => {
       expect(jid).toBe(ALICE)
       expect(node).toBe(PUBLIC_KEYS_METADATA_NODE)
       expect(maxItems).toBe(1)
@@ -285,8 +276,8 @@ describe('probeRemotePublishedFingerprints', () => {
           },
         },
       ]
-    })
-    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    }
+    const fps = await probeRemotePublishedFingerprints(readPep, ALICE)
     expect(fps).toEqual([
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
@@ -297,7 +288,7 @@ describe('probeRemotePublishedFingerprints', () => {
     // Multi-device or rotation history: the metadata can list more than
     // one published key. The probe surfaces them all so callers can detect
     // a non-empty server-side identity regardless of count.
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -317,8 +308,8 @@ describe('probeRemotePublishedFingerprints', () => {
           ],
         },
       },
-    ])
-    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    ]
+    const fps = await probeRemotePublishedFingerprints(readPep, ALICE)
     expect(fps).toEqual(['11'.repeat(20), '22'.repeat(20)])
   })
 
@@ -326,7 +317,7 @@ describe('probeRemotePublishedFingerprints', () => {
     // openpgp.js currently advertises both attrs with the same value when
     // generating v4 keys (RFC 9580 v6 should differ — that's a separate
     // bug). The probe normalizes so callers don't double-count.
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -344,22 +335,22 @@ describe('probeRemotePublishedFingerprints', () => {
           ],
         },
       },
-    ])
-    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    ]
+    const fps = await probeRemotePublishedFingerprints(readPep, ALICE)
     expect(fps).toEqual(['cc'.repeat(20)])
   })
 
   it('returns empty array when the server reports item-not-found', async () => {
     // The canonical "no public key has ever been published" outcome. Safe
     // to proceed to fresh-key generation in this case.
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('item-not-found')
-    })
-    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+    }
+    await expect(probeRemotePublishedFingerprints(readPep, ALICE)).resolves.toEqual([])
   })
 
   it('returns empty array when the node exists but has no public-keys-list item', async () => {
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -368,12 +359,12 @@ describe('probeRemotePublishedFingerprints', () => {
           children: [],
         },
       },
-    ])
-    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+    ]
+    await expect(probeRemotePublishedFingerprints(readPep, ALICE)).resolves.toEqual([])
   })
 
   it('returns empty array when the list is empty', async () => {
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -382,8 +373,8 @@ describe('probeRemotePublishedFingerprints', () => {
           children: [],
         },
       },
-    ])
-    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+    ]
+    await expect(probeRemotePublishedFingerprints(readPep, ALICE)).resolves.toEqual([])
   })
 
   it('throws SecretKeyBackupProbeError on transport failure', async () => {
@@ -391,24 +382,24 @@ describe('probeRemotePublishedFingerprints', () => {
     // collapse to "no published key", because the silent-fork bug downstream
     // is exactly the same — generating a fresh key would publish a fingerprint
     // that competes with whatever is actually on the server.
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('Not connected')
-    })
-    await expect(probeRemotePublishedFingerprints(client, ALICE)).rejects.toBeInstanceOf(
+    }
+    await expect(probeRemotePublishedFingerprints(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
 
   it('throws on permission errors and timeouts', async () => {
-    const forbiddenClient = makeClient(async () => {
+    const forbiddenClient = async () => {
       throw new Error('forbidden')
-    })
+    }
     await expect(probeRemotePublishedFingerprints(forbiddenClient, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
-    const timeoutClient = makeClient(async () => {
+    const timeoutClient = async () => {
       throw new Error('IQ timeout after 30000ms')
-    })
+    }
     await expect(probeRemotePublishedFingerprints(timeoutClient, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
@@ -418,8 +409,8 @@ describe('probeRemotePublishedFingerprints', () => {
     const query = vi.fn(async () => {
       throw new Error('item-not-found')
     })
-    const client = makeClient(query)
-    await probeRemotePublishedFingerprints(client, ALICE)
+    const readPep: PepReader = query
+    await probeRemotePublishedFingerprints(readPep, ALICE)
     expect(query).toHaveBeenCalledTimes(1)
   })
 
@@ -427,7 +418,7 @@ describe('probeRemotePublishedFingerprints', () => {
     // Malformed entry — no v4 or v6 attribute. Skip silently rather than
     // throw: the user clearly has nothing to lose if we treat this entry as
     // absent. The OTHER entries (if any) are still surfaced.
-    const client = makeClient(async () => [
+    const readPep: PepReader = async () => [
       {
         id: 'current',
         payload: {
@@ -439,8 +430,8 @@ describe('probeRemotePublishedFingerprints', () => {
           ],
         },
       },
-    ])
-    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    ]
+    const fps = await probeRemotePublishedFingerprints(readPep, ALICE)
     expect(fps).toEqual(['dd'.repeat(20)])
   })
 })
@@ -451,7 +442,7 @@ describe('probeRemoteIdentityState', () => {
     // need the unified state to decide whether silent generation is safe.
     const armored = makeOpenPgpArmor('PGP MESSAGE', 'fake-backup')
     const calls: string[] = []
-    const client = makeClient(async (_jid, node) => {
+    const readPep: PepReader = async (_jid, node) => {
       calls.push(node)
       if (node === SECRET_KEY_NODE) {
         return [
@@ -484,9 +475,9 @@ describe('probeRemoteIdentityState', () => {
         ]
       }
       throw new Error(`unexpected node: ${node}`)
-    })
+    }
 
-    const state = await probeRemoteIdentityState(client, ALICE)
+    const state = await probeRemoteIdentityState(readPep, ALICE)
     expect(state.backupMessage).toContain('BEGIN PGP MESSAGE')
     expect(state.publishedFingerprints).toEqual(['ee'.repeat(20)])
     expect(state.hasServerIdentity).toBe(true)
@@ -496,10 +487,10 @@ describe('probeRemoteIdentityState', () => {
   })
 
   it('reports no server-side identity when both nodes are absent', async () => {
-    const client = makeClient(async () => {
+    const readPep: PepReader = async () => {
       throw new Error('item-not-found')
-    })
-    const state = await probeRemoteIdentityState(client, ALICE)
+    }
+    const state = await probeRemoteIdentityState(readPep, ALICE)
     expect(state.backupMessage).toBeNull()
     expect(state.publishedFingerprints).toEqual([])
     expect(state.hasServerIdentity).toBe(false)
@@ -511,7 +502,7 @@ describe('probeRemoteIdentityState', () => {
     // metadata and leave the existing private-key holder (another device)
     // unable to receive messages. hasServerIdentity must be true so the
     // guard upstream refuses to generate.
-    const client = makeClient(async (_jid, node) => {
+    const readPep: PepReader = async (_jid, node) => {
       if (node === SECRET_KEY_NODE) throw new Error('item-not-found')
       if (node === PUBLIC_KEYS_METADATA_NODE) {
         return [
@@ -532,9 +523,9 @@ describe('probeRemoteIdentityState', () => {
         ]
       }
       throw new Error(`unexpected node: ${node}`)
-    })
+    }
 
-    const state = await probeRemoteIdentityState(client, ALICE)
+    const state = await probeRemoteIdentityState(readPep, ALICE)
     expect(state.backupMessage).toBeNull()
     expect(state.publishedFingerprints).toEqual(['ff'.repeat(20)])
     expect(state.hasServerIdentity).toBe(true)
@@ -545,7 +536,7 @@ describe('probeRemoteIdentityState', () => {
     // secret-key backup persists. Still NOT safe to silent-generate, because
     // restoring the backup is a legitimate recovery path.
     const armored = makeOpenPgpArmor('PGP MESSAGE', 'orphan-backup')
-    const client = makeClient(async (_jid, node) => {
+    const readPep: PepReader = async (_jid, node) => {
       if (node === SECRET_KEY_NODE) {
         return [
           {
@@ -560,9 +551,9 @@ describe('probeRemoteIdentityState', () => {
       }
       if (node === PUBLIC_KEYS_METADATA_NODE) throw new Error('item-not-found')
       throw new Error(`unexpected node: ${node}`)
-    })
+    }
 
-    const state = await probeRemoteIdentityState(client, ALICE)
+    const state = await probeRemoteIdentityState(readPep, ALICE)
     expect(state.backupMessage).toContain('BEGIN PGP MESSAGE')
     expect(state.publishedFingerprints).toEqual([])
     expect(state.hasServerIdentity).toBe(true)
@@ -571,11 +562,11 @@ describe('probeRemoteIdentityState', () => {
   it('propagates SecretKeyBackupProbeError if either sub-probe throws', async () => {
     // Don't silently degrade: a transient failure on either node means we
     // can't make a safe decision, so the upstream MUST surface a retry.
-    const client = makeClient(async (_jid, node) => {
+    const readPep: PepReader = async (_jid, node) => {
       if (node === SECRET_KEY_NODE) throw new Error('item-not-found')
       throw new Error('Not connected')
-    })
-    await expect(probeRemoteIdentityState(client, ALICE)).rejects.toBeInstanceOf(
+    }
+    await expect(probeRemoteIdentityState(readPep, ALICE)).rejects.toBeInstanceOf(
       SecretKeyBackupProbeError,
     )
   })
