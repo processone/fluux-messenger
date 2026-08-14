@@ -223,7 +223,7 @@ describe('XMPPClient Presence', () => {
     it('should emit presence event with aggregated presence', async () => {
       await connectClient()
       const presenceHandler = vi.fn()
-      xmppClient.on('presence', presenceHandler)
+      xmppClient.internal.on('presence', presenceHandler)
 
       const presenceStanza = createMockElement('presence', {
         from: 'contact@example.com/resource',

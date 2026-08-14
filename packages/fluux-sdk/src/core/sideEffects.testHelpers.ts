@@ -42,6 +42,11 @@ export function createMockClient() {
       queryRoomMAM: vi.fn().mockResolvedValue(undefined),
     },
     internal: {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!handlers.has(event)) handlers.set(event, new Set())
+        handlers.get(event)!.add(handler)
+        return () => handlers.get(event)?.delete(handler)
+      }),
       mam: {
         refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
         refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
@@ -61,11 +66,6 @@ export function createMockClient() {
     isConnected: vi.fn().mockReturnValue(true),
     retryPendingDecrypts: vi.fn().mockResolvedValue(0),
     e2ee: null as any,
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      if (!handlers.has(event)) handlers.set(event, new Set())
-      handlers.get(event)!.add(handler)
-      return () => handlers.get(event)?.delete(handler)
-    }),
     subscribe: vi.fn((event: string, handler: (payload: unknown) => void) => {
       if (!sdkHandlers.has(event)) sdkHandlers.set(event, new Set())
       sdkHandlers.get(event)!.add(handler)

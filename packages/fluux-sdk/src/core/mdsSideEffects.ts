@@ -821,7 +821,7 @@ export function setupMdsSideEffects(
 
   // Fresh session: seed from the node, then enable publishing. Publishing stays
   // disabled for the whole async seed so the seeded positions aren't republished.
-  const unsubscribeOnline = client.on('online', () => {
+  const unsubscribeOnline = client.internal.on('online', () => {
     syncEnabled = false
     sessionEpoch++
     nodeSnapshotAuthoritative = false
@@ -931,7 +931,7 @@ export function setupMdsSideEffects(
   )
 
   // SM resumption: server replays notifications; keep publishing enabled, no reseed.
-  const unsubscribeResumed = client.on('resumed', () => {
+  const unsubscribeResumed = client.internal.on('resumed', () => {
     dirty.open()
     lastConsideredPointerIdentity.clear()
     syncEnabled = true

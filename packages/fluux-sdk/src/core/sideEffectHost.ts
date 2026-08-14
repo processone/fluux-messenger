@@ -102,7 +102,7 @@ export interface E2EEWarmupHost {
  *
  * @category Internal
  */
-export interface SideEffectHost extends SDKEventSource, ClientEventSource {
+export interface SideEffectHost extends SDKEventSource {
   isConnected(): boolean
   /** Re-runs decryption for payloads stashed while the key was unavailable. */
   retryPendingDecrypts(): Promise<number>
@@ -117,6 +117,8 @@ export interface SideEffectHost extends SDKEventSource, ClientEventSource {
    * exposed elsewhere.
    */
   readonly internal: {
+    /** The client's own signal bus (see `ClientEventSource`). */
+    readonly on: ClientEventSource['on']
     readonly mam: MamSideEffectHost
     readonly mds: MdsSideEffectHost
     readonly conversationSync: ConversationSyncSideEffectHost

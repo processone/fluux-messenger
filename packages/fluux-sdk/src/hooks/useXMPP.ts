@@ -50,22 +50,6 @@ import type { Element } from '@xmpp/client'
  * }
  * ```
  *
- * @example Subscribing to client events
- * ```tsx
- * function ConnectionMonitor() {
- *   const { on } = useXMPP()
- *
- *   useEffect(() => {
- *     const unsubscribe = on('online', () => {
- *       console.log('Connected')
- *     })
- *     return unsubscribe
- *   }, [on])
- *
- *   return null
- * }
- * ```
- *
  * @example Building stanzas with the xml helper
  * ```tsx
  * // The builder is protocol vocabulary, so it comes from the escape hatch
@@ -111,16 +95,6 @@ export function useXMPP() {
     [client]
   )
 
-  const on = useCallback(
-    <K extends keyof import('../core/types').XMPPClientEvents>(
-      event: K,
-      handler: import('../core/types').XMPPClientEvents[K]
-    ) => {
-      return client.on(event, handler)
-    },
-    [client]
-  )
-
   return {
     /**
      * The underlying XMPPClient instance.
@@ -137,11 +111,6 @@ export function useXMPP() {
      * Subscribe to raw stanza events
      */
     onStanza,
-
-    /**
-     * Subscribe to any client event
-     */
-    on,
 
     /**
      * Set presence status

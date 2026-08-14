@@ -515,7 +515,7 @@ export function setupBackgroundSyncSideEffects(
   // A transport 'online' starts fresh-session sync. An uninterrupted resume can
   // also be followed by a synthetic 'online' when cache integrity forces full
   // setup; preserve the resume boundary and confirmed joins on that upgrade.
-  const unsubscribeOnline = client.on('online', () => {
+  const unsubscribeOnline = client.internal.on('online', () => {
     const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     uninterruptedResumeMayEmitSyntheticOnline = false
     sessionGeneration += 1
@@ -557,7 +557,7 @@ export function setupBackgroundSyncSideEffects(
   // is a `{ before: '' }` fetch-latest that populates the archive and sets the
   // preview; a gap-open room forward-fills from its recorded gap). Caught-up rooms
   // are skipped, so this stays out of SM's "server replays, no MAM" path.
-  const unsubscribeResumed = client.on('resumed', () => {
+  const unsubscribeResumed = client.internal.on('resumed', () => {
     sessionGeneration += 1
     uninterruptedResumeMayEmitSyntheticOnline = true
     isFreshSession = false

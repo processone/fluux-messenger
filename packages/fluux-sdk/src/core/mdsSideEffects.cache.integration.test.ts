@@ -80,12 +80,11 @@ function makeClient() {
     retractDisplayed: vi.fn().mockResolvedValue(undefined),
   }
   return {
-    on: register,
     subscribe: register,
     _emit: (event: string, payload?: unknown) => {
       for (const handler of handlers[event] ?? []) handler(payload)
     },
-    internal: { mds },
+    internal: { on: register, mds },
   }
 }
 

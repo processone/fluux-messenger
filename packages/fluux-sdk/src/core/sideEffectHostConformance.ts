@@ -31,4 +31,9 @@ type Provides<Contract> = XMPPClient extends Contract ? true : false
 // against the interface named in the alias to find the member that drifted.
 export type ClientProvidesSideEffectHost = Assert<Provides<SideEffectHost>>
 export type ClientProvidesSDKEventSource = Assert<Provides<SDKEventSource>>
-export type ClientProvidesClientEventSource = Assert<Provides<ClientEventSource>>
+// The signal bus is deliberately NOT on the client's public surface: a
+// consumer subscribes to SDK events, or reads raw stanzas through `onStanza`.
+// It is reachable on the internal surface, and that is what must keep holding.
+export type ClientInternalProvidesClientEventSource = Assert<
+  XMPPClient['internal'] extends ClientEventSource ? true : false
+>

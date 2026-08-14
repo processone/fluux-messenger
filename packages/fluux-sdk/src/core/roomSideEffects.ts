@@ -320,7 +320,7 @@ export function setupRoomSideEffects(
   // Fresh sessions require a self-presence confirmation before room MAM starts.
   // A missing-marker upgrade can also emit a synthetic 'online' after 'resumed';
   // that uninterrupted path must retain resume-seeded fetch tracking.
-  const unsubscribeOnline = client.on('online', () => {
+  const unsubscribeOnline = client.internal.on('online', () => {
     const followsUninterruptedResume = uninterruptedResumeMayEmitSyntheticOnline
     freshSessionRequiresJoinConfirmation = true
     if (!followsUninterruptedResume) {
@@ -358,7 +358,7 @@ export function setupRoomSideEffects(
   // after a reconnect" bug). hasQueried (set on any completed MAM query, even an
   // empty result) is the durable signal; it's separate from "has resident
   // messages" so a room caught up via live delivery is still covered.
-  const unsubscribeResumed = client.on('resumed', () => {
+  const unsubscribeResumed = client.internal.on('resumed', () => {
     // A missing cache marker upgrades this same transport session to full fresh
     // setup, which emits a synthetic online only after room rejoins can finish.
     // Keep that next online distinguishable from a later fresh transport session.

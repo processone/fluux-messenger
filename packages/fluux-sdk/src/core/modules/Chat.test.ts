@@ -145,7 +145,7 @@ describe('XMPPClient Message', () => {
     it('should emit message event for incoming messages', async () => {
       await connectClient()
       const messageHandler = vi.fn()
-      xmppClient.on('message', messageHandler)
+      xmppClient.internal.on('message', messageHandler)
 
       const messageStanza = createMockElement('message', {
         from: 'contact@example.com',
@@ -389,7 +389,7 @@ describe('XMPPClient Message', () => {
     it('should NOT emit message event for sent carbons', async () => {
       await connectClient()
       const messageHandler = vi.fn()
-      xmppClient.on('message', messageHandler)
+      xmppClient.internal.on('message', messageHandler)
 
       const carbonStanza = createMockElement('message', {
         from: 'user@example.com',

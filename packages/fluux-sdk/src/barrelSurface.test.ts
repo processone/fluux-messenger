@@ -86,6 +86,22 @@ describe('public API surface', () => {
     }
   })
 
+  it('offers one event bus to a consumer, not two', () => {
+    // `subscribe` carries the state the stores are built from. The client's own
+    // signal bus is what the SDK's side effects listen to, and it moved to the
+    // internal surface so nobody has to guess which of the two to reach for.
+    // `onStanza` stays: it is the named door to the raw feed.
+    const client = new XMPPClient()
+    try {
+      expect('on' in client).toBe(false)
+      expect(typeof client.subscribe).toBe('function')
+      expect(typeof client.onStanza).toBe('function')
+      expect(typeof client.internal.on).toBe('function')
+    } finally {
+      client.destroy()
+    }
+  })
+
   it('offers the raw PEP read on the escape hatch, not on the client', () => {
     // Reading a node the SDK does not model means naming the node and walking
     // its payload: protocol work, and `@fluux/sdk/xmpp` is where that lives.

@@ -114,7 +114,7 @@ export function setupConversationSyncSideEffects(
   // handleFreshSession's merge complete. The 'online' event fires
   // at the end of handleFreshSession, and background sync starts
   // creating conversations after that.
-  const unsubscribeOnline = client.on('online', () => {
+  const unsubscribeOnline = client.internal.on('online', () => {
     syncEnabled = false
     lastPublishedSnapshot = undefined
 
@@ -126,7 +126,7 @@ export function setupConversationSyncSideEffects(
   })
 
   // SM resumption: no sync needed
-  const unsubscribeResumed = client.on('resumed', () => {
+  const unsubscribeResumed = client.internal.on('resumed', () => {
     syncEnabled = false
   })
 

@@ -166,7 +166,7 @@ export function setupChatSideEffects(
 
   // Fresh session: catch up MAM for the active conversation.
   // 'online' fires only on fresh sessions (not SM resumption).
-  const unsubscribeOnline = client.on('online', () => {
+  const unsubscribeOnline = client.internal.on('online', () => {
     isFreshSession = true
     sessionStartTime = Date.now()
 
@@ -183,7 +183,7 @@ export function setupChatSideEffects(
   })
 
   // SM resumption: no MAM catchup needed — server replays undelivered stanzas
-  const unsubscribeResumed = client.on('resumed', () => {
+  const unsubscribeResumed = client.internal.on('resumed', () => {
     isFreshSession = false
     if (debug) console.log('[SideEffects] Chat: SM resumption — skipping MAM catchup')
 

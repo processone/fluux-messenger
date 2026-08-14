@@ -234,10 +234,9 @@ function makeClient() {
     retractDisplayed: vi.fn().mockResolvedValue(undefined),
   }
   return {
-    on: register,
     subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
-    internal: { mds },
+    internal: { on: register, mds },
   }
 }
 

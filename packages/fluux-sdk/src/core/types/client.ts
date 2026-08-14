@@ -33,18 +33,22 @@ export type {
 // ============================================================================
 
 /**
- * The client's public event surface, and a compatibility contract.
+ * The shape of the client's own signal bus.
  *
- * `@fluux/sdk/core` is consumed directly by bots and CLIs, for which these
- * events are the API: removing or changing one breaks them. Anything the SDK
- * emits purely to talk to itself belongs in {@link InternalClientEvents}
- * instead, so the two are not mistaken for each other.
+ * Connection lifecycle and raw stanzas, which the SDK's side effects listen
+ * to. It is reached on `client.internal`, not on the client: a consumer
+ * observes through `client.subscribe`, which carries the state the stores are
+ * built from, or through `client.onStanza` for the raw feed. Two buses on the
+ * public surface meant guessing which one to reach for, and the SDK's own
+ * documentation guessed wrong.
+ *
+ * Anything the SDK emits purely to talk to itself belongs in
+ * {@link InternalClientEvents} instead, so the two are not mistaken for each
+ * other.
  *
  * @example
  * ```typescript
- * client.on('message', (msg) => console.log('New message:', msg.body))
- * client.on('online', () => console.log('Connected!'))
- * client.on('error', (err) => console.error('Error:', err))
+ * client.internal.on('online', () => console.log('Connected!'))
  * ```
  *
  * @category Core

@@ -208,11 +208,10 @@ function makeClient() {
 
   return {
     // Connection lifecycle events ('online'/'resumed') use client.on(...).
-    on: register,
     // SDK events ('read:displayed-synced') use client.subscribe(...).
     subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
-    internal: { mds },
+    internal: { on: register, mds },
   }
 }
 

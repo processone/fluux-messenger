@@ -18,6 +18,10 @@
  * - **`@fluux/sdk/core`** - Core-only: XMPPClient, types (for bots/CLI/other frameworks)
  * - **`@fluux/sdk/stores`** - Direct Zustand store access
  *
+ * Everything the SDK observes reaches you through one bus: `client.subscribe`,
+ * or the hooks built on it. Raw stanzas have their own named door,
+ * `client.onStanza`.
+ *
  * None of those describes XMPP on the wire: conversations, rooms, contacts and
  * presence are the vocabulary, and no XEP has to be read to use them. Raw
  * namespaces, the stanza builder and the wire parsers are the escape hatch on

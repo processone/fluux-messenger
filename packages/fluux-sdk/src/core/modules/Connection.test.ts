@@ -2222,7 +2222,7 @@ describe('XMPPClient Connection', () => {
   describe('event emitter', () => {
     it('should emit online event on connection', async () => {
       const onlineHandler = vi.fn()
-      xmppClient.on('online', onlineHandler)
+      xmppClient.internal.on('online', onlineHandler)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -2239,7 +2239,7 @@ describe('XMPPClient Connection', () => {
 
     it('should allow unsubscribing from events', async () => {
       const handler = vi.fn()
-      const unsubscribe = xmppClient.on('online', handler)
+      const unsubscribe = xmppClient.internal.on('online', handler)
 
       // Unsubscribe before connecting
       unsubscribe()

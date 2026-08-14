@@ -114,7 +114,14 @@ import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, d
  *
  * @internal
  */
-export interface InternalModules {
+export interface InternalSurface {
+  /**
+   * The client's own signal bus: connection lifecycle and raw stanzas, which
+   * the SDK's side effects listen to. A consumer uses `subscribe` instead —
+   * that bus carries the state the stores are built from — or `onStanza` for
+   * the raw feed.
+   */
+  on<K extends keyof XMPPClientEvents>(event: K, handler: XMPPClientEvents[K]): () => void
   mam: MAM
   mds: Mds
   conversationSync: ConversationSync
@@ -302,7 +309,7 @@ export class XMPPClient {
    *
    * @internal
    */
-  public internal!: InternalModules
+  public internal!: InternalSurface
 
   /**
    * Web Push module (p1:push).
@@ -692,7 +699,10 @@ export class XMPPClient {
     this.push = new WebPush(moduleDeps)
     const entityTime = new EntityTime(moduleDeps)
     const lastActivity = new LastActivity(moduleDeps)
-    this.internal = { mam, mds, conversationSync, entityTime, lastActivity, pubsub }
+    this.internal = {
+      on: (event, handler) => this.subscribeToBus(event, handler as ClientEvents[typeof event]),
+      mam, mds, conversationSync, entityTime, lastActivity, pubsub,
+    }
 
     // Post-connection orchestration. Drives the domain modules just built; the
     // churny bits (stores, JID, transport) are read through getters so a
@@ -843,32 +853,6 @@ export class XMPPClient {
   // Event Handling
   // ============================================================================
 
-  /**
-   * Subscribe to client events.
-   *
-   * @param event - The event name to subscribe to
-   * @param handler - The callback function to invoke when the event fires
-   * @returns A function to unsubscribe from the event
-   *
-   * @example
-   * ```typescript
-   * // Subscribe to message events
-   * const unsubscribe = client.on('message', (message) => {
-   *   console.log('Received:', message.body)
-   * })
-   *
-   * // Later, unsubscribe
-   * unsubscribe()
-   * ```
-   */
-  on<K extends keyof XMPPClientEvents>(
-    event: K,
-    handler: XMPPClientEvents[K]
-  ): () => void {
-    // `ClientEvents` is the intersection, so for a public K the two handler
-    // types are the same; TypeScript cannot see that through the generic.
-    return this.subscribeToBus(event, handler as ClientEvents[K])
-  }
 
   /**
    * Subscribe to a signal the client raises for itself. Separate from {@link on}
@@ -973,7 +957,7 @@ export class XMPPClient {
    * ```
    */
   onStanza(handler: (stanza: Element) => void): () => void {
-    return this.on('stanza', handler)
+    return this.subscribeToBus('stanza', handler)
   }
 
   // ============================================================================
