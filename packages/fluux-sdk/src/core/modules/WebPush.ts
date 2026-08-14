@@ -88,18 +88,6 @@ export class WebPush extends BaseModule {
   }
 
   /**
-   * Register a web push subscription with the server.
-   *
-   * Sends a `<push xmlns='p1:push'>` IQ with the browser push subscription
-   * details (endpoint, p256dh key, auth secret) to register for push
-   * notifications.
-   *
-   * @param endpoint - Push service endpoint URL from PushSubscription
-   * @param p256dh - Client public key (base64 encoded) from PushSubscription.getKey('p256dh')
-   * @param auth - Authentication secret (base64 encoded) from PushSubscription.getKey('auth')
-   * @param appId - Application identifier from the VAPID service
-   */
-  /**
    * Disable push notifications on the server for a specific device.
    *
    * Sends a `<disable xmlns='p1:push'>` IQ with the app ID and device token
@@ -143,6 +131,18 @@ export class WebPush extends BaseModule {
     }
   }
 
+  /**
+   * Register a web push subscription with the server.
+   *
+   * Sends a `<push xmlns='p1:push'>` IQ with the browser push subscription
+   * details (endpoint, p256dh key, auth secret) to register for push
+   * notifications.
+   *
+   * @param endpoint - Push service endpoint URL from PushSubscription
+   * @param p256dh - Client public key (base64 encoded) from PushSubscription.getKey('p256dh')
+   * @param auth - Authentication secret (base64 encoded) from PushSubscription.getKey('auth')
+   * @param appId - Application identifier from the VAPID service
+   */
   async registerSubscription(
     endpoint: string,
     p256dh: string,

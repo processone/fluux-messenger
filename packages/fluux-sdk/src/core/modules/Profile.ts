@@ -283,13 +283,6 @@ export class Profile extends BaseModule {
   }
 
   /**
-   * Fetch a room's avatar from its vCard (XEP-0054).
-   * MUC rooms don't support PEP, so avatars are always via vCard-temp.
-   *
-   * @param roomJid - The room's bare JID
-   * @param knownHash - Optional hash from XEP-0153 presence (used for cache key)
-   */
-  /**
    * Fetch an occupant's avatar from their vCard (XEP-0398).
    *
    * XEP-0398 defines how MUC occupant avatars work:
@@ -457,6 +450,13 @@ export class Profile extends BaseModule {
     }
   }
 
+  /**
+   * Fetch a room's avatar from its vCard (XEP-0054).
+   * MUC rooms don't support PEP, so avatars are always via vCard-temp.
+   *
+   * @param roomJid - The room's bare JID
+   * @param knownHash - Optional hash from XEP-0153 presence (used for cache key)
+   */
   async fetchRoomAvatar(roomJid: string, knownHash?: string): Promise<void> {
     const bareJid = getBareJid(roomJid)
 

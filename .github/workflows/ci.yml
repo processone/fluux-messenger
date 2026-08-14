@@ -72,7 +72,7 @@ jobs:
       # Before `npm ci`, because it needs no dependencies and fails in under a
       # second: a comment regression should not wait on an install and a build.
       # The gate validates itself before it gates anything, as the classifier does.
-      - name: Comments describe the code, not the development history
+      - name: Comments describe the code they are attached to
         run: npm run check:comments
 
       - name: Install dependencies
