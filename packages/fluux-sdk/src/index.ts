@@ -607,6 +607,10 @@ export type { ConnectionErrorKind } from './core/modules/transportErrors'
 
 // MUC join failure error (rejected by client.rooms.joinResult)
 export { RoomJoinError, WhisperCounterpartGoneError, HatCommandError, IQTimeoutError } from './core/errors'
+// The reason a join failed, stated in the application's terms. Exported with
+// its resolver so a consumer can classify a condition it obtained elsewhere.
+export { roomJoinReasonFor } from './core/errors'
+export type { RoomJoinReason } from './core/errors'
 
 // XEP-0045: MUC Permission Utilities
 export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'

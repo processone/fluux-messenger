@@ -5,8 +5,8 @@ import { getRoomJoinErrorMessage } from './roomJoinError'
 // Identity translate fn: returns the key so assertions read as i18n keys.
 const t = (key: string) => key
 
-const err = (condition: string, text?: string) =>
-  new RoomJoinError('room@conference.example.com', condition, undefined, text)
+const err = (condition: string, text?: string, passwordSent?: boolean) =>
+  new RoomJoinError('room@conference.example.com', condition, undefined, text, { passwordSent })
 
 describe('getRoomJoinErrorMessage', () => {
   it('maps not-authorized to passwordRequired when no password was sent', () => {
@@ -14,7 +14,7 @@ describe('getRoomJoinErrorMessage', () => {
   })
 
   it('maps not-authorized to incorrectPassword when a password was sent', () => {
-    expect(getRoomJoinErrorMessage(t, err('not-authorized'), { passwordWasSent: true })).toBe(
+    expect(getRoomJoinErrorMessage(t, err('not-authorized', undefined, true))).toBe(
       'rooms.incorrectPassword',
     )
   })

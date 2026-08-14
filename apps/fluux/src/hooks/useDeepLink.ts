@@ -89,9 +89,7 @@ export function useDeepLink() {
         await joinRoom(roomJid, nickname, Object.keys(joinOptions).length > 0 ? joinOptions : undefined)
         await joinResult(roomJid)
       } catch (err) {
-        // A deep link can carry a password, so distinguish "incorrect password"
-        // from "password required" when the server rejects with not-authorized.
-        addToast('error', getRoomJoinErrorMessage(t, err, { passwordWasSent: !!password }))
+        addToast('error', getRoomJoinErrorMessage(t, err))
       }
 
       // Navigate to the room regardless of outcome: on failure the user lands on

@@ -72,12 +72,13 @@ describe('useSDKErrorToasts', () => {
     )
   })
 
-  it('should translate the condition of a failed rejoin', () => {
+  it('should translate the reason of a failed rejoin', () => {
     renderHook(() => useSDKErrorToasts())
 
     const callback = mockSubscribe.mock.calls.find(([name]) => name === 'room:autojoin-error')![1]
     callback({
       roomJid: 'team@conference.example.com',
+      reason: 'nickname-taken',
       error: 'Room join failed: conflict',
       condition: 'conflict',
     })
@@ -85,12 +86,13 @@ describe('useSDKErrorToasts', () => {
     expect(mockAddToast).toHaveBeenCalledWith('error', 'Could not rejoin team: Nickname already in use')
   })
 
-  it('should fall back to the server text on an unrecognized condition', () => {
+  it('should fall back to the server text on an unrecognized reason', () => {
     renderHook(() => useSDKErrorToasts())
 
     const callback = mockSubscribe.mock.calls.find(([name]) => name === 'room:autojoin-error')![1]
     callback({
       roomJid: 'team@conference.example.com',
+      reason: 'unknown',
       error: 'The service is going down for maintenance',
       condition: 'system-shutdown',
     })

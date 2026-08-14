@@ -13,6 +13,7 @@ import type { Message, Conversation } from './chat'
 import type { StoredMessage, StoredRoomMessage } from './message-internal'
 import type { Contact, PresenceShow, VCardInfo } from './roster'
 import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, RoomRole } from './room'
+import type { RoomJoinReason } from '../errors'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
@@ -472,6 +473,8 @@ export interface RoomEvents {
    */
   'room:autojoin-error': {
     roomJid: string
+    /** What the caller can act on, already resolved from the wire condition */
+    reason: RoomJoinReason
     /** Human-readable error message (prefers server text, falls back to the condition) */
     error: string
     /** RFC 6120 error condition, or the synthetic 'timeout' (e.g. 'conflict', 'forbidden') */

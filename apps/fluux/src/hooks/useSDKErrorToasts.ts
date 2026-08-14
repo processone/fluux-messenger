@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useXMPP, getLocalPart } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
-import { getRoomJoinConditionMessage } from '@/utils/roomJoinError'
+import { getRoomJoinReasonMessage } from '@/utils/roomJoinError'
 
 /**
  * Surfaces an SDK error event as a toast when no better place exists to show it.
@@ -26,10 +26,10 @@ export function useSDKErrorToasts(): void {
       client.subscribe('room:invite-error', ({ error }) => {
         addToast('error', t('rooms.inviteRejected', { error }))
       }),
-      client.subscribe('room:autojoin-error', ({ roomJid, condition, error }) => {
+      client.subscribe('room:autojoin-error', ({ roomJid, reason, error }) => {
         addToast('error', t('rooms.couldNotRejoin', {
           room: getLocalPart(roomJid) || roomJid,
-          reason: getRoomJoinConditionMessage(t, condition, error),
+          reason: getRoomJoinReasonMessage(t, reason, error),
         }))
       }),
     ]

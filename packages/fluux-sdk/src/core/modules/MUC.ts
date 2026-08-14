@@ -552,18 +552,21 @@ export class MUC extends BaseModule {
    */
   private failJoin(stanza: Element, roomJid: string): void {
     const error = parseXMPPError(stanza)
-    const reason = error ? formatXMPPError(error) : 'unknown'
-    console.error(`[MUC] Room error for ${roomJid}: ${reason}`)
+    const summary = error ? formatXMPPError(error) : 'unknown'
+    console.error(`[MUC] Room error for ${roomJid}: ${summary}`)
+    // Read before clearPendingJoin drops it: whether the refused join carried a
+    // password is what separates "asks for one" from "that one was wrong".
+    const passwordSent = Boolean(this.pendingJoins.get(roomJid)?.options?.password)
     // Surface in the exportable XMPP console as an at-a-glance error event
     // (the raw error stanza is already logged, this is the readable summary).
-    this.deps.emitSDK('console:event', { message: `Failed to join ${roomJid}: ${reason}`, category: 'error' })
+    this.deps.emitSDK('console:event', { message: `Failed to join ${roomJid}: ${summary}`, category: 'error' })
     this.clearPendingJoin(roomJid) // stops the retry on terminal errors
     this.pendingOccupants.delete(roomJid)
     // SDK event only - binding calls store.updateRoom
     this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
     this.settleJoinError(
       roomJid,
-      new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text)
+      new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text, { passwordSent })
     )
   }
 
@@ -591,6 +594,7 @@ export class MUC extends BaseModule {
       const joinError = err instanceof RoomJoinError ? err : null
       this.deps.emitSDK('room:autojoin-error', {
         roomJid,
+        reason: joinError?.reason ?? 'unknown',
         error: err instanceof Error ? err.message : String(err),
         condition: joinError?.condition ?? 'undefined-condition',
         errorType: joinError?.errorType,

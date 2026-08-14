@@ -68,7 +68,8 @@ export function useRoomPasswordPrompt() {
   const withPasswordPrompt = useCallback(
     async (attempt: (password?: string) => Promise<void>): Promise<boolean> => {
       const isPasswordRefusal = (err: unknown) =>
-        err instanceof RoomJoinError && err.condition === 'not-authorized'
+        err instanceof RoomJoinError &&
+        (err.reason === 'password-required' || err.reason === 'wrong-password')
 
       try {
         await attempt()

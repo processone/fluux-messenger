@@ -48,17 +48,17 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
     if (focusTarget) setFocusTarget(null)
   }, [focusTarget])
 
-  const showJoinError = (err: unknown, passwordWasSent: boolean) => {
+  const showJoinError = (err: unknown) => {
     // Field side-effects stay here; the message text comes from the shared helper.
     if (err instanceof RoomJoinError) {
-      if (err.condition === 'not-authorized') {
+      if (err.reason === 'password-required' || err.reason === 'wrong-password') {
         setShowPassword(true)
         setFocusTarget('password')
-      } else if (err.condition === 'conflict') {
+      } else if (err.reason === 'nickname-taken') {
         setFocusTarget('nickname')
       }
     }
-    setError(getRoomJoinErrorMessage(t, err, { passwordWasSent }))
+    setError(getRoomJoinErrorMessage(t, err))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,18 +86,17 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
 
     // Room passwords are opaque XMPP strings — do not trim (preserve any
     // intentional surrounding whitespace).
-    const passwordWasSent = password.length > 0
     setJoining(true)
     try {
       // Issue #37: warn before joining a room that would expose the user's real JID.
       if (!(await confirmJoin(trimmedRoomJid))) return
-      await joinRoom(trimmedRoomJid, trimmedNickname, passwordWasSent ? { password } : undefined)
+      await joinRoom(trimmedRoomJid, trimmedNickname, password.length > 0 ? { password } : undefined)
       await joinResult(trimmedRoomJid)
       void setActiveConversation(null)
       void setActiveRoom(trimmedRoomJid)
       onClose()
     } catch (err) {
-      showJoinError(err, passwordWasSent)
+      showJoinError(err)
     } finally {
       setJoining(false)
     }

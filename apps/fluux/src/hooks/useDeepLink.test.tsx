@@ -13,15 +13,33 @@ const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
 
 const { RoomJoinError } = vi.hoisted(() => {
+  // Mirrors the SDK's own condition-to-reason resolution. Kept local because
+  // these suites mock the SDK barrel wholesale rather than importing it.
+  const REASONS: Record<string, string> = {
+    conflict: 'nickname-taken',
+    'registration-required': 'members-only',
+    forbidden: 'banned',
+    'service-unavailable': 'room-full',
+    'not-acceptable': 'registered-nickname-required',
+    'item-not-found': 'room-not-found',
+    timeout: 'timed-out',
+  }
+
   class RoomJoinError extends Error {
+    readonly reason: string
     constructor(
       public roomJid: string,
       public condition: string,
       public errorType?: string,
       public text?: string,
+      options?: { passwordSent?: boolean },
     ) {
       super(text || `Room join failed: ${condition}`)
       this.name = 'RoomJoinError'
+      this.reason =
+        condition === 'not-authorized'
+          ? options?.passwordSent ? 'wrong-password' : 'password-required'
+          : REASONS[condition] ?? 'unknown'
     }
   }
   return { RoomJoinError }

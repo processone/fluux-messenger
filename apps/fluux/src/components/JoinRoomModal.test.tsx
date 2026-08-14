@@ -12,15 +12,33 @@ const { mockJoinRoom, mockJoinResult, mockSetActiveRoom, mockSetActiveConversati
 
   // Minimal stand-in for the SDK's RoomJoinError so `instanceof` works in the
   // component (which imports it from the mocked '@fluux/sdk').
+  // Mirrors the SDK's own condition-to-reason resolution. Kept local because
+  // these suites mock the SDK barrel wholesale rather than importing it.
+  const REASONS: Record<string, string> = {
+    conflict: 'nickname-taken',
+    'registration-required': 'members-only',
+    forbidden: 'banned',
+    'service-unavailable': 'room-full',
+    'not-acceptable': 'registered-nickname-required',
+    'item-not-found': 'room-not-found',
+    timeout: 'timed-out',
+  }
+
   class RoomJoinError extends Error {
+    readonly reason: string
     constructor(
       public roomJid: string,
       public condition: string,
       public errorType?: string,
       public text?: string,
+      options?: { passwordSent?: boolean },
     ) {
       super(text || `Room join failed: ${condition}`)
       this.name = 'RoomJoinError'
+      this.reason =
+        condition === 'not-authorized'
+          ? options?.passwordSent ? 'wrong-password' : 'password-required'
+          : REASONS[condition] ?? 'unknown'
     }
   }
 
@@ -328,8 +346,12 @@ describe('JoinRoomModal', () => {
       expect(mockOnClose).not.toHaveBeenCalled()
     })
 
-    it('shows "incorrect password" when a password was already supplied', async () => {
-      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.com', 'not-authorized', 'auth'))
+    // The SDK decides this, not the form: the error carries `wrong-password`
+    // only because the join it refused actually carried one.
+    it('shows "incorrect password" when the refused join carried a password', async () => {
+      mockJoinResult.mockRejectedValue(
+        new RoomJoinError('room@conference.example.com', 'not-authorized', 'auth', undefined, { passwordSent: true })
+      )
       render(<JoinRoomModal onClose={mockOnClose} />)
       fillRoom()
 

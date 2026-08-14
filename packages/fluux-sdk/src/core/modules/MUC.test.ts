@@ -955,6 +955,41 @@ describe('MUC Module', () => {
         updates: expect.objectContaining({ password: expect.anything() }),
       })
     })
+
+    // The refusal reads the same on the wire either way; only the join knows
+    // whether it sent a password, and it must be read before the pending join
+    // is cleared.
+    const refuse = () =>
+      muc.handle(createMockElement('presence', { from: `${ROOM}/mynick`, type: 'error' }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [{ name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }],
+        },
+      ]))
+
+    it('reports a refused password as wrong-password', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.joinRoom(ROOM, 'mynick', { password: 'wrong' })
+      const result = muc.joinResult(ROOM)
+      refuse()
+
+      await expect(result).rejects.toMatchObject({ reason: 'wrong-password' })
+    })
+
+    it('reports a locked room joined without a password as password-required', async () => {
+      mockStores.room.getRoom.mockReturnValue(storedRoom())
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.joinRoom(ROOM, 'mynick')
+      const result = muc.joinResult(ROOM)
+      refuse()
+
+      await expect(result).rejects.toMatchObject({ reason: 'password-required' })
+    })
   })
 
   describe('removeBookmark', () => {
@@ -2833,6 +2868,7 @@ describe('MUC Module', () => {
 
       expect(mockEmitSDK).toHaveBeenCalledWith('room:autojoin-error', {
         roomJid: ROOM,
+        reason: 'nickname-taken',
         error: 'Nickname is taken',
         condition: 'conflict',
         errorType: 'cancel',

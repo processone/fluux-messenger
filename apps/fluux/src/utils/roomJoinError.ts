@@ -1,40 +1,41 @@
-import { RoomJoinError } from '@fluux/sdk'
+import { RoomJoinError, type RoomJoinReason } from '@fluux/sdk'
 
 // Matches the TranslateFn convention in messagePreviewText.ts.
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string
 
 /**
- * Map an RFC 6120 condition from a room-join failure to a localized message.
+ * Map a room-join reason to its localized, user-facing message.
  *
- * Takes the condition rather than the error object so the SDK's
+ * Takes the reason rather than the error object so the SDK's
  * `room:autojoin-error` event, which carries plain data, resolves its wording
- * through the same table as the thrown {@link RoomJoinError}.
+ * through the same table as a thrown {@link RoomJoinError}.
  *
- * @param condition - Condition reported by the server, or the synthetic 'timeout'.
- * @param text - Server-supplied text, used when the condition is unrecognized.
- * @param opts.passwordWasSent see {@link getRoomJoinErrorMessage}
+ * @param text - Server-supplied text, shown when the reason is `unknown`.
  */
-export function getRoomJoinConditionMessage(
+export function getRoomJoinReasonMessage(
   t: TranslateFn,
-  condition: string,
+  reason: RoomJoinReason,
   text?: string,
-  opts?: { passwordWasSent?: boolean },
 ): string {
-  switch (condition) {
-    case 'not-authorized':
-      return t(opts?.passwordWasSent ? 'rooms.incorrectPassword' : 'rooms.passwordRequired')
-    case 'conflict':
+  switch (reason) {
+    case 'password-required':
+      return t('rooms.passwordRequired')
+    case 'wrong-password':
+      return t('rooms.incorrectPassword')
+    case 'nickname-taken':
       return t('rooms.nicknameInUse')
-    case 'registration-required':
+    case 'members-only':
       return t('rooms.membersOnly')
-    case 'forbidden':
+    case 'banned':
       return t('rooms.bannedFromRoom')
-    case 'service-unavailable':
+    case 'room-full':
       return t('rooms.roomFull')
-    case 'not-acceptable':
+    case 'registered-nickname-required':
       return t('rooms.registeredNicknameRequired')
-    case 'item-not-found':
+    case 'room-not-found':
       return t('rooms.roomNotFound')
+    // `not-in-room`, `timed-out` and `unknown` carry nothing an app-specific
+    // wording would add, so they read the server's own text when there is one.
     default:
       return text || t('rooms.failedToJoinRoom')
   }
@@ -46,18 +47,10 @@ export function getRoomJoinConditionMessage(
  * RoomsList, BrowseRoomsModal, deep link) so the wording stays in sync. Field
  * side effects (revealing the password input, focusing the nickname) stay in
  * the modal — this resolves message text only.
- *
- * @param opts.passwordWasSent disambiguates the two `not-authorized` cases:
- *   false → "password required", true → "incorrect password". Secondary paths
- *   never send a password, so they omit it (defaults to false).
  */
-export function getRoomJoinErrorMessage(
-  t: TranslateFn,
-  err: unknown,
-  opts?: { passwordWasSent?: boolean },
-): string {
+export function getRoomJoinErrorMessage(t: TranslateFn, err: unknown): string {
   if (err instanceof RoomJoinError) {
-    return getRoomJoinConditionMessage(t, err.condition, err.text, opts)
+    return getRoomJoinReasonMessage(t, err.reason, err.text)
   }
   return err instanceof Error ? err.message : t('rooms.failedToJoinRoom')
 }
