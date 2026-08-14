@@ -287,6 +287,14 @@ export interface ResidentTopExecutor {
   ) => void
 }
 
+/**
+ * The part of an execution its ownership guard reads. Every executor's state satisfies it, which is
+ * what lets {@link PositioningController.isExecutionCurrent} be written once instead of seven times.
+ */
+interface TrackedExecution {
+  request: { conversationId: string; generation: number }
+}
+
 interface SavedPositionExecutionState {
   request: SavedPositionRequest
   executor: SavedPositionExecutor
@@ -1726,17 +1734,27 @@ export class PositioningController {
     }
   }
 
-  private isLiveEdgeExecutionCurrent(
-    execution: LiveEdgeExecutionState,
+  /**
+   * Whether an execution still owns the position: it is the one its slot holds, and the model still
+   * points at its request. The seven executors each wrap this under their own name; the wrappers are
+   * what the call sites read, and this is the single definition they agree on.
+   */
+  private isExecutionCurrent<T extends TrackedExecution>(
+    slot: T | null,
+    execution: T,
   ): boolean {
     return (
-      this.liveEdgeExecution === execution &&
+      slot === execution &&
       isCurrentGeneration(
         this.model,
         execution.request.conversationId,
         execution.request.generation,
       )
     )
+  }
+
+  private isLiveEdgeExecutionCurrent(execution: LiveEdgeExecutionState): boolean {
+    return this.isExecutionCurrent(this.liveEdgeExecution, execution)
   }
 
   private driveAnchorPreservation(
@@ -1971,17 +1989,8 @@ export class PositioningController {
     }
   }
 
-  private isAnchorPreservationExecutionCurrent(
-    execution: AnchorPreservationExecutionState,
-  ): boolean {
-    return (
-      this.anchorPreservationExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isAnchorPreservationExecutionCurrent(execution: AnchorPreservationExecutionState): boolean {
+    return this.isExecutionCurrent(this.anchorPreservationExecution, execution)
   }
 
   private startDirectionalHistoryLoop(
@@ -2182,17 +2191,8 @@ export class PositioningController {
     }
   }
 
-  private isDirectionalHistoryExecutionCurrent(
-    execution: DirectionalHistoryExecutionState,
-  ): boolean {
-    return (
-      this.directionalHistoryExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isDirectionalHistoryExecutionCurrent(execution: DirectionalHistoryExecutionState): boolean {
+    return this.isExecutionCurrent(this.directionalHistoryExecution, execution)
   }
 
   private startResidentTopLoop(
@@ -2383,17 +2383,8 @@ export class PositioningController {
     }
   }
 
-  private isResidentTopExecutionCurrent(
-    execution: ResidentTopExecutionState,
-  ): boolean {
-    return (
-      this.residentTopExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isResidentTopExecutionCurrent(execution: ResidentTopExecutionState): boolean {
+    return this.isExecutionCurrent(this.residentTopExecution, execution)
   }
 
   private driveExplicitTarget(
@@ -2714,17 +2705,8 @@ export class PositioningController {
     }
   }
 
-  private isExplicitTargetExecutionCurrent(
-    execution: ExplicitTargetExecutionState,
-  ): boolean {
-    return (
-      this.explicitTargetExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isExplicitTargetExecutionCurrent(execution: ExplicitTargetExecutionState): boolean {
+    return this.isExecutionCurrent(this.explicitTargetExecution, execution)
   }
 
   private finishExplicitTargetExecution(
@@ -3038,17 +3020,8 @@ export class PositioningController {
     }
   }
 
-  private isUnreadExecutionCurrent(
-    execution: UnreadMarkerExecutionState,
-  ): boolean {
-    return (
-      this.unreadExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isUnreadExecutionCurrent(execution: UnreadMarkerExecutionState): boolean {
+    return this.isExecutionCurrent(this.unreadExecution, execution)
   }
 
   private finishUnreadExecution(
@@ -3535,17 +3508,8 @@ export class PositioningController {
     }
   }
 
-  private isSavedExecutionCurrent(
-    execution: SavedPositionExecutionState,
-  ): boolean {
-    return (
-      this.savedExecution === execution &&
-      isCurrentGeneration(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-      )
-    )
+  private isSavedExecutionCurrent(execution: SavedPositionExecutionState): boolean {
+    return this.isExecutionCurrent(this.savedExecution, execution)
   }
 
   private cancelExecutionsIfSuperseded(): void {
