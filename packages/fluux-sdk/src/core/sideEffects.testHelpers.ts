@@ -37,7 +37,7 @@ export function createMockClient() {
   const sdkHandlers = new Map<string, Set<(payload: unknown) => void>>()
 
   const client = {
-    chat: {
+    messages: {
       queryMAM: vi.fn().mockResolvedValue(undefined),
       queryRoomMAM: vi.fn().mockResolvedValue(undefined),
     },

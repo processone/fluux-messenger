@@ -3360,7 +3360,10 @@ test.describe('Insertion drift while scrolled up', () => {
       store.setState({ loadOlderMessagesFromCache: async () => 0 })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const demo = (window as any).__demoClient
-      if (demo?.chat) demo.chat.queryRoomMAM = async () => {}
+      // Returning false rather than skipping: a silently un-stubbed loader
+      // fails much later, as an assertion about rows that looks unrelated.
+      if (!demo?.messages) return false
+      demo.messages.queryRoomMAM = async () => {}
       return true
     })
     expect(stubbed, 'the older-history loaders must be stubbable for this scenario').toBe(true)
@@ -3493,15 +3496,15 @@ test.describe('Insertion drift while scrolled up', () => {
     const gated = await page.evaluate(() => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const demo = (window as any).__demoClient
-      if (!demo?.chat) return false
-      const original = demo.chat.queryRoomMAM.bind(demo.chat)
+      if (!demo?.messages) return false
+      const original = demo.messages.queryRoomMAM.bind(demo.messages)
       let open: () => void = () => {}
       const gate = new Promise<void>((resolve) => {
         open = resolve
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(window as any).__releaseOlderLoad = open
-      demo.chat.queryRoomMAM = async (options: unknown) => {
+      demo.messages.queryRoomMAM = async (options: unknown) => {
         await gate
         return original(options)
       }

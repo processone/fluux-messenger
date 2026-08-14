@@ -75,7 +75,7 @@ async function disableWebPush(client: any): Promise<void> {
 
     const notificationId = `${json.endpoint ?? subscription.endpoint}#${p256dh}#${auth}`
 
-    await client.webPush.disableSubscription(service.appId, 'webpush', notificationId)
+    await client.push.disableSubscription(service.appId, 'webpush', notificationId)
     connectionStore.getState().setWebPushEnabled(false)
   } catch (err) {
     console.error('[WebPush] Disable failed:', err)
@@ -92,7 +92,7 @@ async function enableWebPush(client: any): Promise<void> {
     // Trigger service discovery — the useWebPush hook will auto-register
     // once services become available and enabled is true
     try {
-      await client.webPush.queryServices()
+      await client.push.queryServices()
     } catch (err) {
       console.error('[WebPush] Re-enable: service discovery failed:', err)
     }

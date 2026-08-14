@@ -86,8 +86,8 @@ export function simulateDisconnect(
 ): void {
   connectionStore.getState().setStatus('reconnecting')
   if (options?.clearMocks) {
-    vi.mocked(client.chat.queryMAM).mockClear()
-    vi.mocked(client.chat.queryRoomMAM).mockClear()
+    vi.mocked(client.messages.queryMAM).mockClear()
+    vi.mocked(client.messages.queryRoomMAM).mockClear()
   }
 }
 

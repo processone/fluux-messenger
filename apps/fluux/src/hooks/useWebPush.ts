@@ -72,7 +72,7 @@ async function registerPush(
     }
 
     console.log('[WebPush] Registering with XMPP server, endpoint:', endpoint)
-    await client.webPush.registerSubscription(endpoint, p256dh, auth, service.appId)
+    await client.push.registerSubscription(endpoint, p256dh, auth, service.appId)
     console.log('[WebPush] Registration complete!')
   } catch (err) {
     console.error('[WebPush] Registration failed:', err)
