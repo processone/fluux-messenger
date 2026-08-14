@@ -102,14 +102,14 @@ export function useEvents() {
 
   const acceptSubscription = useCallback(
     async (jid: string) => {
-      await client.roster.acceptSubscription(jid)
+      await client.contacts.acceptSubscription(jid)
     },
     [client]
   )
 
   const rejectSubscription = useCallback(
     async (jid: string) => {
-      await client.roster.rejectSubscription(jid)
+      await client.contacts.rejectSubscription(jid)
     },
     [client]
   )
@@ -118,7 +118,7 @@ export function useEvents() {
   const acceptStranger = useCallback(
     async (jid: string) => {
       // Add to roster (sends subscription request)
-      await client.roster.addContact(jid, getLocalPart(jid))
+      await client.contacts.addContact(jid, getLocalPart(jid))
 
       // Create conversation
       const conversation: Conversation = {
@@ -189,7 +189,7 @@ export function useEvents() {
       const roomPassword = password || invitation?.password
 
       // Join the room with isQuickChat flag from invitation
-      await client.muc.joinRoom(roomJid, defaultNick, {
+      await client.rooms.joinRoom(roomJid, defaultNick, {
         password: roomPassword,
         isQuickChat: invitation?.isQuickChat,
       })
@@ -198,7 +198,7 @@ export function useEvents() {
       // refuse it (password required, members-only, nickname taken). Wait for the
       // outcome so the failure reaches the caller and the invitation survives —
       // dropping it on a refusal would strand the user with no way to retry.
-      await client.muc.joinResult(roomJid)
+      await client.rooms.joinResult(roomJid)
 
       // Remove from invitations
       removeMucInvitation(roomJid)

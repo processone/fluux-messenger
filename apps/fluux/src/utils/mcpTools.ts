@@ -151,6 +151,6 @@ export async function sendMessageTool(
   if (room && !room.joined) {
     throw new Error(`Not joined to room: ${conversationId}`)
   }
-  const messageId = await client.chat.sendMessage(conversationId, body)
+  const messageId = await client.messages.sendMessage(conversationId, body)
   return { messageId }
 }

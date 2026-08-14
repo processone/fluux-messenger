@@ -78,21 +78,21 @@ import type { StanzaClaim } from '../stanzaRouting'
  * chat states (typing indicators), and Message Archive Management (MAM).
  *
  * @remarks
- * This module is accessed via `client.chat` on the XMPPClient instance.
+ * This module is accessed via `client.messages` on the XMPPClient instance.
  * Most methods support both 1:1 chat and groupchat (MUC) message types.
  *
  * @example Sending a message
  * ```typescript
  * // Send a 1:1 message
- * await client.chat.sendMessage('user@example.com', 'Hello!')
+ * await client.messages.sendMessage('user@example.com', 'Hello!')
  *
  * // Send a group chat message
- * await client.chat.sendMessage('room@conference.example.com', 'Hello room!')
+ * await client.messages.sendMessage('room@conference.example.com', 'Hello room!')
  * ```
  *
  * @example Sending a reply
  * ```typescript
- * await client.chat.sendMessage('user@example.com', 'I agree!', {
+ * await client.messages.sendMessage('user@example.com', 'I agree!', {
  *   replyTo: {
  *     id: 'original-message-id',
  *     to: 'user@example.com',
@@ -104,30 +104,30 @@ import type { StanzaClaim } from '../stanzaRouting'
  * @example Typing indicators
  * ```typescript
  * // User is typing
- * await client.chat.sendChatState('user@example.com', 'composing')
+ * await client.messages.sendChatState('user@example.com', 'composing')
  *
  * // User stopped typing
- * await client.chat.sendChatState('user@example.com', 'paused')
+ * await client.messages.sendChatState('user@example.com', 'paused')
  * ```
  *
  * @example Reactions (XEP-0444)
  * ```typescript
- * await client.chat.sendReaction('user@example.com', 'message-id', ['👍', '❤️'])
+ * await client.messages.sendReaction('user@example.com', 'message-id', ['👍', '❤️'])
  * ```
  *
  * @example Message correction (XEP-0308)
  * ```typescript
- * await client.chat.sendCorrection('user@example.com', 'original-id', 'Fixed typo')
+ * await client.messages.sendCorrection('user@example.com', 'original-id', 'Fixed typo')
  * ```
  *
  * @example Message retraction (XEP-0424)
  * ```typescript
- * await client.chat.sendRetraction('user@example.com', 'message-id')
+ * await client.messages.sendRetraction('user@example.com', 'message-id')
  * ```
  *
  * @example Fetching message history (XEP-0313 MAM)
  * ```typescript
- * const result = await client.chat.queryMAM({
+ * const result = await client.messages.queryMAM({
  *   with: 'user@example.com',
  *   max: 50
  * })
@@ -792,12 +792,12 @@ export class Chat extends BaseModule {
    *
    * @example Simple message
    * ```typescript
-   * const msgId = await client.chat.sendMessage('user@example.com', 'Hello!')
+   * const msgId = await client.messages.sendMessage('user@example.com', 'Hello!')
    * ```
    *
    * @example Message with attachment
    * ```typescript
-   * const msgId = await client.chat.sendMessage('user@example.com', 'Check this out', {
+   * const msgId = await client.messages.sendMessage('user@example.com', 'Check this out', {
    *   attachment: {
    *     url: 'https://example.com/file.pdf',
    *     name: 'document.pdf',
@@ -1144,13 +1144,13 @@ export class Chat extends BaseModule {
    * @example
    * ```typescript
    * // User started typing
-   * await client.chat.sendChatState('user@example.com', 'composing')
+   * await client.messages.sendChatState('user@example.com', 'composing')
    *
    * // User paused typing
-   * await client.chat.sendChatState('user@example.com', 'paused')
+   * await client.messages.sendChatState('user@example.com', 'paused')
    *
    * // User is active in the conversation
-   * await client.chat.sendChatState('user@example.com', 'active')
+   * await client.messages.sendChatState('user@example.com', 'active')
    * ```
    *
    * @remarks
@@ -1205,13 +1205,13 @@ export class Chat extends BaseModule {
    * @example
    * ```typescript
    * // Add reactions to a message
-   * await client.chat.sendReaction('user@example.com', 'msg-123', ['👍', '❤️'])
+   * await client.messages.sendReaction('user@example.com', 'msg-123', ['👍', '❤️'])
    *
    * // Remove all your reactions from a message
-   * await client.chat.sendReaction('user@example.com', 'msg-123', [])
+   * await client.messages.sendReaction('user@example.com', 'msg-123', [])
    *
    * // React in a MUC room
-   * await client.chat.sendReaction('room@conference.example.com', 'msg-456', ['🎉'])
+   * await client.messages.sendReaction('room@conference.example.com', 'msg-456', ['🎉'])
    * ```
    */
   async sendReaction(to: string, messageId: string, emojis: string[]): Promise<void> {
@@ -1303,10 +1303,10 @@ export class Chat extends BaseModule {
    * @example
    * ```typescript
    * // Correct a typo in a message
-   * await client.chat.sendCorrection('user@example.com', 'msg-123', 'Fixed the typo')
+   * await client.messages.sendCorrection('user@example.com', 'msg-123', 'Fixed the typo')
    *
    * // Correct a message in a MUC room
-   * await client.chat.sendCorrection('room@conference.example.com', 'msg-456', 'Updated content')
+   * await client.messages.sendCorrection('room@conference.example.com', 'msg-456', 'Updated content')
    * ```
    *
    * @remarks
@@ -1444,10 +1444,10 @@ export class Chat extends BaseModule {
    * @example
    * ```typescript
    * // Retract a message
-   * await client.chat.sendRetraction('user@example.com', 'msg-123')
+   * await client.messages.sendRetraction('user@example.com', 'msg-123')
    *
    * // Retract a message in a MUC room
-   * await client.chat.sendRetraction('room@conference.example.com', 'msg-456')
+   * await client.messages.sendRetraction('room@conference.example.com', 'msg-456')
    * ```
    *
    * @remarks
@@ -1528,10 +1528,10 @@ export class Chat extends BaseModule {
    * @example
    * ```typescript
    * // Send confetti animation
-   * await client.chat.sendEasterEgg('user@example.com', 'confetti')
+   * await client.messages.sendEasterEgg('user@example.com', 'confetti')
    *
    * // Send fireworks in a room
-   * await client.chat.sendEasterEgg('room@conference.example.com', 'fireworks')
+   * await client.messages.sendEasterEgg('room@conference.example.com', 'fireworks')
    * ```
    *
    * @remarks
@@ -1586,7 +1586,7 @@ export class Chat extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.chat.sendLinkPreview('user@example.com', 'msg-123', {
+   * await client.messages.sendLinkPreview('user@example.com', 'msg-123', {
    *   url: 'https://example.com/article',
    *   title: 'Article Title',
    *   description: 'A brief description of the article',
@@ -1661,7 +1661,7 @@ export class Chat extends BaseModule {
    *
    * @example Fetch recent messages
    * ```typescript
-   * const result = await client.chat.queryMAM({
+   * const result = await client.messages.queryMAM({
    *   with: 'user@example.com',
    *   max: 50
    * })
@@ -1671,11 +1671,11 @@ export class Chat extends BaseModule {
    * @example Load older messages (pagination)
    * ```typescript
    * // Initial load
-   * const initial = await client.chat.queryMAM({ with: 'user@example.com' })
+   * const initial = await client.messages.queryMAM({ with: 'user@example.com' })
    *
    * // Load more (older messages)
    * if (!initial.complete && initial.rsm?.first) {
-   *   const older = await client.chat.queryMAM({
+   *   const older = await client.messages.queryMAM({
    *     with: 'user@example.com',
    *     before: initial.rsm.first
    *   })
@@ -1705,7 +1705,7 @@ export class Chat extends BaseModule {
    *
    * @example Fetch recent room messages
    * ```typescript
-   * const result = await client.chat.queryRoomMAM({
+   * const result = await client.messages.queryRoomMAM({
    *   roomJid: 'room@conference.example.com',
    *   max: 50
    * })
@@ -1826,7 +1826,7 @@ export class Chat extends BaseModule {
    * ```typescript
    * declare const at: string
    *
-   * const { messages } = await client.chat.fetchContextAround('room@conference.example.com', at, 50)
+   * const { messages } = await client.messages.fetchContextAround('room@conference.example.com', at, 50)
    * ```
    */
   async fetchContextAround(

@@ -147,7 +147,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(hatListResponse([]))
 
-      await xmppClient.muc.listHats('room@conference.example.com')
+      await xmppClient.rooms.listHats('room@conference.example.com')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       expect(sentIq.attrs.to).toBe('room@conference.example.com')
@@ -176,7 +176,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       ])
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const hats = await xmppClient.muc.listHats('room@conference.example.com')
+      const hats = await xmppClient.rooms.listHats('room@conference.example.com')
 
       expect(hats).toHaveLength(2)
       expect(hats[0]).toEqual({ uri: 'http://example.com/hats#moderator', title: 'Moderator', hue: 210 })
@@ -187,7 +187,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(hatListResponse([]))
 
-      const hats = await xmppClient.muc.listHats('room@conference.example.com')
+      const hats = await xmppClient.rooms.listHats('room@conference.example.com')
       expect(hats).toEqual([])
     })
 
@@ -201,7 +201,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       ])
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const hats = await xmppClient.muc.listHats('room@conference.example.com')
+      const hats = await xmppClient.rooms.listHats('room@conference.example.com')
       expect(hats).toHaveLength(1)
       expect(hats[0].title).toBe('Valid')
     })
@@ -214,7 +214,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResultResponse())
 
-      await xmppClient.muc.createHat('room@conference.example.com', 'Speaker', 'http://example.com/hats#speaker', 120)
+      await xmppClient.rooms.createHat('room@conference.example.com', 'Speaker', 'http://example.com/hats#speaker', 120)
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       const command = sentIq.children[0]
@@ -238,7 +238,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResultResponse())
 
-      await xmppClient.muc.createHat('room@conference.example.com', 'Guest', 'http://example.com/hats#guest')
+      await xmppClient.rooms.createHat('room@conference.example.com', 'Guest', 'http://example.com/hats#guest')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       const command = sentIq.children[0]
@@ -253,7 +253,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('forbidden'))
 
       await expect(
-        xmppClient.muc.createHat('room@conference.example.com', 'X', 'urn:x')
+        xmppClient.rooms.createHat('room@conference.example.com', 'X', 'urn:x')
       ).rejects.toThrow('forbidden')
     })
   })
@@ -265,7 +265,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResultResponse())
 
-      await xmppClient.muc.destroyHat('room@conference.example.com', 'http://example.com/hats#old')
+      await xmppClient.rooms.destroyHat('room@conference.example.com', 'http://example.com/hats#old')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       const command = sentIq.children[0]
@@ -285,7 +285,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(hatListResponse([]))
 
-      await xmppClient.muc.listHatAssignments('room@conference.example.com')
+      await xmppClient.rooms.listHatAssignments('room@conference.example.com')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       const command = sentIq.children[0]
@@ -310,7 +310,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       ])
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const assignments = await xmppClient.muc.listHatAssignments('room@conference.example.com')
+      const assignments = await xmppClient.rooms.listHatAssignments('room@conference.example.com')
 
       expect(assignments).toHaveLength(2)
       expect(assignments[0]).toEqual({
@@ -344,7 +344,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       ])
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const assignments = await xmppClient.muc.listHatAssignments('room@conference.example.com')
+      const assignments = await xmppClient.rooms.listHatAssignments('room@conference.example.com')
       expect(assignments).toHaveLength(1)
       expect(assignments[0].jid).toBe('alice@example.com')
     })
@@ -357,7 +357,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResultResponse())
 
-      await xmppClient.muc.assignHat('room@conference.example.com', 'alice@example.com', 'urn:hat:mod')
+      await xmppClient.rooms.assignHat('room@conference.example.com', 'alice@example.com', 'urn:hat:mod')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       expect(sentIq.attrs.to).toBe('room@conference.example.com')
@@ -461,7 +461,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
         .mockResolvedValueOnce(serverForm)
         .mockResolvedValueOnce(completedResponse)
 
-      await xmppClient.muc.assignHat(
+      await xmppClient.rooms.assignHat(
         'room@conference.example.com',
         'user@example.com',
         'xmpp:process-one:devteam',
@@ -514,7 +514,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
         .mockResolvedValueOnce(serverForm)
         .mockResolvedValueOnce(emptyResultResponse())
 
-      await xmppClient.muc.destroyHat('room@conference.example.com', 'urn:hat:mod')
+      await xmppClient.rooms.destroyHat('room@conference.example.com', 'urn:hat:mod')
 
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(2)
 
@@ -545,7 +545,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
         .mockResolvedValueOnce(serverForm)
         .mockResolvedValueOnce(emptyResultResponse())
 
-      await xmppClient.muc.createHat('room@conference.example.com', 'Moderator', 'urn:hat:mod', 210)
+      await xmppClient.rooms.createHat('room@conference.example.com', 'Moderator', 'urn:hat:mod', 210)
 
       const fieldMap = submittedFields(1)
       expect(fieldMap).not.toBeNull()
@@ -569,7 +569,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
         .mockResolvedValueOnce(serverForm)
         .mockResolvedValueOnce(emptyResultResponse())
 
-      await xmppClient.muc.assignHat(
+      await xmppClient.rooms.assignHat(
         'room@conference.example.com',
         'user@example.com',
         'urn:hat:mod',
@@ -589,7 +589,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResultResponse())
 
-      await xmppClient.muc.unassignHat('room@conference.example.com', 'bob@example.com', 'urn:hat:mod')
+      await xmppClient.rooms.unassignHat('room@conference.example.com', 'bob@example.com', 'urn:hat:mod')
 
       const sentIq = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
       const command = sentIq.children[0]
@@ -607,7 +607,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('not-allowed'))
 
       await expect(
-        xmppClient.muc.unassignHat('room@conference.example.com', 'bob@example.com', 'urn:hat:mod')
+        xmppClient.rooms.unassignHat('room@conference.example.com', 'bob@example.com', 'urn:hat:mod')
       ).rejects.toThrow('not-allowed')
     })
   })
@@ -620,7 +620,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       // A server that accepts the IQ and simply never answers.
       mockXmppClientInstance.iqCaller.request.mockReturnValue(new Promise(() => {}))
 
-      const pending = xmppClient.muc.destroyHat('room@conference.example.com', 'urn:hat:mod')
+      const pending = xmppClient.rooms.destroyHat('room@conference.example.com', 'urn:hat:mod')
       const outcome = pending.then(() => 'resolved', (err: unknown) => err)
 
       // Still pending just before the budget elapses...
@@ -656,7 +656,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
         })
         .mockReturnValueOnce(new Promise(() => {}))
 
-      const outcome = xmppClient.muc
+      const outcome = xmppClient.rooms
         .destroyHat('room@conference.example.com', 'urn:hat:mod')
         .then(() => 'resolved', (err: unknown) => err)
 
@@ -678,7 +678,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       })
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(stanzaError)
 
-      const err = await xmppClient.muc
+      const err = await xmppClient.rooms
         .destroyHat('room@conference.example.com', 'urn:hat:mod')
         .catch((e: unknown) => e)
 
@@ -692,7 +692,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('Not connected'))
 
-      const err = await xmppClient.muc
+      const err = await xmppClient.rooms
         .createHat('room@conference.example.com', 'Mod', 'urn:hat:mod')
         .catch((e: unknown) => e)
 

@@ -143,14 +143,14 @@ describe('XMPPClient Quick Chat', () => {
 
   describe('createQuickChat', () => {
     it('should create a quick chat room with generated JID', async () => {
-      const roomJid = await xmppClient.muc.createQuickChat('testuser')
+      const roomJid = await xmppClient.rooms.createQuickChat('testuser')
 
       // Room JID should follow pattern: quickchat-user-adj-noun-suffix@conference.example.com
       expect(roomJid).toMatch(/^quickchat-user-\w+-\w+-\w+@conference\.example\.com$/)
     })
 
     it('should add room to store with isQuickChat flag', async () => {
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       // Verify room:added was emitted with isQuickChat: true
       expect(emitSDKSpy).toHaveBeenCalledWith('room:added', {
@@ -162,7 +162,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should use topic as room name when provided', async () => {
-      await xmppClient.muc.createQuickChat('testuser', 'deploy issue')
+      await xmppClient.rooms.createQuickChat('testuser', 'deploy issue')
 
       // Should configure the room with the topic as name via iqCaller.request
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
@@ -181,7 +181,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should use creator name in room name when no topic provided', async () => {
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       // Should configure with "{creator} - {date}" name via iqCaller.request
       // Since getOwnNickname returns null, it falls back to JID local part "user"
@@ -201,7 +201,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should send presence to join the room', async () => {
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       // Should send presence to join room
       const sendCalls = mockXmppClientInstance.send.mock.calls
@@ -215,7 +215,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should configure room as non-persistent', async () => {
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       // Should send MUC#owner configuration with persistentroom = 0 via iqCaller.request
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
@@ -236,7 +236,7 @@ describe('XMPPClient Quick Chat', () => {
       // Disconnect the client
       await xmppClient.disconnect()
 
-      await expect(xmppClient.muc.createQuickChat('testuser')).rejects.toThrow()
+      await expect(xmppClient.rooms.createQuickChat('testuser')).rejects.toThrow()
     })
 
     it('should throw if MUC service not found', async () => {
@@ -256,12 +256,12 @@ describe('XMPPClient Quick Chat', () => {
         throw new Error('Not mocked')
       })
 
-      await expect(xmppClient.muc.createQuickChat('testuser')).rejects.toThrow('MUC service not available')
+      await expect(xmppClient.rooms.createQuickChat('testuser')).rejects.toThrow('MUC service not available')
     })
 
     it('should send invitations to specified contacts after room creation', async () => {
       const invitees = ['alice@example.com', 'bob@example.com']
-      await xmppClient.muc.createQuickChat('testuser', 'team sync', invitees)
+      await xmppClient.rooms.createQuickChat('testuser', 'team sync', invitees)
 
       // Find invitation messages in send calls
       const sendCalls = mockXmppClientInstance.send.mock.calls
@@ -290,7 +290,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should include reason in invitation when topic is provided', async () => {
-      await xmppClient.muc.createQuickChat('testuser', 'deploy issue', ['alice@example.com'])
+      await xmppClient.rooms.createQuickChat('testuser', 'deploy issue', ['alice@example.com'])
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
       const invitationMessage = sendCalls.find((call: any[]) => {
@@ -312,7 +312,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should not send invitations when invitees array is empty', async () => {
-      await xmppClient.muc.createQuickChat('testuser', 'topic', [])
+      await xmppClient.rooms.createQuickChat('testuser', 'topic', [])
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
       const invitationMessages = sendCalls.filter((call: any[]) => {
@@ -353,7 +353,7 @@ describe('XMPPClient Quick Chat', () => {
         return originalMock!(iq)
       })
 
-      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
+      await xmppClient.rooms.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
 
       // Find the room configuration IQ
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
@@ -415,7 +415,7 @@ describe('XMPPClient Quick Chat', () => {
         return originalMock!(iq)
       })
 
-      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
+      await xmppClient.rooms.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
 
       // Find the room configuration IQ
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
@@ -438,7 +438,7 @@ describe('XMPPClient Quick Chat', () => {
       // Mock getOwnNickname to return the creator's XEP-0172 nickname
       mockStores.connection.getOwnNickname = vi.fn().mockReturnValue('John Doe')
 
-      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com'])
+      await xmppClient.rooms.createQuickChat('testuser', undefined, ['alice@example.com'])
 
       // Find the room configuration IQ
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
@@ -506,7 +506,7 @@ describe('XMPPClient Quick Chat', () => {
     it('sets the Prosody allow-member-invites field when the server advertises it', async () => {
       installConfigForm(['{http://prosody.im/protocol/muc}roomconfig_allowmemberinvites'])
 
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       const configCall = getConfigSubmit()
       expect(configCall).toBeDefined()
@@ -522,7 +522,7 @@ describe('XMPPClient Quick Chat', () => {
       // matching is by local name, so it should still be found and submitted verbatim.
       installConfigForm(['{urn:example:muc}roomconfig_allowmemberinvites'])
 
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       const configCall = getConfigSubmit()
       expect(configCall).toBeDefined()
@@ -533,7 +533,7 @@ describe('XMPPClient Quick Chat', () => {
     it('sets the ejabberd allowinvites field when the server advertises it', async () => {
       installConfigForm(['muc#roomconfig_allowinvites'])
 
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       const configCall = getConfigSubmit()
       expect(configCall).toBeDefined()
@@ -545,7 +545,7 @@ describe('XMPPClient Quick Chat', () => {
       // Prosody-style form without any allow-invites field at all.
       installConfigForm(['muc#roomconfig_persistentroom', 'muc#roomconfig_publicroom'])
 
-      await xmppClient.muc.createQuickChat('testuser')
+      await xmppClient.rooms.createQuickChat('testuser')
 
       const configCall = getConfigSubmit()
       // Config must still be submitted (otherwise the room stays locked)...
@@ -565,7 +565,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should send invitation stanza with correct structure', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
 
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
@@ -587,7 +587,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should include reason element when provided', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', 'Please join our discussion')
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', 'Please join our discussion')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const xElement = sentStanza.children.find((c: any) =>
@@ -600,7 +600,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should not include reason element when not provided', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const xElement = sentStanza.children.find((c: any) =>
@@ -616,12 +616,12 @@ describe('XMPPClient Quick Chat', () => {
       await xmppClient.disconnect()
 
       await expect(
-        xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
+        xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
       ).rejects.toThrow('Not connected')
     })
 
     it('should include quickchat element inside invite when isQuickChat is true', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', undefined, true)
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', undefined, true)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -635,7 +635,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should not include quickchat element when isQuickChat is false', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', undefined, false)
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', undefined, false)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -649,7 +649,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should not include quickchat element when isQuickChat is not provided', async () => {
-      await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
+      await xmppClient.rooms.sendMediatedInvitation('room@conference.example.com', 'alice@example.com')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
@@ -671,7 +671,7 @@ describe('XMPPClient Quick Chat', () => {
 
     it('should send invitations to all specified JIDs', async () => {
       const invitees = ['alice@example.com', 'bob@example.com', 'charlie@example.com']
-      await xmppClient.muc.sendMediatedInvitations('room@conference.example.com', invitees)
+      await xmppClient.rooms.sendMediatedInvitations('room@conference.example.com', invitees)
 
       // Should have sent 3 messages
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(3)
@@ -691,7 +691,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should include reason in all invitations when provided', async () => {
-      await xmppClient.muc.sendMediatedInvitations(
+      await xmppClient.rooms.sendMediatedInvitations(
         'room@conference.example.com',
         ['alice@example.com', 'bob@example.com'],
         'Join our meeting'
@@ -709,7 +709,7 @@ describe('XMPPClient Quick Chat', () => {
     })
 
     it('should include quickchat element in all invitations when isQuickChat is true', async () => {
-      await xmppClient.muc.sendMediatedInvitations(
+      await xmppClient.rooms.sendMediatedInvitations(
         'room@conference.example.com',
         ['alice@example.com', 'bob@example.com'],
         undefined,

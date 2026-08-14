@@ -502,7 +502,7 @@ export function setupBackgroundSyncSideEffects(
                 logInfo('Background sync: aborting member discovery — disconnected')
                 break
               }
-              await client.muc.queryRoomMembers(room.jid)
+              await client.rooms.queryRoomMembers(room.jid)
             }
           }
         } catch {
@@ -533,7 +533,7 @@ export function setupBackgroundSyncSideEffects(
     logInfo('Background sync: fresh session — checking MAM support')
 
     // Discover MAM fulltext search capability (non-blocking, doesn't affect sync)
-    void client.discovery.discoverMAMSearchCapability()
+    void client.server.discoverMAMSearchCapability()
 
     // Warm the E2EE plugin cache for all known conversations. Independent of
     // MAM — these are PEP queries that don't require server-side MAM support.

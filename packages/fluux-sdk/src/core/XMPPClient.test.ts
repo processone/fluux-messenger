@@ -87,12 +87,12 @@ describe('XMPPClient', () => {
 
       // Modules should be available immediately
       expect(client.connection).toBeDefined()
-      expect(client.chat).toBeDefined()
-      expect(client.roster).toBeDefined()
-      expect(client.muc).toBeDefined()
+      expect(client.messages).toBeDefined()
+      expect(client.contacts).toBeDefined()
+      expect(client.rooms).toBeDefined()
       expect(client.admin).toBeDefined()
       expect(client.profile).toBeDefined()
-      expect(client.discovery).toBeDefined()
+      expect(client.server).toBeDefined()
       expect(client.internal.mam).toBeDefined()
       expect(client.blocking).toBeDefined()
     })
@@ -102,9 +102,9 @@ describe('XMPPClient', () => {
       const client = new XMPPClient()
 
       // Should have all the necessary methods
-      expect(typeof client.chat.sendMessage).toBe('function')
-      expect(typeof client.muc.joinRoom).toBe('function')
-      expect(typeof client.roster.addContact).toBe('function')
+      expect(typeof client.messages.sendMessage).toBe('function')
+      expect(typeof client.rooms.joinRoom).toBe('function')
+      expect(typeof client.contacts.addContact).toBe('function')
     })
 
     it('installs the crypto.randomUUID polyfill in the constructor (legacy webviews)', () => {
@@ -134,7 +134,7 @@ describe('XMPPClient', () => {
 
       // Modules should still work
       expect(client.connection).toBeDefined()
-      expect(client.chat).toBeDefined()
+      expect(client.messages).toBeDefined()
     })
 
     it('should create presenceActor automatically', () => {
@@ -260,7 +260,7 @@ describe('XMPPClient', () => {
       })
 
       // Emit via the chat module (which has access to emitSDK)
-      const chat = client.chat as any
+      const chat = client.messages as any
       chat.deps.emitSDK('chat:message', {
         message: {
           id: 'test',
@@ -370,30 +370,30 @@ describe('XMPPClient', () => {
   describe('namespace modules', () => {
     it('should expose all namespace modules after bindStores', () => {
       expect(xmppClient.connection).toBeDefined()
-      expect(xmppClient.chat).toBeDefined()
-      expect(xmppClient.roster).toBeDefined()
-      expect(xmppClient.muc).toBeDefined()
+      expect(xmppClient.messages).toBeDefined()
+      expect(xmppClient.contacts).toBeDefined()
+      expect(xmppClient.rooms).toBeDefined()
       expect(xmppClient.admin).toBeDefined()
       expect(xmppClient.profile).toBeDefined()
-      expect(xmppClient.discovery).toBeDefined()
+      expect(xmppClient.server).toBeDefined()
     })
 
     it('should have expected methods on chat module', () => {
-      expect(typeof xmppClient.chat.sendMessage).toBe('function')
-      expect(typeof xmppClient.chat.sendChatState).toBe('function')
-      expect(typeof xmppClient.chat.sendReaction).toBe('function')
+      expect(typeof xmppClient.messages.sendMessage).toBe('function')
+      expect(typeof xmppClient.messages.sendChatState).toBe('function')
+      expect(typeof xmppClient.messages.sendReaction).toBe('function')
     })
 
     it('should have expected methods on roster module', () => {
-      expect(typeof xmppClient.roster.addContact).toBe('function')
-      expect(typeof xmppClient.roster.removeContact).toBe('function')
-      expect(typeof xmppClient.roster.setPresence).toBe('function')
+      expect(typeof xmppClient.contacts.addContact).toBe('function')
+      expect(typeof xmppClient.contacts.removeContact).toBe('function')
+      expect(typeof xmppClient.contacts.setPresence).toBe('function')
     })
 
     it('should have expected methods on muc module', () => {
-      expect(typeof xmppClient.muc.joinRoom).toBe('function')
-      expect(typeof xmppClient.muc.leaveRoom).toBe('function')
-      expect(typeof xmppClient.muc.setBookmark).toBe('function')
+      expect(typeof xmppClient.rooms.joinRoom).toBe('function')
+      expect(typeof xmppClient.rooms.leaveRoom).toBe('function')
+      expect(typeof xmppClient.rooms.setBookmark).toBe('function')
     })
   })
 
@@ -840,8 +840,8 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const joinRoomSpy = vi.spyOn(newXmppClient.muc, 'joinRoom').mockResolvedValue()
-      const fetchBookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks')
+      const joinRoomSpy = vi.spyOn(newXmppClient.rooms, 'joinRoom').mockResolvedValue()
+      const fetchBookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks')
         .mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
@@ -880,7 +880,7 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -916,7 +916,7 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Simulate a reconnect with short disconnect: set the disconnectedAtTimestamp
       // on the connection module, then connect triggers handleConnectionSuccess
@@ -997,7 +997,7 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Simulate a reconnect with long disconnect (5 minutes ago)
       ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 300_000
@@ -1035,7 +1035,7 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
       const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
 
       // Short disconnect (30s): WebKit keeps the blob URLs alive, so refreshing
@@ -1070,7 +1070,7 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
       const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
 
       // Long disconnect (5 min) covers the OS sleep-wake case where WebKit may
@@ -1114,8 +1114,8 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const joinRoomSpy = vi.spyOn(newXmppClient.muc, 'joinRoom').mockResolvedValue()
-      vi.spyOn(newXmppClient.muc, 'fetchBookmarks')
+      const joinRoomSpy = vi.spyOn(newXmppClient.rooms, 'joinRoom').mockResolvedValue()
+      vi.spyOn(newXmppClient.rooms, 'fetchBookmarks')
         .mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
@@ -1262,7 +1262,7 @@ describe('XMPPClient', () => {
       )
 
       // Try to send a message - should trigger dead socket handling
-      await expect(xmppClient.chat.sendMessage('alice@example.com', 'test')).rejects.toThrow()
+      await expect(xmppClient.messages.sendMessage('alice@example.com', 'test')).rejects.toThrow()
 
       // Should have logged dead connection and scheduled reconnect
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
@@ -1296,7 +1296,7 @@ describe('XMPPClient', () => {
       )
 
       try {
-        await xmppClient.chat.sendMessage('alice@example.com', 'test')
+        await xmppClient.messages.sendMessage('alice@example.com', 'test')
       } catch {
         // Expected to throw
       }
@@ -2026,12 +2026,12 @@ describe('XMPPClient', () => {
       // Set up a JID so discovery has a domain to query
       ;(xmppClient as any).currentJid = 'user@example.com'
 
-      const discoverSpy = vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
-      const fetchServerInfoSpy = vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      const discoverSpy = vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
+      const fetchServerInfoSpy = vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
       const fetchProfileSpy = vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
 
       // Make fetchRoster throw (simulating slow server + IQ timeout)
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockRejectedValue(new Error('IQ timeout'))
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockRejectedValue(new Error('IQ timeout'))
 
       // Call runFreshSessionSetup directly (private method)
       try {
@@ -2049,13 +2049,13 @@ describe('XMPPClient', () => {
     it('should call discoverHttpUploadService even when fetchBookmarks throws', async () => {
       ;(xmppClient as any).currentJid = 'user@example.com'
 
-      const discoverSpy = vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      const discoverSpy = vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
 
       // Let fetchRoster succeed but fetchBookmarks fail
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
 
       try {
@@ -2079,13 +2079,13 @@ describe('XMPPClient', () => {
       const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
       markAllSpy.mockClear()
 
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
-      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
       // Bookmarks fails — simulates the socket dying mid-setup
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
 
       try {
         await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(
@@ -2112,12 +2112,12 @@ describe('XMPPClient', () => {
       const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
       markAllSpy.mockClear()
 
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
-      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
@@ -2137,14 +2137,14 @@ describe('XMPPClient', () => {
       const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
       markAllSpy.mockClear()
 
-      const rejoinSpy = vi.spyOn(xmppClient.muc, 'rejoinActiveRooms').mockResolvedValue()
+      const rejoinSpy = vi.spyOn(xmppClient.rooms, 'rejoinActiveRooms').mockResolvedValue()
 
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
-      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
@@ -2168,20 +2168,20 @@ describe('XMPPClient', () => {
 
       const callOrder: string[] = []
 
-      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockImplementation(async () => {
+      vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockImplementation(async () => {
         callOrder.push('discoverHttpUploadService')
       })
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockImplementation(async () => {
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockImplementation(async () => {
         callOrder.push('fetchServerInfo')
       })
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockImplementation(async () => {
         callOrder.push('fetchOwnProfile')
       })
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockImplementation(async () => {
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockImplementation(async () => {
         callOrder.push('fetchRoster')
       })
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Mock conversation sync
       const convSync = (xmppClient as any).internal.conversationSync
@@ -2205,22 +2205,22 @@ describe('XMPPClient', () => {
     function setupAutojoinFreshSession() {
       ;(xmppClient as any).currentJid = 'user@example.com'
       ;(xmppClient as any).sessionLifecycle.sessionGeneration = 1
-      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
-      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.server, 'discoverHttpUploadService').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
-      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({
+      vi.spyOn(xmppClient.contacts, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({
         roomsToAutojoin: [{ jid: 'public@conf.example.com', nick: 'me' }],
         allRoomJids: ['public@conf.example.com'],
       })
       const convSync = (xmppClient as any).internal.conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
-      vi.spyOn(xmppClient.muc, 'queryRoomFeatures').mockResolvedValue({
+      vi.spyOn(xmppClient.rooms, 'queryRoomFeatures').mockResolvedValue({
         supportsMAM: false, supportsReactions: true, supportsHats: false,
         isNonAnonymous: true, isPrivate: false, isIrcGateway: false, supportsModeration: false, name: 'Public',
       })
-      return vi.spyOn(xmppClient.muc, 'joinRoom').mockResolvedValue()
+      return vi.spyOn(xmppClient.rooms, 'joinRoom').mockResolvedValue()
     }
 
     it('does not autojoin a non-anonymous public bookmark that is not acknowledged', async () => {

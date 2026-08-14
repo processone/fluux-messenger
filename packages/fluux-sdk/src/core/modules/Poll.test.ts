@@ -223,7 +223,7 @@ describe('Poll module', () => {
   describe('vote', () => {
     it('should delegate to chat.sendReaction in single-vote mode', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -243,7 +243,7 @@ describe('Poll module', () => {
 
     it('should enforce single-vote: remove previous poll vote', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -263,7 +263,7 @@ describe('Poll module', () => {
 
     it('should preserve non-poll reactions in single-vote mode', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -283,7 +283,7 @@ describe('Poll module', () => {
 
     it('should toggle off vote in single-vote mode', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -303,7 +303,7 @@ describe('Poll module', () => {
 
     it('should toggle vote in multi-vote mode', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -324,7 +324,7 @@ describe('Poll module', () => {
 
     it('should toggle off in multi-vote mode', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -560,7 +560,7 @@ describe('Poll module', () => {
 
     it('should allow vote on poll with future deadline', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -579,7 +579,7 @@ describe('Poll module', () => {
 
     it('should allow vote on poll without deadline', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -675,7 +675,7 @@ describe('Poll module', () => {
   describe('vote edge cases', () => {
     it('should reject vote with emoji not in poll options', async () => {
       await connectClient()
-      vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -694,7 +694,7 @@ describe('Poll module', () => {
 
     it('should handle voting on closed poll (already closed by closePoll)', async () => {
       await connectClient()
-      vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       // closePoll marks the poll as closed in localPolls, but vote() receives
       // PollData directly — it doesn't check localPolls. This test documents
@@ -710,12 +710,12 @@ describe('Poll module', () => {
 
       // Vote should succeed — poll module only checks deadline, not closed state
       await xmppClient.poll.vote('room@conf.example.com', 'msg-1', '1️⃣', [], poll)
-      expect(xmppClient.chat.sendReaction).toHaveBeenCalled()
+      expect(xmppClient.messages.sendReaction).toHaveBeenCalled()
     })
 
     it('should reject vote when isClosed=true is passed', async () => {
       await connectClient()
-      vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',
@@ -733,7 +733,7 @@ describe('Poll module', () => {
 
     it('should allow vote when isClosed is undefined', async () => {
       await connectClient()
-      const sendReactionSpy = vi.spyOn(xmppClient.chat, 'sendReaction').mockResolvedValue()
+      const sendReactionSpy = vi.spyOn(xmppClient.messages, 'sendReaction').mockResolvedValue()
 
       const poll = {
         title: 'Q?',

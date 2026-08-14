@@ -101,7 +101,7 @@ describe('Discovery MAM Search Capability', () => {
     mockXmppClientInstance._emit('online')
     await connectPromise
 
-    await xmppClient.discovery.discoverMAMSearchCapability()
+    await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: true })
@@ -144,7 +144,7 @@ describe('Discovery MAM Search Capability', () => {
     mockXmppClientInstance._emit('online')
     await connectPromise
 
-    await xmppClient.discovery.discoverMAMSearchCapability()
+    await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
@@ -173,7 +173,7 @@ describe('Discovery MAM Search Capability', () => {
     mockXmppClientInstance._emit('online')
     await connectPromise
 
-    await xmppClient.discovery.discoverMAMSearchCapability()
+    await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
@@ -191,7 +191,7 @@ describe('Discovery MAM Search Capability', () => {
     mockXmppClientInstance._emit('online')
     await connectPromise
 
-    await xmppClient.discovery.discoverMAMSearchCapability()
+    await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:mam-fulltext-search', { supported: false })
@@ -231,7 +231,7 @@ describe('Discovery MAM Search Capability', () => {
     mockXmppClientInstance._emit('online')
     await connectPromise
 
-    await xmppClient.discovery.discoverMAMSearchCapability()
+    await xmppClient.server.discoverMAMSearchCapability()
     await waitForAsyncOps()
 
     // Should not be fooled by fulltext in a non-MAM form

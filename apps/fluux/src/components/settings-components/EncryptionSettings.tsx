@@ -220,7 +220,7 @@ export function EncryptionSettings() {
       return
     }
     let cancelled = false
-    client.discovery
+    client.server
       .checkPepSupport()
       .then((supported) => {
         if (!cancelled) setPepSupported(supported)

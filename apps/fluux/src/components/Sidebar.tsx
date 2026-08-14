@@ -330,7 +330,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
               onCatchUpAll={() => {
                 if (isCatchingUpRooms) return
                 setIsCatchingUpRooms(true)
-                void client.muc.resync().finally(() => setIsCatchingUpRooms(false))
+                void client.rooms.resync().finally(() => setIsCatchingUpRooms(false))
               }}
               isCatchingUp={isCatchingUpRooms}
               onMarkAllRead={markAllRoomsRead}

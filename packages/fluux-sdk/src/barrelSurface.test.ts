@@ -86,6 +86,22 @@ describe('public API surface', () => {
     }
   })
 
+  it('names its modules after the domain, not after the XEPs they implement', () => {
+    // The classes stay MUC, Discovery, Roster: they implement those XEPs and
+    // say so. What a consumer types is the domain word.
+    const client = new XMPPClient()
+    try {
+      for (const name of ['muc', 'roster', 'discovery', 'webPush']) {
+        expect(name in client).toBe(false)
+      }
+      for (const name of ['rooms', 'contacts', 'server', 'push', 'messages']) {
+        expect(typeof (client as unknown as Record<string, unknown>)[name]).toBe('object')
+      }
+    } finally {
+      client.destroy()
+    }
+  })
+
   it('does not hand the stanza builder back through a hook', () => {
     // A named export is not the only door: `useXMPP` used to return `xml`,
     // which would have made every assertion above true and meaningless. The

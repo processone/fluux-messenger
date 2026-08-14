@@ -63,7 +63,7 @@ export function useLinkPreview() {
       }
 
       // Send the fastening with link preview
-      await client.chat.sendLinkPreview(to, messageId, preview)
+      await client.messages.sendLinkPreview(to, messageId, preview)
 
       setState({ isFetching: false, error: null })
     } catch (err) {

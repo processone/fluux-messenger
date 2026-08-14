@@ -106,7 +106,7 @@ export function useXMPP() {
 
   const setPresence = useCallback(
     async (show?: 'away' | 'dnd' | 'xa', status?: string) => {
-      await client.roster.setPresence(show || 'online', status)
+      await client.contacts.setPresence(show || 'online', status)
     },
     [client]
   )

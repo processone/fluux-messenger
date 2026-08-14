@@ -141,7 +141,7 @@ interface UnresolvedModifications {
  *
  * @remarks
  * This module is accessed via `client.mam` on the XMPPClient instance.
- * For convenience, `queryMAM` and `queryRoomMAM` are also available via `client.chat`.
+ * For convenience, `queryMAM` and `queryRoomMAM` are also available via `client.messages`.
  *
  * @example Fetch recent 1:1 messages
  * ```typescript

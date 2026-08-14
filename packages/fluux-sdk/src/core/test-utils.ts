@@ -734,7 +734,7 @@ export const createMockXMPPClientForHooks = () => ({
   sendRawXml: vi.fn(),
 
   // Namespace modules
-  roster: {
+  contacts: {
     addContact: vi.fn(),
     removeContact: vi.fn(),
     renameContact: vi.fn(),
@@ -763,7 +763,7 @@ export const createMockXMPPClientForHooks = () => ({
     clearRoomAvatar: vi.fn(),
     changePassword: vi.fn(),
   },
-  chat: {
+  messages: {
     sendMessage: vi.fn(),
     sendChatState: vi.fn(),
     sendReaction: vi.fn(),
@@ -780,7 +780,7 @@ export const createMockXMPPClientForHooks = () => ({
       catchUpRoomHistory: vi.fn(),
     },
   },
-  muc: {
+  rooms: {
     joinRoom: vi.fn(),
     // Resolves by default: callers that await the join outcome (acceptInvitation)
     // treat a rejection as "the server refused", so the neutral default is success.
@@ -802,7 +802,7 @@ export const createMockXMPPClientForHooks = () => ({
     fetchRoomList: vi.fn(),
     fetchRoomOptions: vi.fn(),
   },
-  discovery: {
+  server: {
     requestUploadSlot: vi.fn(),
   },
   poll: {

@@ -31,7 +31,7 @@ export function useChatActions() {
       // A 1:1 message carries no mentions: those address room occupants.
       options?: Omit<SendMessageOptions, 'references'>
     ): Promise<string> => {
-      return await client.chat.sendMessage(to, body, options)
+      return await client.messages.sendMessage(to, body, options)
     },
     [client]
   )
@@ -71,35 +71,35 @@ export function useChatActions() {
 
   const sendChatState = useCallback(
     async (to: string, state: ChatStateNotification) => {
-      await client.chat.sendChatState(to, state)
+      await client.messages.sendChatState(to, state)
     },
     [client]
   )
 
   const sendReaction = useCallback(
     async (to: string, messageId: string, emojis: string[]) => {
-      await client.chat.sendReaction(to, messageId, emojis)
+      await client.messages.sendReaction(to, messageId, emojis)
     },
     [client]
   )
 
   const sendCorrection = useCallback(
     async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(conversationId, messageId, newBody, attachment)
+      await client.messages.sendCorrection(conversationId, messageId, newBody, attachment)
     },
     [client]
   )
 
   const retractMessage = useCallback(
     async (conversationId: string, messageId: string) => {
-      await client.chat.sendRetraction(conversationId, messageId)
+      await client.messages.sendRetraction(conversationId, messageId)
     },
     [client]
   )
 
   const sendEasterEgg = useCallback(
     async (to: string, animation: string) => {
-      await client.chat.sendEasterEgg(to, animation)
+      await client.messages.sendEasterEgg(to, animation)
     },
     [client]
   )
@@ -191,13 +191,13 @@ export function useChatActions() {
         queryMAM: async (id, beforeId) => {
           const conversation = chatStore.getState().conversations.get(id)
           if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, before: beforeId })
+            await client.messages.queryMAM({ with: conversation.id, before: beforeId })
           }
         },
         queryMAMByEndTime: async (id, endIso) => {
           const conversation = chatStore.getState().conversations.get(id)
           if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, end: endIso, before: '' })
+            await client.messages.queryMAM({ with: conversation.id, end: endIso, before: '' })
           }
         },
         errorLogPrefix: 'Failed to fetch older chat history',

@@ -55,7 +55,7 @@
  * // no React and no extra setup needed.
  * const client = new XMPPClient()
  * await client.connect({ jid: 'bot@example.com', password: 'secret', server: 'example.com' })
- * client.chat.sendMessage('user@example.com', 'Hello!')
+ * client.messages.sendMessage('user@example.com', 'Hello!')
  * ```
  *
  * @packageDocumentation

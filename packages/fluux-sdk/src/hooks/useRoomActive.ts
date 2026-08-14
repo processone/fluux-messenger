@@ -188,28 +188,28 @@ export function useRoomActive() {
 
   const joinRoom = useCallback(
     async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
-      await client.muc.joinRoom(roomJid, nickname, options)
+      await client.rooms.joinRoom(roomJid, nickname, options)
     },
     [client]
   )
 
   const joinResult = useCallback(
     async (roomJid: string): Promise<void> => {
-      await client.muc.joinResult(roomJid)
+      await client.rooms.joinResult(roomJid)
     },
     [client],
   )
 
   const changeNick = useCallback(
     async (roomJid: string, newNick: string): Promise<void> => {
-      await client.muc.changeNick(roomJid, newNick)
+      await client.rooms.changeNick(roomJid, newNick)
     },
     [client],
   )
 
   // Pre-join room inspection + real-JID-exposure acknowledgement (issue #37)
   const getRoomInfo = useCallback(
-    async (roomJid: string): Promise<RoomFeatures | null> => client.muc.queryRoomFeatures(roomJid),
+    async (roomJid: string): Promise<RoomFeatures | null> => client.rooms.queryRoomFeatures(roomJid),
     [client]
   )
   const acknowledgeNonAnonymousRoom = useCallback((roomJid: string) => {
@@ -228,56 +228,56 @@ export function useRoomActive() {
       // is required here even though the protocol leaves it optional.
       options?: RoomSendMessageOptions
     ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, options)
+      return await client.messages.sendMessage(roomJid, body, options)
     },
     [client]
   )
 
   const sendWhisper = useCallback(
     async (roomJid: string, nick: string, body: string): Promise<string> => {
-      return await client.chat.sendWhisper(roomJid, nick, body)
+      return await client.messages.sendWhisper(roomJid, nick, body)
     },
     [client]
   )
 
   const sendReaction = useCallback(
     async (roomJid: string, messageId: string, emojis: string[]) => {
-      await client.chat.sendReaction(roomJid, messageId, emojis)
+      await client.messages.sendReaction(roomJid, messageId, emojis)
     },
     [client]
   )
 
   const sendCorrection = useCallback(
     async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(roomJid, messageId, newBody, attachment)
+      await client.messages.sendCorrection(roomJid, messageId, newBody, attachment)
     },
     [client]
   )
 
   const retractMessage = useCallback(
     async (roomJid: string, messageId: string) => {
-      await client.chat.sendRetraction(roomJid, messageId)
+      await client.messages.sendRetraction(roomJid, messageId)
     },
     [client]
   )
 
   const sendChatState = useCallback(
     async (roomJid: string, state: ChatStateNotification) => {
-      await client.chat.sendChatState(roomJid, state)
+      await client.messages.sendChatState(roomJid, state)
     },
     [client]
   )
 
   const sendWhisperChatState = useCallback(
     async (roomJid: string, nick: string, state: ChatStateNotification) => {
-      await client.chat.sendWhisperChatState(roomJid, nick, state)
+      await client.messages.sendWhisperChatState(roomJid, nick, state)
     },
     [client]
   )
 
   const sendEasterEgg = useCallback(
     async (roomJid: string, animation: string) => {
-      await client.chat.sendEasterEgg(roomJid, animation)
+      await client.messages.sendEasterEgg(roomJid, animation)
     },
     [client]
   )
@@ -319,7 +319,7 @@ export function useRoomActive() {
         getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().rooms.get(id)?.messages ?? []),
         clearInvalidArchiveCursor: (id, cursor) => roomStore.getState().clearMessageStanzaId(id, cursor),
         queryMAM: async (id, beforeId) => {
-          await client.chat.queryRoomMAM({ roomJid: id, before: beforeId })
+          await client.messages.queryRoomMAM({ roomJid: id, before: beforeId })
         },
         errorLogPrefix: 'Failed to fetch older room history',
       }),
@@ -341,7 +341,7 @@ export function useRoomActive() {
         getMessages: (id) => roomStore.getState().rooms.get(id)?.messages || [],
         getGap: (id) => roomStore.getState().roomGaps.get(id),
         queryMAM: async (id, options) => {
-          await client.chat.queryRoomMAM({ roomJid: id, ...options })
+          await client.messages.queryRoomMAM({ roomJid: id, ...options })
         },
       }),
     [client]

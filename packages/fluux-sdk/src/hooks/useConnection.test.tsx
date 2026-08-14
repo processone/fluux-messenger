@@ -426,7 +426,7 @@ describe('useConnection hook', () => {
         put: { url: 'https://upload.example.com/put/abc', headers: {} },
         get: 'https://upload.example.com/get/abc',
       }
-      mockClient.discovery.requestUploadSlot.mockResolvedValue(slot)
+      mockClient.server.requestUploadSlot.mockResolvedValue(slot)
 
       await act(async () => {
         const uploadSlot = await result.current.requestUploadSlot(
@@ -437,7 +437,7 @@ describe('useConnection hook', () => {
         expect(uploadSlot).toEqual(slot)
       })
 
-      expect(mockClient.discovery.requestUploadSlot).toHaveBeenCalledWith('photo.jpg', 1024, 'image/jpeg')
+      expect(mockClient.server.requestUploadSlot).toHaveBeenCalledWith('photo.jpg', 1024, 'image/jpeg')
     })
   })
 
@@ -445,7 +445,7 @@ describe('useConnection hook', () => {
     it('should call client.sendLinkPreview for chat', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
-      mockClient.chat.sendLinkPreview.mockResolvedValue(undefined)
+      mockClient.messages.sendLinkPreview.mockResolvedValue(undefined)
 
       const preview = {
         url: 'https://example.com/article',
@@ -461,7 +461,7 @@ describe('useConnection hook', () => {
         )
       })
 
-      expect(mockClient.chat.sendLinkPreview).toHaveBeenCalledWith(
+      expect(mockClient.messages.sendLinkPreview).toHaveBeenCalledWith(
         'alice@example.com',
         'msg-123',
         preview,
@@ -471,7 +471,7 @@ describe('useConnection hook', () => {
     it('should call client.sendLinkPreview for groupchat', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
-      mockClient.chat.sendLinkPreview.mockResolvedValue(undefined)
+      mockClient.messages.sendLinkPreview.mockResolvedValue(undefined)
 
       const preview = {
         url: 'https://example.com/article',
@@ -486,7 +486,7 @@ describe('useConnection hook', () => {
         )
       })
 
-      expect(mockClient.chat.sendLinkPreview).toHaveBeenCalledWith(
+      expect(mockClient.messages.sendLinkPreview).toHaveBeenCalledWith(
         'room@conference.example.com',
         'msg-456',
         preview,

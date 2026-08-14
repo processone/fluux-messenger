@@ -61,25 +61,25 @@ describe('useEvents hook', () => {
     it('should call client.acceptSubscription when acceptSubscription is called', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.roster.acceptSubscription.mockResolvedValue(undefined)
+      mockClient.contacts.acceptSubscription.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.acceptSubscription('alice@example.com')
       })
 
-      expect(mockClient.roster.acceptSubscription).toHaveBeenCalledWith('alice@example.com')
+      expect(mockClient.contacts.acceptSubscription).toHaveBeenCalledWith('alice@example.com')
     })
 
     it('should call client.rejectSubscription when rejectSubscription is called', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.roster.rejectSubscription.mockResolvedValue(undefined)
+      mockClient.contacts.rejectSubscription.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.rejectSubscription('alice@example.com')
       })
 
-      expect(mockClient.roster.rejectSubscription).toHaveBeenCalledWith('alice@example.com')
+      expect(mockClient.contacts.rejectSubscription).toHaveBeenCalledWith('alice@example.com')
     })
   })
 
@@ -114,7 +114,7 @@ describe('useEvents hook', () => {
     it('should add contact and create conversation when acceptStranger is called', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.roster.addContact.mockResolvedValue(undefined)
+      mockClient.contacts.addContact.mockResolvedValue(undefined)
 
       act(() => {
         eventsStore.getState().addStrangerMessage('stranger@example.com', 'Hello!')
@@ -126,7 +126,7 @@ describe('useEvents hook', () => {
       })
 
       // Should add contact with local part as nickname
-      expect(mockClient.roster.addContact).toHaveBeenCalledWith('stranger@example.com', 'stranger')
+      expect(mockClient.contacts.addContact).toHaveBeenCalledWith('stranger@example.com', 'stranger')
 
       // Should create conversation
       const conversations = Array.from(chatStore.getState().conversations.values())
@@ -183,7 +183,7 @@ describe('useEvents hook', () => {
     it('should join room when acceptInvitation is called', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       // Set up current JID for default nickname
       act(() => {
@@ -198,7 +198,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('room@conference.example.com')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'room@conference.example.com',
         'myuser',  // local part of JID
         { password: undefined, isQuickChat: false }
@@ -211,7 +211,7 @@ describe('useEvents hook', () => {
     it('should prefer the profile username (XEP-0172 nick) over the JID local part', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       act(() => {
         connectionStore.getState().setJid('myuser@example.com/resource')
@@ -226,7 +226,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('room@conference.example.com')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'room@conference.example.com',
         'Alice',  // profile username, not the JID local part
         { password: undefined, isQuickChat: false }
@@ -236,7 +236,7 @@ describe('useEvents hook', () => {
     it('should join room with password from invitation', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       act(() => {
         connectionStore.getState().setJid('myuser@example.com/resource')
@@ -252,7 +252,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('room@conference.example.com')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'room@conference.example.com',
         'myuser',
         { password: 'secret123', isQuickChat: false }
@@ -266,10 +266,10 @@ describe('useEvents hook', () => {
     it('keeps the invitation and rethrows when the server refuses the join', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
       // ...Once: the mock client is shared across tests and vi.clearAllMocks()
       // keeps implementations, so a persistent rejection would leak into them.
-      mockClient.muc.joinResult.mockRejectedValueOnce(
+      mockClient.rooms.joinResult.mockRejectedValueOnce(
         new RoomJoinError('room@conference.example.com', 'not-authorized')
       )
 
@@ -290,7 +290,7 @@ describe('useEvents hook', () => {
     it('retries with a password supplied by the caller, overriding the invitation one', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       act(() => {
         connectionStore.getState().setJid('myuser@example.com/resource')
@@ -306,7 +306,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('room@conference.example.com', 'typed-by-user')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'room@conference.example.com',
         'myuser',
         { password: 'typed-by-user', isQuickChat: false }
@@ -317,7 +317,7 @@ describe('useEvents hook', () => {
     it('should join room with isQuickChat flag from invitation', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       act(() => {
         connectionStore.getState().setJid('myuser@example.com/resource')
@@ -335,7 +335,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('quickchat-user-happy-fox@conference.example.com')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'quickchat-user-happy-fox@conference.example.com',
         'myuser',
         { password: undefined, isQuickChat: true }
@@ -438,7 +438,7 @@ describe('useEvents hook', () => {
     it('should update when events are handled', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.roster.acceptSubscription.mockResolvedValue(undefined)
+      mockClient.contacts.acceptSubscription.mockResolvedValue(undefined)
 
       act(() => {
         eventsStore.getState().addSubscriptionRequest('alice@example.com')
@@ -460,7 +460,7 @@ describe('useEvents hook', () => {
     it('should handle empty JID gracefully in acceptStranger', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.roster.addContact.mockResolvedValue(undefined)
+      mockClient.contacts.addContact.mockResolvedValue(undefined)
 
       act(() => {
         eventsStore.getState().addStrangerMessage('stranger@example.com', 'Hello')
@@ -471,13 +471,13 @@ describe('useEvents hook', () => {
         await result.current.acceptStranger('stranger@example.com')
       })
 
-      expect(mockClient.roster.addContact).toHaveBeenCalledWith('stranger@example.com', 'stranger')
+      expect(mockClient.contacts.addContact).toHaveBeenCalledWith('stranger@example.com', 'stranger')
     })
 
     it('should use "user" as default nickname when JID is null in acceptInvitation', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 
-      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+      mockClient.rooms.joinRoom.mockResolvedValue(undefined)
 
       act(() => {
         // Don't set JID
@@ -491,7 +491,7 @@ describe('useEvents hook', () => {
         await result.current.acceptInvitation('room@conference.example.com')
       })
 
-      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+      expect(mockClient.rooms.joinRoom).toHaveBeenCalledWith(
         'room@conference.example.com',
         'user',  // default when JID is null
         { password: undefined, isQuickChat: false }

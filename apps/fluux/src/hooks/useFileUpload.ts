@@ -123,7 +123,7 @@ export function useFileUpload() {
   // context value) so it doesn't churn the `uploadFile` callback below.
   const requestUploadSlot = useCallback(
     (filename: string, size: number, contentType: string) => {
-      return client.discovery.requestUploadSlot(filename, size, contentType)
+      return client.server.requestUploadSlot(filename, size, contentType)
     },
     [client],
   )

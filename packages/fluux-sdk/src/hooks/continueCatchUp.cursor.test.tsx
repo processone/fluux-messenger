@@ -61,8 +61,8 @@ const seedRoomMessages = (messages: Array<{ timestamp?: Date; stanzaId?: string 
 }
 
 beforeEach(() => {
-  vi.mocked(mockClient.chat.queryMAM).mockReset().mockResolvedValue(undefined)
-  vi.mocked(mockClient.chat.queryRoomMAM).mockReset().mockResolvedValue(undefined)
+  vi.mocked(mockClient.messages.queryMAM).mockReset().mockResolvedValue(undefined)
+  vi.mocked(mockClient.messages.queryRoomMAM).mockReset().mockResolvedValue(undefined)
   chatStore.setState({
     conversations: new Map(),
     conversationEntities: new Map(),
@@ -110,7 +110,7 @@ describe('continueChatCatchUp cursor selection', () => {
       await result.current.continueChatCatchUp()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       after: 'gap-id-1',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -130,7 +130,7 @@ describe('continueChatCatchUp cursor selection', () => {
       await result.current.continueChatCatchUp()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       start: '2026-05-14T09:00:00.000Z',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -149,7 +149,7 @@ describe('continueChatCatchUp cursor selection', () => {
       await result.current.continueChatCatchUp()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       after: 'newest-id',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -161,14 +161,14 @@ describe('continueChatCatchUp cursor selection', () => {
     chatStore.setState({
       conversationGaps: new Map([[CONV, { start: Date.now(), startId: 'gap-id-1' } as never]]),
     })
-    vi.mocked(mockClient.chat.queryMAM).mockRejectedValue(new Error('boom'))
+    vi.mocked(mockClient.messages.queryMAM).mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useChatActive(), { wrapper })
 
     await act(async () => {
       await result.current.continueChatCatchUp()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalled()
+    expect(mockClient.messages.queryMAM).toHaveBeenCalled()
     expect(chatStore.getState().getMAMQueryState(CONV).isLoading).toBe(false)
   })
 })
@@ -184,7 +184,7 @@ describe('continueRoomCatchUp cursor selection', () => {
       await result.current.continueRoomCatchUp()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       after: 'gap-id-1',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -203,7 +203,7 @@ describe('continueRoomCatchUp cursor selection', () => {
       await result.current.continueRoomCatchUp()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       start: '2026-05-14T09:00:00.000Z',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -222,7 +222,7 @@ describe('continueRoomCatchUp cursor selection', () => {
       await result.current.continueRoomCatchUp()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
       after: 'newest-id',
       max: MAM_CATCHUP_FORWARD_MAX,
@@ -234,14 +234,14 @@ describe('continueRoomCatchUp cursor selection', () => {
     roomStore.setState({
       roomGaps: new Map([[ROOM, { start: Date.now(), startId: 'gap-id-1' } as never]]),
     })
-    vi.mocked(mockClient.chat.queryRoomMAM).mockRejectedValue(new Error('boom'))
+    vi.mocked(mockClient.messages.queryRoomMAM).mockRejectedValue(new Error('boom'))
     const { result } = renderHook(() => useRoomActive(), { wrapper })
 
     await act(async () => {
       await result.current.continueRoomCatchUp()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalled()
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalled()
     expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
   })
 })

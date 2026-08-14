@@ -44,8 +44,8 @@ describe('continueCatchUp always clears the MAM loading flag', () => {
   const ROOM = 'room@conference.example.com'
 
   beforeEach(() => {
-    vi.mocked(mockClient.chat.queryMAM).mockReset().mockResolvedValue(undefined)
-    vi.mocked(mockClient.chat.queryRoomMAM).mockReset().mockResolvedValue(undefined)
+    vi.mocked(mockClient.messages.queryMAM).mockReset().mockResolvedValue(undefined)
+    vi.mocked(mockClient.messages.queryRoomMAM).mockReset().mockResolvedValue(undefined)
     chatStore.setState({
       conversations: new Map(),
       conversationEntities: new Map(),
@@ -78,7 +78,7 @@ describe('continueCatchUp always clears the MAM loading flag', () => {
       await result.current.continueChatCatchUp()
     })
 
-    expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
+    expect(mockClient.messages.queryMAM).not.toHaveBeenCalled()
     expect(chatStore.getState().getMAMQueryState(CONV).isLoading).toBe(false)
   })
 
@@ -102,7 +102,7 @@ describe('continueCatchUp always clears the MAM loading flag', () => {
       await result.current.continueRoomCatchUp()
     })
 
-    expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+    expect(mockClient.messages.queryRoomMAM).not.toHaveBeenCalled()
     expect(roomStore.getState().getRoomMAMQueryState(ROOM).isLoading).toBe(false)
   })
 })

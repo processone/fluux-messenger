@@ -153,7 +153,7 @@ export interface InternalModules {
  *   }
  *
  *   const sendMessage = () => {
- *     client.chat.sendMessage('friend@example.com', 'Hello!')
+ *     client.messages.sendMessage('friend@example.com', 'Hello!')
  *   }
  *
  *   if (status !== 'online') return <button onClick={handleConnect}>Connect</button>
@@ -167,16 +167,16 @@ export interface InternalModules {
  *
  * // Chat operations. A room is addressed the same way: `chat` reads the room
  * // store to decide whether it is talking to a room or to a person.
- * client.chat.sendMessage('bob@example.com', 'Hello!')
- * client.chat.sendReaction('bob@example.com', 'msg-1', ['\u{1F44D}'])
+ * client.messages.sendMessage('bob@example.com', 'Hello!')
+ * client.messages.sendReaction('bob@example.com', 'msg-1', ['\u{1F44D}'])
  *
  * // MUC (Multi-User Chat) operations
- * client.muc.joinRoom('room@conference.example.com', 'alice')
- * client.chat.sendMessage('room@conference.example.com', 'Hello room!')
+ * client.rooms.joinRoom('room@conference.example.com', 'alice')
+ * client.messages.sendMessage('room@conference.example.com', 'Hello room!')
  *
  * // Roster operations
- * client.roster.addContact('bob@example.com', 'Bob')
- * client.roster.removeContact('bob@example.com')
+ * client.contacts.addContact('bob@example.com', 'Bob')
+ * client.contacts.removeContact('bob@example.com')
  *
  * // Profile operations
  * client.profile.publishOwnAvatar(imageData, 'image/png', 64, 64)
@@ -187,7 +187,7 @@ export interface InternalModules {
  * client.admin.executeAdminCommand('http://jabber.org/protocol/admin#add-user')
  *
  * // Service discovery
- * client.discovery.fetchServerInfo()
+ * client.server.fetchServerInfo()
  * ```
  *
  * @category Core
@@ -219,7 +219,7 @@ export class XMPPClient {
    * Chat module for 1:1 messaging.
    * Handles messages, reactions, chat states, corrections, and MAM queries.
    */
-  public chat!: Chat
+  public messages!: Chat
 
   /**
    * End-to-end encryption plugin host. `null` before the first successful
@@ -239,13 +239,13 @@ export class XMPPClient {
    * Roster management module.
    * Handles contact list, presence, and subscription management.
    */
-  public roster!: Roster
+  public contacts!: Roster
 
   /**
    * Multi-User Chat (MUC) module.
    * Handles room operations, bookmarks, and group messaging.
    */
-  public muc!: MUC
+  public rooms!: MUC
 
   /**
    * Server administration module (XEP-0133).
@@ -263,7 +263,7 @@ export class XMPPClient {
    * Service discovery module (XEP-0030).
    * Handles server feature discovery and HTTP upload service discovery.
    */
-  public discovery!: Discovery
+  public server!: Discovery
 
   /**
    * PubSub module (XEP-0060).
@@ -313,7 +313,7 @@ export class XMPPClient {
    * Web Push module (p1:push).
    * Handles VAPID-based push notification registration with ejabberd Business Edition.
    */
-  public webPush!: WebPush
+  public push!: WebPush
 
 
 
@@ -683,18 +683,18 @@ export class XMPPClient {
     this.connectionActor = this.connection.getConnectionActor()
     this.pubsub = new PubSub(moduleDeps)
     const mam = new MAM(moduleDeps)
-    this.chat = new Chat(moduleDeps, mam)
-    this.poll = new Poll(moduleDeps, this.chat)
-    this.roster = new Roster(moduleDeps)
-    this.muc = new MUC(moduleDeps, mam)
+    this.messages = new Chat(moduleDeps, mam)
+    this.poll = new Poll(moduleDeps, this.messages)
+    this.contacts = new Roster(moduleDeps)
+    this.rooms = new MUC(moduleDeps, mam)
     this.admin = new Admin(moduleDeps)
     this.profile = new Profile(moduleDeps)
-    this.discovery = new Discovery(moduleDeps)
+    this.server = new Discovery(moduleDeps)
     this.blocking = new Blocking(moduleDeps)
     this.ignore = new Ignore(moduleDeps)
     const conversationSync = new ConversationSync(moduleDeps)
     const mds = new Mds(moduleDeps)
-    this.webPush = new WebPush(moduleDeps)
+    this.push = new WebPush(moduleDeps)
     const entityTime = new EntityTime(moduleDeps)
     const lastActivity = new LastActivity(moduleDeps)
     this.internal = { mam, mds, conversationSync, entityTime, lastActivity }
@@ -703,12 +703,12 @@ export class XMPPClient {
     // churny bits (stores, JID, transport) are read through getters so a
     // re-init or reconnect always sees the live value.
     this.sessionLifecycle = new SessionLifecycleEngine({
-      discovery: this.discovery,
+      discovery: this.server,
       admin: this.admin,
-      roster: this.roster,
-      muc: this.muc,
+      roster: this.contacts,
+      muc: this.rooms,
       profile: this.profile,
-      webPush: this.webPush,
+      webPush: this.push,
       conversationSync: this.internal.conversationSync,
       getStores: () => this.stores,
       getCurrentJid: () => this.currentJid,
@@ -747,7 +747,7 @@ export class XMPPClient {
       // not from the position of a module in this list. See core/stanzaRouting.
       routeStanza(
         stanza,
-        [this.pubsub, this.blocking, this.poll, this.chat, this.muc, this.roster],
+        [this.pubsub, this.blocking, this.poll, this.messages, this.rooms, this.contacts],
         [this.internal.lastActivity],
       )
     })
@@ -928,7 +928,7 @@ export class XMPPClient {
    * client.subscribe('chat:message', ({ message }) => {
    *   console.log(`${message.from}: ${message.body}`)
    *   if (message.body?.includes('hello')) {
-   *     client.chat.sendMessage(message.from, 'Hello!')
+   *     client.messages.sendMessage(message.from, 'Hello!')
    *   }
    * })
    * ```
@@ -1288,7 +1288,7 @@ export class XMPPClient {
     this.stateSnapshot = undefined
 
     // Clean up MUC pending joins to prevent orphaned timeouts
-    this.muc?.cleanup()
+    this.rooms?.cleanup()
   }
 
   /**
@@ -1455,8 +1455,8 @@ export class XMPPClient {
       const showValue = currentShow || 'online'
       const statusValue = currentStatus ?? undefined
       Promise.all([
-        this.roster.setPresence(showValue, statusValue),
-        this.muc.sendPresenceToRooms(showValue, statusValue),
+        this.contacts.setPresence(showValue, statusValue),
+        this.rooms.sendPresenceToRooms(showValue, statusValue),
       ])
         .then(() => {
           // Reset error count on success
@@ -1794,7 +1794,7 @@ export class XMPPClient {
         await this.sendStanza(dataToElement(data))
       },
       queryDisco: async (jid) => {
-        return this.discovery.queryInfo(jid)
+        return this.server.queryInfo(jid)
       },
       publishPEP: async (node, item, options) => {
         await this.pubsub.publish(node, item, options)

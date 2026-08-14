@@ -5,7 +5,7 @@
  *
  * Room `fetchOlderHistory` must NEVER send a client-generated message id as the
  * RSM `<before>` cursor. This exercises the real hook wiring
- * (useRoom → createFetchOlderHistory → client.chat.queryRoomMAM) to prove the
+ * (useRoom → createFetchOlderHistory → client.messages.queryRoomMAM) to prove the
  * cursor is a server stanzaId, or the empty-string "get latest" sentinel, but
  * never a client UUID. Fails against the original
  * `messages[0].stanzaId || messages[0].id` cursor.
@@ -71,7 +71,7 @@ const other = (id: string, ts: string, stanzaId: string): RoomMessage => ({
 
 describe('useRoom fetchOlderHistory — MUC MAM cursor regression', () => {
   beforeEach(() => {
-    vi.mocked(mockClient.chat.queryRoomMAM).mockReset().mockResolvedValue(undefined)
+    vi.mocked(mockClient.messages.queryRoomMAM).mockReset().mockResolvedValue(undefined)
   })
 
   it('uses the oldest server stanzaId as the cursor — never the client id — when the oldest message is our own', async () => {
@@ -85,9 +85,9 @@ describe('useRoom fetchOlderHistory — MUC MAM cursor regression', () => {
       await result.current.fetchOlderHistory()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledTimes(1)
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({ roomJid: ROOM, before: 'archive-1' })
-    const before = vi.mocked(mockClient.chat.queryRoomMAM).mock.calls[0][0].before
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({ roomJid: ROOM, before: 'archive-1' })
+    const before = vi.mocked(mockClient.messages.queryRoomMAM).mock.calls[0][0].before
     expect(before).not.toBe('uuid-own')
   })
 
@@ -102,9 +102,9 @@ describe('useRoom fetchOlderHistory — MUC MAM cursor regression', () => {
       await result.current.fetchOlderHistory()
     })
 
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledTimes(1)
-    expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({ roomJid: ROOM, before: '' })
-    const before = vi.mocked(mockClient.chat.queryRoomMAM).mock.calls[0][0].before
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.messages.queryRoomMAM).toHaveBeenCalledWith({ roomJid: ROOM, before: '' })
+    const before = vi.mocked(mockClient.messages.queryRoomMAM).mock.calls[0][0].before
     expect(['uuid-1', 'uuid-2']).not.toContain(before)
   })
 })

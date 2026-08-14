@@ -3,7 +3,7 @@
  *
  * The real client answers `fetchOlderHistory` by querying MAM and prepending the result
  * via `roomStore.mergeRoomMAMMessages` / `chatStore.mergeMAMMessages` ('backward'). The
- * demo has no server, so we patch `client.chat.queryRoomMAM` (rooms) and `client.chat.queryMAM`
+ * demo has no server, so we patch `client.messages.queryRoomMAM` (rooms) and `client.messages.queryMAM`
  * (1:1) to synthesize a batch of OLDER messages on demand and feed them through the exact
  * same store path. This makes scroll-up actually prepend in demo mode — needed to exercise
  * the prepend-anchor scroll restore (and verify it on a real engine).
@@ -69,7 +69,7 @@ function buildOlderChatBatch(conversationId: string, oldest: Message, startIdx: 
 }
 
 type MAMable = {
-  chat: {
+  messages: {
     queryRoomMAM: (opts: { roomJid: string; before?: string }) => Promise<unknown>
     queryMAM: (opts: { with: string; before?: string }) => Promise<unknown>
   }
@@ -81,7 +81,7 @@ export function installDemoLoadOlder(client: MAMable): void {
   const roomGenerated = new Map<string, number>()
   const chatGenerated = new Map<string, number>()
 
-  client.chat.queryRoomMAM = async ({ roomJid }) => {
+  client.messages.queryRoomMAM = async ({ roomJid }) => {
     const rs = roomStore.getState()
     if (!roomJid.startsWith('stress-')) {
       rs.mergeRoomMAMMessages(roomJid, [], { count: 0 }, true, 'backward')
@@ -102,7 +102,7 @@ export function installDemoLoadOlder(client: MAMable): void {
     return { messages: batch, complete }
   }
 
-  client.chat.queryMAM = async ({ with: jid }) => {
+  client.messages.queryMAM = async ({ with: jid }) => {
     const cs = chatStore.getState()
     if (!jid.startsWith('stress-')) {
       cs.mergeMAMMessages(jid, [], { count: 0 }, true, 'backward')

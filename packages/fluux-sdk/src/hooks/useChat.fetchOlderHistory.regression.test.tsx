@@ -6,7 +6,7 @@
  * `fetchOlderHistory` must NEVER send a client-generated message id as the RSM
  * `<before>` cursor — the server rejects it with item-not-found and dead-ends
  * "load older history". These tests exercise the real hook wiring
- * (useChat → createFetchOlderHistory → client.chat.queryMAM) to prove the
+ * (useChat → createFetchOlderHistory → client.messages.queryMAM) to prove the
  * cursor is always a server stanzaId, or the id-independent timestamp recovery,
  * but never a client UUID. They fail against the original
  * `messages[0].stanzaId || messages[0].id` cursor.
@@ -69,7 +69,7 @@ const incoming = (id: string, ts: string, stanzaId: string): Message => ({
 
 describe('useChat fetchOlderHistory — MAM cursor regression', () => {
   beforeEach(() => {
-    vi.mocked(mockClient.chat.queryMAM).mockReset().mockResolvedValue(undefined)
+    vi.mocked(mockClient.messages.queryMAM).mockReset().mockResolvedValue(undefined)
   })
 
   it('uses the oldest server stanzaId as the cursor — never the client id — when the oldest message is outgoing', async () => {
@@ -84,10 +84,10 @@ describe('useChat fetchOlderHistory — MAM cursor regression', () => {
       await result.current.fetchOlderHistory()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledTimes(1)
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({ with: CONV, before: 'archive-1' })
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({ with: CONV, before: 'archive-1' })
     // The client UUID must never be used as a cursor.
-    const before = vi.mocked(mockClient.chat.queryMAM).mock.calls[0][0].before
+    const before = vi.mocked(mockClient.messages.queryMAM).mock.calls[0][0].before
     expect(before).not.toBe('uuid-sent')
   })
 
@@ -104,9 +104,9 @@ describe('useChat fetchOlderHistory — MAM cursor regression', () => {
       await result.current.fetchOlderHistory()
     })
 
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledTimes(1)
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({ with: CONV, before: 'archive-1' })
-    const before = vi.mocked(mockClient.chat.queryMAM).mock.calls[0][0].before
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({ with: CONV, before: 'archive-1' })
+    const before = vi.mocked(mockClient.messages.queryMAM).mock.calls[0][0].before
     expect(before).not.toBe('uuid-sent')
   })
 
@@ -122,14 +122,14 @@ describe('useChat fetchOlderHistory — MAM cursor regression', () => {
     })
 
     // Recovery: query by the `end` timestamp of the oldest message, empty before.
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledTimes(1)
-    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.messages.queryMAM).toHaveBeenCalledWith({
       with: CONV,
       end: new Date('2026-06-01T10:00:00Z').toISOString(),
       before: '',
     })
     // No call ever uses a client UUID as `before`.
-    for (const [opts] of vi.mocked(mockClient.chat.queryMAM).mock.calls) {
+    for (const [opts] of vi.mocked(mockClient.messages.queryMAM).mock.calls) {
       expect(['uuid-1', 'uuid-2']).not.toContain(opts.before)
     }
   })

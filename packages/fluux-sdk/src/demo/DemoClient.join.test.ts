@@ -22,11 +22,11 @@ describe('DemoClient MUC join', () => {
     const client = makeClient()
 
     const roomJid = 'demoroom@conference.fluux.chat'
-    await client.muc.joinRoom(roomJid, 'me')
+    await client.rooms.joinRoom(roomJid, 'me')
 
     // If the demo failed to settle the deferred, this await would never resolve
     // and the test would hit the vitest timeout (i.e. fail loudly).
-    await expect(client.muc.joinResult(roomJid)).resolves.toBeUndefined()
+    await expect(client.rooms.joinResult(roomJid)).resolves.toBeUndefined()
   })
 
   // Issue #1126: the demo simulates a password-protected room so the whole
@@ -42,8 +42,8 @@ describe('DemoClient MUC join', () => {
       const client = makeClient()
       seed(client)
 
-      await client.muc.joinRoom(ROOM, 'me')
-      const result = client.muc.joinResult(ROOM)
+      await client.rooms.joinRoom(ROOM, 'me')
+      const result = client.rooms.joinResult(ROOM)
 
       await expect(result).rejects.toMatchObject({ condition: 'not-authorized' })
       // Not left spinning: the row must become interactive again.
@@ -54,24 +54,24 @@ describe('DemoClient MUC join', () => {
       const client = makeClient()
       seed(client)
 
-      await client.muc.joinRoom(ROOM, 'me', { password: 'nope' })
+      await client.rooms.joinRoom(ROOM, 'me', { password: 'nope' })
 
-      await expect(client.muc.joinResult(ROOM)).rejects.toMatchObject({ condition: 'not-authorized' })
+      await expect(client.rooms.joinResult(ROOM)).rejects.toMatchObject({ condition: 'not-authorized' })
     })
 
     it('accepts the right password and remembers it for the next join', async () => {
       const client = makeClient()
       seed(client)
 
-      await client.muc.joinRoom(ROOM, 'me', { password: 'fluux' })
-      await expect(client.muc.joinResult(ROOM)).resolves.toBeUndefined()
+      await client.rooms.joinRoom(ROOM, 'me', { password: 'fluux' })
+      await expect(client.rooms.joinResult(ROOM)).resolves.toBeUndefined()
 
       // The password that worked is now on the room, so a rejoin needs no prompt.
       await vi.waitFor(() => expect(roomStore.getState().getRoom(ROOM)?.password).toBe('fluux'))
 
-      await client.muc.leaveRoom(ROOM)
-      await client.muc.joinRoom(ROOM, 'me')
-      await expect(client.muc.joinResult(ROOM)).resolves.toBeUndefined()
+      await client.rooms.leaveRoom(ROOM)
+      await client.rooms.joinRoom(ROOM, 'me')
+      await expect(client.rooms.joinResult(ROOM)).resolves.toBeUndefined()
     })
   })
 })

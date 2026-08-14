@@ -131,7 +131,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           const client = getSearchClient()
           if (client) {
             try {
-              const mamContext = await client.chat.fetchContextAround(
+              const mamContext = await client.messages.fetchContextAround(
                 previewResult.conversationId,
                 targetDate.toISOString(),
                 CONTEXT_BATCH_SIZE
@@ -141,7 +141,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
               after = []
 
               // Trigger background catch-up to fill the gap (non-blocking)
-              void client.chat.catchUpTo(
+              void client.messages.catchUpTo(
                 previewResult.conversationId,
                 targetDate.toISOString(),
               )

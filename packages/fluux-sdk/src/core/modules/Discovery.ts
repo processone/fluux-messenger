@@ -47,11 +47,11 @@ export function discoSupportsPep(disco: {
  * @example
  * ```typescript
  * // Access via XMPPClient
- * client.discovery.fetchServerInfo()
- * client.discovery.discoverHttpUploadService()
+ * client.server.fetchServerInfo()
+ * client.server.discoverHttpUploadService()
  *
  * // Request upload slot for file sharing
- * const slot = await client.discovery.requestUploadSlot('photo.jpg', 1024000, 'image/jpeg')
+ * const slot = await client.server.requestUploadSlot('photo.jpg', 1024000, 'image/jpeg')
  * // PUT file to slot.putUrl, then share slot.getUrl in message
  * ```
  *

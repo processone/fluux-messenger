@@ -54,21 +54,21 @@ export function useRosterActions() {
 
   const removeContact = useCallback(
     async (jid: string) => {
-      await client.roster.removeContact(jid)
+      await client.contacts.removeContact(jid)
     },
     [client]
   )
 
   const addContact = useCallback(
     async (jid: string, nick?: string) => {
-      await client.roster.addContact(jid, nick)
+      await client.contacts.addContact(jid, nick)
     },
     [client]
   )
 
   const renameContact = useCallback(
     async (jid: string, name: string) => {
-      await client.roster.renameContact(jid, name)
+      await client.contacts.renameContact(jid, name)
     },
     [client]
   )
@@ -120,7 +120,7 @@ export function useRosterActions() {
    */
   const acceptSubscription = useCallback(
     async (jid: string) => {
-      await client.roster.acceptSubscription(jid)
+      await client.contacts.acceptSubscription(jid)
     },
     [client]
   )
@@ -130,7 +130,7 @@ export function useRosterActions() {
    */
   const rejectSubscription = useCallback(
     async (jid: string) => {
-      await client.roster.rejectSubscription(jid)
+      await client.contacts.rejectSubscription(jid)
     },
     [client]
   )

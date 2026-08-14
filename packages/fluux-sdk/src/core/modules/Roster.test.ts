@@ -77,14 +77,14 @@ describe('XMPPClient Roster', () => {
 
   describe('addContact', () => {
     it('should throw error when not connected', async () => {
-      await expect(xmppClient.roster.addContact('contact@example.com')).rejects.toThrow('Not connected')
+      await expect(xmppClient.contacts.addContact('contact@example.com')).rejects.toThrow('Not connected')
     })
 
     it('should send subscribe presence without nickname', async () => {
       await connectClient()
 
       // Add contact without nickname
-      await xmppClient.roster.addContact('contact@example.com')
+      await xmppClient.contacts.addContact('contact@example.com')
 
       // Should have sent exactly one stanza (subscribe presence)
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -99,7 +99,7 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Add contact with nickname
-      await xmppClient.roster.addContact('contact@example.com', 'My Friend')
+      await xmppClient.contacts.addContact('contact@example.com', 'My Friend')
 
       // Should have sent two stanzas
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
@@ -125,7 +125,7 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Add contact with empty nickname
-      await xmppClient.roster.addContact('contact@example.com', '')
+      await xmppClient.contacts.addContact('contact@example.com', '')
 
       // Should have sent only one stanza (subscribe presence)
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -138,14 +138,14 @@ describe('XMPPClient Roster', () => {
 
   describe('acceptSubscription', () => {
     it('should throw error when not connected', async () => {
-      await expect(xmppClient.roster.acceptSubscription('contact@example.com')).rejects.toThrow('Not connected')
+      await expect(xmppClient.contacts.acceptSubscription('contact@example.com')).rejects.toThrow('Not connected')
     })
 
     it('should send subscribed and subscribe presence', async () => {
       await connectClient()
 
       // Accept subscription
-      await xmppClient.roster.acceptSubscription('contact@example.com')
+      await xmppClient.contacts.acceptSubscription('contact@example.com')
 
       // Should have sent two stanzas
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
@@ -167,7 +167,7 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Accept subscription
-      await xmppClient.roster.acceptSubscription('contact@example.com')
+      await xmppClient.contacts.acceptSubscription('contact@example.com')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('events:subscription-request-removed', { from: 'contact@example.com' })
     })
@@ -175,14 +175,14 @@ describe('XMPPClient Roster', () => {
 
   describe('rejectSubscription', () => {
     it('should throw error when not connected', async () => {
-      await expect(xmppClient.roster.rejectSubscription('contact@example.com')).rejects.toThrow('Not connected')
+      await expect(xmppClient.contacts.rejectSubscription('contact@example.com')).rejects.toThrow('Not connected')
     })
 
     it('should send unsubscribed presence', async () => {
       await connectClient()
 
       // Reject subscription
-      await xmppClient.roster.rejectSubscription('contact@example.com')
+      await xmppClient.contacts.rejectSubscription('contact@example.com')
 
       // Should have sent one stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -197,7 +197,7 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Reject subscription
-      await xmppClient.roster.rejectSubscription('contact@example.com')
+      await xmppClient.contacts.rejectSubscription('contact@example.com')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('events:subscription-request-removed', { from: 'contact@example.com' })
     })
@@ -205,14 +205,14 @@ describe('XMPPClient Roster', () => {
 
   describe('renameContact', () => {
     it('should throw error when not connected', async () => {
-      await expect(xmppClient.roster.renameContact('contact@example.com', 'New Name')).rejects.toThrow('Not connected')
+      await expect(xmppClient.contacts.renameContact('contact@example.com', 'New Name')).rejects.toThrow('Not connected')
     })
 
     it('should send roster set IQ with new name', async () => {
       await connectClient()
 
       // Rename contact
-      await xmppClient.roster.renameContact('contact@example.com', 'New Display Name')
+      await xmppClient.contacts.renameContact('contact@example.com', 'New Display Name')
 
       // Should have sent one stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -230,14 +230,14 @@ describe('XMPPClient Roster', () => {
 
   describe('removeContact', () => {
     it('should throw error when not connected', async () => {
-      await expect(xmppClient.roster.removeContact('contact@example.com')).rejects.toThrow('Not connected')
+      await expect(xmppClient.contacts.removeContact('contact@example.com')).rejects.toThrow('Not connected')
     })
 
     it('should send roster remove IQ', async () => {
       await connectClient()
 
       // Remove contact
-      await xmppClient.roster.removeContact('contact@example.com')
+      await xmppClient.contacts.removeContact('contact@example.com')
 
       // Should have sent one stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
@@ -425,7 +425,7 @@ describe('XMPPClient Roster', () => {
       await connectPromise
       vi.clearAllMocks()
 
-      await xmppClient.roster.setPresence('away', 'Be right back')
+      await xmppClient.contacts.setPresence('away', 'Be right back')
 
       // Find the presence stanza
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -466,7 +466,7 @@ describe('XMPPClient Roster', () => {
       const machineSend = vi.spyOn(xmppClient.presenceActor, 'send')
 
       // Call setPresence (as setupPresenceSync does when machine state changes)
-      await xmppClient.roster.setPresence('away', 'Auto away')
+      await xmppClient.contacts.setPresence('away', 'Auto away')
 
       // Verify presence was sent
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -489,7 +489,7 @@ describe('XMPPClient Roster', () => {
         machineSend.mockClear()
         vi.mocked(mockXmppClientInstance.send).mockClear()
 
-        await xmppClient.roster.setPresence(show, 'Status message')
+        await xmppClient.contacts.setPresence(show, 'Status message')
 
         // Verify presence was sent
         expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -514,7 +514,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue('online')
       mockPresence.getPreAutoAwayStatusMessage.mockReturnValue(null)
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should send presence WITHOUT <show> element (which means 'online')
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -543,7 +543,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue('online')
       mockPresence.getPreAutoAwayStatusMessage.mockReturnValue(null)
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should restore to online (not preserve 'away')
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -567,7 +567,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue(null)
       mockPresence.getStatusMessage.mockReturnValue('Out for lunch')
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should default to 'online' (no show element in XMPP)
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -585,7 +585,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue('online')
       mockPresence.getStatusMessage.mockReturnValue('In a meeting')
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should preserve 'dnd' status
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -605,7 +605,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue('away')
       mockPresence.getPreAutoAwayStatusMessage.mockReturnValue('Be right back')
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should restore to 'away' (the saved status)
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -629,7 +629,7 @@ describe('XMPPClient Roster', () => {
       mockPresence.getPreAutoAwayState.mockReturnValue(null)
       mockPresence.getStatusMessage.mockReturnValue(null)
 
-      await xmppClient.roster.sendInitialPresence()
+      await xmppClient.contacts.sendInitialPresence()
 
       // Should send presence WITHOUT <show> element
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -992,7 +992,7 @@ describe('XMPPClient Roster', () => {
           presence: 'offline',
         })
 
-        await xmppClient.roster.rejectSubscription('requester@example.com')
+        await xmppClient.contacts.rejectSubscription('requester@example.com')
 
         // Should have sent 2 stanzas: unsubscribed + roster remove
         expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
@@ -1017,7 +1017,7 @@ describe('XMPPClient Roster', () => {
           presence: 'offline',
         })
 
-        await xmppClient.roster.rejectSubscription('requester@example.com')
+        await xmppClient.contacts.rejectSubscription('requester@example.com')
 
         // Should only send unsubscribed, not roster remove
         expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)

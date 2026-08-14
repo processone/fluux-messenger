@@ -52,10 +52,10 @@ export function createMockClient() {
         discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
       },
     },
-    muc: {
+    rooms: {
       queryRoomMembers: vi.fn().mockResolvedValue([]),
     },
-    discovery: {
+    server: {
       discoverMAMSearchCapability: vi.fn().mockResolvedValue(undefined),
     },
     isConnected: vi.fn().mockReturnValue(true),

@@ -456,8 +456,8 @@ describe('XMPPClient Presence', () => {
 
     it('fails the join on a 401 instead of leaving it pending', async () => {
       await connectClient()
-      await xmppClient.muc.joinRoom('secret@conference.example.com', 'mynick')
-      const result = xmppClient.muc.joinResult('secret@conference.example.com')
+      await xmppClient.rooms.joinRoom('secret@conference.example.com', 'mynick')
+      const result = xmppClient.rooms.joinResult('secret@conference.example.com')
 
       mockXmppClientInstance._emit(
         'stanza',
@@ -471,8 +471,8 @@ describe('XMPPClient Presence', () => {
 
     it('fails the join on a nickname conflict', async () => {
       await connectClient()
-      await xmppClient.muc.joinRoom('room@conference.example.com', 'taken')
-      const result = xmppClient.muc.joinResult('room@conference.example.com')
+      await xmppClient.rooms.joinRoom('room@conference.example.com', 'taken')
+      const result = xmppClient.rooms.joinResult('room@conference.example.com')
 
       mockXmppClientInstance._emit(
         'stanza',
@@ -1705,7 +1705,7 @@ describe('XMPPClient Presence', () => {
       mockPresence.getStatusMessage.mockReturnValue('Busy')
 
       // Join a room
-      await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')
+      await xmppClient.rooms.joinRoom('room@conference.example.com', 'testnick')
 
       // Find the join presence stanza
       const sendCalls = mockXmppClientInstance.send.mock.calls
@@ -1737,7 +1737,7 @@ describe('XMPPClient Presence', () => {
       mockPresence.getStatusMessage.mockReturnValue(null)
 
       // Join a room
-      await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')
+      await xmppClient.rooms.joinRoom('room@conference.example.com', 'testnick')
 
       // Find the join presence stanza
       const sendCalls = mockXmppClientInstance.send.mock.calls
@@ -1764,7 +1764,7 @@ describe('XMPPClient Presence', () => {
       mockPresence.getStatusMessage.mockReturnValue(null)
 
       // Join a room
-      await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')
+      await xmppClient.rooms.joinRoom('room@conference.example.com', 'testnick')
 
       // Find the join presence stanza
       const sendCalls = mockXmppClientInstance.send.mock.calls
@@ -1796,7 +1796,7 @@ describe('XMPPClient Presence', () => {
       mockXmppClientInstance.send.mockClear()
 
       // Send presence update to rooms
-      await xmppClient.muc.sendPresenceToRooms('dnd', 'In a meeting')
+      await xmppClient.rooms.sendPresenceToRooms('dnd', 'In a meeting')
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
 
@@ -1833,7 +1833,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance.send.mockClear()
 
-      await xmppClient.muc.sendPresenceToRooms('online')
+      await xmppClient.rooms.sendPresenceToRooms('online')
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
       expect(sendCalls).toHaveLength(1)
@@ -1855,7 +1855,7 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance.send.mockClear()
 
-      await xmppClient.muc.sendPresenceToRooms('away')
+      await xmppClient.rooms.sendPresenceToRooms('away')
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
       // Should only send to room1 (room2 is still joining)
@@ -1926,7 +1926,7 @@ describe('XMPPClient Presence', () => {
       mockStores.connection.getStatus.mockReturnValue('online')
 
       // Spy on the roster.setPresence method
-      const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
+      const setPresenceSpy = vi.spyOn(xmppClient.contacts, 'setPresence').mockResolvedValue()
 
       ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
@@ -1945,7 +1945,7 @@ describe('XMPPClient Presence', () => {
       mockStores.connection.getStatus.mockReturnValue('online')
 
       // Spy on the roster.setPresence method
-      const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
+      const setPresenceSpy = vi.spyOn(xmppClient.contacts, 'setPresence').mockResolvedValue()
 
       ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
@@ -1967,7 +1967,7 @@ describe('XMPPClient Presence', () => {
       mockStores.connection.getStatus.mockReturnValue('disconnected')
 
       // Spy on the roster.setPresence method
-      const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
+      const setPresenceSpy = vi.spyOn(xmppClient.contacts, 'setPresence').mockResolvedValue()
 
       ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
@@ -1988,7 +1988,7 @@ describe('XMPPClient Presence', () => {
       mockStores.connection.getStatus.mockReturnValue('online')
 
       // Spy on the roster.setPresence method
-      const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
+      const setPresenceSpy = vi.spyOn(xmppClient.contacts, 'setPresence').mockResolvedValue()
 
       ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
@@ -2011,7 +2011,7 @@ describe('XMPPClient Presence', () => {
       mockStores.connection.getStatus.mockReturnValue('online')
 
       // Spy on the roster.setPresence method
-      const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
+      const setPresenceSpy = vi.spyOn(xmppClient.contacts, 'setPresence').mockResolvedValue()
 
       ;(xmppClient as any).setupPresenceSync(mockActor as any)
 

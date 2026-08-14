@@ -216,7 +216,7 @@ describe('mcpTools', () => {
     it('forwards a known chat conversation to the SDK, which decides the wire type', async () => {
       chatStore.setState({ conversations: new Map([['alice@example.com', { id: 'alice@example.com' } as Conversation]]) })
       const sendMessage = vi.fn().mockResolvedValue('msg-123')
-      const client = { chat: { sendMessage } } as unknown as XMPPClient
+      const client = { messages: { sendMessage } } as unknown as XMPPClient
 
       const result = await sendMessageTool(client, 'alice@example.com', 'hi')
 
@@ -229,7 +229,7 @@ describe('mcpTools', () => {
         rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com', joined: true } as Room]]),
       })
       const sendMessage = vi.fn().mockResolvedValue('msg-456')
-      const client = { chat: { sendMessage } } as unknown as XMPPClient
+      const client = { messages: { sendMessage } } as unknown as XMPPClient
 
       await sendMessageTool(client, 'room@conference.example.com', 'hi room')
 
@@ -241,14 +241,14 @@ describe('mcpTools', () => {
         rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com', joined: false } as Room]]),
       })
       const sendMessage = vi.fn()
-      const client = { chat: { sendMessage } } as unknown as XMPPClient
+      const client = { messages: { sendMessage } } as unknown as XMPPClient
 
       await expect(sendMessageTool(client, 'room@conference.example.com', 'hi')).rejects.toThrow('Not joined to room')
       expect(sendMessage).not.toHaveBeenCalled()
     })
 
     it('rejects an unknown conversationId', async () => {
-      const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
+      const client = { messages: { sendMessage: vi.fn() } } as unknown as XMPPClient
       await expect(sendMessageTool(client, 'ghost@example.com', 'hi')).rejects.toThrow('Unknown conversationId')
     })
 
@@ -256,7 +256,7 @@ describe('mcpTools', () => {
       vi.useFakeTimers()
       chatStore.setState({ conversations: new Map([['alice@example.com', { id: 'alice@example.com' } as Conversation]]) })
       const sendMessage = vi.fn().mockResolvedValue('msg-id')
-      const client = { chat: { sendMessage } } as unknown as XMPPClient
+      const client = { messages: { sendMessage } } as unknown as XMPPClient
 
       for (let i = 0; i < 10; i++) {
         await sendMessageTool(client, 'alice@example.com', `msg ${i}`)

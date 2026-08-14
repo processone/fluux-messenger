@@ -215,19 +215,19 @@ describe('SDK Event Bindings Integration', () => {
   describe('Verify emitSDK is properly bound in modules', () => {
     it('should have emitSDK available on roster module deps', () => {
       // Verify the module has emitSDK in its deps
-      const roster = xmppClient.roster as any
+      const roster = xmppClient.contacts as any
       expect(roster.deps.emitSDK).toBeDefined()
       expect(typeof roster.deps.emitSDK).toBe('function')
     })
 
     it('should have emitSDK available on muc module deps', () => {
-      const muc = xmppClient.muc as any
+      const muc = xmppClient.rooms as any
       expect(muc.deps.emitSDK).toBeDefined()
       expect(typeof muc.deps.emitSDK).toBe('function')
     })
 
     it('should have emitSDK available on chat module deps', () => {
-      const chat = xmppClient.chat as any
+      const chat = xmppClient.messages as any
       expect(chat.deps.emitSDK).toBeDefined()
       expect(typeof chat.deps.emitSDK).toBe('function')
     })
@@ -236,7 +236,7 @@ describe('SDK Event Bindings Integration', () => {
   describe('Full flow: module emits → binding receives → store updates', () => {
     it('should update roster store when roster module emitSDK is called directly', () => {
       // Simulate what a module would do
-      const roster = xmppClient.roster as any
+      const roster = xmppClient.contacts as any
       const contacts = [{ jid: 'test@example.com', name: 'Test' }]
 
       // Call emitSDK like the module would
@@ -247,7 +247,7 @@ describe('SDK Event Bindings Integration', () => {
     })
 
     it('should update room store when muc module emitSDK is called directly', () => {
-      const muc = xmppClient.muc as any
+      const muc = xmppClient.rooms as any
       const room = { jid: 'room@conference.example.com', name: 'Test Room' }
 
       muc.deps.emitSDK('room:added', { room })
@@ -287,7 +287,7 @@ describe('SDK Event Bindings Integration', () => {
       ]
 
       // Use the module's deps.emitSDK like a real module would
-      const roster = xmppClient.roster as any
+      const roster = xmppClient.contacts as any
       roster.deps.emitSDK('roster:loaded', { contacts })
 
       // Verify the binding caught the event and called the store
@@ -312,7 +312,7 @@ describe('SDK Event Bindings Integration', () => {
         typingUsers: new Set(),
       }
 
-      const muc = xmppClient.muc as any
+      const muc = xmppClient.rooms as any
       muc.deps.emitSDK('room:added', { room })
 
       expect(mockStores.room.addRoom).toHaveBeenCalledTimes(1)

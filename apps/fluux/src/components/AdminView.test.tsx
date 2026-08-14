@@ -70,7 +70,7 @@ const destroyRoom = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@fluux/sdk', () => ({
   useAdmin: () => adminState,
-  useXMPP: () => ({ client: { muc: { destroyRoom } } }),
+  useXMPP: () => ({ client: { rooms: { destroyRoom } } }),
   adminStore: { getState: () => ({ setActiveCategory }) },
   getBareJid: (jid: string) => jid.split('/')[0],
 }))

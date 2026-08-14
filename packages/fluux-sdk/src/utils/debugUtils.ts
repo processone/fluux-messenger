@@ -88,7 +88,7 @@ function createDebugUtils(client: XMPPClient): FluuxDebugUtils {
 
         console.log(`[FLUUX_DEBUG] Catching up ${roomJid} from ${startISO}...`)
         try {
-          await client.chat.queryRoomMAM({
+          await client.messages.queryRoomMAM({
             roomJid,
             start: startISO,
             max: 500, // Reasonable limit per room

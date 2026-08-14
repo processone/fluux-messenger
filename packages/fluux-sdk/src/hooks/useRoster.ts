@@ -82,21 +82,21 @@ export function useRoster() {
 
   const removeContact = useCallback(
     async (jid: string) => {
-      await client.roster.removeContact(jid)
+      await client.contacts.removeContact(jid)
     },
     [client]
   )
 
   const addContact = useCallback(
     async (jid: string, nick?: string) => {
-      await client.roster.addContact(jid, nick)
+      await client.contacts.addContact(jid, nick)
     },
     [client]
   )
 
   const renameContact = useCallback(
     async (jid: string, name: string) => {
-      await client.roster.renameContact(jid, name)
+      await client.contacts.renameContact(jid, name)
     },
     [client]
   )

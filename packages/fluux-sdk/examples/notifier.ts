@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   const client = new XMPPClient()
 
   await client.connect(config)
-  await client.chat.sendMessage(recipient, body)
+  await client.messages.sendMessage(recipient, body)
 
   // Disconnect rather than exiting: it closes the stream cleanly, so the server
   // does not have to time the session out and the message is acknowledged

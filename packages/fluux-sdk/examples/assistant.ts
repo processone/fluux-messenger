@@ -46,22 +46,22 @@ async function answer(question: string): Promise<string> {
  */
 async function respond(client: XMPPClient, question: Question): Promise<void> {
   // Tell the asker it landed, before anything slow starts.
-  await client.chat.sendReaction(question.to, question.messageId, ['👀'])
-  await client.chat.sendChatState(question.to, 'composing')
+  await client.messages.sendReaction(question.to, question.messageId, ['👀'])
+  await client.messages.sendChatState(question.to, 'composing')
 
-  const placeholderId = await client.chat.sendMessage(question.to, 'Working on it…', {
+  const placeholderId = await client.messages.sendMessage(question.to, 'Working on it…', {
     replyTo: { id: question.messageId },
   })
 
   try {
     const text = await answer(question.text)
-    await client.chat.sendCorrection(question.to, placeholderId, text)
+    await client.messages.sendCorrection(question.to, placeholderId, text)
   } catch (error) {
     // The placeholder is already on everyone's screen, so a failure has to
     // replace it. Leaving it saying "Working on it…" forever is worse than
     // saying the work failed.
     const reason = error instanceof Error ? error.message : String(error)
-    await client.chat.sendCorrection(question.to, placeholderId, `Sorry, that failed: ${reason}`)
+    await client.messages.sendCorrection(question.to, placeholderId, `Sorry, that failed: ${reason}`)
   }
 }
 
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   console.log(`Connected as ${config.jid}`)
 
   if (room) {
-    await client.muc.joinRoom(room, nickname)
+    await client.rooms.joinRoom(room, nickname)
     console.log(`Joined ${room} as ${nickname}; mention me to ask something.`)
   }
 

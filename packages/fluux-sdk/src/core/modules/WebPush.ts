@@ -28,10 +28,10 @@ import type { WebPushService } from '../types'
  * declare const appId: string
  *
  * // Query available push services
- * const services = await client.webPush.queryServices()
+ * const services = await client.push.queryServices()
  *
  * // Register a push subscription (after PushManager.subscribe())
- * await client.webPush.registerSubscription(endpoint, p256dh, auth, appId)
+ * await client.push.registerSubscription(endpoint, p256dh, auth, appId)
  * ```
  *
  * @category Modules

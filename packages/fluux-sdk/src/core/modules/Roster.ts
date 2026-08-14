@@ -35,10 +35,10 @@ import type { StanzaClaim } from '../stanzaRouting'
  * @example
  * ```typescript
  * // Access via XMPPClient
- * client.roster.addContact('user@example.com', 'Display Name')
- * client.roster.removeContact('user@example.com')
- * client.roster.setPresence('away', 'Be right back')
- * client.roster.acceptSubscription('user@example.com')
+ * client.contacts.addContact('user@example.com', 'Display Name')
+ * client.contacts.removeContact('user@example.com')
+ * client.contacts.setPresence('away', 'Be right back')
+ * client.contacts.acceptSubscription('user@example.com')
  * ```
  *
  * @category Modules

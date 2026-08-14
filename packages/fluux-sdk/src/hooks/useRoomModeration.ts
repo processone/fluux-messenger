@@ -18,28 +18,28 @@ export function useRoomModeration() {
 
   const moderateMessage = useCallback(
     async (roomJid: string, stanzaId: string, reason?: string) => {
-      await client.muc.moderateMessage(roomJid, stanzaId, reason)
+      await client.rooms.moderateMessage(roomJid, stanzaId, reason)
     },
     [client]
   )
 
   const setAffiliation = useCallback(
     async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
-      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
+      await client.rooms.setAffiliation(roomJid, userJid, affiliation, reason)
     },
     [client]
   )
 
   const setRole = useCallback(
     async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
-      await client.muc.setRole(roomJid, nick, role, reason)
+      await client.rooms.setRole(roomJid, nick, role, reason)
     },
     [client]
   )
 
   const queryAffiliationList = useCallback(
     async (roomJid: string, affiliation: RoomAffiliation) => {
-      return client.muc.queryAffiliationList(roomJid, affiliation)
+      return client.rooms.queryAffiliationList(roomJid, affiliation)
     },
     [client]
   )
@@ -47,42 +47,42 @@ export function useRoomModeration() {
   // XEP-0317: Hat management
   const listHats = useCallback(
     async (roomJid: string) => {
-      return client.muc.listHats(roomJid)
+      return client.rooms.listHats(roomJid)
     },
     [client]
   )
 
   const createHat = useCallback(
     async (roomJid: string, title: string, uri: string, hue?: number) => {
-      await client.muc.createHat(roomJid, title, uri, hue)
+      await client.rooms.createHat(roomJid, title, uri, hue)
     },
     [client]
   )
 
   const destroyHat = useCallback(
     async (roomJid: string, uri: string) => {
-      await client.muc.destroyHat(roomJid, uri)
+      await client.rooms.destroyHat(roomJid, uri)
     },
     [client]
   )
 
   const listHatAssignments = useCallback(
     async (roomJid: string) => {
-      return client.muc.listHatAssignments(roomJid)
+      return client.rooms.listHatAssignments(roomJid)
     },
     [client]
   )
 
   const assignHat = useCallback(
     async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.assignHat(roomJid, userJid, hatUri)
+      await client.rooms.assignHat(roomJid, userJid, hatUri)
     },
     [client]
   )
 
   const unassignHat = useCallback(
     async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.unassignHat(roomJid, userJid, hatUri)
+      await client.rooms.unassignHat(roomJid, userJid, hatUri)
     },
     [client]
   )

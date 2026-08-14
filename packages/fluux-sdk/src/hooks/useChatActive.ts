@@ -205,7 +205,7 @@ export function useChatActive() {
       // Clear the error before resending
       chatStore.getState().updateMessage(conversationId, messageId, { deliveryError: undefined })
 
-      await client.chat.resendMessage(conversationId, message.body, messageId, message.attachment)
+      await client.messages.resendMessage(conversationId, message.body, messageId, message.attachment)
     },
     [client]
   )
@@ -227,7 +227,7 @@ export function useChatActive() {
         getMessages: (id) => chatStore.getState().messages.get(id) || [],
         getGap: (id) => chatStore.getState().conversationGaps.get(id),
         queryMAM: async (id, options) => {
-          await client.chat.queryMAM({ with: id, ...options })
+          await client.messages.queryMAM({ with: id, ...options })
         },
       }),
     [client]

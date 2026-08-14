@@ -57,16 +57,16 @@ import type { StanzaClaim } from '../stanzaRouting'
  * persistent room bookmarks.
  *
  * @remarks
- * This module is accessed via `client.muc` on the XMPPClient instance.
+ * This module is accessed via `client.rooms` on the XMPPClient instance.
  *
  * @example Joining a room
  * ```typescript
- * await client.muc.joinRoom('room@conference.example.com', 'MyNickname')
+ * await client.rooms.joinRoom('room@conference.example.com', 'MyNickname')
  * ```
  *
  * @example Creating a quick chat (temporary room)
  * ```typescript
- * const roomJid = await client.muc.createQuickChat('MyNick', 'Discussion topic', [
+ * const roomJid = await client.rooms.createQuickChat('MyNick', 'Discussion topic', [
  *   'alice@example.com',
  *   'bob@example.com'
  * ])
@@ -75,22 +75,22 @@ import type { StanzaClaim } from '../stanzaRouting'
  * @example Managing bookmarks
  * ```typescript
  * // Fetch all bookmarks
- * const { roomsToAutojoin } = await client.muc.fetchBookmarks()
+ * const { roomsToAutojoin } = await client.rooms.fetchBookmarks()
  *
  * // Add a bookmark with autojoin
- * await client.muc.setBookmark('room@conference.example.com', {
+ * await client.rooms.setBookmark('room@conference.example.com', {
  *   name: 'Team Chat',
  *   nick: 'Me',
  *   autojoin: true
  * })
  *
  * // Remove a bookmark
- * await client.muc.removeBookmark('room@conference.example.com')
+ * await client.rooms.removeBookmark('room@conference.example.com')
  * ```
  *
  * @example Inviting users
  * ```typescript
- * await client.muc.inviteToRoom('room@conference.example.com', 'user@example.com', 'Join us!')
+ * await client.rooms.inviteToRoom('room@conference.example.com', 'user@example.com', 'Join us!')
  * ```
  *
  * @category Core
@@ -718,10 +718,10 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Basic join
-   * await client.muc.joinRoom('room@conference.example.com', 'MyNick')
+   * await client.rooms.joinRoom('room@conference.example.com', 'MyNick')
    *
    * // Join with password and limited history
-   * await client.muc.joinRoom('private@conference.example.com', 'MyNick', {
+   * await client.rooms.joinRoom('private@conference.example.com', 'MyNick', {
    *   password: 'secret',
    *   maxHistory: 10
    * })
@@ -889,7 +889,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.leaveRoom('room@conference.example.com')
+   * await client.rooms.leaveRoom('room@conference.example.com')
    * ```
    *
    * @remarks
@@ -1069,10 +1069,10 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Simple invitation
-   * await client.muc.inviteToRoom('room@conference.example.com', 'user@example.com')
+   * await client.rooms.inviteToRoom('room@conference.example.com', 'user@example.com')
    *
    * // Invitation with reason and password
-   * await client.muc.inviteToRoom('private@conference.example.com', 'user@example.com',
+   * await client.rooms.inviteToRoom('private@conference.example.com', 'user@example.com',
    *   'Join our meeting!', 'room-password')
    * ```
    */
@@ -1102,7 +1102,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.sendMediatedInvitation(
+   * await client.rooms.sendMediatedInvitation(
    *   'quickchat-xyz@conference.example.com',
    *   'user@example.com',
    *   'Quick discussion',
@@ -1145,7 +1145,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.sendMediatedInvitations(
+   * await client.rooms.sendMediatedInvitations(
    *   'room@conference.example.com',
    *   ['alice@example.com', 'bob@example.com', 'carol@example.com'],
    *   'Team meeting'
@@ -1168,7 +1168,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * const mucService = await client.muc.discoverMucService()
+   * const mucService = await client.rooms.discoverMucService()
    * if (mucService) {
    *   console.log(`MUC service available at: ${mucService}`)
    * }
@@ -1234,7 +1234,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * const features = await client.muc.queryRoomFeatures('room@conference.example.com')
+   * const features = await client.rooms.queryRoomFeatures('room@conference.example.com')
    * if (features?.supportsMAM) {
    *   console.log('Room archives messages via MAM')
    * }
@@ -1366,13 +1366,13 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Create a quick chat with some contacts
-   * const roomJid = await client.muc.createQuickChat('Me', 'Project discussion', [
+   * const roomJid = await client.rooms.createQuickChat('Me', 'Project discussion', [
    *   'alice@example.com',
    *   'bob@example.com'
    * ])
    *
    * // Create a solo quick chat (invite others later)
-   * const soloRoomJid = await client.muc.createQuickChat('Me', 'Notes')
+   * const soloRoomJid = await client.rooms.createQuickChat('Me', 'Notes')
    * ```
    *
    * @remarks
@@ -1505,7 +1505,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.submitRoomConfig('room@conference.example.com', {
+   * await client.rooms.submitRoomConfig('room@conference.example.com', {
    *   'muc#roomconfig_roomname': 'New Room Name',
    *   'muc#roomconfig_persistentroom': '1',
    *   'muc#roomconfig_publicroom': '0',
@@ -1557,7 +1557,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.setSubject('room@conference.example.com', 'New topic for discussion')
+   * await client.rooms.setSubject('room@conference.example.com', 'New topic for discussion')
    * ```
    */
   /**
@@ -1571,7 +1571,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.resync()
+   * await client.rooms.resync()
    * ```
    */
   async resync(options: { days?: number; concurrency?: number } = {}): Promise<void> {
@@ -1607,7 +1607,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.createRoom(
+   * await client.rooms.createRoom(
    *   'team@conference.example.com',
    *   'MyNick',
    *   { name: 'Team Chat', description: 'Our team room', membersOnly: true },
@@ -1681,7 +1681,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.destroyRoom('old-room@conference.example.com', 'Moving to new room')
+   * await client.rooms.destroyRoom('old-room@conference.example.com', 'Moving to new room')
    * ```
    */
   async destroyRoom(roomJid: string, reason?: string, alternateRoomJid?: string): Promise<void> {
@@ -1782,10 +1782,10 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Enable notifications for all messages (session only)
-   * await client.muc.setRoomNotifyAll('room@conference.example.com', true)
+   * await client.rooms.setRoomNotifyAll('room@conference.example.com', true)
    *
    * // Enable and save to bookmark
-   * await client.muc.setRoomNotifyAll('room@conference.example.com', true, true)
+   * await client.rooms.setRoomNotifyAll('room@conference.example.com', true, true)
    * ```
    */
   async setRoomNotifyAll(roomJid: string, notifyAll: boolean, persistent: boolean = false): Promise<void> {
@@ -1820,11 +1820,11 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * const { roomsToAutojoin, allRoomJids } = await client.muc.fetchBookmarks()
+   * const { roomsToAutojoin, allRoomJids } = await client.rooms.fetchBookmarks()
    *
    * // Auto-join bookmarked rooms
    * for (const room of roomsToAutojoin) {
-   *   await client.muc.joinRoom(room.jid, room.nick, { password: room.password })
+   *   await client.rooms.joinRoom(room.jid, room.nick, { password: room.password })
    * }
    *
    * console.log(`Loaded ${allRoomJids.length} bookmarked rooms`)
@@ -1930,14 +1930,14 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Bookmark with autojoin
-   * await client.muc.setBookmark('team@conference.example.com', {
+   * await client.rooms.setBookmark('team@conference.example.com', {
    *   name: 'Team Chat',
    *   nick: 'Me',
    *   autojoin: true
    * })
    *
    * // Bookmark a private room
-   * await client.muc.setBookmark('private@conference.example.com', {
+   * await client.rooms.setBookmark('private@conference.example.com', {
    *   name: 'Private Room',
    *   nick: 'Me',
    *   password: 'secret',
@@ -2011,7 +2011,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * await client.muc.removeBookmark('room@conference.example.com')
+   * await client.rooms.removeBookmark('room@conference.example.com')
    * ```
    *
    * @remarks
@@ -2046,7 +2046,7 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Typically called during reconnection
-   * await client.muc.rejoinActiveRooms([
+   * await client.rooms.rejoinActiveRooms([
    *   { jid: 'room1@conference.example.com', nickname: 'Me' },
    *   { jid: 'room2@conference.example.com', nickname: 'Me', password: 'pass' }
    * ])
@@ -2082,11 +2082,11 @@ export class MUC extends BaseModule {
    * @example
    * ```typescript
    * // Fetch first page of rooms
-   * const { rooms, pagination } = await client.muc.fetchRoomList('conference.example.com', { max: 20 })
+   * const { rooms, pagination } = await client.rooms.fetchRoomList('conference.example.com', { max: 20 })
    *
    * // Fetch next page
    * if (pagination?.last) {
-   *   const nextPage = await client.muc.fetchRoomList('conference.example.com', {
+   *   const nextPage = await client.rooms.fetchRoomList('conference.example.com', {
    *     max: 20,
    *     after: pagination.last
    *   })
@@ -2138,7 +2138,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * const options = await client.muc.fetchRoomOptions('room@conference.example.com')
+   * const options = await client.rooms.fetchRoomOptions('room@conference.example.com')
    * if (options) {
    *   console.log('Room name:', options['muc#roomconfig_roomname'])
    *   console.log('Persistent:', options['muc#roomconfig_persistentroom'])
@@ -2188,7 +2188,7 @@ export class MUC extends BaseModule {
    *
    * @example
    * ```typescript
-   * const members = await client.muc.queryRoomMembers('room@conference.example.com')
+   * const members = await client.rooms.queryRoomMembers('room@conference.example.com')
    * for (const member of members) {
    *   console.log(`${member.nick || member.jid}: ${member.affiliation}`)
    * }

@@ -113,7 +113,7 @@ export function useConnectionActions() {
 
   const requestUploadSlot = useCallback(
     async (filename: string, size: number, contentType: string) => {
-      return client.discovery.requestUploadSlot(filename, size, contentType)
+      return client.server.requestUploadSlot(filename, size, contentType)
     },
     [client]
   )
@@ -124,7 +124,7 @@ export function useConnectionActions() {
       originalMessageId: string,
       preview: LinkPreview
     ) => {
-      await client.chat.sendLinkPreview(to, originalMessageId, preview)
+      await client.messages.sendLinkPreview(to, originalMessageId, preview)
     },
     [client]
   )

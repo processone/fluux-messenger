@@ -108,8 +108,8 @@ export interface SideEffectHost extends SDKEventSource, ClientEventSource {
   retryPendingDecrypts(): Promise<number>
   /** Null until an identity is logged in — every caller must handle that. */
   readonly e2ee: E2EEWarmupHost | null
-  readonly muc: MucSideEffectHost
-  readonly discovery: DiscoverySideEffectHost
+  readonly rooms: MucSideEffectHost
+  readonly server: DiscoverySideEffectHost
   /**
    * The modules the SDK drives rather than offers. Grouped so the client can
    * keep them off its public surface: a consumer has no reason to name MAM,

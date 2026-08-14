@@ -560,7 +560,7 @@ describe('XMPPClient HTTP Upload', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(slotResponse)
 
-      const slot = await xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+      const slot = await xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
 
       expect(slot).toEqual({
         putUrl: 'https://upload.example.com/put/abc123',
@@ -590,7 +590,7 @@ describe('XMPPClient HTTP Upload', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(slotResponse)
 
-      const slot = await xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+      const slot = await xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
 
       expect(slot.headers).toEqual({
         'Authorization': 'Bearer token123',
@@ -612,7 +612,7 @@ describe('XMPPClient HTTP Upload', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(slotResponse)
 
-      await xmppClient.discovery.requestUploadSlot('document.pdf', 5242880, 'application/pdf')
+      await xmppClient.server.requestUploadSlot('document.pdf', 5242880, 'application/pdf')
 
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -638,7 +638,7 @@ describe('XMPPClient HTTP Upload', () => {
 
     it('should throw error when file exceeds max size', async () => {
       await expect(
-        xmppClient.discovery.requestUploadSlot('huge.zip', 100000000, 'application/zip') // 100MB
+        xmppClient.server.requestUploadSlot('huge.zip', 100000000, 'application/zip') // 100MB
       ).rejects.toThrow('File too large')
     })
 
@@ -646,7 +646,7 @@ describe('XMPPClient HTTP Upload', () => {
       mockStores.connection.getHttpUploadService = vi.fn().mockReturnValue(null)
 
       await expect(
-        xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+        xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
       ).rejects.toThrow('HTTP Upload service not available')
     })
 
@@ -654,7 +654,7 @@ describe('XMPPClient HTTP Upload', () => {
       await xmppClient.disconnect()
 
       await expect(
-        xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+        xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
       ).rejects.toThrow('Not connected')
     })
 
@@ -673,7 +673,7 @@ describe('XMPPClient HTTP Upload', () => {
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(invalidSlotResponse)
 
       await expect(
-        xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+        xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
       ).rejects.toThrow('Invalid upload slot response')
     })
 
@@ -682,7 +682,7 @@ describe('XMPPClient HTTP Upload', () => {
 
       // Error instances are re-thrown directly
       await expect(
-        xmppClient.discovery.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
+        xmppClient.server.requestUploadSlot('test.jpg', 1024, 'image/jpeg')
       ).rejects.toThrow('quota-exceeded')
     })
 
@@ -706,7 +706,7 @@ describe('XMPPClient HTTP Upload', () => {
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(slotResponse)
 
       // Should not throw even for large files when no limit is set
-      const slot = await xmppClient.discovery.requestUploadSlot('huge.zip', 500000000, 'application/zip')
+      const slot = await xmppClient.server.requestUploadSlot('huge.zip', 500000000, 'application/zip')
       expect(slot.putUrl).toBeDefined()
     })
   })

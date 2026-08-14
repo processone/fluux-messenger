@@ -177,49 +177,49 @@ describe('useRoster hook', () => {
     it('should call client.addContact when addContact is called', async () => {
       const { result } = renderHook(() => useRoster(), { wrapper })
 
-      mockClient.roster.addContact.mockResolvedValue(undefined)
+      mockClient.contacts.addContact.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.addContact('newuser@example.com', 'New User')
       })
 
-      expect(mockClient.roster.addContact).toHaveBeenCalledWith('newuser@example.com', 'New User')
+      expect(mockClient.contacts.addContact).toHaveBeenCalledWith('newuser@example.com', 'New User')
     })
 
     it('should call client.addContact without nickname if not provided', async () => {
       const { result } = renderHook(() => useRoster(), { wrapper })
 
-      mockClient.roster.addContact.mockResolvedValue(undefined)
+      mockClient.contacts.addContact.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.addContact('newuser@example.com')
       })
 
-      expect(mockClient.roster.addContact).toHaveBeenCalledWith('newuser@example.com', undefined)
+      expect(mockClient.contacts.addContact).toHaveBeenCalledWith('newuser@example.com', undefined)
     })
 
     it('should call client.removeContact when removeContact is called', async () => {
       const { result } = renderHook(() => useRoster(), { wrapper })
 
-      mockClient.roster.removeContact.mockResolvedValue(undefined)
+      mockClient.contacts.removeContact.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.removeContact('alice@example.com')
       })
 
-      expect(mockClient.roster.removeContact).toHaveBeenCalledWith('alice@example.com')
+      expect(mockClient.contacts.removeContact).toHaveBeenCalledWith('alice@example.com')
     })
 
     it('should call client.renameContact when renameContact is called', async () => {
       const { result } = renderHook(() => useRoster(), { wrapper })
 
-      mockClient.roster.renameContact.mockResolvedValue(undefined)
+      mockClient.contacts.renameContact.mockResolvedValue(undefined)
 
       await act(async () => {
         await result.current.renameContact('alice@example.com', 'Alice Smith')
       })
 
-      expect(mockClient.roster.renameContact).toHaveBeenCalledWith('alice@example.com', 'Alice Smith')
+      expect(mockClient.contacts.renameContact).toHaveBeenCalledWith('alice@example.com', 'Alice Smith')
     })
 
     // Removed: Avatar caching was deprecated and removed from SDK

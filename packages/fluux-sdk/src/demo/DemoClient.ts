@@ -754,7 +754,7 @@ export class DemoClient extends XMPPClient {
       // self-presence through muc.handle(), so the success path that normally
       // settles it never runs. Without this, awaiting joinResult() (e.g. in
       // JoinRoomModal) would hang forever in demo mode.
-      this.muc.confirmSimulatedJoin(roomJid)
+      this.rooms.confirmSimulatedJoin(roomJid)
 
       // For a password-protected room, also run the REAL post-join bookkeeping by
       // routing a status-110 self-presence: that is what records the password
@@ -764,7 +764,7 @@ export class DemoClient extends XMPPClient {
       // refuseJoin is: the pending join only exists once joinRoom() resumes.
       if (this.roomPasswords.has(roomJid)) {
         setTimeout(() => {
-          this.muc.handle(this.selfPresence(roomJid, selfOccupant) as unknown as Parameters<typeof this.muc.handle>[0])
+          this.rooms.handle(this.selfPresence(roomJid, selfOccupant) as unknown as Parameters<typeof this.rooms.handle>[0])
         }, 0)
       }
 
@@ -815,7 +815,7 @@ export class DemoClient extends XMPPClient {
       { from: `${roomJid}/${nick}`, to: this.selfJid, type: 'error' },
       [this.mockElement('x', { xmlns: NS_MUC }), error]
     )
-    this.muc.handle(presence as unknown as Parameters<typeof this.muc.handle>[0])
+    this.rooms.handle(presence as unknown as Parameters<typeof this.rooms.handle>[0])
   }
 
   // -------------------------------------------------------------------------

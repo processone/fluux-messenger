@@ -9,7 +9,7 @@ let mockHttpUploadService: { jid: string; maxFileSize?: number } | null = null
 vi.mock('@fluux/sdk', () => ({
   useXMPP: () => ({
     client: {
-      discovery: {
+      server: {
         requestUploadSlot: mockRequestUploadSlot,
       },
     },

@@ -25,7 +25,7 @@ let mockStatus = 'online'
 // tests (which never reach a registered plugin); a stub for the import tests.
 let mockPlugin: Record<string, unknown> | null = null
 const mockClient = {
-  discovery: { checkPepSupport: mockCheckPepSupport },
+  server: { checkPepSupport: mockCheckPepSupport },
   e2ee: { getPlugin: (name: string) => (name === 'openpgp' ? mockPlugin : null) },
 }
 

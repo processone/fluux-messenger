@@ -96,7 +96,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(servicesResponse)
 
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
 
       // IQ must not include a 'to' attribute — server handles it itself
       const sentIQ = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
@@ -125,7 +125,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(servicesResponse)
 
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
 
       expect(services).toHaveLength(2)
       expect(services[0].appId).toBe('app1')
@@ -147,7 +147,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(servicesResponse)
 
-      await xmppClient.webPush.queryServices()
+      await xmppClient.push.queryServices()
 
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:webpush-services', {
         services: [{ vapidKey: 'VAPID_KEY', appId: 'test' }],
@@ -160,7 +160,7 @@ describe('WebPush Module', () => {
       const emptyResponse = createMockElement('iq', { type: 'result' })
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResponse)
 
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
 
       expect(services).toEqual([])
     })
@@ -182,7 +182,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(servicesResponse)
 
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
 
       expect(services).toHaveLength(1)
       expect(services[0].appId).toBe('valid')
@@ -193,7 +193,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('Service unavailable'))
 
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
 
       expect(services).toEqual([])
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:webpush-services', { services: [] })
@@ -201,7 +201,7 @@ describe('WebPush Module', () => {
 
     it('should return empty array when not connected', async () => {
       // Don't connect - JID is null
-      const services = await xmppClient.webPush.queryServices()
+      const services = await xmppClient.push.queryServices()
       expect(services).toEqual([])
     })
 
@@ -220,7 +220,7 @@ describe('WebPush Module', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(servicesResponse)
 
-      await xmppClient.webPush.queryServices()
+      await xmppClient.push.queryServices()
 
       expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
         message: expect.stringContaining('1 VAPID service(s) available'),
@@ -237,7 +237,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.registerSubscription(
+      await xmppClient.push.registerSubscription(
         'https://fcm.googleapis.com/fcm/send/abc123',
         'p256dh_key_value',
         'auth_secret_value',
@@ -288,7 +288,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.registerSubscription(
+      await xmppClient.push.registerSubscription(
         'https://fcm.googleapis.com/fcm/send/abc123',
         'p256dh_key',
         'auth_key',
@@ -307,7 +307,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.registerSubscription(
+      await xmppClient.push.registerSubscription(
         'https://fcm.googleapis.com/fcm/send/abc123',
         'p256dh_key',
         'auth_key',
@@ -326,7 +326,7 @@ describe('WebPush Module', () => {
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('Forbidden'))
 
       await expect(
-        xmppClient.webPush.registerSubscription(
+        xmppClient.push.registerSubscription(
           'https://fcm.googleapis.com/fcm/send/abc123',
           'p256dh_key',
           'auth_key',
@@ -338,7 +338,7 @@ describe('WebPush Module', () => {
     it('should throw when not connected', async () => {
       // Don't connect
       await expect(
-        xmppClient.webPush.registerSubscription(
+        xmppClient.push.registerSubscription(
           'https://fcm.googleapis.com/fcm/send/abc123',
           'p256dh_key',
           'auth_key',
@@ -356,7 +356,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.disableSubscription(
+      await xmppClient.push.disableSubscription(
         'fluux.io',
         'webpush',
         'https://fcm.googleapis.com/fcm/send/abc123#p256dh_key#auth_key'
@@ -395,7 +395,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.disableSubscription(
+      await xmppClient.push.disableSubscription(
         'fluux.io',
         'webpush',
         'endpoint#p256dh#auth'
@@ -413,7 +413,7 @@ describe('WebPush Module', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.webPush.disableSubscription(
+      await xmppClient.push.disableSubscription(
         'fluux.io',
         'webpush',
         'endpoint#p256dh#auth'
@@ -431,13 +431,13 @@ describe('WebPush Module', () => {
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('Forbidden'))
 
       await expect(
-        xmppClient.webPush.disableSubscription('fluux.io', 'webpush', 'endpoint#key#auth')
+        xmppClient.push.disableSubscription('fluux.io', 'webpush', 'endpoint#key#auth')
       ).rejects.toThrow('Forbidden')
     })
 
     it('should throw when not connected', async () => {
       await expect(
-        xmppClient.webPush.disableSubscription('fluux.io', 'webpush', 'endpoint#key#auth')
+        xmppClient.push.disableSubscription('fluux.io', 'webpush', 'endpoint#key#auth')
       ).rejects.toThrow('Not connected')
     })
   })

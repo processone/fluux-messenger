@@ -150,7 +150,7 @@ describe('XMPPClient MAM', () => {
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
       // Execute query
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify IQ was sent with correct structure
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
@@ -272,7 +272,7 @@ describe('XMPPClient MAM', () => {
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
       // Execute query
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify messages were collected
       expect(result.messages.length).toBe(2)
@@ -346,7 +346,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(1)
       expect(result.messages[0].body).toBe('Multi-archive entry')
@@ -365,7 +365,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify loading state was set
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-loading', { conversationId: 'alice@example.com', isLoading: true })
@@ -393,7 +393,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify chat:mam-messages was emitted with direction='backward' (no start filter)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
@@ -411,7 +411,7 @@ describe('XMPPClient MAM', () => {
       await connectClient()
       mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('Network error'))
 
-      await expect(xmppClient.chat.queryMAM({ with: 'alice@example.com' })).rejects.toThrow('Network error')
+      await expect(xmppClient.messages.queryMAM({ with: 'alice@example.com' })).rejects.toThrow('Network error')
 
       // Verify error state was set
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-error', { conversationId: 'alice@example.com', error: 'Network error' })
@@ -431,7 +431,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.complete).toBe(false)
     })
@@ -493,7 +493,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(1)
       expect(result.messages[0].replyTo).toEqual({
@@ -565,7 +565,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(1)
       expect(result.messages[0].attachment).toBeDefined()
@@ -636,7 +636,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should still parse the message even without body text
       expect(result.messages.length).toBe(1)
@@ -745,7 +745,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should have only 1 message (fastening is applied, not a separate message)
       expect(result.messages.length).toBe(1)
@@ -773,7 +773,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Verify RSM element was included
       expect(capturedIq).toBeDefined()
@@ -809,7 +809,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com', max: 25 })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com', max: 25 })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -837,7 +837,7 @@ describe('XMPPClient MAM', () => {
       })
 
       // Pass a specific stanza-id to get messages before that ID
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: 'stanza-id-12345' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: 'stanza-id-12345' })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -866,7 +866,7 @@ describe('XMPPClient MAM', () => {
       })
 
       // Default before='' should create empty <before/> for latest messages
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -973,7 +973,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(callCount).toBe(2)
       const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
@@ -1042,7 +1042,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Message without body should be skipped
       expect(result.messages.length).toBe(0)
@@ -1136,7 +1136,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message, not the retraction stanza
       expect(result.messages.length).toBe(1)
@@ -1234,7 +1234,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message
       expect(result.messages.length).toBe(1)
@@ -1331,7 +1331,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message, not the correction stanza
       expect(result.messages.length).toBe(1)
@@ -1437,7 +1437,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message
       expect(result.messages.length).toBe(1)
@@ -1534,7 +1534,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message
       expect(result.messages.length).toBe(1)
@@ -1631,7 +1631,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message (malicious correction discarded)
       expect(result.messages.length).toBe(1)
@@ -1734,7 +1734,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message, not the reaction stanza
       expect(result.messages.length).toBe(1)
@@ -1838,7 +1838,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message
       expect(result.messages.length).toBe(1)
@@ -1975,7 +1975,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // Should only have the original message
       expect(result.messages.length).toBe(1)
@@ -2114,7 +2114,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(1)
 
@@ -2246,7 +2246,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(1)
 
@@ -2320,7 +2320,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // No displayable messages in this batch
       expect(result.messages.length).toBe(0)
@@ -2400,7 +2400,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(0)
 
@@ -2490,7 +2490,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       // The unresolved correction should include originalBody from the cached message
       const updateEvents = emitSDKSpy.mock.calls.filter(
@@ -2567,7 +2567,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result.messages.length).toBe(0)
 
@@ -2612,7 +2612,7 @@ describe('XMPPClient MAM', () => {
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
       // Query with start filter (forward direction, like fetching missed messages)
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com', start: '2026-01-21T19:00:00Z' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com', start: '2026-01-21T19:00:00Z' })
 
       // Direction should be 'forward' for queries with start filter
       // The store will set isCaughtUpToLive=true but NOT isHistoryComplete
@@ -2650,7 +2650,7 @@ describe('XMPPClient MAM', () => {
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
       // Query WITHOUT start filter (backward direction)
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: '' })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: '' })
 
       // Direction should be 'backward' for queries without start filter
       // The store will set isHistoryComplete=true
@@ -2683,7 +2683,7 @@ describe('XMPPClient MAM', () => {
       })
 
       // No `start` filter — only an `after` cursor, seeded from the MDS stanza-id.
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'mds-stanza-id', maxAutoPages: 5 })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', after: 'mds-stanza-id', maxAutoPages: 5 })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -2725,7 +2725,7 @@ describe('XMPPClient MAM', () => {
         return latestResponse
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
 
       // Degraded successfully instead of throwing.
       expect(result.complete).toBe(true)
@@ -2758,7 +2758,7 @@ describe('XMPPClient MAM', () => {
         return latestResponse
       })
 
-      await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
+      await xmppClient.messages.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
 
       // Without this, the persisted gap keeps the purged startId: every
       // session re-degrades and "Load missing messages" can never heal.
@@ -2776,7 +2776,7 @@ describe('XMPPClient MAM', () => {
       // page of an `after`-anchored query only.
       mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue({ condition: 'item-not-found' })
 
-      await expect(xmppClient.chat.queryMAM({ with: 'alice@example.com', before: 'stale-cursor' })).rejects.toBeTruthy()
+      await expect(xmppClient.messages.queryMAM({ with: 'alice@example.com', before: 'stale-cursor' })).rejects.toBeTruthy()
     })
 
     it('signal-only walk jumps to the persisted coverage floor once a page contains its topId (Codex r3 #4)', async () => {
@@ -2872,7 +2872,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: '' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: '' })
 
       // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's rsm.first:
       // everything between topId and bottomId is already proven signal-only.
@@ -2944,7 +2944,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: '' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: '' })
 
       expect(callCount).toBe(5) // MAM_BACKWARD_SIGNAL_RETRY_PAGES
       expect(result.messages).toHaveLength(0)
@@ -3062,7 +3062,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: '' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: '' })
 
       // Walk recovered: purge emitted, pre-jump cursor used, message found.
       expect(callCount).toBe(3)
@@ -3095,7 +3095,7 @@ describe('XMPPClient MAM', () => {
         return latestResponse
       })
 
-      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', before: 'purged-id' })
+      const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: 'purged-id' })
 
       // Degraded to a plain fetch-latest instead of throwing.
       expect(callCount).toBe(2)
@@ -3148,7 +3148,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      await xmppClient.chat.queryRoomMAM({ roomJid })
+      await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify IQ was sent TO the room JID
       expect(capturedIq).toBeDefined()
@@ -3186,7 +3186,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      await xmppClient.chat.queryRoomMAM({ roomJid })
+      await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify query has FORM_TYPE but NO 'with' filter
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
@@ -3298,7 +3298,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid })
 
       expect(result.messages.length).toBe(2)
 
@@ -3338,7 +3338,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
-      await xmppClient.chat.queryRoomMAM({ roomJid })
+      await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify loading state was set and cleared
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-loading', { roomJid, isLoading: true })
@@ -3380,7 +3380,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
-      await xmppClient.chat.queryRoomMAM({ roomJid })
+      await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Verify room:mam-messages was emitted with direction='backward' (no start filter)
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
@@ -3413,7 +3413,7 @@ describe('XMPPClient MAM', () => {
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('Room MAM not supported'))
 
-      await expect(xmppClient.chat.queryRoomMAM({ roomJid })).rejects.toThrow('Room MAM not supported')
+      await expect(xmppClient.messages.queryRoomMAM({ roomJid })).rejects.toThrow('Room MAM not supported')
 
       // Verify error state was set
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-error', { roomJid, error: 'Room MAM not supported' })
@@ -3451,7 +3451,7 @@ describe('XMPPClient MAM', () => {
         return mamResponse
       })
 
-      await xmppClient.chat.queryRoomMAM({ roomJid, before: 'stanza-id-12345' })
+      await xmppClient.messages.queryRoomMAM({ roomJid, before: 'stanza-id-12345' })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -3501,7 +3501,7 @@ describe('XMPPClient MAM', () => {
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
       // Query with start filter (forward direction)
-      await xmppClient.chat.queryRoomMAM({ roomJid, start: '2026-01-21T19:00:00Z' })
+      await xmppClient.messages.queryRoomMAM({ roomJid, start: '2026-01-21T19:00:00Z' })
 
       // Direction should be 'forward' for queries with start filter
       // The store will set isCaughtUpToLive=true but NOT isHistoryComplete
@@ -3554,7 +3554,7 @@ describe('XMPPClient MAM', () => {
       mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
 
       // Query with before filter (backward direction, for scroll-up loading)
-      await xmppClient.chat.queryRoomMAM({ roomJid, before: 'some-stanza-id' })
+      await xmppClient.messages.queryRoomMAM({ roomJid, before: 'some-stanza-id' })
 
       // Direction should be 'backward' for queries with before filter
       // The store will set isHistoryComplete=true
@@ -3596,7 +3596,7 @@ describe('XMPPClient MAM', () => {
       })
 
       // No `start` filter — only an `after` cursor, seeded from the MDS stanza-id.
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid, after: 'mds-stanza-id' })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid, after: 'mds-stanza-id' })
 
       const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
       const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
@@ -3717,7 +3717,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Two IQs; the second advances the backward cursor to page 1's oldest.
       expect(callCount).toBe(2)
@@ -3847,7 +3847,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's rsm.first.
       expect(callCount).toBe(2)
@@ -3931,7 +3931,7 @@ describe('XMPPClient MAM', () => {
         ])
       })
 
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid })
 
       // Same retry cap as the 1:1 backward path.
       expect(callCount).toBe(5)
@@ -3973,7 +3973,7 @@ describe('XMPPClient MAM', () => {
         return latestResponse
       })
 
-      const result = await xmppClient.chat.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
+      const result = await xmppClient.messages.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
 
       expect(result.complete).toBe(true)
       expect(callCount).toBe(2)
@@ -4017,7 +4017,7 @@ describe('XMPPClient MAM', () => {
         return latestResponse
       })
 
-      await xmppClient.chat.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
+      await xmppClient.messages.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
 
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-anchor-purged', {
         roomJid,
@@ -4098,8 +4098,8 @@ describe('XMPPClient MAM', () => {
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
       // Query MAM twice — same message should get the same stable ID
-      const result1 = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
-      const result2 = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result1 = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
+      const result2 = await xmppClient.messages.queryMAM({ with: 'alice@example.com' })
 
       expect(result1.messages.length).toBe(1)
       expect(result2.messages.length).toBe(1)
@@ -4185,7 +4185,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'bob@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'bob@example.com' })
 
       expect(result.messages.length).toBe(1)
       // stanzaId should fall back to the MAM archive result id
@@ -4250,7 +4250,7 @@ describe('XMPPClient MAM', () => {
 
       vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
 
-      const result = await xmppClient.chat.queryMAM({ with: 'carol@example.com' })
+      const result = await xmppClient.messages.queryMAM({ with: 'carol@example.com' })
 
       expect(result.messages.length).toBe(1)
       // stanza-id from the message element should take priority over archive id

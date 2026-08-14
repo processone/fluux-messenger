@@ -263,7 +263,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
 
   const handleDestroyRoom = async (jid: string) => {
     try {
-      await client.muc.destroyRoom(jid)
+      await client.rooms.destroyRoom(jid)
       setSelectedRoom(null)
       resetRoomList()
       void fetchRooms()

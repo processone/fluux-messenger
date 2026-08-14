@@ -1274,7 +1274,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setActiveRoom(null)
       resolveBlockingCatchUp()
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
       expect(foregroundCatchUpCount).toBe(1)
 
@@ -1348,7 +1348,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setActiveRoom(null)
       resolveBlockingCatchUp()
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
       expect(
         vi.mocked(mockClient.internal.mam.catchUpRoomHistory).mock.calls
@@ -1405,7 +1405,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
 
       roomStore.getState().setActiveRoom(null)
@@ -1466,7 +1466,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
 
       rejectForegroundCatchUp(new Error('Not connected during foreground query'))
@@ -1534,7 +1534,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
       await vi.advanceTimersByTimeAsync(10_000)
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
 
       rejectForegroundCatchUp(new Error('Not connected during foreground query'))
@@ -1939,12 +1939,12 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Wait for room catch-up to complete and member discovery to start
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalledTimes(1)
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalledTimes(1)
       })
 
       // Should query Room 1 but NOT quickchat Room 2
-      expect(mockClient.muc.queryRoomMembers).toHaveBeenCalledWith('room1@conference.example.com')
-      expect(mockClient.muc.queryRoomMembers).not.toHaveBeenCalledWith('room2@conference.example.com')
+      expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalledWith('room1@conference.example.com')
+      expect(mockClient.rooms.queryRoomMembers).not.toHaveBeenCalledWith('room2@conference.example.com')
     })
 
     it('should not crash if member discovery fails', async () => {
@@ -1961,7 +1961,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         typingUsers: new Set(),
       })
 
-      ;(mockClient.muc.queryRoomMembers as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'))
+      ;(mockClient.rooms.queryRoomMembers as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'))
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -1978,7 +1978,7 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Should not throw — error is silently caught
       await vi.waitFor(() => {
-        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+        expect(mockClient.rooms.queryRoomMembers).toHaveBeenCalled()
       })
     })
   })

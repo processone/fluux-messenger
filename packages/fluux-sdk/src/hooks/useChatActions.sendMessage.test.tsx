@@ -29,8 +29,8 @@ function wrapper({ children }: { children: ReactNode }) {
  */
 describe('useChatActions.sendMessage (options object)', () => {
   beforeEach(() => {
-    mockClient.chat.sendMessage.mockClear()
-    mockClient.chat.sendMessage.mockResolvedValue('msg-id-1')
+    mockClient.messages.sendMessage.mockClear()
+    mockClient.messages.sendMessage.mockResolvedValue('msg-id-1')
   })
 
   it('sends a plain message with no options at all', async () => {
@@ -40,7 +40,7 @@ describe('useChatActions.sendMessage (options object)', () => {
       await result.current.sendMessage('bob@example.com', 'hi')
     })
 
-    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith('bob@example.com', 'hi', undefined)
+    expect(mockClient.messages.sendMessage).toHaveBeenCalledWith('bob@example.com', 'hi', undefined)
   })
 
   it('passes the options object straight through to the SDK', async () => {
@@ -52,7 +52,7 @@ describe('useChatActions.sendMessage (options object)', () => {
       await result.current.sendMessage('bob@example.com', 'see this', { replyTo, attachment })
     })
 
-    expect(mockClient.chat.sendMessage).toHaveBeenCalledWith('bob@example.com', 'see this', {
+    expect(mockClient.messages.sendMessage).toHaveBeenCalledWith('bob@example.com', 'see this', {
       replyTo,
       attachment,
     })
