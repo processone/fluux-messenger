@@ -462,6 +462,24 @@ export interface RoomEvents {
     errorType: XMPPErrorType
   }
 
+  /**
+   * An automatic rejoin failed.
+   *
+   * Emitted only for joins the user did not ask for and is not waiting on:
+   * reconnecting to a bookmarked room. A join started from the interface
+   * reports through the rejected {@link MUC.joinResult} promise instead, so
+   * consuming both would report the same failure twice.
+   */
+  'room:autojoin-error': {
+    roomJid: string
+    /** Human-readable error message (prefers server text, falls back to the condition) */
+    error: string
+    /** RFC 6120 error condition, or the synthetic 'timeout' (e.g. 'conflict', 'forbidden') */
+    condition: string
+    /** RFC 6120 error type category, when the server supplied one */
+    errorType?: XMPPErrorType
+  }
+
   /** Room MAM messages loaded */
   'room:history-messages': {
     roomJid: string

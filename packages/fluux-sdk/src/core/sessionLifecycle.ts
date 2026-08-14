@@ -253,7 +253,7 @@ export class SessionLifecycleEngine {
         if (this.isSessionStale(gen)) return
         for (const room of roomsToAutojoin) {
           if (!this.deps.getStores()?.room.getRoom(room.jid)?.joined) {
-            this.deps.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
+            void this.deps.muc.autojoinRoom(room.jid, room.nick, { password: room.password })
           }
         }
       }).catch(() => {})
@@ -445,8 +445,9 @@ export class SessionLifecycleEngine {
             logInfo(`Skipping autojoin of non-anonymous room ${room.jid} (real-JID exposure not acknowledged)`)
             return
           }
-          this.deps.muc.joinRoom(room.jid, room.nick, { password: room.password, knownFeatures: features }).catch((err) => {
-            console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
+          await this.deps.muc.autojoinRoom(room.jid, room.nick, {
+            password: room.password,
+            knownFeatures: features,
           })
         })()
       }

@@ -637,6 +637,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             windowAtLiveEdge={windowAtLiveEdge}
             onJumpToLatest={recenterToLatest}
             isHistoryComplete={activeRoom.supportsMAM === false || activeHistoryState?.isHistoryComplete}
+            historyUnavailable={Boolean(activeHistoryState?.error)}
             onNickContextMenu={handleNickContextMenu}
             onNickTouchStart={handleNickTouchStart}
             onNickTouchEnd={handleNickTouchEnd}
@@ -926,6 +927,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   windowAtLiveEdge,
   onJumpToLatest,
   isHistoryComplete,
+  historyUnavailable,
   onNickContextMenu,
   onNickTouchStart,
   onNickTouchEnd,
@@ -984,6 +986,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   windowAtLiveEdge?: boolean
   onJumpToLatest?: () => Promise<unknown> | void
   isHistoryComplete?: boolean
+  historyUnavailable?: boolean
   onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
   onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
   onNickTouchEnd?: () => void
@@ -1253,6 +1256,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       windowAtLiveEdge={windowAtLiveEdge}
       onJumpToLatest={onJumpToLatest}
       isHistoryComplete={isHistoryComplete}
+      historyUnavailable={historyUnavailable}
       renderMessage={renderMessage}
       formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}

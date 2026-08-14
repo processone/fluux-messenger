@@ -15,6 +15,7 @@ import {
 } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
 import type { Room } from '../types/room'
+import { RoomJoinError } from '../errors'
 
 describe('MUC Module', () => {
   let muc: MUC
@@ -2818,6 +2819,57 @@ describe('MUC Module', () => {
 
       const presence = mockSendStanza.mock.calls[0][0]
       expect(priorityOf(presence)).toBe('50')
+    })
+  })
+  describe('autojoinRoom', () => {
+    const ROOM = 'team@conference.example.org'
+
+    it('announces a join the user is not waiting on', async () => {
+      vi.spyOn(muc, 'joinRoom').mockRejectedValue(
+        new RoomJoinError(ROOM, 'conflict', 'cancel', 'Nickname is taken')
+      )
+
+      await muc.autojoinRoom(ROOM, 'mynick')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:autojoin-error', {
+        roomJid: ROOM,
+        error: 'Nickname is taken',
+        condition: 'conflict',
+        errorType: 'cancel',
+      })
+    })
+
+    it('absorbs the rejection so an unawaited call cannot go unhandled', async () => {
+      vi.spyOn(muc, 'joinRoom').mockRejectedValue(new RoomJoinError(ROOM, 'forbidden'))
+
+      await expect(muc.autojoinRoom(ROOM, 'mynick')).resolves.toBeUndefined()
+    })
+
+    it('reports a failure that carries no XMPP condition', async () => {
+      vi.spyOn(muc, 'joinRoom').mockRejectedValue(new Error('socket closed'))
+
+      await muc.autojoinRoom(ROOM, 'mynick')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:autojoin-error', expect.objectContaining({
+        error: 'socket closed',
+        condition: 'undefined-condition',
+      }))
+    })
+
+    it('stays silent when the rejoin succeeds', async () => {
+      vi.spyOn(muc, 'joinRoom').mockResolvedValue(undefined)
+
+      await muc.autojoinRoom(ROOM, 'mynick')
+
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:autojoin-error', expect.anything())
+    })
+
+    it('passes the join options through', async () => {
+      const joinRoom = vi.spyOn(muc, 'joinRoom').mockResolvedValue(undefined)
+
+      await muc.autojoinRoom(ROOM, 'mynick', { password: 'secret', knownFeatures: null })
+
+      expect(joinRoom).toHaveBeenCalledWith(ROOM, 'mynick', { password: 'secret', knownFeatures: null })
     })
   })
 })

@@ -587,6 +587,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           windowAtLiveEdge={windowAtLiveEdge}
           onJumpToLatest={recenterToLatest}
           isHistoryComplete={activeHistoryState?.isHistoryComplete ?? false}
+          historyUnavailable={Boolean(activeHistoryState?.error)}
           forwardGapTimestamp={activeHistoryState?.forwardGapTimestamp}
           onCatchUpHistory={continueChatCatchUp}
           isCatchingUp={activeHistoryState?.isLoading ?? false}
@@ -697,6 +698,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   windowAtLiveEdge,
   onJumpToLatest,
   isHistoryComplete,
+  historyUnavailable,
   isInitialLoading,
   highlightTerms,
   currentMatchId,
@@ -748,6 +750,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   windowAtLiveEdge?: boolean
   onJumpToLatest?: () => Promise<unknown> | void
   isHistoryComplete?: boolean
+  historyUnavailable?: boolean
   isInitialLoading?: boolean
   highlightTerms?: string[]
   currentMatchId?: string
@@ -863,6 +866,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       windowAtLiveEdge={windowAtLiveEdge}
       onJumpToLatest={onJumpToLatest}
       isHistoryComplete={isHistoryComplete}
+      historyUnavailable={historyUnavailable}
       forwardGapTimestamp={forwardGapTimestamp}
       onCatchUpHistory={onCatchUpHistory}
       isCatchingUp={isCatchingUp}

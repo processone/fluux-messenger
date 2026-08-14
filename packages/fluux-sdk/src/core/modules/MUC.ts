@@ -568,6 +568,37 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Join a room on the user's behalf, without anyone awaiting the outcome.
+   *
+   * Used by the reconnect paths, which walk the bookmarks and rejoin what the
+   * user had open. A failure there has no caller to reject to and no dialog to
+   * show it in: the room would simply sit in the list, not joined, with no
+   * stated reason. So the failure is announced instead, and the rejection is
+   * absorbed here rather than surfacing as an unhandled rejection.
+   *
+   * @param roomJid - Bare JID of the room to rejoin.
+   * @param nickname - Nickname to rejoin under.
+   * @param options - Same join options as {@link joinRoom}.
+   */
+  async autojoinRoom(
+    roomJid: string,
+    nickname: string,
+    options?: { password?: string; knownFeatures?: RoomFeatures | null }
+  ): Promise<void> {
+    try {
+      await this.joinRoom(roomJid, nickname, options)
+    } catch (err) {
+      const joinError = err instanceof RoomJoinError ? err : null
+      this.deps.emitSDK('room:autojoin-error', {
+        roomJid,
+        error: err instanceof Error ? err.message : String(err),
+        condition: joinError?.condition ?? 'undefined-condition',
+        errorType: joinError?.errorType,
+      })
+    }
+  }
+
+  /**
    * Await the outcome of an in-flight {@link joinRoom}.
    *
    * Resolves when the room confirms the join (self-presence, status 110) and

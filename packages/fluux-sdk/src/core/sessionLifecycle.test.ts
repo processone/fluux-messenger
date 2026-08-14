@@ -38,6 +38,7 @@ function makeMockModules() {
     muc: {
       fetchBookmarks: vi.fn().mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] }),
       joinRoom: vi.fn().mockResolvedValue(undefined),
+      autojoinRoom: vi.fn().mockResolvedValue(undefined),
       discoverMucService: vi.fn().mockResolvedValue(undefined),
       rejoinActiveRooms: vi.fn().mockResolvedValue(undefined),
       queryRoomFeatures: vi.fn().mockResolvedValue(null),
@@ -109,7 +110,7 @@ describe('SessionLifecycleEngine', () => {
   })
 
   // Issue #1126: unattended rejoining of a password-protected room depends on
-  // the bookmark's password reaching joinRoom on connect.
+  // the bookmark's password reaching the join on connect.
   it('autojoins a bookmarked room with its stored password', async () => {
     modules.muc.fetchBookmarks.mockResolvedValue({
       roomsToAutojoin: [{ jid: 'secret@conference.example.com', nick: 'mynick', password: 'from-bookmark' }],
@@ -118,9 +119,9 @@ describe('SessionLifecycleEngine', () => {
 
     await engine.handleConnectionSuccess(false)
     // The autojoin runs in a detached async task after a disco#info probe.
-    await vi.waitFor(() => expect(modules.muc.joinRoom).toHaveBeenCalled())
+    await vi.waitFor(() => expect(modules.muc.autojoinRoom).toHaveBeenCalled())
 
-    expect(modules.muc.joinRoom).toHaveBeenCalledWith(
+    expect(modules.muc.autojoinRoom).toHaveBeenCalledWith(
       'secret@conference.example.com',
       'mynick',
       expect.objectContaining({ password: 'from-bookmark' })

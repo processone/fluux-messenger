@@ -176,6 +176,10 @@ export function useChatActive() {
     if (!s.activeConversationId) return undefined
     return s.mamQueryStates.get(s.activeConversationId)?.oldestFetchedId
   })
+  const mamError = useChatStore((s) => {
+    if (!s.activeConversationId) return null
+    return s.mamQueryStates.get(s.activeConversationId)?.error ?? null
+  })
   // Gap marker sourced from the PERSISTED conversationGaps (survives reload), parity with rooms.
   const mamForwardGapTimestamp = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
@@ -191,9 +195,9 @@ export function useChatActive() {
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
       forwardGapTimestamp: mamForwardGapTimestamp,
-      error: null,
+      error: mamError,
     }
-  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp])
+  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp, mamError])
 
   // --- Active-specific actions (not in useChatActions) ---
 

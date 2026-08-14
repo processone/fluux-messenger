@@ -20,6 +20,7 @@ import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
+import { HistoryUnavailableMarker } from './HistoryUnavailableMarker'
 import { HistoryStartMarker } from './HistoryStartMarker'
 import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
@@ -150,6 +151,12 @@ export interface MessageListProps<T extends BaseMessage> {
   onJumpToLatest?: () => Promise<unknown> | void
   /** If true, all history has been fetched - disable scroll-to-top trigger */
   isHistoryComplete?: boolean
+  /**
+   * Set when the last archive fetch failed. Shown at the top of the list, above
+   * the retry button, so a reader who scrolls up learns the thread may be
+   * missing messages rather than assuming it starts there.
+   */
+  historyUnavailable?: boolean
   /** Callback when the bottom-most visible message changes (viewport tracking) */
   onMessageSeen?: (messageId: string) => void
   /** Disables all auto-scroll behaviors. Used by read-only preview views
@@ -207,6 +214,7 @@ export function MessageList<T extends BaseMessage>({
   windowAtLiveEdge,
   onJumpToLatest,
   isHistoryComplete,
+  historyUnavailable,
   onMessageSeen,
   staticMode,
   lastSentMessageId,
@@ -668,10 +676,13 @@ export function MessageList<T extends BaseMessage>({
       case 'header':
         return isHistoryComplete ? (
           <div data-row-kind="header">
+            {historyUnavailable && <HistoryUnavailableMarker />}
             <HistoryStartMarker />
           </div>
         ) : onScrollToTop ? (
-          <div data-row-kind="header" className="flex justify-center py-3">
+          <div data-row-kind="header" className="flex flex-col items-center py-3">
+            {historyUnavailable && <HistoryUnavailableMarker />}
+            <div className="flex justify-center">
             <button
               type="button"
               onClick={handleLoadEarlier}
@@ -684,7 +695,8 @@ export function MessageList<T extends BaseMessage>({
             >
               {isLoadingOlder ? <Loader2 className="size-4 animate-spin" /> : <ChevronUp className="size-4" />}
               {t('chat.loadEarlierMessages')}
-            </button>
+              </button>
+            </div>
           </div>
         ) : null
       case 'date':

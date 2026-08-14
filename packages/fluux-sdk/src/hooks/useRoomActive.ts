@@ -150,6 +150,10 @@ export function useRoomActive() {
     if (!s.activeRoomJid) return undefined
     return s.mamQueryStates.get(s.activeRoomJid)?.oldestFetchedId
   })
+  const mamError = useRoomStore((s) => {
+    if (!s.activeRoomJid) return null
+    return s.mamQueryStates.get(s.activeRoomJid)?.error ?? null
+  })
   // Source the gap marker from the PERSISTED roomGaps (survives reload), not the
   // ephemeral mamQueryStates.forwardGapTimestamp which is lost on reload.
   const mamForwardGapTimestamp = useRoomStore((s) => {
@@ -167,9 +171,9 @@ export function useRoomActive() {
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
       forwardGapTimestamp: mamForwardGapTimestamp,
-      error: null,
+      error: mamError,
     }
-  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp])
+  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp, mamError])
 
   // Get typing users for the active room as an array
   const activeTypingUsers = useMemo(() => {
