@@ -2334,14 +2334,16 @@ export class PositioningController {
     execution: ResidentTopExecutionState,
     outcome: ResidentTopCompletion,
   ): void {
-    this.finishResidentTopLoop(execution)
-    execution.abortController?.abort()
-    runScrollShadowSafely({
-      event: 'resident-top-complete',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.executor.complete(execution.request, outcome),
-    })
+    this.teardownExecution(
+      execution,
+      (torn) => this.finishResidentTopLoop(torn),
+      (torn) => runScrollShadowSafely({
+        event: 'resident-top-complete',
+        conversationId: torn.request.conversationId,
+        fallback: undefined,
+        observe: () => torn.executor.complete(torn.request, outcome),
+      }),
+    )
     if (this.residentTopExecution === execution) {
       this.residentTopExecution = null
     }
@@ -3571,27 +3573,41 @@ export class PositioningController {
     this.cancelDirectionalHistoryExecution(outcome)
   }
 
+  /**
+   * Tear an execution down in the order every executor depends on: stop its frame loop, abort the
+   * work its lease authorised, then report the outcome to the executor that asked for it.
+   *
+   * The order is the point. Aborting before the loop is finished leaves a scheduled frame to run
+   * against a dead execution, and reporting before the abort hands the executor a completion whose
+   * signal is still live. Clearing the slot stays with each caller: most drop it unconditionally,
+   * resident top only when it still holds the execution being torn down.
+   */
+  private teardownExecution<T extends { abortController: AbortController | null }>(
+    execution: T | null,
+    finishLoop: (execution: T) => void,
+    reportOutcome?: (execution: T) => void,
+  ): void {
+    if (!execution) return
+    finishLoop(execution)
+    execution.abortController?.abort()
+    reportOutcome?.(execution)
+  }
+
   private cancelSavedExecution(): void {
-    if (this.savedExecution) {
-      this.finishSavedLoop(this.savedExecution)
-      this.savedExecution.abortController?.abort()
-    }
+    this.teardownExecution(this.savedExecution, (execution) => this.finishSavedLoop(execution))
     this.savedExecution = null
   }
 
   private cancelUnreadExecution(): void {
-    if (this.unreadExecution) {
-      this.finishUnreadLoop(this.unreadExecution)
-      this.unreadExecution.abortController?.abort()
-    }
+    this.teardownExecution(this.unreadExecution, (execution) => this.finishUnreadLoop(execution))
     this.unreadExecution = null
   }
 
   private cancelExplicitTargetExecution(): void {
-    if (this.explicitTargetExecution) {
-      this.finishExplicitTargetLoop(this.explicitTargetExecution)
-      this.explicitTargetExecution.abortController?.abort()
-    }
+    this.teardownExecution(
+      this.explicitTargetExecution,
+      (execution) => this.finishExplicitTargetLoop(execution),
+    )
     this.explicitTargetExecution = null
   }
 
@@ -3605,36 +3621,33 @@ export class PositioningController {
   }
 
   private cancelLiveEdgeExecution(outcome: LiveEdgeCompletion): void {
-    const execution = this.liveEdgeExecution
-    if (execution) {
-      this.finishLiveEdgeLoop(execution)
-      execution.abortController?.abort()
-      this.completeLiveEdge(execution, outcome)
-    }
+    this.teardownExecution(
+      this.liveEdgeExecution,
+      (execution) => this.finishLiveEdgeLoop(execution),
+      (execution) => this.completeLiveEdge(execution, outcome),
+    )
     this.liveEdgeExecution = null
   }
 
   private cancelAnchorPreservationExecution(
     outcome: AnchorPreservationCompletion,
   ): void {
-    const execution = this.anchorPreservationExecution
-    if (execution) {
-      this.finishAnchorPreservationLoop(execution)
-      execution.abortController?.abort()
-      this.completeAnchorPreservation(execution, outcome)
-    }
+    this.teardownExecution(
+      this.anchorPreservationExecution,
+      (execution) => this.finishAnchorPreservationLoop(execution),
+      (execution) => this.completeAnchorPreservation(execution, outcome),
+    )
     this.anchorPreservationExecution = null
   }
 
   private cancelDirectionalHistoryExecution(
     outcome: DirectionalHistoryCompletion,
   ): void {
-    const execution = this.directionalHistoryExecution
-    if (execution) {
-      this.finishDirectionalHistoryLoop(execution)
-      execution.abortController?.abort()
-      this.completeDirectionalHistory(execution, outcome)
-    }
+    this.teardownExecution(
+      this.directionalHistoryExecution,
+      (execution) => this.finishDirectionalHistoryLoop(execution),
+      (execution) => this.completeDirectionalHistory(execution, outcome),
+    )
     this.directionalHistoryExecution = null
   }
 }

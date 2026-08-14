@@ -95,16 +95,26 @@ const entryFacts = {
   live: { syncedLiveEdge: false } satisfies EntryPositionFacts,
 }
 
-/** Collects the lease each executor is handed, and keeps the loop inert so no frame ever runs. */
+/**
+ * Collects the lease each executor is handed and keeps the loop inert so no frame ever runs.
+ *
+ * `abortedAtFinish` records what the abort signal read at the moment the loop was told to finish.
+ * Teardown must stop the loop before aborting, or a frame already scheduled runs against an
+ * execution whose lease has gone; the flag is the only way to observe that order from outside.
+ */
 function leaseCollector() {
   const leases: PositionExecutionLease[] = []
+  let abortedAtFinish: boolean | null = null
   const loop: PositionFrameLoop = {
     schedule: () => {},
     recordFrame: () => {},
-    finish: () => {},
+    finish: () => {
+      abortedAtFinish = leases.at(-1)?.signal.aborted ?? null
+    },
   }
   return {
     leases,
+    finishSawAbort: () => abortedAtFinish,
     beginLoop: (lease: PositionExecutionLease) => {
       leases.push(lease)
       return loop
@@ -115,6 +125,7 @@ function leaseCollector() {
 interface Started {
   lease: PositionExecutionLease
   generation: number
+  collector: ReturnType<typeof leaseCollector>
 }
 
 /**
@@ -282,7 +293,7 @@ function started(
   expect(request, 'the executor must accept its own entry point').not.toBeNull()
   const lease = collector.leases.at(-1)
   expect(lease, 'every executor must be handed a lease through beginLoop').toBeDefined()
-  return { lease: lease!, generation: request!.generation }
+  return { lease: lease!, generation: request!.generation, collector }
 }
 
 describe.each(EXECUTORS)('$name lease', ({ start }) => {
@@ -330,6 +341,22 @@ describe.each(EXECUTORS)('$name lease', ({ start }) => {
     })
 
     expect(lease.isCurrent()).toBe(false)
+  })
+
+  it('stops the frame loop before aborting the lease it authorised', () => {
+    // Teardown order, observed from outside: the loop is told to finish while the signal is still
+    // live. Aborting first would leave an already-scheduled frame to run against an execution whose
+    // lease has gone. Nothing else pins this — the order is otherwise only stated in a comment.
+    const controller = new PositioningController()
+    const { collector, generation } = start(controller)
+    expect(collector.finishSawAbort(), 'the loop must still be running before teardown').toBeNull()
+
+    controller.deactivate(conversationId, generation)
+
+    expect(
+      collector.finishSawAbort(),
+      'teardown must finish the loop before aborting, or not finish it at all',
+    ).toBe(false)
   })
 
   it('refuses to advance the phase once it is no longer current', () => {
