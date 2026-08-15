@@ -58,6 +58,7 @@ import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
 import { humanizeStreamError } from './streamErrors'
 import { humanizeTransportError } from './transportErrors'
+import { FastTokenLogoutError } from '../errors'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -217,6 +218,30 @@ export class Connection extends BaseModule {
   protected get stores() { return this.deps.stores! }
   protected get emit() { return this.deps.emit }
   protected get storageAdapter() { return this.deps.storageAdapter }
+
+  private fetchStoredFastToken(jid: string) {
+    return this.deps.fastTokenStorage
+      ? fetchFastToken(jid, this.deps.fastTokenStorage)
+      : fetchFastToken(jid)
+  }
+
+  private saveStoredFastToken(
+    jid: string,
+    token: { mechanism: string; token: string; expiry?: string },
+  ): void {
+    if (this.deps.fastTokenStorage) {
+      saveFastToken(jid, token, this.deps.fastTokenStorage)
+    } else {
+      saveFastToken(jid, token)
+    }
+  }
+
+  private deleteStoredFastToken(jid: string): boolean {
+    if (this.deps.fastTokenStorage) {
+      return deleteFastToken(jid, this.deps.fastTokenStorage)
+    }
+    return deleteFastToken(jid)
+  }
 
   constructor(deps: ModuleDependencies) {
     super(deps)
@@ -706,7 +731,8 @@ export class Connection extends BaseModule {
    * @param options.invalidateFastToken - When true and a FAST token
    *   (XEP-0484) is stored for this account, open a short-lived SASL2
    *   session to invalidate the token on the server before teardown.
-   *   Best-effort: failures do not block the rest of the disconnect.
+   *   Failures do not block connection cleanup. Once cleanup completes, this
+   *   rejects when neither local deletion nor server invalidation succeeded.
    */
   async disconnect(options: { invalidateFastToken?: boolean } = {}): Promise<void> {
     const disconnectOp = ++this.disconnectOperationSeq
@@ -741,10 +767,16 @@ export class Connection extends BaseModule {
     // network-bound) server-side invalidation below can still use it.
     const bareJidForFastToken =
       shouldInvalidateFastToken && jidForSmCleanup ? getBareJid(jidForSmCleanup) : null
-    const capturedFastToken = bareJidForFastToken ? fetchFastToken(bareJidForFastToken) : null
+    const capturedFastToken = bareJidForFastToken
+      ? this.fetchStoredFastToken(bareJidForFastToken)
+      : null
+    const localFastTokenDeleted = bareJidForFastToken
+      ? this.deleteStoredFastToken(bareJidForFastToken)
+      : true
     if (bareJidForFastToken) {
-      deleteFastToken(bareJidForFastToken)
-      logDisconnect('FAST token removed from local storage (sync)')
+      logDisconnect(localFastTokenDeleted
+        ? 'FAST token removed from client storage (sync)'
+        : 'FAST token removal from client storage failed')
     }
 
     if (clientToStop) {
@@ -773,6 +805,7 @@ export class Connection extends BaseModule {
     // session can reach the server while we still have a network path. The
     // local token was already deleted synchronously above; we pass the
     // captured copy so this session can still authenticate to invalidate it.
+    let serverFastTokenInvalidated = false
     if (bareJidForFastToken && serverForInvalidation && capturedFastToken) {
       logDisconnect(`attempting FAST token invalidation for ${bareJidForFastToken}`)
       try {
@@ -780,8 +813,10 @@ export class Connection extends BaseModule {
           jid: bareJidForFastToken,
           server: serverForInvalidation,
           token: capturedFastToken,
+          userAgentId: this.deps.userAgentId,
         })
         if (result.ok) {
+          serverFastTokenInvalidated = true
           logDisconnect(`FAST token invalidated on server${result.reason ? ` (${result.reason})` : ''}`)
           this.stores.console.addEvent('FAST token invalidated on server', 'connection')
         } else {
@@ -861,6 +896,10 @@ export class Connection extends BaseModule {
     }
 
     logDisconnect('complete')
+
+    if (bareJidForFastToken && !localFastTokenDeleted && !serverFastTokenInvalidated) {
+      throw new FastTokenLogoutError(bareJidForFastToken)
+    }
   }
 
   /**
@@ -1560,7 +1599,7 @@ export class Connection extends BaseModule {
         logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
         // XEP-0388 §2.2 / XEP-0484: FAST binds issued tokens to the user-agent
         // id, so we MUST include <user-agent/> for the server to issue tokens.
-        const userAgent = buildUserAgentElement()
+        const userAgent = buildUserAgentElement(this.deps.userAgentId)
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
         await Promise.race([
@@ -1578,28 +1617,27 @@ export class Connection extends BaseModule {
       },
     })
 
-    // Wire FAST token persistence to localStorage (XEP-0484)
-    // xmpp.js default storage is in-memory only — tokens would be lost on page reload.
-    // This enables password-less reconnection for up to 14 days on web.
+    // Wire FAST token persistence to the platform adapter (XEP-0484).
+    // Browsers default to localStorage; headless runtimes default to memory.
     // Token saving is gated on rememberSession — users must opt in via "Remember Me".
     const fastModule = xmppClient.fast
     if (fastModule) {
       const bareJid = getBareJid(jid)
-      fastModule.fetchToken = () => fetchFastToken(bareJid)
+      fastModule.fetchToken = () => this.fetchStoredFastToken(bareJid)
       fastModule.saveToken = options.rememberSession
         ? (t: { mechanism: string; token: string; expiry?: string }) => {
             logInfo(`FAST token saved (mechanism: ${t.mechanism}, expiry: ${t.expiry ?? 'none'})`)
-            saveFastToken(bareJid, t)
+            this.saveStoredFastToken(bareJid, t)
           }
         : () => { /* rememberSession disabled — do not persist FAST token */ }
       fastModule.deleteToken = () => {
         // xmpp.js calls deleteToken() whenever it takes the "invalid token" path,
         // including when no token existed (isTokenValid(undefined) === false).
         // Only log when a token was actually present to avoid spurious noise on first login.
-        if (fetchFastToken(bareJid) !== null) {
+        if (this.fetchStoredFastToken(bareJid) !== null) {
           logInfo('FAST token invalidated/deleted')
         }
-        deleteFastToken(bareJid)
+        this.deleteStoredFastToken(bareJid)
       }
     }
 
@@ -2406,12 +2444,14 @@ export class Connection extends BaseModule {
     }
 
     // Preflight: if there is no viable authentication credential (no password
-    // and no valid FAST token in localStorage), opening a connection would only
+    // and no valid FAST token in client storage), opening a connection would only
     // fail during SASL negotiation. Fail immediately so the machine transitions
     // to terminal.authFailed and the UI shows the login screen without burning
     // a reconnect attempt on a WebSocket round-trip.
     const hasPassword = !!this.credentials.password
-    const hasFastToken = fetchFastToken(getBareJid(this.credentials.jid)) !== null
+    const hasFastToken = this.fetchStoredFastToken(
+      getBareJid(this.credentials.jid),
+    ) !== null
     if (!hasPassword && !hasFastToken) {
       logInfo('attemptReconnect: no viable credentials (no password, no FAST token), transitioning to auth failure')
       this.stores.console.addEvent('Reconnect aborted: no credentials available', 'error')

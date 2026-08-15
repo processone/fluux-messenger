@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { hasFastToken } from '@fluux/sdk'
 import { performLogout } from './performLogout'
 import { getReconnectIntent } from './reconnectIntent'
@@ -36,6 +36,10 @@ describe('performLogout', () => {
     mockReset.mockClear()
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   // ★ The ordering invariant: the intent must flip BEFORE any await, so a
   // disconnect that hangs (or a webview reload mid-logout) can't leave the app
   // in a reconnectable state.
@@ -59,6 +63,18 @@ describe('performLogout', () => {
     await performLogout({ disconnect, jid: JID, shouldCleanLocalData: false })
 
     expect(disconnect).toHaveBeenCalledWith({ invalidateFastToken: true })
+  })
+
+  it('warns when disconnect reports that the FAST token could not be removed', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await performLogout({
+      disconnect: vi.fn().mockRejectedValue(new Error('FAST token removal failed')),
+      jid: JID,
+      shouldCleanLocalData: false,
+    })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('disconnect failed'))
   })
 
   // Post-condition (keep-data logout): every local re-auth vector is gone AND

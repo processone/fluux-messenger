@@ -81,6 +81,9 @@ jobs:
       - name: Build SDK
         run: npm run build:sdk
 
+      - name: Run SDK in plain Node
+        run: npm run test:node --workspace=@fluux/sdk
+
       - name: Run tests
         run: npm test
 

@@ -14,6 +14,7 @@ import type { SDKStores } from '../stores/sdkStores'
 import type { StorageAdapter } from './types/storage'
 import type { ProxyAdapter } from './types/proxy'
 import type { PresenceOptions, PrivacyOptions } from './types/client'
+import type { FastTokenStorageAdapter } from './fastTokenStorage'
 
 /**
  * XMPPClient configuration options.
@@ -75,6 +76,22 @@ export interface XMPPClientConfig {
    * ```
    */
   storageAdapter?: StorageAdapter
+  /**
+   * Storage for XEP-0484 FAST authentication tokens.
+   *
+   * Browsers default to localStorage. Headless runtimes default to memory. To
+   * survive a process restart, inject an adapter and persist {@link userAgentId}.
+   */
+  fastTokenStorage?: FastTokenStorageAdapter
+  /**
+   * Stable XEP-0388 user-agent UUID used to bind XEP-0484 FAST tokens.
+   *
+   * Headless runtimes keep a process-local default. Callers that persist FAST
+   * tokens across process restarts must persist and reuse this ID as well.
+   * An injected ID is caller-owned and is not changed by
+   * `clearUserAgentIdentity()`.
+   */
+  userAgentId?: string
   /**
    * Proxy adapter for WebSocket-to-TCP bridging.
    *

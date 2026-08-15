@@ -19,6 +19,7 @@ import { fetchFastToken, type FastToken } from './fastTokenStorage'
 import { getBareJid, getDomain, getLocalPart } from './jid'
 import { logInfo, logWarn } from './logger'
 import { FAST_TOKEN_INVALIDATION_TIMEOUT_MS } from './modules/connectionTimeouts'
+import { buildUserAgentElement } from './userAgent'
 
 export interface InvalidateFastTokenOptions {
   /** Full or bare JID of the account whose token should be invalidated */
@@ -27,11 +28,14 @@ export interface InvalidateFastTokenOptions {
   server: string
   /** Override the default invalidation timeout (ms) */
   timeoutMs?: number
+  /** Stable XEP-0388 identity used when the FAST token was issued */
+  userAgentId?: string
   /**
    * Pre-fetched token to use for the invalidation session. When provided,
-   * this function does not read localStorage — letting the caller delete the
-   * client-side token synchronously (e.g. before a webview reload) while still
-   * invalidating it server-side. Falls back to a localStorage lookup when omitted.
+   * this function does not read the runtime's default FAST storage — letting
+   * the caller delete the client-side token synchronously (e.g. before a
+   * webview reload) while still invalidating it server-side. Falls back to the
+   * default FAST storage when omitted.
    */
   token?: FastToken | null
 }
@@ -127,7 +131,11 @@ export async function invalidateFastTokenOnServer(
         domain,
         username,
         credentials: async (
-          authenticate: (creds: Record<string, unknown>, mechanism: string) => Promise<void>,
+          authenticate: (
+            creds: Record<string, unknown>,
+            mechanism: string,
+            userAgent: ReturnType<typeof buildUserAgentElement>,
+          ) => Promise<void>,
           mechanisms: string[],
           fast: unknown | null
         ) => {
@@ -138,7 +146,11 @@ export async function invalidateFastTokenOnServer(
           // needs to parse — it won't actually be used because fast.auth
           // will succeed (or fail and surface as an error).
           const mechanism = mechanisms[0] ?? token.mechanism
-          await authenticate({ username, token }, mechanism)
+          await authenticate(
+            { username, token },
+            mechanism,
+            buildUserAgentElement(options.userAgentId),
+          )
         },
       })
 
@@ -149,8 +161,8 @@ export async function invalidateFastTokenOnServer(
         return
       }
 
-      // Override token accessors so xmpp.js uses the token we have, and
-      // does not touch localStorage for this transient session.
+      // Override token accessors so xmpp.js uses the token we have and does
+      // not touch its own token store during this transient session.
       fastModule.fetchToken = async () => token
       fastModule.saveToken = () => {
         /* server MUST NOT issue a new token on invalidation (XEP-0484 §6) */
@@ -169,21 +181,8 @@ export async function invalidateFastTokenOnServer(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       xmppClient.on('error', (err: any) => {
         const msg = err?.message ?? String(err)
-        // A not-authorized / credentials-expired here means the server
-        // already considered the token invalid. Functionally the same
-        // outcome as a successful invalidation.
-        if (
-          err?.condition === 'not-authorized' ||
-          err?.condition === 'credentials-expired' ||
-          msg.includes('not-authorized') ||
-          msg.includes('credentials-expired')
-        ) {
-          logInfo(`FAST invalidation: token already invalid on server (${msg})`)
-          settle({ ok: true, reason: 'already-invalid' })
-          return
-        }
         logWarn(`FAST invalidation: failed (${msg})`)
-        settle({ ok: false, reason: msg })
+        settle({ ok: false, reason: err?.condition ?? msg })
       })
 
       xmppClient.start().catch((err: unknown) => {

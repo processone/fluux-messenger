@@ -87,14 +87,21 @@ const createMockInstance = (): MockXmppInstance => {
   return inst
 }
 
-const { mockClientFactory, mockInstances } = vi.hoisted(() => {
+const { mockClientFactory, mockInstances, mockXmlFn } = vi.hoisted(() => {
   const instances: MockXmppInstance[] = []
   const factory = vi.fn()
-  return { mockClientFactory: factory, mockInstances: instances }
+  const xml = vi.fn((name: string, attrs?: Record<string, string>, ...children: unknown[]) => ({
+    name,
+    attrs: attrs || {},
+    children,
+    toString: () => `<${name}/>`
+  }))
+  return { mockClientFactory: factory, mockInstances: instances, mockXmlFn: xml }
 })
 
 vi.mock('@xmpp/client', () => ({
   client: mockClientFactory,
+  xml: mockXmlFn,
 }))
 
 vi.mock('@xmpp/debug', () => ({ default: vi.fn() }))
@@ -253,7 +260,42 @@ describe('invalidateFastTokenOnServer', () => {
     expect(fetched).toEqual(TOKEN)
   })
 
-  it('treats not-authorized as already-invalid (ok:true)', async () => {
+  it('passes the FAST-bound user-agent identity to authentication', async () => {
+    mockFetchFastToken.mockReturnValue(TOKEN)
+    const inst = createMockInstance()
+    mockClientFactory.mockImplementation(() => inst)
+    const authenticate = vi.fn().mockResolvedValue(undefined)
+
+    const p = invalidateFastTokenOnServer({
+      jid: 'alice@example.com',
+      server: 'wss://example.com/ws',
+      userAgentId: '11111111-2222-4333-8444-555555555555',
+    })
+    await Promise.resolve()
+
+    const config = mockClientFactory.mock.calls[0][0] as {
+      credentials: (
+        authenticateFn: typeof authenticate,
+        mechanisms: string[],
+        fast: unknown,
+      ) => Promise<void>
+    }
+    await config.credentials(authenticate, [TOKEN.mechanism], {})
+    inst._emit('online')
+    await p
+
+    expect(authenticate).toHaveBeenCalledWith(
+      expect.any(Object),
+      TOKEN.mechanism,
+      expect.objectContaining({
+        attrs: expect.objectContaining({
+          id: '11111111-2222-4333-8444-555555555555',
+        }),
+      }),
+    )
+  })
+
+  it('does not report not-authorized as confirmed invalidation', async () => {
     mockFetchFastToken.mockReturnValue(TOKEN)
     const inst = createMockInstance()
     mockClientFactory.mockImplementation(() => inst)
@@ -266,8 +308,7 @@ describe('invalidateFastTokenOnServer', () => {
     inst._emit('error', { condition: 'not-authorized', message: 'token rejected' })
 
     const result = await p
-    expect(result.ok).toBe(true)
-    expect(result.reason).toBe('already-invalid')
+    expect(result).toEqual({ ok: false, reason: 'not-authorized' })
   })
 
   it('resolves {ok:false} with the error message on unrelated errors', async () => {

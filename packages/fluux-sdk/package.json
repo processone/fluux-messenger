@@ -87,6 +87,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:node": "node --test test/node-runtime-smoke.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.bench.json && tsc --noEmit -p examples/tsconfig.json",
     "lint": "eslint src examples",
     "lint:fix": "eslint src examples --fix",

@@ -1,6 +1,21 @@
 import type { XMPPErrorType } from '../utils/xmppError'
 
 /**
+ * Explicit logout completed its connection cleanup, but could not remove the
+ * FAST credential either from client storage or from the server.
+ */
+export class FastTokenLogoutError extends Error {
+  readonly jid: string
+
+  constructor(jid: string) {
+    super(`FAST token for ${jid} could not be removed locally or invalidated on the server`)
+    this.name = 'FastTokenLogoutError'
+    this.jid = jid
+    Object.setPrototypeOf(this, FastTokenLogoutError.prototype)
+  }
+}
+
+/**
  * Why a room join failed, in terms of what the user has to do about it.
  *
  * The wire condition alone does not answer that: `not-authorized` means "ask

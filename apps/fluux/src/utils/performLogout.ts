@@ -54,6 +54,8 @@ export async function performLogout({ disconnect, jid, shouldCleanLocalData }: P
     console.warn(
       `[Fluux] Logout: disconnect timed out after ${LOGOUT_DISCONNECT_TIMEOUT_MS}ms, continuing cleanup`
     )
+  } else if (disconnectSettled === 'error') {
+    console.warn('[Fluux] Logout: disconnect failed; continuing credential cleanup')
   }
 
   // 3. Clear persisted session immediately so the UI can leave ChatLayout even

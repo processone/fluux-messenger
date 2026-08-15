@@ -51,6 +51,7 @@ describe('userAgent', () => {
 
   beforeEach(() => {
     store = installLocalStorageMock()
+    clearUserAgentIdentity()
   })
 
   afterEach(() => {
@@ -85,11 +86,11 @@ describe('userAgent', () => {
       expect(id).toMatch(UUID_V4_RE)
     })
 
-    it('returns different ids on each call when localStorage throws (not persisted)', () => {
+    it('returns the same process-local id when localStorage throws', () => {
       installThrowingLocalStorage()
       const id1 = getOrCreateUserAgentId()
       const id2 = getOrCreateUserAgentId()
-      expect(id1).not.toBe(id2)
+      expect(id2).toBe(id1)
     })
   })
 

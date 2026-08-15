@@ -4,6 +4,8 @@ import {
   fetchFastToken,
   deleteFastToken,
   hasFastToken,
+  createInMemoryFastTokenStorage,
+  type FastTokenStorageAdapter,
 } from './fastTokenStorage'
 
 describe('fastTokenStorage', () => {
@@ -212,6 +214,56 @@ describe('fastTokenStorage', () => {
     it('returns false when token data is corrupted', () => {
       store[STORAGE_KEY] = 'garbage'
       expect(hasFastToken(JID)).toBe(false)
+    })
+  })
+
+  // ── Storage adapters ──
+
+  describe('storage adapters', () => {
+    it('uses an injected in-memory adapter without localStorage', () => {
+      const storage = createInMemoryFastTokenStorage()
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: undefined,
+        writable: true,
+        configurable: true,
+      })
+
+      saveFastToken(JID, validToken, storage)
+      expect(fetchFastToken(JID, storage)?.token).toBe(validToken.token)
+      deleteFastToken(JID, storage)
+      expect(hasFastToken(JID, storage)).toBe(false)
+    })
+
+    it('does not throw when an adapter fails during cleanup', () => {
+      const unavailableStorage: FastTokenStorageAdapter = {
+        getToken: () => { throw new Error('unavailable') },
+        setToken: () => { throw new Error('unavailable') },
+        deleteToken: () => { throw new Error('unavailable') },
+      }
+
+      expect(() => saveFastToken(JID, validToken, unavailableStorage)).not.toThrow()
+      expect(fetchFastToken(JID, unavailableStorage)).toBeNull()
+      expect(deleteFastToken(JID, unavailableStorage)).toBe(false)
+    })
+
+    it('reports whether deletion succeeded', () => {
+      const storage = createInMemoryFastTokenStorage()
+      saveFastToken(JID, validToken, storage)
+
+      expect(deleteFastToken(JID, storage)).toBe(true)
+      expect(fetchFastToken(JID, storage)).toBeNull()
+    })
+
+    it('does not delete a token when the adapter read fails', () => {
+      const deleteToken = vi.fn()
+      const unavailableStorage: FastTokenStorageAdapter = {
+        getToken: () => { throw new Error('temporarily unavailable') },
+        setToken: vi.fn(),
+        deleteToken,
+      }
+
+      expect(fetchFastToken(JID, unavailableStorage)).toBeNull()
+      expect(deleteToken).not.toHaveBeenCalled()
     })
   })
 

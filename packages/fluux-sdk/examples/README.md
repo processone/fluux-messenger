@@ -4,8 +4,12 @@ Two runnable bots, headless: no React, no DOM, plain Node.
 
 They exist to be run against a real server. They are also the SDK's own check
 that `@fluux/sdk/core` stands on its own, so they are typechecked and linted
-with the package (`npm run typecheck`, `npm run lint`). An API change that
-breaks them breaks CI, which is the point.
+with the package and its built core bundle is executed in Node (`npm run
+typecheck`, `npm run lint`, `npm run test:node`). An API or runtime change that
+breaks headless use breaks CI, which is the point.
+
+See the SDK's [headless usage documentation](../README.md#headless-usage-bots-cli-non-react)
+for FAST token storage in Node.
 
 ## Running them
 

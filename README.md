@@ -274,7 +274,7 @@ Yes. By default, closing the main window minimizes Fluux to the system tray or m
 
 #### On the web version, why do I have to log in again after closing the tab?
 
-For security, credentials are only kept in the session context. Nothing sensitive is persisted to local storage. If your XMPP server supports [FAST](https://xmpp.org/extensions/xep-0484.html) authentication tokens (SASL2), reconnection across page reloads will work seamlessly, without ever storing your password. If it doesn't, your server likely doesn't yet support FAST.
+Fluux never persists your password to local storage. If your XMPP server supports [FAST](https://xmpp.org/extensions/xep-0484.html) authentication tokens (SASL2), Fluux stores a short-lived token in local storage so reconnection across page reloads works without storing the password. Without FAST support, the session credentials disappear when the tab closes and you must log in again.
 
 ## Contributing
 

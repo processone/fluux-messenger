@@ -1,11 +1,8 @@
 /**
  * FAST Token Storage (XEP-0484)
  *
- * Provides localStorage-backed persistence for FAST authentication tokens.
- * Tokens allow password-less reconnection for up to 14 days on web.
- *
- * Storage key pattern: `fluux:fast-token:{bare-jid}`
- * Token format: { mechanism, token, expiry } as JSON
+ * Browser clients persist tokens in localStorage. Headless runtimes use a
+ * process-local in-memory adapter unless the caller injects another one.
  *
  * @see https://xmpp.org/extensions/xep-0484.html
  */
@@ -24,19 +21,80 @@ export interface FastToken {
   expiry: string
 }
 
+/**
+ * Synchronous persistence seam for XEP-0484 FAST tokens.
+ *
+ * Deletion is synchronous because explicit logout must remove the local token
+ * before any reconnect path can observe it.
+ */
+export interface FastTokenStorageAdapter {
+  getToken(jid: string): FastToken | null
+  setToken(jid: string, token: FastToken): void
+  deleteToken(jid: string): void
+}
+
 function storageKey(jid: string): string {
   return `${STORAGE_PREFIX}${jid}`
 }
 
+/** Create isolated, process-local FAST token storage. */
+export function createInMemoryFastTokenStorage(): FastTokenStorageAdapter {
+  const tokens = new Map<string, FastToken>()
+
+  return {
+    getToken: (jid) => tokens.get(jid) ?? null,
+    setToken: (jid, token) => { tokens.set(jid, token) },
+    deleteToken: (jid) => { tokens.delete(jid) },
+  }
+}
+
+const browserFastTokenStorage: FastTokenStorageAdapter = {
+  getToken(jid) {
+    const key = storageKey(jid)
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+
+    try {
+      return JSON.parse(raw) as FastToken
+    } catch {
+      window.localStorage.removeItem(key)
+      return null
+    }
+  },
+  setToken(jid, token) {
+    window.localStorage.setItem(storageKey(jid), JSON.stringify(token))
+  },
+  deleteToken(jid) {
+    window.localStorage.removeItem(storageKey(jid))
+  },
+}
+
+const headlessFastTokenStorage = createInMemoryFastTokenStorage()
+
+function getDefaultFastTokenStorage(): FastTokenStorageAdapter {
+  return typeof window === 'undefined'
+    ? headlessFastTokenStorage
+    : browserFastTokenStorage
+}
+
+function removeInvalidToken(jid: string, storage: FastTokenStorageAdapter): void {
+  try {
+    storage.deleteToken(jid)
+  } catch {
+    // Storage is unavailable; there is nothing else to clean up.
+  }
+}
+
 /**
- * Save a FAST token to localStorage for the given JID.
+ * Save a FAST token for the given JID.
  *
- * The expiry is capped at 14 days from now. If the server provides
- * an earlier expiry, that is preserved.
+ * The expiry is capped at 14 days from now. If the server provides an earlier
+ * expiry, that is preserved.
  */
 export function saveFastToken(
   jid: string,
-  tokenData: { mechanism: string; token: string; expiry?: string }
+  tokenData: { mechanism: string; token: string; expiry?: string },
+  storage: FastTokenStorageAdapter = getDefaultFastTokenStorage(),
 ): void {
   const maxExpiry = new Date(Date.now() + MAX_TTL_MS).toISOString()
   let expiry = maxExpiry
@@ -55,58 +113,67 @@ export function saveFastToken(
   }
 
   try {
-    localStorage.setItem(storageKey(jid), JSON.stringify(stored))
+    storage.setToken(jid, stored)
   } catch {
-    // localStorage full or unavailable — token won't persist
+    // Storage is full or unavailable; authentication can continue without persistence.
   }
 }
 
 /**
- * Retrieve a FAST token from localStorage for the given JID.
+ * Retrieve a FAST token for the given JID.
  *
- * Returns null if no token exists or the token has expired.
- * Expired tokens are auto-deleted (lazy cleanup).
+ * Returns null if no token exists or the token has expired. Invalid and
+ * expired tokens are removed lazily.
  */
-export function fetchFastToken(jid: string): FastToken | null {
+export function fetchFastToken(
+  jid: string,
+  storage: FastTokenStorageAdapter = getDefaultFastTokenStorage(),
+): FastToken | null {
+  let stored: FastToken | null
+
   try {
-    const raw = localStorage.getItem(storageKey(jid))
-    if (!raw) return null
-
-    const stored: FastToken = JSON.parse(raw)
-
-    // Validate required fields
-    if (!stored.mechanism || !stored.token || !stored.expiry) {
-      localStorage.removeItem(storageKey(jid))
-      return null
-    }
-
-    // Check expiry
-    if (new Date(stored.expiry) <= new Date()) {
-      localStorage.removeItem(storageKey(jid))
-      return null
-    }
-
-    return stored
+    stored = storage.getToken(jid)
   } catch {
-    // Corrupted data — clean up
-    localStorage.removeItem(storageKey(jid))
     return null
   }
+
+  if (!stored) return null
+
+  if (!stored.mechanism || !stored.token || !stored.expiry) {
+    removeInvalidToken(jid, storage)
+    return null
+  }
+
+  if (new Date(stored.expiry) <= new Date()) {
+    removeInvalidToken(jid, storage)
+    return null
+  }
+
+  return stored
 }
 
 /**
- * Delete the FAST token for the given JID from localStorage.
- */
-export function deleteFastToken(jid: string): void {
-  localStorage.removeItem(storageKey(jid))
-}
-
-/**
- * Check whether a non-expired FAST token exists for the given JID.
+ * Delete the FAST token for the given JID.
  *
- * This only checks client-side token existence and expiry.
- * Server-side FAST support is verified during SASL2 negotiation by xmpp.js.
+ * Returns false when the adapter throws, allowing logout callers to combine
+ * local deletion with server-side invalidation without reporting false success.
  */
-export function hasFastToken(jid: string): boolean {
-  return fetchFastToken(jid) !== null
+export function deleteFastToken(
+  jid: string,
+  storage: FastTokenStorageAdapter = getDefaultFastTokenStorage(),
+): boolean {
+  try {
+    storage.deleteToken(jid)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Check whether a non-expired FAST token exists for the given JID. */
+export function hasFastToken(
+  jid: string,
+  storage: FastTokenStorageAdapter = getDefaultFastTokenStorage(),
+): boolean {
+  return fetchFastToken(jid, storage) !== null
 }

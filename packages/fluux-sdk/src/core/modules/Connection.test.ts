@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import { FastTokenLogoutError } from '../errors'
 import {
   DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
@@ -65,7 +66,7 @@ vi.mock('../../utils/websocketDiscovery', () => ({
 const { mockFetchFastToken, mockSaveFastToken, mockDeleteFastToken } = vi.hoisted(() => ({
   mockFetchFastToken: vi.fn().mockReturnValue(null),
   mockSaveFastToken: vi.fn(),
-  mockDeleteFastToken: vi.fn(),
+  mockDeleteFastToken: vi.fn().mockReturnValue(true),
 }))
 
 vi.mock('../fastTokenStorage', () => ({
@@ -99,6 +100,7 @@ describe('XMPPClient Connection', () => {
     // Reset WebSocket discovery mock to return null (discovery failed -> use fallback URL)
     mockDiscoverWebSocket.mockClear()
     mockDiscoverWebSocket.mockResolvedValue(null)
+    mockDeleteFastToken.mockReturnValue(true)
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
@@ -449,6 +451,11 @@ describe('XMPPClient Connection', () => {
     })
 
     it('requests server-side FAST token invalidation when invalidateFastToken:true', async () => {
+      const stableUserAgentId = '11111111-2222-4333-8444-555555555555'
+      xmppClient.destroy()
+      xmppClient = new XMPPClient({ debug: false, userAgentId: stableUserAgentId })
+      xmppClient.bindStores(mockStores)
+
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
         password: 'secret',
@@ -478,6 +485,7 @@ describe('XMPPClient Connection', () => {
           jid: 'user@example.com',
           server: expect.stringContaining('example.com'),
           token: fakeToken,
+          userAgentId: stableUserAgentId,
         })
       )
       // Client-side token must also be removed so auto-reconnect paths
@@ -553,6 +561,62 @@ describe('XMPPClient Connection', () => {
       expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
 
       mockFetchFastToken.mockReturnValue(null)
+    })
+
+    it('rejects after cleanup when local and server FAST token removal both fail', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const fakeToken = {
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      }
+      mockFetchFastToken.mockReturnValue(fakeToken)
+      mockDeleteFastToken.mockReturnValue(false)
+      mockInvalidateFastTokenOnServer.mockRejectedValueOnce(new Error('network down'))
+
+      await expect(
+        xmppClient.disconnect({ invalidateFastToken: true })
+      ).rejects.toBeInstanceOf(FastTokenLogoutError)
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+
+      mockFetchFastToken.mockReturnValue(null)
+      mockDeleteFastToken.mockReturnValue(true)
+    })
+
+    it('resolves when server invalidation succeeds after local deletion fails', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockFetchFastToken.mockReturnValue({
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      mockDeleteFastToken.mockReturnValue(false)
+      mockInvalidateFastTokenOnServer.mockResolvedValueOnce({ ok: true })
+
+      await expect(
+        xmppClient.disconnect({ invalidateFastToken: true })
+      ).resolves.toBeUndefined()
+
+      mockFetchFastToken.mockReturnValue(null)
+      mockDeleteFastToken.mockReturnValue(true)
     })
 
     it('removes client-side FAST token when server returns not-ok result', async () => {
@@ -3811,6 +3875,92 @@ describe('XMPPClient Connection', () => {
       // Call the wired methods to verify they delegate to our mock
       fast.fetchToken()
       expect(mockFetchFastToken).toHaveBeenCalledWith('user@example.com')
+    })
+
+    it('should wire an injected FAST token storage adapter', async () => {
+      const fastTokenStorage = {
+        getToken: vi.fn().mockReturnValue(null),
+        setToken: vi.fn(),
+        deleteToken: vi.fn(),
+      }
+      const clientWithFastStorage = new XMPPClient({
+        debug: false,
+        fastTokenStorage,
+      })
+      clientWithFastStorage.bindStores(mockStores)
+      ;(mockXmppClientInstance as any).fast = {
+        fetchToken: vi.fn(),
+        saveToken: vi.fn(),
+        deleteToken: vi.fn(),
+      }
+
+      mockFetchFastToken.mockClear()
+      mockSaveFastToken.mockClear()
+      mockDeleteFastToken.mockClear()
+      mockFetchFastToken.mockReturnValue(null)
+
+      const connectPromise = clientWithFastStorage.connect({
+        jid: 'bot@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+        rememberSession: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const fast = (mockXmppClientInstance as any).fast
+      fast.fetchToken()
+      fast.saveToken({ mechanism: 'HT-SHA-256-NONE', token: 'token' })
+      fast.deleteToken()
+
+      expect(mockFetchFastToken).toHaveBeenCalledWith('bot@example.com', fastTokenStorage)
+      expect(mockSaveFastToken).toHaveBeenCalledWith(
+        'bot@example.com',
+        expect.objectContaining({ token: 'token' }),
+        fastTokenStorage,
+      )
+      expect(mockDeleteFastToken).toHaveBeenCalledWith('bot@example.com', fastTokenStorage)
+
+      clientWithFastStorage.destroy()
+    })
+
+    it('should reuse an injected user-agent id across authentication attempts', async () => {
+      const stableUserAgentId = '11111111-2222-4333-8444-555555555555'
+
+      const authenticateOnce = async (): Promise<string> => {
+        mockXmppClientInstance = createMockXmppClient()
+        mockClientFactory._setInstance(mockXmppClientInstance)
+        const clientWithIdentity = new XMPPClient({
+          debug: false,
+          userAgentId: stableUserAgentId,
+        })
+        clientWithIdentity.bindStores(mockStores)
+
+        const connectPromise = clientWithIdentity.connect({
+          jid: 'bot@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+        mockXmppClientInstance._emit('online')
+        await connectPromise
+
+        const credentialsFn = getCredentialsCallback()
+        const authenticate = vi.fn().mockResolvedValue(undefined)
+        await credentialsFn(
+          authenticate,
+          ['SCRAM-SHA-256'],
+          { fetch: vi.fn().mockResolvedValue(null) },
+          { isSecure: () => true },
+        )
+        const userAgent = authenticate.mock.calls[0]?.[2] as { attrs: { id: string } }
+        clientWithIdentity.destroy()
+        return userAgent.attrs.id
+      }
+
+      expect(await authenticateOnce()).toBe(stableUserAgentId)
+      expect(await authenticateOnce()).toBe(stableUserAgentId)
     })
 
     it('should use password auth when no FAST token available', async () => {

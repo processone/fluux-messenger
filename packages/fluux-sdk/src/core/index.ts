@@ -11,6 +11,9 @@ export { createDefaultStoreBindings } from './defaultStoreBindings'
 // Client construction options (carries the store bundle, so it lives outside
 // the leaf type layer).
 export type { XMPPClientConfig } from './clientConfig'
+export { createInMemoryFastTokenStorage, hasFastToken, deleteFastToken } from './fastTokenStorage'
+export type { FastToken, FastTokenStorageAdapter } from './fastTokenStorage'
+export { FastTokenLogoutError } from './errors'
 
 // Types
 export type {

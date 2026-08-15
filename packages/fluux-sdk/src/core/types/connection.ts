@@ -125,10 +125,11 @@ export interface ConnectOptions {
    */
   disableSmKeepalive?: boolean
   /**
-   * Persist FAST tokens (XEP-0484) to localStorage for password-less reconnection.
-   * When true, the SDK saves tokens received during SASL2 negotiation, enabling
-   * auto-login on subsequent sessions for up to 14 days without a password.
-   * When false (default), tokens are not persisted and each session requires a password.
+   * Save FAST tokens (XEP-0484) for password-less reconnection.
+   * When true, tokens received during SASL2 negotiation are saved for up to
+   * 14 days in the configured FAST token storage. Browsers default to
+   * localStorage; headless runtimes default to process memory.
+   * When false (default), newly received tokens are not saved.
    */
   rememberSession?: boolean
   /**

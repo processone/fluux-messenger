@@ -2,9 +2,10 @@
  * SASL2 User Agent (XEP-0388 §2.2)
  *
  * Builds the `<user-agent/>` element included in `<authenticate/>`.
- * The `id` attribute is a stable per-device UUIDv4 kept in localStorage;
- * FAST (XEP-0484) binds issued tokens to this id, so it MUST be stable
- * across sessions for token reuse to work.
+ * The `id` attribute is a stable per-device UUIDv4. Browsers keep it in
+ * localStorage, headless runtimes keep it for the process lifetime, and
+ * callers may inject one through XMPPClientConfig. FAST (XEP-0484) binds
+ * issued tokens to this id, so it MUST be stable across persisted sessions.
  *
  * The `<device/>` label is human-readable and shown in other clients'
  * connected-devices lists. It defaults to a platform-derived name
@@ -21,22 +22,28 @@ import { getCachedPlatform, type Platform } from './platform'
 
 const STORAGE_KEY_ID = 'fluux:user-agent-id'
 const STORAGE_KEY_DEVICE = 'fluux:user-agent-device'
+let fallbackUserAgentId: string | null = null
+
+function getOrCreateFallbackUserAgentId(): string {
+  fallbackUserAgentId ??= generateUUID()
+  return fallbackUserAgentId
+}
 
 /**
- * Get the persistent user-agent id for this installation,
- * generating one on first use.
+ * Get the stable user-agent id for this installation or process, generating
+ * one on first use.
  */
 export function getOrCreateUserAgentId(): string {
+  if (typeof window === 'undefined') return getOrCreateFallbackUserAgentId()
+
   try {
-    const existing = localStorage.getItem(STORAGE_KEY_ID)
+    const existing = window.localStorage.getItem(STORAGE_KEY_ID)
     if (existing) return existing
     const id = generateUUID()
-    localStorage.setItem(STORAGE_KEY_ID, id)
+    window.localStorage.setItem(STORAGE_KEY_ID, id)
     return id
   } catch {
-    // localStorage unavailable (SSR, private mode with quota=0, etc.)
-    // Return a fresh UUID; token persistence won't work but auth will.
-    return generateUUID()
+    return getOrCreateFallbackUserAgentId()
   }
 }
 
@@ -45,10 +52,12 @@ export function getOrCreateUserAgentId(): string {
  * Returns null if no id has been generated yet.
  */
 export function getUserAgentId(): string | null {
+  if (typeof window === 'undefined') return fallbackUserAgentId
+
   try {
-    return localStorage.getItem(STORAGE_KEY_ID)
+    return window.localStorage.getItem(STORAGE_KEY_ID)
   } catch {
-    return null
+    return fallbackUserAgentId
   }
 }
 
@@ -62,9 +71,12 @@ export function getUserAgentId(): string | null {
  * browser and may reconnect.
  */
 export function clearUserAgentIdentity(): void {
+  fallbackUserAgentId = null
+  if (typeof window === 'undefined') return
+
   try {
-    localStorage.removeItem(STORAGE_KEY_ID)
-    localStorage.removeItem(STORAGE_KEY_DEVICE)
+    window.localStorage.removeItem(STORAGE_KEY_ID)
+    window.localStorage.removeItem(STORAGE_KEY_DEVICE)
   } catch {
     // localStorage unavailable — nothing to clear.
   }
@@ -88,8 +100,10 @@ function defaultDeviceName(platform: Platform | null): string {
  * distinguish "user override" from "platform default".
  */
 export function getUserAgentDeviceName(): string | null {
+  if (typeof window === 'undefined') return null
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_DEVICE)
+    const raw = window.localStorage.getItem(STORAGE_KEY_DEVICE)
     if (!raw) return null
     const trimmed = raw.trim()
     return trimmed.length > 0 ? trimmed : null
@@ -103,11 +117,13 @@ export function getUserAgentDeviceName(): string | null {
  * revert to the platform default.
  */
 export function setUserAgentDeviceName(name: string | null): void {
+  if (typeof window === 'undefined') return
+
   try {
     if (name && name.trim().length > 0) {
-      localStorage.setItem(STORAGE_KEY_DEVICE, name.trim())
+      window.localStorage.setItem(STORAGE_KEY_DEVICE, name.trim())
     } else {
-      localStorage.removeItem(STORAGE_KEY_DEVICE)
+      window.localStorage.removeItem(STORAGE_KEY_DEVICE)
     }
   } catch {
     // localStorage unavailable — silently ignore; auth still works with default.
@@ -128,8 +144,8 @@ export function getEffectiveDeviceName(): string {
  * Pass the returned element as the third argument of xmpp.js's
  * `authenticate(credentials, mechanism, userAgent)` callback.
  */
-export function buildUserAgentElement(): Element {
-  return xml('user-agent', { id: getOrCreateUserAgentId() }, [
+export function buildUserAgentElement(userAgentId = getOrCreateUserAgentId()): Element {
+  return xml('user-agent', { id: userAgentId }, [
     xml('software', {}, 'Fluux'),
     xml('device', {}, getEffectiveDeviceName()),
   ])

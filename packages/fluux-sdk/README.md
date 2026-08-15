@@ -157,6 +157,46 @@ const status = useConnectionStore.getState().status
 const conversations = useChatStore.getState().conversations
 ```
 
+FAST authentication tokens persist in `localStorage` in browsers and in
+process memory in Node. To keep tokens across Node process restarts, pass a
+synchronous `FastTokenStorageAdapter` when constructing the client and set
+`rememberSession: true` when connecting:
+
+```typescript
+import { XMPPClient, type FastTokenStorageAdapter } from '@fluux/sdk/core'
+
+const fastTokenStorage: FastTokenStorageAdapter = {
+  getToken: (jid) => persistentTokens.get(jid) ?? null,
+  setToken: (jid, token) => persistentTokens.set(jid, token),
+  deleteToken: (jid) => persistentTokens.delete(jid),
+}
+
+const userAgentId = persistentSettings.get('xmpp-user-agent-id') ?? crypto.randomUUID()
+persistentSettings.set('xmpp-user-agent-id', userAgentId)
+const client = new XMPPClient({ fastTokenStorage, userAgentId })
+
+await client.connect({
+  jid: 'bot@example.com',
+  password: 'secret',
+  server: 'example.com',
+  rememberSession: true,
+})
+```
+
+Here, `persistentTokens` is the application's synchronous database or
+key-value store. `userAgentId` must be the same UUID each time the process
+starts because the server binds FAST tokens to it. Use
+`createInMemoryFastTokenStorage()` when an isolated, non-persistent store is
+preferable to the shared Node default. Treat persisted tokens as credentials:
+restrict access to them and never include them in logs.
+
+For explicit logout, call `disconnect({ invalidateFastToken: true })`. The SDK
+removes the local token synchronously, requests server-side invalidation, and
+still disconnects if either operation fails. The promise rejects with
+`FastTokenLogoutError` only when neither operation succeeds, so callers can
+report that credential cleanup was not confirmed even though the connection
+is already closed.
+
 ## Installation
 
 ```bash

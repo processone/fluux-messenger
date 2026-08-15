@@ -25,7 +25,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0368](https://xmpp.org/extensions/xep-0368.html) | SRV Records for XMPP over TLS                   | ✅ Implemented | Desktop: SRV lookup for `_xmpps-client._tcp` (direct TLS) and `_xmpp-client._tcp` (STARTTLS) via Rust proxy |
 | [XEP-0386](https://xmpp.org/extensions/xep-0386.html) | Bind 2.0                                         | ✅ Implemented | Inline resource binding within SASL2, with Stream Management enabled inline                                  |
 | [XEP-0388](https://xmpp.org/extensions/xep-0388.html) | Extensible SASL Profile (SASL2)                  | ✅ Implemented | Modern authentication with inline features (bind2, FAST). Falls back to SASL1 if server doesn't support it  |
-| [XEP-0484](https://xmpp.org/extensions/xep-0484.html) | Fast Authentication Streamlining Tokens (FAST)   | ✅ Implemented | Token-based reconnection without password (web: 14-day localStorage persistence, HT-SHA-256-NONE mechanism) |
+| [XEP-0484](https://xmpp.org/extensions/xep-0484.html) | Fast Authentication Streamlining Tokens (FAST)   | ✅ Implemented | Token-based reconnection without password (14-day client cap; localStorage on web, injectable storage in Node; HT-SHA-256-NONE) |
 
 ## Service Discovery
 

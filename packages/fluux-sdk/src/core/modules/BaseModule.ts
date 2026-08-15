@@ -2,6 +2,7 @@ import type { Client, Element } from '@xmpp/client'
 import type { StoreBindings, ClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 import type { E2EEManager } from '../e2ee'
 import type { PresenceReader } from '../presenceReader'
+import type { FastTokenStorageAdapter } from '../fastTokenStorage'
 
 /**
  * Dependencies injected into each module by XMPPClient.
@@ -38,6 +39,10 @@ export interface ModuleDependencies {
    * Used by Connection module for SM state persistence.
    */
   storageAdapter?: StorageAdapter
+  /** Platform-specific persistence for XEP-0484 FAST authentication tokens. */
+  fastTokenStorage?: FastTokenStorageAdapter
+  /** Stable XEP-0388 identity used when authenticating and binding FAST tokens. */
+  userAgentId?: string
   /**
    * Proxy adapter for WebSocket-to-TCP bridging.
    * Used by Connection module for native TCP/TLS connections.

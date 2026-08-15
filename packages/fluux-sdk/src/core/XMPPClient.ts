@@ -2,6 +2,7 @@ import { Client, Element } from '@xmpp/client'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
 import type { XMPPClientConfig } from './clientConfig'
+import type { FastTokenStorageAdapter } from './fastTokenStorage'
 import type {
   ConnectOptions,
   StoreBindings,
@@ -204,6 +205,8 @@ export interface InternalSurface {
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private fastTokenStorage?: FastTokenStorageAdapter
+  private userAgentId?: string
   private shouldAutoReconnect?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
@@ -474,6 +477,8 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    this.fastTokenStorage = config.fastTokenStorage
+    this.userAgentId = config.userAgentId
     this.shouldAutoReconnect = config.shouldAutoReconnect
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
@@ -674,6 +679,8 @@ export class XMPPClient {
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
+      fastTokenStorage: this.fastTokenStorage,
+      userAgentId: this.userAgentId,
       proxyAdapter: this.proxyAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
@@ -1075,6 +1082,8 @@ export class XMPPClient {
    *   replayed from another device.
    *
    * @returns Promise that resolves when disconnected
+   * @throws {FastTokenLogoutError} After disconnecting when a requested FAST
+   *   token removal failed both locally and on the server.
    *
    * @example
    * ```typescript

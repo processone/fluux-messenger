@@ -606,7 +606,7 @@ export { classifyConnectionError, extractTransportErrorClass, humanizeTransportE
 export type { ConnectionErrorKind } from './core/modules/transportErrors'
 
 // The failures a caller distinguishes by type rather than by message.
-export { RoomJoinError, WhisperCounterpartGoneError, HatCommandError, RequestTimeoutError } from './core/errors'
+export { FastTokenLogoutError, RoomJoinError, WhisperCounterpartGoneError, HatCommandError, RequestTimeoutError } from './core/errors'
 // The reason a join failed, stated in the application's terms. Exported with
 // its resolver so a consumer can classify a condition it obtained elsewhere.
 export { roomJoinReasonFor } from './core/errors'
@@ -624,7 +624,8 @@ export type { DiscoveryResult } from './utils/websocketDiscovery'
 // =============================================================================
 
 // FAST token utilities (XEP-0484)
-export { hasFastToken, deleteFastToken } from './core/fastTokenStorage'
+export { createInMemoryFastTokenStorage, hasFastToken, deleteFastToken } from './core/fastTokenStorage'
+export type { FastToken, FastTokenStorageAdapter } from './core/fastTokenStorage'
 
 // SASL2 user-agent identity (XEP-0388 §2.2)
 // - id: stable per-device UUID, bound to by FAST tokens
