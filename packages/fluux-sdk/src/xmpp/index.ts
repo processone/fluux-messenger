@@ -44,6 +44,11 @@ export { parseDataForm, getFormFieldValue, getFormFieldValues, buildDataFormSubm
 // and `RSMResponse` shapes stay on the main entry for the same reason.
 export { parseRSMResponse, buildRSMElement } from '../utils/rsm'
 
+// XEP-0066: Out of Band Data. A URL and a description, as the extension puts
+// them on the wire. An attachment the SDK models is a `FileAttachment` on the
+// main entry; this is for reading or writing the raw element.
+export type { OobInfo } from '../core/types/upload'
+
 // XEP-0428: Fallback Indication — strip the fallback text a sending client
 // wrote for clients that cannot render the real payload.
 export { processFallback, getFallbackElement } from '../utils/fallbackUtils'

@@ -131,21 +131,21 @@ export class WhisperCounterpartGoneError extends Error {
 }
 
 /**
- * Thrown when an IQ request passed an explicit `timeoutMs` receives no reply
- * within that budget.
+ * Thrown when a request given an explicit time budget receives no reply within
+ * it.
  *
- * The message is unchanged from the plain `Error` it replaces, so callers that
- * only inspect `err.message` keep working; the class exists so callers that
- * care can tell "the server never answered" apart from "the server said no".
+ * Exists so a caller can tell "the server never answered" apart from "the
+ * server said no": the first is worth retrying, the second is not.
  */
-export class IQTimeoutError extends Error {
+export class RequestTimeoutError extends Error {
+  /** The budget that elapsed, in milliseconds. */
   readonly timeoutMs: number
 
   constructor(timeoutMs: number) {
-    super(`IQ timeout after ${timeoutMs}ms`)
-    this.name = 'IQTimeoutError'
+    super(`Request timed out after ${timeoutMs}ms`)
+    this.name = 'RequestTimeoutError'
     this.timeoutMs = timeoutMs
-    Object.setPrototypeOf(this, IQTimeoutError.prototype)
+    Object.setPrototypeOf(this, RequestTimeoutError.prototype)
   }
 }
 

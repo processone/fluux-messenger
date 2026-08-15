@@ -124,6 +124,23 @@ describe('public API surface', () => {
     }
   })
 
+  it('names the timeout after the request, not after the stanza that carried it', () => {
+    // A caller has to handle "the server never answered". Making that reachable
+    // only through the word IQ would put a protocol term on a path everyone
+    // crosses.
+    expect(Object.keys(main)).toContain('RequestTimeoutError')
+    expect(Object.keys(main)).not.toContain('IQTimeoutError')
+  })
+
+  it('keeps raw extension shapes off the main entry', () => {
+    // Type-only exports leave no runtime key, so this reads the barrel itself.
+    // `OobInfo` is XEP-0066 as written on the wire; the attachment an app
+    // renders is `FileAttachment`, which stays.
+    const barrel = readFileSync(resolve(process.cwd(), 'src/index.ts'), 'utf8')
+    expect(barrel).not.toMatch(/^\s*OobInfo,\s*$/m)
+    expect(Object.keys(main)).toContain('formatXMPPError')
+  })
+
   it('does not hand the stanza builder back through a hook', () => {
     // A named export is not the only door: `useXMPP` used to return `xml`,
     // which would have made every assertion above true and meaningless. The

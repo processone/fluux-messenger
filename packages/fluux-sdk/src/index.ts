@@ -309,11 +309,11 @@ export type {
   WebPushRegistration,
   WebPushStatus,
 
-  // File attachment types (XEP-0066, XEP-0264, XEP-0454)
+  // File attachment types (XEP-0264, XEP-0454). `OobInfo` is the raw XEP-0066
+  // shape and no attachment field carries it, so it lives on `@fluux/sdk/xmpp`.
   FileAttachment,
   FileEncryption,
   ThumbnailInfo,
-  OobInfo,
 
   // Link preview types (XEP-0422 + OGP)
   LinkPreview,
@@ -605,8 +605,8 @@ export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 export { classifyConnectionError, extractTransportErrorClass, humanizeTransportError } from './core/modules/transportErrors'
 export type { ConnectionErrorKind } from './core/modules/transportErrors'
 
-// MUC join failure error (rejected by client.rooms.joinResult)
-export { RoomJoinError, WhisperCounterpartGoneError, HatCommandError, IQTimeoutError } from './core/errors'
+// The failures a caller distinguishes by type rather than by message.
+export { RoomJoinError, WhisperCounterpartGoneError, HatCommandError, RequestTimeoutError } from './core/errors'
 // The reason a join failed, stated in the application's terms. Exported with
 // its resolver so a consumer can classify a condition it obtained elsewhere.
 export { roomJoinReasonFor } from './core/errors'

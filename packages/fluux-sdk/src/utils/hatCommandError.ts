@@ -5,7 +5,7 @@
  * Kept separate from `MUC` so the mapping is unit-testable on its own and can
  * be reused by any other ad-hoc command surface.
  */
-import { HatCommandError, IQTimeoutError } from '../core/errors'
+import { HatCommandError, RequestTimeoutError } from '../core/errors'
 import type { XMPPErrorType } from './xmppError'
 
 const VALID_ERROR_TYPES = new Set<string>(['cancel', 'continue', 'modify', 'auth', 'wait'])
@@ -39,7 +39,7 @@ function asNonEmptyString(value: unknown): string | undefined {
 export function toHatCommandError(err: unknown, roomJid: string, node: string): HatCommandError {
   if (err instanceof HatCommandError) return err
 
-  if (err instanceof IQTimeoutError) {
+  if (err instanceof RequestTimeoutError) {
     return new HatCommandError(roomJid, node, 'timeout', { cause: err })
   }
 
