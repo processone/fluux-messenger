@@ -17,14 +17,17 @@
 import { XMPPClient } from '@fluux/sdk/core'
 import type { Message, RoomMessage } from '@fluux/sdk/core'
 import { checkForMention, getBareJid, getLocalPart } from '@fluux/sdk/core'
+import { pathToFileURL } from 'node:url'
 import { loadConfig, routeSdkLogsToStderr } from './config'
 
 /** A question the bot has decided to answer, and everything needed to reply. */
-interface Question {
+export interface Question {
   /** Who to address the answer to: the room, or the person. */
   to: string
   /** The message being answered, for the acknowledgement and the reply. */
   messageId: string
+  /** Full sender address required by XEP-0461 reply metadata. */
+  messageFrom: string
   text: string
 }
 
@@ -44,13 +47,13 @@ async function answer(question: string): Promise<string> {
  * into the answer, instead of a placeholder followed by a second message that
  * pushes it out of view.
  */
-async function respond(client: XMPPClient, question: Question): Promise<void> {
+export async function respond(client: XMPPClient, question: Question): Promise<void> {
   // Tell the asker it landed, before anything slow starts.
   await client.messages.sendReaction(question.to, question.messageId, ['👀'])
   await client.messages.sendChatState(question.to, 'composing')
 
   const placeholderId = await client.messages.sendMessage(question.to, 'Working on it…', {
-    replyTo: { id: question.messageId },
+    replyTo: { id: question.messageId, to: question.messageFrom },
   })
 
   try {
@@ -65,6 +68,14 @@ async function respond(client: XMPPClient, question: Question): Promise<void> {
   }
 }
 
+/** Start answering without blocking the subscription callback, reporting failures. */
+export function respondInBackground(client: XMPPClient, question: Question): Promise<void> {
+  return respond(client, question).catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.error(`Could not answer ${question.messageId}: ${reason}`)
+  })
+}
+
 /**
  * Decide whether a one-to-one message is a question for us.
  *
@@ -72,13 +83,14 @@ async function respond(client: XMPPClient, question: Question): Promise<void> {
  * bot itself sent (carbons of its own replies would otherwise loop) and
  * archived ones replayed at startup, which are already answered.
  */
-function questionFromChat(message: Message): Question | null {
+export function questionFromChat(message: Message): Question | null {
   if (message.isOutgoing || message.isDelayed) return null
   if (!message.body.trim()) return null
 
   return {
     to: getBareJid(message.from),
     messageId: message.id,
+    messageFrom: message.from,
     text: message.body,
   }
 }
@@ -91,7 +103,7 @@ function questionFromChat(message: Message): Question | null {
  * here: on join, the service replays history in which our past messages are
  * indistinguishable from anyone else's, which is what `isDelayed` covers.
  */
-function questionFromRoom(message: RoomMessage, nickname: string): Question | null {
+export function questionFromRoom(message: RoomMessage, nickname: string): Question | null {
   if (message.isOutgoing || message.isDelayed) return null
   if (message.nick === nickname) return null
   if (!checkForMention(message.body, nickname)) return null
@@ -99,6 +111,7 @@ function questionFromRoom(message: RoomMessage, nickname: string): Question | nu
   return {
     to: message.roomJid,
     messageId: message.id,
+    messageFrom: message.from,
     text: message.body,
   }
 }
@@ -113,12 +126,12 @@ async function main(): Promise<void> {
 
   client.subscribe('chat:message', ({ message }) => {
     const question = questionFromChat(message)
-    if (question) void respond(client, question)
+    if (question) void respondInBackground(client, question)
   })
 
   client.subscribe('room:message', ({ message }) => {
     const question = questionFromRoom(message, nickname)
-    if (question) void respond(client, question)
+    if (question) void respondInBackground(client, question)
   })
 
   await client.connect(config)
@@ -138,7 +151,10 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void stop())
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error)
-  process.exitCode = 1
-})
+const entryPoint = process.argv[1]
+if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  })
+}
