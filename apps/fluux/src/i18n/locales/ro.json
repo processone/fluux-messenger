@@ -1041,7 +1041,7 @@
         "company": "Companie",
         "email": "E-mail",
         "country": "Țară",
-        "vcardSaveError": "Nu s-a putut salva câmpul profilului"
+        "saveFieldError": "Nu s-a putut salva câmpul profilului"
     },
     "console": {
         "title": "Consolă XMPP",

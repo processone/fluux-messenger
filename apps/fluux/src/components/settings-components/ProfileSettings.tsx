@@ -4,14 +4,14 @@ import { getBareJid, getLocalPart, useConnection, usePresence } from '@fluux/sdk
 import { AvatarCropModal } from '../AvatarCropModal'
 import { ChangePasswordModal } from '../ChangePasswordModal'
 import { OwnProfileHero } from './profile/OwnProfileHero'
-import { VCardSection } from './profile/VCardSection'
+import { ProfileDetailsSection } from './profile/ProfileDetailsSection'
 import { DevicesSection } from './profile/DevicesSection'
 import { AccountSection } from './profile/AccountSection'
 
 /**
  * Profile settings - displays and allows editing of user profile information.
  * Mirrors the contact profile layout: hero (avatar + identity row) followed by
- * stacked sections (vCard, devices, account).
+ * stacked sections (profile details, devices, account).
  */
 export function ProfileSettings() {
   const { t } = useTranslation()
@@ -57,7 +57,7 @@ export function ProfileSettings() {
       />
 
       <div className="py-4 md:py-5 space-y-5">
-        <VCardSection />
+        <ProfileDetailsSection />
         <DevicesSection />
         <AccountSection onChangePassword={() => setShowPasswordModal(true)} />
       </div>

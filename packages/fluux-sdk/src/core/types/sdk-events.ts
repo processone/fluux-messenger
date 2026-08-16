@@ -11,7 +11,7 @@
 import type { Element } from '@xmpp/client'
 import type { Message, Conversation } from './chat'
 import type { StoredMessage, StoredRoomMessage } from './message-internal'
-import type { Contact, PresenceShow, VCardInfo } from './roster'
+import type { Contact, PresenceShow, ProfileDetails } from './roster'
 import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, RoomRole } from './room'
 import type { RoomJoinReason } from '../errors'
 import type { ServerInfo } from './discovery'
@@ -71,9 +71,9 @@ export interface ConnectionEvents {
     nickname: string | null
   }
 
-  /** Own vCard changed */
+  /** The descriptive fields of our own profile changed */
   'connection:own-profile': {
-    vcard: VCardInfo | null
+    details: ProfileDetails | null
   }
 
   /** Own resource presence updated */

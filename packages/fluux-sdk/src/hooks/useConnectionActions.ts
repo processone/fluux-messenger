@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores/connectionStore'
 import { useXMPPContext } from '../provider'
-import type { LinkPreview, VCardInfo, ConnectOptions } from '../core/types'
+import type { LinkPreview, ProfileDetails, ConnectOptions } from '../core/types'
 
 /**
  * Action-only counterpart to `useConnection()`.
@@ -86,13 +86,13 @@ export function useConnectionActions() {
     await client.profile.clearOwnNickname()
   }, [client])
 
-  const fetchOwnVCard = useCallback(async () => {
-    return client.profile.fetchOwnVCard()
+  const fetchOwnProfileDetails = useCallback(async () => {
+    return client.profile.fetchOwnProfileDetails()
   }, [client])
 
-  const setOwnVCard = useCallback(
-    async (info: VCardInfo) => {
-      await client.profile.publishOwnVCard(info)
+  const setOwnProfileDetails = useCallback(
+    async (info: ProfileDetails) => {
+      await client.profile.publishOwnProfileDetails(info)
     },
     [client]
   )
@@ -155,8 +155,8 @@ export function useConnectionActions() {
       setOwnAvatar,
       clearOwnNickname,
       clearOwnAvatar,
-      fetchOwnVCard,
-      setOwnVCard,
+      fetchOwnProfileDetails,
+      setOwnProfileDetails,
       restoreOwnAvatarFromCache,
       changePassword,
       getStreamManagementState,
@@ -172,8 +172,8 @@ export function useConnectionActions() {
       setOwnAvatar,
       clearOwnNickname,
       clearOwnAvatar,
-      fetchOwnVCard,
-      setOwnVCard,
+      fetchOwnProfileDetails,
+      setOwnProfileDetails,
       restoreOwnAvatarFromCache,
       changePassword,
       getStreamManagementState,

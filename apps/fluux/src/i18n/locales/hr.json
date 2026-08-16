@@ -1039,7 +1039,7 @@
         "company": "Tvrtka",
         "email": "E-pošta",
         "country": "Država",
-        "vcardSaveError": "Spremanje polja profila nije uspjelo"
+        "saveFieldError": "Spremanje polja profila nije uspjelo"
     },
     "console": {
         "title": "XMPP konzola",

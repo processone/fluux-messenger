@@ -106,7 +106,7 @@ export function useConnection() {
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownAvatarHash = useConnectionStore((s) => s.ownAvatarHash)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const ownVCard = useConnectionStore((s) => s.ownVCard)
+  const ownProfileDetails = useConnectionStore((s) => s.ownProfileDetails)
   const ownResources = useConnectionStore((s) => s.ownResources)
   // HTTP Upload (XEP-0363)
   const httpUploadService = useConnectionStore((s) => s.httpUploadService)
@@ -140,7 +140,7 @@ export function useConnection() {
       ownAvatar,
       ownAvatarHash,
       ownNickname,
-      ownVCard,
+      ownProfileDetails,
       ownResources,
       // HTTP Upload (XEP-0363)
       httpUploadService,
@@ -169,7 +169,7 @@ export function useConnection() {
       ownAvatar,
       ownAvatarHash,
       ownNickname,
-      ownVCard,
+      ownProfileDetails,
       ownResources,
       httpUploadService,
       webPushStatus,

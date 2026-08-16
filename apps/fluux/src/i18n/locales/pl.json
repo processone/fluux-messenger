@@ -1043,7 +1043,7 @@
         "company": "Firma",
         "email": "E-mail",
         "country": "Kraj",
-        "vcardSaveError": "Nie udało się zapisać pola profilu"
+        "saveFieldError": "Nie udało się zapisać pola profilu"
     },
     "console": {
         "title": "Konsola XMPP",

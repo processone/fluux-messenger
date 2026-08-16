@@ -1037,7 +1037,7 @@
         "company": "Company",
         "email": "Email",
         "country": "Country",
-        "vcardSaveError": "Failed to save profile field"
+        "saveFieldError": "Failed to save profile field"
     },
     "console": {
         "title": "XMPP Console",

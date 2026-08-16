@@ -1037,7 +1037,7 @@
         "company": "Företag",
         "email": "E-post",
         "country": "Land",
-        "vcardSaveError": "Kunde inte spara profilfältet"
+        "saveFieldError": "Kunde inte spara profilfältet"
     },
     "console": {
         "title": "XMPP-konsol",

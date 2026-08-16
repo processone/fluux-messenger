@@ -107,7 +107,7 @@ export interface ResourcePresence {
 export interface Contact {
   /** Contact's bare JID */
   jid: string
-  /** Display name (from roster or vCard) */
+  /** Display name (from the roster or the profile details) */
   name: string
   /** Aggregated presence status from all resources */
   presence: PresenceStatus
@@ -148,20 +148,24 @@ export interface Contact {
 }
 
 /**
- * vCard profile information (XEP-0054).
+ * The descriptive fields a user publishes about themselves.
  *
- * Contains selected fields from a contact's vCard for display
- * in user info popovers.
+ * The rest of a profile has its own accessors: an avatar is fetched as image
+ * data, a nickname as a string. This is what is left, and what a contact popover
+ * or a profile pane displays.
+ *
+ * Carried over XEP-0054 vcard-temp, which is why every field is optional: a
+ * server returns only what the user filled in, and many return nothing at all.
  *
  * @category Roster
  */
-export interface VCardInfo {
-  /** Full name (FN field) */
+export interface ProfileDetails {
+  /** Full name */
   fullName?: string
-  /** Organisation name (ORG/ORGNAME field) */
+  /** Organisation name */
   org?: string
-  /** Email address (EMAIL/USERID field) */
+  /** Email address */
   email?: string
-  /** Country (ADR/CTRY field) */
+  /** Country */
   country?: string
 }

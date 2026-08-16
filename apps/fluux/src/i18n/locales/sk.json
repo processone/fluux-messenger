@@ -1042,7 +1042,7 @@
         "company": "Spoločnosť",
         "email": "E-mail",
         "country": "Krajina",
-        "vcardSaveError": "Nepodarilo sa uložiť pole profilu"
+        "saveFieldError": "Nepodarilo sa uložiť pole profilu"
     },
     "console": {
         "title": "XMPP konzola",

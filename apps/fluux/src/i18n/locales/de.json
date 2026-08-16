@@ -1039,7 +1039,7 @@
         "company": "Unternehmen",
         "email": "E-Mail",
         "country": "Land",
-        "vcardSaveError": "Fehler beim Speichern des Profilfelds"
+        "saveFieldError": "Fehler beim Speichern des Profilfelds"
     },
     "console": {
         "title": "XMPP-Konsole",

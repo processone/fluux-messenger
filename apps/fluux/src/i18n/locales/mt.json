@@ -1045,7 +1045,7 @@
         "company": "Kumpanija",
         "email": "Email",
         "country": "Pajjiż",
-        "vcardSaveError": "Ma rnexxiex issejvja l-qasam tal-profil"
+        "saveFieldError": "Ma rnexxiex issejvja l-qasam tal-profil"
     },
     "console": {
         "title": "Console XMPP",

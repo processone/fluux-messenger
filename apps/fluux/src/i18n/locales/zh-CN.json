@@ -1037,7 +1037,7 @@
         "company": "公司",
         "email": "电子邮件",
         "country": "国家/地区",
-        "vcardSaveError": "无法保存个人资料字段"
+        "saveFieldError": "无法保存个人资料字段"
     },
     "console": {
         "title": "XMPP 控制台",

@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import type { Contact, ContactIdentity, RoomAffiliation, RoomRole, VCardInfo } from '@fluux/sdk'
+import type { Contact, ContactIdentity, RoomAffiliation, RoomRole, ProfileDetails } from '@fluux/sdk'
 import { useXMPP } from '@fluux/sdk'
 import { useConnectionStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { useClickOutside } from '@/hooks'
@@ -19,7 +19,7 @@ export interface UserInfoPopoverProps {
   contact?: Contact | ContactIdentity
   /** The JID to display (fallback if no contact) */
   jid?: string
-  /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
+  /** Occupant JID for profile-details fetch in anonymous rooms (e.g. room@conf/nick) */
   occupantJid?: string
   /** Room role (for MUC occupants) */
   role?: RoomRole
@@ -69,11 +69,11 @@ function getDeviceIcon(clientName: string) {
   return <HelpCircle className="size-3" />
 }
 
-// Cache vCard results across popover opens to avoid redundant fetches
-const vcardCache = new Map<string, VCardInfo | null>()
+// Cache the details across popover opens to avoid redundant fetches
+const profileDetailsCache = new Map<string, ProfileDetails | null>()
 
 /** @internal Exported for testing only */
-export const _vcardCacheForTesting = vcardCache
+export const _profileDetailsCacheForTesting = profileDetailsCache
 
 export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
@@ -82,8 +82,8 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
   const forceOffline = connectionStatus !== 'online'
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<{ x: number; top?: number; bottom?: number }>({ x: 0 })
-  const [vcard, setVcard] = useState<VCardInfo | null>(null)
-  const [vcardLoading, setVcardLoading] = useState(false)
+  const [details, setDetails] = useState<ProfileDetails | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
@@ -108,30 +108,30 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [isOpen])
 
-  // Fetch vCard when popover opens
+  // Fetch the details when the popover opens
   useEffect(() => {
     if (!isOpen) return
 
-    const vcardJid = contact?.jid || jid || occupantJid
-    if (!vcardJid) return
+    const targetJid = contact?.jid || jid || occupantJid
+    if (!targetJid) return
 
     // Check cache first
-    if (vcardCache.has(vcardJid)) {
-      setVcard(vcardCache.get(vcardJid) ?? null)
+    if (profileDetailsCache.has(targetJid)) {
+      setDetails(profileDetailsCache.get(targetJid) ?? null)
       return
     }
 
     let cancelled = false
-    setVcardLoading(true)
-    client.profile.fetchVCard(vcardJid).then((result) => {
+    setDetailsLoading(true)
+    client.profile.fetchProfileDetails(targetJid).then((result) => {
       if (cancelled) return
-      vcardCache.set(vcardJid, result)
-      setVcard(result)
-      setVcardLoading(false)
+      profileDetailsCache.set(targetJid, result)
+      setDetails(result)
+      setDetailsLoading(false)
     }).catch(() => {
       if (cancelled) return
-      vcardCache.set(vcardJid, null)
-      setVcardLoading(false)
+      profileDetailsCache.set(targetJid, null)
+      setDetailsLoading(false)
     })
 
     return () => { cancelled = true }
@@ -216,35 +216,35 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
             </div>
           )}
 
-          {/* vCard info */}
-          {vcardLoading && (
+          {/* Profile details */}
+          {detailsLoading && (
             <div className="flex items-center gap-1.5 text-xs text-fluux-muted mb-2">
               <Loader2 className="size-3 animate-spin" />
             </div>
           )}
-          {vcard && (
+          {details && (
             <div className="space-y-1 mb-2">
-              {vcard.fullName && (
+              {details.fullName && (
                 <div className="text-sm font-medium text-fluux-text">
-                  {vcard.fullName}
+                  {details.fullName}
                 </div>
               )}
-              {vcard.org && (
+              {details.org && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
                   <Building2 className="size-3 shrink-0" />
-                  <span className="truncate">{vcard.org}</span>
+                  <span className="truncate">{details.org}</span>
                 </div>
               )}
-              {vcard.email && (
+              {details.email && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
                   <Mail className="size-3 shrink-0" />
-                  <span className="truncate">{vcard.email}</span>
+                  <span className="truncate">{details.email}</span>
                 </div>
               )}
-              {vcard.country && (
+              {details.country && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
                   <MapPin className="size-3 shrink-0" />
-                  <span className="truncate">{vcard.country}</span>
+                  <span className="truncate">{details.country}</span>
                 </div>
               )}
             </div>

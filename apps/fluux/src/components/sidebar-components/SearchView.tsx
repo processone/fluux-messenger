@@ -360,7 +360,7 @@ const SearchResultItem = memo(function SearchResultItem({ result, context, isAct
 
   // Resolve the avatar REACTIVELY (per-key store subscription) — a render-time
   // roomStore/rosterStore getState() read freezes this memoized row on the
-  // letter-avatar fallback when the vCard / room-avatar fetch resolves AFTER the
+  // letter-avatar fallback when the profile-details / room-avatar fetch resolves AFTER the
   // row first rendered (frozen-derived-value-in-a-memo class; cf. useReferencedMessage).
   const roomAvatar = useRoomStore((s) => s.rooms.get(result.conversationId)?.avatar)
   const contactAvatar = useRosterStore((s) => s.contacts.get(result.conversationId)?.avatar)

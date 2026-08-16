@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { type Contact, type VCardInfo } from '@fluux/sdk'
+import { type Contact, type ProfileDetails } from '@fluux/sdk'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { AboutCard } from './cards/AboutCard'
 import { DevicesCard } from './cards/DevicesCard'
@@ -8,7 +8,7 @@ import { SecurityGlanceCard } from './cards/SecurityGlanceCard'
 
 interface ContactProfileGridProps {
   contact: Contact
-  vcard: VCardInfo | null
+  details: ProfileDetails | null
   isInRoster: boolean
   forceOffline: boolean
   encryptionState: ConversationEncryptionState
@@ -17,7 +17,7 @@ interface ContactProfileGridProps {
 
 export function ContactProfileGrid({
   contact,
-  vcard,
+  details,
   isInRoster,
   forceOffline,
   encryptionState,
@@ -27,7 +27,7 @@ export function ContactProfileGrid({
 
   // Each card self-nulls when it has no data; mirror those conditions so we can
   // show an empty state instead of a bare padded grid when nothing renders.
-  const hasAbout = !!(vcard && (vcard.fullName || vcard.org || vcard.email || vcard.country))
+  const hasAbout = !!(details && (details.fullName || details.org || details.email || details.country))
   const hasDevices = !!(contact.resources && contact.resources.size > 0)
   const hasGroups = !!(isInRoster && contact.groups && contact.groups.length > 0)
   const hasSecurity = encryptionState.kind !== 'disabled'
@@ -42,7 +42,7 @@ export function ContactProfileGrid({
 
   return (
     <div className="px-4 py-4 md:px-6 md:py-5 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-      <AboutCard vcard={vcard} />
+      <AboutCard details={details} />
       <DevicesCard contact={contact} forceOffline={forceOffline} />
       <GroupsCard groups={contact.groups} isInRoster={isInRoster} />
       <SecurityGlanceCard state={encryptionState} onOpen={onOpenSecurity} />

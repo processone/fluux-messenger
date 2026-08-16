@@ -1037,7 +1037,7 @@
         "company": "Bedrift",
         "email": "E-post",
         "country": "Land",
-        "vcardSaveError": "Kunne ikke lagre profilfeltet"
+        "saveFieldError": "Kunne ikke lagre profilfeltet"
     },
     "console": {
         "title": "XMPP-konsoll",

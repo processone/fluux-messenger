@@ -1040,7 +1040,7 @@
         "company": "Uzņēmums",
         "email": "E-pasts",
         "country": "Valsts",
-        "vcardSaveError": "Neizdevās saglabāt profila lauku"
+        "saveFieldError": "Neizdevās saglabāt profila lauku"
     },
     "console": {
         "title": "XMPP konsole",

@@ -79,7 +79,7 @@ const props = {
   onRemoveContact: vi.fn(),
   onRenameContact: vi.fn(async () => {}),
   onFetchNickname: vi.fn(async () => null),
-  onFetchVCard: vi.fn(async () => ({ org: 'ProcessOne' })),
+  onFetchProfileDetails: vi.fn(async () => ({ org: 'ProcessOne' })),
 }
 
 describe('ContactProfileView', () => {

@@ -1037,7 +1037,7 @@
         "company": "Virksomhed",
         "email": "E-mail",
         "country": "Land",
-        "vcardSaveError": "Kunne ikke gemme profilfeltet"
+        "saveFieldError": "Kunne ikke gemme profilfeltet"
     },
     "console": {
         "title": "XMPP-konsol",

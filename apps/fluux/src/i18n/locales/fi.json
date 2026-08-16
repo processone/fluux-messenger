@@ -1037,7 +1037,7 @@
         "company": "Yritys",
         "email": "Sähköposti",
         "country": "Maa",
-        "vcardSaveError": "Profiilitiedon tallennus epäonnistui"
+        "saveFieldError": "Profiilitiedon tallennus epäonnistui"
     },
     "console": {
         "title": "XMPP-konsoli",

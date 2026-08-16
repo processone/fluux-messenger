@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
-import { type Contact, type VCardInfo, useBlocking, useXMPPContext } from '@fluux/sdk'
+import { type Contact, type ProfileDetails, useBlocking, useXMPPContext } from '@fluux/sdk'
 import { useBlockingStore, useConnectionStore, useLastActivity } from '@fluux/sdk/react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
@@ -22,7 +22,7 @@ interface ContactProfileViewProps {
   onRemoveContact: () => void
   onRenameContact: (name: string) => Promise<void>
   onFetchNickname: (jid: string) => Promise<string | null>
-  onFetchVCard?: (jid: string) => Promise<VCardInfo | null>
+  onFetchProfileDetails?: (jid: string) => Promise<ProfileDetails | null>
   onAddContact?: () => void
   onBack?: () => void
   /** Whether the contact is in the user's roster (enables rename/remove actions) */
@@ -38,7 +38,7 @@ export function ContactProfileView({
   onRenameContact,
   onAddContact,
   onFetchNickname,
-  onFetchVCard,
+  onFetchProfileDetails,
   onBack,
   isInRoster = true,
 }: ContactProfileViewProps) {
@@ -56,7 +56,7 @@ export function ContactProfileView({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
   const [showVerifyDialog, setShowVerifyDialog] = useState(false)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
-  const [vcard, setVcard] = useState<VCardInfo | null>(null)
+  const [details, setDetails] = useState<ProfileDetails | null>(null)
 
   const { blockJid, unblockJid } = useBlocking()
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
@@ -88,7 +88,7 @@ export function ContactProfileView({
     setPendingConfirm(null)
     setShowVerifyDialog(false)
     setPepNickname(null)
-    setVcard(null)
+    setDetails(null)
   }, [contact.jid, contact.name])
 
   // PEP nickname fetch
@@ -106,19 +106,19 @@ export function ContactProfileView({
     }
   }, [contact.jid, contact.name, onFetchNickname])
 
-  // vCard fetch
+  // Profile details fetch
   useEffect(() => {
-    if (!onFetchVCard) return
+    if (!onFetchProfileDetails) return
     let cancelled = false
-    void onFetchVCard(contact.jid)
+    void onFetchProfileDetails(contact.jid)
       .then((result) => {
-        if (!cancelled && result) setVcard(result)
+        if (!cancelled && result) setDetails(result)
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [contact.jid, onFetchVCard])
+  }, [contact.jid, onFetchProfileDetails])
 
   const handleSaveEdit = async () => {
     const trimmedName = editName.trim()
@@ -251,7 +251,7 @@ export function ContactProfileView({
 
             <ContactProfileGrid
               contact={contact}
-              vcard={vcard}
+              details={details}
               isInRoster={isInRoster}
               forceOffline={forceOffline}
               encryptionState={encryptionState}

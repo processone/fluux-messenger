@@ -285,7 +285,7 @@ export class XMPPClient {
 
   /**
    * Profile management module.
-   * Handles avatars, nicknames, and vCard operations.
+   * Handles avatars, nicknames, and profile details.
    */
   public profile!: Profile
 

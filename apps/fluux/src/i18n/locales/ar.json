@@ -1045,7 +1045,7 @@
         "company": "الشركة",
         "email": "البريد الإلكتروني",
         "country": "البلد",
-        "vcardSaveError": "فشل حفظ حقل الملف الشخصي"
+        "saveFieldError": "فشل حفظ حقل الملف الشخصي"
     },
     "console": {
         "title": "وحدة تحكم XMPP",

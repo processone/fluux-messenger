@@ -1043,7 +1043,7 @@
         "company": "Comhlacht",
         "email": "Ríomhphost",
         "country": "Tír",
-        "vcardSaveError": "Theip ar shábháil réimse próifíle"
+        "saveFieldError": "Theip ar shábháil réimse próifíle"
     },
     "console": {
         "title": "Consól XMPP",

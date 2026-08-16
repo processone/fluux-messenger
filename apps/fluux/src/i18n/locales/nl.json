@@ -1037,7 +1037,7 @@
         "company": "Bedrijf",
         "email": "E-mail",
         "country": "Land",
-        "vcardSaveError": "Kan profielveld niet opslaan"
+        "saveFieldError": "Kan profielveld niet opslaan"
     },
     "console": {
         "title": "XMPP-console",

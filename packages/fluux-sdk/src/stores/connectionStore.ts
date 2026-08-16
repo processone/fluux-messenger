@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService, WebPushService, WebPushStatus, VCardInfo } from '../core/types'
+import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService, WebPushService, WebPushStatus, ProfileDetails } from '../core/types'
 
 // Re-export for convenience
 export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, WebPushStatus } from '../core/types'
@@ -62,7 +62,7 @@ interface ConnectionState {
   ownAvatar: string | null  // Blob URL for display
   ownAvatarHash: string | null  // Hash for cache lookup
   ownNickname: string | null  // XEP-0172 User Nickname
-  ownVCard: VCardInfo | null  // XEP-0054 vCard-temp fields
+  ownProfileDetails: ProfileDetails | null
   ownResources: Map<string, ResourcePresence>  // Other connected resources
   // XEP-0363: HTTP File Upload service
   httpUploadService: HttpUploadService | null
@@ -89,7 +89,7 @@ interface ConnectionState {
   // Own profile actions
   setOwnAvatar: (avatar: string | null, hash?: string | null) => void
   setOwnNickname: (nickname: string | null) => void
-  setOwnVCard: (vcard: VCardInfo | null) => void
+  setOwnProfileDetails: (details: ProfileDetails | null) => void
   updateOwnResource: (resource: string, show: PresenceShow | null, priority: number, status?: string, lastInteraction?: Date, client?: string) => void
   removeOwnResource: (resource: string) => void
   clearOwnResources: () => void
@@ -121,7 +121,7 @@ const initialState = {
   ownAvatar: null as string | null,
   ownAvatarHash: null as string | null,
   ownNickname: null as string | null,
-  ownVCard: null as VCardInfo | null,
+  ownProfileDetails: null as ProfileDetails | null,
   ownResources: new Map<string, ResourcePresence>(),
   httpUploadService: null as HttpUploadService | null,
   webPushStatus: 'unavailable' as WebPushStatus,
@@ -156,7 +156,7 @@ export const connectionStore = createStore<ConnectionState>()(
   }),
 
   setOwnNickname: (nickname) => set({ ownNickname: nickname }),
-  setOwnVCard: (vcard) => set({ ownVCard: vcard }),
+  setOwnProfileDetails: (details) => set({ ownProfileDetails: details }),
 
   updateOwnResource: (resource, show, priority, status, lastInteraction, client) => set((state) => {
     const newResources = new Map(state.ownResources)

@@ -1040,7 +1040,7 @@
         "company": "Entreprise",
         "email": "E-mail",
         "country": "Pays",
-        "vcardSaveError": "Échec de l'enregistrement du champ"
+        "saveFieldError": "Échec de l'enregistrement du champ"
     },
     "console": {
         "title": "Console XMPP",

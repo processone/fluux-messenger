@@ -1037,7 +1037,7 @@
         "company": "Cég",
         "email": "E-mail",
         "country": "Ország",
-        "vcardSaveError": "Nem sikerült menteni a profilmezőt"
+        "saveFieldError": "Nem sikerült menteni a profilmezőt"
     },
     "console": {
         "title": "XMPP konzol",

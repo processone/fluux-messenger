@@ -1,16 +1,16 @@
 /**
- * UserInfoPopover tests - vCard display functionality.
+ * UserInfoPopover tests - profile-details display.
  *
- * Tests that the popover fetches and displays vCard info (full name, org, email, country)
+ * Tests that the popover fetches and displays the profile details (full name, org, email, country)
  * when opened by clicking on a contact avatar/name.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { UserInfoPopover, _vcardCacheForTesting } from './UserInfoPopover'
-import type { VCardInfo } from '@fluux/sdk'
+import { UserInfoPopover, _profileDetailsCacheForTesting } from './UserInfoPopover'
+import type { ProfileDetails } from '@fluux/sdk'
 
-// Track the mock fetchVCard function
-const mockFetchVCard = vi.fn<(jid: string) => Promise<VCardInfo | null>>()
+// Track the mock fetchProfileDetails function
+const mockFetchProfileDetails = vi.fn<(jid: string) => Promise<ProfileDetails | null>>()
 
 // Override the useXMPP mock for this test file
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -18,7 +18,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     useXMPP: () => ({
-      client: { profile: { fetchVCard: mockFetchVCard } },
+      client: { profile: { fetchProfileDetails: mockFetchProfileDetails } },
       sendRawXml: vi.fn(),
       onStanza: vi.fn(() => vi.fn()),
       on: vi.fn(() => vi.fn()),
@@ -32,9 +32,9 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 
 describe('UserInfoPopover', () => {
   beforeEach(() => {
-    mockFetchVCard.mockReset()
-    // Clear the module-level vCard cache between tests
-    _vcardCacheForTesting.clear()
+    mockFetchProfileDetails.mockReset()
+    // Clear the module-level details cache between tests
+    _profileDetailsCacheForTesting.clear()
   })
 
   it('should render trigger element', () => {
@@ -48,7 +48,7 @@ describe('UserInfoPopover', () => {
   })
 
   it('should show JID when popover is opened', () => {
-    mockFetchVCard.mockResolvedValue(null)
+    mockFetchProfileDetails.mockResolvedValue(null)
 
     render(
       <UserInfoPopover jid="alice@example.com">
@@ -61,8 +61,8 @@ describe('UserInfoPopover', () => {
     expect(screen.getByText('alice@example.com')).toBeInTheDocument()
   })
 
-  it('should fetch and display vCard info on open', async () => {
-    mockFetchVCard.mockResolvedValue({
+  it('should fetch and display the profile details on open', async () => {
+    mockFetchProfileDetails.mockResolvedValue({
       fullName: 'Alice Smith',
       org: 'Acme Corp',
       email: 'alice@acme.com',
@@ -87,8 +87,8 @@ describe('UserInfoPopover', () => {
     expect(screen.getByText('France')).toBeInTheDocument()
   })
 
-  it('should fetch vCard using contact jid', async () => {
-    mockFetchVCard.mockResolvedValue({ fullName: 'Bob' })
+  it('should fetch the details using the contact jid', async () => {
+    mockFetchProfileDetails.mockResolvedValue({ fullName: 'Bob' })
 
     render(
       <UserInfoPopover
@@ -101,12 +101,12 @@ describe('UserInfoPopover', () => {
     fireEvent.click(screen.getByText('Bob'))
 
     await waitFor(() => {
-      expect(mockFetchVCard).toHaveBeenCalledWith('bob@example.com')
+      expect(mockFetchProfileDetails).toHaveBeenCalledWith('bob@example.com')
     })
   })
 
-  it('should fall back to occupantJid for vCard fetch', async () => {
-    mockFetchVCard.mockResolvedValue({ fullName: 'Anonymous User' })
+  it('should fall back to occupantJid for the details fetch', async () => {
+    mockFetchProfileDetails.mockResolvedValue({ fullName: 'Anonymous User' })
 
     render(
       <UserInfoPopover occupantJid="room@conference.example.com/anon">
@@ -117,12 +117,12 @@ describe('UserInfoPopover', () => {
     fireEvent.click(screen.getByText('Anon'))
 
     await waitFor(() => {
-      expect(mockFetchVCard).toHaveBeenCalledWith('room@conference.example.com/anon')
+      expect(mockFetchProfileDetails).toHaveBeenCalledWith('room@conference.example.com/anon')
     })
   })
 
-  it('should not show vCard section when fetch returns null', async () => {
-    mockFetchVCard.mockResolvedValue(null)
+  it('should not show the details section when the fetch returns null', async () => {
+    mockFetchProfileDetails.mockResolvedValue(null)
 
     render(
       <UserInfoPopover jid="empty@example.com">
@@ -133,16 +133,16 @@ describe('UserInfoPopover', () => {
     fireEvent.click(screen.getByText('Empty'))
 
     await waitFor(() => {
-      expect(mockFetchVCard).toHaveBeenCalled()
+      expect(mockFetchProfileDetails).toHaveBeenCalled()
     })
 
-    // Only JID should be visible, no vCard fields
+    // Only JID should be visible, no profile fields
     expect(screen.getByText('empty@example.com')).toBeInTheDocument()
     expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
   })
 
-  it('should show partial vCard when only some fields are available', async () => {
-    mockFetchVCard.mockResolvedValue({
+  it('should show partial details when only some fields are available', async () => {
+    mockFetchProfileDetails.mockResolvedValue({
       fullName: 'Charlie',
       org: undefined,
       email: 'charlie@test.com',

@@ -4,7 +4,7 @@
  * SearchResultItem is React.memo'd and the avatar is NOT part of its `result`
  * prop. It must therefore resolve the avatar REACTIVELY (per-key store
  * subscription) — a render-time roomStore.getState() / rosterStore.getState()
- * read freezes the row on the letter-avatar fallback when the vCard / room-avatar
+ * read freezes the row on the letter-avatar fallback when the profile-details / room-avatar
  * fetch resolves AFTER the row first rendered. Same class as the reply-quote
  * freeze (useReferencedMessage) and the reply-scroll / poll-close freezes (#471).
  *
@@ -153,7 +153,7 @@ describe('SearchView avatar reactivity (frozen-derived-value regression guard)',
     // Before the avatar resolves: letter-avatar fallback, no image url.
     expect(avatar()?.getAttribute('data-avatar-url')).toBe('')
 
-    // Room avatar resolves (PEP / vCard fetch) after first render.
+    // Room avatar resolves (PEP / vcard-temp fetch) after first render.
     act(() => {
       mockRoomStore.setState({
         rooms: new Map([['team@conf.example.com', { avatar: 'https://example.com/room.png' }]]),
@@ -171,7 +171,7 @@ describe('SearchView avatar reactivity (frozen-derived-value regression guard)',
     const avatar = () => container.querySelector('[data-testid="avatar"]')
     // Contacts render as circles.
     expect(avatar()?.getAttribute('data-shape')).toBe('circle')
-    // Before the vCard resolves: fallback letter avatar, no image url.
+    // Before the avatar resolves: fallback letter avatar, no image url.
     expect(avatar()?.getAttribute('data-avatar-url')).toBe('')
 
     act(() => {

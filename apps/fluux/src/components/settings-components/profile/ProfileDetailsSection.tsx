@@ -1,24 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Building2, Mail, MapPin, Pencil, Plus, Trash2, User, type LucideIcon } from 'lucide-react'
-import { type VCardInfo, useConnection } from '@fluux/sdk'
+import { type ProfileDetails, useConnection } from '@fluux/sdk'
 import { useClickOutside } from '@/hooks/useClickOutside'
 import { TextInput } from '../../ui/TextInput'
 
-type VCardKey = 'fullName' | 'org' | 'email' | 'country'
+type ProfileDetailsKey = 'fullName' | 'org' | 'email' | 'country'
 
-interface VCardField {
-  key: VCardKey
+interface ProfileDetailsField {
+  key: ProfileDetailsKey
   label: string
   icon: LucideIcon
 }
 
-export function VCardSection() {
+export function ProfileDetailsSection() {
   const { t } = useTranslation()
-  const { isConnected, ownVCard, fetchOwnVCard, setOwnVCard } = useConnection()
+  const { isConnected, ownProfileDetails, fetchOwnProfileDetails, setOwnProfileDetails } = useConnection()
 
   const [showAddField, setShowAddField] = useState(false)
-  const [editingField, setEditingField] = useState<VCardKey | null>(null)
+  const [editingField, setEditingField] = useState<ProfileDetailsKey | null>(null)
   const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,10 +28,10 @@ export function VCardSection() {
 
   useClickOutside(addFieldRef, () => setShowAddField(false), showAddField)
 
-  // Fetch own vCard on mount / when reconnected
+  // Fetch our own details on mount / when reconnected
   useEffect(() => {
-    if (isConnected) void fetchOwnVCard()
-  }, [isConnected, fetchOwnVCard])
+    if (isConnected) void fetchOwnProfileDetails()
+  }, [isConnected, fetchOwnProfileDetails])
 
   // Focus input when entering edit mode
   useEffect(() => {
@@ -41,21 +41,21 @@ export function VCardSection() {
     }
   }, [editingField])
 
-  const fields: VCardField[] = [
+  const fields: ProfileDetailsField[] = [
     { key: 'fullName', label: t('profile.fullName'), icon: User },
     { key: 'org', label: t('profile.company'), icon: Building2 },
     { key: 'email', label: t('profile.email'), icon: Mail },
     { key: 'country', label: t('profile.country'), icon: MapPin },
   ]
 
-  const activeFields = fields.filter((f) => ownVCard?.[f.key])
-  const availableFields = fields.filter((f) => !ownVCard?.[f.key])
+  const activeFields = fields.filter((f) => ownProfileDetails?.[f.key])
+  const availableFields = fields.filter((f) => !ownProfileDetails?.[f.key])
   const editingNewField = editingField && !activeFields.find((f) => f.key === editingField)
     ? fields.find((f) => f.key === editingField) ?? null
     : null
 
-  const handleStartEdit = (key: VCardKey) => {
-    setEditValue(ownVCard?.[key] || '')
+  const handleStartEdit = (key: ProfileDetailsKey) => {
+    setEditValue(ownProfileDetails?.[key] || '')
     setEditingField(key)
     setError(null)
   }
@@ -66,34 +66,34 @@ export function VCardSection() {
     setError(null)
   }
 
-  const handleSave = async (key: VCardKey, value: string) => {
+  const handleSave = async (key: ProfileDetailsKey, value: string) => {
     const trimmed = value.trim()
-    const newVCard: VCardInfo = { ...ownVCard }
+    const updated: ProfileDetails = { ...ownProfileDetails }
     if (trimmed) {
-      newVCard[key] = trimmed
+      updated[key] = trimmed
     } else {
-      delete newVCard[key]
+      delete updated[key]
     }
     setSaving(true)
     setError(null)
     try {
-      await setOwnVCard(newVCard)
+      await setOwnProfileDetails(updated)
       setEditingField(null)
       setEditValue('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('profile.vcardSaveError'))
+      setError(err instanceof Error ? err.message : t('profile.saveFieldError'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleAddField = (key: VCardKey) => {
+  const handleAddField = (key: ProfileDetailsKey) => {
     setShowAddField(false)
     setEditValue('')
     setEditingField(key)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent, key: VCardKey) => {
+  const handleKeyDown = (e: React.KeyboardEvent, key: ProfileDetailsKey) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       void handleSave(key, editValue)
@@ -130,7 +130,7 @@ export function VCardSection() {
               ) : (
                 <div className="group flex items-center gap-3 px-3 py-2.5">
                   <Icon className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
-                  <span className="flex-1 text-sm text-fluux-text break-words">{ownVCard?.[key]}</span>
+                  <span className="flex-1 text-sm text-fluux-text break-words">{ownProfileDetails?.[key]}</span>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <button
                       type="button"

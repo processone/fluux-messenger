@@ -3,7 +3,7 @@ import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { PepNode, type PepCodec } from './PepNode'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
-import type { VCardInfo } from '../types/roster'
+import type { ProfileDetails } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
 import {
   getCachedAvatar,
@@ -214,16 +214,15 @@ export class Profile extends BaseModule {
   }
 
   /**
-   * Fetch vCard profile information for a JID (XEP-0054).
+   * Fetch the descriptive fields a JID publishes about itself.
    *
-   * Returns selected fields (full name, organisation, email, country)
-   * for display in user info popovers. For room occupants in anonymous
-   * rooms, pass the full occupant JID (room@conf/nick).
+   * Carried over XEP-0054 vcard-temp. For a room occupant in an anonymous
+   * room, pass the full occupant JID (room@conf/nick).
    *
    * @param jid - The bare JID or full occupant JID to query
-   * @returns VCardInfo with available fields, or null on error
+   * @returns The fields the server returned, or null if the query failed
    */
-  async fetchVCard(jid: string): Promise<VCardInfo | null> {
+  async fetchProfileDetails(jid: string): Promise<ProfileDetails | null> {
     const iq = xml('iq', { type: 'get', to: jid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
@@ -583,26 +582,28 @@ export class Profile extends BaseModule {
   }
 
   /**
-   * Fetch own vCard (XEP-0054 vcard-temp).
-   * Emits `connection:own-vcard` event so the store picks it up.
+   * Fetch our own profile details.
+   *
+   * Emits `connection:own-profile` so the store picks them up.
    */
-  async fetchOwnVCard(): Promise<VCardInfo | null> {
+  async fetchOwnProfileDetails(): Promise<ProfileDetails | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
     const bareJid = getBareJid(currentJid)
-    const vcard = await this.fetchVCard(bareJid)
-    this.deps.emitSDK('connection:own-profile', { vcard })
-    return vcard
+    const details = await this.fetchProfileDetails(bareJid)
+    this.deps.emitSDK('connection:own-profile', { details })
+    return details
   }
 
   /**
-   * Publish own vCard fields (XEP-0054 vcard-temp).
+   * Publish our own profile details.
    *
-   * Fetches the current vCard first to preserve fields we don't edit (e.g. PHOTO),
-   * then merges the provided fields and sends `<iq type="set">`.
+   * XEP-0054 replaces the whole vcard-temp rather than patching it, so the
+   * current one is fetched first and merged into: publishing only the edited
+   * fields would drop everything else the user has set, the avatar included.
    */
-  async publishOwnVCard(info: VCardInfo): Promise<void> {
+  async publishOwnProfileDetails(info: ProfileDetails): Promise<void> {
     if (!this.deps.getCurrentJid()) throw new Error('Not connected')
 
     // Fetch current vCard to preserve PHOTO and other unmanaged fields
@@ -649,7 +650,7 @@ export class Profile extends BaseModule {
       xml('vCard', { xmlns: NS_VCARD_TEMP }, ...children)
     )
     await this.deps.sendIQ(setIq)
-    this.deps.emitSDK('connection:own-profile', { vcard: info })
+    this.deps.emitSDK('connection:own-profile', { details: info })
   }
 
   /**
@@ -739,7 +740,7 @@ export class Profile extends BaseModule {
     await Promise.allSettled([
       this.fetchOwnAvatar(),
       this.fetchOwnNickname(),
-      this.fetchOwnVCard(),
+      this.fetchOwnProfileDetails(),
     ])
   }
 

@@ -14,7 +14,7 @@ describe('ContactProfileGrid', () => {
     render(
       <ContactProfileGrid
         contact={contact}
-        vcard={{ org: 'ProcessOne' }}
+        details={{ org: 'ProcessOne' }}
         isInRoster={true}
         forceOffline={false}
         encryptionState={{ kind: 'encrypted', fingerprint: 'AB', trust: 'verified' }}
@@ -31,7 +31,7 @@ describe('ContactProfileGrid', () => {
     render(
       <ContactProfileGrid
         contact={contact}
-        vcard={null}
+        details={null}
         isInRoster={false}
         forceOffline={false}
         encryptionState={{ kind: 'disabled' }}
@@ -45,7 +45,7 @@ describe('ContactProfileGrid', () => {
     render(
       <ContactProfileGrid
         contact={{ jid: 'x@y', name: 'X', presence: 'offline', subscription: 'none' } as Contact}
-        vcard={null}
+        details={null}
         isInRoster={false}
         forceOffline={false}
         encryptionState={{ kind: 'disabled' }}
@@ -59,7 +59,7 @@ describe('ContactProfileGrid', () => {
     render(
       <ContactProfileGrid
         contact={contact}
-        vcard={{ org: 'ProcessOne' }}
+        details={{ org: 'ProcessOne' }}
         isInRoster={true}
         forceOffline={false}
         encryptionState={{ kind: 'encrypted', fingerprint: 'AB', trust: 'verified' }}

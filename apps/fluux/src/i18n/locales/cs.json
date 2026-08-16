@@ -1043,7 +1043,7 @@
         "company": "Společnost",
         "email": "E-mail",
         "country": "Země",
-        "vcardSaveError": "Nepodařilo se uložit pole profilu"
+        "saveFieldError": "Nepodařilo se uložit pole profilu"
     },
     "console": {
         "title": "Konzole XMPP",

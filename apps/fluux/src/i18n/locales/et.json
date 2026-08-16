@@ -1039,7 +1039,7 @@
         "company": "Ettevõte",
         "email": "E-post",
         "country": "Riik",
-        "vcardSaveError": "Profiilivälja salvestamine ebaõnnestus"
+        "saveFieldError": "Profiilivälja salvestamine ebaõnnestus"
     },
     "console": {
         "title": "XMPP konsool",

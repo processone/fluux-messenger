@@ -130,9 +130,9 @@ export function createStoreBindings(
     stores.connection.setOwnNickname(nickname)
   })
 
-  on('connection:own-profile', ({ vcard }) => {
+  on('connection:own-profile', ({ details }) => {
     const stores = getStores()
-    stores.connection.setOwnVCard(vcard)
+    stores.connection.setOwnProfileDetails(details)
   })
 
   on('connection:own-resource', (payload) => {

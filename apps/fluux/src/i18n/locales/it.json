@@ -1041,7 +1041,7 @@
         "company": "Azienda",
         "email": "E-mail",
         "country": "Paese",
-        "vcardSaveError": "Impossibile salvare il campo del profilo"
+        "saveFieldError": "Impossibile salvare il campo del profilo"
     },
     "console": {
         "title": "Console XMPP",

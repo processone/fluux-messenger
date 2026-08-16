@@ -40,7 +40,7 @@ export const connectionBindingMethodKeys = [
   // Own profile state
   'setOwnAvatar',
   'setOwnNickname',
-  'setOwnVCard',
+  'setOwnProfileDetails',
   'updateOwnResource',
   'removeOwnResource',
   'clearOwnResources',

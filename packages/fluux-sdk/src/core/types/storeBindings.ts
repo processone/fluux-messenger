@@ -21,7 +21,7 @@ import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
-import type { Contact, PresenceShow, VCardInfo } from './roster'
+import type { Contact, PresenceShow, ProfileDetails } from './roster'
 import type { Message, Conversation } from './chat'
 import type { Room, RoomMessage, RoomOccupant, RoomAffiliation } from './room'
 import type { SystemNotificationType } from './events'
@@ -55,7 +55,7 @@ export interface ConnectionBindings {
   // Own profile actions
   setOwnAvatar: (avatar: string | null, hash?: string | null) => void
   setOwnNickname: (nickname: string | null) => void
-  setOwnVCard: (vcard: VCardInfo | null) => void
+  setOwnProfileDetails: (details: ProfileDetails | null) => void
   updateOwnResource: (resource: string, show: PresenceShow | null, priority: number, status?: string, lastInteraction?: Date, client?: string) => void
   removeOwnResource: (resource: string) => void
   clearOwnResources: () => void

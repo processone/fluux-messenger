@@ -396,7 +396,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     useXMPP: vi.fn(() => ({
       client: {
         profile: {
-          fetchVCard: vi.fn().mockResolvedValue(null),
+          fetchProfileDetails: vi.fn().mockResolvedValue(null),
         },
       },
       sendRawXml: vi.fn(),

@@ -88,7 +88,7 @@ export interface MessageBubbleProps {
   senderRole?: RoomRole
   /** Room affiliation for MUC occupants */
   senderAffiliation?: RoomAffiliation
-  /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
+  /** Occupant JID for profile-details fetch in anonymous rooms (e.g. room@conf/nick) */
   senderOccupantJid?: string
 
   /** Whisper counterpart nick (recipient if outgoing, sender if incoming). */

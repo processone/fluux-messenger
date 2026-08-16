@@ -94,11 +94,11 @@ export function useRosterActions() {
   )
 
   /**
-   * Fetch a contact's vCard (XEP-0054 vcard-temp).
+   * Fetch the descriptive fields a contact publishes about itself.
    */
-  const fetchVCard = useCallback(
+  const fetchProfileDetails = useCallback(
     async (jid: string) => {
-      return client.profile.fetchVCard(jid)
+      return client.profile.fetchProfileDetails(jid)
     },
     [client]
   )
@@ -143,7 +143,7 @@ export function useRosterActions() {
       renameContact,
       getContact,
       fetchContactNickname,
-      fetchVCard,
+      fetchProfileDetails,
       restoreContactAvatarFromCache,
       acceptSubscription,
       rejectSubscription,
@@ -154,7 +154,7 @@ export function useRosterActions() {
       renameContact,
       getContact,
       fetchContactNickname,
-      fetchVCard,
+      fetchProfileDetails,
       restoreContactAvatarFromCache,
       acceptSubscription,
       rejectSubscription,

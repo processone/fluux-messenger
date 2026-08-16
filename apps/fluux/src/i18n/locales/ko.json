@@ -1037,7 +1037,7 @@
         "company": "회사",
         "email": "이메일",
         "country": "국가",
-        "vcardSaveError": "프로필 필드 저장 실패"
+        "saveFieldError": "프로필 필드 저장 실패"
     },
     "console": {
         "title": "XMPP 콘솔",

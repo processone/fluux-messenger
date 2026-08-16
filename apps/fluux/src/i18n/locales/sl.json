@@ -1043,7 +1043,7 @@
         "company": "Podjetje",
         "email": "E-pošta",
         "country": "Država",
-        "vcardSaveError": "Shranjevanje polja profila ni uspelo"
+        "saveFieldError": "Shranjevanje polja profila ni uspelo"
     },
     "console": {
         "title": "XMPP konzola",

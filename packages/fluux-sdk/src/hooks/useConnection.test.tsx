@@ -376,31 +376,31 @@ describe('useConnection hook', () => {
       expect(mockClient.profile.clearOwnNickname).toHaveBeenCalled()
     })
 
-    it('should call client.profile.fetchOwnVCard when fetchOwnVCard is called', async () => {
+    it('should call client.profile.fetchOwnProfileDetails when fetchOwnProfileDetails is called', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
       const vcard = { fullName: 'My Name', org: 'My Org' }
-      mockClient.profile.fetchOwnVCard.mockResolvedValue(vcard)
+      mockClient.profile.fetchOwnProfileDetails.mockResolvedValue(vcard)
 
       await act(async () => {
-        const res = await result.current.fetchOwnVCard()
+        const res = await result.current.fetchOwnProfileDetails()
         expect(res).toEqual(vcard)
       })
 
-      expect(mockClient.profile.fetchOwnVCard).toHaveBeenCalled()
+      expect(mockClient.profile.fetchOwnProfileDetails).toHaveBeenCalled()
     })
 
-    it('should call client.profile.publishOwnVCard when setOwnVCard is called', async () => {
+    it('should call client.profile.publishOwnProfileDetails when setOwnProfileDetails is called', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
-      mockClient.profile.publishOwnVCard.mockResolvedValue(undefined)
+      mockClient.profile.publishOwnProfileDetails.mockResolvedValue(undefined)
 
       const vcard = { fullName: 'Updated Name', email: 'me@test.com' }
       await act(async () => {
-        await result.current.setOwnVCard(vcard)
+        await result.current.setOwnProfileDetails(vcard)
       })
 
-      expect(mockClient.profile.publishOwnVCard).toHaveBeenCalledWith(vcard)
+      expect(mockClient.profile.publishOwnProfileDetails).toHaveBeenCalledWith(vcard)
     })
   })
 

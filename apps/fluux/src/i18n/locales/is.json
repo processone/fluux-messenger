@@ -1037,7 +1037,7 @@
         "company": "Fyrirtæki",
         "email": "Netfang",
         "country": "Land",
-        "vcardSaveError": "Ekki tókst að vista prófílreit"
+        "saveFieldError": "Ekki tókst að vista prófílreit"
     },
     "console": {
         "title": "XMPP stjórnborð",

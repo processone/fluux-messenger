@@ -1,7 +1,7 @@
 /**
  * XMPPClient vCard Tests
  *
- * Tests for fetchVCard(), fetchOwnVCard(), and publishOwnVCard() (XEP-0054 vcard-temp):
+ * Tests for fetchProfileDetails(), fetchOwnProfileDetails(), and publishOwnProfileDetails() (XEP-0054 vcard-temp):
  * - Parsing full name, organisation, email, country
  * - Handling missing fields
  * - Handling errors
@@ -47,7 +47,7 @@ vi.mock('@xmpp/debug', () => ({
   default: vi.fn(),
 }))
 
-describe('XMPPClient fetchVCard', () => {
+describe('XMPPClient fetchProfileDetails', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
 
@@ -102,7 +102,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-    const result = await xmppClient.profile.fetchVCard('alice@example.com')
+    const result = await xmppClient.profile.fetchProfileDetails('alice@example.com')
 
     expect(result).toEqual({
       fullName: 'Alice Smith',
@@ -125,7 +125,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-    const result = await xmppClient.profile.fetchVCard('bob@example.com')
+    const result = await xmppClient.profile.fetchProfileDetails('bob@example.com')
 
     expect(result).toEqual({
       fullName: 'Bob Jones',
@@ -151,7 +151,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-    const result = await xmppClient.profile.fetchVCard('charlie@example.com')
+    const result = await xmppClient.profile.fetchProfileDetails('charlie@example.com')
 
     expect(result).toBeNull()
   })
@@ -161,7 +161,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResponse)
 
-    const result = await xmppClient.profile.fetchVCard('missing@example.com')
+    const result = await xmppClient.profile.fetchProfileDetails('missing@example.com')
 
     expect(result).toBeNull()
   })
@@ -171,7 +171,7 @@ describe('XMPPClient fetchVCard', () => {
       new Error('item-not-found')
     )
 
-    const result = await xmppClient.profile.fetchVCard('error@example.com')
+    const result = await xmppClient.profile.fetchProfileDetails('error@example.com')
 
     expect(result).toBeNull()
   })
@@ -193,7 +193,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-    const result = await xmppClient.profile.fetchVCard('room@conference.example.com/nick')
+    const result = await xmppClient.profile.fetchProfileDetails('room@conference.example.com/nick')
 
     expect(result).toEqual({
       fullName: 'Room User',
@@ -207,7 +207,7 @@ describe('XMPPClient fetchVCard', () => {
   })
 })
 
-describe('XMPPClient fetchOwnVCard', () => {
+describe('XMPPClient fetchOwnProfileDetails', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
   let emitSDKSpy: ReturnType<typeof vi.spyOn>
@@ -238,7 +238,7 @@ describe('XMPPClient fetchOwnVCard', () => {
     vi.clearAllMocks()
   })
 
-  it('should emit connection:own-vcard with vCard data', async () => {
+  it('should emit connection:own-profile with the fetched details', async () => {
     const vcardResponse = createMockElement('iq', { type: 'result' }, [
       {
         name: 'vCard',
@@ -255,7 +255,7 @@ describe('XMPPClient fetchOwnVCard', () => {
 
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
 
-    const result = await xmppClient.profile.fetchOwnVCard()
+    const result = await xmppClient.profile.fetchOwnProfileDetails()
 
     expect(result).toEqual({
       fullName: 'My Name',
@@ -264,23 +264,23 @@ describe('XMPPClient fetchOwnVCard', () => {
       country: undefined,
     })
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
-      vcard: { fullName: 'My Name', org: 'My Company', email: undefined, country: undefined },
+      details: { fullName: 'My Name', org: 'My Company', email: undefined, country: undefined },
     })
   })
 
-  it('should emit connection:own-vcard with null when no vCard exists', async () => {
+  it('should emit connection:own-profile with null when the server returns nothing', async () => {
     mockXmppClientInstance.iqCaller.request.mockResolvedValue(
       createMockElement('iq', { type: 'result' })
     )
 
-    const result = await xmppClient.profile.fetchOwnVCard()
+    const result = await xmppClient.profile.fetchOwnProfileDetails()
 
     expect(result).toBeNull()
-    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', { vcard: null })
+    expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', { details: null })
   })
 })
 
-describe('XMPPClient publishOwnVCard', () => {
+describe('XMPPClient publishOwnProfileDetails', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
   let emitSDKSpy: ReturnType<typeof vi.spyOn>
@@ -336,7 +336,7 @@ describe('XMPPClient publishOwnVCard', () => {
       .mockResolvedValueOnce(existingVCard)
       .mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
 
-    await xmppClient.profile.publishOwnVCard({ fullName: 'New Name', email: 'me@test.com' })
+    await xmppClient.profile.publishOwnProfileDetails({ fullName: 'New Name', email: 'me@test.com' })
 
     // Verify two IQ calls were made (GET + SET)
     expect(mockXmppClientInstance.iqCaller.request.mock.calls.length - requestsBefore).toBe(2)
@@ -347,20 +347,20 @@ describe('XMPPClient publishOwnVCard', () => {
 
     // Verify event emitted with new data
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
-      vcard: { fullName: 'New Name', email: 'me@test.com' },
+      details: { fullName: 'New Name', email: 'me@test.com' },
     })
   })
 
-  it('should emit connection:own-vcard after successful publish', async () => {
+  it('should emit connection:own-profile after a successful publish', async () => {
     // No existing vCard
     mockXmppClientInstance.iqCaller.request
       .mockRejectedValueOnce(new Error('item-not-found'))
       .mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
 
-    await xmppClient.profile.publishOwnVCard({ org: 'Acme Corp', country: 'France' })
+    await xmppClient.profile.publishOwnProfileDetails({ org: 'Acme Corp', country: 'France' })
 
     expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-profile', {
-      vcard: { org: 'Acme Corp', country: 'France' },
+      details: { org: 'Acme Corp', country: 'France' },
     })
   })
 })

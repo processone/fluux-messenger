@@ -1039,7 +1039,7 @@
         "company": "חברה",
         "email": "דוא\"ל",
         "country": "מדינה",
-        "vcardSaveError": "שמירת שדה הפרופיל נכשלה"
+        "saveFieldError": "שמירת שדה הפרופיל נכשלה"
     },
     "console": {
         "title": "קונסולת XMPP",
