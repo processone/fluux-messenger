@@ -5,7 +5,7 @@
  * renameContact, removeContact, and roster push handling.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -53,7 +53,7 @@ describe('XMPPClient Roster', () => {
     // Presence is injected as a dependency now (not a store binding); the
     // client wraps these getters, so tests drive presence via mockPresence.
     xmppClient = new XMPPClient({ debug: false, presenceOptions: mockPresence })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 

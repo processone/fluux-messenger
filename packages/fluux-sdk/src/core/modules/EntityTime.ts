@@ -60,13 +60,7 @@ export function getBestResource(resources: Map<string, ResourcePresence>): strin
  * - Negative caching: contacts that don't support XEP-0202 are remembered
  * - Resource tracking: re-queries when the best resource changes (different timezone)
  *
- * @example
- * ```typescript
- * const result = await client.internal.entityTime.queryTime('alice@example.com')
- * if (result?.supported) {
- *   console.log(`Alice's offset: ${result.offsetMinutes} minutes from UTC`)
- * }
- * ```
+ * Consumers query the domain operation on `client.contacts`.
  */
 export class EntityTime extends BaseModule {
   private cache = new Map<string, EntityTimeCacheEntry>()

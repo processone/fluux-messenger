@@ -37,18 +37,11 @@ export function useLastActivity(bareJid: string | null): void {
     // Already queried this JID in this mount cycle
     if (queriedJidRef.current === bareJid) return
 
-    // Check cache — already queried this session
-    const cached = client.internal.lastActivity?.getCached(bareJid)
-    if (cached) {
-      queriedJidRef.current = bareJid
-      return
-    }
-
     // Only query for offline contacts without a lastSeen timestamp
     if (!contact || contact.presence !== 'offline') return
     if (contact.lastSeen) return
 
     queriedJidRef.current = bareJid
-    client.internal.lastActivity?.queryLastActivity(bareJid)
+    void client.contacts.refreshLastActivity(bareJid)
   }, [bareJid, client, contact?.presence, contact?.lastSeen])
 }

@@ -6,7 +6,7 @@
  * - publishOwnNickname() - store nickname in PEP
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -60,7 +60,7 @@ describe('XMPPClient Nickname', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 

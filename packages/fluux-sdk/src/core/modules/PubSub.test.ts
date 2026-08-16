@@ -4,7 +4,7 @@
  * Tests for XEP-0060 PubSub event handling.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -58,7 +58,7 @@ describe('PubSub Module', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 
@@ -344,7 +344,7 @@ describe('PubSub Module', () => {
     it('returns true (handled) for MDS PubSub event messages', async () => {
       await connectClient()
 
-      const result = xmppClient.internal.pubsub.handle(mdsEvent('user@example.com', [
+      const result = getInternalSurfaceForTesting(xmppClient).pubsub.handle(mdsEvent('user@example.com', [
         {
           name: 'item',
           attrs: { id: 'juliet@capulet.example' },
@@ -418,7 +418,7 @@ describe('PubSub Module', () => {
     it('returns true (handled) for conversations PubSub event messages', async () => {
       await connectClient()
 
-      const result = xmppClient.internal.pubsub.handle(convEvent('user@example.com', [
+      const result = getInternalSurfaceForTesting(xmppClient).pubsub.handle(convEvent('user@example.com', [
         { name: 'conversation', attrs: { jid: 'alice@example.com' } },
       ]))
 
@@ -460,7 +460,7 @@ describe('PubSub Module', () => {
         },
       ])
 
-      const result = xmppClient.internal.pubsub.handle(pubsubMessage)
+      const result = getInternalSurfaceForTesting(xmppClient).pubsub.handle(pubsubMessage)
       expect(result).toBe(true)
     })
 
@@ -473,7 +473,7 @@ describe('PubSub Module', () => {
         { name: 'body', text: 'Hello' },
       ])
 
-      const result = xmppClient.internal.pubsub.handle(regularMessage)
+      const result = getInternalSurfaceForTesting(xmppClient).pubsub.handle(regularMessage)
       expect(result).toBe(false)
     })
 
@@ -484,7 +484,7 @@ describe('PubSub Module', () => {
         from: 'contact@example.com',
       }, [])
 
-      const result = xmppClient.internal.pubsub.handle(presenceStanza)
+      const result = getInternalSurfaceForTesting(xmppClient).pubsub.handle(presenceStanza)
       expect(result).toBe(false)
     })
   })

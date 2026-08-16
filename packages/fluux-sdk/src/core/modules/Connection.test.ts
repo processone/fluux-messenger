@@ -4,7 +4,7 @@
  * Tests for connection, disconnection, reconnection, and related features.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import { FastTokenLogoutError } from '../errors'
 import {
   DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
@@ -104,7 +104,7 @@ describe('XMPPClient Connection', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {
@@ -454,7 +454,7 @@ describe('XMPPClient Connection', () => {
       const stableUserAgentId = '11111111-2222-4333-8444-555555555555'
       xmppClient.destroy()
       xmppClient = new XMPPClient({ debug: false, userAgentId: stableUserAgentId })
-      xmppClient.bindStores(mockStores)
+      bindStoresForTesting(xmppClient, mockStores)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -913,7 +913,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -940,7 +940,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -968,7 +968,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -1004,7 +1004,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -1044,7 +1044,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -1076,7 +1076,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       // Start connection — proxy starts successfully but xmpp.js connect fails
       // (simulates firewall blocking the WebView → localhost proxy connection)
@@ -1114,7 +1114,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       // Initial connect uses first proxy URL
       const connectPromise = proxyClient.connect({
@@ -1157,7 +1157,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       // Initial connect uses first proxy URL
       const connectPromise = proxyClient.connect({
@@ -1217,7 +1217,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       // Initial connect wins via direct WebSocket (XEP-0156 discovery).
       const connectPromise = proxyClient.connect({
@@ -1359,7 +1359,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -1400,7 +1400,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       const connectPromise = proxyClient.connect({
         jid: 'user@example.com',
@@ -2286,7 +2286,7 @@ describe('XMPPClient Connection', () => {
   describe('event emitter', () => {
     it('should emit online event on connection', async () => {
       const onlineHandler = vi.fn()
-      xmppClient.internal.on('online', onlineHandler)
+      getInternalSurfaceForTesting(xmppClient).on('online', onlineHandler)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -2303,7 +2303,7 @@ describe('XMPPClient Connection', () => {
 
     it('should allow unsubscribing from events', async () => {
       const handler = vi.fn()
-      const unsubscribe = xmppClient.internal.on('online', handler)
+      const unsubscribe = getInternalSurfaceForTesting(xmppClient).on('online', handler)
 
       // Unsubscribe before connecting
       unsubscribe()
@@ -2816,7 +2816,7 @@ describe('XMPPClient Connection', () => {
       }
 
       const clientWithStorage = new XMPPClient({ debug: false, storageAdapter: mockStorageAdapter })
-      clientWithStorage.bindStores(mockStores)
+      bindStoresForTesting(clientWithStorage, mockStores)
 
       // Set up IQ handler to return empty bookmarks
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
@@ -3887,7 +3887,7 @@ describe('XMPPClient Connection', () => {
         debug: false,
         fastTokenStorage,
       })
-      clientWithFastStorage.bindStores(mockStores)
+      bindStoresForTesting(clientWithFastStorage, mockStores)
       ;(mockXmppClientInstance as any).fast = {
         fetchToken: vi.fn(),
         saveToken: vi.fn(),
@@ -3935,7 +3935,7 @@ describe('XMPPClient Connection', () => {
           debug: false,
           userAgentId: stableUserAgentId,
         })
-        clientWithIdentity.bindStores(mockStores)
+        bindStoresForTesting(clientWithIdentity, mockStores)
 
         const connectPromise = clientWithIdentity.connect({
           jid: 'bot@example.com',
@@ -4499,7 +4499,7 @@ describe('XMPPClient Connection', () => {
         const ownInstance = createMockXmppClient()
         mockClientFactory._setInstance(ownInstance)
         const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => allowed })
-        client.bindStores(createMockStores())
+        bindStoresForTesting(client, createMockStores())
 
         const p = client.connect({
           jid: 'user@example.com',
@@ -4531,7 +4531,7 @@ describe('XMPPClient Connection', () => {
         const ownInstance = createMockXmppClient()
         mockClientFactory._setInstance(ownInstance)
         const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => true })
-        client.bindStores(createMockStores())
+        bindStoresForTesting(client, createMockStores())
 
         const p = client.connect({
           jid: 'user@example.com',
@@ -4653,7 +4653,7 @@ describe('XMPPClient Connection', () => {
         debug: false,
         storageAdapter: mockStorageAdapter as any,
       })
-      clientWithStorage.bindStores(mockStores)
+      bindStoresForTesting(clientWithStorage, mockStores)
 
       // Connect
       const connectPromise = clientWithStorage.connect({
@@ -4844,7 +4844,7 @@ describe('XMPPClient Connection', () => {
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
       const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
-      proxyClient.bindStores(mockStores)
+      bindStoresForTesting(proxyClient, mockStores)
 
       // Force navigator.onLine false — a non-proxy client would block here
       // for up to `timeoutMs` waiting for the 'online' event.

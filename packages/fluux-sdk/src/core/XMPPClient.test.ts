@@ -12,7 +12,7 @@
  * - XMPPClient.disco.test.ts - service discovery, server info
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from './XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from './XMPPClient'
 import type { ConnectionStatus } from './types/connection'
 import {
   createMockXmppClient,
@@ -24,8 +24,6 @@ import {
 } from './test-utils'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
-import { defaultStores, type SDKStores } from '../stores'
-import { createDefaultStoreBindings } from './defaultStoreBindings'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -72,7 +70,7 @@ describe('XMPPClient', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {
@@ -93,7 +91,7 @@ describe('XMPPClient', () => {
       expect(client.admin).toBeDefined()
       expect(client.profile).toBeDefined()
       expect(client.server).toBeDefined()
-      expect(client.internal.mam).toBeDefined()
+      expect(getInternalSurfaceForTesting(client).mam).toBeDefined()
       expect(client.blocking).toBeDefined()
     })
 
@@ -130,7 +128,7 @@ describe('XMPPClient', () => {
       const client = new XMPPClient({ debug: false })
 
       // Override with custom mock stores
-      client.bindStores(mockStores)
+      bindStoresForTesting(client, mockStores)
 
       // Modules should still work
       expect(client.connection).toBeDefined()
@@ -183,7 +181,7 @@ describe('XMPPClient', () => {
       // Clear persisted presence to ensure fresh state
       sessionStorage.removeItem('fluux:presence-machine')
       const client = new XMPPClient({ debug: false })
-      client.bindStores(mockStores)
+      bindStoresForTesting(client, mockStores)
 
       // Verify the connection module has the handlers set up
       const connectionModule = (client as any).connection
@@ -400,7 +398,7 @@ describe('XMPPClient', () => {
   describe('event emitter', () => {
     it('should emit online event on connection', async () => {
       const onlineHandler = vi.fn()
-      xmppClient.internal.on('online', onlineHandler)
+      getInternalSurfaceForTesting(xmppClient).on('online', onlineHandler)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -417,7 +415,7 @@ describe('XMPPClient', () => {
 
     it('should allow unsubscribing from events', async () => {
       const onlineHandler = vi.fn()
-      const unsubscribe = xmppClient.internal.on('online', onlineHandler)
+      const unsubscribe = getInternalSurfaceForTesting(xmppClient).on('online', onlineHandler)
 
       unsubscribe()
 
@@ -804,7 +802,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -838,7 +836,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const joinRoomSpy = vi.spyOn(newXmppClient.rooms, 'joinRoom').mockResolvedValue()
       const fetchBookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks')
@@ -878,7 +876,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -914,7 +912,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -959,7 +957,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       // Short disconnect keeps the path minimal (no bookmark fetch / catch-up).
       // (In this node env localStorage.getItem throws, so the cache-marker check is
@@ -995,7 +993,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const bookmarksSpy = vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -1033,7 +1031,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
       const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
@@ -1068,7 +1066,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       vi.spyOn(newXmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
       const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
@@ -1112,7 +1110,7 @@ describe('XMPPClient', () => {
       stores.room.joinedRooms.mockReturnValue(storeRooms)
 
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const joinRoomSpy = vi.spyOn(newXmppClient.rooms, 'joinRoom').mockResolvedValue()
       vi.spyOn(newXmppClient.rooms, 'fetchBookmarks')
@@ -1146,7 +1144,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -1171,7 +1169,7 @@ describe('XMPPClient', () => {
 
       const stores = createMockStores()
       const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
+      bindStoresForTesting(newXmppClient, stores)
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -1200,7 +1198,7 @@ describe('XMPPClient', () => {
 
       const stores1 = createMockStores()
       const client1 = new XMPPClient({ debug: false })
-      client1.bindStores(stores1)
+      bindStoresForTesting(client1, stores1)
 
       const promise1 = client1.connect({
         jid: 'user@example.com',
@@ -1227,7 +1225,7 @@ describe('XMPPClient', () => {
 
       const stores2 = createMockStores()
       const client2 = new XMPPClient({ debug: false })
-      client2.bindStores(stores2)
+      bindStoresForTesting(client2, stores2)
 
       const promise2 = client2.connect({
         jid: 'user@example.com',
@@ -2119,7 +2117,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
       vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
-      const convSync = (xmppClient as any).internal.conversationSync
+      const convSync = getInternalSurfaceForTesting(xmppClient).conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
       // No previouslyJoinedRooms, no autojoin bookmarks
@@ -2146,7 +2144,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.contacts, 'sendInitialPresence').mockResolvedValue()
       vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
-      const convSync = (xmppClient as any).internal.conversationSync
+      const convSync = getInternalSurfaceForTesting(xmppClient).conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
       await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(
@@ -2184,7 +2182,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.rooms, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Mock conversation sync
-      const convSync = (xmppClient as any).internal.conversationSync
+      const convSync = getInternalSurfaceForTesting(xmppClient).conversationSync
       if (convSync) {
         vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       }
@@ -2214,7 +2212,7 @@ describe('XMPPClient', () => {
         roomsToAutojoin: [{ jid: 'public@conf.example.com', nick: 'me' }],
         allRoomJids: ['public@conf.example.com'],
       })
-      const convSync = (xmppClient as any).internal.conversationSync
+      const convSync = getInternalSurfaceForTesting(xmppClient).conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       vi.spyOn(xmppClient.rooms, 'queryRoomFeatures').mockResolvedValue({
         supportsMAM: false, supportsReactions: true, supportsHats: false,
@@ -2252,50 +2250,4 @@ describe('XMPPClient', () => {
     })
   })
 
-  describe('store injection', () => {
-    // Wrap a store so getState() returns the real state with a specific method
-    // replaced by a spy — lets the rest of the client run on real stores while
-    // we observe that a chosen call routes through THIS instance.
-    const withSpy = <S>(store: S, override: Record<string, unknown>): S => ({
-      ...store,
-      getState: () => ({ ...(store as { getState: () => object }).getState(), ...override }),
-    }) as S
-
-    it('createDefaultStoreBindings routes writes through the injected bundle', () => {
-      const addMessage = vi.fn()
-      const bundle: SDKStores = {
-        ...defaultStores,
-        chat: withSpy(defaultStores.chat, { addMessage }),
-      }
-
-      const bindings = createDefaultStoreBindings(bundle)
-      bindings.chat.addMessage({ id: 'm1' } as never)
-
-      expect(addMessage).toHaveBeenCalledWith({ id: 'm1' })
-    })
-
-    it('new XMPPClient({ stores }) routes connect account-switch through the injected bundle', () => {
-      const chatSwitch = vi.fn()
-      const roomSwitch = vi.fn()
-      const ignoreRehydrate = vi.fn()
-      const bundle: SDKStores = {
-        ...defaultStores,
-        chat: withSpy(defaultStores.chat, { switchAccount: chatSwitch }),
-        room: withSpy(defaultStores.room, { switchAccount: roomSwitch }),
-        ignore: withSpy(defaultStores.ignore, { rehydrate: ignoreRehydrate }),
-      }
-
-      const client = new XMPPClient({ debug: false, stores: bundle })
-      // switchAccount / rehydrate run synchronously at the top of connect(),
-      // before any await — so they fire before the socket work (which we let
-      // reject harmlessly against the mocked transport).
-      void client
-        .connect({ jid: 'account@example.com', password: 'p', server: 'example.com', skipDiscovery: true })
-        .catch(() => {})
-
-      expect(chatSwitch).toHaveBeenCalledWith('account@example.com')
-      expect(roomSwitch).toHaveBeenCalledWith('account@example.com')
-      expect(ignoreRehydrate).toHaveBeenCalled()
-    })
-  })
 })

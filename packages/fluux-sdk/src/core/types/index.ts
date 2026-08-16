@@ -147,9 +147,8 @@ export type {
 
 // Client types.
 //
-// `XMPPClientConfig` is deliberately NOT here: it carries a live `SDKStores`
-// bundle, so re-exporting it would make this leaf barrel depend on a concrete
-// store. It is exported from `core/clientConfig` instead.
+// Construction options are exported beside XMPPClient rather than from this
+// barrel of shared domain values.
 export type {
   StoreBindings,
   XMPPClientEvents,

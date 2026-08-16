@@ -1,5 +1,5 @@
 import { xml, Element } from '@xmpp/client'
-import { BaseModule } from './BaseModule'
+import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
@@ -15,6 +15,8 @@ import type { PresenceShow, Contact } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import { logInfo } from '../logger'
 import type { StanzaClaim } from '../stanzaRouting'
+import type { EntityTime } from './EntityTime'
+import type { LastActivity } from './LastActivity'
 
 /**
  * Roster and presence management module.
@@ -54,6 +56,26 @@ export class Roster extends BaseModule {
   private capsHash: string | null = null
   /** Track JIDs for which we received 'unsubscribed' but haven't seen the roster push yet */
   private _pendingSubscriptionDenials = new Set<string>()
+
+  constructor(
+    deps: ModuleDependencies,
+    private readonly entityTime?: EntityTime,
+    private readonly lastActivity?: LastActivity,
+  ) {
+    super(deps)
+  }
+
+  /** Return a contact's UTC offset in minutes, or null when unavailable. */
+  async getLocalTimeOffset(bareJid: string): Promise<number | null> {
+    if (!this.entityTime) return null
+    const result = await this.entityTime.queryTime(bareJid)
+    return result?.supported ? result.offsetMinutes : null
+  }
+
+  /** Refresh the last-active timestamp stored for an offline contact. */
+  async refreshLastActivity(bareJid: string): Promise<void> {
+    await this.lastActivity?.queryLastActivity(bareJid)
+  }
 
   /**
    * All presence that is not MUC's. Deliberately broad: MUC's narrower claims

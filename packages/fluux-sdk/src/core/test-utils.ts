@@ -773,6 +773,10 @@ export const createMockXMPPClientForHooks = () => ({
     sendLinkPreview: vi.fn(),
     queryMAM: vi.fn(),
     queryRoomMAM: vi.fn(),
+    refreshHistory: vi.fn(),
+    searchMessages: vi.fn(),
+    searchRoomMessages: vi.fn(),
+    searchConversationHistory: vi.fn(),
   },
   internal: {
     mam: {

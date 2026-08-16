@@ -6,7 +6,7 @@
  * replies with fallback (XEP-0461 + XEP-0428), and reactions (XEP-0444).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import { E2EEEncryptionRequiredError } from '../e2ee'
 import {
   createMockXmppClient,
@@ -53,7 +53,7 @@ describe('XMPPClient Message', () => {
     // tests address has to exist, exactly as a join would make it.
     mockStores.room.getRoom = vi.fn((jid: string) => (jid === 'room@conference.example.com' ? { jid: 'room@conference.example.com', nickname: 'me' } : undefined)) as typeof mockStores.room.getRoom
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 
@@ -145,7 +145,7 @@ describe('XMPPClient Message', () => {
     it('should emit message event for incoming messages', async () => {
       await connectClient()
       const messageHandler = vi.fn()
-      xmppClient.internal.on('message', messageHandler)
+      getInternalSurfaceForTesting(xmppClient).on('message', messageHandler)
 
       const messageStanza = createMockElement('message', {
         from: 'contact@example.com',
@@ -389,7 +389,7 @@ describe('XMPPClient Message', () => {
     it('should NOT emit message event for sent carbons', async () => {
       await connectClient()
       const messageHandler = vi.fn()
-      xmppClient.internal.on('message', messageHandler)
+      getInternalSurfaceForTesting(xmppClient).on('message', messageHandler)
 
       const carbonStanza = createMockElement('message', {
         from: 'user@example.com',
@@ -3998,7 +3998,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
         // MAM returns original poll confirming the creator
-        const fetchSpy = vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockResolvedValue({
+        const fetchSpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'fetchRoomMessageById').mockResolvedValue({
           id: pollMsgId,
           nick: 'Creator',
           occupantId: 'occ-1',
@@ -4042,7 +4042,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
         // MAM returns original poll with a different creator
-        vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockResolvedValue({
+        vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'fetchRoomMessageById').mockResolvedValue({
           id: pollMsgId,
           nick: 'RealCreator',
           occupantId: 'occ-real',
@@ -4075,7 +4075,7 @@ describe('XMPPClient Message', () => {
         mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
         mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
 
-        vi.spyOn(xmppClient.internal.mam, 'fetchRoomMessageById').mockRejectedValue(new Error('timeout'))
+        vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'fetchRoomMessageById').mockRejectedValue(new Error('timeout'))
 
         const stanza = buildPollClosedStanza('Creator', 'occ-1')
         mockXmppClientInstance._emit('stanza', stanza)
@@ -4220,7 +4220,7 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {

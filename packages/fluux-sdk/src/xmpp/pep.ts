@@ -6,6 +6,7 @@
 
 import type { XMPPClient } from '../core/XMPPClient'
 import type { PEPItem } from '../core/e2ee'
+import { queryPepNodeFromClient } from '../core/rawXmppAccess'
 
 /**
  * Read items from a PEP node by name (XEP-0060, XEP-0163).
@@ -46,5 +47,5 @@ export async function queryPepNode(
   node: string,
   maxItems?: number,
 ): Promise<PEPItem[]> {
-  return client.internal.pubsub.query(jid, node, maxItems)
+  return queryPepNodeFromClient(client, jid, node, maxItems)
 }

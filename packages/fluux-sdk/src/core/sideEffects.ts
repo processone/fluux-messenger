@@ -1,8 +1,8 @@
 /**
  * Side effects orchestrator.
  *
- * Wires up all store-based side effects (chat, room, background sync)
- * and re-exports individual setup functions for direct use.
+ * Wires up all store-based side effects (chat, room, background sync) for
+ * XMPPClient.
  *
  * @packageDocumentation
  * @module Core/SideEffects
@@ -33,16 +33,7 @@ export { setupMdsSideEffects } from './mdsSideEffects'
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up all subscriptions
  *
- * @example
- * ```typescript
- * import { setupStoreSideEffects } from '@fluux/sdk/core'
- *
- * const client = new XMPPClient()
- * const cleanup = setupStoreSideEffects(client)
- *
- * // Later, when client is destroyed:
- * cleanup()
- * ```
+ * @internal
  */
 export function setupStoreSideEffects(
   client: SideEffectHost,

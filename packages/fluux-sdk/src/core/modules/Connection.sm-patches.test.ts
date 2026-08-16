@@ -7,7 +7,7 @@
  *    after page reload (xmppjs/xmpp.js#1119)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -108,7 +108,7 @@ describe('SM ack debouncing (patchSmAckDebounce)', () => {
 
     mockClientFactory._setInstance(mockXmppClientInstance)
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores as any)
+    bindStoresForTesting(xmppClient, mockStores as any)
 
     // Connect to trigger createXmppClient which applies the patches
     await connectClient(xmppClient, mockXmppClientInstance)
@@ -223,7 +223,7 @@ describe('SM ackQueue desync fix (patchSmAckQueue)', () => {
 
     mockClientFactory._setInstance(mockXmppClientInstance)
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores as any)
+    bindStoresForTesting(xmppClient, mockStores as any)
 
     await connectClient(xmppClient, mockXmppClientInstance)
   })

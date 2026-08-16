@@ -1,7 +1,7 @@
 /**
  * Demo-mode XEP-0490 (MDS) simulation:
  * - DemoClient answers the MDS PEP-node IQs (publish / items / retract) from an
- *   in-memory node, so `client.internal.mds.*` round-trips work without a server.
+ *   in-memory node, so `getInternalSurfaceForTesting(client).mds.*` round-trips work without a server.
  * - simulateRemoteDisplayed() plays the "another device read up to X" +notify:
  *   it seeds the node AND emits `read:displayed-synced` like PubSub would.
  * - populateDemo defaults a stanza-id onto seeded messages (marker resolution
@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { DemoClient } from './DemoClient'
+import { getInternalSurfaceForTesting } from '../core/XMPPClient'
 import type { DemoData } from './types'
 import type { Room, RoomMessage } from '../core/types/room'
 import type { Message } from '../core/types/chat'
@@ -26,32 +27,32 @@ const ROOM_JID = 'team@conference.fluux.chat'
 describe('DemoClient MDS PEP node simulation', () => {
   it('publishDisplayed then fetchAllDisplayed round-trips the marker', async () => {
     const client = makeClient()
-    await client.internal.mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
+    await getInternalSurfaceForTesting(client).mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
 
-    const markers = await client.internal.mds.fetchAllDisplayed()
+    const markers = await getInternalSurfaceForTesting(client).mds.fetchAllDisplayed()
     expect(markers).toEqual([{ conversationJid: 'ava@fluux.chat', stanzaId: 'sid-42' }])
   })
 
   it('a re-publish for the same conversation overwrites the item (current-value node)', async () => {
     const client = makeClient()
-    await client.internal.mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
-    await client.internal.mds.publishDisplayed('ava@fluux.chat', 'sid-99', 'you@fluux.chat')
+    await getInternalSurfaceForTesting(client).mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
+    await getInternalSurfaceForTesting(client).mds.publishDisplayed('ava@fluux.chat', 'sid-99', 'you@fluux.chat')
 
-    const markers = await client.internal.mds.fetchAllDisplayed()
+    const markers = await getInternalSurfaceForTesting(client).mds.fetchAllDisplayed()
     expect(markers).toEqual([{ conversationJid: 'ava@fluux.chat', stanzaId: 'sid-99' }])
   })
 
   it('retractDisplayed removes the item', async () => {
     const client = makeClient()
-    await client.internal.mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
-    await client.internal.mds.retractDisplayed('ava@fluux.chat')
+    await getInternalSurfaceForTesting(client).mds.publishDisplayed('ava@fluux.chat', 'sid-42', 'you@fluux.chat')
+    await getInternalSurfaceForTesting(client).mds.retractDisplayed('ava@fluux.chat')
 
-    expect(await client.internal.mds.fetchAllDisplayed()).toEqual([])
+    expect(await getInternalSurfaceForTesting(client).mds.fetchAllDisplayed()).toEqual([])
   })
 
   it('fetchAllDisplayed returns [] when nothing was published', async () => {
     const client = makeClient()
-    expect(await client.internal.mds.fetchAllDisplayed()).toEqual([])
+    expect(await getInternalSurfaceForTesting(client).mds.fetchAllDisplayed()).toEqual([])
   })
 })
 
@@ -70,7 +71,7 @@ describe('DemoClient.simulateRemoteDisplayed', () => {
     const client = makeClient()
     client.simulateRemoteDisplayed('ava@fluux.chat', 'sid-7')
 
-    const markers = await client.internal.mds.fetchAllDisplayed()
+    const markers = await getInternalSurfaceForTesting(client).mds.fetchAllDisplayed()
     expect(markers).toEqual([{ conversationJid: 'ava@fluux.chat', stanzaId: 'sid-7' }])
   })
 })

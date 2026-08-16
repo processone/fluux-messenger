@@ -33,25 +33,12 @@ export type {
 // ============================================================================
 
 /**
- * The shape of the client's own signal bus.
- *
- * Connection lifecycle and raw stanzas, which the SDK's side effects listen
- * to. It is reached on `client.internal`, not on the client: a consumer
- * observes through `client.subscribe`, which carries the state the stores are
- * built from, or through `client.onStanza` for the raw feed. Two buses on the
- * public surface meant guessing which one to reach for, and the SDK's own
- * documentation guessed wrong.
+ * The shape of the client's private lifecycle and raw-stanza signal bus.
  *
  * Anything the SDK emits purely to talk to itself belongs in
  * {@link InternalClientEvents} instead, so the two are not mistaken for each
  * other.
- *
- * @example
- * ```typescript
- * client.internal.on('online', () => console.log('Connected!'))
- * ```
- *
- * @category Core
+ * @category Internal
  */
 export interface XMPPClientEvents {
   /** Raw XMPP stanza received */
@@ -104,8 +91,9 @@ export interface InternalClientEvents {
 }
 
 /**
- * Everything the client's legacy bus can carry. Modules emit against this;
- * only {@link XMPPClientEvents} is reachable through the public `on`.
+ * Everything the client's private legacy bus can carry. Modules emit against
+ * this while consumers observe domain events through `subscribe` or raw
+ * stanzas through `onStanza`.
  *
  * @internal
  */

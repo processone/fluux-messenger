@@ -40,31 +40,15 @@ export function useContactTime(bareJid: string | null): string | null {
       return
     }
 
-    // Check cache first — queryTime handles cache + resource change detection
-    const cached = client.internal.entityTime?.getCached(bareJid)
-    if (cached) {
-      if (cached.supported) {
-        setOffsetMinutes(cached.offsetMinutes)
-      } else {
-        // Negatively cached — don't show anything
-        setOffsetMinutes(null)
-        setTime(null)
-      }
-      queriedJidRef.current = bareJid
-      return
-    }
-
     // Reset display while querying (no stale data from previous contact)
     setOffsetMinutes(null)
     setTime(null)
     queriedJidRef.current = bareJid
 
-    client.internal.entityTime?.queryTime(bareJid).then((result) => {
+    client.contacts.getLocalTimeOffset(bareJid).then((offset) => {
       // Only update if we're still looking at the same contact
       if (queriedJidRef.current !== bareJid) return
-      if (result?.supported) {
-        setOffsetMinutes(result.offsetMinutes)
-      }
+      setOffsetMinutes(offset)
     })
   }, [bareJid, client])
 

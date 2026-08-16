@@ -11,9 +11,7 @@ import { fileURLToPath } from 'node:url'
  * Zustand into a package documented as store-agnostic.
  *
  * The layer is clean, and staying clean is the invariant. Two ways to break it:
- * importing a store directly, or importing a `core/` module that does (today
- * `clientConfig.ts`, which names the `SDKStores` bundle — that is exactly why
- * `XMPPClientConfig` lives there and not here).
+ * importing a store directly, or importing a `core/` module that does.
  *
  * If you need a type here that a store also needs, declare it here and let the
  * store import it. Do not add an entry to either list below.
@@ -21,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 const ALLOWED_TO_IMPORT_STORES: string[] = []
 
 /** `core/` modules that reach a store, so importing them re-creates the edge. */
-const CORE_MODULES_THAT_REACH_STORES = ['clientConfig']
+const CORE_MODULES_THAT_REACH_STORES: string[] = []
 
 const TYPES_DIR = dirname(fileURLToPath(import.meta.url))
 

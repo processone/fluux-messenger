@@ -6,7 +6,7 @@
  * - publishConversations() - store conversation list in PEP with private access
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -59,7 +59,7 @@ describe('ConversationSync', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {
@@ -112,7 +112,7 @@ describe('ConversationSync', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const result = await xmppClient.internal.conversationSync.fetchConversations()
+      const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
       expect(result).toEqual([
         { jid: 'alice@example.com', archived: false },
@@ -126,7 +126,7 @@ describe('ConversationSync', () => {
         new Error('item-not-found')
       )
 
-      const result = await xmppClient.internal.conversationSync.fetchConversations()
+      const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
       expect(result).toEqual([])
     })
@@ -148,7 +148,7 @@ describe('ConversationSync', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(emptyResponse)
 
-      const result = await xmppClient.internal.conversationSync.fetchConversations()
+      const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
       expect(result).toEqual([])
     })
@@ -186,7 +186,7 @@ describe('ConversationSync', () => {
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(response)
 
-      const result = await xmppClient.internal.conversationSync.fetchConversations()
+      const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
       expect(result).toEqual([
         { jid: 'alice@example.com', archived: false },
@@ -197,7 +197,7 @@ describe('ConversationSync', () => {
     it('should return empty array when not connected', async () => {
       await xmppClient.disconnect()
 
-      const result = await xmppClient.internal.conversationSync.fetchConversations()
+      const result = await getInternalSurfaceForTesting(xmppClient).conversationSync.fetchConversations()
 
       expect(result).toEqual([])
     })
@@ -220,7 +220,7 @@ describe('ConversationSync', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.internal.conversationSync.publishConversations([
+      await getInternalSurfaceForTesting(xmppClient).conversationSync.publishConversations([
         { jid: 'alice@example.com', archived: false },
         { jid: 'bob@example.com', archived: true },
       ])
@@ -259,7 +259,7 @@ describe('ConversationSync', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.internal.conversationSync.publishConversations([
+      await getInternalSurfaceForTesting(xmppClient).conversationSync.publishConversations([
         { jid: 'alice@example.com', archived: false },
         { jid: 'bob@example.com', archived: true },
       ])
@@ -284,7 +284,7 @@ describe('ConversationSync', () => {
         createMockElement('iq', { type: 'result' })
       )
 
-      await xmppClient.internal.conversationSync.publishConversations([])
+      await getInternalSurfaceForTesting(xmppClient).conversationSync.publishConversations([])
 
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
     })
@@ -293,7 +293,7 @@ describe('ConversationSync', () => {
       await xmppClient.disconnect()
 
       await expect(
-        xmppClient.internal.conversationSync.publishConversations([
+        getInternalSurfaceForTesting(xmppClient).conversationSync.publishConversations([
           { jid: 'alice@example.com', archived: false },
         ])
       ).rejects.toThrow('Not connected')

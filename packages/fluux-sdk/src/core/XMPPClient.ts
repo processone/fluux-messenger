@@ -29,7 +29,16 @@ import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { ensureCryptoRandomUUID } from './polyfill'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
-import { defaultStores, type SDKStores } from '../stores/sdkStores'
+import type { SideEffectHost } from './sideEffectHost'
+import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
+import { rosterStore } from '../stores/rosterStore'
+import { roomStore } from '../stores/roomStore'
+import { eventsStore } from '../stores/eventsStore'
+import { adminStore } from '../stores/adminStore'
+import { blockingStore } from '../stores/blockingStore'
+import { consoleStore } from '../stores/consoleStore'
+import { ignoreStore } from '../stores/ignoreStore'
 import { detectPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
 import { RequestTimeoutError } from './errors'
@@ -109,13 +118,14 @@ import { createDefaultStoreBindings } from './defaultStoreBindings'
 import { createPresenceReader, type PresenceReader } from './presenceReader'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
+import { queryPepNodeSymbol } from './rawXmppAccess'
 
 /**
  * The protocol modules the SDK drives on the consumer's behalf.
  *
  * @internal
  */
-export interface InternalSurface {
+interface InternalSurface {
   /**
    * The client's own signal bus: connection lifecycle and raw stanzas, which
    * the SDK's side effects listen to. A consumer uses `subscribe` instead —
@@ -129,6 +139,23 @@ export interface InternalSurface {
   entityTime: EntityTime
   lastActivity: LastActivity
   pubsub: PubSub
+}
+
+const internalSurfaces = new WeakMap<XMPPClient, InternalSurface>()
+const storeBinders = new WeakMap<XMPPClient, (stores: StoreBindings) => void>()
+
+/** Direct-source test seam; package entry points do not export it. */
+export function getInternalSurfaceForTesting(client: XMPPClient): InternalSurface {
+  const internal = internalSurfaces.get(client)
+  if (!internal) throw new Error('XMPPClient modules are not initialized')
+  return internal
+}
+
+/** Direct-source test seam; package entry points do not export it. */
+export function bindStoresForTesting(client: XMPPClient, stores: StoreBindings): void {
+  const bind = storeBinders.get(client)
+  if (!bind) throw new Error('XMPPClient test seam is not initialized')
+  bind(stores)
 }
 
 /**
@@ -213,14 +240,6 @@ export class XMPPClient {
   private privacyOptions?: PrivacyOptions
   private stateSnapshot?: StateSnapshot
   /**
-   * The store bundle backing this client (default bindings, event→store
-   * wiring, account switching). Defaults to the process-wide singletons; an
-   * injected bundle is the store-injection seam (see `stores/sdkStores.ts`).
-   * @internal
-   */
-  private readonly sdkStores: SDKStores
-
-  /**
    * Connection management module.
    * Handles connecting, disconnecting, reconnection, and Stream Management (XEP-0198).
    */
@@ -296,23 +315,7 @@ export class XMPPClient {
 
 
 
-  /**
-   * Modules the SDK drives itself.
-   *
-   * These speak XMPP the way the protocol names it — MAM, MDS, XEP-0202
-   * entity time — because that is what they implement. They are here rather
-   * than on the client because a consumer never calls them: history catch-up,
-   * read-marker publication and conversation-list sync are driven by the SDK's
-   * own side effects, and what a consumer needs from them is already offered
-   * as a domain verb elsewhere (`useContactTime`, `useLastActivity`,
-   * `muc.resync`).
-   *
-   * NOT a compatibility surface. Reaching in means the domain API is missing
-   * something; say so rather than building on this.
-   *
-   * @internal
-   */
-  public internal!: InternalSurface
+  #internal!: InternalSurface
 
   /**
    * Web Push module (p1:push).
@@ -349,7 +352,7 @@ export class XMPPClient {
    * Narrow read surface over the presence machine, injected into every module
    * via `moduleDeps.presence`. Built once in the constructor from the presence
    * getters (machine snapshot + any custom `presenceOptions`), so it survives
-   * re-init via {@link bindStores}.
+   * test-only module re-initialization.
    * @internal
    */
   private presenceReader!: PresenceReader
@@ -471,9 +474,14 @@ export class XMPPClient {
     // This is async but we fire-and-forget; the result is cached for later use
     void detectPlatform()
 
-    // Resolve the store bundle (injected or the process-wide singletons). Set
-    // before initializeModules / setupBindings, which both read it.
-    this.sdkStores = config.stores ?? defaultStores
+    Object.defineProperty(this, queryPepNodeSymbol, {
+      configurable: false,
+      enumerable: false,
+      value: (jid: string, node: string, maxItems?: number) =>
+        this.#internal.pubsub.query(jid, node, maxItems),
+    })
+
+    storeBinders.set(this, (stores) => this.initializeModules(stores))
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
@@ -542,7 +550,7 @@ export class XMPPClient {
     this.presenceReader = createPresenceReader(presenceOptions)
 
     // Initialize with default store bindings (using global Zustand stores)
-    this.initializeModules(createDefaultStoreBindings(this.sdkStores))
+    this.initializeModules(createDefaultStoreBindings())
 
     // Set up all bindings (presence sync, store bindings, side effects).
     // Extracted to a method so XMPPProvider can call setupBindings/destroy
@@ -579,20 +587,20 @@ export class XMPPClient {
     // Set up SDK event -> Zustand store bindings
     // This wires SDK events (e.g., 'chat:message') to store updates (e.g., chatStore.addMessage)
     const unsubscribeStoreBindings = createStoreBindings(this, () => ({
-      connection: this.sdkStores.connection.getState(),
-      chat: this.sdkStores.chat.getState(),
-      roster: this.sdkStores.roster.getState(),
-      room: this.sdkStores.room.getState(),
-      events: this.sdkStores.events.getState(),
-      admin: this.sdkStores.admin.getState(),
-      blocking: this.sdkStores.blocking.getState(),
-      console: this.sdkStores.console.getState(),
-      ignore: this.sdkStores.ignore.getState(),
+      connection: connectionStore.getState(),
+      chat: chatStore.getState(),
+      roster: rosterStore.getState(),
+      room: roomStore.getState(),
+      events: eventsStore.getState(),
+      admin: adminStore.getState(),
+      blocking: blockingStore.getState(),
+      console: consoleStore.getState(),
+      ignore: ignoreStore.getState(),
     }))
     this.cleanupFunctions.push(unsubscribeStoreBindings)
 
     // Set up store-based side effects (activeConversation -> load cache, MAM fetch)
-    const unsubscribeSideEffects = setupStoreSideEffects(this)
+    const unsubscribeSideEffects = setupStoreSideEffects(this.createSideEffectHost())
     this.cleanupFunctions.push(unsubscribeSideEffects)
 
     // (Re)start the snapshot subscriber. Kept here rather than in
@@ -621,30 +629,31 @@ export class XMPPClient {
     this.stateSnapshot.start()
   }
 
-  /**
-   * Bind custom stores for state management.
-   *
-   * XMPPClient initializes with default Zustand stores automatically.
-   * This method is primarily for testing with mock stores.
-   *
-   * @param stores - Store bindings for state management
-   * @internal
-   */
-  bindStores(stores: StoreBindings): void {
-    // Re-initialize modules with the provided stores
-    // This overwrites the default initialization from the constructor
-    this.initializeModules(stores)
+  private createSideEffectHost(): SideEffectHost {
+    const getE2EE = () => this.e2ee
+    const getRooms = () => this.rooms
+    const getServer = () => this.server
+    const getInternal = () => this.#internal
+    return {
+      subscribe: this.subscribe.bind(this) as SideEffectHost['subscribe'],
+      isConnected: () => this.isConnected(),
+      retryPendingDecrypts: () => this.retryPendingDecrypts(),
+      get e2ee() { return getE2EE() },
+      get rooms() { return getRooms() },
+      get server() { return getServer() },
+      get internal() { return getInternal() },
+    }
   }
 
   /**
    * Initialize all modules with the provided store bindings.
-   * This is called from the constructor with default bindings,
-   * or from bindStores() for backwards compatibility.
+   * This is called from the constructor with default bindings and by the
+   * direct-source test seam when a focused module test needs mocks.
    *
    * @internal
    */
   private initializeModules(stores: StoreBindings): void {
-    // Prevent double initialization unless explicitly overwriting via bindStores
+    // Prevent double initialization unless a focused test replaces the ports.
     if (this.modulesInitialized && this.stores === stores) {
       return
     }
@@ -694,7 +703,9 @@ export class XMPPClient {
     const mam = new MAM(moduleDeps)
     this.messages = new Chat(moduleDeps, mam)
     this.poll = new Poll(moduleDeps, this.messages)
-    this.contacts = new Roster(moduleDeps)
+    const entityTime = new EntityTime(moduleDeps)
+    const lastActivity = new LastActivity(moduleDeps)
+    this.contacts = new Roster(moduleDeps, entityTime, lastActivity)
     this.rooms = new MUC(moduleDeps, mam)
     this.admin = new Admin(moduleDeps)
     this.profile = new Profile(moduleDeps)
@@ -704,12 +715,11 @@ export class XMPPClient {
     const conversationSync = new ConversationSync(moduleDeps)
     const mds = new Mds(moduleDeps)
     this.push = new WebPush(moduleDeps)
-    const entityTime = new EntityTime(moduleDeps)
-    const lastActivity = new LastActivity(moduleDeps)
-    this.internal = {
+    this.#internal = {
       on: (event, handler) => this.subscribeToBus(event, handler as ClientEvents[typeof event]),
       mam, mds, conversationSync, entityTime, lastActivity, pubsub,
     }
+    internalSurfaces.set(this, this.#internal)
 
     // Post-connection orchestration. Drives the domain modules just built; the
     // churny bits (stores, JID, transport) are read through getters so a
@@ -721,7 +731,7 @@ export class XMPPClient {
       muc: this.rooms,
       profile: this.profile,
       webPush: this.push,
-      conversationSync: this.internal.conversationSync,
+      conversationSync: this.#internal.conversationSync,
       getStores: () => this.stores,
       getCurrentJid: () => this.currentJid,
       getXmpp: () => this.getXmpp(),
@@ -759,8 +769,8 @@ export class XMPPClient {
       // not from the position of a module in this list. See core/stanzaRouting.
       routeStanza(
         stanza,
-        [this.internal.pubsub, this.blocking, this.poll, this.messages, this.rooms, this.contacts],
-        [this.internal.lastActivity],
+        [this.#internal.pubsub, this.blocking, this.poll, this.messages, this.rooms, this.contacts],
+        [this.#internal.lastActivity],
       )
     })
 
@@ -778,7 +788,7 @@ export class XMPPClient {
         // For non-MAM rooms, history is requested via <history maxstanzas="50"/> on join
         // Skip on SM resumption — server already replayed all undelivered stanzas
         if (room?.supportsMAM && !room.isQuickChat && !this.sessionLifecycle.isSmResumed()) {
-          this.internal.mam.fetchPreviewForRoom(roomJid).catch(() => {})
+          this.#internal.mam.fetchPreviewForRoom(roomJid).catch(() => {})
         }
       })
 
@@ -1043,9 +1053,9 @@ export class XMPPClient {
     const previousScope = getStorageScopeJid()
     if (previousScope !== scopedJid) {
       setStorageScopeJid(scopedJid)
-      this.sdkStores.chat.getState().switchAccount(scopedJid)
-      this.sdkStores.room.getState().switchAccount(scopedJid)
-      this.sdkStores.ignore.getState().rehydrate()
+      chatStore.getState().switchAccount(scopedJid)
+      roomStore.getState().switchAccount(scopedJid)
+      ignoreStore.getState().rehydrate()
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)
@@ -1098,8 +1108,8 @@ export class XMPPClient {
     this.currentJid = null
     // Clear session-scoped tracking data
     this.xep0084AvatarChecked.clear()
-    this.internal?.entityTime?.clearCache()
-    this.internal?.lastActivity?.clearCache()
+    this.#internal.entityTime.clearCache()
+    this.#internal.lastActivity.clearCache()
     return this.connection.disconnect(options)
   }
 
@@ -1785,19 +1795,19 @@ export class XMPPClient {
         return this.server.queryInfo(jid)
       },
       publishPEP: async (node, item, options) => {
-        await this.internal.pubsub.publish(node, item, options)
+        await this.#internal.pubsub.publish(node, item, options)
       },
       retractPEP: async (node, itemId) => {
-        await this.internal.pubsub.retract(node, itemId)
+        await this.#internal.pubsub.retract(node, itemId)
       },
       deletePEP: async (node) => {
-        await this.internal.pubsub.deleteNode(node)
+        await this.#internal.pubsub.deleteNode(node)
       },
       queryPEP: async (jid, node, maxItems) => {
-        return this.internal.pubsub.query(jid, node, maxItems)
+        return this.#internal.pubsub.query(jid, node, maxItems)
       },
       subscribePEP: (jid, node, cb) => {
-        return this.internal.pubsub.subscribe(jid, node, cb)
+        return this.#internal.pubsub.subscribe(jid, node, cb)
       },
     }
   }

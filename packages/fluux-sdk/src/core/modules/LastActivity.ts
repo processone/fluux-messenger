@@ -25,13 +25,7 @@ export type LastActivityCacheEntry =
  * - Inflight dedup: prevents duplicate queries for the same contact
  * - Auto-invalidation: clears cache when a contact comes back online
  *
- * @example
- * ```typescript
- * const result = await client.internal.lastActivity.queryLastActivity('alice@example.com')
- * if (result?.supported) {
- *   console.log(`Alice was last active ${result.seconds} seconds ago`)
- * }
- * ```
+ * Consumers refresh this through `client.contacts.refreshLastActivity()`.
  */
 export class LastActivity extends BaseModule {
   private cache = new Map<string, LastActivityCacheEntry>()

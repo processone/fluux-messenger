@@ -60,6 +60,9 @@ import type {
   RoomMessage,
   RoomHistoryQueryOptions,
   RoomHistoryResult,
+  HistorySearchOptions,
+  RoomHistorySearchOptions,
+  HistoryPagingSearchOptions,
   PollClosedData,
 } from '../types'
 import { getCorrectionStanzaIds } from '../types/message-internal'
@@ -1651,6 +1654,33 @@ export class Chat extends BaseModule {
    */
   async queryRoomMAM(options: RoomHistoryQueryOptions): Promise<RoomHistoryResult> {
     return this.mamModule.queryRoomArchive(options)
+  }
+
+  /** Reconcile a conversation's cached history with the server archive. */
+  async refreshHistory(
+    conversationId: string,
+    options: { stitchReadPointer?: boolean } = {},
+  ): Promise<void> {
+    const cachedMessages = this.deps.stores?.chat.getConversationMessages(conversationId) ?? []
+    await this.mamModule.catchUpConversationHistory(conversationId, cachedMessages, options)
+  }
+
+  /** Search messages using the server's archive search capability. */
+  async searchMessages(options: HistorySearchOptions): Promise<HistoryResult> {
+    return this.mamModule.searchArchive(options)
+  }
+
+  /** Search messages in one room using the server's archive search capability. */
+  async searchRoomMessages(options: RoomHistorySearchOptions): Promise<RoomHistoryResult> {
+    return this.mamModule.searchRoomArchive(options)
+  }
+
+  /** Search one conversation locally while paging through archived history. */
+  async searchConversationHistory(
+    options: HistoryPagingSearchOptions,
+    signal?: AbortSignal,
+  ): Promise<HistoryResult> {
+    return this.mamModule.searchConversationByPaging(options, signal)
   }
 
   // --- Internal Message Processing (Migrated from MessageHandler) ---

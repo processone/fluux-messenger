@@ -1,16 +1,13 @@
 /**
  * {@link XMPPClient} construction options.
  *
- * This is wiring, not vocabulary: alongside the adapter contracts it carries a
- * live {@link SDKStores} bundle, which is a handle on a concrete state
- * implementation. That is why it lives here next to the client rather than in
- * `core/types`, which stays a leaf layer no store can be reached from.
+ * This is wiring rather than domain vocabulary, so it lives beside the client
+ * instead of in the leaf `core/types` layer.
  *
  * @packageDocumentation
  * @module Core
  */
 
-import type { SDKStores } from '../stores/sdkStores'
 import type { StorageAdapter } from './types/storage'
 import type { ProxyAdapter } from './types/proxy'
 import type { PresenceOptions, PrivacyOptions } from './types/client'
@@ -24,22 +21,6 @@ import type { FastTokenStorageAdapter } from './fastTokenStorage'
 export interface XMPPClientConfig {
   /** Enable debug logging */
   debug?: boolean
-  /**
-   * Store bundle backing this client. Defaults to the process-wide singletons
-   * ({@link defaultStores}).
-   *
-   * @internal Partial seam — NOT a supported multi-account switch yet, and not
-   * part of the public API. A custom {@link SDKStores} bundle is honored by
-   * `connect()` account-switch and the SDK event → store bindings, but the
-   * store-based side effects (MAM catch-up, read-marker / MDS sync, background
-   * sync), the SM-resumable state snapshot, and the Poll module still read and
-   * write the process-global singletons regardless of what is passed here.
-   * Two clients with different bundles therefore cross-contaminate on that
-   * state — do not use this to run multiple accounts. Full isolation also needs
-   * a `createStores()` factory and a per-instance storage scope; see the
-   * checklist in `stores/sdkStores.ts`. Single-account apps must omit this.
-   */
-  stores?: SDKStores
   /**
    * Options for integrating an external presence state machine.
    * Only needed when using XState for presence management (e.g., in React apps).

@@ -5,7 +5,7 @@
  * (type='chat' from a joined room occupant) to the room:whisper event.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -42,7 +42,7 @@ describe('MUC Whispers', () => {
     vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 

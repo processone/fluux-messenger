@@ -119,7 +119,7 @@ export class DemoClient extends XMPPClient {
   // Rooms the simulated MUC service protects with a password (XEP-0045 §7.2.6).
   private roomPasswords = new Map<string, string>()
   // Simulated XEP-0490 MDS PEP node: conversation bare JID → last-displayed
-  // marker. Backs the pubsub publish/items/retract IQs so client.internal.mds.* and the
+  // marker. Backs the pubsub publish/items/retract IQs so MDS sync and the
   // fresh-session seed (fetchAllDisplayed) work in demo mode.
   private mdsNodeItems = new Map<string, { stanzaId: string; by: string }>()
 

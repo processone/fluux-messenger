@@ -12,7 +12,7 @@
  * conditions.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import { RECONNECT_ATTEMPT_TIMEOUT_MS, WAKE_VERIFY_TIMEOUT_MS } from './connectionTimeouts'
 import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
 import {
@@ -115,7 +115,7 @@ describe('Connection race conditions', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {

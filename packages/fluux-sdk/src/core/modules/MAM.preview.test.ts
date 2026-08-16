@@ -5,7 +5,7 @@
  * for each conversation to update sidebar previews after being offline.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -81,7 +81,7 @@ describe('MAM Preview Refresh', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 
@@ -97,7 +97,7 @@ describe('MAM Preview Refresh', () => {
       // Mock empty conversations
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([])
 
-      await xmppClient.internal.mam.refreshConversationPreviews()
+      await getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews()
 
       // Should not have logged anything about refreshing (early return)
       expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
@@ -132,7 +132,7 @@ describe('MAM Preview Refresh', () => {
       })
 
       // Start the refresh and advance timers
-      const refreshPromise = xmppClient.internal.mam.refreshConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -215,7 +215,7 @@ describe('MAM Preview Refresh', () => {
       })
 
       // Start the refresh and advance timers
-      const refreshPromise = xmppClient.internal.mam.refreshConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -252,7 +252,7 @@ describe('MAM Preview Refresh', () => {
       })
 
       // Start the refresh and advance timers - should not throw
-      const refreshPromise = xmppClient.internal.mam.refreshConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews()
       await waitForAsyncOps(30, 100)
       await expect(refreshPromise).resolves.not.toThrow()
 
@@ -274,7 +274,7 @@ describe('MAM Preview Refresh', () => {
       )
 
       // Start the refresh
-      const refreshPromise = xmppClient.internal.mam.refreshConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -315,7 +315,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshConversationPreviews({ concurrency: 3 })
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshConversationPreviews({ concurrency: 3 })
 
       // Process all async operations with lots of timer advances
       await waitForAsyncOps(100, 100)
@@ -334,7 +334,7 @@ describe('MAM Preview Refresh', () => {
       // Mock empty rooms
       vi.mocked(mockStores.room.joinedRooms).mockReturnValue([])
 
-      await xmppClient.internal.mam.refreshRoomPreviews()
+      await getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
 
       // Should not have logged anything about refreshing (early return)
       expect(emitSDKSpy).not.toHaveBeenCalledWith(
@@ -365,7 +365,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -389,7 +389,7 @@ describe('MAM Preview Refresh', () => {
         ])
       )
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -416,7 +416,7 @@ describe('MAM Preview Refresh', () => {
         { jid: 'non-mam-room@conference.example.com', name: 'Non-MAM Room', supportsMAM: false, isQuickChat: false, joined: true, nickname: 'me', lastMessage: existingMessage },
       ] as any)
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -444,7 +444,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -473,7 +473,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -562,7 +562,7 @@ describe('MAM Preview Refresh', () => {
       })
 
       // Start the refresh and advance timers
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -600,7 +600,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -639,7 +639,7 @@ describe('MAM Preview Refresh', () => {
       })
 
       // Start the refresh and advance timers - should not throw
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(30, 100)
       await expect(refreshPromise).resolves.not.toThrow()
 
@@ -666,7 +666,7 @@ describe('MAM Preview Refresh', () => {
       )
 
       // Start the refresh
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -716,7 +716,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshRoomPreviews({ concurrency: 3 })
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshRoomPreviews({ concurrency: 3 })
 
       // Process all async operations with lots of timer advances
       await waitForAsyncOps(100, 100)
@@ -755,7 +755,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      await xmppClient.internal.mam.fetchPreviewForRoom('room1@conference.example.com')
+      await getInternalSurfaceForTesting(xmppClient).mam.fetchPreviewForRoom('room1@conference.example.com')
 
       // Should have tried the cache
       expect(mockStores.room.loadPreviewFromCache).toHaveBeenCalledWith('room1@conference.example.com')
@@ -784,7 +784,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      await xmppClient.internal.mam.fetchPreviewForRoom('room1@conference.example.com')
+      await getInternalSurfaceForTesting(xmppClient).mam.fetchPreviewForRoom('room1@conference.example.com')
 
       // Should have tried the cache first
       expect(mockStores.room.loadPreviewFromCache).toHaveBeenCalledWith('room1@conference.example.com')
@@ -799,7 +799,7 @@ describe('MAM Preview Refresh', () => {
 
       vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([])
 
-      await xmppClient.internal.mam.refreshArchivedConversationPreviews()
+      await getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
 
       // No MAM queries should have been sent
       expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
@@ -831,7 +831,7 @@ describe('MAM Preview Refresh', () => {
         ])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshArchivedConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -910,7 +910,7 @@ describe('MAM Preview Refresh', () => {
         return createMockElement('iq', { type: 'result' }, [])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshArchivedConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -937,7 +937,7 @@ describe('MAM Preview Refresh', () => {
         ])
       )
 
-      const refreshPromise = xmppClient.internal.mam.refreshArchivedConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 
@@ -1017,7 +1017,7 @@ describe('MAM Preview Refresh', () => {
         return createMockElement('iq', { type: 'result' }, [])
       })
 
-      const refreshPromise = xmppClient.internal.mam.refreshArchivedConversationPreviews()
+      const refreshPromise = getInternalSurfaceForTesting(xmppClient).mam.refreshArchivedConversationPreviews()
       await waitForAsyncOps(20, 100)
       await refreshPromise
 

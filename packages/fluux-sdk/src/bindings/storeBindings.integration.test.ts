@@ -8,7 +8,7 @@
  * 4. Verify that when modules emit SDK events, bindings fire and call store methods
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../core/XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../core/XMPPClient'
 import { createStoreBindings, StoreRefs } from './storeBindings'
 import {
   createMockStores,
@@ -68,7 +68,7 @@ describe('SDK Event Bindings Integration', () => {
     mockStores = createMockStores()
 
     // Bind stores to client (creates modules with emitSDK capability)
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
 
     // Create StoreRefs for createStoreBindings (simulating XMPPProvider setup)
     storeRefs = {

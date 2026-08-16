@@ -5,7 +5,7 @@
  * subscription requests, presence preservation on reconnect, and MUC presence.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -53,7 +53,7 @@ describe('XMPPClient Presence', () => {
     // Presence is injected as a dependency now (not a store binding); the
     // client wraps these getters, so tests drive presence via mockPresence.
     xmppClient = new XMPPClient({ debug: false, presenceOptions: mockPresence })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 
@@ -223,7 +223,7 @@ describe('XMPPClient Presence', () => {
     it('should emit presence event with aggregated presence', async () => {
       await connectClient()
       const presenceHandler = vi.fn()
-      xmppClient.internal.on('presence', presenceHandler)
+      getInternalSurfaceForTesting(xmppClient).on('presence', presenceHandler)
 
       const presenceStanza = createMockElement('presence', {
         from: 'contact@example.com/resource',

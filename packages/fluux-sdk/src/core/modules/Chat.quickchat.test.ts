@@ -4,7 +4,7 @@
  * Tests for creating and configuring transient MUC rooms (Quick Chat feature).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -122,7 +122,7 @@ describe('XMPPClient Quick Chat', () => {
     ;(mockStores.admin as any).getMucServiceJid = vi.fn().mockReturnValue('conference.example.com')
 
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
 
     // Connect the client

@@ -3,8 +3,28 @@ import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import * as main from './index'
 import * as core from './core/index'
+import * as stores from './stores/index'
 import * as xmpp from './xmpp/index'
 import { XMPPClient } from './core/XMPPClient'
+import type { XMPPClientConfig } from './core/clientConfig'
+
+/**
+ * Compile-time guard for the consumer-facing client boundary. An unused
+ * `@ts-expect-error` fails typechecking when an implementation detail becomes
+ * reachable again.
+ */
+function _consumerCannotReachInternalWiring(client: XMPPClient): void {
+  // @ts-expect-error SDK-driven protocol modules are not consumer API.
+  void client.internal
+  // @ts-expect-error Store rebinding is a test concern, not consumer API.
+  void client.bindStores
+
+  const config: XMPPClientConfig = {
+    // @ts-expect-error Store bundles do not provide safe client isolation.
+    stores: {},
+  }
+  void config
+}
 
 /**
  * The curated entries do not speak XMPP, and the escape hatch does.
@@ -71,32 +91,27 @@ describe('public API surface', () => {
     expect(Object.keys(main)).toContain('formatXMPPError')
   })
 
-  it('keeps the modules the SDK drives itself off the client', () => {
-    // A consumer names conversations and rooms, not MAM or MDS. These are
-    // grouped under `internal` so the protocol vocabulary stays where it
-    // belongs — inside — while the client reads as domain API.
+  it('keeps the modules the SDK drives itself private', () => {
     const client = new XMPPClient()
     try {
       for (const name of ['mam', 'mds', 'conversationSync', 'entityTime', 'lastActivity', 'pubsub']) {
         expect(name in client).toBe(false)
       }
-      expect(typeof client.internal.mam).toBe('object')
+      expect('internal' in client).toBe(false)
+      expect('bindStores' in client).toBe(false)
     } finally {
       client.destroy()
     }
   })
 
   it('offers one event bus to a consumer, not two', () => {
-    // `subscribe` carries the state the stores are built from. The client's own
-    // signal bus is what the SDK's side effects listen to, and it moved to the
-    // internal surface so nobody has to guess which of the two to reach for.
-    // `onStanza` stays: it is the named door to the raw feed.
+    // `subscribe` carries domain events and `onStanza` is the named door to the
+    // raw feed. The SDK's lifecycle bus remains private implementation wiring.
     const client = new XMPPClient()
     try {
       expect('on' in client).toBe(false)
       expect(typeof client.subscribe).toBe('function')
       expect(typeof client.onStanza).toBe('function')
-      expect(typeof client.internal.on).toBe('function')
     } finally {
       client.destroy()
     }
@@ -106,6 +121,10 @@ describe('public API surface', () => {
     // Reading a node the SDK does not model means naming the node and walking
     // its payload: protocol work, and `@fluux/sdk/xmpp` is where that lives.
     expect(Object.keys(xmpp)).toContain('queryPepNode')
+  })
+
+  it('does not advertise an incomplete multi-client store bundle', () => {
+    expect(Object.keys(stores)).not.toContain('defaultStores')
   })
 
   it('names its modules after the domain, not after the XEPs they implement', () => {

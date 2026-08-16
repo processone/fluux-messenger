@@ -6,7 +6,7 @@
  * - listHatAssignments / assignHat / unassignHat (hat attribution)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import { HatCommandError } from '../errors'
 import {
   createMockXmppClient,
@@ -120,7 +120,7 @@ describe('MUC Hat Management (XEP-0317)', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
   })
 
   afterEach(() => {

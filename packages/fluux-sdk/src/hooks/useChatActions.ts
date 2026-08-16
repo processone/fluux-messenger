@@ -149,10 +149,9 @@ export function useChatActions() {
       chatStore.getState().setMAMLoading(targetId, true)
 
       try {
-        let cachedMessages = chatStore.getState().messages.get(targetId)
+        const cachedMessages = chatStore.getState().messages.get(targetId)
         if (!cachedMessages || cachedMessages.length === 0) {
           await chatStore.getState().loadMessagesFromCache(targetId, { limit: 100 })
-          cachedMessages = chatStore.getState().messages.get(targetId)
         }
 
         // Latest-first orchestrator (same as chatSideEffects' active-conversation
@@ -162,7 +161,7 @@ export function useChatActions() {
         // the user isn't looking at) SHOULD stitch, so its unread region becomes
         // contiguous with the read pointer instead of leaving a gap.
         const isActive = targetId === chatStore.getState().activeConversationId
-        await client.internal.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {
+        await client.messages.refreshHistory(conversation.id, {
           stitchReadPointer: !isActive,
         })
       } catch (error) {

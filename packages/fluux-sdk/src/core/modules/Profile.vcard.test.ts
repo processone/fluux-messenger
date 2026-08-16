@@ -9,7 +9,7 @@
  * - Publish preserves PHOTO and other unmanaged fields
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, bindStoresForTesting } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
@@ -59,7 +59,7 @@ describe('XMPPClient fetchVCard', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
 
     // Connect the client
     const connectPromise = xmppClient.connect({
@@ -220,7 +220,7 @@ describe('XMPPClient fetchOwnVCard', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
 
     const connectPromise = xmppClient.connect({
@@ -293,7 +293,7 @@ describe('XMPPClient publishOwnVCard', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
 
     const connectPromise = xmppClient.connect({

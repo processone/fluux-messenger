@@ -2,14 +2,21 @@
  * Default store bindings using global Zustand stores.
  *
  * This module provides the default StoreBindings implementation using
- * the SDK's global Zustand stores. This is used by XMPPClient when
- * no custom stores are provided.
+ * the SDK's global Zustand stores. XMPPClient uses it for its single supported
+ * store topology.
  *
  * @packageDocumentation
  * @module Core
  */
 
-import { defaultStores, type SDKStores } from '../stores/sdkStores'
+import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
+import { rosterStore } from '../stores/rosterStore'
+import { consoleStore } from '../stores/consoleStore'
+import { eventsStore } from '../stores/eventsStore'
+import { roomStore } from '../stores/roomStore'
+import { adminStore } from '../stores/adminStore'
+import { blockingStore } from '../stores/blockingStore'
 import type { StoreBindings } from './types/client'
 import type { Message } from './types/chat'
 import {
@@ -49,9 +56,6 @@ function bindStoreMethods<S, K extends keyof S>(
  * dependency (see `presenceReader.ts`), since presence is machine state, not
  * connection-store state.
  *
- * @param stores - The store bundle to bind. Defaults to the process-wide
- *   {@link defaultStores} singletons; an injected bundle is the store-injection
- *   seam (see `sdkStores.ts`).
  * @returns StoreBindings object for XMPPClient
  *
  * @example
@@ -60,17 +64,7 @@ function bindStoreMethods<S, K extends keyof S>(
  * // Uses createDefaultStoreBindings() internally
  * ```
  */
-export function createDefaultStoreBindings(stores: SDKStores = defaultStores): StoreBindings {
-  const {
-    connection: connectionStore,
-    chat: chatStore,
-    roster: rosterStore,
-    console: consoleStore,
-    events: eventsStore,
-    room: roomStore,
-    admin: adminStore,
-    blocking: blockingStore,
-  } = stores
+export function createDefaultStoreBindings(): StoreBindings {
   return {
     connection: {
       ...bindStoreMethods(connectionStore, connectionBindingMethodKeys),

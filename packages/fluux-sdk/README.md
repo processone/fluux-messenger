@@ -138,8 +138,8 @@ import { getBareJid, generateConsistentColorHex } from '@fluux/sdk'
 ### Headless Usage (Bots, CLI, Non-React)
 
 ```typescript
-import { XMPPClient, createDefaultStoreBindings } from '@fluux/sdk/core'
-import { useConnectionStore, useChatStore } from '@fluux/sdk/stores'
+import { XMPPClient } from '@fluux/sdk/core'
+import { connectionStore, chatStore } from '@fluux/sdk/stores'
 
 // Create client and connect
 const client = new XMPPClient()
@@ -150,11 +150,11 @@ await client.connect({
 })
 
 // Use client API
-client.chat.sendMessage('user@example.com', 'Hello from bot!')
+await client.messages.sendMessage('user@example.com', 'Hello from bot!')
 
 // Or access stores directly
-const status = useConnectionStore.getState().status
-const conversations = useChatStore.getState().conversations
+const status = connectionStore.getState().status
+const conversations = chatStore.getState().conversations
 ```
 
 FAST authentication tokens persist in `localStorage` in browsers and in
@@ -531,18 +531,18 @@ For advanced use cases, you can access Zustand stores directly:
 
 ```typescript
 import {
-  useConnectionStore,
-  useChatStore,
-  useRosterStore,
-  useConsoleStore,
-} from '@fluux/sdk'
+  connectionStore,
+  chatStore,
+  rosterStore,
+  consoleStore,
+} from '@fluux/sdk/stores'
 
 // Access store state directly
-const status = useConnectionStore((state) => state.status)
-const messages = useChatStore((state) => state.messages)
+const status = connectionStore.getState().status
+const messages = chatStore.getState().messages
 
 // Access store actions
-const { setStatus } = useConnectionStore.getState()
+const { setStatus } = connectionStore.getState()
 ```
 
 ## Internals
@@ -551,7 +551,7 @@ The SDK uses an event-based store binding pattern:
 
 1. **XMPPClient** (`src/core/`) - Handles all XMPP protocol logic, emits events
 2. **Zustand Stores** (`src/stores/`) - Hold application state (connection, chat, roster, etc.)
-3. **XMPPProvider** (`src/provider/`) - Creates client instance and binds stores via `StoreBindings` interface
+3. **XMPPProvider** (`src/provider/`) - Creates the client and owns its React lifecycle
 4. **React Hooks** (`src/hooks/`) - Expose store state and client methods to components
 
 The SDK can be used without React by accessing stores directly.

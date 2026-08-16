@@ -6,7 +6,7 @@
  * - Proper two-step process: fetch metadata first to get hash, then fetch data
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { XMPPClient } from '../XMPPClient'
+import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import type { Room, RoomOccupant } from '../types/room'
 import {
   createMockXmppClient,
@@ -92,7 +92,7 @@ describe('XMPPClient Own Avatar', () => {
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
-    xmppClient.bindStores(mockStores)
+    bindStoresForTesting(xmppClient, mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
 
@@ -681,7 +681,7 @@ describe('XMPPClient Own Avatar', () => {
       // `avatarMetadataUpdate` is an internal signal, deliberately absent from
       // the public `on` surface. Reaching the bus directly is the point here:
       // this asserts what the module emits, not what a consumer can subscribe to.
-      const bus = xmppClient.internal as unknown as {
+      const bus = getInternalSurfaceForTesting(xmppClient) as unknown as {
         on: (event: 'avatarMetadataUpdate', handler: (jid: string, hash: string | null) => void) => () => void
       }
       bus.on('avatarMetadataUpdate', (jid, hash) => {

@@ -612,7 +612,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.internal.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockClient.messages.searchMessages).toHaveBeenCalledWith(expect.objectContaining({
         query: 'hello',
         max: 20,
       }))
@@ -627,7 +627,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.internal.mam.searchArchive).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockClient.messages.searchMessages).toHaveBeenCalledWith(expect.objectContaining({
         query: 'hello',
         with: 'alice@example.com',
       }))
@@ -642,7 +642,7 @@ describe('searchStore', () => {
       searchStore.getState().searchMAM()
       await vi.runAllTimersAsync()
 
-      expect(mockClient.internal.mam.searchConversationByPaging).toHaveBeenCalledWith(
+      expect(mockClient.messages.searchConversationHistory).toHaveBeenCalledWith(
         expect.objectContaining({
           query: 'hello',
           with: 'alice@example.com',
@@ -679,7 +679,7 @@ describe('searchStore', () => {
 
     it('should handle MAM search errors gracefully', async () => {
       const mockClient = createMockMAMClient()
-      mockClient.internal.mam.searchArchive.mockRejectedValueOnce(new Error('Server error'))
+      mockClient.messages.searchMessages.mockRejectedValueOnce(new Error('Server error'))
       setSearchClient(mockClient as any)
       connectionStore.getState().setMAMFulltextSearch(true)
       searchStore.setState({ query: 'hello', searchScope: null })
@@ -982,7 +982,7 @@ describe('searchStore', () => {
 })
 
 // ===========================================================================
-// Helper: create a mock MAM client for searchStore tests
+// Helper: create a mock archive-search client for searchStore tests
 // ===========================================================================
 
 function createMockMAMClient(opts?: {
@@ -990,9 +990,8 @@ function createMockMAMClient(opts?: {
 }) {
   const results = opts?.searchArchiveResults ?? []
   return {
-    internal: {
-    mam: {
-        searchArchive: vi.fn().mockResolvedValue({
+    messages: {
+        searchMessages: vi.fn().mockResolvedValue({
           messages: results.map(r => ({
             id: r.id,
             conversationId: r.conversationId,
@@ -1005,17 +1004,16 @@ function createMockMAMClient(opts?: {
           complete: true,
           rsm: {},
         }),
-        searchRoomArchive: vi.fn().mockResolvedValue({
+        searchRoomMessages: vi.fn().mockResolvedValue({
           messages: [],
           complete: true,
           rsm: {},
         }),
-        searchConversationByPaging: vi.fn().mockResolvedValue({
+        searchConversationHistory: vi.fn().mockResolvedValue({
           messages: [],
           complete: true,
           rsm: {},
         }),
-      },
     },
   }
 }

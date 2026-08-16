@@ -140,12 +140,11 @@ interface UnresolvedModifications {
  * 1:1 conversations and MUC rooms. Supports pagination for incremental loading.
  *
  * @remarks
- * This module is accessed via `client.mam` on the XMPPClient instance.
- * For convenience, `queryMAM` and `queryRoomMAM` are also available via `client.messages`.
+ * Consumers use the history and search operations on `client.messages`.
  *
  * @example Fetch recent 1:1 messages
  * ```typescript
- * const result = await client.internal.mam.queryArchive({
+ * const result = await client.messages.queryMAM({
  *   with: 'user@example.com',
  *   max: 50
  * })
@@ -155,14 +154,14 @@ interface UnresolvedModifications {
  * @example Fetch room messages with pagination
  * ```typescript
  * // Initial fetch
- * const initial = await client.internal.mam.queryRoomArchive({
+ * const initial = await client.messages.queryRoomMAM({
  *   roomJid: 'room@conference.example.com',
  *   max: 50
  * })
  *
  * // Load older messages
  * if (!initial.complete && initial.rsm?.first) {
- *   const older = await client.internal.mam.queryRoomArchive({
+ *   const older = await client.messages.queryRoomMAM({
  *     roomJid: 'room@conference.example.com',
  *     before: initial.rsm.first
  *   })

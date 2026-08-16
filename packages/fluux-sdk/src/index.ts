@@ -325,8 +325,6 @@ export type {
   PollClosedData,
 
   // Client types (XMPPClientConfig is exported separately, below)
-  XMPPClientEvents,
-  StoreBindings,
   PresenceOptions,
   PrivacyOptions,
 
@@ -357,11 +355,13 @@ export type {
   HistoryQueryOptions,
   HistoryResult,
   HistoryQueryState,
+  HistorySearchOptions,
+  RoomHistorySearchOptions,
+  HistoryPagingSearchOptions,
 } from './core/types'
 
-// Client construction options. Exported from `core/clientConfig` rather than
-// the type barrel: it carries a live store bundle, and `core/types` is a leaf
-// layer that must not name a concrete store.
+// Client construction options live beside the client rather than in the
+// shared domain-type barrel.
 export type { XMPPClientConfig } from './core/clientConfig'
 
 // Events types
