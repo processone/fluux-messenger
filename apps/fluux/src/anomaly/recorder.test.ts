@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRecorder, type Recorder } from './recorder'
 import { resetSerializerCountersForTesting } from './serializer'
 import type { Sink } from './sinks/sink'
@@ -14,6 +14,8 @@ import {
   resetValuesForTesting,
   retainRef,
   TAG,
+  tokenSync,
+  tokenWarmFailureCount,
 } from './values'
 
 function fakeSink(): Sink & { lines: string[] } {
@@ -30,6 +32,10 @@ beforeEach(async () => {
   resetValuesForTesting()
   resetSerializerCountersForTesting()
   await initTokenizer()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 function make(sink: Sink, maxBytes?: () => number): Recorder {
@@ -162,6 +168,18 @@ describe('counters', () => {
     expect(first.counters['recorder/rejected-value']).toBe(2)
     // Cumulative would say 3 here; the window saw 1.
     expect(second.counters['recorder/rejected-value']).toBe(1)
+  })
+
+  it('reports rejected background token warms as recorder health', async () => {
+    const sink = fakeSink()
+    const rec = make(sink)
+    vi.spyOn(crypto.subtle, 'sign').mockRejectedValueOnce(new Error('subtle.sign failed'))
+
+    tokenSync('jid', 'failing-recorder@example.com')
+    await vi.waitFor(() => expect(tokenWarmFailureCount()).toBe(1))
+    rec.flushDigest(300_000)
+
+    expect(digests(sink)[0].counters['recorder/token-warm-failed']).toBe(1)
   })
 
   it('clears application counters after a successful flush', () => {

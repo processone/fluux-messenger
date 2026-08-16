@@ -42,6 +42,7 @@ Counter names (digest only, not invariant ids):
 | `recorder/rejected-value` | A detector passed a value with the wrong provenance or category; the record was dropped | A detector bug. Nothing reached disk, but the evidence is lost |
 | `recorder/localref-overflow` | The 2 000-ref map was full and all refs pinned; a crumb was omitted | Usually a leak: something retains refs without releasing |
 | `recorder/token-unresolved` | A token was requested before it was warmed | Rare is fine. Sustained means the pre-warm is missing a lifecycle event |
+| `recorder/token-warm-failed` | A background token warm started by a synchronous lookup rejected | Check `recorder/entity-warm-failing` in the same session. Sustained failures mean `crypto.subtle.sign` is unavailable or failing |
 | `recorder/dropped-not-ready` | Records refused because the tokenizer had no key yet | A few at startup are normal. Sustained means the tokenizer never initialised — check `fluux.log` for the warning |
 | `recorder/sink-write-failed` | A sidecar append failed | Check `fluux.log` — failures mirror there, because a broken sink cannot report itself |
 

@@ -23,6 +23,7 @@ import {
   retainOpaque,
   tokenKeyId,
   tokenUnresolvedCount,
+  tokenWarmFailureCount,
   type Opaque,
 } from './values'
 
@@ -311,6 +312,7 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         [COUNTER.rejectedValue, rejectedValueCount()],
         [COUNTER.localRefOverflow, localRefOverflowCount()],
         [COUNTER.tokenUnresolved, tokenUnresolvedCount()],
+        [COUNTER.tokenWarmFailed, tokenWarmFailureCount()],
         [COUNTER.sinkWriteFailed, sink.failureCount()],
         [COUNTER.droppedNotReady, droppedNotReady],
       ]

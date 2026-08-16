@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   COUNTER,
   CTX,
@@ -20,6 +20,7 @@ import {
   TAG,
   tokenKeyId,
   tokenSync,
+  tokenWarmFailureCount,
   tokenUnresolvedCount,
   warmToken,
 } from './values'
@@ -28,6 +29,10 @@ beforeEach(async () => {
   localStorage.clear()
   resetValuesForTesting()
   await initTokenizer()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('registries', () => {
@@ -213,6 +218,14 @@ describe('tokens', () => {
     const t = tokenSync('jid', 'cold@example.com')
     expect(t.s).toBe('c:unresolved')
     expect(tokenUnresolvedCount()).toBe(1)
+  })
+
+  it('counts a rejected background warm instead of leaving it unhandled', async () => {
+    vi.spyOn(crypto.subtle, 'sign').mockRejectedValueOnce(new Error('subtle.sign failed'))
+
+    expect(tokenSync('jid', 'failing@example.com').s).toBe('c:unresolved')
+
+    await vi.waitFor(() => expect(tokenWarmFailureCount()).toBe(1))
   })
 
   it('namespaces the preimage so one string in two roles differs', async () => {

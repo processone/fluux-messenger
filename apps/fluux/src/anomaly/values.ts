@@ -156,6 +156,7 @@ export const COUNTER = Object.freeze({
   rejectedValue: mint('recorder/rejected-value', 'counter'),
   localRefOverflow: mint('recorder/localref-overflow', 'counter'),
   tokenUnresolved: mint('recorder/token-unresolved', 'counter'),
+  tokenWarmFailed: mint('recorder/token-warm-failed', 'counter'),
   sinkWriteFailed: mint('recorder/sink-write-failed', 'counter'),
   droppedNotReady: mint('recorder/dropped-not-ready', 'counter'),
 })
@@ -237,6 +238,7 @@ const tokens = new Map<string, Opaque>()
 let hmacKey: CryptoKey | null = null
 let keyId = 'unknown'
 let unresolved = 0
+let backgroundWarmFailures = 0
 
 function nsKey(ns: string, value: string): string {
   return `${ns}\u0000${value}` // U+0000: cannot occur in a JID or a stanza id
@@ -322,7 +324,9 @@ export function tokenSync(ns: TokenNs, value: string): Opaque {
     return hit
   }
   unresolved++
-  void warmToken(ns, value)
+  void warmToken(ns, value).catch(() => {
+    backgroundWarmFailures++
+  })
   return UNRESOLVED
 }
 
@@ -344,6 +348,10 @@ export function isTokenizerReady(): boolean {
 
 export function tokenUnresolvedCount(): number {
   return unresolved
+}
+
+export function tokenWarmFailureCount(): number {
+  return backgroundWarmFailures
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +457,7 @@ export function resetValuesForTesting(): void {
   hmacKey = null
   keyId = 'unknown'
   unresolved = 0
+  backgroundWarmFailures = 0
   nextSeq = 0
   overflow = 0
 }
