@@ -160,6 +160,16 @@ describe('public API surface', () => {
     expect(Object.keys(main)).toContain('formatXMPPError')
   })
 
+  it('names pagination after the page, not after the extension that carries it', () => {
+    // The wire parsers keep their protocol names on the escape hatch: they take
+    // and return elements. The shapes a consumer reads do not.
+    const barrel = readFileSync(resolve(process.cwd(), 'src/index.ts'), 'utf8')
+    expect(barrel).toMatch(/^\s*PageRequest,\s*$/m)
+    expect(barrel).toMatch(/^\s*PageInfo,\s*$/m)
+    expect(barrel).not.toMatch(/\bRSMRequest\b|\bRSMResponse\b/)
+    expect(Object.keys(xmpp)).toContain('parseRSMResponse')
+  })
+
   it('does not hand the stanza builder back through a hook', () => {
     // A named export is not the only door: `useXMPP` used to return `xml`,
     // which would have made every assertion above true and meaningless. The

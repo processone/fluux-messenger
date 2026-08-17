@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
-import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, RSMResponse } from '../core/types'
+import type { Message, Conversation, ConversationEntity, ConversationMetadata, HistoryQueryState, PageInfo } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
@@ -471,11 +471,11 @@ interface ChatState {
    * Merge MAM messages into conversation and update query state.
    * @param conversationId - Conversation JID
    * @param messages - Messages from MAM query
-   * @param rsm - RSM pagination response
+   * @param page - RSM pagination response
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -2784,7 +2784,7 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, archivePage, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
+      mergeMAMMessages: (conversationId, archivePage, page, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
         bumpChatUnreadInputVersion(conversationId)
 
         // XEP-0424: a retraction recorded earlier can target a message arriving in
@@ -2837,7 +2837,7 @@ export const chatStore = createStore<ChatState>()(
             conversationId,
             complete,
             direction,
-            rsm.first, // Pagination cursor for fetching older messages
+            page.first, // Pagination cursor for fetching older messages
             newestFetchedTimestamp,
             preserveGapMarker,
             isFetchLatest,
@@ -2871,7 +2871,7 @@ export const chatStore = createStore<ChatState>()(
             // flagged below instead (finding 10).
             newestHeldBelowTs: residentNewestTs,
             newestHeldBelowId: newestMessageStanzaId(rawExisting),
-            lastFetchedArchiveId: rsm.last,
+            lastFetchedArchiveId: page.last,
             preserveGapMarker,
           })
 
@@ -2901,7 +2901,7 @@ export const chatStore = createStore<ChatState>()(
           // the page forever: the resume cursor would point past data that
           // was never stored. That covers deletion, forward startId advance,
           // backward end/endId shrink AND formation (a formed forward gap
-          // carries this page's rsm.last as startId). So EVERY gap transition
+          // carries this page's page.last as startId). So EVERY gap transition
           // defers until the durable write reports success when the merge
           // carries persistable messages; with nothing persistable there is
           // no crash window and the transition applies immediately.
@@ -2925,7 +2925,7 @@ export const chatStore = createStore<ChatState>()(
             direction,
             isFetchLatest,
             preserveGapMarker,
-            rsmFirst: rsm.first,
+            rsmFirst: page.first,
             fetchLatestTopId: extras?.fetchLatestTopId,
             initialBefore: extras?.initialBefore,
             sawCoverageTop: extras?.sawCoverageTop ?? false,

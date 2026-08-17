@@ -9,34 +9,44 @@ import type { Message } from './chat'
 import type { RoomMessage } from './room'
 
 /**
- * Pagination request parameters (XEP-0059).
+ * The page to ask a server for.
+ *
+ * A page is addressed by the item it sits next to, not by an offset: pass the
+ * id of the item to read forward from, or the one to read backward from. Ids
+ * come from the {@link PageInfo} of a previous page.
+ *
+ * Carried over XEP-0059 Result Set Management.
  *
  * @category Pagination
  */
-export interface RSMRequest {
+export interface PageRequest {
   /** Maximum items per page (default 50) */
   max?: number
-  /** Item ID for forward pagination (get items after this) */
+  /** Read forward from this item id */
   after?: string
-  /** Item ID for backward pagination (get items before this) */
+  /** Read backward from this item id */
   before?: string
-  /** Start index (some servers support this) */
+  /** Start index, where the server supports offset addressing */
   index?: number
 }
 
 /**
- * Pagination response from server (XEP-0059).
+ * Where the page that came back sits in the whole set.
+ *
+ * Every field is optional because a server reports only what it chooses to:
+ * `count` in particular is an estimate on many servers, and absent on others,
+ * so it must not be treated as a reliable total.
  *
  * @category Pagination
  */
-export interface RSMResponse {
-  /** ID of first item in result set */
+export interface PageInfo {
+  /** Id of the first item, the cursor to read backward from */
   first?: string
-  /** Index of first item */
+  /** Index of the first item, where the server reports one */
   firstIndex?: number
-  /** ID of last item (use with `after` for next page) */
+  /** Id of the last item, the cursor to read forward from */
   last?: string
-  /** Total count of items (if server provides) */
+  /** Total items in the whole set, where the server reports one */
   count?: number
 }
 
@@ -88,7 +98,7 @@ export interface HistoryResult {
   /** True if no more messages before this batch */
   complete: boolean
   /** Pagination info for next query */
-  rsm: RSMResponse
+  page: PageInfo
   /**
    * Set when a purged `after`-anchored cursor (item-not-found) degraded this
    * query to a `before:''` fetch-latest — the result IS that fetch-latest
@@ -138,7 +148,7 @@ export interface RoomHistoryResult {
   /** True if no more messages before this batch */
   complete: boolean
   /** Pagination info for next query */
-  rsm: RSMResponse
+  page: PageInfo
   /**
    * Set when a purged `after`-anchored cursor (item-not-found) degraded this
    * query to a `before:''` fetch-latest — the result IS that fetch-latest
@@ -231,7 +241,7 @@ export interface HistoryQueryState {
    * Also set after initial load with `before=""` since that fetches latest messages.
    */
   isCaughtUpToLive: boolean
-  /** ID of oldest fetched message (rsm.first) - use as 'before' cursor for pagination */
+  /** ID of oldest fetched message (page.first) - use as 'before' cursor for pagination */
   oldestFetchedId?: string
   /**
    * Epoch ms of the newest message from an incomplete forward catch-up.
@@ -285,7 +295,7 @@ export interface CoverageRecord {
   /** Archive id of the OLDEST entry proven contiguous with the live edge. */
   bottomId: string
   /** Archive id of the NEWEST entry seen by the fetch-latest walk that
-   *  established this record (page-1 rsm.last). */
+   *  established this record (page-1 page.last). */
   topId?: string
 }
 
@@ -297,7 +307,7 @@ export interface CoverageRecord {
 export interface MergeArchiveExtras {
   /** The `before` cursor the query was started with ('' = fetch-latest). */
   initialBefore?: string
-  /** rsm.last of the FIRST page of a backward walk (newest covered entry). */
+  /** page.last of the FIRST page of a backward walk (newest covered entry). */
   fetchLatestTopId?: string
   /** The walk contained the existing coverage record's top entry — the only
    *  accepted proof of contiguity with the record (Codex r4 #3). */

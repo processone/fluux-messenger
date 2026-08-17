@@ -341,8 +341,8 @@ export type {
   DataFormFieldOption,
 
   // Admin entity list types (XEP-0059 RSM)
-  RSMRequest,
-  RSMResponse,
+  PageRequest,
+  PageInfo,
   AdminUser,
   AdminRoom,
   EntityListState,

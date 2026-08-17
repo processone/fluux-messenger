@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useXMPPContext } from '../provider'
-import type { RSMRequest, AdminRoom, RSMResponse } from '../core/types'
+import type { PageRequest, AdminRoom, PageInfo } from '../core/types'
 
 /**
  * Focused hook for MUC room lifecycle & settings: create/destroy a room,
@@ -101,8 +101,8 @@ export function useRoomManagement() {
   )
 
   const browsePublicRooms = useCallback(
-    async (mucServiceJid?: string, rsm?: RSMRequest): Promise<{ rooms: AdminRoom[]; pagination: RSMResponse }> => {
-      return client.admin.fetchRoomList(mucServiceJid, rsm)
+    async (mucServiceJid?: string, page?: PageRequest): Promise<{ rooms: AdminRoom[]; pagination: PageInfo }> => {
+      return client.admin.fetchRoomList(mucServiceJid, page)
     },
     [client]
   )

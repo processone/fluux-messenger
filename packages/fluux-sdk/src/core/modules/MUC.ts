@@ -39,8 +39,8 @@ import type {
   RoomRole,
   Hat,
   PresenceShow,
-  RSMRequest,
-  RSMResponse,
+  PageRequest,
+  PageInfo,
   AdminRoom,
   RoomFeatures,
   RoomMessage,
@@ -2186,7 +2186,7 @@ export class MUC extends BaseModule {
    * on the specified MUC service. Supports pagination via RSM.
    *
    * @param mucServiceJid - The MUC service JID (e.g., 'conference.example.com')
-   * @param rsm - Optional pagination parameters
+   * @param page - Optional pagination parameters
    * @returns List of rooms and pagination info
    *
    * @example
@@ -2203,13 +2203,13 @@ export class MUC extends BaseModule {
    * }
    * ```
    */
-  async fetchRoomList(mucServiceJid: string, rsm?: RSMRequest): Promise<{ rooms: AdminRoom[]; pagination?: RSMResponse }> {
+  async fetchRoomList(mucServiceJid: string, page?: PageRequest): Promise<{ rooms: AdminRoom[]; pagination?: PageInfo }> {
     const iq = xml('iq', { type: 'get', to: mucServiceJid, id: `disco_items_${generateUUID()}` },
       xml('query', { xmlns: NS_DISCO_ITEMS },
-        rsm ? xml('set', { xmlns: NS_RSM },
-          rsm.max ? xml('max', {}, String(rsm.max)) : undefined,
-          rsm.after ? xml('after', {}, rsm.after) : undefined,
-          rsm.before ? xml('before', {}, rsm.before) : undefined
+        page ? xml('set', { xmlns: NS_RSM },
+          page.max ? xml('max', {}, String(page.max)) : undefined,
+          page.after ? xml('after', {}, page.after) : undefined,
+          page.before ? xml('before', {}, page.before) : undefined
         ) : undefined
       )
     )
@@ -2228,7 +2228,7 @@ export class MUC extends BaseModule {
     }
 
     const rsmEl = query?.getChild('set', NS_RSM)
-    const pagination: RSMResponse | undefined = rsmEl ? {
+    const pagination: PageInfo | undefined = rsmEl ? {
       first: rsmEl.getChildText('first') || undefined,
       last: rsmEl.getChildText('last') || undefined,
       count: rsmEl.getChildText('count') ? parseInt(rsmEl.getChildText('count')!, 10) : undefined,

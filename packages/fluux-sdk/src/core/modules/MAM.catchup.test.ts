@@ -434,7 +434,7 @@ describe('MAM Background Catch-Up', () => {
       ]
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
@@ -459,7 +459,7 @@ describe('MAM Background Catch-Up', () => {
       ]
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpAllConversations({ sessionStartTime })
       await waitForAsyncOps(20, 100)
@@ -483,7 +483,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(gapStart.getTime())
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
@@ -501,7 +501,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(undefined)
       vi.mocked(mockStores.chat.getConversationLastTimestamp!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: false, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: false, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
       await waitForAsyncOps(20, 100)
@@ -524,7 +524,7 @@ describe('MAM Background Catch-Up', () => {
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async () => {
         // The fetch-latest merge resolved the pointer (its message was in the page).
         vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -543,10 +543,10 @@ describe('MAM Background Catch-Up', () => {
         if (opts.before === 'page-1-first') {
           // Second backward page contained the pointer's message → resolved.
           vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'page-2-first' } }
+          return { messages: [], complete: false, page: { first: 'page-2-first' } }
         }
-        if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
-        return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'page-1-first' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -561,8 +561,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
-        return { messages: [], complete: true, rsm: { first: 'page-1-first' } } // archive start
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'page-1-first' } } // archive start
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -577,7 +577,7 @@ describe('MAM Background Catch-Up', () => {
       let n = 0
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async () => {
         n++
-        return { messages: [], complete: false, rsm: { first: `page-${n}-first` } }
+        return { messages: [], complete: false, page: { first: `page-${n}-first` } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -595,7 +595,7 @@ describe('MAM Background Catch-Up', () => {
         calls.push(opts)
         // Every page — including the fetch-latest — returns the SAME cursor:
         // the archive has nothing further to offer this walk.
-        return { messages: [], complete: false, rsm: { first: 'stuck' } }
+        return { messages: [], complete: false, page: { first: 'stuck' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -612,7 +612,7 @@ describe('MAM Background Catch-Up', () => {
       // Default loadMessagesFromCache mock resolves [] — the cache-bottom probe is unavailable.
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
-        .mockResolvedValue({ messages: [], complete: false, rsm: {} })
+        .mockResolvedValue({ messages: [], complete: false, page: {} })
 
       await expect(
         getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -629,7 +629,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat('mds-ptr')
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
-        .mockResolvedValue({ messages: [], complete: false, rsm: { first: 'w-bottom' } })
+        .mockResolvedValue({ messages: [], complete: false, page: { first: 'w-bottom' } })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [])
 
@@ -641,7 +641,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat(undefined)
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
-        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+        .mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
@@ -658,7 +658,7 @@ describe('MAM Background Catch-Up', () => {
       setupChat(undefined)
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive')
-        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+        .mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
@@ -676,8 +676,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start) return { messages: [], complete: false, rsm: { last: 'x' } }
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        if (opts.start) return { messages: [], complete: false, page: { last: 'x' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
@@ -706,13 +706,13 @@ describe('MAM Background Catch-Up', () => {
         calls.push(opts)
         // Phase A forward from the coverage edge completes in one page —
         // no fetch-latest, so windowBottom would stay unset.
-        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.after === 'new-9') return { messages: [], complete: true, page: {} }
         if (opts.before === 'bottom-1') {
           // First backward page below prior coverage resolved the pointer.
           vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+          return { messages: [], complete: false, page: { first: 'older-0' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'x' } }
+        return { messages: [], complete: false, page: { first: 'x' } }
       })
 
       const cached = [
@@ -750,8 +750,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
-        return { messages: [], complete: false, rsm: { first: 'p1' } }
+        if (opts.start || opts.after) return { messages: [], complete: true, page: {} } // Phase A done
+        return { messages: [], complete: false, page: { first: 'p1' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com',
@@ -778,8 +778,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
-        return { messages: [], complete: false, rsm: { first: 'p1' } }
+        if (opts.start || opts.after) return { messages: [], complete: true, page: {} } // Phase A done
+        return { messages: [], complete: false, page: { first: 'p1' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com',
@@ -808,8 +808,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
-        return { messages: [], complete: false, rsm: { first: 'p1' } }
+        if (opts.start || opts.after) return { messages: [], complete: true, page: {} } // Phase A done
+        return { messages: [], complete: false, page: { first: 'p1' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com',
@@ -829,12 +829,12 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.after === 'new-9') return { messages: [], complete: true, page: {} }
         if (opts.before === 'old-1') {
           vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+          return { messages: [], complete: false, page: { first: 'older-0' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'x' } }
+        return { messages: [], complete: false, page: { first: 'x' } }
       })
 
       const cached = [
@@ -861,9 +861,9 @@ describe('MAM Background Catch-Up', () => {
         if (opts.before === 'w-bottom') {
           // The user opened the conversation while this backward page was in flight.
           vi.mocked(mockStores.chat.getActiveConversationId!).mockReturnValue('alice@example.com')
-          return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+          return { messages: [], complete: false, page: { first: 'page-1-first' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -880,7 +880,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
       vi.mocked(mockStores.chat.getConversationGapStartId!).mockReturnValue('gap-edge-7')
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
@@ -924,11 +924,11 @@ describe('MAM Background Catch-Up', () => {
           // Phase A's forward query already degraded internally (purged
           // after-anchor) and returned a fetch-latest page — NOT a second
           // `before: ''` bail query should follow.
-          return { messages: [], complete: false, degradedToFetchLatest: true, rsm: { first: 'w-bottom' } }
+          return { messages: [], complete: false, degradedToFetchLatest: true, page: { first: 'w-bottom' } }
         }
         // The pointer's own message is in the backward page seeded from 'w-bottom'.
         vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
-        return { messages: [], complete: false, rsm: { first: 'older' } }
+        return { messages: [], complete: false, page: { first: 'older' } }
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
@@ -939,7 +939,7 @@ describe('MAM Background Catch-Up', () => {
 
       // No second `before: ''` bail query — the degraded initial IS the fetch-latest.
       expect(calls.some((c) => c.before === '')).toBe(false)
-      // Phase B seeds its first backward page from the degraded result's rsm.first.
+      // Phase B seeds its first backward page from the degraded result's page.first.
       expect(calls[1]).toMatchObject({ before: 'w-bottom' })
       expect(calls).toHaveLength(2)
     })
@@ -952,7 +952,7 @@ describe('MAM Background Catch-Up', () => {
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
         // Empty cache: Phase A's own query IS the fetch-latest (before: '').
-        return { messages: [], complete: true, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'w-bottom' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
@@ -978,7 +978,7 @@ describe('MAM Background Catch-Up', () => {
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async () => {
         vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
@@ -996,10 +996,10 @@ describe('MAM Background Catch-Up', () => {
         calls.push(opts)
         if (opts.before === 'page-1-first') {
           vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'page-2-first' } }
+          return { messages: [], complete: false, page: { first: 'page-2-first' } }
         }
-        if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
-        return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'page-1-first' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
@@ -1014,8 +1014,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start) return { messages: [], complete: false, rsm: { last: 'x' } }
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        if (opts.start) return { messages: [], complete: false, page: { last: 'x' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
@@ -1042,12 +1042,12 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.after === 'new-9') return { messages: [], complete: true, page: {} }
         if (opts.before === 'bottom-1') {
           vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+          return { messages: [], complete: false, page: { first: 'older-0' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'x' } }
+        return { messages: [], complete: false, page: { first: 'x' } }
       })
 
       const cached = [
@@ -1082,8 +1082,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
-        return { messages: [], complete: false, rsm: { first: 'p1' } }
+        if (opts.start || opts.after) return { messages: [], complete: true, page: {} } // Phase A done
+        return { messages: [], complete: false, page: { first: 'p1' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid,
@@ -1107,8 +1107,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.start || opts.after) return { messages: [], complete: true, rsm: {} } // Phase A done
-        return { messages: [], complete: false, rsm: { first: 'p1' } }
+        if (opts.start || opts.after) return { messages: [], complete: true, page: {} } // Phase A done
+        return { messages: [], complete: false, page: { first: 'p1' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid,
@@ -1130,12 +1130,12 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.after === 'new-9') return { messages: [], complete: true, page: {} }
         if (opts.before === 'old-1') {
           vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
-          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+          return { messages: [], complete: false, page: { first: 'older-0' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'x' } }
+        return { messages: [], complete: false, page: { first: 'x' } }
       })
 
       const cached = [
@@ -1162,9 +1162,9 @@ describe('MAM Background Catch-Up', () => {
         if (opts.before === 'w-bottom') {
           // The user opened the room while this backward page was in flight.
           vi.mocked(mockStores.room.getActiveRoomJid).mockReturnValue(roomJid)
-          return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+          return { messages: [], complete: false, page: { first: 'page-1-first' } }
         }
-        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: false, page: { first: 'w-bottom' } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
@@ -1179,8 +1179,8 @@ describe('MAM Background Catch-Up', () => {
       const calls: any[] = []
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
         calls.push(opts)
-        if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
-        return { messages: [], complete: true, rsm: { first: 'page-1-first' } } // archive start
+        if (opts.before === '') return { messages: [], complete: false, page: { first: 'w-bottom' } }
+        return { messages: [], complete: true, page: { first: 'page-1-first' } } // archive start
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
@@ -1195,7 +1195,7 @@ describe('MAM Background Catch-Up', () => {
       let n = 0
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockImplementation(async () => {
         n++
-        return { messages: [], complete: false, rsm: { first: `page-${n}-first` } }
+        return { messages: [], complete: false, page: { first: `page-${n}-first` } }
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
@@ -1209,7 +1209,7 @@ describe('MAM Background Catch-Up', () => {
       setupRoom('mds-ptr')
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive')
-        .mockResolvedValue({ messages: [], complete: false, rsm: { first: 'w-bottom' } })
+        .mockResolvedValue({ messages: [], complete: false, page: { first: 'w-bottom' } })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [])
 
@@ -1221,7 +1221,7 @@ describe('MAM Background Catch-Up', () => {
       setupRoom(undefined)
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive')
-        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+        .mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
@@ -1238,7 +1238,7 @@ describe('MAM Background Catch-Up', () => {
       setupRoom(undefined)
 
       const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive')
-        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+        .mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
@@ -1255,7 +1255,7 @@ describe('MAM Background Catch-Up', () => {
       vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
       vi.mocked(mockStores.room.getRoomGapStartId!).mockReturnValue('gap-edge-7')
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       await getInternalSurfaceForTesting(xmppClient).mam.catchUpRoomHistory(roomJid, [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
 
@@ -1353,7 +1353,7 @@ describe('MAM Background Catch-Up', () => {
 
       // Cursor source = pure cache peek (catchUpRoom uses the return value).
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpRoom('room1@conference.example.com', sessionStartTime)
       await waitForAsyncOps(20, 100)
@@ -1378,7 +1378,7 @@ describe('MAM Background Catch-Up', () => {
 
       // Cursor source = pure cache peek (catchUpRoom uses the return value).
       vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.catchUpRoom('room1@conference.example.com')
       await waitForAsyncOps(20, 100)
@@ -1527,7 +1527,7 @@ describe('MAM Background Catch-Up', () => {
       ] as any)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
 
-      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+      const querySpy = vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, page: {} })
 
       const catchUpPromise = getInternalSurfaceForTesting(xmppClient).mam.forceCatchUpAllRooms()
       await waitForAsyncOps(20, 100)
@@ -1581,7 +1581,7 @@ describe('MAM Background Catch-Up', () => {
     it('emits a console event when a 1:1 forward catch-up ends incomplete (a gap remains)', async () => {
       await connectClient()
 
-      // complete=false, no rsm cursor → forward pagination stops with isComplete=false
+      // complete=false, no page cursor → forward pagination stops with isComplete=false
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
 
       const queryPromise = getInternalSurfaceForTesting(xmppClient).mam.queryArchive({
@@ -1605,7 +1605,7 @@ describe('MAM Background Catch-Up', () => {
       await connectClient()
 
       vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
-      // complete=false, no rsm cursor → forward pagination stops with isComplete=false
+      // complete=false, no page cursor → forward pagination stops with isComplete=false
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
 
       const queryPromise = getInternalSurfaceForTesting(xmppClient).mam.queryRoomArchive({
@@ -1760,7 +1760,7 @@ describe('MAM Background Catch-Up', () => {
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({
         messages: [fakeMessage] as any,
         complete: true,
-        rsm: {},
+        page: {},
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
@@ -1789,7 +1789,7 @@ describe('MAM Background Catch-Up', () => {
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({
         messages: [],
         complete: true,
-        rsm: {},
+        page: {},
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()
@@ -1810,7 +1810,7 @@ describe('MAM Background Catch-Up', () => {
       vi.spyOn(getInternalSurfaceForTesting(xmppClient).mam, 'queryArchive').mockResolvedValue({
         messages: [fakeMessage] as any,
         complete: true,
-        rsm: {},
+        page: {},
       })
 
       await getInternalSurfaceForTesting(xmppClient).mam.discoverNewConversationsFromRoster()

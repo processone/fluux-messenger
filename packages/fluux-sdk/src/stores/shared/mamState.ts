@@ -204,7 +204,7 @@ export function setMAMQueryCompleted(
   // marker — such a page proves nothing about the hole, and clearing the
   // marker here would let the persisted-gap mirror (syncGapAfterArchiveMerge)
   // delete the recorded GapInterval: a permanent silent hole. Coverage still
-  // advances id-exactly via the gap's startId (rsm.last IS set for
+  // advances id-exactly via the gap's startId (page.last IS set for
   // signal-only pages; see mamGap.ts).
   const forwardGapTimestamp = preserveGapMarker
     ? current.forwardGapTimestamp

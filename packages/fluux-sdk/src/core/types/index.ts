@@ -98,8 +98,8 @@ export type { LinkPreview } from './media'
 
 // Pagination types
 export type {
-  RSMRequest,
-  RSMResponse,
+  PageRequest,
+  PageInfo,
   HistoryQueryOptions,
   HistoryResult,
   HistoryQueryState,

@@ -38,7 +38,7 @@ export type {
   HistorySearchOptions,
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,
-  RSMResponse,
+  PageInfo,
   // Room types (separated for fine-grained subscriptions)
   Room,
   RoomEntity,

@@ -316,7 +316,7 @@ describe('XMPPClient MAM', () => {
           const msg = createMockElement('message', { from: 'example.com' }, [
             {
               name: 'result',
-              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-rsm-id' },
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-page-id' },
               children: [
                 {
                   name: 'forwarded',
@@ -399,7 +399,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
-        rsm: expect.any(Object),
+        page: expect.any(Object),
         complete: true,
         direction: 'backward',
         isFetchLatest: true,
@@ -2619,7 +2619,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', {
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
-        rsm: expect.any(Object),
+        page: expect.any(Object),
         complete: true, // complete from server
         direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
         isFetchLatest: false, // forward queries are never fetch-latest candidates
@@ -2657,7 +2657,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:history-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
         messages: expect.any(Array),
-        rsm: expect.any(Object),
+        page: expect.any(Object),
         complete: true, // complete from server
         direction: 'backward', // direction - store will set isHistoryComplete
         isFetchLatest: true, // before:'' fetch-latest candidate
@@ -2874,7 +2874,7 @@ describe('XMPPClient MAM', () => {
 
       const result = await xmppClient.messages.queryMAM({ with: 'alice@example.com', before: '' })
 
-      // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's rsm.first:
+      // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's page.first:
       // everything between topId and bottomId is already proven signal-only.
       expect(callCount).toBe(2)
       const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
@@ -2966,7 +2966,7 @@ describe('XMPPClient MAM', () => {
         // coverage (Codex r4 #2) — the flag blocks record formation.
         walkCarriedModifications: true,
       })
-      expect((mamEmits[0][1] as { rsm: { first?: string } }).rsm.first).toBe('p5-first')
+      expect((mamEmits[0][1] as { page: { first?: string } }).page.first).toBe('p5-first')
     })
 
     it('a floor purged AFTER the jump falls back to the pre-jump cursor and continues the walk (Codex r4 #6)', async () => {
@@ -3386,7 +3386,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
-        rsm: expect.objectContaining({ first: 'first-id', last: 'last-id' }),
+        page: expect.objectContaining({ first: 'first-id', last: 'last-id' }),
         complete: true,
         direction: 'backward',
         isFetchLatest: true, // no before, no start = fetch-latest
@@ -3508,7 +3508,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', {
         roomJid,
         messages: expect.any(Array),
-        rsm: expect.any(Object),
+        page: expect.any(Object),
         complete: true, // complete from server
         direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
         isFetchLatest: false, // forward query, never a fetch-latest
@@ -3561,7 +3561,7 @@ describe('XMPPClient MAM', () => {
       expect(emitSDKSpy).toHaveBeenCalledWith('room:history-messages', expect.objectContaining({
         roomJid,
         messages: expect.any(Array),
-        rsm: expect.any(Object),
+        page: expect.any(Object),
         complete: true, // complete from server
         direction: 'backward', // direction - store will set isHistoryComplete
         isFetchLatest: false, // real pagination cursor ('some-stanza-id'), not a fetch-latest
@@ -3849,7 +3849,7 @@ describe('XMPPClient MAM', () => {
 
       const result = await xmppClient.messages.queryRoomMAM({ roomJid })
 
-      // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's rsm.first.
+      // Page 2's cursor must be the coverage BOTTOM (jump), not page 1's page.first.
       expect(callCount).toBe(2)
       const secondQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
       const secondSetEl = secondQueryEl?.children?.find((c: any) => c.name === 'set')

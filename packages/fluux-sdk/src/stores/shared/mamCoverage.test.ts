@@ -32,7 +32,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
     expect(out.coverage.get('a@b')).toEqual({ bottomId: 'deep', topId: 'top' })
   })
 
-  it('signal-only give-up (zero messages, rsm.first set) still establishes the record', () => {
+  it('signal-only give-up (zero messages, page.first set) still establishes the record', () => {
     // Codex r3 #4: the walked window IS proven contiguous coverage even with
     // zero displayable messages — this is the durable resume for the cap.
     const out = syncCoverageAfterArchiveMerge(base({ rsmFirst: 'page5-first', fetchLatestTopId: 'page1-last' }))
@@ -162,7 +162,7 @@ describe('syncCoverageAfterArchiveMerge', () => {
     })
   })
 
-  it('empty fetch-latest with no rsm.first (empty archive) is a no-op', () => {
+  it('empty fetch-latest with no page.first (empty archive) is a no-op', () => {
     const coverage = new Map<string, CoverageRecord>()
     expect(syncCoverageAfterArchiveMerge(base({ coverage })).coverage).toBe(coverage)
   })

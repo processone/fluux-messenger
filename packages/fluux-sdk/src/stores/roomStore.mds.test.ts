@@ -346,7 +346,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
     roomStore.getState().mergeRoomMAMMessages(
       ROOM,
       [rmsg('m2', 's2', 2), rmsg('m5', 's5', 5)],
-      {}, // RSMResponse — all fields optional, empty is valid
+      {}, // PageInfo — all fields optional, empty is valid
       true,
       'forward'
     )

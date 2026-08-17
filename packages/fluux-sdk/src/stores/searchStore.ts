@@ -432,7 +432,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
           })
           newResults = result.messages.map(m => roomMessageToSearchResult(m, scope, query, phrases))
           hasMore = !result.complete
-          mamRsmCursor = result.rsm.first
+          mamRsmCursor = result.page.first
         } else {
           const result = await clientRef.messages.searchMessages({
             query,
@@ -442,7 +442,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
           })
           newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
           hasMore = !result.complete
-          mamRsmCursor = result.rsm.first
+          mamRsmCursor = result.page.first
         }
       } else if (!isRoom) {
         // Paging search (1:1 conversations only, no fulltext required)
@@ -479,7 +479,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
       })
       newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
       hasMore = !result.complete
-      mamRsmCursor = result.rsm.first
+      mamRsmCursor = result.page.first
     }
 
     // Check generation — discard if query changed

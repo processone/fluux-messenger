@@ -18,7 +18,7 @@ import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { AdminCommand, AdminSession, ServerStats } from './admin'
-import type { RSMResponse } from './pagination'
+import type { PageInfo } from './pagination'
 import type { HistoryQueryDirection } from './pagination'
 import type { SystemNotificationType } from './events'
 import type { XMPPErrorType, XMPPStanzaError } from '../../utils/xmppError'
@@ -223,7 +223,7 @@ export interface ChatEvents {
   'chat:history-messages': {
     conversationId: string
     messages: Message[]
-    rsm: RSMResponse
+    page: PageInfo
     complete: boolean
     direction: HistoryQueryDirection
     /** When true, leave the gap marker untouched (bounded windowed context queries). */
@@ -233,7 +233,7 @@ export interface ChatEvents {
     /** The `before` cursor the query started from ('' = fetch-latest) — anchors
      *  the persisted coverage-record extension (mamCoverage.ts). */
     initialBefore?: string
-    /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
+    /** page.last of the FIRST page of a backward walk (newest covered entry) —
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
     /** The walk contained the existing coverage record's top entry (id-exact
@@ -487,7 +487,7 @@ export interface RoomEvents {
   'room:history-messages': {
     roomJid: string
     messages: RoomMessage[]
-    rsm: RSMResponse
+    page: PageInfo
     complete: boolean
     direction: HistoryQueryDirection
     /** When true, leave the gap marker untouched (bounded force-repair queries). */
@@ -497,7 +497,7 @@ export interface RoomEvents {
     /** The `before` cursor the query started from ('' = fetch-latest) — anchors
      *  the persisted coverage-record extension (mamCoverage.ts). */
     initialBefore?: string
-    /** rsm.last of the FIRST page of a backward walk (newest covered entry) —
+    /** page.last of the FIRST page of a backward walk (newest covered entry) —
      *  the coverage record's `topId`. */
     fetchLatestTopId?: string
     /** The walk contained the existing coverage record's top entry (id-exact

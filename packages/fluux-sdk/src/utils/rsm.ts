@@ -1,14 +1,14 @@
 import { xml, Element } from '@xmpp/client'
-import type { RSMRequest, RSMResponse } from '../core/types'
+import type { PageRequest, PageInfo } from '../core/types'
 import { NS_RSM } from '../core/namespaces'
 
 /**
  * Parse RSM response from XML element (XEP-0059).
  */
-export function parseRSMResponse(setElement: Element | undefined): RSMResponse {
+export function parseRSMResponse(setElement: Element | undefined): PageInfo {
   if (!setElement) return {}
 
-  const response: RSMResponse = {}
+  const response: PageInfo = {}
 
   const firstEl = setElement.getChild('first')
   if (firstEl) {
@@ -38,23 +38,23 @@ export function parseRSMResponse(setElement: Element | undefined): RSMResponse {
 /**
  * Build RSM request XML element (XEP-0059).
  */
-export function buildRSMElement(rsm: RSMRequest): Element {
+export function buildRSMElement(page: PageRequest): Element {
   const children: Element[] = []
 
-  if (rsm.max !== undefined) {
-    children.push(xml('max', {}, String(rsm.max)))
+  if (page.max !== undefined) {
+    children.push(xml('max', {}, String(page.max)))
   }
 
-  if (rsm.after !== undefined) {
-    children.push(xml('after', {}, rsm.after))
+  if (page.after !== undefined) {
+    children.push(xml('after', {}, page.after))
   }
 
-  if (rsm.before !== undefined) {
-    children.push(xml('before', {}, rsm.before))
+  if (page.before !== undefined) {
+    children.push(xml('before', {}, page.before))
   }
 
-  if (rsm.index !== undefined) {
-    children.push(xml('index', {}, String(rsm.index)))
+  if (page.index !== undefined) {
+    children.push(xml('index', {}, String(page.index)))
   }
 
   return xml('set', { xmlns: NS_RSM }, ...children)

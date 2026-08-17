@@ -1609,10 +1609,10 @@ export class Chat extends BaseModule {
    * const initial = await client.messages.queryMAM({ with: 'user@example.com' })
    *
    * // Load more (older messages)
-   * if (!initial.complete && initial.rsm?.first) {
+   * if (!initial.complete && initial.page?.first) {
    *   const older = await client.messages.queryMAM({
    *     with: 'user@example.com',
-   *     before: initial.rsm.first
+   *     before: initial.page.first
    *   })
    * }
    * ```

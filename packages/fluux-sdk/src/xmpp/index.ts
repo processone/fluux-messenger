@@ -40,8 +40,8 @@ export type { PEPItem } from '../core/e2ee'
 // admin forms without ever touching the wire.
 export { parseDataForm, getFormFieldValue, getFormFieldValues, buildDataFormSubmit } from '../utils/dataForm'
 
-// XEP-0059: Result Set Management — pagination on the wire. The `RSMRequest`
-// and `RSMResponse` shapes stay on the main entry for the same reason.
+// XEP-0059: Result Set Management — pagination on the wire. The `PageRequest`
+// and `PageInfo` shapes stay on the main entry for the same reason.
 export { parseRSMResponse, buildRSMElement } from '../utils/rsm'
 
 // XEP-0066: Out of Band Data. A URL and a description, as the extension puts

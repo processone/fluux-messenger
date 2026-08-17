@@ -31,7 +31,7 @@ import type {
   HistoryQueryDirection,
   CoverageRecord,
   MergeArchiveExtras,
-  RSMResponse,
+  PageInfo,
 } from './pagination'
 import type { GetMessagesOptions } from '../../utils/messageCache'
 
@@ -153,11 +153,11 @@ export interface ChatBindings {
    * Merge MAM messages into conversation and update query state.
    * @param conversationId - Conversation JID
    * @param messages - Messages from MAM query
-   * @param rsm - RSM pagination response
+   * @param page - RSM pagination response
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean, extras?: MergeArchiveExtras) => void
   getMAMQueryState: (conversationId: string) => HistoryQueryState
   resetMAMStates: () => void
 
@@ -430,11 +430,11 @@ export interface RoomBindings {
    * Merge MAM messages into room and update query state.
    * @param roomJid - Room JID
    * @param messages - Messages from MAM query
-   * @param rsm - RSM pagination response
+   * @param page - RSM pagination response
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
   getRoomMAMQueryState: (roomJid: string) => HistoryQueryState
   resetRoomMAMStates: () => void
 

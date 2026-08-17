@@ -82,7 +82,7 @@ export interface ArchiveMergeCoverageInput {
   initialAfter?: string
   /** Bounded windowed query — proves nothing about live contiguity. */
   preserveGapMarker: boolean
-  /** rsm.first of the merge's LAST page (deepest entry seen, signals included). */
+  /** page.first of the merge's LAST page (deepest entry seen, signals included). */
   rsmFirst?: string
   fetchLatestTopId?: string
   initialBefore?: string

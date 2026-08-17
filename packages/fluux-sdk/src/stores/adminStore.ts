@@ -5,7 +5,7 @@ import type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  RSMResponse,
+  PageInfo,
   AdminCategory,
   ServerStats,
   LastActivityEntry,
@@ -121,10 +121,10 @@ export interface AdminState {
   // Entity list actions
   setActiveCategory: (category: AdminCategory | null) => void
   setUserList: (state: Partial<EntityListState<AdminUser>>) => void
-  appendUserList: (items: AdminUser[], pagination: RSMResponse) => void
+  appendUserList: (items: AdminUser[], pagination: PageInfo) => void
   resetUserList: () => void
   setRoomList: (state: Partial<EntityListState<AdminRoom>>) => void
-  appendRoomList: (items: AdminRoom[], pagination: RSMResponse) => void
+  appendRoomList: (items: AdminRoom[], pagination: PageInfo) => void
   resetRoomList: () => void
   setMucServiceJid: (jid: string | null) => void
   setOnlineJids: (jids: Set<string>) => void

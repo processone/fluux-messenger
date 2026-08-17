@@ -1375,7 +1375,7 @@ export async function countRoomUnreadInArchive(roomJid: string, args: UnreadCoun
 }
 
 /**
- * Resolve an archive id — a MAM `rsm.first`/`rsm.last` value, which is what a
+ * Resolve an archive id — a MAM `page.first`/`page.last` value, which is what a
  * {@link CoverageRecord}'s `bottomId` names — to its position in archive
  * order. `parseArchiveMessage`/`parseRoomArchiveMessage` (`MAM.ts`) store this
  * id as the row's `stanzaId` (`stanzaId = parsed.stanzaId || archiveId`), so

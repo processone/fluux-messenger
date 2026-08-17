@@ -1002,17 +1002,17 @@ function createMockMAMClient(opts?: {
             isDelayed: true,
           })),
           complete: true,
-          rsm: {},
+          page: {},
         }),
         searchRoomMessages: vi.fn().mockResolvedValue({
           messages: [],
           complete: true,
-          rsm: {},
+          page: {},
         }),
         searchConversationHistory: vi.fn().mockResolvedValue({
           messages: [],
           complete: true,
-          rsm: {},
+          page: {},
         }),
     },
   }

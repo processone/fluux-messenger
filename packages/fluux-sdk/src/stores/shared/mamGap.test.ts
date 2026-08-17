@@ -232,14 +232,14 @@ describe('syncGapAfterArchiveMerge', () => {
     expect(out.get(id)).toEqual({ start: ts('2026-07-10T00:00:00Z'), end, startId: 's2', endId: 'e1' })
   })
 
-  it('forward resync: preserves startId when the merge has no lastFetchedArchiveId (rsm.last)', () => {
+  it('forward resync: preserves startId when the merge has no lastFetchedArchiveId (page.last)', () => {
     const start = ts('2026-07-01T00:00:00Z')
     const end = ts('2026-07-14T00:00:00Z')
     const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
     const merged = [msg('2026-07-14T00:00:00Z')]
     const out = syncGapAfterArchiveMerge(base({
       direction: 'forward', gaps, forwardGapTimestamp: start, merged,
-      // No lastFetchedArchiveId — an incomplete forward merge without rsm.last.
+      // No lastFetchedArchiveId — an incomplete forward merge without page.last.
     }))
     expect(out.get(id)).toEqual({ start, end, startId: 's1', endId: 'e1' })
   })

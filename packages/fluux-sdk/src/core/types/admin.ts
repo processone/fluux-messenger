@@ -5,7 +5,7 @@
  * @module Types/Admin
  */
 
-import type { RSMResponse } from './pagination'
+import type { PageInfo } from './pagination'
 
 // ============================================================================
 // Admin Types (XEP-0133 Service Administration)
@@ -243,7 +243,7 @@ export interface EntityListState<T> {
   /** List items */
   items: T[]
   /** Pagination info */
-  pagination: RSMResponse
+  pagination: PageInfo
   /** True while loading */
   isLoading: boolean
   /** Error message if failed */

@@ -3,7 +3,7 @@ import { adminStore } from '../stores/adminStore'
 import { LastActivityQueue } from '../core/admin/lastActivityQueue'
 import { useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { AdminCommand, AdminCommandCategory, AdminCategory, RSMRequest } from '../core/types'
+import type { AdminCommand, AdminCommandCategory, AdminCategory, PageRequest } from '../core/types'
 import { USER_COMMANDS } from './adminCommands'
 
 /**
@@ -321,15 +321,15 @@ export function useAdmin() {
 
   // Fetch user list with pagination
   const fetchUsers = useCallback(
-    async (rsm?: RSMRequest) => {
+    async (page?: PageRequest) => {
       const store = adminStore.getState()
       store.setUserList({ isLoading: true, error: null })
 
       try {
         // Use selected vhost or fall back to default
         const vhost = store.selectedVhost || undefined
-        const result = await client.admin.fetchUserList(vhost, rsm)
-        if (rsm?.after) {
+        const result = await client.admin.fetchUserList(vhost, page)
+        if (page?.after) {
           // Appending to existing list
           store.appendUserList(result.users, result.pagination)
         } else {
@@ -379,13 +379,13 @@ export function useAdmin() {
 
   // Fetch room list with pagination
   const fetchRooms = useCallback(
-    async (rsm?: RSMRequest) => {
+    async (page?: PageRequest) => {
       const store = adminStore.getState()
       store.setRoomList({ isLoading: true, error: null })
 
       try {
-        const result = await client.admin.fetchRoomList(undefined, rsm)
-        if (rsm?.after) {
+        const result = await client.admin.fetchRoomList(undefined, page)
+        if (page?.after) {
           // Appending to existing list
           store.appendRoomList(result.rooms, result.pagination)
         } else {

@@ -10,7 +10,7 @@ import type {
   RoomMember,
   RoomMessage,
   HistoryQueryState,
-  RSMResponse,
+  PageInfo,
 } from '../core/types'
 import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
@@ -1029,11 +1029,11 @@ export interface RoomState {
    * Merge MAM messages into room and update query state.
    * @param roomJid - Room JID
    * @param messages - Messages from MAM query
-   * @param rsm - RSM pagination response
+   * @param page - RSM pagination response
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], page: PageInfo, complete: boolean, direction: HistoryQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean, extras?: MergeArchiveExtras) => void
   /**
    * Strip a purged archive id from the persisted gap anchor (`startId`),
    * keeping the `start` timestamp so the next catch-up resume uses the
@@ -3768,7 +3768,7 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, archivePage, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
+  mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
     bumpRoomUnreadInputVersion(roomJid)
 
     // XEP-0424: a retraction recorded earlier can target a message arriving in
@@ -3829,7 +3829,7 @@ export const roomStore = createStore<RoomState>()(
         roomJid,
         complete,
         direction,
-        rsm.first, // Pagination cursor for fetching older messages
+        page.first, // Pagination cursor for fetching older messages
         newestFetchedTimestamp,
         preserveGapMarker,
         isFetchLatest,
@@ -3865,7 +3865,7 @@ export const roomStore = createStore<RoomState>()(
         // flagged below instead (finding 10).
         newestHeldBelowTs: residentNewestTs,
         newestHeldBelowId: newestMessageStanzaId(existingMessages),
-        lastFetchedArchiveId: rsm.last,
+        lastFetchedArchiveId: page.last,
         preserveGapMarker,
       })
 
@@ -3893,7 +3893,7 @@ export const roomStore = createStore<RoomState>()(
       // crash — or a silently failed write — skip the page forever: the
       // resume cursor would point past data that was never stored. That
       // covers deletion, forward startId advance, backward end/endId shrink
-      // AND formation (a formed forward gap carries this page's rsm.last as
+      // AND formation (a formed forward gap carries this page's page.last as
       // startId). So EVERY gap transition defers until the durable write
       // reports success when the merge carries persistable messages; with
       // nothing persistable there is no crash window and the transition
@@ -3918,7 +3918,7 @@ export const roomStore = createStore<RoomState>()(
         direction,
         isFetchLatest,
         preserveGapMarker,
-        rsmFirst: rsm.first,
+        rsmFirst: page.first,
         fetchLatestTopId: extras?.fetchLatestTopId,
         initialBefore: extras?.initialBefore,
         sawCoverageTop: extras?.sawCoverageTop ?? false,

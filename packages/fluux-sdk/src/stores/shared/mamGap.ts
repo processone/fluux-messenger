@@ -279,7 +279,7 @@ export interface ArchiveMergeGapInput {
    *  `newestHeldBelowTs`) — stamped as a formed backward seam's `startId`. */
   newestHeldBelowId?: string
   /** Archive id of the last fetched message for an incomplete forward
-   *  catch-up (the merge's `rsm.last`) — stamped as the forward gap's `startId`. */
+   *  catch-up (the merge's `page.last`) — stamped as the forward gap's `startId`. */
   lastFetchedArchiveId?: string
   /** Bounded force-repair: leave the marker untouched (neither set nor cleared). */
   preserveGapMarker: boolean
@@ -316,12 +316,12 @@ export function syncGapAfterArchiveMerge(input: ArchiveMergeGapInput): Map<strin
     // (forwardGapTimestamp) normally carries the gap through this mirror, but
     // on a fresh session mamQueryStates are empty while the gap map is
     // persisted: preserve the recorded interval verbatim and only advance the
-    // id-exact coverage cursor (rsm.last IS set for signal-only pages).
+    // id-exact coverage cursor (page.last IS set for signal-only pages).
     if (existing && !complete && fetched.length === 0 && forwardGapTimestamp === undefined) {
       return syncGap(gaps, id, existing.start, existing.end, lastFetchedArchiveId ?? existing.startId, existing.endId)
     }
     const gapEnd = forwardGapTimestamp !== undefined ? computeGapEnd(merged, forwardGapTimestamp) : undefined
-    // startId: prefer this merge's rsm.last; an incomplete forward merge
+    // startId: prefer this merge's page.last; an incomplete forward merge
     // without one (no new page fetched) carries the existing cursor forward.
     const startId = lastFetchedArchiveId ?? existing?.startId
     // endId: only survives when the end edge hasn't moved — once `end`

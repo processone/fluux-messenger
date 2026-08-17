@@ -374,7 +374,7 @@ describe('durableMapPersist — the gap boundary is structural, the end is not',
   })
 
   /** `startId` alone can move while `start` stands still — an incomplete forward
-   *  page whose `rsm.last` advances the id-exact cursor. Same class, same rule. */
+   *  page whose `page.last` advances the id-exact cursor. Same class, same rule. */
   it('force-flushes a startId-only advance', () => {
     write({ gaps: gaps({ a: { start: 1000, startId: 'arc-1' } }) }, 'baseline')
     write({ gaps: gaps({ a: { start: 1000, end: 900, startId: 'arc-1' } }) }, 'opener')

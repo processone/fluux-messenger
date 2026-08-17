@@ -2938,9 +2938,9 @@ describe('roomStore', () => {
     })
 
     it('forward ADVANCE of an existing gap is deferred until the page is durably cached', async () => {
-      // Codex r3 #1: the advance (startId → rsm.last) was persisted
+      // Codex r3 #1: the advance (startId → page.last) was persisted
       // synchronously while the IndexedDB write was still in flight — a crash
-      // in between resumes `after: rsm.last` and skips the page forever.
+      // in between resumes `after: page.last` and skips the page forever.
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomGaps: new Map([[jid, {
         start: new Date('2026-07-06T00:00:00Z').getTime(),
@@ -2956,7 +2956,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'fwd', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'fwd', timestamp: new Date('2026-07-07T00:00:00Z'), isOutgoing: false,
       }
-      // Incomplete forward page: gap start moves up and startId advances to rsm.last.
+      // Incomplete forward page: gap start moves up and startId advances to page.last.
       roomStore.getState().mergeRoomMAMMessages(jid, [m], { last: 'new-cursor' }, false, 'forward')
 
       // Advance must NOT be visible while the write is pending.
@@ -2990,8 +2990,8 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.get(jid)?.startId).toBe('old-cursor')
     })
 
-    it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s rsm.last)', async () => {
-      // Codex r4 #1: a formed forward gap carries rsm.last as startId — a
+    it('gap FORMATION with persistable messages is deferred too (its startId is this page\'s page.last)', async () => {
+      // Codex r4 #1: a formed forward gap carries page.last as startId — a
       // cursor INTO this very page. Publishing it before the write commits
       // has exactly the deletion/advance crash window.
       roomStore.getState().addRoom(createRoom(jid))
@@ -3248,7 +3248,7 @@ describe('roomStore', () => {
 
     it('a signal-only incomplete forward page preserves the persisted gap and advances its coverage cursor', () => {
       // All-signal page (reactions/receipts only): zero displayable messages
-      // but rsm.last IS set. The gap must survive (the page proves nothing
+      // but page.last IS set. The gap must survive (the page proves nothing
       // about the hole) with startId advanced to the last fetched archive id.
       roomStore.getState().addRoom(createRoom(jid))
       const start = new Date('2026-07-06T00:00:00Z').getTime()

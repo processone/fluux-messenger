@@ -78,7 +78,7 @@ import type {
   HistoryResult,
   RoomHistoryQueryOptions,
   RoomHistoryResult,
-  RSMResponse,
+  PageInfo,
   HistorySearchOptions,
   RoomHistorySearchOptions,
   HistoryPagingSearchOptions,
@@ -160,10 +160,10 @@ interface UnresolvedModifications {
  * })
  *
  * // Load older messages
- * if (!initial.complete && initial.rsm?.first) {
+ * if (!initial.complete && initial.page?.first) {
  *   const older = await client.messages.queryRoomMAM({
  *     roomJid: 'room@conference.example.com',
- *     before: initial.rsm.first
+ *     before: initial.page.first
  *   })
  * }
  * ```
@@ -218,11 +218,11 @@ export class MAM extends BaseModule {
     // The pointer-seed catch-up starts the FIRST page from the given `after`
     // cursor; a plain `start`-anchored catch-up has no initial cursor (the
     // timestamp filter alone selects the first page) and only acquires one
-    // from `rsm.last` after that first page.
+    // from `pageInfo.last` after that first page.
     let currentAfter: string | undefined = after
     let isComplete = false
-    let lastRsm: RSMResponse = {}
-    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    let lastPage: PageInfo = {}
+    // pageInfo.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
     // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
@@ -331,7 +331,7 @@ export class MAM extends BaseModule {
             }
             throw iqError
           }
-          const { complete, rsm } = this.parseMAMResponse(response)
+          const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
           // Drain the buffer: E2EE decrypt first (so modification bodies are
           // plaintext, not fallback hints), then modification detection, then parse.
@@ -350,8 +350,8 @@ export class MAM extends BaseModule {
           // page's correction/reaction can still land on an earlier page's message.
           allMessages.push(...collectedMessages)
           isComplete = complete
-          lastRsm = rsm
-          if (page === 0 && !isForwardPaginate) fetchLatestTopId = rsm.last
+          lastPage = pageInfo
+          if (page === 0 && !isForwardPaginate) fetchLatestTopId = pageInfo.last
           if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
             sawCoverageTop = true
           }
@@ -359,8 +359,8 @@ export class MAM extends BaseModule {
           if (isForwardPaginate) {
             // Forward catch-up: accumulate every page, advance via `after` until complete.
             if (complete) break
-            if (rsm.last) {
-              currentAfter = rsm.last
+            if (pageInfo.last) {
+              currentAfter = pageInfo.last
             } else {
               break
             }
@@ -371,7 +371,7 @@ export class MAM extends BaseModule {
             }
             // No displayable messages but archive has more - continue with next page
             // Use the 'first' ID as the 'before' cursor for backward pagination
-            if (rsm.first) {
+            if (pageInfo.first) {
               // Known signal-only floor (persisted coverage): once this walk
               // re-enters previously-covered territory (the page contains the
               // record's top entry), everything down to the record's bottom is
@@ -379,11 +379,11 @@ export class MAM extends BaseModule {
               // successive sessions descend instead of re-walking the same
               // newest pages (Codex r3 #4).
               if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
-                preJumpCursor = rsm.first
+                preJumpCursor = pageInfo.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {
-                currentBefore = rsm.first
+                currentBefore = pageInfo.first
               }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
@@ -422,7 +422,7 @@ export class MAM extends BaseModule {
       this.deps.emitSDK('chat:history-messages', {
         conversationId,
         messages: allMessages,
-        rsm: lastRsm,
+        page: lastPage,
         complete: isComplete,
         direction,
         preserveGapMarker,
@@ -453,7 +453,7 @@ export class MAM extends BaseModule {
         })
       }
 
-      return { messages: allMessages, complete: isComplete, rsm: lastRsm }
+      return { messages: allMessages, complete: isComplete, page: lastPage }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
       if (isConnectionError(error)) {
@@ -495,8 +495,8 @@ export class MAM extends BaseModule {
     const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : MAM_BACKWARD_SIGNAL_RETRY_PAGES
     const allMessages: RoomMessage[] = []
     let isComplete = false
-    let lastRsm: RSMResponse = {}
-    // rsm.last of the FIRST backward page — the newest archive entry seen by
+    let lastPage: PageInfo = {}
+    // pageInfo.last of the FIRST backward page — the newest archive entry seen by
     // this walk; stamped as the coverage record's topId (mamCoverage.ts).
     let fetchLatestTopId: string | undefined
     // Persisted coverage record (Codex r3 #4): floor for the signal-only walk
@@ -612,7 +612,7 @@ export class MAM extends BaseModule {
             }
             throw iqError
           }
-          const { complete, rsm } = this.parseMAMResponse(response)
+          const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
@@ -645,7 +645,7 @@ export class MAM extends BaseModule {
             this.deps.emitSDK('room:history-messages', {
               roomJid,
               messages: collectedMessages,
-              rsm,
+              page: pageInfo,
               complete,
               direction: 'forward',
               preserveGapMarker,
@@ -659,8 +659,8 @@ export class MAM extends BaseModule {
 
           allMessages.push(...collectedMessages)
           isComplete = complete
-          lastRsm = rsm
-          if (page === 0 && !isForward) fetchLatestTopId = rsm.last
+          lastPage = pageInfo
+          if (page === 0 && !isForward) fetchLatestTopId = pageInfo.last
           if (coverageRecord?.topId && rawEntries.some((e) => e.archiveId === coverageRecord.topId)) {
             sawCoverageTop = true
           }
@@ -672,8 +672,8 @@ export class MAM extends BaseModule {
 
           if (isForward) {
             // Forward pagination: use `last` as the next `after` cursor
-            if (rsm.last) {
-              currentAfter = rsm.last
+            if (pageInfo.last) {
+              currentAfter = pageInfo.last
             } else {
               break
             }
@@ -686,15 +686,15 @@ export class MAM extends BaseModule {
             if (allMessages.length > 0) {
               break
             }
-            if (rsm.first) {
+            if (pageInfo.first) {
               // Known signal-only floor (persisted coverage) — jump below
               // covered territory; see the 1:1 twin in queryArchive.
               if (canJumpToFloor && coverageRecord && sawCoverageTop && !jumpedToFloor) {
-                preJumpCursor = rsm.first
+                preJumpCursor = pageInfo.first
                 currentBefore = coverageRecord.bottomId
                 jumpedToFloor = true
               } else {
-                currentBefore = rsm.first
+                currentBefore = pageInfo.first
               }
               this.deps.emitSDK('console:event', {
                 message: `Page ${page + 1} had no displayable messages, fetching older...`,
@@ -726,7 +726,7 @@ export class MAM extends BaseModule {
         this.deps.emitSDK('room:history-messages', {
           roomJid,
           messages: allMessages,
-          rsm: lastRsm,
+          page: lastPage,
           complete: isComplete,
           direction: 'backward',
           preserveGapMarker,
@@ -753,7 +753,7 @@ export class MAM extends BaseModule {
         })
       }
 
-      return { messages: allMessages, complete: isComplete, rsm: lastRsm }
+      return { messages: allMessages, complete: isComplete, page: lastPage }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
       if (isConnectionError(error)) {
@@ -818,7 +818,7 @@ export class MAM extends BaseModule {
     try {
       logInfo(`MAM search: query="${query}"${withJid ? `, with=${getBareJid(withJid)}` : ''}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
-      const { complete, rsm } = this.parseMAMResponse(response)
+      const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
       const currentJid = this.deps.getCurrentJid()
       const ownBareJid = currentJid ? getBareJid(currentJid) : ''
@@ -839,7 +839,7 @@ export class MAM extends BaseModule {
       this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
 
       logInfo(`MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
-      return { messages: collectedMessages, complete, rsm }
+      return { messages: collectedMessages, complete, page: pageInfo }
     } finally {
       unregister()
     }
@@ -886,7 +886,7 @@ export class MAM extends BaseModule {
     try {
       logInfo(`Room MAM search: query="${query}", room=${roomJid}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
-      const { complete, rsm } = this.parseMAMResponse(response)
+      const { complete, page: pageInfo } = this.parseMAMResponse(response)
 
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
@@ -901,7 +901,7 @@ export class MAM extends BaseModule {
       this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
 
       logInfo(`Room MAM search result: ${collectedMessages.length} msg(s), complete=${complete}`)
-      return { messages: collectedMessages, complete, rsm }
+      return { messages: collectedMessages, complete, page: pageInfo }
     } finally {
       unregister()
     }
@@ -926,13 +926,13 @@ export class MAM extends BaseModule {
     const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
     const allTokens = [...new Set([...parsed.terms, ...phraseTokens])]
     if (allTokens.length === 0 && parsed.phrases.length === 0) {
-      return { messages: [], complete: true, rsm: {} }
+      return { messages: [], complete: true, page: {} }
     }
 
     const matches: Message[] = []
     let beforeCursor: string | undefined
     let isComplete = false
-    let lastRsm: RSMResponse = {}
+    let lastPage: PageInfo = {}
 
     logInfo(`MAM paging search: query="${query}", with=${withJid}, maxPages=${maxPages}`)
 
@@ -948,7 +948,7 @@ export class MAM extends BaseModule {
       })
 
       isComplete = result.complete
-      lastRsm = result.rsm
+      lastPage = result.page
 
       // Match messages client-side
       for (const msg of result.messages) {
@@ -958,15 +958,15 @@ export class MAM extends BaseModule {
         }
       }
 
-      if (isComplete || !result.rsm.first) break
-      beforeCursor = result.rsm.first
+      if (isComplete || !result.page.first) break
+      beforeCursor = result.page.first
 
       // Small delay between pages to avoid overwhelming the server
       await new Promise(resolve => setTimeout(resolve, 100))
     }
 
     logInfo(`MAM paging search result: scanned to find ${matches.length} match(es), complete=${isComplete}`)
-    return { messages: matches, complete: isComplete, rsm: lastRsm }
+    return { messages: matches, complete: isComplete, page: lastPage }
   }
 
   /**
@@ -1423,7 +1423,7 @@ export class MAM extends BaseModule {
         after?: string
         start?: string
         maxAutoPages?: number
-      }) => Promise<{ complete: boolean; rsm: { first?: string }; degradedToFetchLatest?: boolean }>
+      }) => Promise<{ complete: boolean; page: { first?: string }; degradedToFetchLatest?: boolean }>
     },
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
@@ -1453,14 +1453,14 @@ export class MAM extends BaseModule {
       // before:'' fetch-latest — `initial` IS that fetch-latest page. Treat
       // it as the fetch-latest phase directly instead of issuing a second,
       // fully-deduped `before: ''` bail query.
-      windowBottom = initial.rsm.first
+      windowBottom = initial.page.first
       windowBottomComplete = initial.complete
     } else if (isForward && !initial.complete) {
       const latest = await io.query({ max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
-      windowBottom = latest.rsm.first
+      windowBottom = latest.page.first
       windowBottomComplete = latest.complete
     } else if (!isForward) {
-      windowBottom = initial.rsm.first
+      windowBottom = initial.page.first
       windowBottomComplete = initial.complete
     }
     // (forward && complete → contiguous to live over the cache; a pending
@@ -1523,8 +1523,8 @@ export class MAM extends BaseModule {
         max: MAM_CATCHUP_FORWARD_MAX,
       })
       if (res.complete) return // archive start reached — a still-pending pointer is purged
-      if (!res.rsm.first || res.rsm.first === windowBottom) return
-      windowBottom = res.rsm.first
+      if (!res.page.first || res.page.first === windowBottom) return
+      windowBottom = res.page.first
     }
   }
 
@@ -2167,11 +2167,11 @@ export class MAM extends BaseModule {
   /**
    * Parse MAM response to extract completion status and RSM info.
    */
-  private parseMAMResponse(response: Element): { complete: boolean; rsm: RSMResponse } {
+  private parseMAMResponse(response: Element): { complete: boolean; page: PageInfo } {
     const fin = response.getChild('fin', NS_MAM)
     const complete = fin?.attrs.complete === 'true'
-    const rsm = parseRSMResponse(fin?.getChild('set', NS_RSM))
-    return { complete, rsm }
+    const pageInfo = parseRSMResponse(fin?.getChild('set', NS_RSM))
+    return { complete, page: pageInfo }
   }
 
   /**

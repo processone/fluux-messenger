@@ -22,8 +22,8 @@ import type {
   AdminCommandCategory,
   DataForm,
   AdminSession,
-  RSMRequest,
-  RSMResponse,
+  PageRequest,
+  PageInfo,
   AdminUser,
   AdminRoom,
   ServerStats,
@@ -693,11 +693,11 @@ export class Admin extends BaseModule {
   /**
    * Fetch paginated list of registered users via XEP-0133.
    * @param vhost - Virtual host to query (defaults to current domain)
-   * @param rsm - RSM pagination parameters
+   * @param page - RSM pagination parameters
    */
-  async fetchUserList(vhost?: string, rsm?: RSMRequest): Promise<{
+  async fetchUserList(vhost?: string, page?: PageRequest): Promise<{
     users: AdminUser[]
-    pagination: RSMResponse
+    pagination: PageInfo
   }> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) throw new Error('Not connected')
@@ -727,8 +727,8 @@ export class Admin extends BaseModule {
       const completeChildren: Element[] = [
         xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' })
       ]
-      if (rsm) {
-        completeChildren.push(buildRSMElement(rsm))
+      if (page) {
+        completeChildren.push(buildRSMElement(page))
       }
 
       const completeIq = xml(
@@ -953,11 +953,11 @@ export class Admin extends BaseModule {
   /**
    * Fetch paginated list of public rooms from MUC service.
    * @param mucServiceJid - Optional MUC service JID. If not provided, uses auto-discovered service.
-   * @param rsm - RSM pagination parameters
+   * @param page - RSM pagination parameters
    */
-  async fetchRoomList(mucServiceJid?: string, rsm?: RSMRequest): Promise<{
+  async fetchRoomList(mucServiceJid?: string, page?: PageRequest): Promise<{
     rooms: AdminRoom[]
-    pagination: RSMResponse
+    pagination: PageInfo
   }> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) throw new Error('Not connected')
@@ -977,8 +977,8 @@ export class Admin extends BaseModule {
 
     // Build disco#items query with RSM
     const queryChildren: Element[] = []
-    if (rsm) {
-      queryChildren.push(buildRSMElement(rsm))
+    if (page) {
+      queryChildren.push(buildRSMElement(page))
     }
 
     const iq = xml(
