@@ -9,6 +9,7 @@ import { FastTokenLogoutError } from '../errors'
 import {
   DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
+  VERIFY_CONNECTION_TIMEOUT_MS,
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
@@ -4209,6 +4210,31 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
     })
 
+    it('restarts the SM probe when suspension delays the keepalive timeout', async () => {
+      mockXmppClientInstance.send.mockClear()
+      mockXmppClientInstance.send.mockResolvedValue(undefined)
+      vi.setSystemTime(new Date(0))
+
+      const healthPromise = xmppClient.verifyConnectionHealth()
+
+      expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+
+      // Advancing wall time without advancing timers models a suspended JS
+      // runtime: the callback runs long after the timeout's deadline.
+      vi.setSystemTime(new Date(16_000))
+      await vi.advanceTimersByTimeAsync(VERIFY_CONNECTION_TIMEOUT_MS)
+
+      expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
+
+      mockXmppClientInstance._emit(
+        'nonza',
+        createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+      )
+
+      await expect(healthPromise).resolves.toBe(true)
+    })
+
     // #515: with SM disabled, the keepalive probe falls back to an IQ ping to
     // the account domain. A misconfigured server (Openfire answering bare-domain
     // IQs with <remote-server-not-found/>) rejects that ping with an IQ ERROR on
@@ -4226,6 +4252,64 @@ describe('XMPPClient Connection', () => {
       const healthy = await xmppClient.verifyConnectionHealth()
 
       expect(healthy).toBe(true)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
+    })
+
+    it('retires each delayed ping before starting its replacement', async () => {
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+      mockXmppClientInstance.iqCaller.request.mockReset()
+      let requestCount = 0
+      let activeRequests = 0
+      let maxActiveRequests = 0
+      mockXmppClientInstance.iqCaller.request.mockImplementation((...args: unknown[]) => {
+        const requestTimeoutMs = args[1] as number
+        requestCount += 1
+        activeRequests += 1
+        maxActiveRequests = Math.max(maxActiveRequests, activeRequests)
+
+        if (requestCount > 2) {
+          activeRequests -= 1
+          return Promise.resolve(undefined)
+        }
+
+        return new Promise((_, reject) => {
+          setTimeout(() => {
+            activeRequests -= 1
+            const error = new Error('IQ request timed out')
+            error.name = 'TimeoutError'
+            reject(error)
+          }, requestTimeoutMs)
+        })
+      })
+      vi.setSystemTime(new Date(0))
+
+      const healthPromise = xmppClient.verifyConnectionHealth()
+
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
+
+      vi.setSystemTime(new Date(Date.now() + 16_000))
+      await vi.advanceTimersByTimeAsync(VERIFY_CONNECTION_TIMEOUT_MS)
+
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(2)
+      expect(activeRequests).toBe(1)
+
+      vi.setSystemTime(new Date(Date.now() + 16_000))
+      await vi.advanceTimersByTimeAsync(VERIFY_CONNECTION_TIMEOUT_MS)
+
+      await expect(healthPromise).resolves.toBe(true)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(3)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        VERIFY_CONNECTION_TIMEOUT_MS
+      )
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        VERIFY_CONNECTION_TIMEOUT_MS
+      )
+      expect(maxActiveRequests).toBe(1)
+      expect(activeRequests).toBe(0)
       expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
     })
 
@@ -4303,7 +4387,7 @@ describe('XMPPClient Connection', () => {
         expect(mockClientFactory.mock.calls.length).toBe(clientsBefore + 1)
       })
 
-      it('is safe to tick repeatedly (no dedup)', async () => {
+      it('coalesces repeated ticks while a health check is in flight', async () => {
         mockXmppClientInstance.send.mockImplementation(() => {
           setTimeout(() => {
             const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
@@ -4311,14 +4395,18 @@ describe('XMPPClient Connection', () => {
           }, 50)
           return Promise.resolve()
         })
+        mockXmppClientInstance.send.mockClear()
 
         xmppClient.handleKeepaliveTick()
         xmppClient.handleKeepaliveTick()
         xmppClient.handleKeepaliveTick()
 
         await vi.advanceTimersByTimeAsync(100)
-        // Each tick triggers a health check — at least 3 SM <r/> requests sent
-        expect(mockXmppClientInstance.send.mock.calls.length).toBeGreaterThanOrEqual(3)
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+
+        xmppClient.handleKeepaliveTick()
+        await vi.advanceTimersByTimeAsync(100)
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
       })
 
       it('swallows health check rejections', async () => {

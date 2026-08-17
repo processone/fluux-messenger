@@ -77,6 +77,8 @@ const logError = (...args: unknown[]) => {
   }
 }
 
+type ConnectionProbeLabel = 'verify' | 'keepalive'
+
 // Stream/SASL auth failures are terminal and should not be retried.
 // Keep this list explicit to avoid classifying generic stanza `type="auth"`
 // errors (e.g. PEP/pubsub permissions) as account authentication failures.
@@ -185,6 +187,10 @@ export class Connection extends BaseModule {
   // into a single in-flight promise prevents the render storm that causes the
   // webview to hang after wake.
   private handleAwakeInFlight: Promise<void> | null = null
+
+  // Native ticks can bunch up when the webview resumes. Keep one routine
+  // health probe active so delayed timers cannot accumulate listeners and IQs.
+  private healthCheckInFlight: Promise<boolean> | null = null
 
   // Timestamp of last wake-from-sleep event. Used by attemptReconnect to add a
   // short settle delay — navigator.onLine goes true before the network path is
@@ -996,14 +1002,25 @@ export class Connection extends BaseModule {
    * to `connected.verifying`. It silently sends an SM `<r/>` request and waits
    * for an `<a/>` acknowledgment. If the check passes, nothing happens (no
    * status change, no logging). If it fails, {@link handleDeadSocket} triggers
-   * reconnection.
+   * reconnection. Concurrent checks share one probe. When scheduler suspension
+   * delays a timeout, the probe restarts with a fresh deadline before deciding
+   * that the socket is dead.
    *
    * Use this for periodic health checks (e.g., Rust-driven keepalive) where the
    * connection is expected to be healthy.
    */
-  async verifyConnectionHealth(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
-    if (!this.xmpp || !this.isInConnectedState()) return false
+  verifyConnectionHealth(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
+    if (!this.xmpp || !this.isInConnectedState()) return Promise.resolve(false)
+    if (this.healthCheckInFlight) return this.healthCheckInFlight
 
+    const healthCheck = this.runConnectionHealthCheck(timeoutMs).finally(() => {
+      if (this.healthCheckInFlight === healthCheck) this.healthCheckInFlight = null
+    })
+    this.healthCheckInFlight = healthCheck
+    return healthCheck
+  }
+
+  private async runConnectionHealthCheck(timeoutMs: number): Promise<boolean> {
     const result = await this.probeConnection(timeoutMs, 'keepalive')
 
     if (result === 'healthy') return true
@@ -1075,7 +1092,7 @@ export class Connection extends BaseModule {
    */
   private async probeConnection(
     timeoutMs: number,
-    label: string
+    label: ConnectionProbeLabel
   ): Promise<'healthy' | 'dead' | 'stale'> {
     const clientAtStart = this.xmpp
     if (!clientAtStart) return 'dead'
@@ -1088,12 +1105,19 @@ export class Connection extends BaseModule {
     try {
       const sm = clientAtStart.streamManagement
       if (sm?.enabled) {
-        const ackReceived = await this.waitForSmAck(timeoutMs)
-        if (this.xmpp && this.xmpp !== clientAtStart) {
-          logInfo(`${label}: client replaced during await, ignoring stale result`)
-          return 'stale'
-        }
-        if (!ackReceived) {
+        while (true) {
+          const ackResult = await this.waitForSmAck(timeoutMs)
+          if (this.xmpp && this.xmpp !== clientAtStart) {
+            logInfo(`${label}: client replaced during await, ignoring stale result`)
+            return 'stale'
+          }
+          if (ackResult.status === 'acknowledged') break
+          if (
+            ackResult.status === 'timeout' &&
+            this.shouldRetryDelayedKeepalive(label, ackResult.elapsedMs, timeoutMs)
+          ) {
+            continue
+          }
           logWarn(`${label} probe failed (sm-ack): no <a/> within ${timeoutMs}ms`)
           return 'dead'
         }
@@ -1106,17 +1130,27 @@ export class Connection extends BaseModule {
         probeMode = 'ping'
         const iqCaller = clientAtStart.iqCaller
         if (iqCaller) {
-          const ping = xml(
-            'iq',
-            { type: 'get', id: `${label}_${Date.now()}` },
-            xml('ping', { xmlns: NS_PING })
-          )
-          await Promise.race([
-            iqCaller.request(ping),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Ping timeout')), timeoutMs)
-            ),
-          ])
+          while (true) {
+            const ping = xml(
+              'iq',
+              { type: 'get', id: `${label}_${Date.now()}` },
+              xml('ping', { xmlns: NS_PING })
+            )
+            const startedAt = Date.now()
+            try {
+              await iqCaller.request(ping, timeoutMs)
+              break
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                error.name === 'TimeoutError' &&
+                this.shouldRetryDelayedKeepalive(label, Date.now() - startedAt, timeoutMs)
+              ) {
+                continue
+              }
+              throw error
+            }
+          }
         } else {
           // No iqCaller available — fire-and-forget ping
           const ping = xml(
@@ -1152,7 +1186,11 @@ export class Connection extends BaseModule {
    * Wait for a Stream Management acknowledgment (<a/>) with timeout.
    * @internal
    */
-  private waitForSmAck(timeoutMs: number): Promise<boolean> {
+  private waitForSmAck(timeoutMs: number): Promise<
+    | { status: 'acknowledged' }
+    | { status: 'failed' }
+    | { status: 'timeout'; elapsedMs: number }
+  > {
     return new Promise((resolve) => {
       // Capture the client reference at call time. If the client is swapped
       // (reconnect), we must not act on the stale timeout — forceDestroyClient
@@ -1160,11 +1198,12 @@ export class Connection extends BaseModule {
       // only exit path for orphaned waits.
       const client = this.xmpp
       if (!client) {
-        resolve(false)
+        resolve({ status: 'failed' })
         return
       }
 
       let resolved = false
+      const startedAt = Date.now()
 
       // Cleanup helper
       const cleanup = (timeoutId: ReturnType<typeof setTimeout>) => {
@@ -1178,7 +1217,7 @@ export class Connection extends BaseModule {
         if (nonza.is('a', 'urn:xmpp:sm:3') && !resolved) {
           resolved = true
           cleanup(timeoutId)
-          resolve(true)
+          resolve({ status: 'acknowledged' })
         }
       }
 
@@ -1187,7 +1226,7 @@ export class Connection extends BaseModule {
         if (!resolved) {
           resolved = true
           cleanup(timeoutId)
-          resolve(false)
+          resolve({ status: 'failed' })
         }
       }
 
@@ -1200,7 +1239,7 @@ export class Connection extends BaseModule {
           resolved = true
           client?.off?.('nonza', handleNonza)
           client?.off?.('disconnect', handleDisconnect)
-          resolve(false)
+          resolve({ status: 'timeout', elapsedMs: Date.now() - startedAt })
         }
       }, timeoutMs)
 
@@ -1209,10 +1248,22 @@ export class Connection extends BaseModule {
         if (!resolved) {
           resolved = true
           cleanup(timeoutId)
-          resolve(false)
+          resolve({ status: 'failed' })
         }
       })
     })
+  }
+
+  private shouldRetryDelayedKeepalive(
+    label: ConnectionProbeLabel,
+    elapsedMs: number,
+    timeoutMs: number
+  ): boolean {
+    if (label !== 'keepalive' || !didTimerSleepThrough(elapsedMs, timeoutMs)) return false
+    logWarn(
+      `${label} probe timer delayed (${elapsedMs}ms for ${timeoutMs}ms timeout); retrying before reconnect`
+    )
+    return true
   }
 
   /**

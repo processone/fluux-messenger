@@ -88,8 +88,8 @@ export function computePostWakeSettleMs(
 }
 
 /**
- * Decide whether a connection-attempt timer firing `elapsedMs` after it was
- * scheduled should be treated as evidence that the system slept through it.
+ * Decide whether a timer firing `elapsedMs` after it was scheduled should be
+ * treated as evidence that the system slept through it.
  *
  * `setTimeout` freezes while macOS sleeps; when the app wakes, the timer
  * fires immediately regardless of how long the sleep lasted. An elapsed

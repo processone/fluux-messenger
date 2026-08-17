@@ -1139,7 +1139,8 @@ export class XMPPClient {
   }
 
   /**
-   * Verify the connection is alive by sending an XMPP ping (XEP-0199).
+   * Verify the connection is alive with a Stream Management acknowledgment,
+   * falling back to an XMPP ping (XEP-0199) when SM is unavailable.
    *
    * @returns Promise that resolves to true if the server responds, false otherwise
    *
@@ -1158,11 +1159,14 @@ export class XMPPClient {
   /**
    * Lightweight connection health check for routine keepalive.
    *
-   * Unlike {@link verifyConnection}, this does NOT change connection status
-   * or trigger presence events. Suitable for periodic health checks where
-   * the connection is expected to be healthy.
+   * Unlike {@link verifyConnection}, this does not enter the transient
+   * `verifying` status or trigger presence events. Concurrent calls share one
+   * probe. If JavaScript scheduling delays the probe timeout, the SDK requires
+   * a fresh Stream Management acknowledgment or ping result before deciding
+   * that the connection is dead. Confirmed failures trigger reconnection.
    *
-   * @returns Promise that resolves to true if healthy, false if dead
+   * @returns Promise that resolves to true if healthy, false if unavailable
+   *   or confirmed dead
    */
   async verifyConnectionHealth(): Promise<boolean> {
     return this.connection.verifyConnectionHealth()
@@ -1174,7 +1178,8 @@ export class XMPPClient {
    * The SDK routes the tick internally based on connection state and the
    * display-power signal: nudges a stalled reconnect loop, runs a health
    * check when connected, or no-ops. When `displayActive` is `false` the
-   * tick does no network work and only informs the state machine.
+   * tick does no network work and only informs the state machine. Connected
+   * ticks that overlap share the current health probe.
    *
    * @param displayActive Primary-display power state (undefined = legacy
    *   payload, treated as active / fail-open).
