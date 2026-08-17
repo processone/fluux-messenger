@@ -228,9 +228,15 @@ describe('Connection race conditions', () => {
     it('should not trigger double reconnect from concurrent wake events', async () => {
       await connectAndGoOnline(xmppClient, mockXmppClientInstance)
 
-      // Make verify fail: IQ ping hangs (simulates dead socket after sleep)
+      // Make verify fail: IQ ping times out (simulates dead socket after sleep)
       mockXmppClientInstance.iqCaller.request.mockImplementation(
-        () => new Promise(() => {}) // Never resolves — simulates dead socket
+        (_stanza: unknown, timeoutMs: number) => new Promise((_, reject) => {
+          setTimeout(() => {
+            const error = new Error('IQ request timed out')
+            error.name = 'TimeoutError'
+            reject(error)
+          }, timeoutMs)
+        })
       )
 
       // Both WAKEs fire almost simultaneously (as happens with Tauri + heartbeat)
