@@ -288,7 +288,7 @@ Fluux Messenger is licensed under the **GNU Affero General Public License v3.0 o
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=processone/fluux-messenger&type=Date&theme=dark&legend=bottom-right)](https://star-history.com/#processone/fluux-messenger&Date&legend=bottom-right)
+[![Star History Chart](https://star-history.dera.page/svg?repos=processone/fluux-messenger&type=Date&theme=dark&legend=bottom-right)](https://star-history.dera.page/#processone/fluux-messenger&Date&legend=bottom-right)
 
 ---
 
