@@ -356,55 +356,34 @@ export class Profile extends BaseModule {
     // If we have a real JID, try to fetch from their PEP or vCard
     if (realJid) {
       const bareJid = getBareJid(realJid)
-      const domain = getDomain(bareJid)
-
       // The presence advertises an avatar hash, which is a positive signal
       // that the user now has an avatar. Clear any stale negative cache entry
       // (they may have been marked as "no avatar" from a previous session).
       await clearNoAvatar(bareJid)
 
-      // Skip PEP for domains known to block PubSub avatar access
-      if (!isPepForbiddenDomain(domain)) {
-        try {
-          // Try XEP-0084 (PEP) first
-          const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
-            xml('pubsub', { xmlns: NS_PUBSUB },
-              xml('items', { node: NS_AVATAR_DATA },
-                xml('item', { id: avatarHash })
-              )
-            )
-          )
-          const result = await this.deps.sendIQ(iq)
-          const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', NS_AVATAR_DATA)?.text()
+      const data = (await this.readContactAvatarNode(
+        this.avatarDataNode, bareJid, { itemId: avatarHash },
+      ))[0]
 
-          if (data) {
-            // The data node has no MIME type; sniff the bytes so animated
-            // avatars aren't cached as image/png (see fetchAvatarData).
-            const mimeType = sniffImageMimeType(data) ?? 'image/png'
-            const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
-            await clearNoAvatar(bareJid)
-            // Persist JID→hash mapping so we can restore from cache on next session
-            await saveAvatarHash(bareJid, avatarHash, 'contact')
-            if (occupantId) {
-              await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
-            }
-            this.deps.emitSDK('room:occupant-avatar', {
-              roomJid,
-              nick,
-              ...(occupantId && { occupantId }),
-              avatar: blobUrl,
-              avatarHash,
-            })
-            return
-          }
-        } catch (err: any) {
-          // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
-          const condition = err?.condition as string | undefined
-          if (condition === 'forbidden' || condition === 'service-unavailable') {
-            markPepForbiddenDomain(domain).catch(() => {})
-          }
-          // Fall through to vCard fetch
+      if (data) {
+        // The data node has no MIME type; sniff the bytes so animated
+        // avatars aren't cached as image/png (see fetchAvatarData).
+        const mimeType = sniffImageMimeType(data) ?? 'image/png'
+        const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
+        await clearNoAvatar(bareJid)
+        // Persist JID→hash mapping so we can restore from cache on next session
+        await saveAvatarHash(bareJid, avatarHash, 'contact')
+        if (occupantId) {
+          await saveRoomOccupantAvatarHash(roomJid, occupantId, avatarHash)
         }
+        this.deps.emitSDK('room:occupant-avatar', {
+          roomJid,
+          nick,
+          ...(occupantId && { occupantId }),
+          avatar: blobUrl,
+          avatarHash,
+        })
+        return
       }
 
       // Try vCard-temp (XEP-0054)
