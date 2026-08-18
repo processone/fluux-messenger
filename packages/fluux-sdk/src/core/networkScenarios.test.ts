@@ -18,6 +18,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 
 // Mock messageCache to prevent IndexedDB operations
 vi.mock('../utils/messageCache', () => ({
+  saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
   saveRoomMessage: vi.fn().mockResolvedValue(undefined),
   saveRoomMessages: vi.fn().mockResolvedValue(undefined),
   getRoomMessages: vi.fn().mockResolvedValue([]),
@@ -26,6 +27,7 @@ vi.mock('../utils/messageCache', () => ({
   updateRoomMessage: vi.fn().mockResolvedValue(undefined),
   deleteRoomMessage: vi.fn().mockResolvedValue(undefined),
   deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
+  saveMessageWithResult: vi.fn().mockResolvedValue(true),
   saveMessage: vi.fn().mockResolvedValue(undefined),
   saveMessages: vi.fn().mockResolvedValue(undefined),
   getMessages: vi.fn().mockResolvedValue([]),

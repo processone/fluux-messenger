@@ -15,12 +15,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('useChat hook', () => {
   beforeEach(() => {
-    // Reset store state before each test
-    chatStore.setState({
-      conversations: new Map(),
-      messages: new Map(),
-      activeConversationId: null,
-    })
+    chatStore.getState().reset()
   })
 
   describe('composed action surface (useChat = state + useChatActions)', () => {
