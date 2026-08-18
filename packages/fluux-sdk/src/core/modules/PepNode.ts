@@ -57,16 +57,35 @@ export interface PepCodec<T, TWrite = T> {
 }
 
 /**
- * Outcome of a read. The three cases are deliberately distinct: `absent` is the
- * server stating there is nothing published, which is a FACT a caller may act
- * on (a fresh account seeding its first value), while `unavailable` means we
- * did not learn anything. Collapsing them into an empty array loses that, and
- * XEP-0490's read-position seeding depends on the difference.
+ * Outcome of a read. Four cases, split by what the caller can DO about each.
+ *
+ * - `ok` — the server answered with items.
+ * - `absent` — the server answered that nothing is published. A FACT: a fresh
+ *   account seeds its first value on this, and XEP-0490's read-position
+ *   seeding depends on telling it apart from silence.
+ * - `refused` — the server answered that we may not read this node at all.
+ *   Also a fact, and a durable one: a deployment that forbids PEP avatars
+ *   forbids them for every contact on that domain, so a caller can remember it
+ *   and stop asking.
+ * - `unavailable` — no answer. Timeout, transport, anything transient. Nothing
+ *   was learned, so nothing should be remembered.
+ *
+ * `refused` and `unavailable` were one case until the avatar paths needed them
+ * apart, for the same reason `absent` had to be split out: collapsing an answer
+ * into a non-answer loses the only thing that made it actionable.
  */
 export type PepFetch<T> =
   | { status: 'ok'; items: T[] }
   | { status: 'absent' }
+  | { status: 'refused'; condition: string }
   | { status: 'unavailable' }
+
+/**
+ * Conditions that mean "this node is not available to you", as opposed to a
+ * transport failure. A server that answers either for one contact's avatar node
+ * answers the same for every contact it hosts.
+ */
+const REFUSAL_CONDITIONS = ['forbidden', 'service-unavailable'] as const
 
 /** Read options. Defaults to every item on our own node. */
 export interface PepGetOptions {
@@ -111,11 +130,12 @@ export class PepNode<T, TWrite = T> {
     try {
       result = await this.deps.sendIQ(iq, options.timeoutMs)
     } catch (error) {
-      // `item-not-found` is the server answering the question: no such node or
-      // item. Anything else (timeout, transport, forbidden) left us uninformed.
-      return hasErrorCondition(error, 'item-not-found')
-        ? { status: 'absent' }
-        : { status: 'unavailable' }
+      // Every branch here asks the same question: did the server ANSWER? An
+      // answer is actionable however unwelcome; silence is not.
+      if (hasErrorCondition(error, 'item-not-found')) return { status: 'absent' }
+      const refusal = REFUSAL_CONDITIONS.find((c) => hasErrorCondition(error, c))
+      if (refusal) return { status: 'refused', condition: refusal }
+      return { status: 'unavailable' }
     }
 
     const items = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')

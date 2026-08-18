@@ -127,13 +127,18 @@ export class Mds {
   /**
    * Fetch all displayed markers while preserving whether the node response was
    * authoritative. A missing node is authoritative and contains no markers;
-   * transport, timeout, and unexpected failures are unknown.
+   * a refusal, transport failure, timeout, or unexpected failure is unknown.
+   *
+   * A refusal is an ANSWER, but not the answer this asks for: "you may not read
+   * this node" is not "you have no markers", and seeding read positions from it
+   * would publish over another device's.
    */
   async fetchAllDisplayedResult(timeoutMs?: number): Promise<DisplayedMarkerFetchResult> {
     const result = await this.node.get({ timeoutMs })
     switch (result.status) {
       case 'ok': return { status: 'authoritative', markers: result.items }
       case 'absent': return { status: 'authoritative', markers: [] }
+      case 'refused': return { status: 'unknown' }
       case 'unavailable': return { status: 'unknown' }
     }
   }

@@ -51,10 +51,12 @@ function thingItem(id: string, name: string): Element {
   return xml('item', { id }, xml('thing', { xmlns: NODE, name }))
 }
 
-/** The shape `sendIQ` rejects with when the server answers `item-not-found`. */
-function itemNotFound(): Error & { condition: string } {
-  return Object.assign(new Error('item-not-found'), { condition: 'item-not-found' })
+/** The shape `sendIQ` rejects with when the server answers a stanza error. */
+function stanzaError(condition: string): Error & { condition: string } {
+  return Object.assign(new Error(condition), { condition })
 }
+
+const itemNotFound = () => stanzaError('item-not-found')
 
 describe('PepNode.get', () => {
   it('decodes items and reports ok', async () => {
@@ -108,9 +110,29 @@ describe('PepNode.get', () => {
     expect(await new PepNode(deps, NODE, codec).get()).toEqual({ status: 'absent' })
   })
 
+  // A refusal is an ANSWER: the server said this node is not ours to read, and
+  // that holds for every item on it. Callers remember it; they must not remember
+  // a timeout.
+  it('classifies forbidden as refused, carrying the condition', async () => {
+    const deps = makeDeps(async () => { throw stanzaError('forbidden') })
+    expect(await new PepNode(deps, NODE, codec).get())
+      .toEqual({ status: 'refused', condition: 'forbidden' })
+  })
+
+  it('classifies service-unavailable as refused', async () => {
+    const deps = makeDeps(async () => { throw stanzaError('service-unavailable') })
+    expect(await new PepNode(deps, NODE, codec).get())
+      .toEqual({ status: 'refused', condition: 'service-unavailable' })
+  })
+
   it('classifies any other rejection as unavailable', async () => {
     const deps = makeDeps(async () => { throw new Error('timeout') })
     expect(await new PepNode(deps, NODE, codec).get()).toEqual({ status: 'unavailable' })
+  })
+
+  it('keeps item-not-found ahead of the refusal conditions', async () => {
+    const deps = makeDeps(async () => { throw stanzaError('item-not-found') })
+    expect(await new PepNode(deps, NODE, codec).get()).toEqual({ status: 'absent' })
   })
 
   it('treats a result without <items/> as unavailable rather than empty', async () => {
@@ -132,10 +154,12 @@ describe('PepNode.getOr', () => {
     expect(await new PepNode(deps, NODE, codec).getOr([])).toEqual([{ id: 'a', name: 'Ada' }])
   })
 
-  it('falls back for both absent and unavailable', async () => {
+  it('falls back for absent, refused and unavailable alike', async () => {
     const absent = makeDeps(async () => { throw itemNotFound() })
+    const refused = makeDeps(async () => { throw stanzaError('forbidden') })
     const broken = makeDeps(async () => { throw new Error('nope') })
     expect(await new PepNode(absent, NODE, codec).getOr([])).toEqual([])
+    expect(await new PepNode(refused, NODE, codec).getOr([])).toEqual([])
     expect(await new PepNode(broken, NODE, codec).getOr([])).toEqual([])
   })
 })
