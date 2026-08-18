@@ -518,6 +518,29 @@ function positionFrameInShadow<Request extends { conversationId: string }, Resul
   })
 }
 
+/**
+ * Discard a loop whose lease went stale while it was being built.
+ *
+ * `beginLoop` can outlive the ownership that authorised it, and the orphaned loop is nobody else's
+ * to end. Ending it is an adapter call like any other, so it runs inside the shadow — the seven runs
+ * reach this point by different paths and must not differ in whether a failing adapter throws out of
+ * one of them. No public entry point is known to reach this branch; it is depth, kept uniform so a
+ * reader does not have to work out which runs have it.
+ */
+function finishStaleLoopInShadow(
+  run: { request: { conversationId: string } },
+  event: string,
+  loop: PositionFrameLoop | null,
+): void {
+  if (!loop) return
+  runScrollShadowSafely({
+    event,
+    conversationId: run.request.conversationId,
+    fallback: undefined,
+    observe: () => loop.finish(),
+  })
+}
+
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
@@ -1699,7 +1722,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      loop?.finish()
+      finishStaleLoopInShadow(execution, 'live-edge-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -1927,7 +1950,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      loop?.finish()
+      finishStaleLoopInShadow(execution, 'anchor-preservation-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -2119,7 +2142,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      loop?.finish()
+      finishStaleLoopInShadow(execution, 'directional-history-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -2282,14 +2305,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      if (loop) {
-        runScrollShadowSafely({
-          event: 'resident-top-loop-stale-finish',
-          conversationId: execution.request.conversationId,
-          fallback: undefined,
-          observe: () => loop.finish(),
-        })
-      }
+      finishStaleLoopInShadow(execution, 'resident-top-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -2570,14 +2586,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      if (loop) {
-        runScrollShadowSafely({
-          event: 'explicit-target-loop-stale-finish',
-          conversationId: execution.request.conversationId,
-          fallback: undefined,
-          observe: () => loop.finish(),
-        })
-      }
+      finishStaleLoopInShadow(execution, 'explicit-target-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -2836,14 +2845,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      if (loop) {
-        runScrollShadowSafely({
-          event: 'unread-marker-loop-stale-finish',
-          conversationId: execution.request.conversationId,
-          fallback: undefined,
-          observe: () => loop.finish(),
-        })
-      }
+      finishStaleLoopInShadow(execution, 'unread-marker-loop-stale-finish', loop)
       return
     }
     if (!loop) {
@@ -3193,14 +3195,7 @@ export class PositioningController {
       observe: () => execution.executor.beginLoop(lease),
     })
     if (!lease.isCurrent()) {
-      if (loop) {
-        runScrollShadowSafely({
-          event: 'saved-position-loop-stale-finish',
-          conversationId: execution.request.conversationId,
-          fallback: undefined,
-          observe: () => loop.finish(),
-        })
-      }
+      finishStaleLoopInShadow(execution, 'saved-position-loop-stale-finish', loop)
       return
     }
     if (!loop) {
