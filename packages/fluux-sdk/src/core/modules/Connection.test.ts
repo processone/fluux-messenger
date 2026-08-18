@@ -4213,6 +4213,10 @@ describe('XMPPClient Connection', () => {
     it('restarts the SM probe when suspension delays the keepalive timeout', async () => {
       mockXmppClientInstance.send.mockClear()
       mockXmppClientInstance.send.mockResolvedValue(undefined)
+      mockXmppClientInstance.socket = {
+        writable: true,
+        socket: { bufferedAmount: 4096 },
+      } as MockXmppClient['socket']
       vi.setSystemTime(new Date(0))
 
       const healthPromise = xmppClient.verifyConnectionHealth()
@@ -4226,6 +4230,12 @@ describe('XMPPClient Connection', () => {
 
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
       expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[health\] probe-delayed generation=1 mode=sm-ack elapsedMs=26000 timeoutMs=10000 .*bufferedAmount=4096$/
+        ),
+        'connection'
+      )
 
       mockXmppClientInstance._emit(
         'nonza',
@@ -4233,6 +4243,31 @@ describe('XMPPClient Connection', () => {
       )
 
       await expect(healthPromise).resolves.toBe(true)
+    })
+
+    it('records a sleep-gap tick with the display and transport state', () => {
+      mockXmppClientInstance.socket = {
+        writable: true,
+        socket: { bufferedAmount: 2048 },
+      } as MockXmppClient['socket']
+
+      xmppClient.handleKeepaliveTick(false, 180_000)
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[health\] keepalive-wake generation=1 display=inactive sleptMs=180000 .*bufferedAmount=2048$/
+        ),
+        'connection'
+      )
+    })
+
+    it('does not record a steady keepalive tick as a wake', () => {
+      xmppClient.handleKeepaliveTick(false, 30_000)
+
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        expect.stringMatching(/^\[health\] keepalive-wake /),
+        'connection'
+      )
     })
 
     // #515: with SM disabled, the keepalive probe falls back to an IQ ping to
@@ -4321,6 +4356,14 @@ describe('XMPPClient Connection', () => {
 
       expect(healthy).toBe(false)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[health\] probe-failed .*reason="WebSocket ECONNERROR" /),
+        'connection'
+      )
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[health\] reconnect-decision .*source=keepalive-failed /),
+        'connection'
+      )
     })
 
     it('should not trigger reconnect when concurrent verifyConnection and verifyConnectionHealth race', async () => {

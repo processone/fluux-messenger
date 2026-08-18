@@ -78,6 +78,7 @@ const logError = (...args: unknown[]) => {
 }
 
 type ConnectionProbeLabel = 'verify' | 'keepalive'
+const KEEPALIVE_WAKE_THRESHOLD_MS = 180_000
 
 // Stream/SASL auth failures are terminal and should not be retried.
 // Keep this list explicit to avoid classifying generic stanza `type="auth"`
@@ -191,6 +192,16 @@ export class Connection extends BaseModule {
   // Native ticks can bunch up when the webview resumes. Keep one routine
   // health probe active so delayed timers cannot accumulate listeners and IQs.
   private healthCheckInFlight: Promise<boolean> | null = null
+
+  // Monotonic identity for each xmpp.js client owned by this module. Health
+  // events use it to distinguish stale callbacks from the active transport.
+  private connectionGeneration = 0
+
+  // Wall-clock time of the latest XEP-0198 acknowledgment observed by a
+  // health probe. The value is diagnostic only and is never persisted.
+  private lastSmAckTimestamp = 0
+  private lastIncomingTimestamp = 0
+  private lastOutgoingTimestamp = 0
 
   // Timestamp of last wake-from-sleep event. Used by attemptReconnect to add a
   // short settle delay — navigator.onLine goes true before the network path is
@@ -385,6 +396,56 @@ export class Connection extends BaseModule {
     if (!isConnectionTraceEnabled()) return
     this.stores.console.addEvent(message, 'connection')
     logInfo(message)
+  }
+
+  private getWebSocketBufferedAmount(): number | null {
+    const socketWrapper = (this.xmpp as unknown as {
+      socket?: {
+        bufferedAmount?: unknown
+        socket?: { bufferedAmount?: unknown } | null
+      } | null
+    } | null)?.socket
+    const value = socketWrapper?.socket?.bufferedAmount ?? socketWrapper?.bufferedAmount
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private logHealthEvent(
+    event: string,
+    fields: ReadonlyArray<readonly [name: string, value: string | number | boolean]> = []
+  ): void {
+    const now = Date.now()
+    const lastSmAckAgeMs = this.lastSmAckTimestamp > 0
+      ? Math.max(0, now - this.lastSmAckTimestamp)
+      : 'unknown'
+    const lastIncomingAgeMs = this.lastIncomingTimestamp > 0
+      ? Math.max(0, now - this.lastIncomingTimestamp)
+      : 'unknown'
+    const lastOutgoingAgeMs = this.lastOutgoingTimestamp > 0
+      ? Math.max(0, now - this.lastOutgoingTimestamp)
+      : 'unknown'
+    const bufferedAmount = this.getWebSocketBufferedAmount() ?? 'unknown'
+    const fieldText = fields.map(([name, value]) => {
+      const text = String(value)
+      const formatted = /^[A-Za-z0-9._:-]+$/.test(text) ? text : JSON.stringify(text)
+      return `${name}=${formatted}`
+    })
+    const machineState = this.getMachineState()
+    const state = typeof machineState === 'string'
+      ? machineState
+      : Object.entries(machineState).map(([parent, child]) => `${parent}.${child}`).join('.')
+    this.stores.console.addEvent(
+      [
+        `[health] ${event}`,
+        `generation=${this.connectionGeneration}`,
+        ...fieldText,
+        `state=${state}`,
+        `lastSmAckAgeMs=${lastSmAckAgeMs}`,
+        `lastIncomingAgeMs=${lastIncomingAgeMs}`,
+        `lastOutgoingAgeMs=${lastOutgoingAgeMs}`,
+        `bufferedAmount=${bufferedAmount}`,
+      ].join(' '),
+      'connection'
+    )
   }
 
   /**
@@ -582,7 +643,7 @@ export class Connection extends BaseModule {
     const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
       this.stores.connection.setConnectionMethod(connectionMethod)
       this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive, rememberSession }
-      this.xmpp = this.createXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
+      this.installXmppClient({ jid, password, server: resolvedServer, resource, lang, rememberSession })
       this.hydrateStreamManagement(effectiveSmState)
       this.setupHandlers()
 
@@ -1049,6 +1110,13 @@ export class Connection extends BaseModule {
    *   gap indicates the machine slept; used to send an immediate wake kick.
    */
   handleKeepaliveTick(displayActive?: boolean, sleptMs?: number): void {
+    if ((sleptMs ?? 0) >= KEEPALIVE_WAKE_THRESHOLD_MS) {
+      this.logHealthEvent('keepalive-wake', [
+        ['display', displayActive === false ? 'inactive' : displayActive === true ? 'active' : 'unknown'],
+        ['sleptMs', sleptMs!],
+      ])
+    }
+
     if (displayActive === false) {
       // Display off: zero outbound work; just release/hold the ladder.
       this.sendMachineEvent({ type: 'DISPLAY_INACTIVE' }, 'keepalive:display-inactive')
@@ -1101,6 +1169,7 @@ export class Connection extends BaseModule {
     // delayed because the file never said the keepalive was failing, let
     // alone how (the console event is in-app only).
     let probeMode = 'sm-ack'
+    let retriedAfterDelayedTimer = false
 
     try {
       const sm = clientAtStart.streamManagement
@@ -1114,11 +1183,18 @@ export class Connection extends BaseModule {
           if (ackResult.status === 'acknowledged') break
           if (
             ackResult.status === 'timeout' &&
-            this.shouldRetryDelayedKeepalive(label, ackResult.elapsedMs, timeoutMs)
+            this.shouldRetryDelayedKeepalive(label, probeMode, ackResult.elapsedMs, timeoutMs)
           ) {
+            retriedAfterDelayedTimer = true
             continue
           }
           logWarn(`${label} probe failed (sm-ack): no <a/> within ${timeoutMs}ms`)
+          this.logHealthEvent('probe-failed', [
+            ['probe', label],
+            ['mode', probeMode],
+            ['timeoutMs', timeoutMs],
+            ['reason', ackResult.status],
+          ])
           return 'dead'
         }
       } else {
@@ -1144,8 +1220,9 @@ export class Connection extends BaseModule {
               if (
                 error instanceof Error &&
                 error.name === 'TimeoutError' &&
-                this.shouldRetryDelayedKeepalive(label, Date.now() - startedAt, timeoutMs)
+                this.shouldRetryDelayedKeepalive(label, probeMode, Date.now() - startedAt, timeoutMs)
               ) {
+                retriedAfterDelayedTimer = true
                 continue
               }
               throw error
@@ -1164,6 +1241,12 @@ export class Connection extends BaseModule {
 
       // If client was replaced during the await, treat as stale
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
+      if (retriedAfterDelayedTimer) {
+        this.logHealthEvent('probe-recovered', [
+          ['probe', label],
+          ['mode', probeMode],
+        ])
+      }
       return 'healthy'
     } catch (err) {
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
@@ -1178,6 +1261,11 @@ export class Connection extends BaseModule {
         return 'healthy'
       }
       logWarn(`${label} probe failed (${probeMode}): ${errorMessage}`)
+      this.logHealthEvent('probe-failed', [
+        ['probe', label],
+        ['mode', probeMode],
+        ['reason', errorMessage || 'unknown'],
+      ])
       return 'dead'
     }
   }
@@ -1216,6 +1304,7 @@ export class Connection extends BaseModule {
       const handleNonza = (nonza: Element) => {
         if (nonza.is('a', 'urn:xmpp:sm:3') && !resolved) {
           resolved = true
+          if (this.xmpp === client) this.lastSmAckTimestamp = Date.now()
           cleanup(timeoutId)
           resolve({ status: 'acknowledged' })
         }
@@ -1256,6 +1345,7 @@ export class Connection extends BaseModule {
 
   private shouldRetryDelayedKeepalive(
     label: ConnectionProbeLabel,
+    mode: string,
     elapsedMs: number,
     timeoutMs: number
   ): boolean {
@@ -1263,6 +1353,11 @@ export class Connection extends BaseModule {
     logWarn(
       `${label} probe timer delayed (${elapsedMs}ms for ${timeoutMs}ms timeout); retrying before reconnect`
     )
+    this.logHealthEvent('probe-delayed', [
+      ['mode', mode],
+      ['elapsedMs', elapsedMs],
+      ['timeoutMs', timeoutMs],
+    ])
     return true
   }
 
@@ -1291,6 +1386,11 @@ export class Connection extends BaseModule {
       )
       return
     }
+
+    this.logHealthEvent('reconnect-decision', [
+      ['source', source],
+      ['immediate', immediateReconnect],
+    ])
 
     // Signal to setupConnectionHandlers' error handler that recovery is already
     // in progress. Must be set BEFORE cleanupClient/nudgeReconnect so the
@@ -1765,6 +1865,16 @@ export class Connection extends BaseModule {
     return xmppClient
   }
 
+  private installXmppClient(options: ConnectOptions): Client {
+    const nextClient = this.createXmppClient(options)
+    this.xmpp = nextClient
+    this.connectionGeneration += 1
+    this.lastSmAckTimestamp = 0
+    this.lastIncomingTimestamp = 0
+    this.lastOutgoingTimestamp = 0
+    return nextClient
+  }
+
   /**
    * Disable xmpp.js built-in auto-reconnect (@xmpp/reconnect module).
    *
@@ -2093,9 +2203,11 @@ export class Connection extends BaseModule {
 
     // Log all incoming/outgoing XML to console store
     this.xmpp.on('element', (element: Element) => {
+      this.lastIncomingTimestamp = Date.now()
       this.stores?.console.addPacket('incoming', element.toString())
     })
     this.xmpp.on('send', (element: Element) => {
+      this.lastOutgoingTimestamp = Date.now()
       this.stores?.console.addPacket('outgoing', element.toString())
     })
 
@@ -2593,7 +2705,7 @@ export class Connection extends BaseModule {
 
       const connectWithOptions = async (options: ConnectOptions): Promise<void> => {
         this.deadSocketRecoveryInProgress = false
-        this.xmpp = this.createXmppClient(options)
+        this.installXmppClient(options)
         clientCreatedByThisAttempt = this.xmpp
         this.hydrateStreamManagement(smState ?? undefined)
         this.setupHandlers()

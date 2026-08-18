@@ -10,6 +10,7 @@ import { TextInput, TextArea } from './ui/TextInput'
 import { Tooltip } from './Tooltip'
 import { ModalOverlay } from './ModalOverlay'
 import { platform } from '@/platform'
+import { buildXmppConsoleExport } from '@/utils/xmppConsoleExport'
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
@@ -179,7 +180,7 @@ export function XmppConsole() {
   const status = useConnectionStore((s) => s.status)
   const serverInfo = useConnectionStore((s) => s.serverInfo)
   const connectionMethod = useConnectionStore((s) => s.connectionMethod)
-  const { sendRawXml } = useXMPP()
+  const { client, sendRawXml } = useXMPP()
   const [inputXml, setInputXml] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -426,53 +427,36 @@ export function XmppConsole() {
   }
 
   const handleExport = useCallback(async () => {
-    // Snapshot current entries at export time to avoid stale closure issues
-    const currentEntries = entries
-    const currentConnectionMethod = connectionMethod
-    const currentServerInfo = serverInfo
-
-    // Build header with version info
-    const exportDate = format(new Date(), 'yyyy-MM-dd HH:mm:ss')
-    const header = [
-      '================================================================================',
-      `Fluux XMPP Console Log`,
-      `Version: ${__APP_VERSION__} (${__GIT_COMMIT__})`,
-      `Connection: ${currentConnectionMethod?.toUpperCase() ?? 'Unknown'}`,
-      `Exported: ${exportDate}`,
-      '================================================================================',
-    ]
-
-    // Add server info section if available
-    const serverSection: string[] = []
-    if (currentServerInfo) {
-      serverSection.push('')
-      serverSection.push(`Server: ${currentServerInfo.domain}`)
-      if (currentServerInfo.identities.length > 0) {
-        const identity = currentServerInfo.identities[0]
-        serverSection.push(`Identity: ${identity.name || 'Unknown'} (${identity.category}/${identity.type})`)
-      }
-      serverSection.push(`Features (${currentServerInfo.features.length}):`)
-      for (const feature of currentServerInfo.features) {
-        serverSection.push(`  - ${feature}`)
-      }
-      serverSection.push('')
-      serverSection.push('================================================================================')
-    }
-
-    serverSection.push('')
-
-    // Format entries as a readable log
-    const lines = currentEntries.map((entry) => {
-      const timestamp = format(entry.timestamp, 'yyyy-MM-dd HH:mm:ss.SSS')
-      if (entry.type === 'event') {
-        return `[${timestamp}] EVENT: ${entry.content}`
-      }
-      const direction = entry.type === 'incoming' ? 'IN ' : 'OUT'
-      return `[${timestamp}] ${direction}: ${entry.content}`
+    const exportedAt = new Date()
+    const machineSnapshot = client.connectionActor.getSnapshot()
+    const machineContext = machineSnapshot.context
+    const streamManagement = client.getStreamManagementState()
+    const content = buildXmppConsoleExport({
+      entries,
+      appVersion: __APP_VERSION__,
+      gitCommit: __GIT_COMMIT__,
+      exportedAt,
+      connectionMethod,
+      serverInfo,
+      health: {
+        status,
+        machineState: machineSnapshot.value,
+        reconnectAttempt: machineContext.reconnectAttempt,
+        nextRetryDelayMs: machineContext.nextRetryDelayMs,
+        reconnectTargetTime: machineContext.reconnectTargetTime,
+        smResumeViable: machineContext.smResumeViable,
+        displayAsleep: machineContext.displayAsleep,
+        browserOnline: typeof navigator === 'undefined' ? null : navigator.onLine,
+        visibilityState: typeof document === 'undefined' ? null : document.visibilityState,
+        focused: typeof document === 'undefined' || typeof document.hasFocus !== 'function'
+          ? null
+          : document.hasFocus(),
+        streamManagement: streamManagement
+          ? { inbound: streamManagement.inbound, outbound: streamManagement.outbound }
+          : null,
+      },
     })
-
-    const content = [...header, ...serverSection, ...lines].join('\n')
-    const defaultFilename = `xmpp-log-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.txt`
+    const defaultFilename = `xmpp-log-${format(exportedAt, 'yyyy-MM-dd-HHmmss')}.txt`
 
     // Use native save dialog in Tauri, fallback to blob download for web
     if (platform().nativeDownloads) {
@@ -496,7 +480,7 @@ export function XmppConsole() {
     } else {
       downloadAsBlob(content, defaultFilename)
     }
-  }, [entries, connectionMethod, serverInfo])
+  }, [client, connectionMethod, entries, serverInfo, status])
 
   if (!isOpen) return null
 
