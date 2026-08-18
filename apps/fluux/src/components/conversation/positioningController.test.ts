@@ -2397,6 +2397,198 @@ describe('positioning controller explicit-target ownership', () => {
   })
 })
 
+/**
+ * Anchor preservation was the only executor without an ownership block of its own. What existed
+ * lived inside the live-edge block, testing how the two interact: that an outgoing live edge
+ * supersedes a controller-owned media anchor, and that divider layout preservation runs through the
+ * same execution machine. Its own lifecycle — what settles it, what ends it best-effort, what a
+ * queued frame may still do once it has lost the position — was covered only at the adapter layer.
+ */
+describe('positioning controller anchor-preservation ownership', () => {
+  function anchorHarness(
+    frameResult: () => AnchorPreservationFrameResult = () => ({
+      kind: 'positioned',
+      scrollTop: 500,
+      reassert: true,
+    }),
+  ) {
+    const callbacks: Array<() => void> = []
+    const finish = vi.fn()
+    const recordFrame = vi.fn()
+    const complete = vi.fn()
+    const positionFrame = vi.fn(frameResult)
+    const executor: AnchorPreservationExecutor = {
+      reachability: () => ({
+        kind: 'available',
+        index: 5,
+        mounted: true,
+        placement: 'viable',
+      }),
+      beginLoop: () => ({
+        schedule: (callback) => callbacks.push(callback),
+        recordFrame,
+        finish,
+      }),
+      positionFrame,
+      complete,
+    }
+    return {
+      executor,
+      callbacks,
+      finish,
+      recordFrame,
+      complete,
+      positionFrame,
+      runFrame: () => {
+        const callback = callbacks.shift()
+        expect(callback, 'a frame must be queued').toBeDefined()
+        callback!()
+      },
+    }
+  }
+
+  const mediaAnchor = {
+    kind: 'anchor' as const,
+    messageId: 'media-row',
+    placement: { kind: 'bottom-fraction' as const, fraction: messageFraction(0.5) },
+  }
+
+  function beginMedia(controller: PositioningController, harness: ReturnType<typeof anchorHarness>) {
+    observeLiveEntry(controller)
+    const request = controller.beginMediaPreservation({
+      conversationId,
+      desired: mediaAnchor,
+      executor: harness.executor,
+    })
+    expect(request, 'media preservation must be accepted').not.toBeNull()
+    return request!
+  }
+
+  it('settles as soon as a frame stops asking to re-assert', () => {
+    // Preservation is not a fixed frame budget: the executor decides it has converged, and the
+    // controller must take that answer rather than keep re-asserting to the cap.
+    let reassert = true
+    const harness = anchorHarness(() => ({ kind: 'positioned', scrollTop: 500, reassert }))
+    const controller = new PositioningController()
+    beginMedia(controller, harness)
+
+    reassert = false
+    harness.runFrame()
+
+    expect(harness.complete).toHaveBeenCalledWith(expect.anything(), 'settled')
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('settles once the measured position holds still, and stops reporting writes', () => {
+    // Eight frames inside the 8px drift window mean the row has stopped moving. Every frame after
+    // the first reports no write, which is what tells the re-assert monitor the loop is quiet.
+    const harness = anchorHarness()
+    const controller = new PositioningController()
+    beginMedia(controller, harness)
+
+    // ANCHOR_PRESERVATION_STABLE_FRAMES
+    for (let i = 0; i < 8 + 1; i++) harness.runFrame()
+
+    expect(harness.recordFrame).toHaveBeenCalledWith(true)
+    expect(harness.recordFrame).toHaveBeenLastCalledWith(false)
+    expect(harness.complete).toHaveBeenCalledWith(expect.anything(), 'settled')
+    expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
+  })
+
+  it('ends best-effort when the anchor stops being reachable', () => {
+    let available = true
+    const harness = anchorHarness(() =>
+      available
+        ? { kind: 'positioned', scrollTop: 500, reassert: true }
+        : { kind: 'unavailable' },
+    )
+    const controller = new PositioningController()
+    beginMedia(controller, harness)
+
+    available = false
+    harness.runFrame()
+
+    expect(harness.complete).toHaveBeenCalledWith(expect.anything(), 'best-effort')
+  })
+
+  it('gives up best-effort at the frame cap rather than re-asserting forever', () => {
+    // A row that never stops moving — a still-decoding image — must not hold the position for good.
+    let scrollTop = 0
+    const harness = anchorHarness(() => ({
+      kind: 'positioned',
+      scrollTop: (scrollTop += 100),
+      reassert: true,
+    }))
+    const controller = new PositioningController()
+    beginMedia(controller, harness)
+
+    // ANCHOR_PRESERVATION_REASSERT_FRAMES
+    for (let i = 0; i < 90 + 1; i++) harness.runFrame()
+
+    expect(harness.complete).toHaveBeenCalledWith(expect.anything(), 'best-effort')
+    // It stopped rather than merely reported: nothing is queued, and the budget covered the
+    // initial write plus its re-assert frames, not one frame more.
+    expect(harness.callbacks).toHaveLength(0)
+    expect(harness.positionFrame).toHaveBeenCalledTimes(90 + 1)
+  })
+
+  it('cancels on genuine user input and rejects the frame already queued', () => {
+    const harness = anchorHarness()
+    const controller = new PositioningController()
+    const request = beginMedia(controller, harness)
+    const framesBefore = harness.positionFrame.mock.calls.length
+
+    controller.observeUserInput(conversationId)
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(framesBefore)
+    expect(controller.snapshot().active?.request.generation).not.toBe(request.generation)
+  })
+
+  it('rejects a queued frame once the conversation is deactivated', () => {
+    const harness = anchorHarness()
+    const controller = new PositioningController()
+    const request = beginMedia(controller, harness)
+    const framesBefore = harness.positionFrame.mock.calls.length
+
+    controller.deactivate(conversationId, request.generation)
+    harness.runFrame()
+
+    expect(harness.positionFrame).toHaveBeenCalledTimes(framesBefore)
+    expect(controller.snapshot().active).toBeNull()
+  })
+
+  it('refuses layout preservation while another request is still positioning', () => {
+    // Divider movement is ambient: it may hold a settled reading point, but it must never take the
+    // position from a request the reader is still waiting to reach.
+    const harness = anchorHarness()
+    const controller = new PositioningController()
+    observeLiveEntry(controller)
+    const target = controller.beginExplicitTarget({
+      conversationId,
+      messageId: 'still-arriving',
+      executor: {
+        reachability: () => ({ kind: 'target-absent', loadAround: 'loading' }),
+        beginLoop: () => null,
+        readScrollTop: () => 0,
+        positionFrame: () => ({ kind: 'waiting' }),
+        complete: vi.fn(),
+      },
+    })
+    expect(target, 'the explicit target must own the position first').not.toBeNull()
+
+    const refused = controller.beginLayoutPreservation({
+      conversationId,
+      reason: 'divider-mutation',
+      desired: mediaAnchor,
+      executor: harness.executor,
+    })
+
+    expect(refused).toBeNull()
+    expect(controller.snapshot().active?.request.generation).toBe(target!.generation)
+  })
+})
+
 describe('position fact adapters', () => {
   it('derives mounted state from the current virtual window', () => {
     const virtualizer = {
