@@ -379,6 +379,22 @@ interface DirectionalHistoryExecutionState {
   applied: boolean
 }
 
+/**
+ * Whether a frame landed close enough to the previous one to count as still. A run's first frame has
+ * no previous landing and is never still, which is what the null check says: without it, a fresh
+ * execution would count its opening write as one stable frame it never measured.
+ *
+ * Each executor decides for itself what to do with the answer — how many still frames settle it,
+ * whether the settling frame is recorded — so only the question is shared, not the accounting.
+ */
+function heldWithinDrift(
+  landedTarget: number | null,
+  scrollTop: number,
+  driftPx: number,
+): boolean {
+  return landedTarget !== null && Math.abs(scrollTop - landedTarget) <= driftPx
+}
+
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
@@ -1839,11 +1855,7 @@ export class PositioningController {
       return
     }
     let wrote = false
-    if (
-      execution.landedTarget !== null &&
-      Math.abs(result.scrollTop - execution.landedTarget) <=
-        ANCHOR_PRESERVATION_DRIFT_PX
-    ) {
+    if (heldWithinDrift(execution.landedTarget, result.scrollTop, ANCHOR_PRESERVATION_DRIFT_PX)) {
       execution.stableFrames += 1
     } else {
       wrote = true
@@ -2613,11 +2625,7 @@ export class PositioningController {
     lease.markApplied()
     if (!lease.isCurrent()) return
 
-    if (
-      execution.landedTarget !== null &&
-      Math.abs(result.scrollTop - execution.landedTarget) <=
-        EXPLICIT_TARGET_DRIFT_PX
-    ) {
+    if (heldWithinDrift(execution.landedTarget, result.scrollTop, EXPLICIT_TARGET_DRIFT_PX)) {
       execution.stableFrames += 1
       if (execution.stableFrames >= EXPLICIT_TARGET_STABLE_FRAMES) {
         this.recordExplicitTargetFrame(execution, result.wrote)
@@ -2877,11 +2885,7 @@ export class PositioningController {
     execution.resolvedAtLiveEdge ||= result.atLiveEdge
 
     let wrote = false
-    if (
-      execution.landedTarget !== null &&
-      Math.abs(result.scrollTop - execution.landedTarget) <=
-        UNREAD_MARKER_DRIFT_PX
-    ) {
+    if (heldWithinDrift(execution.landedTarget, result.scrollTop, UNREAD_MARKER_DRIFT_PX)) {
       execution.stableFrames += 1
       if (execution.stableFrames >= UNREAD_MARKER_STABLE_FRAMES) {
         if (execution.resolvedAtLiveEdge) {
@@ -3211,11 +3215,7 @@ export class PositioningController {
     }
 
     let wrote = false
-    if (
-      execution.landedTarget !== null &&
-      Math.abs(result.scrollTop - execution.landedTarget) <=
-        SAVED_POSITION_DRIFT_PX
-    ) {
+    if (heldWithinDrift(execution.landedTarget, result.scrollTop, SAVED_POSITION_DRIFT_PX)) {
       execution.stableFrames += 1
       if (execution.stableFrames >= SAVED_POSITION_STABLE_FRAMES) {
         this.settleSavedPosition(execution, lease, 'settled')

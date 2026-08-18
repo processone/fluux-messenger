@@ -2495,6 +2495,27 @@ describe('positioning controller anchor-preservation ownership', () => {
     expect(controller.snapshot().active?.phase).toEqual({ kind: 'settled' })
   })
 
+  it('counts a frame exactly on the drift bound as still, and one past it as movement', () => {
+    // ANCHOR_PRESERVATION_DRIFT_PX is 8, and the window is inclusive: a row settling by exactly 8px
+    // per frame has stopped moving for positioning purposes. Nothing else pins that boundary, so a
+    // stricter comparison would pass every other test here while never letting a slow settle finish.
+    const stepBy = (px: number) => {
+      let scrollTop = 0
+      const harness = anchorHarness(() => ({
+        kind: 'positioned',
+        scrollTop: (scrollTop += px),
+        reassert: true,
+      }))
+      const controller = new PositioningController()
+      beginMedia(controller, harness)
+      for (let i = 0; i < 8 + 1; i++) harness.runFrame()
+      return harness
+    }
+
+    expect(stepBy(8).complete).toHaveBeenCalledWith(expect.anything(), 'settled')
+    expect(stepBy(9).complete).not.toHaveBeenCalled()
+  })
+
   it('ends best-effort when the anchor stops being reachable', () => {
     let available = true
     const harness = anchorHarness(() =>
