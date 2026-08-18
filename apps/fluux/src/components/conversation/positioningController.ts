@@ -1723,21 +1723,14 @@ export class PositioningController {
       return
     }
 
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'live-edge-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'live-edge-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.settleLiveEdge(execution, lease, 'best-effort')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'live-edge-loop-start',
+      staleFinishEvent: 'live-edge-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => this.settleLiveEdge(execution, lease, 'best-effort'),
+    })) return
     this.scheduleLiveEdgeFrame(execution, lease)
   }
 
@@ -1860,6 +1853,43 @@ export class PositioningController {
    * `ownsSlot` is the only part a run states for itself, because the slot is a named field per run.
    * `alreadySatisfied` lets a run treat a phase as reached without touching the model.
    */
+  /**
+   * Adopt the frame loop a run just asked its executor to build.
+   *
+   * The order here is the point, and it is the same for all seven runs: the loop is stored before
+   * the first frame is scheduled, so a frame that runs immediately finds it; and a lease that went
+   * stale while the loop was being built still ends that loop, because nobody else holds it.
+   *
+   * What a run does when its executor cannot build one is its own — settling, promoting a fallback,
+   * or reporting the target as not indexed. Returns whether the run may now drive frames; the loop
+   * is already stored by then, so a caller cannot schedule one before it is reachable.
+   */
+  private adoptFrameLoop(step: {
+    execution: ShadowedRun
+    lease: PositionExecutionLease
+    startEvent: string
+    staleFinishEvent: string
+    beginLoop: () => PositionFrameLoop | null
+    onCannotStart: () => void
+  }): boolean {
+    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
+      event: step.startEvent,
+      conversationId: step.execution.request.conversationId,
+      fallback: null,
+      observe: step.beginLoop,
+    })
+    if (!step.lease.isCurrent()) {
+      finishStaleLoopInShadow(step.execution, step.staleFinishEvent, loop)
+      return false
+    }
+    if (!loop) {
+      step.onCannotStart()
+      return false
+    }
+    step.execution.loop = loop
+    return true
+  }
+
   private beginExecutionOperation(
     execution: ExecutionOperationState,
     ownsSlot: () => boolean,
@@ -1974,21 +2004,14 @@ export class PositioningController {
       this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'anchor-preservation-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'anchor-preservation-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'anchor-preservation-loop-start',
+      staleFinishEvent: 'anchor-preservation-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => this.settleAnchorPreservation(execution, lease, 'best-effort'),
+    })) return
     this.scheduleAnchorPreservationFrame(execution, lease)
   }
 
@@ -2140,21 +2163,14 @@ export class PositioningController {
       return
     }
 
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'directional-history-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'directional-history-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.settleDirectionalHistory(execution, lease, 'best-effort')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'directional-history-loop-start',
+      staleFinishEvent: 'directional-history-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => this.settleDirectionalHistory(execution, lease, 'best-effort'),
+    })) return
     this.scheduleDirectionalHistoryFrame(execution, lease)
   }
 
@@ -2277,22 +2293,17 @@ export class PositioningController {
     execution.framesLeft = RESIDENT_TOP_OBSERVE_FRAMES
     execution.stableFrames = 0
     const lease = this.beginResidentTopOperation(execution)
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'resident-top-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'resident-top-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'resident-top-loop-start',
+      staleFinishEvent: 'resident-top-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => {
+        lease.settle()
+        this.completeResidentTopExecution(execution, 'best-effort')
+      },
+    })) return
 
     const started = runScrollShadowSafely<ResidentTopStartResult>({
       event: 'resident-top-start',
@@ -2530,26 +2541,21 @@ export class PositioningController {
     execution.landedTarget = null
     execution.applied = false
     const lease = this.beginExplicitTargetOperation(execution)
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'explicit-target-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'explicit-target-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-        { kind: 'pending', reason: 'target-not-indexed' },
-      )
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'explicit-target-loop-start',
+      staleFinishEvent: 'explicit-target-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => {
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          execution.request.conversationId,
+          execution.request.generation,
+          { kind: 'pending', reason: 'target-not-indexed' },
+        )
+      },
+    })) return
     this.scheduleExplicitTargetFrame(execution, lease)
   }
 
@@ -2761,21 +2767,14 @@ export class PositioningController {
   ): void {
     if (!this.isUnreadExecutionCurrent(execution)) return
     const lease = this.beginUnreadOperation(execution)
-    const loop = runScrollShadowSafely<UnreadMarkerFrameLoop | null>({
-      event: 'unread-marker-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'unread-marker-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'unread-marker-loop-start',
+      staleFinishEvent: 'unread-marker-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => this.promoteUnreadFallback(execution, 'unread-marker-unavailable'),
+    })) return
     this.scheduleUnreadMarkerFrame(execution, lease)
   }
 
@@ -3083,21 +3082,14 @@ export class PositioningController {
     this.completeSavedPosition(execution, 'applied')
     if (!initial.reassert) return
 
-    const loop = runScrollShadowSafely<PositionFrameLoop | null>({
-      event: 'saved-position-loop-start',
-      conversationId: execution.request.conversationId,
-      fallback: null,
-      observe: () => execution.executor.beginLoop(lease),
-    })
-    if (!lease.isCurrent()) {
-      finishStaleLoopInShadow(execution, 'saved-position-loop-stale-finish', loop)
-      return
-    }
-    if (!loop) {
-      this.settleSavedPosition(execution, lease, 'best-effort')
-      return
-    }
-    execution.loop = loop
+    if (!this.adoptFrameLoop({
+      execution,
+      lease,
+      startEvent: 'saved-position-loop-start',
+      staleFinishEvent: 'saved-position-loop-stale-finish',
+      beginLoop: () => execution.executor.beginLoop(lease),
+      onCannotStart: () => this.settleSavedPosition(execution, lease, 'best-effort'),
+    })) return
     this.scheduleSavedPositionFrame(execution, lease)
   }
 

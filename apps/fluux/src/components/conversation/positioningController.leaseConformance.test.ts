@@ -110,6 +110,9 @@ const entryFacts = {
  */
 let loopsRefuseToSchedule = false
 
+/** Makes every executor fail to build a loop, for the runs that cannot start one. */
+let loopsCannotBeBuilt = false
+
 function leaseCollector() {
   const leases: PositionExecutionLease[] = []
   let abortedAtFinish: boolean | null = null
@@ -130,7 +133,7 @@ function leaseCollector() {
     finishSawAbort: () => abortedAtFinish,
     beginLoop: (lease: PositionExecutionLease) => {
       leases.push(lease)
-      return loop
+      return loopsCannotBeBuilt ? null : loop
     },
   }
 }
@@ -312,6 +315,20 @@ function started(
 describe.each(EXECUTORS)('$name lease', ({ start }) => {
   beforeEach(() => {
     loopsRefuseToSchedule = false
+    loopsCannotBeBuilt = false
+  })
+
+  it('leaves no positioning under way when its executor cannot build a loop', () => {
+    // Without a loop nothing will drive this run, so it must not leave the rest of the app reading
+    // an in-progress positioning phase — the states that mean frames are still coming. Each run
+    // gets there differently: six end the run, and explicit target reports the target as not
+    // indexed so a later attempt can still succeed.
+    loopsCannotBeBuilt = true
+    const controller = new PositioningController()
+    start(controller)
+
+    expect(controller.snapshot().active?.phase.kind).not.toBe('mounting')
+    expect(controller.snapshot().active?.phase.kind).not.toBe('reconciling')
   })
 
   it('ends the run when its loop can no longer schedule a frame', () => {
