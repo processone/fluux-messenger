@@ -1,7 +1,7 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
-import { PepNode, type PepCodec } from './PepNode'
+import { PepNode, type PepCodec, type PepGetOptions, type PublishOptions } from './PepNode'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
 import type { ProfileDetails } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
@@ -61,8 +61,60 @@ import {
  *
  * @category Modules
  */
-/** XEP-0172 keeps a single current value, so its item id is a constant. */
-const NICK_ITEM_ID = 'current'
+/** XEP-0172 and the appearance node each keep a single current value. */
+const CURRENT_ITEM_ID = 'current'
+
+/** What the appearance node stores. `mode` is required; the rest are optional. */
+export interface AppearanceSettings {
+  mode: string
+  themeId?: string
+  fontSize?: number
+  accentPreset?: string
+}
+
+/** XEP-0223 private storage: owner-only, retained across sessions. */
+const APPEARANCE_NODE_OPTIONS: PublishOptions = {
+  persistItems: true,
+  accessModel: 'whitelist',
+}
+
+const appearanceCodec: PepCodec<AppearanceSettings> = {
+  encode: (settings) => {
+    const children = [xml('mode', {}, settings.mode)]
+    if (settings.themeId) children.push(xml('themeId', {}, settings.themeId))
+    if (settings.fontSize != null) children.push(xml('fontSize', {}, String(settings.fontSize)))
+    if (settings.accentPreset) children.push(xml('accentPreset', {}, settings.accentPreset))
+    return xml('appearance', { xmlns: NS_APPEARANCE }, ...children)
+  },
+  decode: (item) => {
+    const appearance = item.getChild('appearance', NS_APPEARANCE)
+    if (!appearance) return undefined
+    // `theme` is the pre-0.18 name for `mode`, still read so an upgrade keeps
+    // the user's choice. Publishing only ever writes `mode`.
+    const mode = appearance.getChildText('mode') || appearance.getChildText('theme')
+    if (!mode) return undefined
+    const settings: AppearanceSettings = { mode }
+    const themeId = appearance.getChildText('themeId')
+    if (themeId) settings.themeId = themeId
+    const fontSize = appearance.getChildText('fontSize')
+    if (fontSize) settings.fontSize = Number(fontSize)
+    const accentPreset = appearance.getChildText('accentPreset')
+    if (accentPreset) settings.accentPreset = accentPreset
+    return settings
+  },
+}
+
+/** XEP-0084 data node: base64 payload keyed by the avatar's SHA-1. */
+const avatarDataCodec: PepCodec<string> = {
+  encode: (data) => xml('data', { xmlns: NS_AVATAR_DATA }, data),
+  decode: (item) => item.getChild('data', NS_AVATAR_DATA)?.text() || undefined,
+}
+
+/** XEP-0084 metadata node: the current avatar's hash. */
+const avatarMetadataCodec: PepCodec<string> = {
+  encode: (hash) => xml('metadata', { xmlns: NS_AVATAR_METADATA }, xml('info', { id: hash })),
+  decode: (item) => item.getChild('metadata', NS_AVATAR_METADATA)?.getChild('info')?.attrs.id || undefined,
+}
 
 /** Payload is the bare `<nick/>` text; the node carries no publish-options. */
 const nickCodec: PepCodec<string> = {
@@ -72,10 +124,45 @@ const nickCodec: PepCodec<string> = {
 
 export class Profile extends BaseModule {
   private readonly nickNode: PepNode<string>
+  private readonly appearanceNode: PepNode<AppearanceSettings>
+  private readonly avatarDataNode: PepNode<string>
+  private readonly avatarMetadataNode: PepNode<string>
 
   constructor(deps: ModuleDependencies) {
     super(deps)
     this.nickNode = new PepNode(deps, NS_NICK, nickCodec)
+    this.appearanceNode = new PepNode(deps, NS_APPEARANCE, appearanceCodec, APPEARANCE_NODE_OPTIONS)
+    this.avatarDataNode = new PepNode(deps, NS_AVATAR_DATA, avatarDataCodec)
+    this.avatarMetadataNode = new PepNode(deps, NS_AVATAR_METADATA, avatarMetadataCodec)
+  }
+
+  /**
+   * Read a contact's XEP-0084 node, honouring what their server has already
+   * told us.
+   *
+   * A deployment that refuses PEP avatar reads refuses them for every contact it
+   * hosts, so the refusal is remembered per DOMAIN and skipped from then on.
+   * Only a REFUSAL is remembered: a timeout says nothing about policy, and
+   * treating one as a refusal would strand every contact on that domain at the
+   * vCard fallback for the rest of the session.
+   *
+   * Returns an empty array for every non-answer, because the caller's response
+   * is the same either way — fall back to vCard.
+   */
+  private async readContactAvatarNode(
+    node: PepNode<string>,
+    contactBareJid: string,
+    options: PepGetOptions = {},
+  ): Promise<string[]> {
+    const contactDomain = getDomain(contactBareJid)
+    if (isPepForbiddenDomain(contactDomain)) return []
+
+    const result = await node.get({ ...options, jid: contactBareJid })
+    if (result.status === 'refused') {
+      markPepForbiddenDomain(contactDomain).catch(() => {})
+      return []
+    }
+    return result.status === 'ok' ? result.items : []
   }
 
   // Note: PubSub events are now handled by the PubSub module.
@@ -89,55 +176,31 @@ export class Profile extends BaseModule {
   async fetchAvatarData(jid: string, hash: string): Promise<void> {
     const bareJid = getBareJid(jid)
 
-    // Check IndexedDB cache first - skip network if we already have this avatar
+    // Check if we already have this avatar cached
     const cachedUrl = await getCachedAvatar(hash)
     if (cachedUrl) {
       this.updateAvatar(bareJid, cachedUrl, hash)
       return
     }
 
-    // Skip PEP for domains known to block PubSub avatar access
-    const domain = getDomain(bareJid)
-    if (isPepForbiddenDomain(domain)) {
+    const data = (await this.readContactAvatarNode(
+      this.avatarDataNode, bareJid, { itemId: hash },
+    ))[0]
+
+    if (!data) {
       await this.fetchVCardAvatar(bareJid)
       return
     }
 
-    try {
-      // Try XEP-0084 (PEP) first
-      const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
-        xml('pubsub', { xmlns: NS_PUBSUB },
-          xml('items', { node: `urn:xmpp:avatar:data` },
-            xml('item', { id: hash })
-          )
-        )
-      )
-      const result = await this.deps.sendIQ(iq)
-      const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', 'urn:xmpp:avatar:data')?.text()
-
-      if (data) {
-        // XEP-0084 data responses carry no MIME type, so sniff the bytes rather
-        // than assume PNG — otherwise animated GIF/WebP/APNG avatars get a Blob
-        // typed image/png and any consumer trusting blob.type is misled.
-        const mimeType = sniffImageMimeType(data) ?? 'image/png'
-        // Cache to IndexedDB and get a blob URL
-        const blobUrl = await cacheAvatar(hash, data, mimeType)
-        await saveAvatarHash(bareJid, hash, 'contact')
-        this.updateAvatar(bareJid, blobUrl, hash)
-        // Clear negative cache since we found an avatar
-        await clearNoAvatar(bareJid)
-      } else {
-        // Fallback to VCard
-        await this.fetchVCardAvatar(bareJid)
-      }
-    } catch (err: any) {
-      // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
-      const condition = err?.condition as string | undefined
-      if (condition === 'forbidden' || condition === 'service-unavailable') {
-        markPepForbiddenDomain(domain).catch(() => {})
-      }
-      await this.fetchVCardAvatar(bareJid)
-    }
+    // XEP-0084 data responses carry no MIME type, so sniff the bytes rather
+    // than assume PNG — otherwise animated GIF/WebP/APNG avatars get a Blob
+    // typed image/png and any consumer trusting blob.type is misled.
+    const mimeType = sniffImageMimeType(data) ?? 'image/png'
+    const blobUrl = await cacheAvatar(hash, data, mimeType)
+    await saveAvatarHash(bareJid, hash, 'contact')
+    this.updateAvatar(bareJid, blobUrl, hash)
+    // Clear negative cache since we found an avatar
+    await clearNoAvatar(bareJid)
   }
 
   /**
@@ -158,59 +221,23 @@ export class Profile extends BaseModule {
       return null
     }
 
-    // Skip PEP for domains known to block PubSub avatar access
-    const domain = getDomain(bareJid)
-    if (isPepForbiddenDomain(domain)) {
+    const hash = (await this.readContactAvatarNode(
+      this.avatarMetadataNode, bareJid, { maxItems: 1 },
+    ))[0]
+
+    if (!hash) {
+      // No avatar via XEP-0084, or the server would not say — either way, fall
+      // back to vCard-temp (XEP-0054).
       await this.fetchVCardAvatar(bareJid)
       return null
     }
 
-    try {
-      // Query contact's PEP node for avatar metadata
-      const metadataIq = xml(
-        'iq',
-        { type: 'get', to: bareJid, id: `avatar_meta_${generateUUID()}` },
-        xml('pubsub', { xmlns: NS_PUBSUB },
-          xml('items', { node: NS_AVATAR_METADATA, max_items: '1' })
-        )
-      )
-
-      const metadataResult = await this.deps.sendIQ(metadataIq)
-
-      // Parse metadata response
-      const pubsub = metadataResult.getChild('pubsub', NS_PUBSUB)
-      const items = pubsub?.getChild('items')
-      const item = items?.getChild('item')
-      const metadata = item?.getChild('metadata', NS_AVATAR_METADATA)
-      const info = metadata?.getChild('info')
-
-      if (!info) {
-        // No avatar set via XEP-0084, try vCard-temp (XEP-0054) as fallback
-        await this.fetchVCardAvatar(bareJid)
-        return null
-      }
-
-      const hash = info.attrs.id
-
-      if (hash) {
-        // Found an avatar - clear any negative cache entry
-        await clearNoAvatar(bareJid)
-        // Emit the same event that XEP-0153 would emit, so existing
-        // avatar fetching logic handles it consistently
-        this.deps.emit('avatarMetadataUpdate', bareJid, hash)
-        return hash
-      }
-    } catch (err: any) {
-      // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
-      const condition = err?.condition as string | undefined
-      if (condition === 'forbidden' || condition === 'service-unavailable') {
-        markPepForbiddenDomain(domain).catch(() => {})
-      }
-      // Contact may not support XEP-0084 or PEP, try vCard-temp (XEP-0054) as fallback
-      await this.fetchVCardAvatar(bareJid)
-    }
-
-    return null
+    // Found an avatar - clear any negative cache entry
+    await clearNoAvatar(bareJid)
+    // Emit the same event that XEP-0153 would emit, so existing
+    // avatar fetching logic handles it consistently
+    this.deps.emit('avatarMetadataUpdate', bareJid, hash)
+    return hash
   }
 
   /**
@@ -569,7 +596,7 @@ export class Profile extends BaseModule {
       throw new Error('Nickname cannot be empty')
     }
 
-    await this.nickNode.publish(NICK_ITEM_ID, trimmedNickname)
+    await this.nickNode.publish(CURRENT_ITEM_ID, trimmedNickname)
     this.deps.emitSDK('connection:own-nickname', { nickname: trimmedNickname })
   }
 
@@ -577,7 +604,7 @@ export class Profile extends BaseModule {
    * Clear/remove own nickname from PEP (XEP-0172).
    */
   async clearOwnNickname(): Promise<void> {
-    await this.nickNode.retract(NICK_ITEM_ID)
+    await this.nickNode.retract(CURRENT_ITEM_ID)
     this.deps.emitSDK('connection:own-nickname', { nickname: null })
   }
 
@@ -657,77 +684,16 @@ export class Profile extends BaseModule {
    * Fetch appearance settings from private PEP storage (XEP-0223).
    * Returns mode (required) plus optional themeId, fontSize, and accentPreset.
    */
-  async fetchAppearance(): Promise<{ mode: string; themeId?: string; fontSize?: number; accentPreset?: string } | null> {
-    const currentJid = this.deps.getCurrentJid()
-    if (!currentJid) return null
-
-    const bareJid = getBareJid(currentJid)
-    const iq = xml('iq', { type: 'get', to: bareJid, id: `appearance_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('items', { node: NS_APPEARANCE, max_items: '1' })
-      )
-    )
-
-    try {
-      const result = await this.deps.sendIQ(iq)
-      const item = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')
-      const appearance = item?.getChild('appearance', NS_APPEARANCE)
-      if (appearance) {
-        // Read 'mode' (new format) or 'theme' (legacy format) for backwards compatibility
-        // TODO: Remove 'theme' fallback before 1.0 release
-        const mode = appearance.getChildText('mode') || appearance.getChildText('theme')
-        if (mode) {
-          const result: { mode: string; themeId?: string; fontSize?: number; accentPreset?: string } = { mode }
-          const themeId = appearance.getChildText('themeId')
-          if (themeId) result.themeId = themeId
-          const fontSize = appearance.getChildText('fontSize')
-          if (fontSize) result.fontSize = Number(fontSize)
-          const accentPreset = appearance.getChildText('accentPreset')
-          if (accentPreset) result.accentPreset = accentPreset
-          return result
-        }
-      }
-    } catch {
-      // Appearance not set
-    }
-    return null
+  async fetchAppearance(): Promise<AppearanceSettings | null> {
+    const settings = await this.appearanceNode.getOr([], { itemId: CURRENT_ITEM_ID, maxItems: 1 })
+    return settings[0] ?? null
   }
 
   /**
    * Save appearance settings to private PEP storage (XEP-0223).
    */
-  async setAppearance(settings: { mode: string; themeId?: string; fontSize?: number; accentPreset?: string }): Promise<void> {
-    if (!this.deps.getCurrentJid()) throw new Error('Not connected')
-
-    const children = [xml('mode', {}, settings.mode)]
-    if (settings.themeId) children.push(xml('themeId', {}, settings.themeId))
-    if (settings.fontSize != null) children.push(xml('fontSize', {}, String(settings.fontSize)))
-    if (settings.accentPreset) children.push(xml('accentPreset', {}, settings.accentPreset))
-
-    const iq = xml('iq', { type: 'set', id: `appearance_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: NS_APPEARANCE },
-          xml('item', { id: 'current' },
-            xml('appearance', { xmlns: NS_APPEARANCE }, ...children)
-          )
-        ),
-        // XEP-0223: Publish options for private storage
-        xml('publish-options', {},
-          xml('x', { xmlns: 'jabber:x:data', type: 'submit' },
-            xml('field', { var: 'FORM_TYPE', type: 'hidden' },
-              xml('value', {}, 'http://jabber.org/protocol/pubsub#publish-options')
-            ),
-            xml('field', { var: 'pubsub#persist_items' },
-              xml('value', {}, 'true')
-            ),
-            xml('field', { var: 'pubsub#access_model' },
-              xml('value', {}, 'whitelist')
-            )
-          )
-        )
-      )
-    )
-    await this.deps.sendIQ(iq)
+  async setAppearance(settings: AppearanceSettings): Promise<void> {
+    await this.appearanceNode.publish(CURRENT_ITEM_ID, settings)
   }
 
   /**
