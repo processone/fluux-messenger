@@ -32,6 +32,7 @@ import {
   pruneTransient,
   removeTransient,
   clearTransientScope,
+  clearTransientEntity,
   transientIdentity,
   transientAliases,
   type ScopeKey as TransientScopeKey,
@@ -64,6 +65,8 @@ import {
   recordRecountDeferral,
   type RecountDeferralReason,
 } from './shared/recountDiagnostics'
+import { createRecountRetryScheduler } from './shared/recountRetry'
+import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { flushKey, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
@@ -561,6 +564,11 @@ const conversationArchiveSaves = createArchiveSaveChain()
 // write (the recompute also re-checks `conversationMeta` under the same key).
 const chatRecountVersion = new Map<string, number>()
 const chatUnreadInputVersion = new Map<string, number>()
+const chatPendingUnreadWrites = createPendingEntityWrites()
+const chatEntityEpoch = new Map<string, number>()
+const chatRecountRetry = createRecountRetryScheduler((error) => {
+  console.warn('Unread recount retry failed for a conversation:', error)
+})
 
 function bumpChatRecountVersion(conversationId: string): number {
   const next = (chatRecountVersion.get(conversationId) ?? 0) + 1
@@ -572,11 +580,17 @@ function bumpChatUnreadInputVersion(conversationId: string): void {
   chatUnreadInputVersion.set(conversationId, (chatUnreadInputVersion.get(conversationId) ?? 0) + 1)
 }
 
-// Cache epoch (Codex r4 #5): bumped whenever the chat cache lifecycle resets
-// (logout reset, account switch, conversation deletion). Deferred
-// gap/coverage commits capture the epoch at merge time and no-op when it
-// moved — a gate already in flight when the state was torn down must not
-// resurrect entries.
+function chatRecountReady(conversationId: string): boolean {
+  const mam = mamState.getMAMQueryState(chatStore.getState().mamQueryStates, conversationId)
+  return !chatPendingUnreadWrites.has(conversationId) &&
+    !conversationArchiveSaves.has(conversationId) &&
+    isCaughtUpForCounting(mam)
+}
+
+function currentChatEntityEpoch(conversationId: string): number {
+  return chatEntityEpoch.get(conversationId) ?? 0
+}
+
 let chatCacheEpoch = 0
 
 /**
@@ -664,6 +678,16 @@ const unmigratedLegacyReadState = new Map<string, Map<string, LegacyReadState>>(
  */
 function chatTransientScopeKey(conversationId: string): TransientScopeKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'chat', entityId: conversationId }
+}
+
+function invalidateChatEntity(conversationId: string): void {
+  chatEntityEpoch.set(conversationId, currentChatEntityEpoch(conversationId) + 1)
+  conversationArchiveSaves.cancel(conversationId)
+  chatPendingUnreadWrites.cancel(conversationId)
+  chatRecountRetry.cancel(conversationId)
+  chatRecountVersion.delete(conversationId)
+  chatUnreadInputVersion.delete(conversationId)
+  clearTransientEntity(chatTransientScopeKey(conversationId))
 }
 
 /**
@@ -1597,7 +1621,7 @@ export const chatStore = createStore<ChatState>()(
         // r4 #5): drop them with the cache, and invalidate in-flight deferred
         // commits so one can't resurrect an entry for the deleted
         // conversation.
-        chatCacheEpoch++
+        invalidateChatEntity(id)
 
         set((state) => {
           // Remove from all three conversation maps
@@ -1643,9 +1667,9 @@ export const chatStore = createStore<ChatState>()(
         const msg = arrival.messages[0]
         if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
-        // `noLocalStore` messages (Quick Chat) are never archived, so
-        // the transient overlay is their ONLY source of unread truth —
-        // computed once, here, before the state update below, so
+        // Unread messages that are not yet durable use the transient overlay:
+        // permanently for `noLocalStore`, and until a live cache write commits
+        // for ordinary messages. It is computed once here, before the state update, so
         // `noteTransient` (a side-effecting Map mutation) runs exactly once
         // per arrival. Gated on `isUnseenIncomingMessage` so we never note an
         // outgoing/seen/historical arrival that `onMessageReceived` would not
@@ -1672,9 +1696,10 @@ export const chatStore = createStore<ChatState>()(
           },
           { treatDelayedAsNew: true }
         )
-        const noteAsTransient = unseen && isNoLocalStore(msg) && isRenderableStoredMessage(msg)
+        const noteAsTransient = unseen && isRenderableStoredMessage(msg)
         let overlayUnreadDelta = 0
         let overlayRequiresRecount = false
+        let acceptedMessage = false
         if (noteAsTransient && priorMeta) {
           const scopeKey = chatTransientScopeKey(msg.conversationId)
           // No boundary here: `isUnseenIncomingMessage` above already
@@ -1733,15 +1758,7 @@ export const chatStore = createStore<ChatState>()(
             patchedMap.set(msg.conversationId, append.messages)
             return { messages: patchedMap }
           }
-
-          // Save to IndexedDB + search index only if the message is locally persistable.
-          // This runs regardless of the live-edge gate: a gated message is still
-          // durable in the cache (and the meta/preview/unread updates below still
-          // run); it reloads on jump-to-latest.
-          if (!isNoLocalStore(msg)) {
-            void messageCache.saveMessage(msg)
-            searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
-          }
+          acceptedMessage = true
 
           const newMessages = new Map(state.messages)
           newMessages.set(
@@ -1857,6 +1874,31 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessages, lastArrivedMessage: newArrived, ...interiorPlacementPatch }
         })
+
+        if (!acceptedMessage && overlayUnreadDelta > 0) {
+          removeTransient(chatTransientScopeKey(msg.conversationId), transientIdentity({ id: msg.id }, 'chat'))
+        }
+
+        if (acceptedMessage && !isNoLocalStore(msg)) {
+          const scopeAtSave = getStorageScopeJid()
+          const writeToken = chatPendingUnreadWrites.begin(msg.conversationId)
+          const save = 'saveMessageWithResult' in messageCache
+            ? messageCache.saveMessageWithResult(msg)
+            : messageCache.saveMessage(msg).then(() => true)
+          void save.then((committed) => {
+            const owned = chatPendingUnreadWrites.finish(msg.conversationId, writeToken)
+            if (!owned || getStorageScopeJid() !== scopeAtSave) return
+            if (committed && noteAsTransient) {
+              const removed = removeTransient(
+                chatTransientScopeKey(msg.conversationId),
+                transientIdentity({ id: msg.id }, 'chat')
+              )
+              if (removed.removed) bumpChatUnreadInputVersion(msg.conversationId)
+            }
+            chatRecountRetry.resume(msg.conversationId)
+          })
+          searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
+        }
 
         // See `noteTransient`'s doc on `requiresRecount`: only the
         // archive-derived recompute can fold this change back into the stored
@@ -2515,10 +2557,18 @@ export const chatStore = createStore<ChatState>()(
       },
 
       recomputeUnreadForConversation: async (conversationId, options) => {
-        // Passive diagnostic — see the room twin and #1211.
-        const defer = (reason: RecountDeferralReason): void =>
-          recordRecountDeferral('chat', reason)
         const allowActive = options?.allowActive ?? false
+        const defer = (reason: RecountDeferralReason): void => {
+          recordRecountDeferral('chat', reason)
+          if (reason === 'input-version-changed') {
+            chatRecountRetry.schedule(
+              conversationId,
+              allowActive,
+              (retryOptions) => get().recomputeUnreadForConversation(conversationId, retryOptions),
+              () => chatRecountReady(conversationId)
+            )
+          }
+        }
         // Active conversation counts are usually reconciled by their own
         // synchronous path (the live-edge convergence) — skip here to
         // avoid a redundant race, UNLESS the caller explicitly opted in
@@ -2581,10 +2631,11 @@ export const chatStore = createStore<ChatState>()(
         // overwriting the newer (correct) result.
         const version = bumpChatRecountVersion(conversationId)
         const cacheEpochAtStart = chatCacheEpoch
+        const entityEpochAtStart = currentChatEntityEpoch(conversationId)
         const storageScopeAtStart = getStorageScopeJid()
         const unreadInputVersionAtStart = chatUnreadInputVersion.get(conversationId) ?? 0
         const recountContextDeferral = (): RecountDeferralReason | undefined => {
-          if (chatCacheEpoch !== cacheEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
+          if (chatCacheEpoch !== cacheEpochAtStart || currentChatEntityEpoch(conversationId) !== entityEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
             return 'context-changed'
           }
           if (chatRecountVersion.get(conversationId) !== version) return 'recount-superseded'
@@ -2594,10 +2645,9 @@ export const chatStore = createStore<ChatState>()(
           return undefined
         }
 
-        // final-fix-2: snapshot the pointer identity the archive-derived
-        // count below is computed AGAINST. Re-checked at the final commit
-        // (see that guard's comment) to close a race the new allowActive
-        // trigger (advanceReadPointer) makes materially more likely.
+        // Snapshot the pointer identity the archive-derived count below is
+        // computed against. Re-check it at the final commit because an
+        // allowActive recount can race advanceReadPointer.
         const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
         const unreadInputVersionAtCompute = chatUnreadInputVersion.get(conversationId) ?? 0
 
@@ -2664,7 +2714,7 @@ export const chatStore = createStore<ChatState>()(
           const meta = state.conversationMeta.get(conversationId)
           if (!meta) { defer('no-meta'); return state }
 
-          // final-fix-2: `res.unread` was derived against `pointerIdAtCompute`
+          // `res.unread` was derived against `pointerIdAtCompute`
           // (metaNow.readPointer, captured before the coverage-bottom and
           // countUnreadInArchive awaits). chatRecountVersion only orders this
           // recompute against ANOTHER recompute for the same entity — it does
@@ -2675,9 +2725,8 @@ export const chatStore = createStore<ChatState>()(
           // still active) can therefore be in flight exactly when that direct
           // write lands. Re-reading the pointer here and bailing if it moved
           // means a result computed against a now-stale pointer never clobbers
-          // the newer, correct value — worst case this recompute under-acts
-          // once; the next trigger (another arrival, deactivation, or
-          // activation) re-derives it.
+          // the newer, correct value. An input change queues the bounded
+          // trailing retry; a direct pointer advance launches its own recount.
           if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
             defer('pointer-changed')
             return state
@@ -2786,6 +2835,9 @@ export const chatStore = createStore<ChatState>()(
 
       mergeMAMMessages: (conversationId, archivePage, page, complete, direction, isFetchLatest = false, preserveGapMarker = false, extras = undefined) => {
         bumpChatUnreadInputVersion(conversationId)
+        const cacheEpochAtMerge = chatCacheEpoch
+        const entityEpochAtMerge = currentChatEntityEpoch(conversationId)
+        const storageScopeAtMerge = getStorageScopeJid()
 
         // XEP-0424: a retraction recorded earlier can target a message arriving in
         // THIS page (the live pass missed it because nothing was resident). Patch
@@ -2806,6 +2858,8 @@ export const chatStore = createStore<ChatState>()(
         // NON-active conversation — the archive-derived recount runs after
         // set() returns (see bottom of this action).
         let shouldRecountAfterMerge = false
+        let archiveCommitGate: Promise<boolean> | undefined
+        let durableMessages: Message[] = []
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -2907,6 +2961,7 @@ export const chatStore = createStore<ChatState>()(
           // no crash window and the transition applies immediately.
           const prevGap = state.conversationGaps.get(conversationId)
           const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
+          durableMessages = persistableMessages
           // A merge with nothing persistable still defers when earlier pages
           // of this conversation are in flight (or failed): its cursor must
           // not leap them.
@@ -2954,7 +3009,7 @@ export const chatStore = createStore<ChatState>()(
           const scheduleDeferredCommit = (gate: Promise<boolean>) => {
             void gate.then((committed) => {
               if (!committed) return
-              if (chatCacheEpoch !== epochAtMerge) return
+              if (chatCacheEpoch !== epochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge) return
               set((s) => {
                 // State may have moved on (a later merge advanced or
                 // re-planted the gap/record): only transition the exact
@@ -2996,7 +3051,8 @@ export const chatStore = createStore<ChatState>()(
             // still gate this merge's transitions: chain a no-op save so the
             // transition applies (or is dropped) with the same ordering rules.
             if (deferGapCommit || deferCoverageCommit) {
-              scheduleDeferredCommit(conversationArchiveSaves.chain(conversationId, Promise.resolve(true)))
+              archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
+              scheduleDeferredCommit(archiveCommitGate)
             }
             if (patched.length === 0 || !isActive) {
               return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
@@ -3013,6 +3069,7 @@ export const chatStore = createStore<ChatState>()(
             // true only when THIS page and every earlier in-flight page
             // committed.
             const commitGate = conversationArchiveSaves.chain(conversationId, savePromise)
+            archiveCommitGate = commitGate
             if (deferGapCommit || deferCoverageCommit) {
               scheduleDeferredCommit(commitGate)
             }
@@ -3085,6 +3142,21 @@ export const chatStore = createStore<ChatState>()(
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
+        if (archiveCommitGate) {
+          void archiveCommitGate.then((committed) => {
+            if (!committed || chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+            let removed = false
+            for (const message of durableMessages) {
+              removed = removeTransient(
+                chatTransientScopeKey(conversationId),
+                transientIdentity({ id: message.id }, 'chat')
+              ).removed || removed
+            }
+            if (removed) bumpChatUnreadInputVersion(conversationId)
+            chatRecountRetry.resume(conversationId)
+          })
+        }
+
         // XEP-0490: a pending marker was not orderable in an earlier slice.
         // Retry against the merged messages; applyRemoteDisplayed clears
         // pendingRemoteDisplayedStanzaId only when the comparison resolves.
@@ -3099,6 +3171,17 @@ export const chatStore = createStore<ChatState>()(
         // the badge from the archive rather than trusting this page alone.
         if (shouldRecountAfterMerge) {
           void get().recomputeUnreadForConversation(conversationId)
+        }
+        if (direction === 'forward' && complete) {
+          if (!archiveCommitGate && conversationArchiveSaves.has(conversationId)) {
+            archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
+          }
+          const resume = () => {
+            if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+            chatRecountRetry.resume(conversationId)
+          }
+          if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
+          else resume()
         }
       },
 
@@ -3358,6 +3441,9 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
+        chatPendingUnreadWrites.clear()
+        chatEntityEpoch.clear()
+        chatRecountRetry.clear()
         // Tear down the OUTGOING account's transient overlay entries
         // before adopting the new scope — see lastChatTransientScope's doc for
         // why this can't just read getStorageScopeJid() here.
@@ -3376,6 +3462,9 @@ export const chatStore = createStore<ChatState>()(
         chatCacheEpoch++
         chatRecountVersion.clear()
         chatUnreadInputVersion.clear()
+        chatPendingUnreadWrites.clear()
+        chatEntityEpoch.clear()
+        chatRecountRetry.clear()
         // Logout tears down this account's transient overlay too.
         // Unlike switchAccount, nothing flips the global scope before reset()
         // runs (clearLocalData calls it directly), so getStorageScopeJid()

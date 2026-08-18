@@ -56,9 +56,8 @@ export type RecountDeferralReason =
    * Message inputs changed while this recount was awaiting, so its result describes
    * a state that no longer exists.
    *
-   * The interesting one for #1211: `addMessage` bumps this version on EVERY
-   * arrival, so an active room that keeps receiving can invalidate each recount
-   * with the traffic that made it necessary.
+   * `addMessage` bumps this version on every arrival, so a snapshot computed
+   * before live traffic cannot commit after that traffic changes its inputs.
    */
   | 'input-version-changed'
   /** The read pointer moved while the recount was in flight. */

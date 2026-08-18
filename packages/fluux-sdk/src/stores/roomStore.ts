@@ -49,6 +49,7 @@ import {
   pruneTransient,
   removeTransient,
   clearTransientScope,
+  clearTransientEntity,
   transientIdentity,
   transientAliases,
   type ScopeKey as TransientScopeKey,
@@ -78,6 +79,8 @@ import {
   recordRecountDeferral,
   type RecountDeferralReason,
 } from './shared/recountDiagnostics'
+import { createRecountRetryScheduler } from './shared/recountRetry'
+import { createPendingEntityWrites } from './shared/pendingEntityWrites'
 import { schedule, flush as flushThrottledStorage } from './shared/throttledStorage'
 import { scheduleDurableMaps, cancelDurableMaps, forgetAllDurableMapBaselines, noteCoverageTransition } from './shared/durableMapPersist'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
@@ -386,7 +389,7 @@ function savePendingRetractionsToStorage(pending: Map<string, PendingRetraction[
 const roomArchiveSaves = createArchiveSaveChain()
 
 // Cache epoch (Codex r4 #5): bumped whenever the room cache lifecycle resets
-// (logout reset, account switch, room removal). Deferred gap/coverage commits
+// (logout reset or account switch). Deferred gap/coverage commits
 // capture the epoch at merge time and no-op when it moved — a gate that was
 // already in flight when the state was torn down must not resurrect entries.
 let roomCacheEpoch = 0
@@ -415,6 +418,11 @@ export function _resetRoomArchiveSavesForTesting(): void {
 // under the same key).
 const roomRecountVersion = new Map<string, number>()
 const roomUnreadInputVersion = new Map<string, number>()
+const roomPendingUnreadWrites = createPendingEntityWrites()
+const roomEntityEpoch = new Map<string, number>()
+const roomRecountRetry = createRecountRetryScheduler((error) => {
+  console.warn('Unread recount retry failed for a room:', error)
+})
 
 function bumpRoomRecountVersion(roomJid: string): number {
   const next = (roomRecountVersion.get(roomJid) ?? 0) + 1
@@ -426,6 +434,17 @@ function bumpRoomUnreadInputVersion(roomJid: string): void {
   roomUnreadInputVersion.set(roomJid, (roomUnreadInputVersion.get(roomJid) ?? 0) + 1)
 }
 
+function roomRecountReady(roomJid: string): boolean {
+  const mam = mamState.getMAMQueryState(roomStore.getState().mamQueryStates, roomJid)
+  return !roomPendingUnreadWrites.has(roomJid) &&
+    !roomArchiveSaves.has(roomJid) &&
+    isCaughtUpForCounting(mam)
+}
+
+function currentRoomEntityEpoch(roomJid: string): number {
+  return roomEntityEpoch.get(roomJid) ?? 0
+}
+
 /**
  * The transient-overlay scope key for a room. `accountScope` mirrors
  * chatStore's `chatTransientScopeKey` — a bare room JID can collide across
@@ -433,6 +452,16 @@ function bumpRoomUnreadInputVersion(roomJid: string): void {
  */
 function roomTransientScopeKey(roomJid: string): TransientScopeKey {
   return { accountScope: getStorageScopeJid() ?? '', kind: 'room', entityId: roomJid }
+}
+
+function invalidateRoomEntity(roomJid: string): void {
+  roomEntityEpoch.set(roomJid, currentRoomEntityEpoch(roomJid) + 1)
+  roomArchiveSaves.cancel(roomJid)
+  roomPendingUnreadWrites.cancel(roomJid)
+  roomRecountRetry.cancel(roomJid)
+  roomRecountVersion.delete(roomJid)
+  roomUnreadInputVersion.delete(roomJid)
+  clearTransientEntity(roomTransientScopeKey(roomJid))
 }
 
 /**
@@ -1216,7 +1245,7 @@ export const roomStore = createStore<RoomState>()(
     // The durable cursors describe messages that no longer exist (Codex r4
     // #5): drop them with the cache, and invalidate in-flight deferred
     // commits so one can't resurrect an entry for the removed room.
-    roomCacheEpoch++
+    invalidateRoomEntity(roomJid)
 
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -1764,6 +1793,9 @@ export const roomStore = createStore<RoomState>()(
     roomCacheEpoch++
     roomRecountVersion.clear()
     roomUnreadInputVersion.clear()
+    roomPendingUnreadWrites.clear()
+    roomEntityEpoch.clear()
+    roomRecountRetry.clear()
     // Tear down the OUTGOING account's transient overlay entries
     // before adopting the new scope — see lastRoomTransientScope's doc for
     // why this can't just read getStorageScopeJid() here.
@@ -1787,6 +1819,9 @@ export const roomStore = createStore<RoomState>()(
     roomCacheEpoch++
     roomRecountVersion.clear()
     roomUnreadInputVersion.clear()
+    roomPendingUnreadWrites.clear()
+    roomEntityEpoch.clear()
+    roomRecountRetry.clear()
     // Logout tears down this account's transient overlay too.
     // Unlike switchAccount, nothing flips the global scope before reset()
     // runs (clearLocalData calls it directly), so getStorageScopeJid() here
@@ -1850,15 +1885,9 @@ export const roomStore = createStore<RoomState>()(
     const messageToAdd = arrival.messages[0]
     if (arrival.pendingRetractions) set({ pendingRetractions: arrival.pendingRetractions })
 
-    // Save to IndexedDB only if the message is locally persistable
-    if (!isNoLocalStore(messageToAdd)) {
-      void messageCache.saveRoomMessage(messageToAdd)
-      searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
-    }
-
-    // `noLocalStore` messages (Quick Chat rooms, MUC ephemera) are
-    // never archived, so the transient overlay is their ONLY source of
-    // unread truth — computed once, here, before the state update below, so
+    // Unread messages that are not yet durable use the transient overlay:
+    // permanently for `noLocalStore`, and until a live cache write commits
+    // for ordinary messages. It is computed once here, before the state update, so
     // `noteTransient` (a side-effecting Map mutation) runs exactly once per
     // arrival. Gated on `isUnseenIncomingMessage` so we never note an
     // outgoing/seen/historical arrival that `onMessageReceived` would not
@@ -1881,9 +1910,10 @@ export const roomStore = createStore<RoomState>()(
       windowVisible: connectionStore.getState().windowVisible,
       viewportAtLiveEdge: viewportAtLiveEdgeForNote,
     })
-    const noteAsTransient = incrementUnread && unseen && isNoLocalStore(messageToAdd) && isRenderableStoredMessage(messageToAdd)
+    const noteAsTransient = incrementUnread && unseen && isRenderableStoredMessage(messageToAdd)
     let overlayUnreadDelta = 0
     let overlayRequiresRecount = false
+    let acceptedMessage = false
     if (noteAsTransient && priorMeta) {
       const scopeKey = roomTransientScopeKey(roomJid)
       // No boundary here: `isUnseenIncomingMessage` above already establishes
@@ -1954,6 +1984,7 @@ export const roomStore = createStore<RoomState>()(
         }
         return { rooms: newRooms, roomRuntime: patchedRuntime }
       }
+      acceptedMessage = true
 
       // The appended set is also the basis for the newest-message preview even
       // when the append was gated (the preview must still advance to the
@@ -2109,6 +2140,36 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
     })
+
+    const transientMessageIdentity = () => transientIdentity({
+      roomJid,
+      from: messageToAdd.from,
+      id: messageToAdd.id,
+      stanzaId: messageToAdd.stanzaId,
+      originId: messageToAdd.originId,
+    }, 'room')
+
+    if (!acceptedMessage && overlayUnreadDelta > 0) {
+      removeTransient(roomTransientScopeKey(roomJid), transientMessageIdentity())
+    }
+
+    if (acceptedMessage && !isNoLocalStore(messageToAdd)) {
+      const scopeAtSave = getStorageScopeJid()
+      const writeToken = roomPendingUnreadWrites.begin(roomJid)
+      const save = 'saveRoomMessageWithResult' in messageCache
+        ? messageCache.saveRoomMessageWithResult(messageToAdd)
+        : messageCache.saveRoomMessage(messageToAdd).then(() => true)
+      void save.then((committed) => {
+        const owned = roomPendingUnreadWrites.finish(roomJid, writeToken)
+        if (!owned || getStorageScopeJid() !== scopeAtSave) return
+        if (committed && noteAsTransient) {
+          const removed = removeTransient(roomTransientScopeKey(roomJid), transientMessageIdentity())
+          if (removed.removed) bumpRoomUnreadInputVersion(roomJid)
+        }
+        roomRecountRetry.resume(roomJid)
+      })
+      searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
+    }
 
     // See `noteTransient`'s doc on `requiresRecount`: only the archive-derived
     // recompute can fold this change back into the stored count. No-ops for
@@ -2333,9 +2394,17 @@ export const roomStore = createStore<RoomState>()(
 
   recomputeUnreadForRoom: async (roomJid, options) => {
     const allowActive = options?.allowActive ?? false
-    // Passive diagnostic: every guard below declines to COUNT, and from outside the
-    // store they are indistinguishable — the badge just keeps its old value. See #1211.
-    const defer = (reason: RecountDeferralReason): void => recordRecountDeferral('room', reason)
+    const defer = (reason: RecountDeferralReason): void => {
+      recordRecountDeferral('room', reason)
+      if (reason === 'input-version-changed') {
+        roomRecountRetry.schedule(
+          roomJid,
+          allowActive,
+          (retryOptions) => get().recomputeUnreadForRoom(roomJid, retryOptions),
+          () => roomRecountReady(roomJid)
+        )
+      }
+    }
     // Active room counts are usually reconciled by their own synchronous path
     // (the live-edge convergence) — skip here to avoid a redundant
     // race, UNLESS the caller explicitly opted in (a remote XEP-0490
@@ -2397,10 +2466,11 @@ export const roomStore = createStore<RoomState>()(
     // room is discarded instead of overwriting the newer (correct) result.
     const version = bumpRoomRecountVersion(roomJid)
     const cacheEpochAtStart = roomCacheEpoch
+    const entityEpochAtStart = currentRoomEntityEpoch(roomJid)
     const storageScopeAtStart = getStorageScopeJid()
     const unreadInputVersionAtStart = roomUnreadInputVersion.get(roomJid) ?? 0
     const recountContextDeferral = (): RecountDeferralReason | undefined => {
-      if (roomCacheEpoch !== cacheEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
+      if (roomCacheEpoch !== cacheEpochAtStart || currentRoomEntityEpoch(roomJid) !== entityEpochAtStart || getStorageScopeJid() !== storageScopeAtStart) {
         return 'context-changed'
       }
       if (roomRecountVersion.get(roomJid) !== version) return 'recount-superseded'
@@ -2410,10 +2480,9 @@ export const roomStore = createStore<RoomState>()(
       return undefined
     }
 
-    // final-fix-2: snapshot the pointer identity the archive-derived count
-    // below is computed AGAINST. Re-checked at the final commit (see that
-    // guard's comment) to close a race the new allowActive trigger
-    // (advanceReadPointer) makes materially more likely.
+    // Snapshot the pointer identity the archive-derived count below is
+    // computed against. Re-check it at the final commit because an
+    // allowActive recount can race advanceReadPointer.
     const pointerIdAtCompute = metaNow.readPointer?.identity.messageId
     const unreadInputVersionAtCompute = roomUnreadInputVersion.get(roomJid) ?? 0
 
@@ -2482,7 +2551,7 @@ export const roomStore = createStore<RoomState>()(
       const meta = state.roomMeta.get(roomJid)
       if (!meta) { defer('no-meta'); return state }
 
-      // final-fix-2: `res.unread` was derived against `pointerIdAtCompute`
+      // `res.unread` was derived against `pointerIdAtCompute`
       // (metaNow.readPointer, captured before the coverage-bottom and
       // countRoomUnreadInArchive awaits). roomRecountVersion only orders this
       // recompute against ANOTHER recompute for the same room — it does NOT
@@ -2493,9 +2562,8 @@ export const roomStore = createStore<RoomState>()(
       // still active) can therefore be in flight exactly when that direct
       // write lands. Re-reading the pointer here and bailing if it moved
       // means a result computed against a now-stale pointer never clobbers
-      // the newer, correct value — worst case this recompute under-acts
-      // once; the next trigger (another arrival, deactivation, or
-      // activation) re-derives it.
+      // the newer, correct value. An input change queues the bounded trailing
+      // retry; a direct pointer advance launches its own recount.
       if (meta.readPointer?.identity.messageId !== pointerIdAtCompute) {
         defer('pointer-changed')
         return state
@@ -3770,6 +3838,9 @@ export const roomStore = createStore<RoomState>()(
 
   mergeRoomMAMMessages: (roomJid, archivePage, page, complete, direction, preserveGapMarker = false, isFetchLatest = false, extras = undefined) => {
     bumpRoomUnreadInputVersion(roomJid)
+    const cacheEpochAtMerge = roomCacheEpoch
+    const entityEpochAtMerge = currentRoomEntityEpoch(roomJid)
+    const storageScopeAtMerge = getStorageScopeJid()
 
     // XEP-0424: a retraction recorded earlier can target a message arriving in
     // THIS page (the live pass missed it because nothing was resident). Patch
@@ -3793,6 +3864,8 @@ export const roomStore = createStore<RoomState>()(
     // contiguous history past the read pointer with new messages — triggers
     // the archive-derived recount after this set().
     let shouldRecountAfterMerge = false
+    let archiveCommitGate: Promise<boolean> | undefined
+    let durableMessages: RoomMessage[] = []
     set((state) => {
       const room = state.rooms.get(roomJid)
       if (!room) return state
@@ -3900,6 +3973,7 @@ export const roomStore = createStore<RoomState>()(
       // applies immediately.
       const prevGap = state.roomGaps.get(roomJid)
       const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
+      durableMessages = persistableMessages
       // A merge with nothing persistable still defers when earlier pages of
       // this room are in flight (or failed): its cursor must not leap them.
       const mustGateOnChain = persistableMessages.length > 0 || roomArchiveSaves.has(roomJid)
@@ -3943,7 +4017,7 @@ export const roomStore = createStore<RoomState>()(
       const scheduleDeferredCommit = (gate: Promise<boolean>) => {
         void gate.then((committed) => {
           if (!committed) return
-          if (roomCacheEpoch !== epochAtMerge) return
+          if (roomCacheEpoch !== epochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge) return
           set((s) => {
             // State may have moved on (a later merge advanced or re-planted
             // the gap/record): only transition the exact value this merge
@@ -3984,7 +4058,8 @@ export const roomStore = createStore<RoomState>()(
         // still gate this merge's transitions: chain a no-op save so the
         // transition applies (or is dropped) with the same ordering rules.
         if (deferGapCommit || deferCoverageCommit) {
-          scheduleDeferredCommit(roomArchiveSaves.chain(roomJid, Promise.resolve(true)))
+          archiveCommitGate = roomArchiveSaves.chain(roomJid, Promise.resolve(true))
+          scheduleDeferredCommit(archiveCommitGate)
         }
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
           return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
@@ -4006,6 +4081,7 @@ export const roomStore = createStore<RoomState>()(
         // Serialize through the per-room chain: the gate resolves true only
         // when THIS page and every earlier in-flight page committed.
         const commitGate = roomArchiveSaves.chain(roomJid, savePromise)
+        archiveCommitGate = commitGate
         if (deferGapCommit || deferCoverageCommit) {
           scheduleDeferredCommit(commitGate)
         }
@@ -4082,6 +4158,30 @@ export const roomStore = createStore<RoomState>()(
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
+    if (archiveCommitGate) {
+      void archiveCommitGate.then((committed) => {
+        if (!committed || roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+        let removed = false
+        for (const message of durableMessages) {
+          const aliases = transientAliases({
+            roomJid,
+            from: message.from,
+            id: message.id,
+            stanzaId: message.stanzaId,
+            originId: message.originId,
+          }, 'room')
+          for (const alias of aliases) {
+            if (removeTransient(roomTransientScopeKey(roomJid), alias).removed) {
+              removed = true
+              break
+            }
+          }
+        }
+        if (removed) bumpRoomUnreadInputVersion(roomJid)
+        roomRecountRetry.resume(roomJid)
+      })
+    }
+
     // XEP-0490: a pending marker was not orderable in an earlier slice.
     // Retry against the merged messages; the shared resolver clears it only
     // when the comparison resolves.
@@ -4096,6 +4196,17 @@ export const roomStore = createStore<RoomState>()(
     // badge from the archive rather than trusting this page alone.
     if (shouldRecountAfterMerge) {
       void get().recomputeUnreadForRoom(roomJid)
+    }
+    if (direction === 'forward' && complete) {
+      if (!archiveCommitGate && roomArchiveSaves.has(roomJid)) {
+        archiveCommitGate = roomArchiveSaves.chain(roomJid, Promise.resolve(true))
+      }
+      const resume = () => {
+        if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
+        roomRecountRetry.resume(roomJid)
+      }
+      if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
+      else resume()
     }
   },
 

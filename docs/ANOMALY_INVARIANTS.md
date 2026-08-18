@@ -70,7 +70,7 @@ badge; recounts for other entities in the same window can contribute to the tall
 | `pointerless-defer` | No read position ever established; a bare zero cannot be trusted |
 | `pending-remote-displayed` | A remote XEP-0490 position is still resolving |
 | `no-floor` | Neither a read pointer nor a history floor to count from |
-| `mam-not-caught-up` | History is partial, so any count would under-report |
+| `history-not-caught-up` | History is partial, so any count would under-report |
 | `context-changed` | Cache epoch or storage scope moved underneath |
 | `coverage-missing` | No coverage record, so the archive bottom is unknown |
 | `coverage-unresolvable` | The coverage bottom no longer resolves in the archive |
@@ -81,9 +81,11 @@ badge; recounts for other entities in the same window can contribute to the tall
 | `pointer-changed` | The read pointer moved while the recount was in flight |
 
 `input-version-changed` is the one to watch for #1211: `addMessage` bumps that version
-on **every** arrival, so an active room that keeps receiving can invalidate each recount
-with the traffic that made it necessary. A high tally during the affected window
-supports that attribution; a high `coverage-missing` points elsewhere entirely.
+on **every** arrival, so live traffic can invalidate an in-flight recount. The store
+keeps the stale-snapshot guard and schedules at most one coalesced trailing recount,
+waiting until pending cache writes and archive catch-up are durably ready. A high tally
+during the affected window supports that attribution; a high `coverage-missing` points
+elsewhere entirely.
 
 ## Detector families
 

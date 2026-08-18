@@ -2,12 +2,12 @@ import { compareExact, isAfterBoundary, type ExactPosition, type PointerOrder } 
 import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../../utils/roomMessageIdentity'
 
 /**
- * Transient overlay for `noLocalStore` messages (MUC ephemera, Quick Chat):
- * messages that are never written to IndexedDB but must still count as
- * unread. `unreadCount` is derived from the archive (see `readState.ts`),
- * but an archive-only count silently erases these messages — they have no
- * row to scan. This overlay holds them in memory, position-aware, so Tasks
- * 7/8 can add its contribution on top of the archive-derived count:
+ * Transient overlay for unread messages that have no durable IndexedDB row:
+ * permanently for `noLocalStore` messages, and while an ordinary live write
+ * is pending or after it fails. `unreadCount` is derived from the archive (see
+ * `readState.ts`), but an archive-only count silently erases these messages.
+ * This overlay holds them in memory, position-aware, so callers can add its
+ * contribution on top of the archive-derived count:
  * `unread = min(999, archive.unread + transient.unread)`.
  *
  * Scoped by `{accountScope, kind, entityId}` (never a bare `entityId` — that
@@ -24,8 +24,8 @@ import { roomCanonicalKey, roomIdentityKeys, type RoomIdentityFields } from '../
  * Entries are NEVER cleared on deactivation: clearing when the user
  * switches away (while scrolled up) would silently drop unread. An entry
  * leaves only when the read pointer passes it ({@link pruneTransient}), the
- * message is retracted/removed ({@link removeTransient}), or the account is
- * torn down ({@link clearTransientScope}). Because {@link transientCounts}
+ * message becomes durable or is retracted/removed ({@link removeTransient}),
+ * or the account is torn down ({@link clearTransientScope}). Because {@link transientCounts}
  * compares each entry against the *current* boundary, a partial pointer
  * advance reduces the count correctly with no clearing at all — pruning is
  * a memory bound, not a correctness mechanism.
@@ -119,7 +119,7 @@ export function transientAliases(msg: RoomIdentityFields | { id: string }, kind:
 }
 
 /**
- * Note a transient (never-archived) message. Resolves every supplied alias
+ * Note a message that is not yet represented by a durable archive row. Resolves every supplied alias
  * through `canonicalByAlias`:
  *
  * - none resolve → brand-new logical entry, stored under `identity`.
@@ -251,6 +251,10 @@ export function clearTransientScope(accountScope: string): void {
   for (const k of scopes.keys()) {
     if (k.startsWith(prefix)) scopes.delete(k)
   }
+}
+
+export function clearTransientEntity(key: ScopeKey): void {
+  scopes.delete(scopeKeyString(key))
 }
 
 /**

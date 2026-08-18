@@ -38,7 +38,7 @@ This document is the backlog *beyond* those — what to improve next, prioritize
 
 ### R3. Exact unread badge while the pointer is still pending
 
-**Problem.** #1029's fix wave made the badge recount from the full cache when the pointer resolves during Phase B (finding fixed). But *while the pointer is still pending* (deep backlog mid-walk), the badge shows a lower bound (loaded-so-far), converging to exact only once the pointer's message loads. The async recount also has a documented benign race (a live message landing between the cache read and the apply is missed by that one recount, corrected on the next merge/activation).
+**Problem.** #1029's fix wave made the badge recount from the full cache when the pointer resolves during Phase B (finding fixed). But *while the pointer is still pending* (deep backlog mid-walk), the badge shows a lower bound (loaded-so-far), converging to exact only once the pointer's message loads.
 
 **Impact.** Cosmetic during the (usually brief) walk window; self-corrects. Only visible for genuinely deep backlogs.
 

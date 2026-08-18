@@ -27,10 +27,16 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
     getMessages: vi.fn(actual.getMessages),
     countUnreadInArchive: vi.fn(actual.countUnreadInArchive),
+    saveMessageWithResult: vi.fn(actual.saveMessageWithResult),
+    saveMessages: vi.fn(actual.saveMessages),
   }
 })
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
+
+const countUnreadInArchiveImplementation = vi.mocked(messageCache.countUnreadInArchive).getMockImplementation()!
+const saveMessageWithResultImplementation = vi.mocked(messageCache.saveMessageWithResult).getMockImplementation()!
+const saveMessagesImplementation = vi.mocked(messageCache.saveMessages).getMockImplementation()!
 
 /**
  * A transient entry's position.
@@ -113,10 +119,15 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     chatStore.getState().reset()
     resetRecountDeferralsForTesting()
     chatStore.getState().addConversation(createConversation(CID))
-    // mockClear() only resets call history, never the base implementation set
-    // by vi.fn(actual.countUnreadInArchive) above, so it stays real by default.
+    // Reset queued one-shot implementations as well as call history so a
+    // deliberately failing race test cannot contaminate the next test.
     vi.mocked(messageCache.getMessages).mockClear()
-    vi.mocked(messageCache.countUnreadInArchive).mockClear()
+    vi.mocked(messageCache.countUnreadInArchive).mockReset()
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementation(countUnreadInArchiveImplementation)
+    vi.mocked(messageCache.saveMessageWithResult).mockReset()
+    vi.mocked(messageCache.saveMessageWithResult).mockImplementation(saveMessageWithResultImplementation)
+    vi.mocked(messageCache.saveMessages).mockReset()
+    vi.mocked(messageCache.saveMessages).mockImplementation(saveMessagesImplementation)
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
     clearTransientScope(getStorageScopeJid() ?? '')
@@ -657,7 +668,9 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     // lets 'a-msg' get appended last, wrongly advances the pointer TO
     // 'a-msg', and 'z-msg' — already-confirmed-seen — then archive-sorts
     // AFTER it and gets wrongly counted as unread.
-    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    })
   })
 
   // ---------------------------------------------------------------------
@@ -755,7 +768,7 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     expect(readRecountDeferrals()['chat:context-changed']).toBeUndefined()
   })
 
-  it('discards a recount whose archive snapshot predates a live arrival', async () => {
+  it('holds an invalidated active recount until forward catch-up durably completes', async () => {
     await messageCache.saveMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
       archiveMsg('p0', 1000),
@@ -767,23 +780,144 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     seedCoverage('anchor-stanza')
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
-      () => new Promise((resolve) => { releaseCount = resolve })
-    )
+    vi.mocked(messageCache.countUnreadInArchive)
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
+      .mockImplementationOnce(async () => ({ unread: 7 }))
 
-    const stale = chatStore.getState().recomputeUnreadForConversation(CID)
+    chatStore.setState({ activeConversationId: CID })
+    const stale = chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
     await vi.waitFor(() => expect(releaseCount).toBeDefined())
 
     chatStore.getState().addMessage(archiveMsg('live', 2000))
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+    chatStore.getState().mergeMAMMessages(
+      CID,
+      [archiveMsg('catchup-1', 2100)],
+      { first: 'catchup-1', last: 'catchup-1' },
+      false,
+      'forward'
+    )
 
     releaseCount({ unread: 3 })
     await stale
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
     expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
-    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(6)
+
+    chatStore.getState().mergeMAMMessages(
+      CID,
+      [archiveMsg('catchup-2', 2200)],
+      { first: 'catchup-2', last: 'catchup-2' },
+      true,
+      'forward'
+    )
+
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(7)
+    })
+    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(7)
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
     expect(readRecountDeferrals()['chat:input-version-changed']).toBe(1)
     expect(readRecountDeferrals()['chat:context-changed']).toBeUndefined()
+  })
+
+  it('retains a failed live cache write in the unread recount overlay', async () => {
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+      ...Array.from({ length: 5 }, (_, index) => archiveMsg(`u${index + 1}`, 1100 + index)),
+    ])
+    setMeta({
+      unreadCount: 5,
+      readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    chatStore.setState({ activeConversationId: CID })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
+    )
+    vi.mocked(messageCache.saveMessageWithResult).mockResolvedValueOnce(false)
+
+    const stale = chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+    chatStore.getState().addMessage(archiveMsg('live-write-failed', 2000))
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+
+    releaseCount({ unread: 5 })
+    await stale
+
+    await vi.waitFor(() => {
+      expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(6)
+    })
+    expect(transientCounts(scopeKey(), undefined).unread).toBe(1)
+  })
+
+  it('resumes a held active recount after a backward archive write commits', async () => {
+    await messageCache.saveMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('older', 700),
+      archiveMsg('p0', 1000),
+    ])
+    setMeta({
+      unreadCount: 5,
+      readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'chat', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    chatStore.setState({ activeConversationId: CID })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countUnreadInArchive)
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
+      .mockImplementationOnce(async () => ({ unread: 7 }))
+    let releaseSave!: (committed: boolean) => void
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSave = resolve })
+    )
+
+    const stale = chatStore.getState().recomputeUnreadForConversation(CID, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+    chatStore.getState().mergeMAMMessages(
+      CID,
+      [archiveMsg('older', 700)],
+      { first: 'older', last: 'older' },
+      true,
+      'backward'
+    )
+    releaseCount({ unread: 3 })
+    await stale
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(1)
+    releaseSave(true)
+
+    await vi.waitFor(() => {
+      expect(messageCache.countUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(7)
+    })
+  })
+
+  it('settles a live write when an unrelated conversation is deleted', async () => {
+    const otherId = 'other@example.com'
+    chatStore.getState().addConversation(createConversation(otherId))
+    chatStore.setState({ activeConversationId: CID })
+    let releaseSave!: (committed: boolean) => void
+    vi.mocked(messageCache.saveMessageWithResult).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSave = resolve })
+    )
+
+    chatStore.getState().addMessage(archiveMsg('pending-live', 2000))
+    expect(transientCounts(scopeKey(), undefined).unread).toBe(1)
+
+    chatStore.getState().deleteConversation(otherId)
+    releaseSave(true)
+
+    await vi.waitFor(() => {
+      expect(transientCounts(scopeKey(), undefined).unread).toBe(0)
+    })
   })
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',

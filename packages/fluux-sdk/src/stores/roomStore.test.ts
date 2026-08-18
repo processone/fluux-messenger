@@ -51,6 +51,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
+    saveRoomMessageWithResult: vi.fn().mockResolvedValue(true),
     saveRoomMessages: vi.fn().mockResolvedValue(true),
     getRoomMessages: vi.fn().mockResolvedValue([]),
     getRoomMessagesAround: vi.fn().mockResolvedValue([]),
@@ -1485,7 +1486,7 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      expect(messageCache.saveRoomMessage).toHaveBeenCalled()
+      expect(messageCache.saveRoomMessageWithResult).toHaveBeenCalled()
     })
 
     it('should not save message to IndexedDB when noLocalStore is true (XEP-0334)', () => {
@@ -1494,7 +1495,7 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
+      expect(messageCache.saveRoomMessageWithResult).not.toHaveBeenCalled()
     })
 
     it('should set noLocalStore=true on messages for Quick Chat rooms', () => {
@@ -1504,7 +1505,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('quickchat@conference.example.com', message)
 
       // Message should not be saved to IndexedDB
-      expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
+      expect(messageCache.saveRoomMessageWithResult).not.toHaveBeenCalled()
 
       // But message should still be in memory with noLocalStore flag
       const room = roomStore.getState().rooms.get('quickchat@conference.example.com')
@@ -5384,7 +5385,7 @@ describe('roomStore', () => {
     beforeEach(() => {
       roomStore.getState().reset()
       vi.mocked(messageCache.getRoomMessages).mockReset()
-      vi.mocked(messageCache.saveRoomMessage).mockClear()
+      vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
       roomStore.getState().addRoom({
         jid: roomJid,
         name: 'Test Room',
@@ -5461,7 +5462,7 @@ describe('roomStore', () => {
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
       expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
 
-      vi.mocked(messageCache.saveRoomMessage).mockClear()
+      vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
       const before = roomStore.getState().getRoom(roomJid)!.messages
       const live = roomMsgAt('live-1', 10000)
       roomStore.getState().addMessage(roomJid, live)
@@ -5472,7 +5473,7 @@ describe('roomStore', () => {
       expect(room.messages.length).toBe(before.length)
       expect(room.messages[room.messages.length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
-      expect(messageCache.saveRoomMessage).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      expect(messageCache.saveRoomMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
       expect(room.lastMessage?.id).toBe('live-1')
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('live-1')

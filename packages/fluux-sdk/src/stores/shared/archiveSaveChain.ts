@@ -22,6 +22,7 @@ export interface ArchiveSaveChain {
   chain: (id: string, save: Promise<boolean>) => Promise<boolean>
   /** True when `id` has an in-flight (or poisoned) chain entry. */
   has: (id: string) => boolean
+  cancel: (id: string) => void
   /** Drop all entries (store reset / account switch). */
   clear: () => void
 }
@@ -42,6 +43,9 @@ export function createArchiveSaveChain(): ArchiveSaveChain {
     },
     has(id) {
       return chains.has(id)
+    },
+    cancel(id) {
+      chains.delete(id)
     },
     clear() {
       chains.clear()

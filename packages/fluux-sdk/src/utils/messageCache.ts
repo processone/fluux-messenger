@@ -545,17 +545,23 @@ async function putChatMessageGuarded(
  * Upserts - will overwrite if message with same ID exists, EXCEPT it never
  * degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
  */
-export async function saveMessage(message: Message): Promise<void> {
+export async function saveMessageWithResult(message: Message): Promise<boolean> {
   try {
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     await putChatMessageGuarded(tx.store, message)
     await tx.done
+    return true
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to save message:', error)
     }
+    return false
   }
+}
+
+export async function saveMessage(message: Message): Promise<void> {
+  await saveMessageWithResult(message)
 }
 
 /**
@@ -1117,8 +1123,12 @@ export async function deleteConversationMessages(conversationId: string): Promis
  * catch-up cursor may skip past it. Batched writes for history replay
  * should use {@link saveRoomMessages} instead.
  */
+export async function saveRoomMessageWithResult(message: RoomMessage): Promise<boolean> {
+  return saveRoomMessages([message])
+}
+
 export async function saveRoomMessage(message: RoomMessage): Promise<void> {
-  await saveRoomMessages([message])
+  await saveRoomMessageWithResult(message)
 }
 
 /**

@@ -46,6 +46,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     ...actual,
     deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
     saveMessage: vi.fn().mockResolvedValue(undefined),
+    saveMessageWithResult: vi.fn().mockResolvedValue(true),
     saveMessages: vi.fn().mockResolvedValue(true),
     getMessages: vi.fn().mockResolvedValue([]),
     getMessagesAround: vi.fn().mockResolvedValue([]),
@@ -1584,7 +1585,7 @@ describe('chatStore', () => {
 
       chatStore.getState().addMessage(msg)
 
-      expect(messageCache.saveMessage).toHaveBeenCalledWith(msg)
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith(msg)
     })
 
     it('should not save message to IndexedDB when noLocalStore is true (XEP-0334)', () => {
@@ -1593,7 +1594,7 @@ describe('chatStore', () => {
 
       chatStore.getState().addMessage(msg)
 
-      expect(messageCache.saveMessage).not.toHaveBeenCalled()
+      expect(messageCache.saveMessageWithResult).not.toHaveBeenCalled()
     })
 
     it('should still add noLocalStore message to in-memory store', () => {
@@ -4535,7 +4536,7 @@ describe('chatStore', () => {
 
     beforeEach(() => {
       vi.mocked(messageCache.getMessages).mockReset()
-      vi.mocked(messageCache.saveMessage).mockClear()
+      vi.mocked(messageCache.saveMessageWithResult).mockClear()
       chatStore.getState().addConversation(createConversation(conversationId))
     })
 
@@ -4590,7 +4591,7 @@ describe('chatStore', () => {
       await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
       expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
 
-      vi.mocked(messageCache.saveMessage).mockClear()
+      vi.mocked(messageCache.saveMessageWithResult).mockClear()
       const before = chatStore.getState().messages.get(conversationId)!
       const live = chatMsgAt('live-1', 10000)
       chatStore.getState().addMessage(live)
@@ -4601,7 +4602,7 @@ describe('chatStore', () => {
       expect(messages.length).toBe(before.length)
       expect(messages[messages.length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
-      expect(messageCache.saveMessage).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      expect(messageCache.saveMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.id).toBe('live-1')
       expect(chatStore.getState().conversationMeta.get(conversationId)?.unreadCount).toBe(1)
@@ -5174,7 +5175,7 @@ describe('chatStore delayed live arrivals (#1176)', () => {
     ] as const) {
       chatStore.getState().addMessage(arrival(id, iso))
     }
-    vi.mocked(messageCache.saveMessage).mockClear()
+    vi.mocked(messageCache.saveMessageWithResult).mockClear()
 
     // Offline replay: reaches the live path now, stamped BEFORE the window's
     // oldest resident message.
@@ -5187,8 +5188,8 @@ describe('chatStore delayed live arrivals (#1176)', () => {
     expect(resident.some((m) => m.id === 'offline-replay')).toBe(false)
     // ...yet it WAS written to IndexedDB, so it is durable-only: invisible in
     // the timeline until a cache slice pages it back in.
-    expect(messageCache.saveMessage).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(messageCache.saveMessage).mock.calls[0][0]).toMatchObject({ id: 'offline-replay' })
+    expect(messageCache.saveMessageWithResult).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(messageCache.saveMessageWithResult).mock.calls[0][0]).toMatchObject({ id: 'offline-replay' })
   })
 
   it('positions a delayed arrival inside the resident window in timestamp order', () => {

@@ -30,10 +30,16 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     // order (vi.fn.mockImplementationOnce) without disabling the real cursor.
     getRoomMessages: vi.fn(actual.getRoomMessages),
     countRoomUnreadInArchive: vi.fn(actual.countRoomUnreadInArchive),
+    saveRoomMessageWithResult: vi.fn(actual.saveRoomMessageWithResult),
+    saveRoomMessages: vi.fn(actual.saveRoomMessages),
   }
 })
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
+
+const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
+const saveRoomMessageWithResultImplementation = vi.mocked(messageCache.saveRoomMessageWithResult).getMockImplementation()!
+const saveRoomMessagesImplementation = vi.mocked(messageCache.saveRoomMessages).getMockImplementation()!
 
 /**
  * A transient entry's position.
@@ -131,10 +137,15 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     _resetRoomReadStateForTesting()
     resetRecountDeferralsForTesting()
     roomStore.getState().addRoom(createRoom(ROOM))
-    // mockClear() only resets call history, never the base implementation set
-    // by vi.fn(actual.countRoomUnreadInArchive) above, so it stays real by default.
+    // Reset queued one-shot implementations as well as call history so a
+    // deliberately failing race test cannot contaminate the next test.
     vi.mocked(messageCache.getRoomMessages).mockClear()
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockClear()
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockReset()
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementation(countRoomUnreadInArchiveImplementation)
+    vi.mocked(messageCache.saveRoomMessageWithResult).mockReset()
+    vi.mocked(messageCache.saveRoomMessageWithResult).mockImplementation(saveRoomMessageWithResultImplementation)
+    vi.mocked(messageCache.saveRoomMessages).mockReset()
+    vi.mocked(messageCache.saveRoomMessages).mockImplementation(saveRoomMessagesImplementation)
     // The transient overlay is a module-level singleton (never cleared on
     // deactivation by design) — reset it between tests explicitly.
     clearTransientScope(getStorageScopeJid() ?? '')
@@ -562,7 +573,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // lets alice's message get appended last, wrongly advances the pointer TO
     // it, and zulu's message — already-confirmed-seen — then archive-sorts
     // AFTER it and gets wrongly counted as unread.
-    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    })
   })
 
   // ---------------------------------------------------------------------
@@ -656,11 +669,21 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     expect(readRecountDeferrals()['room:context-changed']).toBeUndefined()
   })
 
-  it('discards a recount whose archive snapshot predates a live arrival', async () => {
+  it('holds an invalidated active pointer recount until forward catch-up durably completes', async () => {
+    const p0 = archiveMsg('p0', 1000)
+    const p1 = archiveMsg('p1', 1500)
     await messageCache.saveRoomMessages([
       archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
-      archiveMsg('p0', 1000),
+      p0,
+      p1,
     ])
+    roomStore.setState((state) => {
+      const rooms = new Map(state.rooms)
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, messages: [p0, p1] })
+      const roomRuntime = new Map(state.roomRuntime)
+      roomRuntime.set(ROOM, { ...roomRuntime.get(ROOM)!, messages: [p0, p1] })
+      return { rooms, roomRuntime }
+    })
     setMeta({
       unreadCount: 5,
       readPointer: { order: { role: 'exact', timestamp: new Date(1000).getTime(), tiebreak: { kind: 'room', from: ROOM + '/alice', id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
@@ -668,23 +691,144 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     seedCoverage('anchor-stanza')
 
     let releaseCount!: (v: { unread: number }) => void
-    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
-      () => new Promise((resolve) => { releaseCount = resolve })
-    )
+    vi.mocked(messageCache.countRoomUnreadInArchive)
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
+      .mockImplementationOnce(async () => ({ unread: 7 }))
 
-    const stale = roomStore.getState().recomputeUnreadForRoom(ROOM)
+    roomStore.setState({ activeRoomJid: ROOM })
+    roomStore.getState().advanceReadPointer(ROOM, 'p1')
     await vi.waitFor(() => expect(releaseCount).toBeDefined())
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p1')
 
     roomStore.getState().addMessage(ROOM, archiveMsg('live', 2000))
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [archiveMsg('catchup-1', 2100)],
+      { first: 'catchup-1', last: 'catchup-1' },
+      false,
+      'forward'
+    )
 
     releaseCount({ unread: 3 })
-    await stale
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
+    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(1)
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
-    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(6)
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [archiveMsg('catchup-2', 2200)],
+      { first: 'catchup-2', last: 'catchup-2' },
+      true,
+      'forward'
+    )
+
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+    })
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(7)
+    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
     expect(readRecountDeferrals()['room:input-version-changed']).toBe(1)
     expect(readRecountDeferrals()['room:context-changed']).toBeUndefined()
+  })
+
+  it('retains a failed live cache write in the unread recount overlay', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('p0', 1000),
+      ...Array.from({ length: 5 }, (_, index) => archiveMsg(`u${index + 1}`, 1100 + index)),
+    ])
+    setMeta({
+      unreadCount: 5,
+      readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countRoomUnreadInArchive).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseCount = resolve })
+    )
+    vi.mocked(messageCache.saveRoomMessageWithResult).mockResolvedValueOnce(false)
+
+    const stale = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+    roomStore.getState().addMessage(ROOM, archiveMsg('live-write-failed', 2000))
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
+
+    releaseCount({ unread: 5 })
+    await stale
+
+    await vi.waitFor(() => {
+      expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(6)
+    })
+    expect(transientCounts(scopeKey(), undefined).unread).toBe(1)
+  })
+
+  it('resumes a held active recount after a backward archive write commits', async () => {
+    await messageCache.saveRoomMessages([
+      archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' }),
+      archiveMsg('older', 700),
+      archiveMsg('p0', 1000),
+    ])
+    setMeta({
+      unreadCount: 5,
+      readPointer: { order: { role: 'exact', timestamp: 1000, tiebreak: { kind: 'room', from: `${ROOM}/alice`, id: 'p0' } }, identity: { state: 'local', messageId: 'p0' } },
+    })
+    seedCoverage('anchor-stanza')
+    roomStore.setState({ activeRoomJid: ROOM })
+
+    let releaseCount!: (v: { unread: number }) => void
+    vi.mocked(messageCache.countRoomUnreadInArchive)
+      .mockImplementationOnce(() => new Promise((resolve) => { releaseCount = resolve }))
+      .mockImplementationOnce(async () => ({ unread: 7 }))
+    let releaseSave!: (committed: boolean) => void
+    vi.mocked(messageCache.saveRoomMessages).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSave = resolve })
+    )
+
+    const stale = roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
+    await vi.waitFor(() => expect(releaseCount).toBeDefined())
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [archiveMsg('older', 700)],
+      { first: 'older', last: 'older' },
+      true,
+      'backward'
+    )
+    releaseCount({ unread: 3 })
+    await stale
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(1)
+    releaseSave(true)
+
+    await vi.waitFor(() => {
+      expect(messageCache.countRoomUnreadInArchive).toHaveBeenCalledTimes(2)
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(7)
+    })
+  })
+
+  it('settles a live write when an unrelated room is removed', async () => {
+    const otherRoom = 'other@conference.example.com'
+    roomStore.getState().addRoom(createRoom(otherRoom))
+    roomStore.setState({ activeRoomJid: ROOM })
+    let releaseSave!: (committed: boolean) => void
+    vi.mocked(messageCache.saveRoomMessageWithResult).mockImplementationOnce(
+      () => new Promise((resolve) => { releaseSave = resolve })
+    )
+
+    roomStore.getState().addMessage(ROOM, archiveMsg('pending-live', 2000))
+    expect(transientCounts(scopeKey(), undefined).unread).toBe(1)
+
+    roomStore.getState().removeRoom(otherRoom)
+    releaseSave(true)
+
+    await vi.waitFor(() => {
+      expect(transientCounts(scopeKey(), undefined).unread).toBe(0)
+    })
   })
 
   // Was 'rejects a guard-pass pointer write after the account scope changes',

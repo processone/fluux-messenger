@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, expectTypeOf, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import { openDB } from 'idb'
@@ -9,6 +9,7 @@ import { roomIdentityKeys, roomCanonicalKey } from './roomMessageIdentity'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
+import * as cacheApi from '../cache'
 import { mergeRoomRows, _contentProjectionForTesting } from './messageCache'
 import type { StoredRoomMessage } from './messageCache'
 
@@ -46,6 +47,11 @@ function createMockRoomMessage(roomJid: string, overrides: Partial<RoomMessage> 
 }
 
 describe('messageCache', () => {
+  it('preserves public single-message save return types', () => {
+    expectTypeOf(cacheApi.saveMessage).returns.toEqualTypeOf<Promise<void>>()
+    expectTypeOf(cacheApi.saveRoomMessage).returns.toEqualTypeOf<Promise<void>>()
+  })
+
   beforeEach(async () => {
     _resetStorageScopeForTesting()
     // Reset IndexedDB completely before each test
@@ -93,7 +99,7 @@ describe('messageCache', () => {
       it('should save a message to IndexedDB', async () => {
         const message = createMockMessage(conversationId, { id: 'msg-1' })
 
-        await messageCache.saveMessage(message)
+        await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
         const retrieved = await messageCache.getMessage('msg-1')
         expect(retrieved).not.toBeNull()
@@ -107,7 +113,7 @@ describe('messageCache', () => {
           stanzaId: 'stanza-123',
         })
 
-        await messageCache.saveMessage(message)
+        await expect(messageCache.saveMessage(message)).resolves.toBeUndefined()
 
         const byStanzaId = await messageCache.getMessageByStanzaId('stanza-123')
         expect(byStanzaId).not.toBeNull()
@@ -508,7 +514,7 @@ describe('messageCache', () => {
       it('should save a room message to IndexedDB', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-1' })
 
-        await messageCache.saveRoomMessage(message)
+        await expect(messageCache.saveRoomMessage(message)).resolves.toBeUndefined()
 
         const retrieved = await messageCache.getRoomMessage(roomJid, 'room-1')
         expect(retrieved).not.toBeNull()
@@ -521,7 +527,7 @@ describe('messageCache', () => {
           stanzaId: 'room-stanza-123',
         })
 
-        await messageCache.saveRoomMessage(message)
+        await expect(messageCache.saveRoomMessage(message)).resolves.toBeUndefined()
 
         const byStanzaId = await messageCache.getRoomMessageByStanzaId(roomJid, 'room-stanza-123')
         expect(byStanzaId).not.toBeNull()
