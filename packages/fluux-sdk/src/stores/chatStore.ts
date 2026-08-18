@@ -1882,9 +1882,7 @@ export const chatStore = createStore<ChatState>()(
         if (acceptedMessage && !isNoLocalStore(msg)) {
           const scopeAtSave = getStorageScopeJid()
           const writeToken = chatPendingUnreadWrites.begin(msg.conversationId)
-          const save = 'saveMessageWithResult' in messageCache
-            ? messageCache.saveMessageWithResult(msg)
-            : messageCache.saveMessage(msg).then(() => true)
+          const save = messageCache.saveMessageWithResult(msg)
           void save.then((committed) => {
             const owned = chatPendingUnreadWrites.finish(msg.conversationId, writeToken)
             if (!owned || getStorageScopeJid() !== scopeAtSave) return

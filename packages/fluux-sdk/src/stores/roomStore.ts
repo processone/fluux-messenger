@@ -2156,9 +2156,7 @@ export const roomStore = createStore<RoomState>()(
     if (acceptedMessage && !isNoLocalStore(messageToAdd)) {
       const scopeAtSave = getStorageScopeJid()
       const writeToken = roomPendingUnreadWrites.begin(roomJid)
-      const save = 'saveRoomMessageWithResult' in messageCache
-        ? messageCache.saveRoomMessageWithResult(messageToAdd)
-        : messageCache.saveRoomMessage(messageToAdd).then(() => true)
+      const save = messageCache.saveRoomMessageWithResult(messageToAdd)
       void save.then((committed) => {
         const owned = roomPendingUnreadWrites.finish(roomJid, writeToken)
         if (!owned || getStorageScopeJid() !== scopeAtSave) return
