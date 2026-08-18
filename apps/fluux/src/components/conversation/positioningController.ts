@@ -433,6 +433,14 @@ function advanceDriftConvergence(
   return { moved, settles: execution.stableFrames >= stableFramesToSettle }
 }
 
+/** What a run exposes to the step that mints its lease. */
+interface ExecutionOperationState {
+  request: { conversationId: string; generation: number }
+  abortController: AbortController | null
+  operation: number
+  framesLeft: number
+}
+
 /**
  * What every positioning run exposes to the shadow-wrapped frame steps below.
  *
@@ -1841,8 +1849,21 @@ export class PositioningController {
     })
   }
 
-  private beginLiveEdgeOperation(
-    execution: LiveEdgeExecutionState,
+  /**
+   * Mint the lease that authorises one operation of a run, superseding whatever it was doing.
+   *
+   * A lease answers one question — does this run still own the position — and ownership can be lost
+   * three ways, minted at three different moments: the abort signal fires, the controller's slot
+   * stops pointing at this execution, or a newer operation supersedes this one. A newer generation
+   * of the conversation is the fourth, and lives in the model rather than on the execution.
+   *
+   * `ownsSlot` is the only part a run states for itself, because the slot is a named field per run.
+   * `alreadySatisfied` lets a run treat a phase as reached without touching the model.
+   */
+  private beginExecutionOperation(
+    execution: ExecutionOperationState,
+    ownsSlot: () => boolean,
+    alreadySatisfied?: (phase: PositioningPhase) => boolean,
   ): PositionExecutionLease {
     execution.abortController?.abort()
     const abortController = new AbortController()
@@ -1851,11 +1872,12 @@ export class PositioningController {
     const { conversationId, generation } = execution.request
     const isCurrent = () =>
       !abortController.signal.aborted &&
-      this.liveEdgeExecution === execution &&
+      ownsSlot() &&
       execution.operation === operation &&
       isCurrentGeneration(this.model, conversationId, generation)
     const advance = (phase: PositioningPhase) => {
       if (!isCurrent()) return false
+      if (alreadySatisfied?.(phase)) return true
       this.model = advancePhaseIfCurrent(
         this.model,
         conversationId,
@@ -1874,6 +1896,15 @@ export class PositioningController {
       markApplied: () => advance({ kind: 'position-applied' }),
       settle: () => advance({ kind: 'settled' }),
     }
+  }
+
+  private beginLiveEdgeOperation(
+    execution: LiveEdgeExecutionState,
+  ): PositionExecutionLease {
+    return this.beginExecutionOperation(
+      execution,
+      () => this.liveEdgeExecution === execution,
+    )
   }
 
   /**
@@ -2071,36 +2102,10 @@ export class PositioningController {
   private beginAnchorPreservationOperation(
     execution: AnchorPreservationExecutionState,
   ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.anchorPreservationExecution === execution &&
-      execution.operation === operation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+    return this.beginExecutionOperation(
+      execution,
+      () => this.anchorPreservationExecution === execution,
+    )
   }
 
   private isAnchorPreservationExecutionCurrent(execution: AnchorPreservationExecutionState): boolean {
@@ -2253,36 +2258,10 @@ export class PositioningController {
   private beginDirectionalHistoryOperation(
     execution: DirectionalHistoryExecutionState,
   ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.directionalHistoryExecution === execution &&
-      execution.operation === operation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+    return this.beginExecutionOperation(
+      execution,
+      () => this.directionalHistoryExecution === execution,
+    )
   }
 
   private isDirectionalHistoryExecutionCurrent(execution: DirectionalHistoryExecutionState): boolean {
@@ -2428,38 +2407,10 @@ export class PositioningController {
   private beginResidentTopOperation(
     execution: ResidentTopExecutionState,
   ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.residentTopExecution === execution &&
-      execution.operation === operation &&
-      execution.request.conversationId === conversationId &&
-      execution.request.generation === generation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+    return this.beginExecutionOperation(
+      execution,
+      () => this.residentTopExecution === execution,
+    )
   }
 
   private isResidentTopExecutionCurrent(execution: ResidentTopExecutionState): boolean {
@@ -2727,38 +2678,10 @@ export class PositioningController {
   private beginExplicitTargetOperation(
     execution: ExplicitTargetExecutionState,
   ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.explicitTargetExecution === execution &&
-      execution.operation === operation &&
-      execution.request.conversationId === conversationId &&
-      execution.request.generation === generation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+    return this.beginExecutionOperation(
+      execution,
+      () => this.explicitTargetExecution === execution,
+    )
   }
 
   private isExplicitTargetExecutionCurrent(execution: ExplicitTargetExecutionState): boolean {
@@ -3014,38 +2937,10 @@ export class PositioningController {
   private beginUnreadOperation(
     execution: UnreadMarkerExecutionState,
   ): PositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.unreadExecution === execution &&
-      execution.operation === operation &&
-      execution.request.conversationId === conversationId &&
-      execution.request.generation === generation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+    return this.beginExecutionOperation(
+      execution,
+      () => this.unreadExecution === execution,
+    )
   }
 
   private isUnreadExecutionCurrent(execution: UnreadMarkerExecutionState): boolean {
@@ -3463,44 +3358,16 @@ export class PositioningController {
   private beginSavedOperation(
     execution: SavedPositionExecutionState,
   ): SavedPositionExecutionLease {
-    execution.abortController?.abort()
-    const abortController = new AbortController()
-    execution.abortController = abortController
-    const operation = ++execution.operation
-    const { conversationId, generation } = execution.request
-    const isCurrent = () =>
-      !abortController.signal.aborted &&
-      this.savedExecution === execution &&
-      execution.operation === operation &&
-      execution.request.conversationId === conversationId &&
-      execution.request.generation === generation &&
-      isCurrentGeneration(this.model, conversationId, generation)
-    const advance = (phase: PositioningPhase) => {
-      if (!isCurrent()) return false
-      if (
+    return this.beginExecutionOperation(
+      execution,
+      () => this.savedExecution === execution,
+      // A saved-position run that has already settled treats a late "applied" as reached rather
+      // than walking the phase backwards: the entry has finished, and the frame reporting it is
+      // just the loop draining.
+      (phase) =>
         phase.kind === 'position-applied' &&
-        this.model.active?.phase.kind === 'settled'
-      ) {
-        return true
-      }
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        conversationId,
-        generation,
-        phase,
-      )
-      return isCurrent()
-    }
-    return {
-      conversationId,
-      generation,
-      operation,
-      frameBudget: execution.framesLeft,
-      signal: abortController.signal,
-      isCurrent,
-      markApplied: () => advance({ kind: 'position-applied' }),
-      settle: () => advance({ kind: 'settled' }),
-    }
+        this.model.active?.phase.kind === 'settled',
+    )
   }
 
   private isSavedExecutionCurrent(execution: SavedPositionExecutionState): boolean {

@@ -1264,6 +1264,32 @@ describe('positioning controller saved-position ownership', () => {
     }
   }
 
+  it('keeps a settled entry settled when a later frame reports the position applied', () => {
+    // A saved-position run can be driven a second time — an around-load or a recenter re-enters it
+    // with a fresh request — and the first pass may already have settled. Reporting "applied" then
+    // would walk the phase backwards, and a phase that goes back from settled is read by the rest
+    // of the app as positioning still in progress.
+    const harness = savedLoopHarness()
+    const controller = new PositioningController()
+    controller.beginSavedPositionEntry({
+      conversationId,
+      entryFacts: savedFacts(),
+      executor: harness.executor,
+    })
+    const lease = harness.leases.at(-1)
+    expect(lease).toBeDefined()
+
+    expect(lease!.settle()).toBe(true)
+    expect(controller.savedPositionStatus(conversationId)?.phase).toEqual({
+      kind: 'settled',
+    })
+
+    expect(lease!.markApplied()).toBe(true)
+    expect(controller.savedPositionStatus(conversationId)?.phase).toEqual({
+      kind: 'settled',
+    })
+  })
+
   it('loads an off-window anchor exactly once and resumes when that load settles', async () => {
     let anchorAvailable = false
     let resolveLoad!: () => void
