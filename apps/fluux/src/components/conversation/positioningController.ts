@@ -52,6 +52,12 @@ export interface PositionExecutionLease {
   conversationId: string
   generation: number
   operation: number
+  /**
+   * Frames this run may take before it gives up. The loop monitor derives its non-converging
+   * threshold from it, so a run must report the budget it was actually given: understating it
+   * calls a healthy loop non-converging, overstating it never calls anything.
+   */
+  frameBudget: number
   signal: AbortSignal
   isCurrent: () => boolean
   markApplied: () => boolean
@@ -1743,6 +1749,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -1994,6 +2001,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -2196,6 +2204,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -2390,6 +2399,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -2708,6 +2718,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -2887,23 +2898,23 @@ export class PositioningController {
     let wrote = false
     if (heldWithinDrift(execution.landedTarget, result.scrollTop, UNREAD_MARKER_DRIFT_PX)) {
       execution.stableFrames += 1
-      if (execution.stableFrames >= UNREAD_MARKER_STABLE_FRAMES) {
-        if (execution.resolvedAtLiveEdge) {
-          this.promoteUnreadFallback(
-            execution,
-            'unread-marker-resolved-at-live-edge',
-          )
-        } else {
-          this.finishUnreadExecution(execution, true)
-        }
-        return
-      }
     } else {
       wrote = true
       execution.stableFrames = 0
     }
     execution.landedTarget = result.scrollTop
     this.recordUnreadMarkerFrame(execution, wrote)
+    if (execution.stableFrames >= UNREAD_MARKER_STABLE_FRAMES) {
+      if (execution.resolvedAtLiveEdge) {
+        this.promoteUnreadFallback(
+          execution,
+          'unread-marker-resolved-at-live-edge',
+        )
+      } else {
+        this.finishUnreadExecution(execution, true)
+      }
+      return
+    }
     this.scheduleUnreadMarkerFrame(execution, lease)
   }
 
@@ -3019,6 +3030,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),
@@ -3217,16 +3229,16 @@ export class PositioningController {
     let wrote = false
     if (heldWithinDrift(execution.landedTarget, result.scrollTop, SAVED_POSITION_DRIFT_PX)) {
       execution.stableFrames += 1
-      if (execution.stableFrames >= SAVED_POSITION_STABLE_FRAMES) {
-        this.settleSavedPosition(execution, lease, 'settled')
-        return
-      }
     } else {
       wrote = true
       execution.stableFrames = 0
     }
     execution.landedTarget = result.scrollTop
     this.recordSavedPositionFrame(execution, wrote)
+    if (execution.stableFrames >= SAVED_POSITION_STABLE_FRAMES) {
+      this.settleSavedPosition(execution, lease, 'settled')
+      return
+    }
     this.scheduleSavedPositionFrame(execution, lease)
   }
 
@@ -3503,6 +3515,7 @@ export class PositioningController {
       conversationId,
       generation,
       operation,
+      frameBudget: execution.framesLeft,
       signal: abortController.signal,
       isCurrent,
       markApplied: () => advance({ kind: 'position-applied' }),

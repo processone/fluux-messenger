@@ -3,6 +3,16 @@ import { renderHook } from '@testing-library/react'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
 import type { PinLoopClaim } from './pinLoopClaim'
 import type { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
+const monitorBegin = vi.fn((_label: string, _now: number, _frameBudget?: number) => ({
+  frame: () => null,
+  end: () => {},
+  label: 'marker' as const,
+}))
+vi.mock('./reassertLoopMonitor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./reassertLoopMonitor')>()),
+  createReassertLoopMonitor: () => ({ begin: monitorBegin, activeCount: () => 0 }),
+}))
+
 import {
   useScrollExecutors,
   type ScrollExecutorPorts,
@@ -213,6 +223,7 @@ describe('useScrollExecutors adapter ownership', () => {
       conversationId: 'room-a',
       generation: 1,
       operation: 1,
+      frameBudget: 60,
       signal: new AbortController().signal,
       isCurrent: () => true,
       markApplied: () => true,
@@ -297,5 +308,32 @@ describe('useScrollExecutors adapter ownership', () => {
     result.current.disposeDirectionalHistoryBrowser()
     // A rebuild after disposal must hand out a fresh adapter, not the disposed one.
     expect(result.current.getDirectionalHistoryBrowser()).not.toBe(browser)
+  })
+})
+
+describe('useScrollExecutors monitor wiring', () => {
+  it("hands the monitor the lease's frame budget", () => {
+    // The non-converging threshold is a fraction of the budget. Drop the budget here and every
+    // loop silently reverts to the flat threshold — unreachable for the short loops — with
+    // nothing else in the codebase noticing.
+    monitorBegin.mockClear()
+    const { ports } = portsHarness()
+    const { result } = renderHook(
+      (input: UseScrollExecutorsInput) => useScrollExecutors(input),
+      { initialProps: baseInput(ports) },
+    )
+    result.current.buildUnreadMarkerExecutor().beginLoop({
+      conversationId: 'room-a',
+      generation: 1,
+      operation: 1,
+      frameBudget: 30,
+      signal: new AbortController().signal,
+      isCurrent: () => true,
+      markApplied: () => true,
+      settle: () => true,
+    })
+
+    expect(monitorBegin).toHaveBeenCalledTimes(1)
+    expect(monitorBegin.mock.calls[0]?.[2]).toBe(30)
   })
 })

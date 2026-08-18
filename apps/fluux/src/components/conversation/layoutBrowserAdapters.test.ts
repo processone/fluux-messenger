@@ -65,6 +65,7 @@ function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
     conversationId: 'room-a',
     generation: 7,
     operation: 1,
+    frameBudget: 60,
     signal: new AbortController().signal,
     isCurrent,
     markApplied: () => true,

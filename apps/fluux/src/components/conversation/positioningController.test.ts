@@ -1615,7 +1615,10 @@ describe('positioning controller saved-position ownership', () => {
     for (let frame = 0; frame < 9; frame += 1) harness.runFrame()
 
     expect(harness.positionFrame).toHaveBeenCalledTimes(10)
-    expect(harness.recordFrame).toHaveBeenCalledTimes(8)
+    // Nine, not eight: the frame that reaches the threshold is reported like every other, so the
+    // loop monitor gets one last overlap sample at the moment this loop ends — which is when a
+    // second loop starting is most likely. Every executor now settles that way.
+    expect(harness.recordFrame).toHaveBeenCalledTimes(9)
     expect(harness.recordFrame).toHaveBeenNthCalledWith(1, true)
     expect(harness.finish).toHaveBeenCalledTimes(1)
     expect(harness.complete).toHaveBeenLastCalledWith(

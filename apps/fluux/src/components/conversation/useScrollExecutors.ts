@@ -197,7 +197,7 @@ export function useScrollExecutors({
       lease,
       supersede: supersedeReassertLoopRef.current,
       beginHandle: () => (reassertMonitorRef.current ??=
-        createReassertLoopMonitor()).begin(label, performance.now()),
+        createReassertLoopMonitor()).begin(label, performance.now(), lease.frameBudget),
       registry: portsRef.current.reassertLoopRegistry,
       // Native WebKit/Chromium scheduler methods require Window as their receiver. Keep them behind
       // closures when passing into the extracted adapter; an unbound method throws before the first

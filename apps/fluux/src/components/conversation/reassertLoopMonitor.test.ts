@@ -145,3 +145,33 @@ describe('reassertLoopSignal', () => {
     expect(JSON.stringify(signal)).not.toContain('ScrollReassertLoop')
   })
 })
+
+describe('non-converging threshold derived from the frame budget', () => {
+  const writesOver = (frameBudget: number, writes: number) => {
+    const m = createReassertLoopMonitor()
+    const h = m.begin('marker', 0, frameBudget)
+    let warned = false
+    for (let i = 0; i < writes; i++) warned ||= h.frame(i, true)?.reason === 'non-converging'
+    return warned
+  }
+
+  it('scales the line with the budget instead of applying one flat count', () => {
+    // A third of the budget. A flat 40 was unreachable for the 30-frame explicit-target loop —
+    // it would have had to write 41 times in 30 frames — and lenient for the 120-frame ones.
+    expect(writesOver(30, 10)).toBe(false)
+    expect(writesOver(30, 11)).toBe(true)
+    expect(writesOver(90, 30)).toBe(false)
+    expect(writesOver(90, 31)).toBe(true)
+  })
+
+  it('keeps the long-standing line for the budget it was tuned against', () => {
+    // 120 frames was the case the flat 40 described, so that case must not move.
+    expect(writesOver(120, 40)).toBe(false)
+    expect(writesOver(120, 41)).toBe(true)
+  })
+
+  it('falls back to the flat threshold when no budget is given', () => {
+    expect(writesOver(undefined as unknown as number, 40)).toBe(false)
+    expect(writesOver(undefined as unknown as number, 41)).toBe(true)
+  })
+})

@@ -90,8 +90,19 @@ export interface ReassertLoopHandle {
 }
 
 export interface ReassertLoopMonitor {
-  /** Register the start of a re-assert loop; `label` names the loop kind. */
-  begin(label: ReassertLoopLabel, now: number): ReassertLoopHandle
+  /**
+   * Register the start of a re-assert loop; `label` names the loop kind.
+   *
+   * `frameBudget` is how many frames this loop may run before it gives up. The
+   * non-converging threshold is derived from it, because a fixed count cannot
+   * mean the same thing to a loop bounded at 30 frames and one bounded at 120.
+   * Omit it and the flat `writeThreshold` applies.
+   */
+  begin(
+    label: ReassertLoopLabel,
+    now: number,
+    frameBudget?: number,
+  ): ReassertLoopHandle
   /** Labels of the currently-active loops (for tests/diagnostics). */
   activeLabels(): string[]
 }
@@ -105,14 +116,25 @@ export interface ReassertLoopMonitorOptions {
   cooldownMs?: number
 }
 
+/**
+ * A loop writing on more than this fraction of its frame budget is not converging.
+ * One third reproduces the long-standing 40 for the 120-frame loops it was tuned
+ * against, and carries the same meaning to the shorter ones.
+ */
+const WRITES_PER_FRAME_BUDGET = 3
+
 export function createReassertLoopMonitor(
   opts: ReassertLoopMonitorOptions = {},
 ): ReassertLoopMonitor {
-  // Defaults: 2 concurrent loops is already an overlap (they fight over
-  // scrollTop). A healthy loop writes only a few times before it settles, so >40
-  // cumulative writes (it runs at most ~120 frames) means it never converged.
+  // 2 concurrent loops is already an overlap (they fight over scrollTop).
+  //
+  // Non-converging is a RATIO, not a count: a healthy loop writes a few times and
+  // then idles out its budget, so writing on more than a third of the frames it
+  // was given means it never converged. A flat count could not say that for every
+  // loop — the frame budgets span 30 to 120, so 40 was unreachable for the
+  // 30-frame explicit-target loop and lenient for the 120-frame ones.
   const overlapThreshold = opts.overlapThreshold ?? 2
-  const writeThreshold = opts.writeThreshold ?? 40
+  const flatWriteThreshold = opts.writeThreshold ?? 40
   const cooldownMs = opts.cooldownMs ?? 5000
 
   // Active loops by monotonically-increasing id, so two loops sharing a label
@@ -123,7 +145,15 @@ export function createReassertLoopMonitor(
   let lastOverlapWarnAt = Number.NEGATIVE_INFINITY
 
   return {
-    begin(label: ReassertLoopLabel, _now: number): ReassertLoopHandle {
+    begin(
+      label: ReassertLoopLabel,
+      _now: number,
+      frameBudget?: number,
+    ): ReassertLoopHandle {
+      const writeThreshold =
+        frameBudget === undefined
+          ? flatWriteThreshold
+          : Math.max(1, Math.ceil(frameBudget / WRITES_PER_FRAME_BUDGET))
       const id = nextId++
       active.set(id, label)
       let writeCount = 0

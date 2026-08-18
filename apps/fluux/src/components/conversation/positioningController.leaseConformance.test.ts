@@ -359,6 +359,16 @@ describe.each(EXECUTORS)('$name lease', ({ start }) => {
     ).toBe(false)
   })
 
+  it('tells the monitor what budget it was given', () => {
+    // The non-converging threshold is a fraction of the budget, so a lease that misreports it —
+    // or omits it — silently moves the line at which a loop is called non-converging.
+    const controller = new PositioningController()
+    const { lease } = start(controller)
+
+    expect(Number.isInteger(lease.frameBudget)).toBe(true)
+    expect(lease.frameBudget).toBeGreaterThan(0)
+  })
+
   it('refuses to advance the phase once it is no longer current', () => {
     // The lease is the authority a frame checks before writing. A superseded one that still
     // reported success would let a finished executor move the phase of its successor.
