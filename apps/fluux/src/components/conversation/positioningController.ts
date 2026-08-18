@@ -433,6 +433,91 @@ function advanceDriftConvergence(
   return { moved, settles: execution.stableFrames >= stableFramesToSettle }
 }
 
+/**
+ * What every positioning run exposes to the shadow-wrapped frame steps below.
+ *
+ * The seven runs hold different executors, requests and terminal states, but each drives its frames
+ * the same way: through a loop it owns, on behalf of one conversation.
+ */
+interface ShadowedRun {
+  request: { conversationId: string }
+  loop: PositionFrameLoop | null
+}
+
+/**
+ * Report one frame to the loop monitor from inside the scroll shadow.
+ *
+ * The diagnostic event name stays with the run that owns it rather than being derived from a
+ * prefix: these names surface in the shadow snapshot a developer greps for, so they must exist in
+ * the source as whole literals.
+ */
+function recordFrameInShadow(
+  run: ShadowedRun,
+  event: string,
+  wrote: boolean,
+): void {
+  runScrollShadowSafely({
+    event,
+    conversationId: run.request.conversationId,
+    fallback: undefined,
+    observe: () => run.loop?.recordFrame(wrote),
+  })
+}
+
+/**
+ * Ask the loop for the next frame, inside the scroll shadow.
+ *
+ * A loop that cannot schedule is not recoverable: nothing will drive the run again, so it must end
+ * now rather than hang holding the position. What "end now" means differs per run — each settles
+ * into its own terminal state, and one of them also has a model phase to advance — so the failure
+ * action stays with the caller.
+ */
+function scheduleFrameInShadow(
+  run: ShadowedRun,
+  event: string,
+  lease: PositionExecutionLease,
+  drive: () => void,
+  onScheduleFailed: () => void,
+): void {
+  if (!lease.isCurrent() || !run.loop) return
+  const scheduled = runScrollShadowSafely({
+    event,
+    conversationId: run.request.conversationId,
+    fallback: false,
+    observe: () => {
+      run.loop?.schedule(drive)
+      return true
+    },
+  })
+  if (!scheduled && lease.isCurrent()) onScheduleFailed()
+}
+
+/**
+ * Ask the executor to position one frame, inside the scroll shadow.
+ *
+ * An adapter that throws degrades this frame to the caller's fallback — always the result union's
+ * `unavailable` arm, which every loop already handles — instead of tearing the run down through a
+ * React effect or a rAF callback where nothing would catch it.
+ */
+function positionFrameInShadow<Request extends { conversationId: string }, Result>(
+  run: {
+    request: Request
+    executor: {
+      positionFrame: (request: Request, lease: PositionExecutionLease) => Result
+    }
+  },
+  event: string,
+  lease: PositionExecutionLease,
+  fallback: Result,
+): Result {
+  return runScrollShadowSafely<Result>({
+    event,
+    conversationId: run.request.conversationId,
+    fallback,
+    observe: () => run.executor.positionFrame(run.request, lease),
+  })
+}
+
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
 const EXPLICIT_TARGET_STABLE_FRAMES = 4
 const EXPLICIT_TARGET_DRIFT_PX = 16
@@ -1661,48 +1746,27 @@ export class PositioningController {
     execution: LiveEdgeExecutionState,
     lease: PositionExecutionLease,
   ): LiveEdgeFrameResult {
-    return runScrollShadowSafely<LiveEdgeFrameResult>({
-      event: 'live-edge-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request,
-        lease,
-      ),
-    })
+    return positionFrameInShadow(execution, 'live-edge-frame', lease, { kind: 'unavailable' })
   }
 
   private scheduleLiveEdgeFrame(
     execution: LiveEdgeExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'live-edge-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveLiveEdgeFrame(execution, lease),
-        )
-        return true
-      },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.settleLiveEdge(execution, lease, 'best-effort')
-    }
+    scheduleFrameInShadow(
+      execution,
+      'live-edge-frame-schedule',
+      lease,
+      () => this.driveLiveEdgeFrame(execution, lease),
+      () => this.settleLiveEdge(execution, lease, 'best-effort'),
+    )
   }
 
   private recordLiveEdgeFrame(
     execution: LiveEdgeExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'live-edge-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'live-edge-frame-monitor', wrote)
   }
 
   private settleLiveEdgeBestEffort(
@@ -1911,48 +1975,27 @@ export class PositioningController {
     execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
   ): AnchorPreservationFrameResult {
-    return runScrollShadowSafely<AnchorPreservationFrameResult>({
-      event: 'anchor-preservation-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request,
-        lease,
-      ),
-    })
+    return positionFrameInShadow(execution, 'anchor-preservation-frame', lease, { kind: 'unavailable' })
   }
 
   private scheduleAnchorPreservationFrame(
     execution: AnchorPreservationExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'anchor-preservation-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveAnchorPreservationFrame(execution, lease),
-        )
-        return true
-      },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.settleAnchorPreservation(execution, lease, 'best-effort')
-    }
+    scheduleFrameInShadow(
+      execution,
+      'anchor-preservation-frame-schedule',
+      lease,
+      () => this.driveAnchorPreservationFrame(execution, lease),
+      () => this.settleAnchorPreservation(execution, lease, 'best-effort'),
+    )
   }
 
   private recordAnchorPreservationFrame(
     execution: AnchorPreservationExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'anchor-preservation-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'anchor-preservation-frame-monitor', wrote)
   }
 
   private settleAnchorPreservation(
@@ -2114,48 +2157,27 @@ export class PositioningController {
     execution: DirectionalHistoryExecutionState,
     lease: PositionExecutionLease,
   ): DirectionalHistoryFrameResult {
-    return runScrollShadowSafely<DirectionalHistoryFrameResult>({
-      event: 'directional-history-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request,
-        lease,
-      ),
-    })
+    return positionFrameInShadow(execution, 'directional-history-frame', lease, { kind: 'unavailable' })
   }
 
   private scheduleDirectionalHistoryFrame(
     execution: DirectionalHistoryExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'directional-history-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveDirectionalHistoryFrame(execution, lease),
-        )
-        return true
-      },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.settleDirectionalHistory(execution, lease, 'best-effort')
-    }
+    scheduleFrameInShadow(
+      execution,
+      'directional-history-frame-schedule',
+      lease,
+      () => this.driveDirectionalHistoryFrame(execution, lease),
+      () => this.settleDirectionalHistory(execution, lease, 'best-effort'),
+    )
   }
 
   private recordDirectionalHistoryFrame(
     execution: DirectionalHistoryExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'directional-history-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'directional-history-frame-monitor', wrote)
   }
 
   private settleDirectionalHistory(
@@ -2336,34 +2358,23 @@ export class PositioningController {
     execution: ResidentTopExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'resident-top-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveResidentTopFrame(execution, lease),
-        )
-        return true
+    scheduleFrameInShadow(
+      execution,
+      'resident-top-frame-schedule',
+      lease,
+      () => this.driveResidentTopFrame(execution, lease),
+      () => {
+        lease.settle()
+        this.completeResidentTopExecution(execution, 'best-effort')
       },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      lease.settle()
-      this.completeResidentTopExecution(execution, 'best-effort')
-    }
+    )
   }
 
   private recordResidentTopFrame(
     execution: ResidentTopExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'resident-top-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'resident-top-frame-monitor', wrote)
   }
 
   private finishResidentTopLoop(
@@ -2632,15 +2643,12 @@ export class PositioningController {
       return
     }
 
-    const result = runScrollShadowSafely<ExplicitTargetFrameResult>({
-      event: 'explicit-target-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request,
-        lease,
-      ),
-    })
+    const result = positionFrameInShadow<ExplicitTargetRequest, ExplicitTargetFrameResult>(
+      execution,
+      'explicit-target-frame',
+      lease,
+      { kind: 'unavailable' },
+    )
     if (!lease.isCurrent()) return
 
     if (result.kind === 'waiting') {
@@ -2683,39 +2691,28 @@ export class PositioningController {
     execution: ExplicitTargetExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'explicit-target-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveExplicitTargetFrame(execution, lease),
+    scheduleFrameInShadow(
+      execution,
+      'explicit-target-frame-schedule',
+      lease,
+      () => this.driveExplicitTargetFrame(execution, lease),
+      () => {
+        this.finishExplicitTargetLoop(execution)
+        this.model = advancePhaseIfCurrent(
+          this.model,
+          execution.request.conversationId,
+          execution.request.generation,
+          { kind: 'pending', reason: 'target-not-indexed' },
         )
-        return true
       },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.finishExplicitTargetLoop(execution)
-      this.model = advancePhaseIfCurrent(
-        this.model,
-        execution.request.conversationId,
-        execution.request.generation,
-        { kind: 'pending', reason: 'target-not-indexed' },
-      )
-    }
+    )
   }
 
   private recordExplicitTargetFrame(
     execution: ExplicitTargetExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'explicit-target-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'explicit-target-frame-monitor', wrote)
   }
 
   private beginExplicitTargetOperation(
@@ -2898,15 +2895,12 @@ export class PositioningController {
       return
     }
 
-    const result = runScrollShadowSafely<UnreadMarkerFrameResult>({
-      event: 'unread-marker-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request as UnreadMarkerRequest,
-        lease,
-      ),
-    })
+    const result = positionFrameInShadow<UnreadMarkerRequest, UnreadMarkerFrameResult>(
+      execution,
+      'unread-marker-frame',
+      lease,
+      { kind: 'unavailable' },
+    )
     if (!lease.isCurrent()) return
 
     if (result.kind === 'waiting') {
@@ -2949,33 +2943,20 @@ export class PositioningController {
     execution: UnreadMarkerExecutionState,
     lease: PositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'unread-marker-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveUnreadMarkerFrame(execution, lease),
-        )
-        return true
-      },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.promoteUnreadFallback(execution, 'unread-marker-unavailable')
-    }
+    scheduleFrameInShadow(
+      execution,
+      'unread-marker-frame-schedule',
+      lease,
+      () => this.driveUnreadMarkerFrame(execution, lease),
+      () => this.promoteUnreadFallback(execution, 'unread-marker-unavailable'),
+    )
   }
 
   private recordUnreadMarkerFrame(
     execution: UnreadMarkerExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'unread-marker-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'unread-marker-frame-monitor', wrote)
   }
 
   private promoteUnreadFallback(
@@ -3271,48 +3252,27 @@ export class PositioningController {
     execution: SavedPositionExecutionState,
     lease: SavedPositionExecutionLease,
   ): SavedPositionFrameResult {
-    return runScrollShadowSafely<SavedPositionFrameResult>({
-      event: 'saved-position-frame',
-      conversationId: execution.request.conversationId,
-      fallback: { kind: 'unavailable' },
-      observe: () => execution.executor.positionFrame(
-        execution.request,
-        lease,
-      ),
-    })
+    return positionFrameInShadow(execution, 'saved-position-frame', lease, { kind: 'unavailable' })
   }
 
   private scheduleSavedPositionFrame(
     execution: SavedPositionExecutionState,
     lease: SavedPositionExecutionLease,
   ): void {
-    if (!lease.isCurrent() || !execution.loop) return
-    const scheduled = runScrollShadowSafely({
-      event: 'saved-position-frame-schedule',
-      conversationId: execution.request.conversationId,
-      fallback: false,
-      observe: () => {
-        execution.loop?.schedule(
-          () => this.driveSavedPositionFrame(execution, lease),
-        )
-        return true
-      },
-    })
-    if (!scheduled && lease.isCurrent()) {
-      this.settleSavedPosition(execution, lease, 'best-effort')
-    }
+    scheduleFrameInShadow(
+      execution,
+      'saved-position-frame-schedule',
+      lease,
+      () => this.driveSavedPositionFrame(execution, lease),
+      () => this.settleSavedPosition(execution, lease, 'best-effort'),
+    )
   }
 
   private recordSavedPositionFrame(
     execution: SavedPositionExecutionState,
     wrote: boolean,
   ): void {
-    runScrollShadowSafely({
-      event: 'saved-position-frame-monitor',
-      conversationId: execution.request.conversationId,
-      fallback: undefined,
-      observe: () => execution.loop?.recordFrame(wrote),
-    })
+    recordFrameInShadow(execution, 'saved-position-frame-monitor', wrote)
   }
 
   private settleSavedPosition(

@@ -36,7 +36,7 @@
  * surface cannot produce — worth knowing before the seven are consolidated, since unifying guards
  * that are already over-determined cannot change reachable behaviour.
  */
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PositioningController,
   type AnchorPreservationExecutor,
@@ -102,18 +102,31 @@ const entryFacts = {
  * Teardown must stop the loop before aborting, or a frame already scheduled runs against an
  * execution whose lease has gone; the flag is the only way to observe that order from outside.
  */
+/**
+ * Makes every loop refuse to schedule, for the frames that cannot be driven any more.
+ *
+ * Module-level because the executors build their own collector inside `start`; each test that
+ * sets it must clear it, which `beforeEach` does.
+ */
+let loopsRefuseToSchedule = false
+
 function leaseCollector() {
   const leases: PositionExecutionLease[] = []
   let abortedAtFinish: boolean | null = null
+  let finishes = 0
   const loop: PositionFrameLoop = {
-    schedule: () => {},
+    schedule: () => {
+      if (loopsRefuseToSchedule) throw new Error('loop cannot schedule')
+    },
     recordFrame: () => {},
     finish: () => {
+      finishes += 1
       abortedAtFinish = leases.at(-1)?.signal.aborted ?? null
     },
   }
   return {
     leases,
+    finishes: () => finishes,
     finishSawAbort: () => abortedAtFinish,
     beginLoop: (lease: PositionExecutionLease) => {
       leases.push(lease)
@@ -297,6 +310,22 @@ function started(
 }
 
 describe.each(EXECUTORS)('$name lease', ({ start }) => {
+  beforeEach(() => {
+    loopsRefuseToSchedule = false
+  })
+
+  it('ends the run when its loop can no longer schedule a frame', () => {
+    // A loop that cannot schedule is terminal: nothing will drive this run again, so it must end
+    // rather than hold the scroll position for good waiting for a frame that never comes. Every
+    // executor reaches that decision through the same shared step but acts on it differently, so
+    // the assertion is the outcome they must share — the loop is finished, not left open.
+    loopsRefuseToSchedule = true
+    const controller = new PositioningController()
+    const { collector } = start(controller)
+
+    expect(collector.finishes()).toBeGreaterThan(0)
+  })
+
   it('describes the request that issued it', () => {
     const controller = new PositioningController()
     const { lease, generation } = start(controller)
