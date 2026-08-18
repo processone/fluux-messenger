@@ -389,9 +389,6 @@ interface DirectionalHistoryExecutionState {
  * Whether a frame landed close enough to the previous one to count as still. A run's first frame has
  * no previous landing and is never still, which is what the null check says: without it, a fresh
  * execution would count its opening write as one stable frame it never measured.
- *
- * Each executor decides for itself what to do with the answer — how many still frames settle it,
- * whether the settling frame is recorded — so only the question is shared, not the accounting.
  */
 function heldWithinDrift(
   landedTarget: number | null,
@@ -399,6 +396,41 @@ function heldWithinDrift(
   driftPx: number,
 ): boolean {
   return landedTarget !== null && Math.abs(scrollTop - landedTarget) <= driftPx
+}
+
+/** The two fields the drift-convergence step owns; nothing else may write them. */
+interface DriftConvergenceState {
+  landedTarget: number | null
+  stableFrames: number
+}
+
+interface DriftConvergenceStep {
+  /**
+   * Whether the position moved beyond tolerance since the previous frame. NOT the same question as
+   * "did the adapter write to scrollTop": an adapter can write the value already there, and layout
+   * can move the position with no write at all. Both are legitimate things to report to the loop
+   * monitor, so the step answers its own and lets each loop choose.
+   */
+  moved: boolean
+  /** Whether this frame is the one that reaches the settling threshold. */
+  settles: boolean
+}
+
+/**
+ * One frame of drift-based convergence, for the loops that settle when the position stops moving.
+ * Advances the stability count, remembers where this frame landed, and reports whether the loop has
+ * now held still long enough. Which terminal state that leads to belongs to the loop.
+ */
+function advanceDriftConvergence(
+  execution: DriftConvergenceState,
+  scrollTop: number,
+  driftPx: number,
+  stableFramesToSettle: number,
+): DriftConvergenceStep {
+  const moved = !heldWithinDrift(execution.landedTarget, scrollTop, driftPx)
+  execution.stableFrames = moved ? 0 : execution.stableFrames + 1
+  execution.landedTarget = scrollTop
+  return { moved, settles: execution.stableFrames >= stableFramesToSettle }
 }
 
 const EXPLICIT_TARGET_REASSERT_FRAMES = 30
@@ -1861,18 +1893,14 @@ export class PositioningController {
       this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
-    let wrote = false
-    if (heldWithinDrift(execution.landedTarget, result.scrollTop, ANCHOR_PRESERVATION_DRIFT_PX)) {
-      execution.stableFrames += 1
-    } else {
-      wrote = true
-      execution.stableFrames = 0
-    }
-    execution.landedTarget = result.scrollTop
-    this.recordAnchorPreservationFrame(execution, wrote)
-    if (
-      execution.stableFrames >= ANCHOR_PRESERVATION_STABLE_FRAMES
-    ) {
+    const step = advanceDriftConvergence(
+      execution,
+      result.scrollTop,
+      ANCHOR_PRESERVATION_DRIFT_PX,
+      ANCHOR_PRESERVATION_STABLE_FRAMES,
+    )
+    this.recordAnchorPreservationFrame(execution, step.moved)
+    if (step.settles) {
       this.settleAnchorPreservation(execution, lease, 'settled')
       return
     }
@@ -2635,18 +2663,19 @@ export class PositioningController {
     lease.markApplied()
     if (!lease.isCurrent()) return
 
-    if (heldWithinDrift(execution.landedTarget, result.scrollTop, EXPLICIT_TARGET_DRIFT_PX)) {
-      execution.stableFrames += 1
-      if (execution.stableFrames >= EXPLICIT_TARGET_STABLE_FRAMES) {
-        this.recordExplicitTargetFrame(execution, result.wrote)
-        this.finishExplicitTargetExecution(execution, true, 'settled')
-        return
-      }
-    } else {
-      execution.stableFrames = 0
-    }
-    execution.landedTarget = result.scrollTop
+    const step = advanceDriftConvergence(
+      execution,
+      result.scrollTop,
+      EXPLICIT_TARGET_DRIFT_PX,
+      EXPLICIT_TARGET_STABLE_FRAMES,
+    )
+    // Reports the adapter's own write, not `step.moved`. A jump to a named message is judged by
+    // whether it acted this frame; the drift question only decides when it has arrived.
     this.recordExplicitTargetFrame(execution, result.wrote)
+    if (step.settles) {
+      this.finishExplicitTargetExecution(execution, true, 'settled')
+      return
+    }
     this.scheduleExplicitTargetFrame(execution, lease)
   }
 
@@ -2895,16 +2924,14 @@ export class PositioningController {
     if (!lease.isCurrent()) return
     execution.resolvedAtLiveEdge ||= result.atLiveEdge
 
-    let wrote = false
-    if (heldWithinDrift(execution.landedTarget, result.scrollTop, UNREAD_MARKER_DRIFT_PX)) {
-      execution.stableFrames += 1
-    } else {
-      wrote = true
-      execution.stableFrames = 0
-    }
-    execution.landedTarget = result.scrollTop
-    this.recordUnreadMarkerFrame(execution, wrote)
-    if (execution.stableFrames >= UNREAD_MARKER_STABLE_FRAMES) {
+    const step = advanceDriftConvergence(
+      execution,
+      result.scrollTop,
+      UNREAD_MARKER_DRIFT_PX,
+      UNREAD_MARKER_STABLE_FRAMES,
+    )
+    this.recordUnreadMarkerFrame(execution, step.moved)
+    if (step.settles) {
       if (execution.resolvedAtLiveEdge) {
         this.promoteUnreadFallback(
           execution,
@@ -3226,16 +3253,14 @@ export class PositioningController {
       return
     }
 
-    let wrote = false
-    if (heldWithinDrift(execution.landedTarget, result.scrollTop, SAVED_POSITION_DRIFT_PX)) {
-      execution.stableFrames += 1
-    } else {
-      wrote = true
-      execution.stableFrames = 0
-    }
-    execution.landedTarget = result.scrollTop
-    this.recordSavedPositionFrame(execution, wrote)
-    if (execution.stableFrames >= SAVED_POSITION_STABLE_FRAMES) {
+    const step = advanceDriftConvergence(
+      execution,
+      result.scrollTop,
+      SAVED_POSITION_DRIFT_PX,
+      SAVED_POSITION_STABLE_FRAMES,
+    )
+    this.recordSavedPositionFrame(execution, step.moved)
+    if (step.settles) {
       this.settleSavedPosition(execution, lease, 'settled')
       return
     }
