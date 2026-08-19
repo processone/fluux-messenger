@@ -141,7 +141,7 @@ describe('roomStore viewport-evidence gate (Task 11)', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),

@@ -50,7 +50,7 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
 
 describe('roomStore.resyncDividerToReadPointer', () => {
   beforeEach(() => {
-    roomStore.setState({ rooms: new Map(), roomMeta: new Map(), roomRuntime: new Map(), firstNewMessageMarkers: new Map() })
+    roomStore.setState({ rooms: new Map(), roomMeta: new Map(), roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(), firstNewMessageMarkers: new Map() })
   })
 
   it('advances an existing divider to the first unread after the pointer', () => {

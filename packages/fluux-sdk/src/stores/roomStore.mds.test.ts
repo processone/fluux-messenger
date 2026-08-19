@@ -151,7 +151,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -472,7 +472,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -521,12 +521,10 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // was outside the loaded window). The gate must skip re-folding the identical marker so it
     // can't reposition the divider on every return (XEP-0490 markers broadcast live over PEP).
     roomStore.setState((s) => {
-      const rt = new Map(s.roomRuntime)
-      const existing = rt.get(REOPEN_ROOM)
-      if (existing) rt.set(REOPEN_ROOM, { ...existing, messages })
+      const nextMessages = new Map(s.messages).set(REOPEN_ROOM, messages)
       const m = new Map(s.roomMeta)
       m.set(REOPEN_ROOM, { ...m.get(REOPEN_ROOM)!, pendingRemoteDisplayedStanzaId: 's3' })
-      return { roomRuntime: rt, roomMeta: m }
+      return { messages: nextMessages, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
     expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m3')
@@ -556,12 +554,10 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // Re-open: rehydrate the messages (cache reload) and a NEW further-ahead remote read (s4)
     // that the live notify could only stash while the room was unloaded.
     roomStore.setState((s) => {
-      const rt = new Map(s.roomRuntime)
-      const existing = rt.get(REOPEN_ROOM)
-      if (existing) rt.set(REOPEN_ROOM, { ...existing, messages })
+      const nextMessages = new Map(s.messages).set(REOPEN_ROOM, messages)
       const m = new Map(s.roomMeta)
       m.set(REOPEN_ROOM, { ...m.get(REOPEN_ROOM)!, pendingRemoteDisplayedStanzaId: 's4' })
-      return { roomRuntime: rt, roomMeta: m }
+      return { messages: nextMessages, roomMeta: m }
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
     expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.readPointer?.identity.messageId).toBe('m4')
@@ -593,10 +589,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     // The archive healed since (e.g. catch-up landed): the marker's message is loadable now.
     const healed = [...early, rmsg('m9', 's9', 9)]
     roomStore.setState((s) => {
-      const rt = new Map(s.roomRuntime)
-      const existing = rt.get(RETRY_ROOM)
-      if (existing) rt.set(RETRY_ROOM, { ...existing, messages: healed })
-      return { roomRuntime: rt }
+      return { messages: new Map(s.messages).set(RETRY_ROOM, healed) }
     })
 
     await roomStore.getState().activateRoom(RETRY_ROOM)
@@ -748,7 +741,7 @@ describe('roomStore — new-message divider is session-only', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -810,7 +803,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -846,9 +839,7 @@ describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () =
     roomStore.setState((s) => {
       const m = new Map(s.roomMeta)
       m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 2 })
-      const rt = new Map(s.roomRuntime)
-      rt.set(ROOM, { ...rt.get(ROOM)!, windowAtLiveEdge: false })
-      return { roomMeta: m, roomRuntime: rt }
+      return { roomMeta: m, windowAtLiveEdge: new Map(s.windowAtLiveEdge).set(ROOM, false) }
     })
     roomStore.getState().setActiveRoom(ROOM)
     reportRoomViewport(ROOM, 'at-edge')
@@ -894,7 +885,7 @@ describe('roomStore.advanceReadPointer presence gate', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -950,7 +941,7 @@ describe('roomStore fresh-instance catch-up preserves the remote read position',
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -1033,7 +1024,7 @@ describe('roomStore pending-marker guard edges', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),

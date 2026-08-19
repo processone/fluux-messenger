@@ -11,7 +11,7 @@ function createMockState(overrides: Partial<RoomState> = {}): RoomState {
     rooms: new Map(),
     roomEntities: new Map(),
     roomMeta: new Map(),
-    roomRuntime: new Map(),
+    roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
     activeRoomJid: null,
     activeAnimation: null,
     drafts: new Map(),
@@ -497,7 +497,6 @@ describe('roomSelectors', () => {
     it('should return runtime for existing room', () => {
       const runtime: RoomRuntime = {
         occupants: new Map([['alice', { nick: 'alice', affiliation: 'member', role: 'participant' }]]),
-        messages: [],
       }
       const roomRuntime = new Map([['room@conference.example.com', runtime]])
       const state = createMockState({ roomRuntime })
@@ -648,12 +647,9 @@ describe('roomSelectors', () => {
   describe('runtimeMessagesFor', () => {
     it('should return messages from runtime', () => {
       const msg = createMockRoomMessage('1', 'room@conference.example.com')
-      const runtime: RoomRuntime = {
-        occupants: new Map(),
-        messages: [msg],
-      }
-      const roomRuntime = new Map([['room@conference.example.com', runtime]])
-      const state = createMockState({ roomRuntime })
+      const state = createMockState({
+        messages: new Map([['room@conference.example.com', [msg]]]),
+      })
 
       const result = roomSelectors.runtimeMessagesFor('room@conference.example.com')(state)
       expect(result).toHaveLength(1)
@@ -672,7 +668,6 @@ describe('roomSelectors', () => {
       const occupant: RoomOccupant = { nick: 'alice', affiliation: 'member', role: 'participant' }
       const runtime: RoomRuntime = {
         occupants: new Map([['alice', occupant]]),
-        messages: [],
       }
       const roomRuntime = new Map([['room@conference.example.com', runtime]])
       const state = createMockState({ roomRuntime })
@@ -690,7 +685,6 @@ describe('roomSelectors', () => {
           ['alice', { nick: 'alice', affiliation: 'member', role: 'participant' }],
           ['bob', { nick: 'bob', affiliation: 'member', role: 'participant' }],
         ]),
-        messages: [],
       }
       const roomRuntime = new Map([['room@conference.example.com', runtime]])
       const state = createMockState({ roomRuntime })

@@ -108,24 +108,26 @@ export function useRoomActive() {
   // (the load-newer scroll trigger and the jump-to-latest affordance turn on). Absent ⇒ at edge.
   const activeWindowAtLiveEdge = useRoomStore((s) => {
     if (!s.activeRoomJid) return true
-    return s.roomRuntime.get(s.activeRoomJid)?.windowAtLiveEdge ?? true
+    return s.windowAtLiveEdge.get(s.activeRoomJid) ?? true
   })
 
-  // Reconstruct the full Room object from entity + meta + runtime.
-  // Room extends RoomEntity, RoomMetadata, RoomRuntime — so spreading works.
+  // The resident window, from its own map rather than the combined rooms Map.
+  const activeMessages = useRoomStore((s) =>
+    (s.activeRoomJid ? s.messages.get(s.activeRoomJid) : undefined) ?? EMPTY_MESSAGE_ARRAY
+  )
+
+  // Reconstruct the full Room object from entity + meta + runtime + window.
+  // Room extends all four — so spreading works.
   const activeRoom = useMemo((): Room | undefined => {
     if (!activeRoomEntity || !activeRoomMeta || !activeRoomRuntime) return undefined
     return {
       ...activeRoomEntity,
       ...activeRoomMeta,
       ...activeRoomRuntime,
+      messages: activeMessages,
+      windowAtLiveEdge: activeWindowAtLiveEdge,
     }
-  }, [activeRoomEntity, activeRoomMeta, activeRoomRuntime])
-
-  // Messages from runtime (avoids subscribing to the combined rooms Map)
-  const activeMessages = useMemo((): RoomMessage[] => {
-    return activeRoomRuntime?.messages ?? EMPTY_MESSAGE_ARRAY
-  }, [activeRoomRuntime])
+  }, [activeRoomEntity, activeRoomMeta, activeRoomRuntime, activeMessages, activeWindowAtLiveEdge])
 
   // Easter egg animation state
   const activeAnimation = useRoomStore((s) => s.activeAnimation)

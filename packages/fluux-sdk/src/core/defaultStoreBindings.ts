@@ -135,7 +135,7 @@ export function createDefaultStoreBindings(): StoreBindings {
       getRoomCoverageUnproven: (roomJid: string) => roomStore.getState().getRoomMAMQueryState(roomJid).coverageBottomUnproven,
       getRoomPendingStanzaId: (roomJid: string) => roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
       getAllRoomMessages: () =>
-        Array.from(roomStore.getState().roomRuntime, ([jid, runtime]) => ({ jid, messages: runtime.messages })),
+        Array.from(roomStore.getState().messages, ([jid, messages]) => ({ jid, messages })),
     },
     admin: {
       ...bindStoreMethods(adminStore, adminBindingMethodKeys),

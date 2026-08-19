@@ -586,7 +586,7 @@ export const roomSelectors = {
    * Use this for message list rendering.
    */
   runtimeMessagesFor: (roomJid: string) => (state: RoomState): RoomMessage[] => {
-    return state.roomRuntime.get(roomJid)?.messages ?? EMPTY_MESSAGE_ARRAY
+    return state.messages.get(roomJid) ?? EMPTY_MESSAGE_ARRAY
   },
 
   /**

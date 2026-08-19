@@ -45,7 +45,7 @@ export function useReferencedMessage(params: ReferencedMessageParams): Message |
   )
   const roomMatch = useRoomStore((s) =>
     roomJid && id
-      ? findMessageById(s.roomRuntime.get(roomJid)?.messages ?? EMPTY_ROOM_MESSAGES, id)
+      ? findMessageById(s.messages.get(roomJid) ?? EMPTY_ROOM_MESSAGES, id)
       : undefined
   )
 

@@ -71,7 +71,8 @@ describe('useReferencedMessage', () => {
 
       act(() => {
         roomStore.setState({
-          roomRuntime: new Map([[roomJid, { occupants: new Map(), messages: [target] }]]),
+          roomRuntime: new Map([[roomJid, { occupants: new Map() }]]),
+          messages: new Map([[roomJid, [target]]]),
         })
       })
       expect(result.current).toBe(target)

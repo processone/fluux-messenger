@@ -174,7 +174,7 @@ export function setupMdsSideEffects(
   function indexOfStanza(jid: string, stanzaId: string | undefined): number {
     if (!stanzaId) return -1
     const messages = isRoom(jid)
-      ? roomStore.getState().roomRuntime.get(jid)?.messages ?? []
+      ? roomStore.getState().messages.get(jid) ?? []
       : chatStore.getState().messages.get(jid) || []
     return messages.findIndex((m) => m.stanzaId === stanzaId)
   }
@@ -358,7 +358,7 @@ export function setupMdsSideEffects(
       const target = exactRoomPointerTarget(pointer)
       if (!target) return undefined
       const { messageId: seenId, from } = target
-      const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
+      const messages = roomStore.getState().messages.get(jid) ?? []
       const fromSlice = messages.find((m) => m.id === seenId && m.from === from)?.stanzaId
       if (fromSlice) return fromSlice
       // Non-active rooms keep no resident array (memory windowing); mark-all-read
@@ -769,8 +769,10 @@ export function setupMdsSideEffects(
     (state) => state.roomMeta,
     considerRooms
   )
-  const unsubscribeRoomRuntime = roomStore.subscribe(
-    (state) => state.roomRuntime,
+  // The window, not the runtime blob: occupancy churn has no bearing on where
+  // the read marker sits, and this now mirrors the chat subscription above.
+  const unsubscribeRoomMessages = roomStore.subscribe(
+    (state) => state.messages,
     considerRooms
   )
   const unsubscribeRoomMam = roomStore.subscribe(
@@ -971,7 +973,7 @@ export function setupMdsSideEffects(
     unsubscribeMessages()
     unsubscribeConversationMam()
     unsubscribeRoomMeta()
-    unsubscribeRoomRuntime()
+    unsubscribeRoomMessages()
     unsubscribeRoomMam()
     unsubscribeRoomsSeedDrain()
     unsubscribeChatEntities()

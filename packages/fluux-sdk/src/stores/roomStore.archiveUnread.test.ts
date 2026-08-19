@@ -680,9 +680,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState((state) => {
       const rooms = new Map(state.rooms)
       rooms.set(ROOM, { ...rooms.get(ROOM)!, messages: [p0, p1] })
-      const roomRuntime = new Map(state.roomRuntime)
-      roomRuntime.set(ROOM, { ...roomRuntime.get(ROOM)!, messages: [p0, p1] })
-      return { rooms, roomRuntime }
+      return { rooms, messages: new Map(state.messages).set(ROOM, [p0, p1]) }
     })
     setMeta({
       unreadCount: 5,
@@ -942,9 +940,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
       markers.set(ROOM, 'stale-marker-id')
-      const runtime = new Map(state.roomRuntime)
-      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
-      return { firstNewMessageMarkers: markers, activeRoomJid: ROOM, roomRuntime: runtime }
+      return {
+        firstNewMessageMarkers: markers,
+        activeRoomJid: ROOM,
+        messages: new Map(state.messages).set(ROOM, messages),
+      }
     })
   }
 
@@ -990,12 +990,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
     seedCoverage('anchor-stanza')
     roomStore.setState((state) => {
-      const runtime = new Map(state.roomRuntime)
-      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages: [anchor, p0, u1] })
+      const nextMessages = new Map(state.messages).set(ROOM, [anchor, p0, u1])
       const markers = new Map(state.firstNewMessageMarkers)
       // The divider activation parked on the first unread message.
       markers.set(ROOM, 'u1')
-      return { activeRoomJid: ROOM, roomRuntime: runtime, firstNewMessageMarkers: markers }
+      return { activeRoomJid: ROOM, messages: nextMessages, firstNewMessageMarkers: markers }
     })
 
     roomStore.getState().advanceReadPointer(ROOM, 'u1')
@@ -1026,9 +1025,11 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.setState((state) => {
       const markers = new Map(state.firstNewMessageMarkers)
       markers.set(ROOM, 'stale-marker-id')
-      const runtime = new Map(state.roomRuntime)
-      runtime.set(ROOM, { ...runtime.get(ROOM)!, messages: [anchor, p0] })
-      return { firstNewMessageMarkers: markers, activeRoomJid: null, roomRuntime: runtime }
+      return {
+        firstNewMessageMarkers: markers,
+        activeRoomJid: null,
+        messages: new Map(state.messages).set(ROOM, [anchor, p0]),
+      }
     })
 
     await roomStore.getState().recomputeUnreadForRoom(ROOM)
@@ -1232,9 +1233,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     /** Seed the room's resident window (roomRuntime.messages) directly. */
     function seedResident(messages: RoomMessage[]): void {
       roomStore.setState((state) => {
-        const runtime = new Map(state.roomRuntime)
-        runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
-        return { roomRuntime: runtime }
+        return { messages: new Map(state.messages).set(ROOM, messages) }
       })
     }
 
@@ -1553,9 +1552,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     /** Seed the room's resident window (roomRuntime.messages) directly. */
     function seedResident(messages: RoomMessage[]): void {
       roomStore.setState((state) => {
-        const runtime = new Map(state.roomRuntime)
-        runtime.set(ROOM, { ...runtime.get(ROOM)!, messages })
-        return { roomRuntime: runtime }
+        return { messages: new Map(state.messages).set(ROOM, messages) }
       })
     }
 

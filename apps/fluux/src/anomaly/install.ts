@@ -106,15 +106,13 @@ function readUnreadCount(kind: ViewportKind, id: string): number {
 /**
  * Is the loaded window at the tail of the archive.
  *
- * Rooms keep it on `roomRuntime`, conversations in a `windowAtLiveEdge` map — one fact
- * in two shapes. Defaults to `false`, the conservative direction: an unknown window is
- * treated as possibly slid up, which suppresses `fab-at-live-edge` rather than
- * reporting a FAB that may be legitimately offering "jump to latest".
+ * Defaults to `false`, the conservative direction: an unknown window is treated as
+ * possibly slid up, which suppresses `fab-at-live-edge` rather than reporting a FAB
+ * that may be legitimately offering "jump to latest".
  */
 function readWindowAtLiveEdge(kind: ViewportKind, id: string): boolean {
-  return kind === 'room'
-    ? (roomStore.getState().roomRuntime.get(id)?.windowAtLiveEdge ?? false)
-    : (chatStore.getState().windowAtLiveEdge.get(id) ?? false)
+  const store = kind === 'room' ? roomStore : chatStore
+  return store.getState().windowAtLiveEdge.get(id) ?? false
 }
 
 /**

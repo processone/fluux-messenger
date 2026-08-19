@@ -979,7 +979,7 @@ test.describe('Virtualization scroll invariants', () => {
     const evicted = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      return (rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []).length
+      return (rs.messages.get(jid) ?? []).length
     }, STRESS_ROOM_JID)
     expect(evicted, 'resident window should be evicted (or trimmed) after switching away').toBeLessThan(150)
 
@@ -994,7 +994,7 @@ test.describe('Virtualization scroll invariants', () => {
     const reloaded = await page.evaluate(([jid, id]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       return { residentLen: msgs.length, hasAnchor: msgs.some((m: { id: string }) => m.id === id) }
     }, [STRESS_ROOM_JID, anchorId] as const)
     expect(reloaded.residentLen, 'resident window did not grow past the latest slice — anchor slice not reloaded').toBeGreaterThan(150)
@@ -1189,7 +1189,7 @@ test.describe('Virtualization scroll invariants', () => {
     const lastId = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
       if (last) rs.advanceReadPointer(jid, last.id)
       return last?.id ?? null
@@ -1378,7 +1378,7 @@ test.describe('Marker-on-reentry diagnostic', () => {
     const lastId = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
       if (last) rs.advanceReadPointer(jid, last.id)
       return last?.id ?? null
@@ -2544,7 +2544,7 @@ test.describe('Sliding window (load-older past the cap)', () => {
     const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
     return {
       count: room?.messages?.length ?? 0,
-      atLiveEdge: rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true,
+      atLiveEdge: rs.windowAtLiveEdge.get(jid) ?? true,
       scrollTop: scroller?.scrollTop ?? 0,
     }
   }, STRESS_ROOM_JID)
@@ -2569,7 +2569,7 @@ test.describe('Sliding window (load-older past the cap)', () => {
     await page.waitForFunction((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      return (rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true) === false
+      return (rs.windowAtLiveEdge.get(jid) ?? true) === false
     }, STRESS_ROOM_JID, { timeout: 6_000 }).catch(() => { /* asserted below with context */ })
     await page.waitForTimeout(800) // anchor-restore re-assert settle
 
@@ -2586,7 +2586,7 @@ test.describe('Sliding window (load-older past the cap)', () => {
     await page.waitForFunction((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      return (rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true) === true
+      return (rs.windowAtLiveEdge.get(jid) ?? true) === true
     }, STRESS_ROOM_JID, { timeout: 6_000 }).catch(() => { /* asserted below */ })
     const recentered = await readState(page)
     expect(recentered.atLiveEdge, `jump-to-latest did not recenter to the live edge: ${JSON.stringify(recentered)}`).toBe(true)
@@ -2612,7 +2612,7 @@ test.describe('Jump-to-last-read pill', () => {
     await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       const last = msgs[msgs.length - 1]
       if (last) rs.advanceReadPointer(jid, last.id)
     }, STRESS_ROOM_JID)
@@ -2737,7 +2737,7 @@ test.describe('Jump-to-last-read pill', () => {
       const store = (window as any).__roomStore
       const s = store.getState()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; from?: string; timestamp: Date; isOutgoing?: boolean }[]
+      const msgs = (s.messages.get(jid) ?? []) as { id: string; from?: string; timestamp: Date; isOutgoing?: boolean }[]
       // First unread after the pointer must exist and be incoming — find the last incoming message
       // and put the pointer immediately before it, so resyncDividerToReadPointer lands on it.
       let targetIdx = -1
@@ -2793,7 +2793,7 @@ test.describe('Jump-to-last-read pill', () => {
     const readDividerState = () => page.evaluate(([jid, dividerId]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       const markerId = rs.firstNewMessageMarkers.get(jid) ?? null
       const s = document.querySelector('[data-message-list]') as HTMLElement | null
       return {

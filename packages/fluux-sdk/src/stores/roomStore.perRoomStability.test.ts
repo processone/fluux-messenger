@@ -8,7 +8,7 @@ import { createRoom, createRoomMessage } from '../hooks/renderStability.helpers'
 describe('per-room ref stability after unrelated message', () => {
   beforeEach(() => {
     roomStore.setState({
-      rooms: new Map(), roomEntities: new Map(), roomMeta: new Map(), roomRuntime: new Map(),
+      rooms: new Map(), roomEntities: new Map(), roomMeta: new Map(), roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null, mamQueryStates: new Map(), activeAnimation: null, drafts: new Map(),
     })
   })

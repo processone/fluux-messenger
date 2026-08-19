@@ -13,7 +13,7 @@ import { createRoom, createRoomMessage } from '../hooks/renderStability.helpers'
 describe('room message window', () => {
   beforeEach(() => {
     roomStore.setState({
-      rooms: new Map(), roomEntities: new Map(), roomMeta: new Map(), roomRuntime: new Map(),
+      rooms: new Map(), roomEntities: new Map(), roomMeta: new Map(), roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null, mamQueryStates: new Map(), activeAnimation: null, drafts: new Map(),
       firstNewMessageMarkers: new Map(),
     })
@@ -25,12 +25,12 @@ describe('room message window', () => {
 
     const state = roomStore.getState()
     const viaCompat = state.rooms.get('a@x')!.messages
-    const viaRuntime = state.roomRuntime.get('a@x')!.messages
+    const viaWindow = state.messages.get('a@x')!
 
     expect(viaCompat.map((m) => m.id)).toEqual(['m1'])
     // Same reference, not merely equal contents: a reader that falls back from
     // one map to the other must not be able to observe two different windows.
-    expect(viaRuntime).toBe(viaCompat)
+    expect(viaWindow).toBe(viaCompat)
   })
 
   it('keeps the two maps in step across several appends', () => {
@@ -40,7 +40,7 @@ describe('room message window', () => {
     }
 
     const state = roomStore.getState()
-    expect(state.rooms.get('a@x')!.messages).toBe(state.roomRuntime.get('a@x')!.messages)
+    expect(state.rooms.get('a@x')!.messages).toBe(state.messages.get('a@x'))
     expect(state.rooms.get('a@x')!.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
   })
 
@@ -49,11 +49,11 @@ describe('room message window', () => {
     roomStore.getState().setActiveRoom('a@x')
 
     // No messages were ever appended, so deactivating has no window to drop.
-    const before = roomStore.getState().roomRuntime
+    const before = roomStore.getState().messages
     roomStore.getState().setActiveRoom(null)
 
-    // A fresh map here would re-render every runtime subscriber for nothing.
-    expect(roomStore.getState().roomRuntime).toBe(before)
+    // A fresh map here would re-render every window subscriber for nothing.
+    expect(roomStore.getState().messages).toBe(before)
   })
 
   it('does not resurrect a room that is gone from the compat map', () => {

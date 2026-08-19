@@ -161,7 +161,7 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
     // lastMessage previews can satisfy the resolver before it reaches IndexedDB.
     expect(chatStore.getState().messages.has(EXACT_CHAT)).toBe(false)
     expect(chatStore.getState().messages.has(FALLBACK_CHAT)).toBe(false)
-    expect(roomStore.getState().roomRuntime.get(ROOM)?.messages).toEqual([])
+    expect(roomStore.getState().messages.get(ROOM)).toEqual([])
 
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: OWN_JID } as never)

@@ -93,7 +93,7 @@ describe('roomStore', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -129,12 +129,12 @@ describe('roomStore', () => {
       roomStore.setState({ activeRoomJid: roomA })
 
       // Sanity: A is resident before switching away.
-      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toHaveLength(2)
+      expect(roomStore.getState().messages.get(roomA)).toHaveLength(2)
 
       roomStore.getState().setActiveRoom(roomB)
 
       // A's messages are evicted from both mirrors (rooms + roomRuntime)...
-      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toEqual([])
+      expect(roomStore.getState().messages.get(roomA)).toEqual([])
       expect(roomStore.getState().rooms.get(roomA)?.messages).toEqual([])
       // ...but its sidebar preview / identity are preserved.
       expect(roomStore.getState().rooms.get(roomA)?.lastMessage).toEqual(msgs[1])
@@ -151,7 +151,7 @@ describe('roomStore', () => {
       // Activating A (no previous active room) must not evict A.
       roomStore.getState().setActiveRoom(roomA)
 
-      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toHaveLength(1)
+      expect(roomStore.getState().messages.get(roomA)).toHaveLength(1)
       expect(roomStore.getState().activeRoomJid).toBe(roomA)
     })
   })
@@ -514,7 +514,6 @@ describe('roomStore', () => {
     it('should NOT set lastInteractedAt when joining room with no messages', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: false,
-        messages: [],
       }))
 
       roomStore.getState().setRoomJoined('test@conference.example.com', true)
@@ -2040,10 +2039,7 @@ describe('roomStore', () => {
       }))
       // Simulate eviction: runtime messages array is empty (non-active room).
       roomStore.setState((state) => {
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)
-        if (existingRuntime) newRuntime.set(roomJid, { ...existingRuntime, messages: [] })
-        return { roomRuntime: newRuntime }
+        return { messages: new Map(state.messages).set(roomJid, []) }
       })
 
       roomStore.getState().markReadToNewest(roomJid)
@@ -2345,15 +2341,11 @@ describe('roomStore', () => {
         }
         roomMeta.set(jid, meta)
 
-        const roomRuntime = new Map(s.roomRuntime)
-        const runtime = roomRuntime.get(jid)
-        if (runtime) roomRuntime.set(jid, { ...runtime, messages })
-
         const rooms = new Map(s.rooms)
         const room = rooms.get(jid)
         if (room) rooms.set(jid, { ...room, messages, readPointer: undefined, historyFloor: new Date(2000) })
 
-        return { roomMeta, roomRuntime, rooms }
+        return { roomMeta, messages: new Map(s.messages).set(jid, messages), rooms }
       })
     }
 
@@ -2551,7 +2543,7 @@ describe('roomStore', () => {
         'msg-150',
         expect.any(Object)
       )
-      const resident = roomStore.getState().roomRuntime.get(roomJid)?.messages
+      const resident = roomStore.getState().messages.get(roomJid)
       expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
       expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toBe('msg-151')
     })
@@ -4393,7 +4385,7 @@ describe('roomStore', () => {
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('bg-2')
       // ...but the resident array is NOT populated (only the active room is in RAM).
       expect(roomStore.getState().rooms.get(roomJid)?.messages).toEqual([])
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages).toEqual([])
+      expect(roomStore.getState().messages.get(roomJid)).toEqual([])
     })
 
     it('should merge older MAM messages at the start with direction backward', () => {
@@ -5425,10 +5417,7 @@ describe('roomStore', () => {
         const newRooms = new Map(state.rooms)
         const existing = newRooms.get(roomJid)!
         newRooms.set(roomJid, { ...existing, messages: resident })
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)!
-        newRuntime.set(roomJid, { ...existingRuntime, messages: resident })
-        return { rooms: newRooms, roomRuntime: newRuntime }
+        return { rooms: newRooms, messages: new Map(state.messages).set(roomJid, resident) }
       })
 
       const olderBatch: RoomMessage[] = []
@@ -5439,7 +5428,8 @@ describe('roomStore', () => {
     }
 
     it('a fresh room seeded via addRoom is at the live edge', () => {
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      // Absent means at the live edge — the same convention chatStore's map uses.
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid) ?? true).toBe(true)
     })
 
     it('appends a live message when the window is at the live edge (default)', () => {
@@ -5454,13 +5444,13 @@ describe('roomStore', () => {
     it('sets windowAtLiveEdge false after a load-older that evicts the newest tail', async () => {
       seedSlidWindow()
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
     })
 
     it('does not append a live message when the window has slid off the live edge, but still persists to cache and updates meta', async () => {
       seedSlidWindow()
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
 
       vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
       const before = roomStore.getState().getRoom(roomJid)!.messages
@@ -5483,33 +5473,30 @@ describe('roomStore', () => {
     it('recenters to the live edge when the latest window is (re)loaded', async () => {
       seedSlidWindow()
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
 
       // A latest-N load (activation path) makes the newest messages resident again.
       vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
 
     it('mergeRoomMAMMessages flips windowAtLiveEdge true on a fetch-latest merge, but a plain backward merge does not', () => {
       roomStore.setState({ activeRoomJid: roomJid })
       // Seed the flag false, as if a prior scroll-up slid the window off the live edge.
       roomStore.setState((state) => {
-        const newRuntime = new Map(state.roomRuntime)
-        const existing = newRuntime.get(roomJid)!
-        newRuntime.set(roomJid, { ...existing, windowAtLiveEdge: false })
-        return { roomRuntime: newRuntime }
+        return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }
       })
 
       // A plain backward merge (isFetchLatest false) must not flip it back.
       const older = roomMsgAt('older-1', 1)
       roomStore.getState().mergeRoomMAMMessages(roomJid, [older], {}, false, 'backward')
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
 
       // A fetch-latest merge lands the window AT the live edge by construction.
       const fresh = roomMsgAt('fresh-1', 20000)
       roomStore.getState().mergeRoomMAMMessages(roomJid, [fresh], {}, false, 'backward', false, true)
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
   })
 
@@ -5559,10 +5546,11 @@ describe('roomStore', () => {
         const newRooms = new Map(state.rooms)
         const existing = newRooms.get(roomJid)!
         newRooms.set(roomJid, { ...existing, messages: resident })
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)!
-        newRuntime.set(roomJid, { ...existingRuntime, messages: resident, windowAtLiveEdge: false })
-        return { rooms: newRooms, roomRuntime: newRuntime }
+        return {
+          rooms: newRooms,
+          messages: new Map(state.messages).set(roomJid, resident),
+          windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
+        }
       })
     }
 
@@ -5609,7 +5597,7 @@ describe('roomStore', () => {
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
 
     it('leaves windowAtLiveEdge slid (false) when a full batch returns (more newer remain)', async () => {
@@ -5622,7 +5610,7 @@ describe('roomStore', () => {
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
     })
 
     it('returns an empty array and does nothing when the room has no resident messages', async () => {
@@ -5678,10 +5666,11 @@ describe('roomStore', () => {
         const newRooms = new Map(state.rooms)
         const existing = newRooms.get(roomJid)!
         newRooms.set(roomJid, { ...existing, messages: resident })
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)!
-        newRuntime.set(roomJid, { ...existingRuntime, messages: resident, windowAtLiveEdge: false })
-        return { rooms: newRooms, roomRuntime: newRuntime }
+        return {
+          rooms: newRooms,
+          messages: new Map(state.messages).set(roomJid, resident),
+          windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
+        }
       })
 
       const latestBatch = [roomMsgAt('latest-1', 90000)]
@@ -5689,7 +5678,7 @@ describe('roomStore', () => {
 
       await roomStore.getState().recenterToLatest(roomJid)
 
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
       const room = roomStore.getState().rooms.get(roomJid)
       expect(room?.messages.some((m) => m.id === 'latest-1')).toBe(true)
     })
@@ -5699,7 +5688,7 @@ describe('roomStore', () => {
 
       await roomStore.getState().recenterToLatest(roomJid)
 
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
     })
   })
 
@@ -5998,8 +5987,7 @@ describe('roomStore', () => {
 
       roomStore.getState().updateMessage(roomJid, 'server-stanza-id-123', { isRetracted: true })
 
-      const runtime = roomStore.getState().roomRuntime.get(roomJid)
-      expect(runtime?.messages[0]?.isRetracted).toBe(true)
+      expect(roomStore.getState().messages.get(roomJid)?.[0]?.isRetracted).toBe(true)
     })
   })
 
@@ -6308,7 +6296,7 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
@@ -6471,7 +6459,7 @@ describe('roomStore pending retractions', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       pendingRetractions: new Map(),
     })
@@ -6578,7 +6566,7 @@ describe('roomStore parity drift regressions', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       firstNewMessageMarkers: new Map(),
       mamQueryStates: new Map(),
@@ -6622,7 +6610,7 @@ describe('roomStore parity drift regressions', () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].stanzaId).toBe('archive-123')
       // The runtime mirror must receive the same patched array.
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('archive-123')
+      expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('archive-123')
       // The backfill must also persist so the cursor survives a reload.
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
         roomJid,
@@ -6735,14 +6723,12 @@ describe('roomStore parity drift regressions', () => {
 
     it('updateRoom never recenters the window: windowAtLiveEdge survives a runtime update', () => {
       roomStore.setState((state) => {
-        const roomRuntime = new Map(state.roomRuntime)
-        roomRuntime.set(roomJid, { ...roomRuntime.get(roomJid)!, windowAtLiveEdge: false })
-        return { roomRuntime }
+        return { windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false) }
       })
 
       roomStore.getState().updateRoom(roomJid, { occupants: new Map() })
 
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+      expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
     })
 
     it('MAM merge backfills the archive stanzaId onto resident messages (parity with chatStore)', () => {
@@ -6762,7 +6748,7 @@ describe('roomStore parity drift regressions', () => {
       const messages = roomStore.getState().rooms.get(roomJid)?.messages || []
       expect(messages).toHaveLength(1)
       expect(messages[0].stanzaId).toBe('arch-merge')
-      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('arch-merge')
+      expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('arch-merge')
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
         roomJid,
         'own-1',

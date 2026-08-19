@@ -507,13 +507,13 @@ describe('setupMdsSideEffects', () => {
     // The reflection lands and backfills the stanza-id; #1142's retry then
     // publishes the TRUE position rather than an approximation of it.
     roomStore.setState((s) => {
-      const runtime = new Map(s.roomRuntime)
-      const entry = runtime.get(room)!
-      runtime.set(room, {
-        ...entry,
-        messages: entry.messages.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2' } : m)),
-      })
-      return { roomRuntime: runtime }
+      const current = s.messages.get(room) ?? []
+      return {
+        messages: new Map(s.messages).set(
+          room,
+          current.map((m) => (m.id === 'r2' ? { ...m, stanzaId: 'rs2' } : m))
+        ),
+      }
     })
     await vi.advanceTimersByTimeAsync(2_000)
 

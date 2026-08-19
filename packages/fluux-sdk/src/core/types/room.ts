@@ -337,6 +337,33 @@ export interface RoomRuntime {
   affiliatedMembers?: RoomMember[]
   /** Our own occupant info (when joined) */
   selfOccupant?: RoomOccupant
+}
+
+/**
+ * A MUC room (group chat).
+ *
+ * Contains all room state including occupants, messages, and bookmark settings.
+ * This is the combined type that includes entity, metadata, and runtime fields.
+ *
+ * @remarks
+ * Internally, the store separates entity, metadata, and runtime into different
+ * maps for performance optimization. This combined type is provided for
+ * convenience and backward compatibility.
+ *
+ * @category MUC
+ */
+/**
+ * A room's resident message window: the slice of history currently held in
+ * memory, and whether it still touches the tail.
+ *
+ * Separate from {@link RoomRuntime} because it is not MUC-specific. `chatStore`
+ * has kept the same two things as top-level maps all along; this is the room
+ * side saying the same thing. Occupancy and the nick/occupant-id caches stay on
+ * the runtime — those exist because MUC hides real JIDs.
+ *
+ * @category MUC
+ */
+export interface RoomMessageWindow {
   /** Messages in this room */
   messages: RoomMessage[]
   /**
@@ -360,20 +387,7 @@ export interface RoomRuntime {
   windowAtLiveEdge?: boolean
 }
 
-/**
- * A MUC room (group chat).
- *
- * Contains all room state including occupants, messages, and bookmark settings.
- * This is the combined type that includes entity, metadata, and runtime fields.
- *
- * @remarks
- * Internally, the store separates entity, metadata, and runtime into different
- * maps for performance optimization. This combined type is provided for
- * convenience and backward compatibility.
- *
- * @category MUC
- */
-export interface Room extends RoomEntity, RoomMetadata, RoomRuntime {}
+export interface Room extends RoomEntity, RoomMetadata, RoomRuntime, RoomMessageWindow {}
 
 /**
  * Room capabilities discovered via disco#info (XEP-0030/XEP-0045 §6.4).

@@ -76,7 +76,7 @@ beforeEach(() => {
     rooms: new Map(),
     roomEntities: new Map(),
     roomMeta: new Map(),
-    roomRuntime: new Map(),
+    roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
     mamQueryStates: new Map(),
     roomGaps: new Map(),
     activeRoomJid: null,

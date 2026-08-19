@@ -18,7 +18,7 @@ describe('useRoomActive render stability', () => {
       rooms: new Map(),
       roomEntities: new Map(),
       roomMeta: new Map(),
-      roomRuntime: new Map(),
+      roomRuntime: new Map(), messages: new Map(), windowAtLiveEdge: new Map(),
       activeRoomJid: null,
       mamQueryStates: new Map(),
       activeAnimation: null,
