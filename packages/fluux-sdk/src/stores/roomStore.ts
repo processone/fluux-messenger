@@ -726,6 +726,62 @@ function resolveRoomPendingRetractions(
   return { messages, pendingRetractions: nextPending }
 }
 
+/**
+ * The single writer for a room's resident message window.
+ *
+ * The window lives in two maps: the `rooms` compat entry and `roomRuntime`.
+ * Seven call sites used to set both by hand, and the two writes were not even
+ * decided the same way — the compat write was unconditional while the runtime
+ * write sat behind `if (existingRuntime)`. Two independent decisions per write
+ * is exactly what a reader has to trust when it falls back from one map to the
+ * other, and the fallbacks in this file are the trace of that doubt.
+ *
+ * Copy-on-write, and deliberately so on each map separately: a fresh map
+ * reference re-renders every subscriber to it, so a window that is already what
+ * it would become leaves `roomRuntime` untouched.
+ *
+ * @returns the maps to return from `set()`, or `null` when the room is unknown
+ *   — the same miss the call sites already guarded on.
+ */
+function withRoomMessageWindow(
+  state: Pick<RoomState, 'rooms' | 'roomRuntime'>,
+  roomJid: string,
+  messages: RoomMessage[],
+  options: {
+    /** Extra fields for the compat entry only, e.g. a refreshed preview. */
+    roomPatch?: Partial<Room>
+    /**
+     * Move the live-edge flag. Written to the runtime and NOT to the compat
+     * entry: the flag is authoritative on the runtime, which is why
+     * `ROOM_RUNTIME_FIELD_ROUTING` marks it `preserve` — a plain field update
+     * must never silently recenter the window.
+     */
+    atLiveEdge?: boolean
+  } = {}
+): Pick<RoomState, 'rooms' | 'roomRuntime'> | null {
+  const existing = state.rooms.get(roomJid)
+  if (!existing) return null
+
+  const rooms = new Map(state.rooms)
+  rooms.set(roomJid, { ...existing, ...options.roomPatch, messages })
+
+  const runtime = state.roomRuntime.get(roomJid)
+  const windowUnchanged =
+    runtime &&
+    options.atLiveEdge === undefined &&
+    (runtime.messages === messages ||
+      (runtime.messages.length === 0 && messages.length === 0))
+  if (!runtime || windowUnchanged) return { rooms, roomRuntime: state.roomRuntime }
+
+  const roomRuntime = new Map(state.roomRuntime)
+  roomRuntime.set(roomJid, {
+    ...runtime,
+    messages,
+    ...(options.atLiveEdge === undefined ? {} : { windowAtLiveEdge: options.atLiveEdge }),
+  })
+  return { rooms, roomRuntime }
+}
+
 function mergeCachedRoomMessages(
   state: RoomState,
   roomJid: string,
@@ -751,14 +807,8 @@ function mergeCachedRoomMessages(
     findLastNonIgnoredMessage(msgs, roomJid, existing.nickToJidCache)
   )
 
-  newRooms.set(roomJid, { ...existing, messages: merged, lastMessage })
-
-  // Update runtime
-  const newRuntime = new Map(state.roomRuntime)
-  const existingRuntime = newRuntime.get(roomJid)
-  if (existingRuntime) {
-    newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
-  }
+  const written = withRoomMessageWindow(state, roomJid, merged, { roomPatch: { lastMessage } })
+  if (!written) return null
 
   // Update metadata with lastMessage for sidebar
   const newMeta = new Map(state.roomMeta)
@@ -768,8 +818,7 @@ function mergeCachedRoomMessages(
   }
 
   return {
-    rooms: newRooms,
-    roomRuntime: newRuntime,
+    ...written,
     roomMeta: newMeta,
     ...(resolvedRetractions.pendingRetractions ? { pendingRetractions: resolvedRetractions.pendingRetractions } : {}),
   }
@@ -1976,13 +2025,9 @@ export const roomStore = createStore<RoomState>()(
         for (const p of append.patched) {
           void messageCache.updateRoomMessage(roomJid, p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) }, p.from)
         }
-        newRooms.set(roomJid, { ...existing, messages: append.messages })
-        const patchedRuntime = new Map(state.roomRuntime)
-        const runtimeEntry = patchedRuntime.get(roomJid)
-        if (runtimeEntry) {
-          patchedRuntime.set(roomJid, { ...runtimeEntry, messages: append.messages })
-        }
-        return { rooms: newRooms, roomRuntime: patchedRuntime }
+        const backfilled = withRoomMessageWindow(state, roomJid, append.messages)
+        if (!backfilled) return state
+        return backfilled
       }
       acceptedMessage = true
 
@@ -2097,22 +2142,16 @@ export const roomStore = createStore<RoomState>()(
       // never moved on send, unlike chatStore.addMessage — a chat/room parity
       // gap. `onMessageReceived` only ever advances via `advance()`, which is
       // forward-only, so committing it here unconditionally cannot regress it.
-      newRooms.set(roomJid, {
-        ...existing,
-        messages: newMessages,
-        unreadCount,
-        mentionsCount: updated.mentionsCount,
-        readPointer: updated.readPointer,
-        lastMessage,
-        lastInteractedAt: newLastInteractedAt,
+      const written = withRoomMessageWindow(state, roomJid, newMessages, {
+        roomPatch: {
+          unreadCount,
+          mentionsCount: updated.mentionsCount,
+          readPointer: updated.readPointer,
+          lastMessage,
+          lastInteractedAt: newLastInteractedAt,
+        },
       })
-
-      // Update runtime (messages)
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
-      }
+      if (!written) return state
 
       // Update metadata
       const newMeta = new Map(state.roomMeta)
@@ -2138,7 +2177,7 @@ export const roomStore = createStore<RoomState>()(
       if (updated.firstNewMessageId) newMarkers.set(roomJid, updated.firstNewMessageId)
       else newMarkers.delete(roomJid)
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
+      return { ...written, roomMeta: newMeta, firstNewMessageMarkers: newMarkers, ...interiorPlacementPatch }
     })
 
     const transientMessageIdentity = () => transientIdentity({
@@ -2229,16 +2268,9 @@ export const roomStore = createStore<RoomState>()(
         void messageCache.updateRoomMessageReactions(roomJid, messageId, reactorNick, emojis)
       }
 
-      newRooms.set(roomJid, { ...existing, messages: newMessages })
-
-      // Update runtime
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
-      }
-
-      return { rooms: newRooms, roomRuntime: newRuntime }
+      const written = withRoomMessageWindow(state, roomJid, newMessages)
+      if (!written) return state
+      return written
     })
   },
 
@@ -2289,18 +2321,12 @@ export const roomStore = createStore<RoomState>()(
         }
       }
 
-      newRooms.set(roomJid, { ...existing, messages: newMessages })
-
-      // Update runtime
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
-      }
+      const written = withRoomMessageWindow(state, roomJid, newMessages)
+      if (!written) return state
 
       // Update metadata's lastMessage if the updated message is the last one
       const lastMessage = newMessages[newMessages.length - 1]
-      const result: Partial<RoomState> = { rooms: newRooms, roomRuntime: newRuntime }
+      const result: Partial<RoomState> = { ...written }
       if (updatedMessage && lastMessage === updatedMessage) {
         const newMeta = new Map(state.roomMeta)
         const existingMeta = newMeta.get(roomJid)
@@ -2330,16 +2356,10 @@ export const roomStore = createStore<RoomState>()(
 
       void messageCache.updateRoomMessage(roomJid, existing.messages[targetIdx].id, { stanzaId: undefined }, existing.messages[targetIdx].from)
 
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, messages: newMessages })
+      const written = withRoomMessageWindow(state, roomJid, newMessages)
+      if (!written) return state
 
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
-      }
-
-      const result: Partial<RoomState> = { rooms: newRooms, roomRuntime: newRuntime }
+      const result: Partial<RoomState> = { ...written }
       const meta = state.roomMeta.get(roomJid)
       const wasLastMessage =
         !!meta?.lastMessage &&
@@ -2755,24 +2775,14 @@ export const roomStore = createStore<RoomState>()(
       const hadMarker = get().firstNewMessageMarkers.has(prevJid)
 
       set((state) => {
-        // Evict from the runtime mirror (messages live here).
-        const newRuntime = new Map(state.roomRuntime)
-        const prevRuntime = newRuntime.get(prevJid)
-        if (prevRuntime && prevRuntime.messages.length > 0) {
-          newRuntime.set(prevJid, { ...prevRuntime, messages: [] })
-        }
-
-        // Evict from the combined map mirror.
-        const newRooms = new Map(state.rooms)
-        const prevRoom = newRooms.get(prevJid)
-        if (prevRoom) {
-          newRooms.set(prevJid, { ...prevRoom, messages: [] })
-        }
+        // Drop the deactivated room's window; the writer leaves `roomRuntime`
+        // untouched when it is already empty.
+        const evicted = withRoomMessageWindow(state, prevJid, [])
 
         const newMarkers = new Map(state.firstNewMessageMarkers)
         if (hadMarker) newMarkers.delete(prevJid)
 
-        return { roomRuntime: newRuntime, rooms: newRooms, firstNewMessageMarkers: newMarkers }
+        return { ...evicted, firstNewMessageMarkers: newMarkers }
       })
     }
 
@@ -3608,20 +3618,10 @@ export const roomStore = createStore<RoomState>()(
             roomTimelineConfig()
           )
 
-          newRooms.set(roomJid, { ...existing, messages: merged })
-
-          // Update runtime
-          const newRuntime = new Map(state.roomRuntime)
-          const existingRuntime = newRuntime.get(roomJid)
-          if (existingRuntime) {
-            newRuntime.set(roomJid, {
-              ...existingRuntime,
-              messages: merged,
-              ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
-            })
-          }
-
-          return { rooms: newRooms, roomRuntime: newRuntime }
+          const written = withRoomMessageWindow(state, roomJid, merged,
+            newestEvicted ? { atLiveEdge: false } : {})
+          if (!written) return state
+          return written
         })
       }
 
@@ -3673,20 +3673,10 @@ export const roomStore = createStore<RoomState>()(
             roomTimelineConfig()
           )
 
-          newRooms.set(roomJid, { ...existing, messages: merged })
-
-          // Update runtime
-          const newRuntime = new Map(state.roomRuntime)
-          const existingRuntime = newRuntime.get(roomJid)
-          if (existingRuntime) {
-            newRuntime.set(roomJid, {
-              ...existingRuntime,
-              messages: merged,
-              ...(reachedTail ? { windowAtLiveEdge: true } : {}),
-            })
-          }
-
-          return { rooms: newRooms, roomRuntime: newRuntime }
+          const written = withRoomMessageWindow(state, roomJid, merged,
+            reachedTail ? { atLiveEdge: true } : {})
+          if (!written) return state
+          return written
         })
       } else if (reachedTail) {
         // Empty batch: still need to flip the flag if the room isn't already at the edge.
@@ -4062,14 +4052,8 @@ export const roomStore = createStore<RoomState>()(
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
           return { mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
         }
-        const backfilledRooms = new Map(state.rooms)
-        backfilledRooms.set(roomJid, { ...room, messages: merged })
-        const backfilledRuntime = new Map(state.roomRuntime)
-        const runtimeEntry = backfilledRuntime.get(roomJid)
-        if (runtimeEntry) {
-          backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
-        }
-        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
+        const backfilled = withRoomMessageWindow(state, roomJid, merged)
+        return { ...backfilled, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
@@ -4126,8 +4110,14 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
+      const written = withRoomMessageWindow(state, roomJid, merged, {
+        roomPatch: { lastMessage },
+        ...(newestEvicted
+          ? { atLiveEdge: false }
+          : isFetchLatest && newFromMAM.length > 0
+            ? { atLiveEdge: true }
+            : {}),
+      })
 
       // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
       // (newestEvicted from the timeline machine), sliding the window off the live
@@ -4139,21 +4129,8 @@ export const roomStore = createStore<RoomState>()(
       // keep-newest and jump the window to live — same class as
       // jump-to-latest. The content-anchor scroll restore then degrades to an
       // estimate rather than an exact reposition.
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, {
-          ...existingRuntime,
-          messages: merged,
-          ...(newestEvicted
-            ? { windowAtLiveEdge: false }
-            : isFetchLatest && newFromMAM.length > 0
-              ? { windowAtLiveEdge: true }
-              : {}),
-        })
-      }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
+      return { ...written, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
     if (archiveCommitGate) {
