@@ -564,7 +564,7 @@ kinetic scrolling and stale-paint behavior.
        synced-live-edge predicate and its late-resolving twin are now separately testable, including
        the empty-conversation case where a bare pointer comparison would discard a saved position.
      - [x] Express the two remaining ambient re-pins as pure decisions: `mdsSettleDecision` for a
-       divider cleared by a late XEP-0490 read-sync, and `typingIndicatorDecision` for the band that
+       divider cleared before the reader moves, and `typingIndicatorDecision` for the band that
        shrinks the scrollport, the twin of `rowGrowthDecision`. The detectors that remain in the
        hook carry a single condition each, where a decision layer would be ceremony.
 

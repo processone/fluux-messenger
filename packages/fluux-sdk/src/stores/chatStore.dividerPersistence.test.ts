@@ -1,0 +1,79 @@
+/**
+ * The "New messages" divider is a landmark, not a cursor.
+ *
+ * It marks where the unread messages began when this view was opened. The read pointer moves
+ * underneath it while the reader scrolls — that is genuine read state, and it still drives receipts
+ * and the XEP-0490 marker other devices see — but deriving the divider's POSITION from that pointer
+ * walks the line down the screen while the reader is looking at it. Placing it belongs to
+ * activation; removing it belongs to read-through scroll, Esc, mark-all-read and deactivation.
+ */
+import { describe, it, expect, beforeEach } from 'vitest'
+import { chatStore } from './chatStore'
+import type { Message } from '../core'
+import { makeReadPointer } from './shared/readPointer'
+
+const CID = 'alice@example.com'
+
+function msg(id: string): Message {
+  return {
+    id,
+    stanzaId: `stanza-${id}`,
+    conversationId: CID,
+    from: CID,
+    body: id,
+    timestamp: new Date(2024, 0, 1, 12, Number(id.replace(/\D/g, '')) || 0),
+    isOutgoing: false,
+    isDelayed: false,
+    type: 'chat' as const,
+  }
+}
+
+const MESSAGES = [msg('m0'), msg('m1'), msg('m2'), msg('m3'), msg('m4')]
+
+/** Parks a divider at `marker` with the pointer already read down to `lastSeen`. */
+function seedActive(lastSeen: string, marker: string) {
+  const seen = MESSAGES.find((m) => m.id === lastSeen)!
+  chatStore.setState({
+    activeConversationId: CID,
+    conversationMeta: new Map([[CID, { unreadCount: 0, readPointer: makeReadPointer(seen, 'chat') }]]),
+    messages: new Map([[CID, MESSAGES]]),
+    firstNewMessageMarkers: new Map([[CID, marker]]),
+    conversations: new Map(),
+  })
+}
+
+describe('the active conversation keeps the divider its view opened with', () => {
+  beforeEach(() => {
+    chatStore.setState({
+      activeConversationId: undefined,
+      conversationMeta: new Map(),
+      messages: new Map(),
+      firstNewMessageMarkers: new Map(),
+      conversations: new Map(),
+    })
+  })
+
+  it('holds the divider when another device publishes a read marker further down', () => {
+    // XEP-0490 catch-up from a second client. The pointer must follow it — that is the whole point
+    // of the marker — but the line the reader is looking at is not the other device's business.
+    seedActive('m1', 'm1')
+    const before = chatStore.getState().conversationMeta.get(CID)?.readPointer
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES)
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).not.toEqual(before)
+  })
+
+  it('does not walk the divider forward when the read pointer has advanced past it', () => {
+    // The reader opened on m1 and has scrolled down to m3. Re-deriving from the pointer would put
+    // the line at m4 — under the reader's eyes, and no longer marking what they came back to.
+    seedActive('m3', 'm1')
+    chatStore.getState().resyncDividerToReadPointer(CID)
+    // The SDK primitive still repositions on demand: the app simply stops asking.
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+
+    seedActive('m3', 'm1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+  })
+})

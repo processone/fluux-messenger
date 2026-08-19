@@ -3,8 +3,8 @@
  * resolution — shared by chatStore and roomStore, whose applyRemoteDisplayed
  * implementations were ~100-line twins that had to be kept in sync by hand.
  *
- * The stores keep their map fan-out (meta / combined / markers) and apply the
- * returned resolution; everything decision-shaped lives here.
+ * The stores keep their map fan-out and apply the returned read-state
+ * resolution; divider placement stays outside this state machine.
  */
 
 import type { NotificationMessage } from './notificationState'
@@ -37,21 +37,16 @@ export type RemoteDisplayedResolution =
    */
   | { kind: 'clear-pending' }
   /**
-   * Forward advance on a non-active entity (divider recomputes on next
-   * activation). The whole read position travels as one `readPointer` (#1081).
+   * Forward advance. The whole read position travels as one `readPointer`
+   * (#1081); divider placement remains owned by activation.
    */
   | { kind: 'advanced'; readPointer: ReadPointer }
   /**
-   * Forward advance on the ACTIVE entity: the new-message divider was already
-   * derived at activation from the now-stale local position, so it is
-   * recomputed here from the advanced position. `firstNewMessageId`
-   * undefined = no divider (delete the marker).
+   * Forward advance on the active entity. Kept distinct so callers can run the
+   * active archive recount without coupling read synchronization to divider
+   * placement.
    */
-  | {
-      kind: 'advanced-with-divider'
-      readPointer: ReadPointer
-      firstNewMessageId: string | undefined
-    }
+  | { kind: 'advanced-active'; readPointer: ReadPointer }
 
 /**
  * Decide whether the remote marker `match` is a forward advance over `current`.
@@ -131,33 +126,7 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   if (!options.isActive) {
     return { kind: 'advanced', readPointer }
   }
-
-  // Recompute the divider from the advanced position (reuses onActivate's
-  // forward scan). No `historyFloor` is threaded here, deliberately: this branch
-  // is reached only after an advance, so `readPointer` is always defined and
-  // `computeFloor` is pointer-wins — a floor would be a field no code path could
-  // read.
-  //
-  // If the pointer caught up and the scan finds no new boundary, keep the active
-  // visit's parked divider (`divider ?? currentFirstNewMessageId` below): pointer
-  // reconciliation must not retire the anchor before the reader can inspect it.
-  // Explicit read-through, mark-read, and deactivation paths own clearing it.
-  const divider = notifState.onActivate(
-    {
-      unreadCount: 0,
-      mentionsCount: 0,
-      readPointer,
-      firstNewMessageId: undefined,
-    },
-    messages,
-    kind
-  ).firstNewMessageId
-
-  return {
-    kind: 'advanced-with-divider',
-    readPointer,
-    firstNewMessageId: divider ?? currentFirstNewMessageId,
-  }
+  return { kind: 'advanced-active', readPointer }
 }
 
 // ============================================================================

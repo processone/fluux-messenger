@@ -414,49 +414,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
     })
   })
 
-  describe('divider resync on scroll-up', () => {
-    it('snaps the divider to the pointer when the reader scrolls back up', () => {
-      const onResyncDivider = vi.fn()
-      const messages = createTestMessages(10)
-      render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"   // divider at entry
-          readPointerId="msg-6"   // read pointer deeper than divider
-          onResyncDivider={onResyncDivider}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-      const scrollCtx = setupScrollContainer()
-      if (!scrollCtx) return
-      // Scroll to the top so the bottom-most-visible row (msg-4) is above the pointer (msg-6).
-      simulateScrollTo(scrollCtx.container, 0)
-      expect(onResyncDivider).toHaveBeenCalledWith('conv-1')
-    })
-
-    it('does not snap while the reader is at or below the pointer', () => {
-      const onResyncDivider = vi.fn()
-      const messages = createTestMessages(10)
-      render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-3"
-          readPointerId="msg-3"   // pointer == divider, reader hasn't gone past it
-          onResyncDivider={onResyncDivider}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
-      )
-      const scrollCtx = setupScrollContainer()
-      if (!scrollCtx) return
-      simulateScrollTo(scrollCtx.container, 0) // bottom-visible msg-4 is BELOW the pointer msg-3
-      expect(onResyncDivider).not.toHaveBeenCalled()
-    })
-  })
-
   describe('no flash on fresh open at bottom', () => {
     it('does not play the spring-out exit animation on initial mount', () => {
       // When a conversation opens already at the bottom, the FAB should be hidden with NO

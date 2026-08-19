@@ -75,7 +75,7 @@ describe('resolveRemoteDisplayed', () => {
     })
   })
 
-  it('recomputes the divider for the ACTIVE entity from the advanced position', () => {
+  it('reports an active advance without carrying divider placement', () => {
     const result = resolveRemoteDisplayed(
       { ...baseMeta, readPointer: seenIn('m1') },
       messages,
@@ -85,21 +85,16 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: true }
     )
 
-    // Advanced to m2 → the first unseen incoming message after it is m3.
-    expect(result).toMatchObject({
-      kind: 'advanced-with-divider',
+    expect(result).toEqual({
+      kind: 'advanced-active',
       readPointer: {
         order: { role: 'exact', timestamp: new Date('2024-01-15T10:02:00Z').getTime(), tiebreak: { kind: 'chat', id: 'm2' } },
-        // ADDRESSABLE, and free: the row was found BY the archive id the marker
-        // carried, so the minted pointer already holds its wire name — no
-        // lookup, no residency, nothing for the publisher to resolve.
         identity: { state: 'addressable', messageId: 'm2', archiveId: 'arch-m2' },
       },
-      firstNewMessageId: 'm3',
     })
   })
 
-  it('keeps the current divider when the advanced position reaches the newest message', () => {
+  it('does not return divider state when the active advance reaches the newest message', () => {
     const result = resolveRemoteDisplayed(
       { ...baseMeta, readPointer: seenIn('m1') },
       messages,
@@ -109,13 +104,12 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: true }
     )
 
-    expect(result).toMatchObject({
-      kind: 'advanced-with-divider',
+    expect(result).toEqual({
+      kind: 'advanced-active',
       readPointer: {
         order: { role: 'exact', timestamp: new Date('2024-01-15T10:03:00Z').getTime(), tiebreak: { kind: 'chat', id: 'm3' } },
         identity: { state: 'addressable', messageId: 'm3', archiveId: 'arch-m3' },
       },
-      firstNewMessageId: 'm2',
     })
   })
 
@@ -284,7 +278,7 @@ describe('resolveRemoteDisplayed', () => {
       identity: { state: 'local', messageId: 'm1' },
     }
     let pending: string | undefined = 'arch-m3'
-    let firstNewMessageId: string | undefined = 'm2'
+    const firstNewMessageId: string | undefined = 'm2'
 
     // Fresh-session forward catch-up only has the newest page. It contains the
     // remote marker (m3), but not the local pointer (m1), so the comparison is
@@ -306,8 +300,7 @@ describe('resolveRemoteDisplayed', () => {
     expect(pending).toBe('arch-m3')
 
     // Opening the entity loads a wide enough slice to order both ends by
-    // index. The normal activation fold can now advance to the remote position
-    // and move the stale divider from m2 to the first truly unread message, m4.
+    // index. The normal activation fold can now advance to the remote position.
     const fold = foldPendingRemoteDisplayed(
       gate,
       'xsf@muc.xmpp.org',
@@ -326,10 +319,9 @@ describe('resolveRemoteDisplayed', () => {
           'chat',
           { isActive: true }
         )
-        expect(activated.kind).toBe('advanced-with-divider')
-        if (activated.kind === 'advanced-with-divider') {
+        expect(activated.kind).toBe('advanced-active')
+        if (activated.kind === 'advanced-active') {
           readPointer = activated.readPointer
-          firstNewMessageId = activated.firstNewMessageId
           pending = undefined
         }
       }
@@ -337,7 +329,7 @@ describe('resolveRemoteDisplayed', () => {
 
     expect(fold).toEqual({ pending: 'arch-m3', attempted: true, resolved: true })
     expect(readPointer.identity.messageId).toBe('m3')
-    expect(firstNewMessageId).toBe('m4')
+    expect(firstNewMessageId).toBe('m2')
     expect(pending).toBeUndefined()
   })
 })

@@ -284,9 +284,9 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
   })
 
   // -----------------------------------------------------------------------
-  // Scenario 7: Remote XEP-0490 marker advances the pointer while scrolled up
+  // Scenario 7: An ambient divider/count update while scrolled up
   // -----------------------------------------------------------------------
-  it('scenario 7 — remote marker advance updates every surface and preserves the anchored offset', () => {
+  it('scenario 7 — an ambient divider/count update preserves every surface and the anchored offset', () => {
     const messages = createTestMessages(10) // msg-0 .. msg-9
     const allIds = messages.map((m) => m.id)
     const { rerender, container } = render(
@@ -346,7 +346,7 @@ describe('MessageList — unread-count-single-source acceptance scenarios (Task 
     const relativeTopBefore = msg4().getBoundingClientRect().top
     expect(relativeTopBefore).toBe(420) // sanity: confirms the capture actually saw this position
 
-    // The remote marker advances the boundary: the divider moves to msg-6, the count drops to 2
+    // Simulate a new divider/count snapshot: the divider moves to msg-6 and the count drops to 2
     // (M). This pushes msg-6..msg-9 down instead of msg-3..msg-9 — msg-4's OWN offsetTop moves
     // from 500 to 400 (the marker no longer sits above it), a real 100px document-position shift.
     //

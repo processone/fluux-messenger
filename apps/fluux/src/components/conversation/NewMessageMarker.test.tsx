@@ -17,8 +17,7 @@ describe('NewMessageMarker', () => {
   })
 
   // Provisional = derived from the local read pointer while a synced XEP-0490
-  // read position is still unresolved; it may move or vanish once the marker
-  // resolves, so it renders muted rather than looking definitive.
+  // read position is still unresolved, so it renders muted.
   it('renders muted grey when provisional', () => {
     const { container } = render(<NewMessageMarker provisional />)
     const marker = container.querySelector('[data-new-message-marker]') as HTMLElement

@@ -85,8 +85,6 @@ export interface MessageListProps<T extends BaseMessage> {
   clearFirstNewMessageId?: () => void
   /** Persisted read pointer for this conversation — the badge counts unread below it. */
   readPointerId?: string
-  /** Recompute the divider from the read pointer (called when the reader scrolls back up). */
-  onResyncDivider?: (conversationId: string) => void
   /**
    * The ONE canonical unread count (the store's pointer-derived
    * `unreadCount` — `meta.unreadCount` / `room.unreadCount`), fed to every numeric surface this
@@ -192,7 +190,6 @@ export function MessageList<T extends BaseMessage>({
   firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
   readPointerId,
-  onResyncDivider,
   unreadCount,
   targetMessageId,
   onTargetMessageConsumed,
@@ -542,7 +539,6 @@ export function MessageList<T extends BaseMessage>({
     requestMessageTarget,
     showScrollToBottom,
     markerAboveViewport,
-    bottomVisibleMessageId,
     scrollToMarker,
   } = useMessageListScroll({
     conversationId,
@@ -760,20 +756,6 @@ export function MessageList<T extends BaseMessage>({
   // hide a divider the store already positioned. `undefined` here falls back to the marker's
   // generic "New messages" label instead of a misleading "0 new messages".
   const dividerCount = canonicalUnreadCount > 0 ? canonicalUnreadCount : undefined
-  // When the reader scrolls back ABOVE the read pointer, snap the "New messages" divider to the
-  // first unread after the pointer ("here's how far I got"). Forward-only + idempotent in the store,
-  // so a slightly noisy trigger is harmless. Compares the bottom-most-visible row (from the scroll
-  // hook) against the pointer, both resolved in the resident message array.
-  useEffect(() => {
-    if (!firstNewMessageId || !readPointerId || !bottomVisibleMessageId || !onResyncDivider) return
-    const bIdx = deduplicatedMessages.findIndex((m) => m.id === bottomVisibleMessageId)
-    const pIdx = deduplicatedMessages.findIndex((m) => m.id === readPointerId)
-    const dIdx = deduplicatedMessages.findIndex((m) => m.id === firstNewMessageId)
-    // Scrolled above the pointer (bIdx < pIdx) and the divider still trails it (dIdx <= pIdx).
-    if (bIdx >= 0 && pIdx > bIdx && dIdx !== -1 && dIdx <= pIdx) {
-      onResyncDivider(conversationId)
-    }
-  }, [bottomVisibleMessageId, readPointerId, firstNewMessageId, deduplicatedMessages, conversationId, onResyncDivider])
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
   // MessageList is remounted per conversation via `key`, so this ref resets on every open.

@@ -531,15 +531,12 @@ describe('chatStore — new-message divider is session-only', () => {
   })
 })
 
-describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE divider', () => {
+describe('chatStore.applyRemoteDisplayed — late marker advances ACTIVE read state without moving the divider', () => {
   beforeEach(() => chatStore.getState().reset())
 
-  // Reproduces the fresh-session seed race: the conversation is activated (divider
-  // derived from the STALE local read position) BEFORE the async MDS seed lands, so
-  // the marker arrives via applyRemoteDisplayed while the conversation is already
-  // active. The divider must be recomputed to reflect the synced read position, not
-  // left frozen at the stale local one (which is what made the view open at the last
-  // local place and only jump to the synced place on the next open).
+  // Reproduces the fresh-session seed race: the conversation is activated before the async MDS
+  // seed lands, so the marker arrives while the conversation is already active. The marker still
+  // advances the read pointer, but the divider remains the landmark placed for this visit.
   it('keeps firstNewMessageMarkers when a late marker reaches the newest message', () => {
     const cid = 'juliet@capulet.example'
     const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
@@ -725,9 +722,8 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m6')
   })
 
-  // A divider derived while a pending marker is still UNRESOLVED is provisional —
-  // the synced read position may move or erase it once the marker's message loads.
-  // The UI renders it muted until it is confirmed (pending resolved).
+  // A divider derived while a pending marker is still UNRESOLVED is provisional.
+  // The UI renders it muted until the pending position is resolved.
   it('flags the divider provisional while the pending marker is unresolved, confirmed once it resolves', async () => {
     const cid = 'provisional@capulet.example'
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
@@ -778,10 +774,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
-  // The flash scenario, made explicit: a provisional divider must settle to its
-  // DEFINITIVE position (moved, confirmed) when the marker resolves AHEAD of it
-  // on the active conversation — and stop being provisional.
-  it('moves the divider and confirms it when the marker resolves ahead of it (active conversation)', async () => {
+  it('keeps the divider where activation placed it when a pending marker resolves ahead', async () => {
     const cid = 'resolve-ahead@capulet.example'
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
@@ -799,14 +792,32 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
 
-    // The marker's message arrives (merge): the synced read is ahead → the divider
-    // settles after the synced position, definitive.
     const full = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4), timed('m5', 's5', 5)]
     chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m5')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+  })
+
+  it('does not resurrect a cleared divider when a pending marker resolves ahead', async () => {
+    const cid = 'resolve-after-clear@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m5', 's5', 5)]
+    seedMessages(cid, loaded)
+    seedConversation(cid, {
+      unreadCount: 0,
+      readPointer: pointerIn(loaded, 'm2'),
+      pendingRemoteDisplayedStanzaId: 's4',
+    })
+
+    await chatStore.getState().activateConversation(cid)
+    chatStore.getState().clearFirstNewMessageId(cid)
+    chatStore.getState().applyRemoteDisplayed(cid, 's4', [...loaded, timed('m4', 's4', 4)])
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
   })
 
   it('keeps the divider when the marker resolves at the newest message', async () => {

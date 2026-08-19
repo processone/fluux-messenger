@@ -2624,20 +2624,8 @@ export const roomStore = createStore<RoomState>()(
         return state
       }
 
-      // Rederive the divider: the boundary may have moved
-      // since a marker was last parked here (a remote pointer advance).
-      //
-      // Reposition-only while the room is ACTIVE: a pointer that caught up is
-      // not a reason to retire a divider the reader is looking at. This recount
-      // is scheduled BY the viewport pointer advance (advanceReadPointer,
-      // allowActive) — and in a room short enough to fit on screen the viewport
-      // reports the newest message the moment it opens, so the pointer lands
-      // past the divider within milliseconds. Deleting here made the "New
-      // messages" divider vanish right after opening. Clearing a live divider
-      // belongs to read-through scroll, Esc, mark-all-read, or deactivation —
-      // the same rule resyncDividerToReadPointer states. A BACKGROUND room still
-      // gets its stale marker retired here (deactivation normally already
-      // deleted it; this stays correct if that ever changes).
+      // Re-derive only to decide whether a background marker remains valid. The active visit's
+      // landmark is preserved below.
       let newMarkers = state.firstNewMessageMarkers
       const parkedDivider = state.firstNewMessageMarkers.get(roomJid)
       if (parkedDivider !== undefined) {
@@ -2663,7 +2651,13 @@ export const roomStore = createStore<RoomState>()(
           slice,
           'room'
         ).firstNewMessageId
-        const nextDivider = divider ?? (state.activeRoomJid === roomJid ? parkedDivider : undefined)
+        // The ACTIVE room's divider does not move. It marks where the unread messages began when
+        // this view was opened, so it has to outlive the reading that follows: the pointer advances
+        // under it as the viewport reports rows seen, and re-deriving a position from that pointer
+        // would walk the line down the screen while the reader is looking at it. Only activation
+        // places it; the explicit read-through, Esc, mark-all-read and deactivation paths remove
+        // it. A BACKGROUND room still gets its stale marker retired.
+        const nextDivider = state.activeRoomJid === roomJid ? parkedDivider : divider
         if (nextDivider !== parkedDivider) {
           newMarkers = new Map(state.firstNewMessageMarkers)
           if (nextDivider) newMarkers.set(roomJid, nextDivider)
@@ -3149,7 +3143,7 @@ export const roomStore = createStore<RoomState>()(
       // mergeRoomMAMMessages passes the just-merged array here; else read the
       // window map, falling back to the compat entry.
       // The resolution state machine (stash / clear-pending / forward-only
-      // advance / active-divider recompute) is shared — see shared/readMarkerSync.
+      // advance) is shared — see shared/readMarkerSync.
       const messages = messagesOverride ?? state.messages.get(roomJid) ?? []
       const resolution = resolveRemoteDisplayed(
         {
@@ -3191,27 +3185,18 @@ export const roomStore = createStore<RoomState>()(
       // ALSO what makes a not-yet-caught-up room defer rather than commit a
       // wrong number. mentionsCount is left untouched (the spread above
       // preserves it) — archive recounts never write it either.
-      // 'advanced-with-divider' (the active room) is NOT exempted here: its
+      // 'advanced-active' (the active room) is NOT exempted here: its
       // counts are not "already zero", so the active room needs this
       // re-derivation exactly as much as a non-active one does.
       if (resolution.kind === 'advanced') {
         advancedNonActive = true
-      } else if (resolution.kind === 'advanced-with-divider') {
+      } else if (resolution.kind === 'advanced-active') {
         advancedActive = true
-      }
-
-      // The divider is recomputed only for the active room; inactive rooms
-      // recompute on their next activation.
-      let newMarkers = state.firstNewMessageMarkers
-      if (resolution.kind === 'advanced-with-divider') {
-        newMarkers = new Map(state.firstNewMessageMarkers)
-        if (resolution.firstNewMessageId) newMarkers.set(roomJid, resolution.firstNewMessageId)
-        else newMarkers.delete(roomJid)
       }
 
       // A position another device read to is a read position like any other —
       // persist it. The stash/clear kinds move no pointer.
-      if (resolution.kind === 'advanced' || resolution.kind === 'advanced-with-divider') {
+      if (resolution.kind === 'advanced' || resolution.kind === 'advanced-active') {
         persistRoomReadState(newMeta)
       }
 
@@ -3219,9 +3204,9 @@ export const roomStore = createStore<RoomState>()(
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...existing, ...metaPatch })
-        return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
+        return { roomMeta: newMeta, rooms: newRooms }
       }
-      return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
+      return { roomMeta: newMeta }
     })
 
     // Archive-derived recount (trigger: pointer advance / inbound

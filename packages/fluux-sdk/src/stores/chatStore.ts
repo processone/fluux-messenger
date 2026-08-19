@@ -2010,8 +2010,8 @@ export const chatStore = createStore<ChatState>()(
           if (!meta) return state
           const messages = state.messages.get(conversationId) || []
 
-          // Same recompute pattern as applyRemoteDisplayed's active-divider branch: derive the
-          // divider from the pointer via onActivate and keep only .firstNewMessageId.
+          // Derive the divider from the pointer via onActivate and keep only
+          // .firstNewMessageId.
           const divider = notifState.onActivate(
             {
               unreadCount: 0,
@@ -2119,7 +2119,7 @@ export const chatStore = createStore<ChatState>()(
           // A non-active conversation keeps no resident array (memory windowing), so
           // mergeMAMMessages passes the just-merged array here; otherwise read RAM.
           // The resolution state machine (stash / clear-pending / forward-only
-          // advance / active-divider recompute) is shared — see shared/readMarkerSync.
+          // advance) is shared — see shared/readMarkerSync.
           const messages = messagesOverride ?? (state.messages.get(conversationId) || [])
           const resolution = resolveRemoteDisplayed(
             {
@@ -2158,25 +2158,16 @@ export const chatStore = createStore<ChatState>()(
           // undercounts): both advance kinds instead schedule the
           // archive-derived recount below, which is ALSO what makes a
           // not-yet-caught-up entity defer rather than commit a wrong number.
-          // 'advanced-with-divider' (the active entity) is NOT exempted here:
+          // 'advanced-active' (the active entity) is NOT exempted here:
           // its counts are not "already zero", so the active entity needs this
           // re-derivation exactly as much as a non-active one does.
           if (resolution.kind === 'advanced') {
             advancedNonActive = true
-          } else if (resolution.kind === 'advanced-with-divider') {
+          } else if (resolution.kind === 'advanced-active') {
             advancedActive = true
           }
 
-          // The divider is recomputed only for the active conversation; inactive
-          // ones recompute on their next activation.
-          let newMarkers = state.firstNewMessageMarkers
-          if (resolution.kind === 'advanced-with-divider') {
-            newMarkers = new Map(state.firstNewMessageMarkers)
-            if (resolution.firstNewMessageId) newMarkers.set(conversationId, resolution.firstNewMessageId)
-            else newMarkers.delete(conversationId)
-          }
-
-          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
+          return draft.commit()
         })
 
         // Archive-derived recount (trigger: pointer advance / inbound
@@ -2730,21 +2721,8 @@ export const chatStore = createStore<ChatState>()(
             return state
           }
 
-          // Rederive the divider: the boundary may have moved
-          // since a marker was last parked here (a remote pointer advance).
-          //
-          // Reposition-only while the conversation is ACTIVE: a pointer that
-          // caught up is not a reason to retire a divider the reader is looking
-          // at. This recount is scheduled BY the viewport pointer advance
-          // (advanceReadPointer, allowActive) — and in a conversation short
-          // enough to fit on screen the viewport reports the newest message the
-          // moment it opens, so the pointer lands past the divider within
-          // milliseconds. Deleting here made the "New messages" divider vanish
-          // right after opening. Clearing a live divider belongs to read-through
-          // scroll, Esc, mark-all-read, or deactivation — the same rule
-          // resyncDividerToReadPointer states. A BACKGROUND conversation still
-          // gets its stale marker retired here (deactivation normally already
-          // deleted it; this stays correct if that ever changes).
+          // Re-derive only to decide whether a background marker remains valid. The active
+          // visit's landmark is preserved below.
           let newMarkers = state.firstNewMessageMarkers
           const parkedDivider = state.firstNewMessageMarkers.get(conversationId)
           if (parkedDivider !== undefined) {
@@ -2770,8 +2748,14 @@ export const chatStore = createStore<ChatState>()(
               slice,
               'chat'
             ).firstNewMessageId
+            // The ACTIVE entity's divider does not move. It marks where the unread messages began
+            // when this view was opened, so it has to outlive the reading that follows: the pointer
+            // advances under it as the viewport reports rows seen, and re-deriving a position from
+            // that pointer would walk the line down the screen while the reader is looking at it.
+            // Only activation places it; the explicit read-through, Esc, mark-all-read and
+            // deactivation paths remove it. A BACKGROUND entity still gets its stale marker retired.
             const nextDivider =
-              divider ?? (state.activeConversationId === conversationId ? parkedDivider : undefined)
+              state.activeConversationId === conversationId ? parkedDivider : divider
             if (nextDivider !== parkedDivider) {
               newMarkers = new Map(state.firstNewMessageMarkers)
               if (nextDivider) newMarkers.set(conversationId, nextDivider)

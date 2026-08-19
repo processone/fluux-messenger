@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { decideMdsSettle, type MdsSettleFacts } from './mdsSettleDecision'
 
-/** A divider that has just been cleared by a late read-sync, with nothing else in the way. */
+/** A divider that has just been cleared before the reader moves. */
 const settling: MdsSettleFacts = {
   staticMode: false,
   sameConversation: true,

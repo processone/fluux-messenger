@@ -248,9 +248,8 @@ export interface UseMessageListScrollResult {
   markerAboveViewport: boolean
   /** Id of the bottom-most message whose top is within the viewport (the row peeking in at the
    *  bottom edge), or null before the first scroll (or during programmatic positioning — see the
-   *  handleScroll gate). Drives the divider-snap trigger in MessageList (snap the "New messages"
-   *  divider to the read pointer on genuine user scroll); the FAB badge count reads the pointer
-   *  directly instead. */
+   *  handleScroll gate). Ambient layout preservation uses it to keep the reader's anchor stable
+   *  across insertions and divider mutations. */
   bottomVisibleMessageId: string | null
   /** Scroll to (and re-assert toward) the first-new-message marker. Used by the jump-to-last-read
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
@@ -1387,16 +1386,9 @@ export function useMessageListScroll({
     staticMode,
   ])
 
-  // XEP-0490 settle window: the fresh-session read-sync seed can land just AFTER a
-  // conversation is opened. The SDK's entry fold races the async PEP fetch, so at
-  // activation the divider was derived from the STALE local read position and the
-  // conversation-switch effect above already positioned the view (and armed a re-assert
-  // loop) against it. When the seed lands, the SDK advances readPointerId and
-  // recomputes the divider live for the ACTIVE conversation (chatStore/roomStore
-  // applyRemoteDisplayed); when the synced read caught the conversation up, the divider
-  // clears. Settle the view to the bottom so the FIRST open lands where a later re-open
-  // would — otherwise it stays stranded at the stale marker and appears to "jump to the
-  // end" only on re-open.
+  // Divider-clear settle window: entry may already have positioned the view against a divider
+  // when another path removes it. Before the reader moves, settle to the live edge so the list
+  // does not remain parked at a landmark that no longer exists.
   //
   // Tightly gated so it never fights the user or a genuine unread marker:
   //  - only a live divider CLEAR (a defined marker -> undefined) on the SAME conversation
@@ -1418,7 +1410,7 @@ export function useMessageListScroll({
       hasGenuineInput: viewportSessionRef.current?.hasGenuineInput(conversationId) ?? false,
     })
     if (decision === 'skip') return
-    debugLog('MDS SETTLE: divider cleared by late read-sync → settle to bottom', {
+    debugLog('MDS SETTLE: divider cleared before reader input → settle to bottom', {
       conversationId,
       prevMarker: prev.divider,
     })

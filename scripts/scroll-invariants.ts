@@ -2680,19 +2680,15 @@ test.describe('Jump-to-last-read pill', () => {
     expect(dividerVisible, 'clicking the pill must return the divider to view').toBe(true)
   })
 
-  // The "New messages" divider follows reading progress: once the reader has read past part of a
-  // new-message block and scrolls back up, the divider snaps FORWARD to the read pointer (first
-  // unread after the read pointer) — and it must NEVER be cleared by that snap (the read-through /
-  // pill paths own clearing). Setup is store-driven (divider behind an advanced pointer) so the test
-  // is deterministic and does not depend on the stress room's live-message cache-reload behavior; the
-  // observer→pointer and entry-positioning paths are covered by the marker-reentry / pill invariants.
-  // What this exercises for real: the MessageList scroll-up snap effect → resyncDividerToReadPointer.
+  // The "New messages" divider marks the opening boundary while the read pointer advances
+  // independently. Setup is store-driven (divider behind an advanced pointer) so any scroll-driven
+  // repositioning has a deterministic, visibly different target.
   //
   // The reader is carried clear of the at-bottom band BEFORE the divider is planted, and every wait
   // below is on an observable condition. That is not tidying: planting the divider while the list
   // was still parked at the live edge put this test one scroll event away from the read-through
   // clear, and which engine won that race decided whether it passed (see the wheel step).
-  test('divider snaps forward to the read pointer on genuine scroll-up (never cleared)', async ({ page }) => {
+  test('divider holds its planted position through a genuine scroll (never moved, never cleared)', async ({ page }) => {
     await loadDemo(page)
     await navigateToStressRoom(page)
 
@@ -2707,13 +2703,12 @@ test.describe('Jump-to-last-read pill', () => {
     // The ORDER is the invariant this test needs and used to leave to chance. While the list sits
     // inside the at-bottom band, the first genuine scroll event is the documented read-through clear
     // ("MARKER CLEAR (reached bottom)") — a path that legitimately owns clearing — so it would wipe
-    // the divider before the snap ever ran. Whether that happened came down to how the engine
+    // the divider before the post-plant invariant ran. Whether that happened came down to how the engine
     // delivers one wheel gesture: Chromium and WebKit/macOS apply the whole 1200px in a single
     // scroll event (first event ~1248px from the bottom, safely clear), while WebKitGTK on CI
     // delivers it incrementally and the first event can land ~88px from the bottom — inside the
     // band. That is the whole flake: same code, same assertion, engine-dependent event granularity.
-    // Scrolling clear FIRST takes the engine out of it, so the only thing that can move the divider
-    // afterwards is the snap — which is what this test is about.
+    // Scrolling clear first keeps the read-through path out of this invariant.
     const listBox = await page.locator('[data-message-list]').first().boundingBox()
     if (listBox) await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2)
     await expect.poll(
@@ -2727,10 +2722,25 @@ test.describe('Jump-to-last-read pill', () => {
       { message: 'a genuine wheel scroll-up must carry the reader clear of the at-bottom band', timeout: 20_000 },
     ).toBeGreaterThan(CLEAR_OF_BOTTOM_PX)
 
-    // Plant a divider BEHIND an advanced read pointer, and place the pointer JUST BEFORE a verified
-    // incoming (non-outgoing) message so the recompute has a deterministic forward target. This is
-    // the state after the reader has read down past the divider (pointer advanced by the viewport
-    // observer) while the sticky divider has not yet caught up.
+    const minimumUpwardHeadroom = 700
+    const preparedScroll = await page.evaluate(([minimumHeadroom, clearFromBottom]) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return null
+      const maxScrollTop = s.scrollHeight - s.clientHeight
+      const highestAllowed = maxScrollTop - clearFromBottom
+      if (highestAllowed < minimumHeadroom) return null
+      s.scrollTop = Math.min(Math.max(s.scrollTop, minimumHeadroom), highestAllowed)
+      return {
+        scrollTop: Math.round(s.scrollTop),
+        distFromBottom: Math.round(maxScrollTop - s.scrollTop),
+      }
+    }, [minimumUpwardHeadroom, CLEAR_OF_BOTTOM_PX] as const)
+    expect(preparedScroll, 'stress room must have room to scroll upward away from the bottom').not.toBeNull()
+    expect(preparedScroll!.scrollTop).toBeGreaterThanOrEqual(minimumUpwardHeadroom)
+    expect(preparedScroll!.distFromBottom).toBeGreaterThanOrEqual(CLEAR_OF_BOTTOM_PX)
+
+    // Plant a divider behind an advanced read pointer, with a verified incoming message after the
+    // pointer so an unintended re-derivation has a deterministic forward target.
     const setup = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const store = (window as any).__roomStore
@@ -2738,7 +2748,7 @@ test.describe('Jump-to-last-read pill', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const msgs = (s.messages.get(jid) ?? []) as { id: string; from?: string; timestamp: Date; isOutgoing?: boolean }[]
       // First unread after the pointer must exist and be incoming — find the last incoming message
-      // and put the pointer immediately before it, so resyncDividerToReadPointer lands on it.
+      // and put the pointer immediately before it, so any re-derivation lands on it.
       let targetIdx = -1
       for (let i = msgs.length - 1; i >= 2; i--) { if (!msgs[i].isOutgoing) { targetIdx = i; break } }
       if (targetIdx < 2) return { ok: false, len: msgs.length }
@@ -2746,7 +2756,6 @@ test.describe('Jump-to-last-read pill', () => {
       const dIdx = Math.max(0, Math.floor(pIdx * 0.3))
       const dividerId = msgs[dIdx].id
       const pointerId = msgs[pIdx].id
-      const expectedTargetId = msgs[targetIdx].id
       // One read position, written whole — the literal shape `makeReadPointer`
       // writes: an EXACT order (the named message's own timestamp plus the cache
       // tie-break) and an identity naming it. The exact role is not optional
@@ -2779,15 +2788,9 @@ test.describe('Jump-to-last-read pill', () => {
       const markers = new Map(s.firstNewMessageMarkers)
       markers.set(jid, dividerId)
       store.setState({ roomMeta, rooms, firstNewMessageMarkers: markers })
-      return { ok: true, dividerId, pointerId, expectedTargetId, dIdx, pIdx, targetIdx, len: msgs.length }
+      return { ok: true, dividerId, pointerId, dIdx, pIdx, targetIdx, len: msgs.length }
     }, STRESS_ROOM_JID)
     expect(setup.ok, `stress room needs a resident incoming message (len=${setup.len})`).toBe(true)
-
-    // One more genuine (non-programmatic) wheel, still upward and still clear of the bottom: the
-    // snap trigger reads the bottom-most-visible row, and that is republished only on a genuine
-    // scroll event. A REAL wheel gesture, not `scrollTop = n` — a programmatic write is gated out
-    // of the trigger on purpose (entry positioning must not drift the divider).
-    await page.mouse.wheel(0, -600)
 
     const readDividerState = () => page.evaluate(([jid, dividerId]) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2804,25 +2807,40 @@ test.describe('Jump-to-last-read pill', () => {
       }
     }, [STRESS_ROOM_JID, setup.dividerId] as const)
 
-    // Wait for the divider to LEAVE the spot it was planted in, not for a duration. Both terminal
-    // outcomes settle this poll — the snap moved it, or something cleared it — and which one
-    // happened is exactly what the assertions below are here to distinguish. A regression that
-    // never runs the snap leaves it planted and times out with that stated.
+    const beforeWheel = await readDividerState()
+    expect(beforeWheel.scrollTop).not.toBeNull()
+    expect(beforeWheel.scrollTop!).toBeGreaterThanOrEqual(minimumUpwardHeadroom)
+    expect(beforeWheel.distFromBottom!).toBeGreaterThanOrEqual(CLEAR_OF_BOTTOM_PX)
+
+    await page.mouse.wheel(0, -600)
     await expect.poll(
-      async () => (await readDividerState()).markerId !== setup.dividerId,
-      { message: `the scroll-up snap never ran — divider still planted at ${setup.dividerId}`, timeout: 15_000 },
-    ).toBe(true)
+      async () => (await readDividerState()).scrollTop,
+      {
+        message: 'the post-plant wheel must produce a genuine upward scroll',
+        timeout: 5_000,
+      },
+    ).toBeLessThan(beforeWheel.scrollTop!)
+
+    const stableUntil = Date.now() + 5_000
+    while (Date.now() < stableUntil) {
+      const sample = await readDividerState()
+      expect(
+        sample.markerId,
+        `divider must stay planted at ${setup.dividerId} while the reader scrolls`,
+      ).toBe(setup.dividerId)
+      await page.waitForTimeout(50)
+    }
 
     const after = await readDividerState()
-    console.log('── DIVIDER SNAP ──', JSON.stringify({ setup, after }))
+    console.log('── DIVIDER HOLD ──', JSON.stringify({ setup, after }))
 
-    // The snap moved the divider FORWARD to the first unread after the pointer, and did NOT clear it.
-    expect(after.markerId, 'the scroll-up snap must not clear the divider').not.toBeNull()
+    // Neither moved toward the pointer nor cleared by the scroll.
+    expect(after.markerId, 'a genuine scroll must not clear the divider').not.toBeNull()
     expect(
       after.markerId,
-      `divider must snap forward from ${setup.dividerId} to ${setup.expectedTargetId} (stayed at ${after.markerId})`,
-    ).toBe(setup.expectedTargetId)
-    expect(after.markerIdx, 'the divider must snap FORWARD toward the read pointer').toBeGreaterThan(after.dividerIdx)
+      `divider must stay at ${setup.dividerId} (moved to ${after.markerId}, pointer was at ${setup.pointerId})`,
+    ).toBe(setup.dividerId)
+    expect(after.markerIdx, 'the divider must not advance toward the read pointer').toBe(after.dividerIdx)
   })
 })
 

@@ -91,8 +91,8 @@ export function useChatActive() {
     if (!s.activeConversationId) return undefined
     return s.firstNewMessageMarkers.get(s.activeConversationId)
   })
-  // Persisted read pointer (XEP-0490 sync marker) for the active conversation. Drives the FAB badge
-  // count and the divider resync-on-scroll-up trigger in MessageList.
+  // Persisted read pointer (XEP-0490 sync marker) for the active conversation. Entry arbitration
+  // and saved viewport snapshots use it to distinguish stale positions from the current read state.
   const activeReadPointerId = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
     return s.conversationMeta.get(s.activeConversationId)?.readPointer?.identity.messageId

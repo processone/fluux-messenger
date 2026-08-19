@@ -6,8 +6,8 @@ import { formatUnreadCount } from '@/utils/formatUnreadCount'
  * Used to indicate where unread messages begin in the conversation.
  *
  * `provisional`: the position was derived from the local read pointer while a
- * synced XEP-0490 read position is still unresolved — it may move or vanish
- * once the marker resolves, so it renders muted instead of the accent color.
+ * synced XEP-0490 read position is still unresolved, so it renders muted until
+ * that position can be ordered.
  *
  * `count`: the canonical unread count — the divider is a real
  * numeric surface, not just a positional line. When provided it labels the count (e.g. "2 new

@@ -99,7 +99,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeHistoryState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, readPointerId } = useRoomActive()
   const interiorPlacementVersion = useRoomStore((state) => {
     const jid = state.activeRoomJid
     return jid ? state.interiorPlacementVersions.get(jid) ?? 0 : 0
@@ -456,11 +456,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [roomJid, clearFirstNewMessageId])
 
-  const handleResyncDivider = useCallback(
-    (roomJid: string) => resyncDividerToReadPointer(roomJid),
-    [resyncDividerToReadPointer],
-  )
-
   // Viewport observer callback: update readPointerId as user scrolls
   const handleMessageSeen = useCallback((messageId: string) => {
     if (roomJid) {
@@ -626,7 +621,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
-            onResyncDivider={handleResyncDivider}
             onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
@@ -916,7 +910,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
-  onResyncDivider,
   onMessageSeen,
   isJoined,
   isDarkMode,
@@ -975,7 +968,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
-  onResyncDivider?: (roomJid: string) => void
   onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
@@ -1239,7 +1231,6 @@ export const RoomMessageList = memo(function RoomMessageList({
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
-      onResyncDivider={onResyncDivider}
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}

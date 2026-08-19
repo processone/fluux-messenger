@@ -85,8 +85,8 @@ export function useRoomActive() {
     return s.firstNewMessageMarkers.get(s.activeRoomJid)
   })
 
-  // Persisted read pointer (XEP-0490 sync marker) for the active room. Drives the FAB badge count
-  // and the divider resync-on-scroll-up trigger in MessageList.
+  // Persisted read pointer (XEP-0490 sync marker) for the active room. Entry arbitration and saved
+  // viewport snapshots use it to distinguish stale positions from the current read state.
   const activeReadPointerId = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
     return s.roomMeta.get(s.activeRoomJid)?.readPointer?.identity.messageId

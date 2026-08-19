@@ -311,7 +311,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   })
 
   // resolveRemoteDisplayed resolves
-  // 'advanced-with-divider' — not 'advanced' — for the ACTIVE room, and that
+  // 'advanced-active' — not 'advanced' — for the ACTIVE room, and that
   // branch used to be exempted from triggering a recount on the premise that
   // an active entity's count was "already zero". A
   // spy-only assertion ("was recomputeUnreadForRoom called?") would pass even
@@ -349,14 +349,15 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     roomStore.getState().applyRemoteDisplayed(ROOM, 's-p0', messages)
 
     // Still active throughout — this is not a "became inactive" race. The
-    // pointer advance and divider reposition are applied synchronously inside
-    // applyRemoteDisplayed's own `set()` call, so these don't need to wait for
-    // the fire-and-forget recount below.
+    // pointer advance is applied synchronously inside applyRemoteDisplayed's own
+    // `set()` call and the divider is left untouched, so neither assertion needs
+    // to wait for the fire-and-forget recount below.
     expect(roomStore.getState().activeRoomJid).toBe(ROOM)
     // The pointer advanced (resolveRemoteDisplayed's job, unaffected by this fix).
     expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('p0')
-    // The divider was positioned at the first message after the new pointer.
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    // No divider appears. Placing the line belongs to activation; an inbound marker on an
+    // already-open view moves the pointer and the count, never the landmark.
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBeUndefined()
     // The count is re-derived from the archive (u1, u2, u3), not left
     // at the stale 99 a guard that still exempted the active room would
     // produce. The recount is fire-and-forget (cache read, coverage resolve,
@@ -954,7 +955,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
   // only while an entity is active (deactivation deletes it), and both
   // allowActive triggers follow a pointer advance. The seeded marker is a
   // distinct stale id, so 'u1' can only come from a real rederivation.
-  it('a remote advance rederives the divider to the new boundary', async () => {
+  it('holds the ACTIVE entity\'s divider through a pointer advance, while the count re-derives', async () => {
     const anchor = archiveMsg('anchor', 500, { stanzaId: 'anchor-stanza' })
     const p0 = archiveMsg('p0', 1000)
     const u1 = archiveMsg('u1', 1001)
@@ -968,7 +969,9 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
 
     await roomStore.getState().recomputeUnreadForRoom(ROOM, { allowActive: true })
 
-    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('u1')
+    // The line stays where this view opened. Re-deriving it from the advanced pointer would
+    // walk it down the screen under the reader; only re-opening the view places it again.
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('stale-marker-id')
     // The count is re-derived too (u1), not left at the stale 99.
     expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
   })

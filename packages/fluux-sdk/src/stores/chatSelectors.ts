@@ -235,10 +235,9 @@ export const chatSelectors = {
   /**
    * Is the conversation's new-message divider provisional? True while a synced
    * XEP-0490 read position is still unresolved (pendingRemoteDisplayedStanzaId
-   * set): the divider was derived from the local read pointer and may move or
-   * vanish once a loaded slice can order the marker against that pointer. Purely
-   * derived — resolving the marker (advance OR clear-pending) confirms the
-   * divider with no extra state.
+   * set): the divider was derived from the local read pointer before the synced
+   * position could be ordered. Purely derived — resolving the marker (advance OR
+   * clear-pending) confirms the divider with no extra state.
    */
   firstNewMessageIsProvisionalFor: (conversationId: string) => (state: ChatState): boolean => {
     if (!state.firstNewMessageMarkers.has(conversationId)) return false

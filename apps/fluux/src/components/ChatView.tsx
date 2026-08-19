@@ -57,7 +57,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, readPointerId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, advanceReadPointer, activeHistoryState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   const interiorPlacementVersion = useChatStore((state) => {
     const id = state.activeConversationId
     return id ? state.interiorPlacementVersions.get(id) ?? 0 : 0
@@ -348,11 +348,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     [viewportEvidenceKey, viewportGeneration],
   )
 
-  const handleResyncDivider = useCallback(
-    (conversationId: string) => resyncDividerToReadPointer(conversationId),
-    [resyncDividerToReadPointer],
-  )
-
   // Viewport observer callback: update readPointerId as user scrolls
   const handleMessageSeen = (messageId: string) => {
     if (conversationId) {
@@ -577,7 +572,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
-            onResyncDivider={handleResyncDivider}
             onMessageSeen={handleMessageSeen}
             isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
@@ -688,7 +682,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
-  onResyncDivider,
   onMessageSeen,
   isDarkMode,
   onScrollToTop,
@@ -740,7 +733,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
-  onResyncDivider?: (conversationId: string) => void
   onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
   onScrollToTop?: () => void
@@ -849,7 +841,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
-      onResyncDivider={onResyncDivider}
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}

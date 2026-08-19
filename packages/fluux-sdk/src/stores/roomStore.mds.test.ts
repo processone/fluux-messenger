@@ -232,10 +232,9 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(meta?.unreadCount).toBe(5)
   })
 
-  // Fresh-session seed race (MUC): the room is activated (divider derived from the
-  // stale local read) BEFORE the async MDS seed lands, so the marker arrives while the
-  // room is already active. The divider must be recomputed from the advanced position,
-  // not frozen at the stale local one.
+  // Fresh-session seed race (MUC): the room is activated before the async MDS seed lands, so the
+  // marker arrives while the room is already active. The marker still advances the read pointer,
+  // but the divider remains the landmark placed for this visit.
   it('keeps firstNewMessageMarkers when a late marker reaches the newest message', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     roomStore.setState((s) => {
@@ -631,9 +630,8 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIdFor(DEEP_ROOM)(roomStore.getState())).toBe('m6')
   })
 
-  // A divider derived while a pending marker is still UNRESOLVED is provisional —
-  // the synced read position may move or erase it once the marker's message loads.
-  // The UI renders it muted until it is confirmed (pending resolved).
+  // A divider derived while a pending marker is still UNRESOLVED is provisional.
+  // The UI renders it muted until the pending position is resolved.
   it('flags the divider provisional while the pending marker is unresolved, confirmed once it resolves', async () => {
     const PROV_ROOM = 'provisional@conference.example'
     const messages = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
@@ -680,10 +678,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIsProvisionalFor(NO_DIVIDER_ROOM)(roomStore.getState())).toBe(false)
   })
 
-  // The flash scenario, made explicit: a provisional divider must settle to its
-  // DEFINITIVE position (moved, confirmed) when the marker resolves AHEAD of it
-  // on the active room — and stop being provisional.
-  it('moves the divider and confirms it when the marker resolves ahead of it (active room)', async () => {
+  it('keeps the divider where activation placed it when a pending marker resolves ahead', async () => {
     const AHEAD_ROOM = 'resolve-ahead@conference.example'
     // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
     const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m5', 's5', 5)]
@@ -699,14 +694,30 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m3')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(true)
 
-    // The marker's message arrives (merge): the synced read is ahead → the divider
-    // settles after the synced position, definitive.
     const full = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4), rmsg('m5', 's5', 5)]
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
     expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m5')
+    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m3')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
+  })
+
+  it('does not resurrect a cleared divider when a pending marker resolves ahead', async () => {
+    const roomJid = 'resolve-after-clear@conference.example'
+    const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m5', 's5', 5)]
+    seedRoom(roomJid, loaded, 'm2')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(roomJid, { ...m.get(roomJid)!, pendingRemoteDisplayedStanzaId: 's4' })
+      return { roomMeta: m }
+    })
+
+    await roomStore.getState().activateRoom(roomJid)
+    roomStore.getState().clearFirstNewMessageId(roomJid)
+    roomStore.getState().applyRemoteDisplayed(roomJid, 's4', [...loaded, rmsg('m4', 's4', 4)])
+
+    expect(roomStore.getState().roomMeta.get(roomJid)?.readPointer?.identity.messageId).toBe('m4')
+    expect(roomSelectors.firstNewMessageIdFor(roomJid)(roomStore.getState())).toBeUndefined()
   })
 
   it('keeps the divider when the marker resolves at the newest message', async () => {

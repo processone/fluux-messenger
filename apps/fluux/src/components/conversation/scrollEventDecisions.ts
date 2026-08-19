@@ -43,7 +43,7 @@ export interface ScrollEventPlan {
    */
   recordMeasuredAtBottom: boolean
   atBottom: boolean
-  /** Only a genuine move updates the divider-snap trigger. */
+  /** Only a genuine move refreshes the bottom-visible row used for ambient anchoring. */
   trackBottomVisibleMessage: boolean
   observeGenuineInput: boolean
   /**
