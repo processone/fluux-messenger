@@ -8,12 +8,21 @@ const chatState = {
   messages: new Map<string, Array<{ id: string; stanzaId?: string; isOutgoing?: boolean; body?: string }>>(),
   activeConversationId: null as string | null,
 }
+type RoomMsg = { id: string; stanzaId?: string; nick?: string; body?: string }
 const roomState = {
-  rooms: new Map<string, { nickname: string; messages: Array<{ id: string; stanzaId?: string; nick?: string; body?: string }> }>(),
+  rooms: new Map<string, { nickname: string; messages: RoomMsg[] }>(),
+  // The resident window, like the chat mock above it.
+  messages: new Map<string, RoomMsg[]>(),
   getMessage: vi.fn(),
   activeRoomJid: null as string | null,
 }
 const connectionState = { jid: 'me@example.com' }
+
+/** Seed a room's identity and its resident window, which live in two maps. */
+function seedRoom(jid: string, messages: RoomMsg[]): void {
+  roomState.rooms.set(jid, { nickname: 'Me', messages })
+  roomState.messages.set(jid, messages)
+}
 const mockGetCachedMessage = vi.fn()
 const mockGetCachedMessageByStanzaId = vi.fn()
 const mockGetCachedRoomMessage = vi.fn()
@@ -249,7 +258,7 @@ describe('useReactionNotifications — room reaction resolution', () => {
     roomState.rooms = new Map()
     roomState.activeRoomJid = null
     roomState.getMessage = vi.fn().mockReturnValue(undefined)
-    roomState.rooms.set(ROOM, { nickname: 'Me', messages: [{ id: 'r-last', nick: 'Alice' }] })
+    seedRoom(ROOM, [{ id: 'r-last', nick: 'Alice' }])
   })
 
   it('raises a toast for a resident own room message reacted to while a different room is active', async () => {
@@ -297,7 +306,7 @@ describe('useReactionNotifications — room reaction resolution', () => {
   it('suppresses the notification when the room reaction references the last message by stanza-id', async () => {
     roomState.activeRoomJid = ROOM
     const last = { id: 'r-last', stanzaId: 'stanza-r-last', nick: 'Me', body: 'my latest' }
-    roomState.rooms.set(ROOM, { nickname: 'Me', messages: [{ id: 'r1', nick: 'Alice' }, last] })
+    seedRoom(ROOM, [{ id: 'r1', nick: 'Alice' }, last])
     roomState.getMessage = vi.fn().mockReturnValue(last)
 
     renderHook(() => useReactionNotifications())

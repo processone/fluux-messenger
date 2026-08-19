@@ -212,7 +212,7 @@ export function setupRoomSideEffects(
       }
 
       // Latest-first orchestrator — room twin, Phase A only (active entity).
-      const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      const roomMessages = roomStore.getState().messages.get(roomJid) ?? []
       await client.internal.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
       if (!isRoomFetchOwnerCurrent(roomJid, fetchOwner)) {
         return
@@ -277,7 +277,7 @@ export function setupRoomSideEffects(
         // message array AFTER the list mounted and scrolled, knocking the restored
         // scroll position off (lands mid-list). Live delivery keeps the resident set
         // current, so there is genuinely nothing to fetch.
-        const residentCount = roomStore.getState().rooms.get(activeRoomJid)?.messages.length ?? 0
+        const residentCount = roomStore.getState().messages.get(activeRoomJid)?.length ?? 0
         if (
           fetchInitiated.has(activeRoomJid) &&
           (residentCount > 0 || resumeArchiveHeldRooms.has(activeRoomJid))
@@ -374,7 +374,7 @@ export function setupRoomSideEffects(
     const archiveHeld = (jid: string): boolean => {
       const room = state.rooms.get(jid)
       if (!room) return false
-      return room.messages.length > 0 || state.getRoomMAMQueryState(jid).hasQueried
+      return (state.messages.get(jid)?.length ?? 0) > 0 || state.getRoomMAMQueryState(jid).hasQueried
     }
     for (const [jid, room] of state.rooms) {
       if ((room.joined || room.isJoining) && archiveHeld(jid)) {

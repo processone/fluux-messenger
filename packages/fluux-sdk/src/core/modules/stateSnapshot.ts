@@ -161,7 +161,12 @@ function deserializeRoomMessage(m: SerializedRoomMessage): RoomMessage {
   }
 }
 
-function serializeRoom(r: Room): SerializedRoom {
+/**
+ * @param window - the room's resident messages. Passed in rather than read off
+ *   `r`: the window lives in its own store map, and the combined entry's copy is
+ *   a mirror this must not come to depend on.
+ */
+function serializeRoom(r: Room, window: RoomMessage[]): SerializedRoom {
   return {
     jid: r.jid,
     name: r.name,
@@ -185,7 +190,7 @@ function serializeRoom(r: Room): SerializedRoom {
     supportsHats: r.supportsHats,
     isIrcGateway: r.isIrcGateway,
     readPointer: r.readPointer ? serializeReadPointer(r.readPointer) : undefined,
-    messages: r.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
+    messages: window.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
   }
 }
 
@@ -353,9 +358,10 @@ export class StateSnapshot {
           (rooms) => this.schedule('rooms', () => {
             const jid = this.deps.getJid()
             if (!jid || !adapter.setRooms) return
+            const windows = roomStore.getState().messages
             const serialized = Array.from(rooms.values())
               .filter((r) => !r.isQuickChat)
-              .map(serializeRoom)
+              .map((r) => serializeRoom(r, windows.get(r.jid) ?? []))
             return adapter.setRooms(jid, serialized)
           })
         )
@@ -429,9 +435,10 @@ export class StateSnapshot {
       jobs.push(adapter.setRoster(jid, serialized))
     }
     if (adapter.setRooms) {
+      const windows = roomStore.getState().messages
       const serialized = Array.from(roomStore.getState().rooms.values())
         .filter((r) => !r.isQuickChat)
-        .map(serializeRoom)
+        .map((r) => serializeRoom(r, windows.get(r.jid) ?? []))
       jobs.push(adapter.setRooms(jid, serialized))
     }
     if (adapter.setServerInfo) {

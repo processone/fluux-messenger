@@ -51,6 +51,9 @@ const triggerChatStoreUpdate = () => {
 const triggerRoomStoreUpdate = () => {
   const state = {
     rooms: mockRooms,
+    // The resident window lives in its own map; these fixtures keep it on the
+    // room object, so project it rather than duplicating every seed.
+    messages: new Map(Array.from(mockRooms, ([jid, r]) => [jid, r.messages ?? []])),
     activeRoomJid: mockActiveRoomJid,
     allRooms: () => Array.from(mockRooms.values()),
   }

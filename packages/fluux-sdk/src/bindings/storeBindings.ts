@@ -712,8 +712,9 @@ export function createStoreBindings(
 
       // Recalculate lastMessage from in-memory messages
       const room = stores.room.getRoom(roomJid)
-      if (room && room.messages.length > 0) {
-        const newLast = findLastNonIgnoredMessage(room.messages, roomJid, room.nickToJidCache)
+      const roomMessages = stores.room.messages.get(roomJid) ?? []
+      if (room && roomMessages.length > 0) {
+        const newLast = findLastNonIgnoredMessage(roomMessages, roomJid, room.nickToJidCache)
         if (newLast) {
           stores.room.updateLastMessagePreview(roomJid, newLast)
         }

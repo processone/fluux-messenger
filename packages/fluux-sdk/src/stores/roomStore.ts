@@ -669,6 +669,20 @@ function commitRoomUpdate(
     }
   }
 
+  // The window still reaches `Room`, so a `Partial<Room>` can carry it. Route it
+  // through the one writer rather than letting this become a second one — and
+  // rather than accepting a field only to drop it, which is how `lastMessage`
+  // went missing from the old hand-maintained lists.
+  if ('messages' in update || 'windowAtLiveEdge' in update) {
+    const written = withRoomMessageWindow(
+      { rooms: result.rooms ?? state.rooms, messages: state.messages, windowAtLiveEdge: state.windowAtLiveEdge },
+      roomJid,
+      update.messages ?? state.messages.get(roomJid) ?? [],
+      update.windowAtLiveEdge === undefined ? {} : { atLiveEdge: update.windowAtLiveEdge }
+    )
+    if (written) Object.assign(result, written)
+  }
+
   return result
 }
 

@@ -136,7 +136,7 @@ export function useReactionNotifications(): void {
       // resident window in RAM, so a reaction to an own message that has scrolled
       // out of the window isn't found there — fall back to the durable cache, same
       // as the 1:1 path.
-      const roomMessages = room.messages
+      const roomMessages = roomStore.getState().messages.get(roomJid) ?? []
       let message = state.getMessage(roomJid, messageId)
       if (!message) {
         message = (await getCachedRoomMessage(roomJid, messageId)) ?? (await getCachedRoomMessageByStanzaId(roomJid, messageId)) ?? undefined

@@ -22,6 +22,9 @@ const mockState = {
   conversations: [] as Array<{ id: string; unreadCount: number }>,
   activeConversationId: null as string | null,
   joinedRooms: [] as Array<{ jid: string; mentionsCount: number; unreadCount: number }>,
+  // The resident window lives in its own store map; these fixtures carry no
+  // messages, so an empty map yields the zero timestamp the sort already expects.
+  roomMessages: new Map<string, Array<{ timestamp?: Date }>>(),
   activeRoomJid: null as string | null,
   archivedConversations: new Set<string>(),
   setActiveConversation: vi.fn(),
@@ -56,6 +59,7 @@ vi.mock('@fluux/sdk', () => ({
       // semantic the fixture represents.
       allRooms: () => mockState.joinedRooms.map(r => ({ ...r, joined: true })),
       activeRoomJid: mockState.activeRoomJid,
+      messages: mockState.roomMessages,
       setActiveRoom: mockState.setActiveRoom,
       loadMessagesFromCache: mockState.roomLoadMessagesFromCache,
       // Mirrors the real store action: hydrate from cache, then set active
@@ -116,6 +120,7 @@ describe('useKeyboardShortcuts', () => {
     mockState.activeConversationId = null
     mockState.setActiveConversation = vi.fn()
     mockState.joinedRooms = []
+    mockState.roomMessages = new Map()
     mockState.activeRoomJid = null
     mockState.setActiveRoom = vi.fn()
     mockState.chatLoadMessagesFromCache = vi.fn(() => Promise.resolve([]))

@@ -188,7 +188,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       .filter(r => (r.mentionsCount > 0 || r.unreadCount > 0) && r.jid !== activeRoomJid)
       .map(room => {
         // Get timestamp from last message (safely handle empty/missing messages)
-        const messages = room.messages || []
+        const messages = roomStore.getState().messages.get(room.jid) ?? []
         const lastMessage = messages[messages.length - 1]
         const timestamp = lastMessage?.timestamp instanceof Date
           ? lastMessage.timestamp.getTime()

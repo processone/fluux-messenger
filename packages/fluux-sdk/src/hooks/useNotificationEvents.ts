@@ -237,7 +237,11 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         new Map(
           allRooms.map(r => [
             r.jid,
-            { mentionsCount: r.mentionsCount, messagesLength: r.messages.length, unreadCount: r.unreadCount ?? 0 },
+            {
+              mentionsCount: r.mentionsCount,
+              messagesLength: state.messages.get(r.jid)?.length ?? 0,
+              unreadCount: r.unreadCount ?? 0,
+            },
           ])
         )
 
@@ -263,9 +267,10 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
 
         if (!onRoomMessage) continue
 
+        const roomMessages = state.messages.get(room.jid) ?? []
         const prevMessagesLength = prev?.messagesLength ?? 0
-        const hasNewMessages = room.messages.length > prevMessagesLength
-        const newMessageCount = room.messages.length - prevMessagesLength
+        const hasNewMessages = roomMessages.length > prevMessagesLength
+        const newMessageCount = roomMessages.length - prevMessagesLength
 
         if (!hasNewMessages) continue
 
@@ -276,11 +281,11 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         const isActive = room.jid === activeRoomJid
 
         // Find the most recent message that warrants notification
-        const searchStartIndex = room.messages.length - 1
-        const searchEndIndex = Math.max(0, room.messages.length - newMessageCount)
+        const searchStartIndex = roomMessages.length - 1
+        const searchEndIndex = Math.max(0, roomMessages.length - newMessageCount)
 
         for (let i = searchStartIndex; i >= searchEndIndex; i--) {
-          const msg = room.messages[i]
+          const msg = roomMessages[i]
 
           const result = shouldNotifyRoom(
             {
