@@ -47,7 +47,7 @@ export function buildStressEvents(scenario: StressScenario, ctx: StressContext):
     const room: Room = {
       jid: roomJid, name: `Stress ${i}`, nickname: ctx.selfNick, joined: true,
       isBookmarked: false, autojoin: false, supportsMAM: true, supportsReactions: true,
-      unreadCount: 0, mentionsCount: 0, typingUsers: new Set(), occupants: new Map(), messages: [],
+      unreadCount: 0, mentionsCount: 0, typingUsers: new Set(), occupants: new Map(),
     }
     const selfOcc: RoomOccupant = { nick: ctx.selfNick, jid: ctx.selfJid, affiliation: 'owner', role: 'moderator' }
     events.push({ delayMs: base, type: 'room:added', payload: { room } })

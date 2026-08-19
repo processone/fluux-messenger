@@ -187,7 +187,6 @@ function seedBackgroundedRoom(pointerId?: string, pointerFrom = `${ROOM}/alice`)
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),

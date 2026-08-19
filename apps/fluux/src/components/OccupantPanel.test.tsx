@@ -118,7 +118,6 @@ const createRoom = (overrides: Partial<Room> = {}): Room => ({
   name: 'Test Room',
   nickname: 'Me',
   occupants: new Map(),
-  messages: [],
   joined: true,
   unreadCount: 0,
   mentionsCount: 0,

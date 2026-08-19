@@ -10,7 +10,6 @@ function createRoom(jid: string, options: Partial<Room> = {}): Room {
     joined: options.joined ?? false,
     isBookmarked: options.isBookmarked ?? false,
     occupants: options.occupants ?? new Map(),
-    messages: options.messages ?? [],
     unreadCount: options.unreadCount ?? 0,
     mentionsCount: options.mentionsCount ?? 0,
     typingUsers: options.typingUsers ?? new Set(),

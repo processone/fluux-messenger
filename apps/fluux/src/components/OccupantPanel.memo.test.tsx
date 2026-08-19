@@ -84,7 +84,7 @@ const createOccupant = (overrides: Partial<RoomOccupant> = {}): RoomOccupant => 
 
 const createRoom = (occupants: Map<string, RoomOccupant>): Room => ({
   jid: 'room@conference.example.com', name: 'Test Room', nickname: 'Me',
-  occupants, messages: [], joined: true, unreadCount: 0, mentionsCount: 0,
+  occupants, joined: true, unreadCount: 0, mentionsCount: 0,
   typingUsers: new Set(), isBookmarked: false,
 })
 

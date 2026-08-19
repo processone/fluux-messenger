@@ -845,8 +845,8 @@ describe('XMPPClient Own Avatar', () => {
 
       // Mock room store to return rooms without avatars
       mockStores.room.getRoom
-        .mockReturnValueOnce({ jid: 'room1@conference.example.com', name: 'Room 1', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
-        .mockReturnValueOnce({ jid: 'room2@conference.example.com', name: 'Room 2', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
+        .mockReturnValueOnce({ jid: 'room1@conference.example.com', name: 'Room 1', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
+        .mockReturnValueOnce({ jid: 'room2@conference.example.com', name: 'Room 2', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
 
       await xmppClient.profile.restoreAllRoomAvatarHashes()
 
@@ -878,7 +878,6 @@ describe('XMPPClient Own Avatar', () => {
         joined: false,
         isBookmarked: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set<string>(),
@@ -926,7 +925,6 @@ describe('XMPPClient Own Avatar', () => {
         joined: false,
         isBookmarked: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set<string>(),
@@ -969,7 +967,7 @@ describe('XMPPClient Own Avatar', () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.com', name: 'Room', nickname: '',
         joined: true, isBookmarked: false, occupants: new Map(),
-        messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
+        unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
         avatarHash: 'hash-r1',
       })
 

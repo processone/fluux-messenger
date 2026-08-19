@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore, _resetRoomArchiveSavesForTesting, _resetRoomReadStateForTesting } from './roomStore'
 import type { Room, RoomMessage, RoomMetadata } from '../core/types'
 import { isNoLocalStore } from '../core/types/message-internal'
-import { createRoom, createMessage } from './roomStore.testHelpers'
+import { createRoom, createMessage, roomWindow } from './roomStore.testHelpers'
 import { makeReadPointer, type ReadPointer } from './shared/readPointer'
 import {
   flush as flushThrottledStorage,
@@ -124,7 +124,8 @@ describe('roomStore', () => {
         createMessage('m1', roomA, 'nick', 'hello'),
         createMessage('m2', roomA, 'nick', 'world'),
       ]
-      roomStore.getState().addRoom(createRoom(roomA, { joined: true, messages: msgs, lastMessage: msgs[1] }))
+      roomStore.getState().addRoom(createRoom(roomA, { joined: true, lastMessage: msgs[1]
+}), msgs)
       roomStore.getState().addRoom(createRoom(roomB, { joined: true }))
       roomStore.setState({ activeRoomJid: roomA })
 
@@ -135,7 +136,7 @@ describe('roomStore', () => {
 
       // A's messages are evicted from both mirrors (rooms + roomRuntime)...
       expect(roomStore.getState().messages.get(roomA)).toEqual([])
-      expect(roomStore.getState().rooms.get(roomA)?.messages).toEqual([])
+      expect(roomWindow(roomA)).toEqual([])
       // ...but its sidebar preview / identity are preserved.
       expect(roomStore.getState().rooms.get(roomA)?.lastMessage).toEqual(msgs[1])
       expect(roomStore.getState().rooms.get(roomA)?.joined).toBe(true)
@@ -145,7 +146,8 @@ describe('roomStore', () => {
     it('keeps the newly-activated room messages resident', () => {
       const roomA = 'a@conference.example.com'
       const msgs = [createMessage('m1', roomA, 'nick', 'hello')]
-      roomStore.getState().addRoom(createRoom(roomA, { joined: true, messages: msgs }))
+      roomStore.getState().addRoom(createRoom(roomA, { joined: true
+}), msgs)
       roomStore.setState({ activeRoomJid: null })
 
       // Activating A (no previous active room) must not evict A.
@@ -293,7 +295,7 @@ describe('roomStore', () => {
       expect(room?.autojoin).toBe(true)
       expect(room?.password).toBe('secret')
       expect(room?.joined).toBe(false)
-      expect(room?.messages).toEqual([])
+      expect(roomWindow('newroom@conference.example.com')).toEqual([])
       expect(room?.unreadCount).toBe(0)
     })
 
@@ -482,24 +484,23 @@ describe('roomStore', () => {
     })
 
     it('should NOT set lastInteractedAt when joining room with messages', () => {
-      // MUC history arrives before the join confirmation, so room.messages may
+      // MUC history arrives before the join confirmation, so roomWindow('test@conference.example.com') may
       // already have content. But these are history messages, not user interaction.
       // Only setActiveRoom (user clicking) should set lastInteractedAt.
       const messageTime = new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: false,
-        messages: [{
-          type: 'groupchat',
-          id: 'msg1',
-          from: 'test@conference.example.com/user',
-          roomJid: 'test@conference.example.com',
-          nick: 'user',
-          body: 'Hello',
-          timestamp: messageTime,
-          isOutgoing: false,
-        }],
-      }))
+      }), [{
+        type: 'groupchat',
+        id: 'msg1',
+        from: 'test@conference.example.com/user',
+        roomJid: 'test@conference.example.com',
+        nick: 'user',
+        body: 'Hello',
+        timestamp: messageTime,
+        isOutgoing: false,
+      }])
 
       roomStore.getState().setRoomJoined('test@conference.example.com', true)
 
@@ -831,17 +832,16 @@ describe('roomStore', () => {
         joined: true,
         lastInteractedAt: twoHoursAgo,
         muted: true,
-        messages: [{
-          type: 'groupchat',
-          id: 'msg1',
-          from: 'room-a@conference.example.com/user',
-          roomJid: 'room-a@conference.example.com',
-          nick: 'user',
-          body: 'Recent message',
-          timestamp: fiveMinAgo,
-          isOutgoing: false,
-        }],
-      }))
+      }), [{
+        type: 'groupchat',
+        id: 'msg1',
+        from: 'room-a@conference.example.com/user',
+        roomJid: 'room-a@conference.example.com',
+        nick: 'user',
+        body: 'Recent message',
+        timestamp: fiveMinAgo,
+        isOutgoing: false,
+      }])
       roomStore.getState().addRoom(createRoom('room-b@conference.example.com', {
         joined: true,
         lastInteractedAt: oneHourAgo,
@@ -902,17 +902,16 @@ describe('roomStore', () => {
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: true,
-        messages: [{
-          type: 'groupchat',
-          id: 'msg1',
-          from: 'test@conference.example.com/user',
-          roomJid: 'test@conference.example.com',
-          nick: 'user',
-          body: 'Hello',
-          timestamp: messageTime,
-          isOutgoing: false,
-        }],
-      }))
+      }), [{
+        type: 'groupchat',
+        id: 'msg1',
+        from: 'test@conference.example.com/user',
+        roomJid: 'test@conference.example.com',
+        nick: 'user',
+        body: 'Hello',
+        timestamp: messageTime,
+        isOutgoing: false,
+      }])
 
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.lastInteractedAt).toBeUndefined()
 
@@ -932,9 +931,9 @@ describe('roomStore', () => {
 
     it('should NOT set lastInteractedAt when room has no messages (prevents jumping to top)', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
-        joined: true,
-        messages: [], // No messages
-      }))
+        joined: true, // No messages
+
+      }), [])
 
       roomStore.getState().setActiveRoom('test@conference.example.com')
 
@@ -951,17 +950,16 @@ describe('roomStore', () => {
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: true,
-        messages: [{
-          type: 'groupchat',
-          id: 'msg1',
-          from: 'test@conference.example.com/user',
-          roomJid: 'test@conference.example.com',
-          nick: 'user',
-          body: 'Old message',
-          timestamp: oldMessageTime,
-          isOutgoing: false,
-        }],
-      }))
+      }), [{
+        type: 'groupchat',
+        id: 'msg1',
+        from: 'test@conference.example.com/user',
+        roomJid: 'test@conference.example.com',
+        nick: 'user',
+        body: 'Old message',
+        timestamp: oldMessageTime,
+        isOutgoing: false,
+      }])
 
       // Open room first time
       roomStore.getState().setActiveRoom('test@conference.example.com')
@@ -1047,9 +1045,8 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].body).toBe('Hello!')
+      expect(roomWindow('test@conference.example.com').length).toBe(1)
+      expect(roomWindow('test@conference.example.com')[0].body).toBe('Hello!')
     })
 
     it('should increment unread count for non-active rooms', () => {
@@ -1280,9 +1277,8 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', msg1)
       roomStore.getState().addMessage('test@conference.example.com', msg2)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].id).toBe('msg-1')
+      expect(roomWindow('test@conference.example.com').length).toBe(1)
+      expect(roomWindow('test@conference.example.com')[0].id).toBe('msg-1')
     })
 
     it('should deduplicate messages by from + id when no stanzaId', () => {
@@ -1314,8 +1310,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', msg1)
       roomStore.getState().addMessage('test@conference.example.com', msg2)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(1)
+      expect(roomWindow('test@conference.example.com').length).toBe(1)
     })
 
     it('should deduplicate messages by originId (XEP-0359)', () => {
@@ -1351,9 +1346,8 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', msg1)
       roomStore.getState().addMessage('test@conference.example.com', msg2)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].id).toBe('client-uuid-1')
+      expect(roomWindow('test@conference.example.com').length).toBe(1)
+      expect(roomWindow('test@conference.example.com')[0].id).toBe('client-uuid-1')
     })
 
     it('should allow same message id from different senders', () => {
@@ -1385,8 +1379,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', msg1)
       roomStore.getState().addMessage('test@conference.example.com', msg2)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(2)
+      expect(roomWindow('test@conference.example.com').length).toBe(2)
     })
 
     it('should not increment unreadCount for duplicate messages', () => {
@@ -1507,9 +1500,8 @@ describe('roomStore', () => {
       expect(messageCache.saveRoomMessageWithResult).not.toHaveBeenCalled()
 
       // But message should still be in memory with noLocalStore flag
-      const room = roomStore.getState().rooms.get('quickchat@conference.example.com')
-      expect(room?.messages.length).toBe(1)
-      expect(isNoLocalStore(room!.messages[0])).toBe(true)
+      expect(roomWindow('quickchat@conference.example.com').length).toBe(1)
+      expect(isNoLocalStore(roomWindow('quickchat@conference.example.com')[0])).toBe(true)
     })
 
     it('should still add noLocalStore message to in-memory store', () => {
@@ -1518,9 +1510,8 @@ describe('roomStore', () => {
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].body).toBe('Ephemeral')
+      expect(roomWindow('test@conference.example.com').length).toBe(1)
+      expect(roomWindow('test@conference.example.com')[0].body).toBe('Ephemeral')
     })
 
     it('should still increment unreadCount for noLocalStore messages', () => {
@@ -1567,9 +1558,7 @@ describe('roomStore', () => {
         // `added` gate is ever consulted — making the control hollow.
         roomStore.setState((state) => {
           const rooms = new Map(state.rooms)
-          const existing = rooms.get(ROOM)
-          if (existing) rooms.set(ROOM, { ...existing, messages: [] })
-          return { rooms }
+          return { rooms, messages: new Map(state.messages).set(ROOM, []) }
         })
 
         // The MUC's real-time reflection of the SAME message: shares the
@@ -1733,7 +1722,7 @@ describe('roomStore', () => {
 
         roomStore.getState().addMessage(ROOM, delayed('poll-1', 'Original poll', '2026-07-18T09:00:00Z'))
 
-        const bodies = (roomStore.getState().rooms.get(ROOM)?.messages ?? []).map((m) => m.body)
+        const bodies = (roomWindow(ROOM) ?? []).map((m) => m.body)
         expect(bodies).toContain('Original poll')
       })
 
@@ -1783,7 +1772,7 @@ describe('roomStore', () => {
 
       roomStore.getState().clearMessageStanzaId(ROOM, 'uuid-sent')
 
-      expect(roomStore.getState().rooms.get(ROOM)?.messages[0].stanzaId).toBeUndefined()
+      expect(roomWindow(ROOM)[0].stanzaId).toBeUndefined()
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(ROOM, 'm1', { stanzaId: undefined }, `${ROOM}/me`)
     })
@@ -1796,7 +1785,7 @@ describe('roomStore', () => {
 
       roomStore.getState().clearMessageStanzaId(ROOM, 'not-present')
 
-      expect(roomStore.getState().rooms.get(ROOM)?.messages[0].stanzaId).toBe('archive-1')
+      expect(roomWindow(ROOM)[0].stanzaId).toBe('archive-1')
       expect(messageCache.updateRoomMessage).not.toHaveBeenCalled()
     })
   })
@@ -1972,12 +1961,11 @@ describe('roomStore', () => {
       ]
       roomStore.getState().addRoom(createRoom(roomJid, {
         joined: true,
-        messages,
         lastMessage: messages[2],
         unreadCount: 2,
         mentionsCount: 1,
         readPointer: { order: { role: 'floor', timestamp: new Date(messages[0].timestamp).getTime() }, identity: { state: 'local', messageId: 'm1' } },
-      }))
+      }), messages)
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
         newMarkers.set(roomJid, 'm2')
@@ -2002,12 +1990,11 @@ describe('roomStore', () => {
       ]
       roomStore.getState().addRoom(createRoom(roomJid, {
         joined: true,
-        messages,
         lastMessage: messages[2],
         unreadCount: 2,
         mentionsCount: 1,
         readPointer: { order: { role: 'floor', timestamp: new Date(messages[0].timestamp).getTime() }, identity: { state: 'local', messageId: 'm1' } },
-      }))
+      }), messages)
       roomStore.setState((state) => {
         const newMarkers = new Map(state.firstNewMessageMarkers)
         newMarkers.set(roomJid, 'm2')
@@ -2032,11 +2019,10 @@ describe('roomStore', () => {
       const m9 = createMessage('m9', roomJid, 'alice', 'latest before eviction')
       roomStore.getState().addRoom(createRoom(roomJid, {
         joined: true,
-        messages: [],
         lastMessage: m9,
         unreadCount: 3,
         mentionsCount: 1,
-      }))
+      }), [])
       // Simulate eviction: runtime messages array is empty (non-active room).
       roomStore.setState((state) => {
         return { messages: new Map(state.messages).set(roomJid, []) }
@@ -2060,14 +2046,14 @@ describe('roomStore', () => {
       const unjoinedMsgs = [createMessage('j1', unreadUnjoined, 'alice', 'hi')]
 
       roomStore.getState().addRoom(createRoom(unreadJoined, {
-        joined: true, messages: unreadMsgs, lastMessage: unreadMsgs[0], unreadCount: 2,
-      }))
+        joined: true, lastMessage: unreadMsgs[0], unreadCount: 2,
+      }), unreadMsgs)
       roomStore.getState().addRoom(createRoom(cleanJoined, {
-        joined: true, messages: cleanMsgs, lastMessage: cleanMsgs[0], unreadCount: 0, mentionsCount: 0,
-      }))
+        joined: true, lastMessage: cleanMsgs[0], unreadCount: 0, mentionsCount: 0,
+      }), cleanMsgs)
       roomStore.getState().addRoom(createRoom(unreadUnjoined, {
-        joined: false, messages: unjoinedMsgs, lastMessage: unjoinedMsgs[0], unreadCount: 5,
-      }))
+        joined: false, lastMessage: unjoinedMsgs[0], unreadCount: 5,
+      }), unjoinedMsgs)
 
       roomStore.getState().markAllRoomsRead()
 
@@ -2343,7 +2329,7 @@ describe('roomStore', () => {
 
         const rooms = new Map(s.rooms)
         const room = rooms.get(jid)
-        if (room) rooms.set(jid, { ...room, messages, readPointer: undefined, historyFloor: new Date(2000) })
+        if (room) rooms.set(jid, { ...room, readPointer: undefined, historyFloor: new Date(2000) })
 
         return { roomMeta, messages: new Map(s.messages).set(jid, messages), rooms }
       })
@@ -2414,7 +2400,7 @@ describe('roomStore', () => {
         (state) => state.activeRoomJid,
         (activeJid) => {
           if (activeJid === roomJid) {
-            messagesAtActivation = roomStore.getState().rooms.get(roomJid)?.messages
+            messagesAtActivation = roomWindow(roomJid)
           }
         }
       )
@@ -2571,7 +2557,7 @@ describe('roomStore', () => {
         createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello'),
         createMessage('msg2', 'test@conference.example.com', 'bob', 'Hi there'),
       ]
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
       roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
 
       const activeMessages = roomStore.getState().activeMessages()
@@ -2608,7 +2594,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+      roomStore.getState().addRoom(createRoom(jid), [recent])
 
       const fetched: RoomMessage = {
         type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
@@ -2640,7 +2626,8 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held
+}), [held])
 
       const fetched: RoomMessage = {
         type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
@@ -2665,7 +2652,8 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'shared', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'shared', timestamp: new Date('2026-07-14T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held
+}), [held])
 
       const fresh: RoomMessage = {
         type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
@@ -2687,7 +2675,8 @@ describe('roomStore', () => {
         body: 'held', timestamp: new Date('2026-07-20T00:00:00Z'), isOutgoing: false,
         stanzaId: 'local-edge',
       }
-      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held
+}), [held])
       expect(roomStore.getState().getRoomCoverage(jid)).toBeUndefined()
 
       const fetched: RoomMessage = {
@@ -2727,8 +2716,8 @@ describe('roomStore', () => {
         isOutgoing: false, stanzaId: 'july-top-archive-id',
       }
       roomStore.getState().addRoom(createRoom(jid, {
-        joined: true, messages: [residentTop], lastMessage: residentTop,
-      }))
+        joined: true, lastMessage: residentTop,
+      }), [residentTop])
 
       // A Phase B page from January: it resumed from the cache-bottom cursor,
       // NOT from the resident window's oldest message, and hit the archive start.
@@ -2758,8 +2747,8 @@ describe('roomStore', () => {
         isOutgoing: false, stanzaId: 'oldest-resident-archive-id',
       }
       roomStore.getState().addRoom(createRoom(jid, {
-        joined: true, messages: [residentBottom], lastMessage: residentBottom,
-      }))
+        joined: true, lastMessage: residentBottom,
+      }), [residentBottom])
 
       const firstEver: RoomMessage = {
         type: 'groupchat', id: 'jan-first', roomJid: jid, from: `${jid}/b`, nick: 'b',
@@ -2780,7 +2769,8 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held
+}), [held])
       const older: RoomMessage = {
         type: 'groupchat', id: 'older', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'older', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
@@ -3214,7 +3204,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'above', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'above', timestamp: new Date('2026-07-14T06:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { messages: [above] }))
+      roomStore.getState().addRoom(createRoom(jid), [above])
       roomStore.setState({ roomGaps: new Map([[jid, { start: new Date('2026-07-06T00:00:00Z').getTime() }]]) })
 
       // complete=true from above the gap, but the page is all duplicates.
@@ -3270,7 +3260,7 @@ describe('roomStore', () => {
           type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
           body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
         }
-        roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+        roomStore.getState().addRoom(createRoom(jid), [recent])
         const fetched: RoomMessage = {
           type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
           body: 'edge', timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false,
@@ -3323,7 +3313,7 @@ describe('roomStore', () => {
         type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
         body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+      roomStore.getState().addRoom(createRoom(jid), [recent])
       const fetched: RoomMessage = {
         type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
         body: 'edge', timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false,
@@ -3698,73 +3688,67 @@ describe('roomStore', () => {
   describe('updateReactions', () => {
     it('should add reactions to a message', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       roomStore.getState().updateReactions('test@conference.example.com', 'msg1', 'bob', ['👍', '❤️'])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'], '❤️': ['bob'] })
+      expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'], '❤️': ['bob'] })
     })
 
     it('should replace reactions from the same reactor', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].reactions = { '👍': ['bob'] }
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       roomStore.getState().updateReactions('test@conference.example.com', 'msg1', 'bob', ['❤️'])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toEqual({ '❤️': ['bob'] })
+      expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '❤️': ['bob'] })
     })
 
     it('should remove all reactions when empty array is passed', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].reactions = { '👍': ['bob'] }
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       roomStore.getState().updateReactions('test@conference.example.com', 'msg1', 'bob', [])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toBeUndefined()
+      expect(roomWindow('test@conference.example.com')[0].reactions).toBeUndefined()
     })
 
     it('should find message by stanzaId when reaction references server-assigned ID', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].stanzaId = 'server-stanza-id-123'
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       // Reaction references the stanzaId (as other clients like Gajim may do)
       roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-123', 'bob', ['👍'])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'] })
+      expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'] })
     })
 
     it('should find message by originId when a reaction references the sender id', () => {
       const messages = [createMessage('muc-rewritten-id', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].originId = 'sender-origin-uuid'
       messages[0].stanzaId = 'server-stanza-id-789'
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       // Reaction references the sender-assigned origin-id (e.g. a corrected message)
       roomStore.getState().updateReactions('test@conference.example.com', 'sender-origin-uuid', 'bob', ['👍'])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'] })
+      expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '👍': ['bob'] })
     })
 
     it('should replace reactions when referenced by stanzaId', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].stanzaId = 'server-stanza-id-456'
-      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'), messages)
 
       // First reaction via stanzaId
       roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-456', 'bob', ['👍'])
       // Bob changes reaction (still via stanzaId)
       roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-456', 'bob', ['❤️'])
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.messages[0].reactions).toEqual({ '❤️': ['bob'] })
+      expect(roomWindow('test@conference.example.com')[0].reactions).toEqual({ '❤️': ['bob'] })
     })
   })
 
@@ -4091,8 +4075,8 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('room2@conference.example.com', msgForRoom2)
 
       // Message should be in Room 2, not Room 1
-      expect(roomStore.getState().rooms.get('room2@conference.example.com')?.messages.length).toBe(1)
-      expect(roomStore.getState().rooms.get('room1@conference.example.com')?.messages.length).toBe(0)
+      expect(roomWindow('room2@conference.example.com').length).toBe(1)
+      expect(roomWindow('room1@conference.example.com').length).toBe(0)
     })
 
     it('should correctly track which room has unread messages', () => {
@@ -4384,7 +4368,7 @@ describe('roomStore', () => {
       // ...sidebar preview updated...
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('bg-2')
       // ...but the resident array is NOT populated (only the active room is in RAM).
-      expect(roomStore.getState().rooms.get(roomJid)?.messages).toEqual([])
+      expect(roomWindow(roomJid)).toEqual([])
       expect(roomStore.getState().messages.get(roomJid)).toEqual([])
     })
 
@@ -4434,8 +4418,7 @@ describe('roomStore', () => {
         'backward'
       )
 
-      const room = roomStore.getState().rooms.get(roomJid)
-      const messages = room?.messages || []
+      const messages = roomWindow(roomJid) || []
       expect(messages.length).toBe(3)
       // Oldest messages at the start
       expect(messages[0].body).toBe('Old message 1')
@@ -4494,8 +4477,7 @@ describe('roomStore', () => {
         'forward'
       )
 
-      const room = roomStore.getState().rooms.get(roomJid)
-      const messages = room?.messages || []
+      const messages = roomWindow(roomJid) || []
       expect(messages.length).toBe(3)
       // Old local message at the start
       expect(messages[0].body).toBe('Old local message')
@@ -4563,8 +4545,7 @@ describe('roomStore', () => {
         'forward'
       )
 
-      const room = roomStore.getState().rooms.get(roomJid)
-      const messages = room?.messages || []
+      const messages = roomWindow(roomJid) || []
       expect(messages.length).toBe(4)
       // Should be sorted chronologically
       expect(messages[0].body).toBe('Existing at 10:00')
@@ -4930,7 +4911,6 @@ describe('roomStore', () => {
         isJoining: false,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5057,7 +5037,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: false, // Non-MAM room
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5170,7 +5149,6 @@ describe('roomStore', () => {
         isBookmarked: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5266,7 +5244,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5293,7 +5270,7 @@ describe('roomStore', () => {
       const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, 'anchor')
 
       expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, 'anchor', expect.any(Object))
-      const resident = roomStore.getState().rooms.get(roomJid)?.messages
+      const resident = roomWindow(roomJid)
       expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
       expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
     })
@@ -5316,7 +5293,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5344,10 +5320,7 @@ describe('roomStore', () => {
         resident.push(roomMsgAt(`resident-${i}`, 50 + i))
       }
       roomStore.setState((state) => {
-        const newRooms = new Map(state.rooms)
-        const existing = newRooms.get(roomJid)!
-        newRooms.set(roomJid, { ...existing, messages: resident })
-        return { rooms: newRooms }
+        return { messages: new Map(state.messages).set(roomJid, resident) }
       })
 
       // Cache returns 50 messages older than the current oldest resident message (minute 50).
@@ -5359,14 +5332,13 @@ describe('roomStore', () => {
 
       await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
 
-      const room = roomStore.getState().rooms.get(roomJid)
       // Window size is preserved...
-      expect(room?.messages.length).toBe(RESIDENT_WINDOW_SIZE)
+      expect(roomWindow(roomJid).length).toBe(RESIDENT_WINDOW_SIZE)
       // ...but the just-loaded older batch is now resident (oldest id is from the older batch)...
-      expect(room?.messages[0].id).toBe('older-0')
+      expect(roomWindow(roomJid)[0].id).toBe('older-0')
       // ...which means the window slid: the newest 50 resident messages were evicted.
-      expect(room?.messages.some((m) => m.id === 'resident-4999')).toBe(false)
-      expect(room?.messages[room.messages.length - 1].id).toBe('resident-4949')
+      expect(roomWindow(roomJid).some((m) => m.id === 'resident-4999')).toBe(false)
+      expect(roomWindow(roomJid)[roomWindow(roomJid).length - 1].id).toBe('resident-4949')
     })
   })
 
@@ -5387,7 +5359,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5414,10 +5385,7 @@ describe('roomStore', () => {
         resident.push(roomMsgAt(`resident-${i}`, 50 + i))
       }
       roomStore.setState((state) => {
-        const newRooms = new Map(state.rooms)
-        const existing = newRooms.get(roomJid)!
-        newRooms.set(roomJid, { ...existing, messages: resident })
-        return { rooms: newRooms, messages: new Map(state.messages).set(roomJid, resident) }
+        return { messages: new Map(state.messages).set(roomJid, resident) }
       })
 
       const olderBatch: RoomMessage[] = []
@@ -5437,7 +5405,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage(roomJid, live)
 
       const room = roomStore.getState().getRoom(roomJid)!
-      expect(room.messages.some((m) => m.id === 'live-1')).toBe(true)
+      expect(roomWindow(roomJid).some((m) => m.id === 'live-1')).toBe(true)
       expect(room.lastMessage?.id).toBe('live-1')
     })
 
@@ -5453,15 +5421,15 @@ describe('roomStore', () => {
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(false)
 
       vi.mocked(messageCache.saveRoomMessageWithResult).mockClear()
-      const before = roomStore.getState().getRoom(roomJid)!.messages
+      const before = roomWindow(roomJid)
       const live = roomMsgAt('live-1', 10000)
       roomStore.getState().addMessage(roomJid, live)
 
       const room = roomStore.getState().getRoom(roomJid)!
       // Resident array is unchanged (no false-adjacency gap appended)...
-      expect(room.messages.some((m) => m.id === 'live-1')).toBe(false)
-      expect(room.messages.length).toBe(before.length)
-      expect(room.messages[room.messages.length - 1].id).toBe(before[before.length - 1].id)
+      expect(roomWindow(roomJid).some((m) => m.id === 'live-1')).toBe(false)
+      expect(roomWindow(roomJid).length).toBe(before.length)
+      expect(roomWindow(roomJid)[roomWindow(roomJid).length - 1].id).toBe(before[before.length - 1].id)
       // ...but the message is still persisted to IndexedDB...
       expect(messageCache.saveRoomMessageWithResult).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
       // ...and meta (sidebar preview + unread badge) still update.
@@ -5516,7 +5484,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5543,11 +5510,7 @@ describe('roomStore', () => {
         resident.push(roomMsgAt(`resident-${i}`, i))
       }
       roomStore.setState((state) => {
-        const newRooms = new Map(state.rooms)
-        const existing = newRooms.get(roomJid)!
-        newRooms.set(roomJid, { ...existing, messages: resident })
         return {
-          rooms: newRooms,
           messages: new Map(state.messages).set(roomJid, resident),
           windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
         }
@@ -5566,14 +5529,13 @@ describe('roomStore', () => {
 
       await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
 
-      const room = roomStore.getState().rooms.get(roomJid)
       // Window size is preserved...
-      expect(room?.messages.length).toBe(RESIDENT_WINDOW_SIZE)
+      expect(roomWindow(roomJid).length).toBe(RESIDENT_WINDOW_SIZE)
       // ...the just-loaded newer batch is now resident (newest id is from the newer batch)...
-      expect(room?.messages[room.messages.length - 1].id).toBe('newer-49')
+      expect(roomWindow(roomJid)[roomWindow(roomJid).length - 1].id).toBe('newer-49')
       // ...which means the window slid down: the oldest 50 resident messages were evicted.
-      expect(room?.messages.some((m) => m.id === 'resident-0')).toBe(false)
-      expect(room?.messages[0].id).toBe('resident-50')
+      expect(roomWindow(roomJid).some((m) => m.id === 'resident-0')).toBe(false)
+      expect(roomWindow(roomJid)[0].id).toBe('resident-50')
     })
 
     it('queries the cache with an after-cursor at the newest resident timestamp', async () => {
@@ -5636,7 +5598,6 @@ describe('roomStore', () => {
         isBookmarked: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -5663,11 +5624,7 @@ describe('roomStore', () => {
         resident.push(roomMsgAt(`resident-${i}`, 50 + i))
       }
       roomStore.setState((state) => {
-        const newRooms = new Map(state.rooms)
-        const existing = newRooms.get(roomJid)!
-        newRooms.set(roomJid, { ...existing, messages: resident })
         return {
-          rooms: newRooms,
           messages: new Map(state.messages).set(roomJid, resident),
           windowAtLiveEdge: new Map(state.windowAtLiveEdge).set(roomJid, false),
         }
@@ -5679,8 +5636,7 @@ describe('roomStore', () => {
       await roomStore.getState().recenterToLatest(roomJid)
 
       expect(roomStore.getState().windowAtLiveEdge.get(roomJid)).toBe(true)
-      const room = roomStore.getState().rooms.get(roomJid)
-      expect(room?.messages.some((m) => m.id === 'latest-1')).toBe(true)
+      expect(roomWindow(roomJid).some((m) => m.id === 'latest-1')).toBe(true)
     })
 
     it('sets windowAtLiveEdge true even when the cache has nothing newer (already-resident latest window)', async () => {
@@ -5905,12 +5861,12 @@ describe('roomStore', () => {
     it('should update message found by client id', () => {
       const roomJid = 'room@conference.example.com'
       const msg = createMessage('client-id-1', roomJid, 'alice', 'Hello')
-      const room = createRoom(roomJid, { messages: [msg], joined: true })
-      roomStore.getState().addRoom(room)
+      const room = createRoom(roomJid, { joined: true })
+      roomStore.getState().addRoom(room, [msg])
 
       roomStore.getState().updateMessage(roomJid, 'client-id-1', { isRetracted: true })
 
-      const updated = roomStore.getState().rooms.get(roomJid)?.messages[0]
+      const updated = roomWindow(roomJid)[0]
       expect(updated?.isRetracted).toBe(true)
     })
 
@@ -5920,13 +5876,13 @@ describe('roomStore', () => {
         ...createMessage('client-id-1', roomJid, 'alice', 'Hello'),
         stanzaId: 'server-stanza-id-123',
       }
-      const room = createRoom(roomJid, { messages: [msg], joined: true })
-      roomStore.getState().addRoom(room)
+      const room = createRoom(roomJid, { joined: true })
+      roomStore.getState().addRoom(room, [msg])
 
       // Retraction references the stanza-id, not the client id
       roomStore.getState().updateMessage(roomJid, 'server-stanza-id-123', { isRetracted: true })
 
-      const updated = roomStore.getState().rooms.get(roomJid)?.messages[0]
+      const updated = roomWindow(roomJid)[0]
       expect(updated?.isRetracted).toBe(true)
       // Verify IndexedDB update uses actual message id, not the stanza-id
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(roomJid, 'client-id-1', { isRetracted: true }, `${roomJid}/alice`)
@@ -5939,14 +5895,14 @@ describe('roomStore', () => {
         originId: 'sender-origin-uuid',
         stanzaId: 'server-stanza-id-123',
       }
-      const room = createRoom(roomJid, { messages: [msg], joined: true })
-      roomStore.getState().addRoom(room)
+      const room = createRoom(roomJid, { joined: true })
+      roomStore.getState().addRoom(room, [msg])
 
       // XEP-0308 corrections reference the sender-assigned origin-id. If a MUC
       // rewrote the message id, matching on id/stanzaId alone would miss it.
       roomStore.getState().updateMessage(roomJid, 'sender-origin-uuid', { isEdited: true, body: 'Hello (fixed)' })
 
-      const updated = roomStore.getState().rooms.get(roomJid)?.messages[0]
+      const updated = roomWindow(roomJid)[0]
       expect(updated?.isEdited).toBe(true)
       expect(updated?.body).toBe('Hello (fixed)')
       // IndexedDB update still keyed by the actual stored message id.
@@ -5960,14 +5916,14 @@ describe('roomStore', () => {
         originId: 'shared-value',
       }
       const owner = createMessage('shared-value', roomJid, 'alice', 'owner body')
-      const room = createRoom(roomJid, { messages: [carrier, owner], joined: true })
-      roomStore.getState().addRoom(room)
+      const room = createRoom(roomJid, { joined: true })
+      roomStore.getState().addRoom(room, [carrier, owner])
 
       // Reference resolves to the message that OWNS it as id — not the carrier
       // that merely holds it as a (spoofable) origin-id.
       roomStore.getState().updateMessage(roomJid, 'shared-value', { isEdited: true, body: 'edited' })
 
-      const msgs = roomStore.getState().rooms.get(roomJid)?.messages
+      const msgs = roomWindow(roomJid)
       const updatedOwner = msgs?.find((m) => m.id === 'shared-value')
       const untouchedCarrier = msgs?.find((m) => m.id === 'other-id')
       expect(updatedOwner?.body).toBe('edited')
@@ -5982,8 +5938,8 @@ describe('roomStore', () => {
         ...createMessage('client-id-1', roomJid, 'alice', 'Hello'),
         stanzaId: 'server-stanza-id-123',
       }
-      const room = createRoom(roomJid, { messages: [msg], joined: true })
-      roomStore.getState().addRoom(room)
+      const room = createRoom(roomJid, { joined: true })
+      roomStore.getState().addRoom(room, [msg])
 
       roomStore.getState().updateMessage(roomJid, 'server-stanza-id-123', { isRetracted: true })
 
@@ -6214,7 +6170,8 @@ describe('roomStore', () => {
         timestamp: new Date('2026-06-14T10:00:00.000Z'),
         isOutgoing: false,
       }
-      roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages: [realMessage] }))
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true
+}), [realMessage])
 
       // An encrypted reaction replayed from MAM before the key was available is
       // stored as an empty-body message. It is NEWER than the real message, so a
@@ -6335,7 +6292,8 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
   }
 
   function activateWith(messages: RoomMessage[], seenMessageId: string, unreadCount: number) {
-    roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages, unreadCount }))
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true, unreadCount
+}), messages)
     const seenMsg = messages.find((m) => m.id === seenMessageId)!
     roomStore.setState((s) => {
       const meta = new Map(s.roomMeta)
@@ -6386,11 +6344,10 @@ describe('setActiveRoom new-message marker — delayed history unified with chat
     // what keeps a fresh join marker-free.
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
-      messages: [
-        delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
-        delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
-      ],
-    }))
+    }), [
+      delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
+      delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
+    ])
     roomStore.getState().setActiveRoom(ROOM)
     const marker = roomStore.getState().firstNewMessageMarkers.get(ROOM)
     expect(marker).toBeUndefined()
@@ -6476,7 +6433,7 @@ describe('roomStore pending retractions', () => {
 
     roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({
+    expect(roomWindow(roomJid)[0]).toMatchObject({
       id: 'm1',
       isRetracted: true,
     })
@@ -6489,7 +6446,7 @@ describe('roomStore pending retractions', () => {
 
     roomStore.getState().addMessage(roomJid, occupantMessage('m1'))
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0].isRetracted).toBeUndefined()
+    expect(roomWindow(roomJid)[0].isRetracted).toBeUndefined()
   })
 
   it('falls back to the full room JID when neither side has an occupant-id', () => {
@@ -6497,7 +6454,7 @@ describe('roomStore pending retractions', () => {
 
     roomStore.getState().addMessage(roomJid, createMessage('m1', roomJid, 'edaveine', 'to retract'))
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+    expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
   })
 
   it('applies to a resident target without recording anything', () => {
@@ -6506,7 +6463,7 @@ describe('roomStore pending retractions', () => {
 
     roomStore.getState().recordPendingRetraction(roomJid, 'm1', `${roomJid}/edaveine`, 'occ-1')
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+    expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
   })
 
@@ -6516,7 +6473,7 @@ describe('roomStore pending retractions', () => {
 
     await roomStore.getState().loadMessagesFromCache(roomJid)
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({ isRetracted: true })
+    expect(roomWindow(roomJid)[0]).toMatchObject({ isRetracted: true })
     expect(roomStore.getState().pendingRetractions.get(roomJid) ?? []).toHaveLength(0)
     expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
       roomJid,
@@ -6532,7 +6489,7 @@ describe('roomStore pending retractions', () => {
 
     roomStore.getState().mergeRoomMAMMessages(roomJid, [occupantMessage('m1')], {}, true, 'backward')
 
-    expect(roomStore.getState().rooms.get(roomJid)?.messages[0]).toMatchObject({
+    expect(roomWindow(roomJid)[0]).toMatchObject({
       id: 'm1',
       isRetracted: true,
     })
@@ -6606,7 +6563,7 @@ describe('roomStore parity drift regressions', () => {
       const archived: RoomMessage = { ...original, stanzaId: 'archive-123' }
       roomStore.getState().addMessage(roomJid, archived)
 
-      const messages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      const messages = roomWindow(roomJid) || []
       expect(messages).toHaveLength(1)
       expect(messages[0].stanzaId).toBe('archive-123')
       // The runtime mirror must receive the same patched array.
@@ -6638,7 +6595,7 @@ describe('roomStore parity drift regressions', () => {
       roomStore.getState().mergeRoomMAMMessages(roomJid, older, { first: 'cursor-1' }, false, 'backward')
 
       // The resident window slid, but the sidebar preview must stay on the newest message.
-      expect(roomStore.getState().rooms.get(roomJid)?.messages.map((m) => m.id)).toEqual(['old-1', 'old-2'])
+      expect(roomWindow(roomJid).map((m) => m.id)).toEqual(['old-1', 'old-2'])
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('new-1')
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('new-1')
     })
@@ -6654,7 +6611,7 @@ describe('roomStore parity drift regressions', () => {
       roomStore.setState((state) => {
         const rooms = new Map(state.rooms)
         const room = rooms.get(roomJid)!
-        rooms.set(roomJid, { ...room, messages: [], lastMessage: encrypted })
+        rooms.set(roomJid, { ...room, lastMessage: encrypted })
         const roomMeta = new Map(state.roomMeta)
         roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: encrypted })
         return { rooms, roomMeta }
@@ -6673,7 +6630,7 @@ describe('roomStore parity drift regressions', () => {
       const newest = messageAt('new-1', 'alice', 'newest', '2024-01-15T12:00:00Z')
       roomStore.setState((state) => {
         const rooms = new Map(state.rooms)
-        rooms.set(roomJid, { ...rooms.get(roomJid)!, messages: [], lastMessage: newest })
+        rooms.set(roomJid, { ...rooms.get(roomJid)!, lastMessage: newest })
         const roomMeta = new Map(state.roomMeta)
         roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: newest })
         return { rooms, roomMeta }
@@ -6745,7 +6702,7 @@ describe('roomStore parity drift regressions', () => {
       const archived: RoomMessage = { ...own, stanzaId: 'arch-merge' }
       roomStore.getState().mergeRoomMAMMessages(roomJid, [archived], {}, true, 'forward')
 
-      const messages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      const messages = roomWindow(roomJid) || []
       expect(messages).toHaveLength(1)
       expect(messages[0].stanzaId).toBe('arch-merge')
       expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('arch-merge')

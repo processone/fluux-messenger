@@ -3,12 +3,11 @@ import { roomStore } from './roomStore'
 import { createRoom, createRoomMessage } from '../hooks/renderStability.helpers'
 
 /**
- * The room's resident message window lives in two maps — the `rooms` compat
- * entry and `roomRuntime` — and one writer keeps them in step.
+ * The room's resident message window lives in `messages`, keyed by room JID,
+ * and nowhere else: the room entry carries no timeline.
  *
- * These pin the two properties a reader depends on and a hand-written mirror
- * pair kept losing: the maps agree, and a write that changes nothing hands back
- * the same reference.
+ * These pin the two properties every reader depends on — the window has one
+ * home, and a write that changes nothing hands back the same map reference.
  */
 describe('room message window', () => {
   beforeEach(() => {
@@ -19,32 +18,30 @@ describe('room message window', () => {
     })
   })
 
-  it('lands an appended message in BOTH maps, with the same array', () => {
+  it('lands an appended message in the window map', () => {
     roomStore.getState().addRoom(createRoom('a@x', { joined: true }))
     roomStore.getState().addMessage('a@x', createRoomMessage('a@x', 'nick', 'hello', { id: 'm1' }))
 
-    const state = roomStore.getState()
-    const viaCompat = state.rooms.get('a@x')!.messages
-    const viaWindow = state.messages.get('a@x')!
-
-    expect(viaCompat.map((m) => m.id)).toEqual(['m1'])
-    // Same reference, not merely equal contents: a reader that falls back from
-    // one map to the other must not be able to observe two different windows.
-    expect(viaWindow).toBe(viaCompat)
+    expect(roomStore.getState().messages.get('a@x')!.map((m) => m.id)).toEqual(['m1'])
   })
 
-  it('keeps the two maps in step across several appends', () => {
+  it('accumulates across several appends', () => {
     roomStore.getState().addRoom(createRoom('a@x', { joined: true }))
     for (const id of ['m1', 'm2', 'm3']) {
       roomStore.getState().addMessage('a@x', createRoomMessage('a@x', 'nick', id, { id }))
     }
 
-    const state = roomStore.getState()
-    expect(state.rooms.get('a@x')!.messages).toBe(state.messages.get('a@x'))
-    expect(state.rooms.get('a@x')!.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
+    expect(roomStore.getState().messages.get('a@x')!.map((m) => m.id)).toEqual(['m1', 'm2', 'm3'])
   })
 
-  it('leaves roomRuntime referentially identical when a deactivation evicts an already-empty window', () => {
+  it('seeds the window from the resident slice handed to addRoom', () => {
+    const resident = ['m1', 'm2'].map((id) => createRoomMessage('a@x', 'nick', id, { id }))
+    roomStore.getState().addRoom(createRoom('a@x', { joined: true }), resident)
+
+    expect(roomStore.getState().messages.get('a@x')).toBe(resident)
+  })
+
+  it('leaves the window map referentially identical when a deactivation evicts an already-empty window', () => {
     roomStore.getState().addRoom(createRoom('a@x', { joined: true }))
     roomStore.getState().setActiveRoom('a@x')
 
@@ -63,5 +60,6 @@ describe('room message window', () => {
     roomStore.getState().addMessage('a@x', createRoomMessage('a@x', 'nick', 'hello', { id: 'm1' }))
 
     expect(roomStore.getState().rooms.has('a@x')).toBe(false)
+    expect(roomStore.getState().messages.has('a@x')).toBe(false)
   })
 })

@@ -2385,7 +2385,7 @@ test.describe('Reaction bottom-stick (room)', () => {
     const pick = await page.evaluate((jid) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rs = (window as any).__roomStore.getState()
-      const msgs = rs.rooms.get(jid)?.messages ?? []
+      const msgs = rs.messages.get(jid) ?? []
       const lastId: string | null = msgs[msgs.length - 1]?.id ?? null
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const hasReactions = new Set(msgs.filter((m: any) => m.reactions && Object.keys(m.reactions).length > 0).map((m: any) => m.id))
@@ -2540,10 +2540,9 @@ test.describe('Sliding window (load-older past the cap)', () => {
   const readState = (page: Page) => page.evaluate((jid) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rs = (window as any).__roomStore.getState()
-    const room = rs.getRoom(jid)
     const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
     return {
-      count: room?.messages?.length ?? 0,
+      count: (rs.messages.get(jid) ?? []).length,
       atLiveEdge: rs.windowAtLiveEdge.get(jid) ?? true,
       scrollTop: scroller?.scrollTop ?? 0,
     }
@@ -3102,7 +3101,7 @@ test.describe('Insertion drift while scrolled up', () => {
       })
       .sort((a, b) => a.top - b.top)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const msgs: any[] = (window as any).__roomStore.getState().rooms.get(jid)?.messages ?? []
+    const msgs: any[] = (window as any).__roomStore.getState().messages.get(jid) ?? []
     return {
       scrollTop: Math.round(s.scrollTop),
       distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),

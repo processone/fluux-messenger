@@ -244,7 +244,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       const messageStanza = createMockElement('message', {
@@ -804,7 +803,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       // Receive a composing notification from our own nickname
@@ -836,7 +834,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       // Receive a composing notification with different case
@@ -1031,7 +1028,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       const body = '😀 hey @TestUser'
@@ -1087,7 +1083,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       const messageStanza = createMockElement('message', {
@@ -2562,7 +2557,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
       // Original message not in store
       mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
@@ -2605,7 +2599,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       // First call: original not in store. Second call: message now exists (from first correction)
@@ -3485,7 +3478,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       // Simulate message from IRC bridge without id attribute
@@ -3529,7 +3521,6 @@ describe('XMPPClient Message', () => {
         mentionsCount: 0,
         typingUsers: new Set<string>(),
         occupants: new Map(),
-        messages: [],
       })
 
       // Same message received twice (e.g., on room rejoin)

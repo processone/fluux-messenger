@@ -103,7 +103,6 @@ export function getDesignRoom(): DemoRoomData {
       mentionsCount: 0,
       typingUsers: new Set(),
       occupants: new Map(),
-      messages: [],
       lastMessage: DESIGN_ROOM_MESSAGES.at(-1),
     },
     occupants: [

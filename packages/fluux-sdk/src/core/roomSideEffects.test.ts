@@ -47,6 +47,7 @@ import { setupRoomSideEffects } from './roomSideEffects'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
 import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
+import { seedRoomWindow } from '../stores/roomStore.testHelpers'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -88,7 +89,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -129,7 +129,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -167,7 +166,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -181,7 +179,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -211,7 +208,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -240,7 +236,6 @@ describe('setupRoomSideEffects', () => {
         supportsMAM: false,
         isQuickChat: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -282,12 +277,11 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [liveMessage],
         unreadCount: 1,
         mentionsCount: 0,
         typingUsers: new Set(),
-        isBookmarked: true,
-      })
+        isBookmarked: true
+}, [liveMessage])
 
       const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
 
@@ -335,12 +329,11 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [liveMessage],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
-        isBookmarked: true,
-      })
+        isBookmarked: true
+}, [liveMessage])
 
       cleanup = setupRoomSideEffects(mockClient)
       simulateSmResumption(mockClient) // seeds fetchInitiated for joined rooms; no MAM
@@ -372,7 +365,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -423,7 +415,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -473,7 +464,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -519,7 +509,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -557,7 +546,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -570,7 +558,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -613,7 +600,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -674,7 +660,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -722,7 +707,6 @@ describe('setupRoomSideEffects', () => {
         joined: true, // hydrated SM snapshot, not confirmed in the new stream
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -758,7 +742,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -793,7 +776,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -815,12 +797,7 @@ describe('setupRoomSideEffects', () => {
       }
       const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
         .mockImplementation(async (roomJid: string) => {
-          const room = roomStore.getState().rooms.get(roomJid)
-          if (room) {
-            roomStore.getState().updateRoom(roomJid, {
-              messages: [cachedMsg],
-            })
-          }
+          if (roomStore.getState().rooms.has(roomJid)) seedRoomWindow(roomJid, [cachedMsg])
           return [cachedMsg]
         })
 
@@ -858,7 +835,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -873,8 +849,7 @@ describe('setupRoomSideEffects', () => {
       ]
       const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
         .mockImplementation(async (roomJid: string) => {
-          const room = roomStore.getState().rooms.get(roomJid)
-          if (room) roomStore.getState().updateRoom(roomJid, { messages })
+          if (roomStore.getState().rooms.has(roomJid)) seedRoomWindow(roomJid, messages)
           return messages
         })
 
@@ -911,7 +886,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -948,7 +922,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -985,7 +958,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -999,7 +971,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1034,7 +1005,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1070,7 +1040,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1101,7 +1070,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: false,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1139,7 +1107,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1184,12 +1151,11 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [resident],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
-        isBookmarked: true,
-      })
+        isBookmarked: true
+}, [resident])
       roomStore.getState().setActiveRoom(ROOM)
       cleanup = setupRoomSideEffects(mockClient)
 
@@ -1220,7 +1186,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1284,7 +1249,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1326,7 +1290,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1377,12 +1340,11 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [resident],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
-        isBookmarked: true,
-      })
+        isBookmarked: true
+}, [resident])
 
       roomStore.getState().setActiveRoom('room@conference.example.com')
 
@@ -1408,7 +1370,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1421,7 +1382,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1452,7 +1412,6 @@ describe('setupRoomSideEffects', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1504,7 +1463,6 @@ describe('setupRoomSideEffects', () => {
         joined: false,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),

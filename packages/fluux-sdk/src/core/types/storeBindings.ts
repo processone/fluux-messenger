@@ -333,7 +333,7 @@ export interface EventsBindings {
  */
 export interface RoomBindings {
   // Actions
-  addRoom: (room: Room) => void
+  addRoom: (room: Room, resident?: RoomMessage[]) => void
   updateRoom: (roomJid: string, update: Partial<Room>) => void
   removeRoom: (roomJid: string) => void
   setRoomJoined: (roomJid: string, joined: boolean) => void

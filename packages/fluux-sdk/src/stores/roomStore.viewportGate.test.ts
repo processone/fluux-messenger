@@ -77,7 +77,6 @@ function createRoom(jid: string): Room {
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),

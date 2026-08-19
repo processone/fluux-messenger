@@ -370,7 +370,7 @@ describe('setupBackgroundSyncSideEffects', () => {
     ) =>
       roomStore.getState().addRoom({
         jid, name: jid, nickname: 'me', joined: true, isBookmarked: true, supportsMAM: true,
-        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+        occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
         ...overrides,
       })
 
@@ -630,7 +630,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -672,7 +671,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -715,7 +713,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -752,7 +749,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -796,7 +792,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -868,7 +863,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -940,7 +934,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1015,7 +1008,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1119,7 +1111,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: transition === 'join',
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1132,7 +1123,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1218,7 +1208,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1299,7 +1288,6 @@ describe('setupBackgroundSyncSideEffects', () => {
           supportsMAM: true,
           isBookmarked: true,
           occupants: new Map(),
-          messages: [],
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1370,7 +1358,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1431,7 +1418,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1499,7 +1485,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         supportsMAM: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1569,7 +1554,7 @@ describe('setupBackgroundSyncSideEffects', () => {
     const addRoom = (jid: string, supportsMAM: boolean) =>
       roomStore.getState().addRoom({
         jid, name: jid, nickname: 'me', joined: true, isBookmarked: true, supportsMAM,
-        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+        occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
       })
 
     it('catches up a non-active room whose MAM support resolves AFTER the initial 10s pass', async () => {
@@ -1652,7 +1637,7 @@ describe('setupBackgroundSyncSideEffects', () => {
         jid, name: jid, nickname: 'me', joined: true, isBookmarked: true,
         supportsMAM: opts.supportsMAM ?? true,
         isQuickChat: opts.isQuickChat,
-        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+        occupants: new Map(), unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
       })
 
     const seedPreview = (jid: string) =>
@@ -1906,7 +1891,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         joined: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1919,7 +1903,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         isBookmarked: true,
         isQuickChat: true, // Should be excluded
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),
@@ -1957,7 +1940,6 @@ describe('setupBackgroundSyncSideEffects', () => {
         joined: true,
         isBookmarked: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),

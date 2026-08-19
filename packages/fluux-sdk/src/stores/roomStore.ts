@@ -669,20 +669,6 @@ function commitRoomUpdate(
     }
   }
 
-  // The window still reaches `Room`, so a `Partial<Room>` can carry it. Route it
-  // through the one writer rather than letting this become a second one — and
-  // rather than accepting a field only to drop it, which is how `lastMessage`
-  // went missing from the old hand-maintained lists.
-  if ('messages' in update || 'windowAtLiveEdge' in update) {
-    const written = withRoomMessageWindow(
-      { rooms: result.rooms ?? state.rooms, messages: state.messages, windowAtLiveEdge: state.windowAtLiveEdge },
-      roomJid,
-      update.messages ?? state.messages.get(roomJid) ?? [],
-      update.windowAtLiveEdge === undefined ? {} : { atLiveEdge: update.windowAtLiveEdge }
-    )
-    if (written) Object.assign(result, written)
-  }
-
   return result
 }
 
@@ -758,29 +744,20 @@ function withRoomMessageWindow(
   roomJid: string,
   messages: RoomMessage[],
   options: {
-    /** Extra fields for the compat entry only, e.g. a refreshed preview. */
+    /** Fields to patch on the room entry alongside the window, e.g. a preview. */
     roomPatch?: Partial<Room>
-    /**
-     * Move the live-edge flag. Written to the runtime and NOT to the compat
-     * entry: the flag is authoritative on the runtime, which is why
-     * `ROOM_RUNTIME_FIELD_ROUTING` marks it `preserve` — a plain field update
-     * must never silently recenter the window.
-     */
+    /** Move the live-edge flag. Absent leaves it as it was. */
     atLiveEdge?: boolean
   } = {}
 ): Pick<RoomState, 'rooms' | 'messages' | 'windowAtLiveEdge'> | null {
   const existing = state.rooms.get(roomJid)
   if (!existing) return null
 
-  // The compat entry keeps mirroring the window, so `Room` stays a truthful
-  // whole for the consumers that still read it as one.
-  const rooms = new Map(state.rooms)
-  rooms.set(roomJid, {
-    ...existing,
-    ...options.roomPatch,
-    messages,
-    ...(options.atLiveEdge === undefined ? {} : { windowAtLiveEdge: options.atLiveEdge }),
-  })
+  // `rooms` is touched only for the caller's own patch now — the window itself
+  // lives in the two maps below and nowhere else.
+  const rooms = options.roomPatch
+    ? new Map(state.rooms).set(roomJid, { ...existing, ...options.roomPatch })
+    : state.rooms
 
   const current = state.messages.get(roomJid)
   const sameSlice =
@@ -808,7 +785,8 @@ function mergeCachedRoomMessages(
 
   // Shared timeline machine: dedupe (in-memory messages take precedence),
   // sort, and keep-newest trim.
-  const { merged: rawMerged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
+  const resident = state.messages.get(roomJid) ?? []
+  const { merged: rawMerged } = timeline.latestSlice(resident, cachedMessages, roomTimelineConfig())
 
   // XEP-0424: a retraction recorded while this room was unloaded applies here,
   // the moment its target becomes resident.
@@ -879,12 +857,27 @@ export interface RoomState {
   /** Runtime room data - occupants, messages (rebuilt on join) */
   roomRuntime: Map<string, RoomRuntime>
   /**
-   * The resident message window per room, and whether it still touches the
-   * tail. Top-level maps, like `chatStore`'s: the window is not MUC-specific,
-   * and a per-room subscriber to occupancy should not re-render when a message
-   * lands. `withRoomMessageWindow` is the only writer.
+   * The resident message window per room: the slice of history currently held
+   * in memory. Top-level maps, like `chatStore`'s — the window is not
+   * MUC-specific, and a per-room subscriber to occupancy should not re-render
+   * when a message lands. `withRoomMessageWindow` is the only writer.
    */
   messages: Map<string, RoomMessage[]>
+  /**
+   * Whether a room's resident window still holds the newest history, so an
+   * incoming live message can be appended. Sliding the window up via load-older
+   * evicts the newest tail and sets this `false`, gating the append in
+   * {@link RoomState.addMessage}: appending onto a window that no longer touches
+   * the tail would create a visible false-adjacency gap. The gated message is
+   * still persisted and still updates the preview and unread badge; it reloads
+   * on jump-to-latest / recenter.
+   *
+   * EPHEMERAL: never persisted. On reload the resident array is rebuilt from the
+   * newest window (= live edge), so a stored "scrolled-up" value would wrongly
+   * gate live messages.
+   *
+   * A missing entry means "at the live edge"; only an explicit `false` gates.
+   */
   windowAtLiveEdge: Map<string, boolean>
   activeRoomJid: string | null
   // True while activateRoom() is hydrating a room's cache before it becomes active.
@@ -931,7 +924,11 @@ export interface RoomState {
   interiorPlacementVersions: Map<string, number>
 
   // Actions
-  addRoom: (room: Room) => void
+  /**
+   * @param resident - the room's initial message window. Defaults to empty:
+   *   only the snapshot restore arrives with history already in hand.
+   */
+  addRoom: (room: Room, resident?: RoomMessage[]) => void
   updateRoom: (roomJid: string, update: Partial<Room>) => void
   removeRoom: (roomJid: string) => void
   setRoomJoined: (roomJid: string, joined: boolean) => void
@@ -1212,7 +1209,7 @@ export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
   ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage(), loadCoverageFromStorage(), loadPendingRetractionsFromStorage()), // Restore drafts, poll state, history gaps, coverage, and non-anon acks from localStorage
 
-  addRoom: (room) => {
+  addRoom: (room, resident = []) => {
     set((state) => {
       // Split room into entity, metadata, and runtime components
       const entity: RoomEntity = {
@@ -1261,7 +1258,7 @@ export const roomStore = createStore<RoomState>()(
         // outrank a fresh stamp: a floor that moved would silently bury whatever
         // arrived while we were away.
         historyFloor: existingMeta?.historyFloor ?? restoredReadState?.historyFloor ?? new Date(),
-        lastMessage: room.messages?.length > 0 ? findLastNonIgnoredMessage(room.messages, room.jid, room.nickToJidCache) : undefined,
+        lastMessage: resident.length > 0 ? findLastNonIgnoredMessage(resident, room.jid, room.nickToJidCache) : undefined,
         lastInteractedAt: room.lastInteractedAt,
       }
       const runtime: RoomRuntime = {
@@ -1298,11 +1295,7 @@ export const roomStore = createStore<RoomState>()(
       // convention is that absent means edge, so only a room arriving with an
       // explicit `false` records anything.
       const newMessages = new Map(state.messages)
-      newMessages.set(room.jid, room.messages ?? [])
-      const newEdge =
-        room.windowAtLiveEdge === false
-          ? new Map(state.windowAtLiveEdge).set(room.jid, false)
-          : state.windowAtLiveEdge
+      newMessages.set(room.jid, resident)
 
       // Creation stamps the history floor, so the durable copy is written here
       // too — a room joined and never opened still gets its floor recorded.
@@ -1314,7 +1307,6 @@ export const roomStore = createStore<RoomState>()(
         roomMeta: newMeta,
         roomRuntime: newRuntime,
         messages: newMessages,
-        windowAtLiveEdge: newEdge,
       }
     })
   },
@@ -1344,11 +1336,19 @@ export const roomStore = createStore<RoomState>()(
       const newRuntime = new Map(state.roomRuntime)
       newRuntime.delete(roomJid)
 
+      const newMessages = new Map(state.messages)
+      newMessages.delete(roomJid)
+
+      const newLiveEdge = new Map(state.windowAtLiveEdge)
+      newLiveEdge.delete(roomJid)
+
       const out: Partial<RoomState> = {
         rooms: newRooms,
         roomEntities: newEntities,
         roomMeta: newMeta,
         roomRuntime: newRuntime,
+        messages: newMessages,
+        windowAtLiveEdge: newLiveEdge,
       }
       if (state.roomGaps.has(roomJid)) {
         const newGaps = new Map(state.roomGaps)
@@ -1379,7 +1379,7 @@ export const roomStore = createStore<RoomState>()(
       if (!existing) return state
 
       // DON'T set lastInteractedAt on join - only setActiveRoom (user clicking) should set it.
-      // MUC history messages arrive before the join confirmation, so existing.messages may
+      // MUC history messages arrive before the join confirmation, so the resident window may
       // contain history whose timestamps don't reflect actual user interaction.
       // Leaving lastInteractedAt undefined lets allRooms() fall back to lastMessage.timestamp
       // (populated by MAM preview), which correctly reflects each room's latest activity.
@@ -2045,9 +2045,10 @@ export const roomStore = createStore<RoomState>()(
       // IndexedDB (above) and the preview/unread updates below still run;
       // they reload on jump-to-latest.
       const atLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
+      const resident = state.messages.get(roomJid) ?? []
       const appendObservation: timeline.AppendLiveObservation = {}
       const append = timeline.appendLive(
-        existing.messages,
+        resident,
         messageToAdd,
         atLiveEdge,
         roomTimelineConfig(),
@@ -2069,8 +2070,8 @@ export const roomStore = createStore<RoomState>()(
       // The appended set is also the basis for the newest-message preview even
       // when the append was gated (the preview must still advance to the
       // incoming message after the window slid off the live edge).
-      const appendedMessages = append.kind === 'appended' ? append.messages : [...existing.messages, messageToAdd]
-      const newMessages = append.kind === 'appended' ? append.messages : existing.messages
+      const appendedMessages = append.kind === 'appended' ? append.messages : [...resident, messageToAdd]
+      const newMessages = append.kind === 'appended' ? append.messages : resident
       const interiorPlacementPatch = appendObservation.placement === 'interior'
         ? {
             interiorPlacementVersions: new Map(state.interiorPlacementVersions).set(
@@ -2136,7 +2137,7 @@ export const roomStore = createStore<RoomState>()(
       // 'appended'` path, `appendedMessages` is already chronological and
       // `findLastNonIgnoredMessage`'s backward scan finds the true newest
       // message directly. The GATED path is the one that still concatenates
-      // naively (`[...existing.messages, messageToAdd]`, no timeline/sort
+      // naively (`[...resident, messageToAdd]`, no timeline/sort
       // involved at all — the window has slid off the live edge), so a DELAYED
       // arrival (gateway/offline replay, or the MAM {ids} fetch behind deferred
       // poll-closed verification, which emits the ORIGINAL POLL — older than the
@@ -2258,9 +2259,10 @@ export const roomStore = createStore<RoomState>()(
       if (!existing) return state
 
       // Resolve to a single target: id/stanzaId win, origin-id is fallback only.
-      const targetIdx = findMessageIndexById(existing.messages, messageId)
+      const resident = state.messages.get(roomJid) ?? []
+      const targetIdx = findMessageIndexById(resident, messageId)
       let updatedMessage: RoomMessage | undefined
-      const newMessages = targetIdx === -1 ? existing.messages : existing.messages.map((msg, i) => {
+      const newMessages = targetIdx === -1 ? resident : resident.map((msg, i) => {
         if (i !== targetIdx) return msg
 
         // Build new reactions map
@@ -2319,9 +2321,10 @@ export const roomStore = createStore<RoomState>()(
       // Resolve to a single target: id/stanzaId win, origin-id is fallback only.
       // Retractions (XEP-0424) reference the MUC stanza-id; corrections (XEP-0308)
       // reference the sender-assigned origin-id (a MUC may rewrite the message id).
-      const targetIdx = findMessageIndexById(existing.messages, messageId)
+      const resident = state.messages.get(roomJid) ?? []
+      const targetIdx = findMessageIndexById(resident, messageId)
       let updatedMessage: RoomMessage | undefined
-      const newMessages = targetIdx === -1 ? existing.messages : existing.messages.map((msg, i) => {
+      const newMessages = targetIdx === -1 ? resident : resident.map((msg, i) => {
         if (i !== targetIdx) return msg
         updatedMessage = { ...msg, ...updates }
         return updatedMessage
@@ -2382,14 +2385,15 @@ export const roomStore = createStore<RoomState>()(
       const existing = state.rooms.get(roomJid)
       if (!existing) return state
 
-      const targetIdx = existing.messages.findIndex((message) => message.stanzaId === stanzaId)
+      const resident = state.messages.get(roomJid) ?? []
+      const targetIdx = resident.findIndex((message) => message.stanzaId === stanzaId)
       if (targetIdx === -1) return state
 
-      const newMessages = [...existing.messages]
-      const { stanzaId: _staleStanzaId, ...updatedMessage } = existing.messages[targetIdx]
+      const newMessages = [...resident]
+      const { stanzaId: _staleStanzaId, ...updatedMessage } = resident[targetIdx]
       newMessages[targetIdx] = updatedMessage
 
-      void messageCache.updateRoomMessage(roomJid, existing.messages[targetIdx].id, { stanzaId: undefined }, existing.messages[targetIdx].from)
+      void messageCache.updateRoomMessage(roomJid, resident[targetIdx].id, { stanzaId: undefined }, resident[targetIdx].from)
 
       const written = withRoomMessageWindow(state, roomJid, newMessages)
       if (!written) return state
@@ -2417,8 +2421,8 @@ export const roomStore = createStore<RoomState>()(
       ...(actorOccupantId ? { actorOccupantId } : {}),
       retractedAt: Date.now(),
     }
-    const resident = get().rooms.get(roomJid)?.messages
-    const target = resident ? findMessageById(resident, targetId) : undefined
+    const resident = get().messages.get(roomJid) ?? []
+    const target = findMessageById(resident, targetId)
     if (target) {
       // Resolved on the spot — updateMessage carries the write-through to
       // IndexedDB and the search-index removal.
@@ -2440,9 +2444,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   getMessage: (roomJid, messageId) => {
-    const room = get().rooms.get(roomJid)
-    if (!room) return undefined
-    return findMessageById(room.messages, messageId)
+    return findMessageById(get().messages.get(roomJid) ?? [], messageId)
   },
 
   recomputeUnreadForRoom: async (roomJid, options) => {
@@ -2702,7 +2704,7 @@ export const roomStore = createStore<RoomState>()(
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
 
-      const messages = state.messages.get(roomJid) ?? existing.messages
+      const messages = state.messages.get(roomJid) ?? []
 
       const windowAtLiveEdge = state.windowAtLiveEdge.get(roomJid) !== false
       const viewportAtLiveEdge =
@@ -2745,7 +2747,7 @@ export const roomStore = createStore<RoomState>()(
       if (!existing) return state
 
       const slice = state.messages.get(roomJid)
-      const resident = slice?.length ? slice : existing.messages
+      const resident = slice?.length ? slice : (state.messages.get(roomJid) ?? [])
       const newest = resident[resident.length - 1] ?? existing.lastMessage
       if (!newest) return state
 
@@ -2842,13 +2844,13 @@ export const roomStore = createStore<RoomState>()(
           firstNewMessageId: get().firstNewMessageMarkers.get(roomJid),
         }
 
-        const messages = get().messages.get(roomJid) ?? room.messages
+        const messages = get().messages.get(roomJid) ?? []
         // Position the divider at the first message the canonical count would
         // count — same floor, same predicate (see onActivate).
         const activated = notifState.onActivate(notifInput, messages, 'room')
 
         // Determine lastInteractedAt for sidebar sorting
-        const lastMessage = room.messages?.[room.messages.length - 1]
+        const lastMessage = messages[messages.length - 1]
         const lastMessageTimestamp = room.lastMessage?.timestamp ?? lastMessage?.timestamp
         const newLastInteractedAt = lastMessageTimestamp ?? room.lastInteractedAt
 
@@ -3034,7 +3036,7 @@ export const roomStore = createStore<RoomState>()(
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
       if (!meta && !existing) return state
-      const messages = state.messages.get(roomJid) ?? existing?.messages ?? []
+      const messages = state.messages.get(roomJid) ?? []
       const readPointer = meta?.readPointer ?? existing?.readPointer
 
       const divider = notifState.onActivate(
@@ -3082,7 +3084,7 @@ export const roomStore = createStore<RoomState>()(
       const meta = state.roomMeta.get(roomJid)
       if (!existing) return state
 
-      const messages = state.messages.get(roomJid) ?? existing.messages
+      const messages = state.messages.get(roomJid) ?? []
 
       const notifInput: notifState.EntityNotificationState = {
         unreadCount: meta?.unreadCount ?? existing.unreadCount,
@@ -3148,7 +3150,7 @@ export const roomStore = createStore<RoomState>()(
       // window map, falling back to the compat entry.
       // The resolution state machine (stash / clear-pending / forward-only
       // advance / active-divider recompute) is shared — see shared/readMarkerSync.
-      const messages = messagesOverride ?? state.messages.get(roomJid) ?? existing?.messages ?? []
+      const messages = messagesOverride ?? state.messages.get(roomJid) ?? []
       const resolution = resolveRemoteDisplayed(
         {
           unreadCount: meta.unreadCount,
@@ -3332,8 +3334,6 @@ export const roomStore = createStore<RoomState>()(
           password: bookmark.password,
           notifyAllPersistent: bookmark.notifyAll,
           occupants: new Map(),
-          messages: [],
-          windowAtLiveEdge: true,
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -3610,13 +3610,13 @@ export const roomStore = createStore<RoomState>()(
     }
 
     try {
-      const room = get().rooms.get(roomJid)
-      if (!room || room.messages.length === 0) {
+      const resident = get().messages.get(roomJid) ?? []
+      if (!get().rooms.has(roomJid) || resident.length === 0) {
         return []
       }
 
       // Get the oldest message timestamp we have in memory
-      const oldestInMemory = room.messages[0]
+      const oldestInMemory = resident[0]
       const beforeDate = oldestInMemory.timestamp
 
       // Load older messages from IndexedDB
@@ -3631,13 +3631,14 @@ export const roomStore = createStore<RoomState>()(
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
+          const resident = state.messages.get(roomJid) ?? []
 
           // Dedupe (in-memory messages take precedence), sort, keep-oldest trim
           // (load-older slides the window so scroll-back past the bound works).
           // If keep-oldest evicted the newest resident message, the window has
           // slid off the live edge → gate live appends in addMessage.
           const { merged, newestEvicted } = timeline.loadOlderSlice(
-            existing.messages,
+            resident,
             cachedMessages,
             roomTimelineConfig()
           )
@@ -3662,13 +3663,13 @@ export const roomStore = createStore<RoomState>()(
     }
 
     try {
-      const room = get().rooms.get(roomJid)
-      if (!room || room.messages.length === 0) {
+      const resident = get().messages.get(roomJid) ?? []
+      if (!get().rooms.has(roomJid) || resident.length === 0) {
         return []
       }
 
       // Get the newest message timestamp we have in memory
-      const newestInMemory = room.messages[room.messages.length - 1]
+      const newestInMemory = resident[resident.length - 1]
       const afterDate = newestInMemory.timestamp
 
       // Load newer messages from IndexedDB
@@ -3688,11 +3689,12 @@ export const roomStore = createStore<RoomState>()(
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
+          const resident = state.messages.get(roomJid) ?? []
 
           // Dedupe (in-memory messages take precedence), sort, keep-newest trim
           // (load-newer slides the window back down toward the live edge).
           const { merged } = timeline.loadNewerSlice(
-            existing.messages,
+            resident,
             cachedMessages,
             roomTimelineConfig()
           )
@@ -3877,7 +3879,7 @@ export const roomStore = createStore<RoomState>()(
       if (!room) return state
 
       // Get existing messages for this room
-      const existingMessages = room.messages || []
+      const existingMessages = state.messages.get(roomJid) ?? []
 
       // Shared timeline machine: archive-id backfill onto resident messages
       // (so an outgoing reflection gains its MAM cursor — was a chat-only
@@ -4353,8 +4355,8 @@ export const roomStore = createStore<RoomState>()(
   },
 
   activeMessages: () => {
-    const room = get().activeRoom()
-    return room?.messages ?? EMPTY_MESSAGE_ARRAY
+    const jid = get().activeRoomJid
+    return (jid ? get().messages.get(jid) : undefined) ?? EMPTY_MESSAGE_ARRAY
   },
 
   totalMentionsCount: () => {

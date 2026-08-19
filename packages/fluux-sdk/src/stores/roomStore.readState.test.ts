@@ -53,7 +53,7 @@ function rmsg(id: string, ms: number, roomJid = ROOM): RoomMessage {
   } as RoomMessage
 }
 
-function makeRoom(jid = ROOM, messages: RoomMessage[] = []): Room {
+function makeRoom(jid = ROOM): Room {
   return {
     jid,
     name: 'Room',
@@ -61,7 +61,6 @@ function makeRoom(jid = ROOM, messages: RoomMessage[] = []): Room {
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages,
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),
@@ -128,7 +127,7 @@ describe('room read state persistence', () => {
   })
 
   it('persists the pointer so it survives a store reset + rehydrate', () => {
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m4', 4000), rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m4', 4000), rmsg('m5', 5000)])
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     // Whatever the in-memory state, the durable copy is what matters here.
@@ -172,7 +171,7 @@ describe('room read state persistence', () => {
   })
 
   it('rehydrates the persisted pointer into roomMeta on the next session', () => {
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m4', 4000), rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m4', 4000), rmsg('m5', 5000)])
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     restartSession()
@@ -201,7 +200,7 @@ describe('room read state persistence', () => {
   })
 
   it('persists a pointer advanced through commitRoomUpdate (markReadToNewest)', () => {
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m1', 1000), rmsg('m2', 2000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m1', 1000), rmsg('m2', 2000)])
     roomStore.getState().markReadToNewest(ROOM)
 
     // The markReadToNewest save is the one under test, and it coalesced behind
@@ -218,10 +217,10 @@ describe('room read state persistence', () => {
   // that moment roomMeta knows nothing about the other room.
   it('keeps the row of a room that has not been re-added this session', () => {
     roomStore.getState().addRoom(makeRoom(OTHER_ROOM))
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
 
     restartSession()
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     // Observe the row the ADVANCE wrote, not the one addRoom wrote before it.
@@ -232,7 +231,7 @@ describe('room read state persistence', () => {
   // setBookmark is the other place a room entity is born: a bookmark pushed
   // from another device materialises a room we have never joined.
   it('stamps and restores read state for a room born from a bookmark', () => {
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
     const floor = roomStore.getState().roomMeta.get(ROOM)?.historyFloor
 
@@ -299,7 +298,7 @@ describe('room read state persistence', () => {
   // unreadCount is derived from the archive against the pointer, not stored:
   // a persisted count outlives the messages it counted and comes back wrong.
   it('does not persist unreadCount', () => {
-    roomStore.getState().addRoom(makeRoom(ROOM, [rmsg('m5', 5000)]))
+    roomStore.getState().addRoom(makeRoom(ROOM), [rmsg('m5', 5000)])
     roomStore.getState().advanceReadPointer(ROOM, 'm5')
 
     // The blob under test is the one the ADVANCE produced — a pointer save is

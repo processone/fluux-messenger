@@ -26,7 +26,6 @@ function createRoom(jid: string, options: Partial<Room> = {}): Room {
     autojoin: options.autojoin,
     password: options.password,
     occupants: options.occupants || new Map(),
-    messages: options.messages || [],
     unreadCount: options.unreadCount || 0,
     mentionsCount: options.mentionsCount || 0,
     typingUsers: options.typingUsers || new Set(),
@@ -282,7 +281,8 @@ describe('useRoom hook', () => {
       ]
 
       act(() => {
-        roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages, joined: true }))
+        roomStore.getState().addRoom(createRoom('test@conference.example.com', { joined: true
+        }), messages)
         roomStore.getState().setActiveRoom('test@conference.example.com')
       })
 
@@ -380,9 +380,8 @@ describe('useRoom hook', () => {
       act(() => {
         roomStore.getState().addRoom(createRoom('test@conference.example.com', {
           joined: true,
-          messages: [liveMessage],
           unreadCount: 1,
-        }))
+        }), [liveMessage])
       })
 
       // Replace loadMessagesFromCache on the store to record activeRoomJid at call time.
@@ -424,8 +423,7 @@ describe('useRoom hook', () => {
       act(() => {
         roomStore.getState().addRoom(createRoom('test@conference.example.com', {
           joined: true,
-          messages: [existingMessage],
-        }))
+        }), [existingMessage])
       })
 
       const originalLoad = roomStore.getState().loadMessagesFromCache

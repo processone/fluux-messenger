@@ -372,7 +372,6 @@ describe('Chat Network Scenario Journey Tests', () => {
         joined: true,
         supportsMAM: true,
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),

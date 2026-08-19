@@ -124,10 +124,8 @@ export function useRoomActive() {
       ...activeRoomEntity,
       ...activeRoomMeta,
       ...activeRoomRuntime,
-      messages: activeMessages,
-      windowAtLiveEdge: activeWindowAtLiveEdge,
     }
-  }, [activeRoomEntity, activeRoomMeta, activeRoomRuntime, activeMessages, activeWindowAtLiveEdge])
+  }, [activeRoomEntity, activeRoomMeta, activeRoomRuntime])
 
   // Easter egg animation state
   const activeAnimation = useRoomStore((s) => s.activeAnimation)
@@ -322,7 +320,7 @@ export function useRoomActive() {
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().rooms.get(id)?.messages ?? []),
+        getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().messages.get(id) ?? []),
         clearInvalidArchiveCursor: (id, cursor) => roomStore.getState().clearMessageStanzaId(id, cursor),
         queryMAM: async (id, beforeId) => {
           await client.messages.queryRoomMAM({ roomJid: id, before: beforeId })
@@ -344,7 +342,7 @@ export function useRoomActive() {
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadMessagesFromCache(id, { limit }),
-        getMessages: (id) => roomStore.getState().rooms.get(id)?.messages || [],
+        getMessages: (id) => roomStore.getState().messages.get(id) ?? [],
         getGap: (id) => roomStore.getState().roomGaps.get(id),
         queryMAM: async (id, options) => {
           await client.messages.queryRoomMAM({ roomJid: id, ...options })

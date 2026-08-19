@@ -156,12 +156,11 @@ function seedRoom(jid: string, messages: RoomMessage[], seenMessageId?: string):
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages,
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),
   }
-  roomStore.getState().addRoom(room)
+  roomStore.getState().addRoom(room, messages)
   if (seenMessageId !== undefined) {
     const seen = messages.find((m) => m.id === seenMessageId)
     roomStore.setState((s) => {

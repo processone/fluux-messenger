@@ -8,6 +8,7 @@
 
 import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
+import { roomStore } from './roomStore'
 
 /** Helper to create test rooms */
 export function createRoom(jid: string, options: Partial<Room> = {}): Room {
@@ -21,7 +22,6 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
     autojoin: options.autojoin,
     password: options.password,
     occupants: options.occupants || new Map(),
-    messages: options.messages || [],
     unreadCount: options.unreadCount || 0,
     mentionsCount: options.mentionsCount || 0,
     subject: options.subject,
@@ -74,4 +74,17 @@ export function createMessage(
     timestamp,
     isOutgoing,
   }
+}
+
+/**
+ * The room's resident message window. The store keeps it in `messages`, keyed
+ * by room JID; the room entry itself carries no timeline.
+ */
+export function roomWindow(jid: string): RoomMessage[] {
+  return roomStore.getState().messages.get(jid) ?? []
+}
+
+/** Seed a room's resident window on an entry that already exists. */
+export function seedRoomWindow(jid: string, messages: RoomMessage[]): void {
+  roomStore.setState((s) => ({ messages: new Map(s.messages).set(jid, messages) }))
 }

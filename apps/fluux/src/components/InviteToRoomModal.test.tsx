@@ -118,7 +118,6 @@ function createMockRoom(overrides?: Partial<Room>): Room {
     nickname: 'testuser',
     joined: true,
     occupants,
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     ...overrides,

@@ -188,7 +188,7 @@ export function setupRoomSideEffects(
       // Load IndexedDB cache first to ensure we have the latest messages
       // before deciding the MAM query direction. Without this, a foreground
       // trigger can race with the active-room subscriber's cache load, and
-      // room.messages may be empty — causing a backward "before:''" query
+      // the resident window may be empty — causing a backward "before:''" query
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 

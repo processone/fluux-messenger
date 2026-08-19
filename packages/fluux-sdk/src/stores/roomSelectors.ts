@@ -142,7 +142,7 @@ export const roomSelectors = {
    * Returns a selector function for the given room JID.
    */
   messagesForRoom: (roomJid: string) => (state: RoomState): RoomMessage[] => {
-    return state.rooms.get(roomJid)?.messages ?? EMPTY_MESSAGE_ARRAY
+    return state.messages.get(roomJid) ?? EMPTY_MESSAGE_ARRAY
   },
 
   /**
@@ -165,7 +165,7 @@ export const roomSelectors = {
    */
   activeMessages: (state: RoomState): RoomMessage[] => {
     if (!state.activeRoomJid) return EMPTY_MESSAGE_ARRAY
-    return state.rooms.get(state.activeRoomJid)?.messages ?? EMPTY_MESSAGE_ARRAY
+    return state.messages.get(state.activeRoomJid) ?? EMPTY_MESSAGE_ARRAY
   },
 
   /**

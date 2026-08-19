@@ -8,7 +8,6 @@ function createRoom(overrides: Partial<Room> = {}): Room {
     name: 'Test Room',
     joined: true,
     nickname: 'Me',
-    messages: [],
     occupants: new Map(),
     typingUsers: new Set(),
     unreadCount: 0,

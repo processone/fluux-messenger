@@ -1916,16 +1916,16 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   useTypeToFocus(composerRef)
 
   // Collect mention-candidate nicks (occupants + history authors + affiliated
-  // members). Read NON-reactively from the store on each render: this must NOT
-  // subscribe to room.messages (that would re-render the composer on every
-  // message). Recomputed each render so it stays fresh while typing, without a
+  // members). Read NON-reactively from the store on each render: subscribing to
+  // the room's message window would re-render the composer on every message.
+  // Recomputed each render so it stays fresh while typing, without a
   // subscription. (Do not memoize on [roomJid] — that would freeze the set at
   // room-entry and miss later authors.)
   const messageNicks = (() => {
     const nicks = new Set<string>()
-    const liveRoom = roomStore.getState().getRoom(roomJid)
-    for (const msg of liveRoom?.messages ?? []) nicks.add(msg.nick)
-    for (const member of liveRoom?.affiliatedMembers ?? []) {
+    const rs = roomStore.getState()
+    for (const msg of rs.messages.get(roomJid) ?? []) nicks.add(msg.nick)
+    for (const member of rs.getRoom(roomJid)?.affiliatedMembers ?? []) {
       if (member.nick) nicks.add(member.nick)
     }
     return nicks

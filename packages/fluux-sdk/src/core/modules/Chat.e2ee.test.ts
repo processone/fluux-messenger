@@ -1180,7 +1180,6 @@ describe('Chat E2EE wiring', () => {
             nickname: 'me',
             joined: true,
             occupants: new Map(),
-            messages: [],
             unreadCount: 0,
             mentionsCount: 0,
             typingUsers: new Set(),
@@ -1500,7 +1499,7 @@ describe('Chat E2EE wiring', () => {
      */
     function makeDepsWithOriginal(options: {
       manager: E2EEManager
-      originalBody: string
+      originalBody: string,
     }): {
       deps: ModuleDependencies
       capturedStanzas: Element[]

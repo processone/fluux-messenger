@@ -340,10 +340,10 @@ export interface RoomRuntime {
 }
 
 /**
- * A MUC room (group chat).
- *
- * Contains all room state including occupants, messages, and bookmark settings.
- * This is the combined type that includes entity, metadata, and runtime fields.
+ * A MUC room (group chat): occupants, bookmark settings and the rest of the
+ * room's own state. Not its messages — the resident message window is keyed by
+ * room JID in `roomStore.messages`, so a subscriber to occupancy does not
+ * re-render when a message lands.
  *
  * @remarks
  * Internally, the store separates entity, metadata, and runtime into different
@@ -352,42 +352,7 @@ export interface RoomRuntime {
  *
  * @category MUC
  */
-/**
- * A room's resident message window: the slice of history currently held in
- * memory, and whether it still touches the tail.
- *
- * Separate from {@link RoomRuntime} because it is not MUC-specific. `chatStore`
- * has kept the same two things as top-level maps all along; this is the room
- * side saying the same thing. Occupancy and the nick/occupant-id caches stay on
- * the runtime — those exist because MUC hides real JIDs.
- *
- * @category MUC
- */
-export interface RoomMessageWindow {
-  /** Messages in this room */
-  messages: RoomMessage[]
-  /**
-   * Whether the resident `messages` array is currently at the live edge (holds the
-   * newest history) so an incoming live message can be appended. Sliding the window
-   * up via load-older (which evicts the newest tail) sets this `false`, gating the
-   * append in {@link RoomState.addMessage}: appending a fresh message onto a window
-   * that no longer touches the tail would create a visible false-adjacency gap. The
-   * gated message is still persisted to IndexedDB and updates the sidebar preview /
-   * unread badge; it reloads on jump-to-latest / recenter.
-   *
-   * EPHEMERAL: this lives only on the (non-persisted) runtime. On reload the resident
-   * array is rebuilt from the newest window (= live edge), so a persisted "scrolled-up"
-   * value would wrongly gate live messages.
-   *
-   * OPTIONAL with "absent or `true` = at the live edge; only an explicit `false` gates"
-   * (parity with chatStore's `windowAtLiveEdge` map). The store's own rooms are seeded
-   * `true` on creation; the `!== false` read means an unset value behaves as the live
-   * edge, so ad-hoc `Room` literals don't have to specify it.
-   */
-  windowAtLiveEdge?: boolean
-}
-
-export interface Room extends RoomEntity, RoomMetadata, RoomRuntime, RoomMessageWindow {}
+export interface Room extends RoomEntity, RoomMetadata, RoomRuntime {}
 
 /**
  * Room capabilities discovered via disco#info (XEP-0030/XEP-0045 §6.4).

@@ -150,7 +150,6 @@ describe('mdsSideEffects real IndexedDB cache integration', () => {
       joined: true,
       isBookmarked: false,
       occupants: new Map(),
-      messages: [],
       unreadCount: 0,
       mentionsCount: 0,
       typingUsers: new Set(),

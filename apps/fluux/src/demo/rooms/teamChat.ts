@@ -234,7 +234,6 @@ export function getTeamRoom(): DemoRoomData {
       mentionsCount: 0,
       typingUsers: new Set(),
       occupants: new Map(),
-      messages: [],
       lastMessage: TEAM_ROOM_MESSAGES.at(-1),
     },
     occupants: [

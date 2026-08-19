@@ -105,7 +105,6 @@ const makeRoom = (over: Partial<Room> = {}): Room =>
     isBookmarked: true,
     autojoin: false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set<string>(),

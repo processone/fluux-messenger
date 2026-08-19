@@ -229,7 +229,7 @@ export function useRoomActions() {
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().rooms.get(id)?.messages ?? []),
+        getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().messages.get(id) ?? []),
         clearInvalidArchiveCursor: (id, cursor) => roomStore.getState().clearMessageStanzaId(id, cursor),
         queryMAM: async (id, beforeId) => {
           await client.messages.queryRoomMAM({ roomJid: id, before: beforeId })

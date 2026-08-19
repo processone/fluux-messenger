@@ -36,6 +36,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
 })
 import * as messageCache from '../utils/messageCache'
 import { makeCacheOrderKey, type ExactPosition } from './shared/readState'
+import { roomWindow } from './roomStore.testHelpers'
 
 const countRoomUnreadInArchiveImplementation = vi.mocked(messageCache.countRoomUnreadInArchive).getMockImplementation()!
 const saveRoomMessageWithResultImplementation = vi.mocked(messageCache.saveRoomMessageWithResult).getMockImplementation()!
@@ -80,7 +81,6 @@ function createRoom(jid: string): Room {
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),
@@ -552,7 +552,7 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     // before zulu), not arrival order — the load-bearing invariant
     // messageTimeline.test.ts pins at the pure-function level; here it is
     // asserted through the real store.
-    expect(roomStore.getState().rooms.get(ROOM)?.messages.map((m) => m.from)).toEqual([
+    expect(roomWindow(ROOM).map((m) => m.from)).toEqual([
       `${ROOM}/alice`,
       `${ROOM}/zulu`,
     ])
@@ -679,7 +679,6 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     ])
     roomStore.setState((state) => {
       const rooms = new Map(state.rooms)
-      rooms.set(ROOM, { ...rooms.get(ROOM)!, messages: [p0, p1] })
       return { rooms, messages: new Map(state.messages).set(ROOM, [p0, p1]) }
     })
     setMeta({

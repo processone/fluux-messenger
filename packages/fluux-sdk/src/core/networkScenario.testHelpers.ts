@@ -57,7 +57,6 @@ export function makeRoom(config: TestRoomConfig): Room {
     isBookmarked: config.isBookmarked ?? true,
     isQuickChat: config.isQuickChat ?? false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),

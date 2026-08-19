@@ -88,7 +88,7 @@ export function installDemoLoadOlder(client: MAMable): void {
       return { messages: [], complete: true }
     }
     await new Promise((r) => setTimeout(r, 80)) // mimic a network round-trip
-    const oldest = rs.getRoom(roomJid)?.messages?.[0]
+    const oldest = rs.messages.get(roomJid)?.[0]
     const start = roomGenerated.get(roomJid) ?? 0
     if (!oldest || start >= MAX_OLDER) {
       rs.mergeRoomMAMMessages(roomJid, [], { count: 0 }, true, 'backward')

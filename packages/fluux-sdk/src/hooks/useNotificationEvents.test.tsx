@@ -157,7 +157,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           notifyAllPersistent: true,
           mentionsCount: 0,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })
@@ -200,7 +199,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           notifyAllPersistent: true,
           mentionsCount: 0,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })
@@ -243,7 +241,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           notifyAllPersistent: true,
           mentionsCount: 0,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })
@@ -284,7 +281,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           notifyAllPersistent: true,
           mentionsCount: 0,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })
@@ -422,7 +418,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           notifyAllPersistent: true,
           mentionsCount: 0,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })
@@ -850,7 +845,6 @@ describe('useNotificationEvents', () => {
           joined: true,
           unreadCount: 2,
           mentionsCount: 1,
-          messages: [],
         })
         triggerRoomStoreUpdate()
       })

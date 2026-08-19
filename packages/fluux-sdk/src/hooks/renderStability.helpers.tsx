@@ -74,7 +74,6 @@ export function createRoom(jid: string, options: Partial<Room> = {}): Room {
     autojoin: options.autojoin,
     password: options.password,
     occupants: options.occupants ?? new Map(),
-    messages: options.messages ?? [],
     unreadCount: options.unreadCount ?? 0,
     mentionsCount: options.mentionsCount ?? 0,
     typingUsers: options.typingUsers ?? new Set(),

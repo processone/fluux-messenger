@@ -67,6 +67,7 @@ import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import * as messageCache from '../utils/messageCache'
 import type { ReadPointer } from '../stores/shared/readPointer'
+import { roomWindow } from '../stores/roomStore.testHelpers'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -901,7 +902,10 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         joined: true,
         isBookmarked: false,
         occupants: new Map(),
-        messages: [{
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set()
+}, [{
           type: 'groupchat',
           id: 'enc-1',
           roomJid: ROOM,
@@ -911,11 +915,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
           timestamp: new Date('2026-06-10T00:02:00Z'),
           isOutgoing: false,
           encryptedPayload: DUMMY_PAYLOAD_XML,
-        }],
-        unreadCount: 0,
-        mentionsCount: 0,
-        typingUsers: new Set(),
-      })
+        }])
 
       // Model catch-up already complete, with a resolvable coverage bottom —
       // the realistic state by the time a deferred decrypt runs — and a
@@ -953,7 +953,7 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
 
       await xmppClient.retryPendingDecrypts()
 
-      const messages = roomStore.getState().rooms.get(ROOM)?.messages ?? []
+      const messages = roomWindow(ROOM) ?? []
       expect(messages.find((m) => m.id === 'enc-1')?.body).toBe('hello')
       expect(messages.find((m) => m.id === 'enc-1')?.encryptedPayload).toBeUndefined()
       // The inflated badge is corrected once the recount is triggered.

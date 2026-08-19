@@ -38,7 +38,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const ROOM = 'room@conference.example.com'
 
-function createRoom(messages: RoomMessage[]): Room {
+function createRoom(): Room {
   return {
     jid: ROOM,
     name: 'room',
@@ -46,7 +46,6 @@ function createRoom(messages: RoomMessage[]): Room {
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages,
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),
@@ -55,7 +54,7 @@ function createRoom(messages: RoomMessage[]): Room {
 
 function seedRoom(messages: RoomMessage[]) {
   roomStore.setState({ rooms: new Map(), activeRoomJid: null })
-  roomStore.getState().addRoom(createRoom(messages))
+  roomStore.getState().addRoom(createRoom(), messages)
   roomStore.getState().setActiveRoom(ROOM)
   connectionStore.getState().setStatus('online')
 }

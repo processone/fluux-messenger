@@ -74,7 +74,6 @@ function createMockRoom(jid: string, overrides: Partial<Room> = {}): Room {
     joined: false,
     isBookmarked: false,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set<string>(),
@@ -169,9 +168,9 @@ describe('roomSelectors', () => {
   describe('messagesForRoom', () => {
     it('should return messages for given room', () => {
       const messages = [createMockRoomMessage('1', 'room@conference.example.com')]
-      const room = createMockRoom('room@conference.example.com', { messages })
+      const room = createMockRoom('room@conference.example.com')
       const rooms = new Map([['room@conference.example.com', room]])
-      const state = createMockState({ rooms })
+      const state = createMockState({ rooms, messages: new Map([['room@conference.example.com', messages]]) })
       const result = roomSelectors.messagesForRoom('room@conference.example.com')(state)
       expect(result).toBe(messages)
     })

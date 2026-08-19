@@ -306,7 +306,6 @@ describe('SDK Event Bindings Integration', () => {
         autojoin: true,
         nickname: 'Me',
         occupants: new Map(),
-        messages: [],
         unreadCount: 0,
         mentionsCount: 0,
         typingUsers: new Set(),

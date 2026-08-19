@@ -54,10 +54,7 @@ const seedChatMessages = (messages: Array<{ timestamp?: Date; stanzaId?: string 
 }
 
 const seedRoomMessages = (messages: Array<{ timestamp?: Date; stanzaId?: string }>) => {
-  const rooms = new Map(roomStore.getState().rooms)
-  const room = rooms.get(ROOM)!
-  rooms.set(ROOM, { ...room, messages: messages as never })
-  roomStore.setState({ rooms })
+  roomStore.setState((s) => ({ messages: new Map(s.messages).set(ROOM, messages as never) }))
 }
 
 beforeEach(() => {
@@ -91,7 +88,6 @@ beforeEach(() => {
     nickname: 'me',
     joined: true,
     occupants: new Map(),
-    messages: [],
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),

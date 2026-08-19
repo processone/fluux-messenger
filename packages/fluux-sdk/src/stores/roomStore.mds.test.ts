@@ -108,12 +108,11 @@ function seedRoom(
     joined: true,
     isBookmarked: false,
     occupants: new Map(),
-    messages,
     unreadCount: 0,
     mentionsCount: 0,
     typingUsers: new Set(),
   }
-  roomStore.getState().addRoom(room)
+  roomStore.getState().addRoom(room, messages)
   if (seenMessageId !== undefined) {
     // A pointer resolved from a resident message is KEYED, as `makeReadPointer`
     // always writes it. An explicit `pointerTimestamp` is the opposite case by

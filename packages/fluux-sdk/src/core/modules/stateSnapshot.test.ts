@@ -67,7 +67,6 @@ function makeRoom(jid: string, overrides: Partial<Room> = {}): Room {
     mentionsCount: 0,
     occupants: new Map(),
     typingUsers: new Set(),
-    messages: [],
     ...overrides,
   } as Room
 }
@@ -152,7 +151,6 @@ describe('StateSnapshot', () => {
           isBookmarked: true,
           autojoin: true,
           readPointer: { order: { role: 'floor', timestamp: new Date(readAt.getTime()).getTime() }, identity: { state: 'local', messageId: 'msg-42' } },
-          messages: [],
         }],
       })
 
@@ -308,7 +306,6 @@ describe('StateSnapshot', () => {
           unreadCount: 0,
           mentionsCount: 0,
           isBookmarked: false,
-          messages: [],
         }],
         profile: { avatarHash: 'stale-hash', nickname: 'StaleNick' },
       })

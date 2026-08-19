@@ -39,7 +39,6 @@ export function getBoardRoom(): DemoRoomData {
       mentionsCount: 0,
       typingUsers: new Set(),
       occupants: new Map(),
-      messages: [],
       lastMessage: BOARD_ROOM_MESSAGES.at(-1),
     },
     occupants: [

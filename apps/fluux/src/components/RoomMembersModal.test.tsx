@@ -112,7 +112,6 @@ function createMockRoom(overrides?: Partial<Room>): Room {
     ],
     unreadCount: 0,
     mentionsCount: 0,
-    messages: [],
     typingUsers: [],
     ...overrides,
   } as Room

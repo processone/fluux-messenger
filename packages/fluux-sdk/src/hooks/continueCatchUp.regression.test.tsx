@@ -89,7 +89,6 @@ describe('continueCatchUp always clears the MAM loading flag', () => {
       nickname: 'me',
       joined: true,
       occupants: new Map(),
-      messages: [],
       unreadCount: 0,
       mentionsCount: 0,
       typingUsers: new Set(),

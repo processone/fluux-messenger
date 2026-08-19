@@ -29,7 +29,6 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
   const rooms = new Map()
   rooms.set(JID, {
     jid: JID,
-    messages: opts.messages,
     unreadCount: 0,
     mentionsCount: 0,
     readPointer,
@@ -42,10 +41,16 @@ function seed(opts: { lastSeen: string | undefined; marker: string | undefined; 
     readPointer,
   })
   const roomRuntime = new Map()
-  roomRuntime.set(JID, { occupants: new Map(), messages: opts.messages })
+  roomRuntime.set(JID, { occupants: new Map() })
   const markers = new Map<string, string>()
   if (opts.marker) markers.set(JID, opts.marker)
-  roomStore.setState({ rooms, roomMeta, roomRuntime, firstNewMessageMarkers: markers })
+  roomStore.setState({
+    rooms,
+    roomMeta,
+    roomRuntime,
+    messages: new Map([[JID, opts.messages]]),
+    firstNewMessageMarkers: markers,
+  })
 }
 
 describe('roomStore.resyncDividerToReadPointer', () => {

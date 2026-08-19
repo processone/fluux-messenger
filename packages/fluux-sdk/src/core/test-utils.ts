@@ -48,7 +48,6 @@ export const createMockRoom = (jid: string, overrides: Partial<Room> = {}): Room
   avatarFromPresence: overrides.avatarFromPresence,
   occupants: overrides.occupants ?? new Map(),
   selfOccupant: overrides.selfOccupant,
-  messages: overrides.messages ?? [],
   unreadCount: overrides.unreadCount ?? 0,
   mentionsCount: overrides.mentionsCount ?? 0,
   typingUsers: overrides.typingUsers ?? new Set(),

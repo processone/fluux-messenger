@@ -301,7 +301,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
 
           if (result.shouldNotify) {
             // Notify at most once per message id: a re-hydration that grows
-            // room.messages must not re-fire for a message already delivered.
+            // the resident window must not re-fire for a message already delivered.
             if (lastNotifiedRoomMessageIdRef.current.get(room.jid) === msg.id) break
             onRoomMessage(room, msg, result.isMention)
             lastNotifiedRoomMessageIdRef.current.set(room.jid, msg.id)

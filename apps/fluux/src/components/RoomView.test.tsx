@@ -77,7 +77,6 @@ const createRoom = (overrides: Partial<Room> & { occupantsList?: RoomOccupant[] 
     name: 'Test Room',
     joined: true,
     nickname: 'Me', // Our nick in the room
-    messages: [],
     occupants: occupantsMap,
     ...(occupantIdToNick.size > 0 && { occupantIdToNick }),
     typingUsers: new Set<string>(),

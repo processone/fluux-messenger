@@ -161,15 +161,12 @@ describe('roomStore throttled persistence', () => {
   // it has a `roomMeta` entry, and the message id is resident. `addRoom` with
   // a populated `messages` array satisfies the last three.
   it('coalesces room read state and keeps the latest pointer', () => {
-    roomStore.getState().addRoom(
-      createRoom(ROOM, {
-        joined: true,
-        messages: [
-          createMessage('r1', ROOM, 'alice', 'first', false, new Date(1000)),
-          createMessage('r2', ROOM, 'alice', 'second', false, new Date(2000)),
-        ],
-      })
-    )
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+    }), [
+      createMessage('r1', ROOM, 'alice', 'first', false, new Date(1000)),
+      createMessage('r2', ROOM, 'alice', 'second', false, new Date(2000)),
+    ])
     localStorageMock.setItem.mockClear()
 
     // NOTE: `addRoom` itself ends with `persistRoomReadState`, so the
@@ -195,15 +192,12 @@ describe('roomStore throttled persistence', () => {
         [ROOM2, { bottomId: 'cov-pending' }],
       ]),
     })
-    roomStore.getState().addRoom(
-      createRoom(ROOM, {
-        joined: true,
-        messages: [
-          createMessage('read-first', ROOM, 'alice', 'a', false, new Date(1000)),
-          createMessage('read-pending', ROOM, 'alice', 'b', false, new Date(2000)),
-        ],
-      })
-    )
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+    }), [
+      createMessage('read-first', ROOM, 'alice', 'a', false, new Date(1000)),
+      createMessage('read-pending', ROOM, 'alice', 'b', false, new Date(2000)),
+    ])
     // Leave a pending write on each of the three keys. Gaps and coverage open
     // their window on the first clear; read state's is already open, since
     // `addRoom` above ended with `persistRoomReadState`.
@@ -234,15 +228,12 @@ describe('roomStore throttled persistence', () => {
   })
 
   it('_clearAllRoomReadStateForTesting leaves no row to resurrect', () => {
-    roomStore.getState().addRoom(
-      createRoom(ROOM, {
-        joined: true,
-        messages: [
-          createMessage('r-first', ROOM, 'alice', 'a', false, new Date(1000)),
-          createMessage('r-pending', ROOM, 'alice', 'b', false, new Date(2000)),
-        ],
-      })
-    )
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+    }), [
+      createMessage('r-first', ROOM, 'alice', 'a', false, new Date(1000)),
+      createMessage('r-pending', ROOM, 'alice', 'b', false, new Date(2000)),
+    ])
     // `addRoom` already opened the read-state window, so both of these
     // coalesce and 'r-pending' is left sitting in the pending thunk.
     roomStore.getState().advanceReadPointer(ROOM, 'r-first')
@@ -540,8 +531,7 @@ describe('roomStore gap/coverage structural durability', () => {
   it('persists a coverage REPLACEMENT that was coalesced into an open window', () => {
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
-      messages: [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
-    }))
+    }), [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))])
 
     createCoverage(ROOM, 'deep-old', 'top-1')
     expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'deep-old', topId: 'top-1' })
@@ -566,8 +556,7 @@ describe('roomStore gap/coverage structural durability', () => {
   it('still coalesces the throttled coverage transition (topId refresh)', () => {
     roomStore.getState().addRoom(createRoom(ROOM, {
       joined: true,
-      messages: [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
-    }))
+    }), [createMessage('held', ROOM, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))])
     createCoverage(ROOM, 'cov-bottom', 'top-1')
     localStorageMock.setItem.mockClear()
 
@@ -666,8 +655,7 @@ describe('roomStore gap/coverage structural durability', () => {
     for (const room of [ROOM, ROOM2]) {
       roomStore.getState().addRoom(createRoom(room, {
         joined: true,
-        messages: [createMessage(`held-${room}`, room, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))],
-      }))
+      }), [createMessage(`held-${room}`, room, 'a', 'held', false, new Date('2026-07-20T00:00:00Z'))])
     }
     createCoverage(ROOM, 'cov-room-1', 'top-1')
     createCoverage(ROOM2, 'cov-room-2', 'top-1')

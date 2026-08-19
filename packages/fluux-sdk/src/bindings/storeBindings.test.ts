@@ -229,7 +229,6 @@ describe('createStoreBindings', () => {
         mentionsCount: 0,
         typingUsers: new Set(),
         occupants: new Map(),
-        messages: [],
       }
       mockClient.emit('room:added', { room })
       expect(mockStores.room.addRoom).toHaveBeenCalledWith(room)
