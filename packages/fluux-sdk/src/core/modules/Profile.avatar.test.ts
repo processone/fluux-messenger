@@ -101,6 +101,56 @@ describe('XMPPClient Own Avatar', () => {
     vi.clearAllMocks()
   })
 
+  describe('publishOwnAvatar / clearOwnAvatar (XEP-0084 wire)', () => {
+    beforeEach(async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+      mockXmppClientInstance.iqCaller.request.mockClear()
+    })
+
+    type El = { name: string; attrs: Record<string, string>; children?: El[] }
+    const sent = (): El[] => mockXmppClientInstance.iqCaller.request.mock.calls.map((c: unknown[]) => c[0] as El)
+    const child = (el: El | undefined, name: string): El | undefined =>
+      el?.children?.find((c) => c.name === name)
+    const path = (el: El | undefined, ...names: string[]): El | undefined =>
+      names.reduce<El | undefined>((cur, n) => child(cur, n), el)
+
+    it('publishes the data before the metadata that names it', async () => {
+      await xmppClient.profile.publishOwnAvatar('data:image/png;base64,AAAA', 'image/png', 1, 1)
+
+      const nodes = sent().map((iq) => path(iq, 'pubsub', 'publish')?.attrs.node)
+      // A peer reading the metadata immediately must find the image its hash names.
+      expect(nodes).toEqual(['urn:xmpp:avatar:data', 'urn:xmpp:avatar:metadata'])
+    })
+
+    it('carries id, type and bytes on <info/>', async () => {
+      await xmppClient.profile.publishOwnAvatar('data:image/png;base64,AAAAAAAA', 'image/png', 1, 1)
+
+      const info = path(sent()[1], 'pubsub', 'publish', 'item', 'metadata', 'info')
+      expect(info?.attrs.type).toBe('image/png')
+      expect(info?.attrs.id).toBeTruthy()
+      expect(Number(info?.attrs.bytes)).toBeGreaterThan(0)
+    })
+
+    // XEP-0084 §4.2: disabling publishes a `<metadata/>` with no `<info/>`.
+    // A bare `<item/>` carries nothing for a peer to read, so the avatar would
+    // stay on every other client.
+    it('clears by publishing an empty <metadata/>, not a bare <item/>', async () => {
+      await xmppClient.profile.clearOwnAvatar()
+
+      const metadata = path(sent()[0], 'pubsub', 'publish', 'item', 'metadata')
+      expect(metadata).toBeDefined()
+      expect(metadata?.attrs.xmlns).toBe('urn:xmpp:avatar:metadata')
+      expect(child(metadata, 'info')).toBeUndefined()
+    })
+  })
+
   describe('fetchOwnAvatar', () => {
     beforeEach(async () => {
       // Connect the client first

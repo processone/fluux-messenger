@@ -25,7 +25,6 @@ import {
 } from '../../utils/avatarCache'
 import { sniffImageMimeType } from '../../utils/imageType'
 import {
-  NS_PUBSUB,
   NS_NICK,
   NS_APPEARANCE,
   NS_VCARD_TEMP,
@@ -110,10 +109,44 @@ const avatarDataCodec: PepCodec<string> = {
   decode: (item) => item.getChild('data', NS_AVATAR_DATA)?.text() || undefined,
 }
 
-/** XEP-0084 metadata node: the current avatar's hash. */
-const avatarMetadataCodec: PepCodec<string> = {
-  encode: (hash) => xml('metadata', { xmlns: NS_AVATAR_METADATA }, xml('info', { id: hash })),
-  decode: (item) => item.getChild('metadata', NS_AVATAR_METADATA)?.getChild('info')?.attrs.id || undefined,
+/** What XEP-0084's `<info/>` carries about the current avatar. */
+export interface AvatarMetadata {
+  /** SHA-1 of the image, and the item id on the data node. */
+  hash: string
+  mimeType?: string
+  bytes?: number
+}
+
+/**
+ * XEP-0084 metadata node.
+ *
+ * `null` is the published state "no avatar", which the XEP spells as a
+ * `<metadata/>` with no `<info/>` (§4.2) rather than as an absent item. It is a
+ * VALUE here because it is one on the wire: peers read it to drop the avatar
+ * they hold. `undefined` stays reserved for an item that does not parse.
+ */
+const avatarMetadataCodec: PepCodec<AvatarMetadata | null> = {
+  encode: (meta) => xml('metadata', { xmlns: NS_AVATAR_METADATA },
+    ...(meta === null ? [] : [xml('info', {
+      id: meta.hash,
+      ...(meta.mimeType ? { type: meta.mimeType } : {}),
+      ...(meta.bytes === undefined ? {} : { bytes: String(meta.bytes) }),
+    })]),
+  ),
+  decode: (item) => {
+    const metadata = item.getChild('metadata', NS_AVATAR_METADATA)
+    if (!metadata) return undefined
+    const info = metadata.getChild('info')
+    if (!info) return null
+    const hash = info.attrs.id
+    if (!hash) return undefined
+    const bytes = Number(info.attrs.bytes)
+    return {
+      hash,
+      ...(info.attrs.type ? { mimeType: info.attrs.type } : {}),
+      ...(Number.isFinite(bytes) && info.attrs.bytes ? { bytes } : {}),
+    }
+  },
 }
 
 /** Payload is the bare `<nick/>` text; the node carries no publish-options. */
@@ -126,7 +159,7 @@ export class Profile extends BaseModule {
   private readonly nickNode: PepNode<string>
   private readonly appearanceNode: PepNode<AppearanceSettings>
   private readonly avatarDataNode: PepNode<string>
-  private readonly avatarMetadataNode: PepNode<string>
+  private readonly avatarMetadataNode: PepNode<AvatarMetadata | null>
 
   constructor(deps: ModuleDependencies) {
     super(deps)
@@ -149,11 +182,11 @@ export class Profile extends BaseModule {
    * Returns an empty array for every non-answer, because the caller's response
    * is the same either way — fall back to vCard.
    */
-  private async readContactAvatarNode(
-    node: PepNode<string>,
+  private async readContactAvatarNode<T>(
+    node: PepNode<T, unknown>,
     contactBareJid: string,
     options: PepGetOptions = {},
-  ): Promise<string[]> {
+  ): Promise<T[]> {
     const contactDomain = getDomain(contactBareJid)
     if (isPepForbiddenDomain(contactDomain)) return []
 
@@ -221,9 +254,11 @@ export class Profile extends BaseModule {
       return null
     }
 
+    // `null` is the contact stating they have no avatar; both it and an
+    // unreadable node fall through to vCard.
     const hash = (await this.readContactAvatarNode(
       this.avatarMetadataNode, bareJid, { maxItems: 1 },
-    ))[0]
+    ))[0]?.hash
 
     if (!hash) {
       // No avatar via XEP-0084, or the server would not say — either way, fall
@@ -699,122 +734,49 @@ export class Profile extends BaseModule {
 
     const bareJid = getBareJid(currentJid)
 
-    try {
-      // Query our own PEP node for avatar metadata
-      const metadataIq = xml(
-        'iq',
-        { type: 'get', to: bareJid, id: `avatar_meta_${generateUUID()}` },
-        xml('pubsub', { xmlns: NS_PUBSUB },
-          xml('items', { node: NS_AVATAR_METADATA, max_items: '1' })
-        )
-      )
+    const meta = (await this.avatarMetadataNode.getOr([], { maxItems: 1 }))[0]
+    // `null` is a published "no avatar"; either way there is nothing to fetch.
+    if (!meta) return
 
-      const metadataResult = await this.deps.sendIQ(metadataIq)
-
-      // Parse metadata response
-      const pubsub = metadataResult.getChild('pubsub', NS_PUBSUB)
-      const items = pubsub?.getChild('items')
-      const item = items?.getChild('item')
-      const metadata = item?.getChild('metadata', NS_AVATAR_METADATA)
-      const info = metadata?.getChild('info')
-
-      if (!info) {
-        // No avatar set
-        return
-      }
-
-      const hash = info.attrs.id
-      const mimeType = info.attrs.type || 'image/png'
-
-      if (!hash) return
-
-      // Check cache first
-      const cachedUrl = await getCachedAvatar(hash)
-      if (cachedUrl) {
-        this.deps.emitSDK('connection:own-avatar', { avatar: cachedUrl, hash })
-        return
-      }
-
-      // Fetch avatar data
-      const dataIq = xml(
-        'iq',
-        { type: 'get', to: bareJid, id: `avatar_data_${generateUUID()}` },
-        xml('pubsub', { xmlns: NS_PUBSUB },
-          xml('items', { node: NS_AVATAR_DATA },
-            xml('item', { id: hash })
-          )
-        )
-      )
-
-      const dataResult = await this.deps.sendIQ(dataIq)
-
-      const dataPubsub = dataResult.getChild('pubsub', NS_PUBSUB)
-      const dataItems = dataPubsub?.getChild('items')
-      const dataItem = dataItems?.getChild('item')
-      const data = dataItem?.getChild('data', NS_AVATAR_DATA)
-
-      if (data) {
-        const base64 = data.text()
-        if (base64) {
-          // Prefer the sniffed type over the advertised <info type>, which the
-          // publishing client may have mislabeled; fall back to it when unknown.
-          const sniffedType = sniffImageMimeType(base64) ?? mimeType
-          const blobUrl = await cacheAvatar(hash, base64, sniffedType)
-          await saveAvatarHash(bareJid, hash, 'contact')
-          this.deps.emitSDK('connection:own-avatar', { avatar: blobUrl, hash })
-        }
-      }
-    } catch {
-      // Own avatar might not be set, this is normal
+    const cachedUrl = await getCachedAvatar(meta.hash)
+    if (cachedUrl) {
+      this.deps.emitSDK('connection:own-avatar', { avatar: cachedUrl, hash: meta.hash })
+      return
     }
+
+    const base64 = (await this.avatarDataNode.getOr([], { itemId: meta.hash }))[0]
+    if (!base64) return
+
+    // Prefer the sniffed type over the advertised <info type>, which the
+    // publishing client may have mislabeled; fall back to it when unknown.
+    const sniffedType = sniffImageMimeType(base64) ?? meta.mimeType ?? 'image/png'
+    const blobUrl = await cacheAvatar(meta.hash, base64, sniffedType)
+    await saveAvatarHash(bareJid, meta.hash, 'contact')
+    this.deps.emitSDK('connection:own-avatar', { avatar: blobUrl, hash: meta.hash })
   }
 
   async publishOwnAvatar(imageData: string, mimeType: string, _width: number, _height: number): Promise<void> {
     const base64Data = imageData.split(',')[1] || imageData
     const hash = generateUUID() // Should ideally be SHA-1 of data
 
-    // XEP-0084: Publish data
-    const dataIq = xml('iq', { type: 'set', id: `avatar_pub_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: 'urn:xmpp:avatar:data' },
-          xml('item', { id: hash },
-            xml('data', { xmlns: 'urn:xmpp:avatar:data' }, base64Data)
-          )
-        )
-      )
-    )
-    await this.deps.sendIQ(dataIq)
+    // Data first: a peer reading the metadata immediately must find the image
+    // the hash names.
+    await this.avatarDataNode.publish(hash, base64Data)
+    await this.avatarMetadataNode.publish(hash, {
+      hash,
+      mimeType,
+      bytes: Math.round(base64Data.length * 0.75),
+    })
 
-    // XEP-0084: Publish metadata
-    const metadataIq = xml('iq', { type: 'set', id: `avatar_meta_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: 'urn:xmpp:avatar:metadata' },
-          xml('item', { id: hash },
-            xml('metadata', { xmlns: 'urn:xmpp:avatar:metadata' },
-              xml('info', {
-                id: hash,
-                type: mimeType,
-                bytes: String(Math.round(base64Data.length * 0.75)),
-              })
-            )
-          )
-        )
-      )
-    )
-    await this.deps.sendIQ(metadataIq)
-    
     this.updateAvatar(this.deps.getCurrentJid()!, imageData, hash)
   }
 
   async clearOwnAvatar(): Promise<void> {
-    const iq = xml('iq', { type: 'set', id: `avatar_clear_${generateUUID()}` },
-      xml('pubsub', { xmlns: NS_PUBSUB },
-        xml('publish', { node: 'urn:xmpp:avatar:metadata' },
-          xml('item', {})
-        )
-      )
-    )
-    await this.deps.sendIQ(iq)
+    // XEP-0084 §4.2 disables an avatar by publishing a `<metadata/>` with no
+    // `<info/>`, not by publishing a bare `<item/>`: peers drop the avatar they
+    // hold on reading the empty element, and an item with no payload carries
+    // nothing for them to read.
+    await this.avatarMetadataNode.publish(CURRENT_ITEM_ID, null)
     this.updateAvatar(this.deps.getCurrentJid()!, null, null)
   }
 
