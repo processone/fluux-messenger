@@ -42,6 +42,14 @@ import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
+import {
+  conversationKind,
+  conversationMessages,
+  conversationMetadata,
+  conversationLastMessage,
+  conversationHistoryState,
+  conversationIds,
+} from '../stores/conversationLens'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
 import {
   compareExact,
@@ -138,9 +146,9 @@ export function setupMdsSideEffects(
     currentSessionConfirmedNodeJids.add(jid)
   }
 
-  /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
+  /** Is this JID a known room (bookmarked or joined)? */
   function isRoom(jid: string): boolean {
-    return roomStore.getState().rooms.has(jid)
+    return conversationKind(jid) === 'room'
   }
 
   /** Our own bare JID, or '' before the connection JID is known. */
@@ -173,10 +181,7 @@ export function setupMdsSideEffects(
   /** Index of a stanza-id in a conversation's/room's loaded messages, or -1. */
   function indexOfStanza(jid: string, stanzaId: string | undefined): number {
     if (!stanzaId) return -1
-    const messages = isRoom(jid)
-      ? roomStore.getState().messages.get(jid) ?? []
-      : chatStore.getState().messages.get(jid) || []
-    return messages.findIndex((m) => m.stanzaId === stanzaId)
+    return conversationMessages(jid).findIndex((m) => m.stanzaId === stanzaId)
   }
 
   /**
@@ -188,9 +193,7 @@ export function setupMdsSideEffects(
    * cannot tell".
    */
   function pendingRemoteDisplayed(jid: string): string | undefined {
-    return isRoom(jid)
-      ? roomStore.getState().roomMeta.get(jid)?.pendingRemoteDisplayedStanzaId
-      : chatStore.getState().conversationMeta.get(jid)?.pendingRemoteDisplayedStanzaId
+    return conversationMetadata(jid)?.pendingRemoteDisplayedStanzaId
   }
 
   /**
@@ -290,9 +293,7 @@ export function setupMdsSideEffects(
   }
 
   function readPointer(jid: string): ReadPointer | undefined {
-    return isRoom(jid)
-      ? roomStore.getState().roomMeta.get(jid)?.readPointer
-      : chatStore.getState().conversationMeta.get(jid)?.readPointer
+    return conversationMetadata(jid)?.readPointer
   }
 
   /**
@@ -364,8 +365,7 @@ export function setupMdsSideEffects(
       // Non-active rooms keep no resident array (memory windowing); mark-all-read
       // points at the newest known message, whose stanza-id survives on the
       // lastMessage preview.
-      const last = roomStore.getState().roomMeta.get(jid)?.lastMessage
-        ?? roomStore.getState().rooms.get(jid)?.lastMessage
+      const last = conversationLastMessage(jid)
       return last?.id === seenId && last.from === from ? last.stanzaId : undefined
     }
     const seenId = pointer.identity.messageId
@@ -373,8 +373,7 @@ export function setupMdsSideEffects(
     const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
     if (fromSlice) return fromSlice
     // Same eviction fallback for backgrounded 1:1 conversations.
-    const last = chatStore.getState().conversationMeta.get(jid)?.lastMessage
-      ?? chatStore.getState().conversations.get(jid)?.lastMessage
+    const last = conversationLastMessage(jid)
     if (last?.id === seenId && last.stanzaId) return last.stanzaId
     // The pointer names a message with no stanza-id — in 1:1 the normal resting
     // state once the user has replied. Publish the newest position we CAN
@@ -569,9 +568,7 @@ export function setupMdsSideEffects(
    * entirely.
    */
   function archiveIsTrustworthy(jid: string): boolean {
-    const mam = isRoom(jid)
-      ? roomStore.getState().getRoomMAMQueryState(jid)
-      : chatStore.getState().getMAMQueryState(jid)
+    const mam = conversationHistoryState(jid)
     if (mam.error !== null) return false
     if (!mam.hasQueried && !mam.isLoading) return true // never queried — nothing partial
     return !mam.isLoading && mam.isCaughtUpToLive
@@ -684,14 +681,6 @@ export function setupMdsSideEffects(
     })()
   }
 
-  /** Current live set: 1:1 conversation entities ∪ known rooms. */
-  function liveJids(): Set<string> {
-    const s = new Set<string>()
-    for (const jid of chatStore.getState().conversationEntities.keys()) s.add(jid)
-    for (const jid of roomStore.getState().rooms.keys()) s.add(jid)
-    return s
-  }
-
   /**
    * Forget a JID's in-memory publisher state so a retract/recreate is clean.
    * `dirty.delete` drops a still-buffered (debounced) publish; a publish that
@@ -715,7 +704,7 @@ export function setupMdsSideEffects(
    * retracts nothing.
    */
   function reconcileDeletions(): void {
-    const current = liveJids()
+    const current = conversationIds()
 
     if (!syncEnabled || connectionStore.getState().status !== 'online') {
       trackedJids = current // keep baseline synced while disarmed; never retract
@@ -843,7 +832,7 @@ export function setupMdsSideEffects(
 
       if (result.status === 'unknown') {
         syncEnabled = true
-        trackedJids = liveJids()
+        trackedJids = conversationIds()
         logInfo('MDS: node state unavailable; publishing remains guarded')
         return
       }
@@ -906,7 +895,7 @@ export function setupMdsSideEffects(
       syncEnabled = true
       // Rebuild the delete-detection baseline to the current live set so the
       // fresh-session population is never seen as deletions.
-      trackedJids = liveJids()
+      trackedJids = conversationIds()
       // Sweep once now that publishing is armed. Every entity is re-considered
       // against the freshly seeded node state, so a position the previous session
       // never managed to publish goes out now instead of waiting for incidental
@@ -939,7 +928,7 @@ export function setupMdsSideEffects(
     syncEnabled = true
     // Rebuild the delete-detection baseline to the current live set (mirrors the
     // fresh-session handler) so a resume's known entities aren't seen as deletes.
-    trackedJids = liveJids()
+    trackedJids = conversationIds()
     considerConversations()
     considerRooms()
   })
