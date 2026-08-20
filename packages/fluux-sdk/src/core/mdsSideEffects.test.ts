@@ -276,6 +276,7 @@ function setRoomMamState(
 describe('setupMdsSideEffects', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    clearLocallyPublishedDisplayed('romeo@montague.example')
     connectionStore.getState().reset()
     chatStore.getState().reset()
     roomStore.getState().reset()
@@ -378,6 +379,37 @@ describe('setupMdsSideEffects', () => {
 
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
     clearLocallyPublishedDisplayed(account)
+    cleanup()
+  })
+
+  it('keeps published positions across side-effect rebinding', async () => {
+    const cid = 'juliet@capulet.example'
+    const account = 'romeo@montague.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: `${account}/phone` } as never)
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    seedMeta(cid, 'm1')
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+
+    let cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', account)
+
+    cleanup()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's2' }])
+    cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
     cleanup()
   })
 
@@ -1361,6 +1393,33 @@ describe('setupMdsSideEffects', () => {
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
 
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
+    cleanup()
+  })
+
+  it('waits to migrate an off-slice legacy marker until its position resolves', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    addConversation(cid)
+    seedMessages(cid, [msg('m3', 's3'), msg('m4', 's4')])
+    seedMeta(cid, 'm3')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')])
+
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      cid,
+      's1',
+      'romeo@montague.example',
+    )
     cleanup()
   })
 

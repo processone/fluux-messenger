@@ -24,6 +24,12 @@ import {
 } from './test-utils'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import {
+  clearLocallyPublishedDisplayed,
+  locallyPublishedDisplayed,
+  noteLocallyPublishedDisplayed,
+} from './localMdsPublishes'
+import { makeReadPointer } from '../stores/shared/readPointer'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -74,6 +80,7 @@ describe('XMPPClient', () => {
   })
 
   afterEach(() => {
+    clearLocallyPublishedDisplayed('user@example.com')
     vi.useRealTimers()
     vi.clearAllMocks()
   })
@@ -319,6 +326,26 @@ describe('XMPPClient', () => {
       await client.flushStateSnapshot()
 
       expect(setRoster).toHaveBeenCalledWith('user@example.com', expect.any(Array))
+    })
+  })
+
+  describe('disconnect', () => {
+    it('clears published positions only for an explicit logout', async () => {
+      const pointer = makeReadPointer(
+        { id: 'm1', stanzaId: 's1', timestamp: new Date(1) },
+        'chat',
+      )
+      noteLocallyPublishedDisplayed('user@example.com', 'peer@example.com', pointer)
+      ;(xmppClient as unknown as { currentJid: string }).currentJid = 'user@example.com/phone'
+      vi.spyOn(xmppClient.connection, 'disconnect').mockResolvedValue()
+
+      await xmppClient.disconnect()
+      expect(locallyPublishedDisplayed('user@example.com', 'peer@example.com')).toEqual(pointer)
+
+      ;(xmppClient as unknown as { currentJid: string }).currentJid = 'user@example.com/phone'
+      await xmppClient.disconnect({ invalidateFastToken: true })
+
+      expect(locallyPublishedDisplayed('user@example.com', 'peer@example.com')).toBeUndefined()
     })
   })
 

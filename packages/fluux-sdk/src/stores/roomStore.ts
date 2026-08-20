@@ -4490,6 +4490,10 @@ roomStore.subscribe((state, previous) => {
     parked,
     state.messages.get(roomJid) ?? [],
     'room',
+    locallyPublishedDisplayed(
+      getBareJid(connectionStore.getState().jid ?? ''),
+      roomJid,
+    ),
   )
   if (result.kind === 'advanced') {
     roomStore.setState((current) => ({

@@ -114,11 +114,15 @@ export function createRemoteDividerAdvanceTracker() {
       parkedDivider: string | undefined,
       messages: T[],
       kind: 'chat' | 'room',
+      locallyPublishedPointer?: ReadPointer,
     ): RemoteDividerAdvanceResult {
       const markerPointer = pending.get(id)
-      return markerPointer === undefined
-        ? { kind: 'unchanged' }
-        : apply(id, parkedDivider, markerPointer, messages, kind)
+      if (markerPointer === undefined) return { kind: 'unchanged' }
+      if (locallyPublishedPointer && !isAhead(markerPointer, locallyPublishedPointer)) {
+        pending.delete(id)
+        return { kind: 'unchanged' }
+      }
+      return apply(id, parkedDivider, markerPointer, messages, kind)
     },
     has(id: string): boolean {
       return pending.has(id)

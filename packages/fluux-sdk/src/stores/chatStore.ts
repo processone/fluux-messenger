@@ -3641,6 +3641,10 @@ chatStore.subscribe((state, previous) => {
     parked,
     state.messages.get(conversationId) ?? [],
     'chat',
+    locallyPublishedDisplayed(
+      getBareJid(connectionStore.getState().jid ?? ''),
+      conversationId,
+    ),
   )
   if (result.kind === 'advanced') {
     chatStore.setState((current) => ({

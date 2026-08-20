@@ -46,6 +46,7 @@ import { getBareJid, getDomain } from './jid'
 import { routeStanza } from './stanzaRouting'
 import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
+import { clearLocallyPublishedDisplayed } from './localMdsPublishes'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -1105,11 +1106,15 @@ export class XMPPClient {
    * ```
    */
   async disconnect(options: { invalidateFastToken?: boolean } = {}): Promise<void> {
+    const accountJid = this.currentJid ? getBareJid(this.currentJid) : null
     this.currentJid = null
     // Clear session-scoped tracking data
     this.xep0084AvatarChecked.clear()
     this.#internal.entityTime.clearCache()
     this.#internal.lastActivity.clearCache()
+    if (options.invalidateFastToken && accountJid) {
+      clearLocallyPublishedDisplayed(accountJid)
+    }
     return this.connection.disconnect(options)
   }
 

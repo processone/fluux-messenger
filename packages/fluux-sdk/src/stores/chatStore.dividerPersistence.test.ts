@@ -11,6 +11,11 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { chatStore } from './chatStore'
 import type { Message } from '../core'
 import { makeReadPointer } from './shared/readPointer'
+import { connectionStore } from './connectionStore'
+import {
+  clearLocallyPublishedDisplayed,
+  noteLocallyPublishedDisplayed,
+} from '../core/localMdsPublishes'
 
 const CID = 'alice@example.com'
 
@@ -44,6 +49,8 @@ function seedActive(lastSeen: string, marker: string) {
 
 describe('the active conversation keeps the divider its view opened with', () => {
   beforeEach(() => {
+    clearLocallyPublishedDisplayed('me@example.com')
+    connectionStore.setState({ jid: 'me@example.com/phone' })
     chatStore.getState().clearFirstNewMessageId(CID)
     chatStore.setState({
       activeConversationId: undefined,
@@ -94,6 +101,21 @@ describe('the active conversation keeps the divider its view opened with', () =>
     chatStore.getState().addMessage(msg('m5'))
 
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBeUndefined()
+  })
+
+  it('drops a deferred marker overtaken by a local publish', () => {
+    seedActive('m2', 'm1')
+    chatStore.setState({ messages: new Map([[CID, MESSAGES.slice(1)]]) })
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES.slice(1))
+    noteLocallyPublishedDisplayed(
+      'me@example.com',
+      CID,
+      makeReadPointer(MESSAGES[4], 'chat'),
+    )
+
+    chatStore.setState({ messages: new Map([[CID, MESSAGES]]) })
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
   })
 
   it('writes nothing when a resolved marker moves neither the pointer nor the line', () => {

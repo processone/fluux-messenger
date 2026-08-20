@@ -60,10 +60,7 @@ import {
 } from '../stores/shared/readState'
 import { makeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
-import {
-  clearLocallyPublishedDisplayed,
-  noteLocallyPublishedDisplayed,
-} from './localMdsPublishes'
+import { noteLocallyPublishedDisplayed } from './localMdsPublishes'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -137,7 +134,7 @@ export function setupMdsSideEffects(
   // the JIDs owed another pass because they changed during one. See consider().
   const resolutionInFlight = new Set<string>()
   const resolutionOwed = new Set<string>()
-  const locallyPublishedAccounts = new Set<string>()
+  const pendingLegacyMigrations = new Map<string, string>()
   // Bumped whenever the session boundary moves (fresh seed, disconnect). A
   // resolution that spans a bump was ordered against node state the new session
   // has re-derived, so it is discarded rather than published.
@@ -189,12 +186,23 @@ export function setupMdsSideEffects(
     if (!by) return
     const accountJid = ownBareJid()
     const readPointer = resolvedPointerForStanzaId(jid, stanzaId)
-    if (readPointer) noteLocallyPublishedDisplayed(accountJid, jid, readPointer)
-    locallyPublishedAccounts.add(accountJid)
+    if (!readPointer) {
+      pendingLegacyMigrations.set(jid, stanzaId)
+      return
+    }
+    pendingLegacyMigrations.delete(jid)
+    noteLocallyPublishedDisplayed(accountJid, jid, readPointer)
     client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
       // Best-effort — an unconverted marker is republished on the next advance. The recorded
       // position stays: a rejection can be a timeout the server nonetheless committed.
     })
+  }
+
+  function retryLegacyMigrations(): void {
+    if (disposed || !syncEnabled || connectionStore.getState().status !== 'online') return
+    for (const [jid, stanzaId] of pendingLegacyMigrations) {
+      migrateLegacyMarker(jid, stanzaId)
+    }
   }
 
   /** Index of a stanza-id in a conversation's/room's loaded messages, or -1. */
@@ -569,7 +577,6 @@ export function setupMdsSideEffects(
       // recognise as ours. Keeping it is the safe direction: at worst the divider ignores a marker
       // covering ground this client had already read.
       noteLocallyPublishedDisplayed(accountJid, jid, readPointer)
-      locallyPublishedAccounts.add(accountJid)
       try {
         await client.internal.mds.publishDisplayed(jid, stanzaId, by)
         recordKnownNodeStanzaId(jid, stanzaId)
@@ -789,11 +796,17 @@ export function setupMdsSideEffects(
 
   const unsubscribeConversationMeta = chatStore.subscribe(
     (state) => state.conversationMeta,
-    considerConversations
+    () => {
+      considerConversations()
+      retryLegacyMigrations()
+    }
   )
   const unsubscribeMessages = chatStore.subscribe(
     (state) => state.messages,
-    considerConversations
+    () => {
+      considerConversations()
+      retryLegacyMigrations()
+    }
   )
   const unsubscribeConversationMam = chatStore.subscribe(
     (state) => state.mamQueryStates,
@@ -801,13 +814,19 @@ export function setupMdsSideEffects(
   )
   const unsubscribeRoomMeta = roomStore.subscribe(
     (state) => state.roomMeta,
-    considerRooms
+    () => {
+      considerRooms()
+      retryLegacyMigrations()
+    }
   )
   // The window, not the runtime blob: occupancy churn has no bearing on where
   // the read marker sits, and this now mirrors the chat subscription above.
   const unsubscribeRoomMessages = roomStore.subscribe(
     (state) => state.messages,
-    considerRooms
+    () => {
+      considerRooms()
+      retryLegacyMigrations()
+    }
   )
   const unsubscribeRoomMam = roomStore.subscribe(
     (state) => state.mamQueryStates,
@@ -862,6 +881,7 @@ export function setupMdsSideEffects(
     sessionEpoch++
     nodeSnapshotAuthoritative = false
     currentSessionConfirmedNodeJids.clear()
+    pendingLegacyMigrations.clear()
     void (async () => {
       const seedStartedAtRevision = nodeRevision
       let result: DisplayedMarkerFetchResult
@@ -948,6 +968,7 @@ export function setupMdsSideEffects(
       // cost nothing here — publishDecision() skips them without an IQ.
       considerConversations()
       considerRooms()
+      retryLegacyMigrations()
       logInfo('MDS: seeded read positions and enabled publishing')
     })()
   })
@@ -976,6 +997,7 @@ export function setupMdsSideEffects(
     trackedJids = conversationIds()
     considerConversations()
     considerRooms()
+    retryLegacyMigrations()
   })
 
   // On disconnect: DROP pending work and cancel the timer. The canonical pointer
@@ -1002,9 +1024,6 @@ export function setupMdsSideEffects(
 
   return () => {
     disposed = true
-    for (const accountJid of locallyPublishedAccounts) {
-      clearLocallyPublishedDisplayed(accountJid)
-    }
     resolutionOwed.clear()
     unsubscribeConversationMeta()
     unsubscribeMessages()
@@ -1021,6 +1040,7 @@ export function setupMdsSideEffects(
     unsubscribeConnection()
     dirty.drop()
     unroutedSeedMarkers.clear()
+    pendingLegacyMigrations.clear()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = undefined
