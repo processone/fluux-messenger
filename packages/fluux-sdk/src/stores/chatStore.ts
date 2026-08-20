@@ -51,6 +51,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
+import type { RemoteDisplayedOrigin } from '../core/remoteDisplayedDispatch'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
   advance,
@@ -398,7 +399,13 @@ interface ChatState {
    * the read pointer forward-only. Pending and ordering semantics are owned by
    * the shared `readMarkerSync` resolver.
    */
-  applyRemoteDisplayed: (conversationId: string, stanzaId: string, messagesOverride?: Message[]) => void
+  applyRemoteDisplayed: (
+    conversationId: string,
+    stanzaId: string,
+    messagesOverride?: Message[],
+    /** Whose reading this marker reports; only the divider depends on it. */
+    origin?: RemoteDisplayedOrigin,
+  ) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -2107,7 +2114,7 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
-      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
+      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride, origin = 'remote') => {
         // Set when the resolution advanced the pointer on a NON-active
         // conversation — triggers the exact cache recount below.
         let advancedNonActive = false
@@ -2177,7 +2184,10 @@ export const chatStore = createStore<ChatState>()(
           // were read, so leaving the divider in front of them would mark as new what the user has
           // already seen. Scrolling THIS view is not such evidence and does not come through here.
           let newMarkers = state.firstNewMessageMarkers
-          if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
+          if (
+            origin === 'remote' &&
+            (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active')
+          ) {
             const parked = state.firstNewMessageMarkers.get(conversationId)
             const markerPointer = resolution.kind === 'resolved-active'
               ? resolution.markerPointer

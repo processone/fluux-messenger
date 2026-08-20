@@ -65,6 +65,7 @@ import {
   forgetLocallyPublishedDisplayed,
   markLocallyPublishedDisplayed,
 } from './localMdsPublishes'
+import { classifyRemoteDisplayed } from './remoteDisplayedDispatch'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -804,7 +805,9 @@ export function setupMdsSideEffects(
       }
       for (const [jid] of drainable) unroutedSeedMarkers.delete(jid)
       for (const [jid, { stanzaId, legacy }] of drainable) {
-        roomStore.getState().applyRemoteDisplayed(jid, stanzaId)
+        roomStore.getState().applyRemoteDisplayed(
+          jid, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), jid, stanzaId),
+        )
         // The JID is now classified as a room → a legacy item can be migrated.
         if (legacy) migrateLegacyMarker(jid, stanzaId)
       }
@@ -886,10 +889,14 @@ export function setupMdsSideEffects(
         // JID we can never classify keeps its legacy item until the next
         // local read advance overwrites it.
         if (isRoom(bare)) {
-          roomStore.getState().applyRemoteDisplayed(bare, stanzaId)
+          roomStore.getState().applyRemoteDisplayed(
+            bare, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), bare, stanzaId),
+          )
           if (legacy) migrateLegacyMarker(bare, stanzaId)
         } else {
-          chatStore.getState().applyRemoteDisplayed(bare, stanzaId)
+          chatStore.getState().applyRemoteDisplayed(
+            bare, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), bare, stanzaId),
+          )
           const migrateNow = !!legacy && chatStore.getState().conversationEntities.has(bare)
           if (migrateNow) migrateLegacyMarker(bare, stanzaId)
           unroutedSeedMarkers.set(bare, { stanzaId, legacy: !!legacy && !migrateNow })

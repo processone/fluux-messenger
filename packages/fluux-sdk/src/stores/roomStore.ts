@@ -67,6 +67,7 @@ import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
+import type { RemoteDisplayedOrigin } from '../core/remoteDisplayedDispatch'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { advance, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
@@ -1046,7 +1047,13 @@ export interface RoomState {
    * the read pointer forward-only. Pending and ordering semantics are owned by
    * the shared `readMarkerSync` resolver.
    */
-  applyRemoteDisplayed: (roomJid: string, stanzaId: string, messagesOverride?: RoomMessage[]) => void
+  applyRemoteDisplayed: (
+    roomJid: string,
+    stanzaId: string,
+    messagesOverride?: RoomMessage[],
+    /** Whose reading this marker reports; only the divider depends on it. */
+    origin?: RemoteDisplayedOrigin,
+  ) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -3132,7 +3139,7 @@ export const roomStore = createStore<RoomState>()(
     }
   },
 
-  applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
+  applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride, origin = 'remote') => {
     // Set when the resolution advanced the pointer on a NON-active room —
     // triggers the archive-derived recount below.
     let advancedNonActive = false
@@ -3206,7 +3213,10 @@ export const roomStore = createStore<RoomState>()(
       // read, so leaving the divider in front of them would mark as new what the user has already
       // seen. Scrolling THIS view is not such evidence and does not come through here.
       let newMarkers = state.firstNewMessageMarkers
-      if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
+      if (
+            origin === 'remote' &&
+            (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active')
+          ) {
         const parked = state.firstNewMessageMarkers.get(roomJid)
         const markerPointer = resolution.kind === 'resolved-active'
           ? resolution.markerPointer
