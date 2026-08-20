@@ -18,9 +18,21 @@ import { advance } from '../stores/shared/readPointer'
  * Only the new-message divider consults this. The read pointer is forward-only and cannot be harmed
  * by a position it already holds.
  */
-const published = new Map<string, Map<string, ReadPointer>>()
+interface PublishedDisplayed {
+  retained?: ReadPointer
+  inFlight: Map<number, ReadPointer>
+}
 
-const key = (accountJid: string): Map<string, ReadPointer> => {
+export type LocalDisplayedPublishOutcome = 'published' | 'ambiguous' | 'rejected'
+
+export interface LocalDisplayedPublishClaim {
+  settle(outcome: LocalDisplayedPublishOutcome): void
+}
+
+const published = new Map<string, Map<string, PublishedDisplayed>>()
+let nextClaimId = 0
+
+const key = (accountJid: string): Map<string, PublishedDisplayed> => {
   let byConversation = published.get(accountJid)
   if (!byConversation) {
     byConversation = new Map()
@@ -29,11 +41,20 @@ const key = (accountJid: string): Map<string, ReadPointer> => {
   return byConversation
 }
 
+function entry(
+  byConversation: Map<string, PublishedDisplayed>,
+  conversationJid: string,
+): PublishedDisplayed {
+  let value = byConversation.get(conversationJid)
+  if (!value) {
+    value = { inFlight: new Map() }
+    byConversation.set(conversationJid, value)
+  }
+  return value
+}
+
 /**
  * Record a position this client published.
- *
- * Recording an ambiguous publish — a timeout that may still have committed server-side — is the safe
- * direction: at worst the divider ignores a marker covering ground this client had already read.
  */
 export function noteLocallyPublishedDisplayed(
   accountJid: string,
@@ -42,7 +63,38 @@ export function noteLocallyPublishedDisplayed(
 ): void {
   if (!accountJid) return
   const byConversation = key(accountJid)
-  byConversation.set(conversationJid, advance(byConversation.get(conversationJid), readPointer))
+  const value = entry(byConversation, conversationJid)
+  value.retained = advance(value.retained, readPointer)
+}
+
+export function beginLocallyPublishedDisplayed(
+  accountJid: string,
+  conversationJid: string,
+  readPointer: ReadPointer,
+): LocalDisplayedPublishClaim {
+  if (!accountJid) return { settle: () => {} }
+
+  const byConversation = key(accountJid)
+  const value = entry(byConversation, conversationJid)
+  const claimId = ++nextClaimId
+  value.inFlight.set(claimId, readPointer)
+  let settled = false
+
+  return {
+    settle(outcome: LocalDisplayedPublishOutcome): void {
+      if (settled) return
+      settled = true
+      value.inFlight.delete(claimId)
+      if (outcome !== 'rejected') value.retained = advance(value.retained, readPointer)
+
+      if (byConversation.get(conversationJid) !== value) return
+      if (value.retained || value.inFlight.size > 0) return
+      byConversation.delete(conversationJid)
+      if (byConversation.size === 0 && published.get(accountJid) === byConversation) {
+        published.delete(accountJid)
+      }
+    },
+  }
 }
 
 /** The furthest position this client has published for a conversation, if any. */
@@ -50,7 +102,13 @@ export function locallyPublishedDisplayed(
   accountJid: string,
   conversationJid: string,
 ): ReadPointer | undefined {
-  return published.get(accountJid)?.get(conversationJid)
+  const value = published.get(accountJid)?.get(conversationJid)
+  if (!value) return undefined
+  let highWater = value.retained
+  for (const readPointer of value.inFlight.values()) {
+    highWater = advance(highWater, readPointer)
+  }
+  return highWater
 }
 
 export function clearLocallyPublishedDisplayed(accountJid: string): void {

@@ -60,7 +60,7 @@ import {
 } from '../stores/shared/readState'
 import { makeReadPointer, type ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
-import { noteLocallyPublishedDisplayed } from './localMdsPublishes'
+import { beginLocallyPublishedDisplayed } from './localMdsPublishes'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -88,6 +88,10 @@ const PUBLISH_DEBOUNCE_MS = 1_500
  * and is never published ahead of the true read position.
  */
 const CACHE_LOOKBACK = 50
+
+function isDefinitivePublishRejection(error: unknown): boolean {
+  return (error as { name?: unknown } | null)?.name === 'StanzaError'
+}
 
 /**
  * Sets up the MDS read-position publisher side effect.
@@ -191,11 +195,13 @@ export function setupMdsSideEffects(
       return
     }
     pendingLegacyMigrations.delete(jid)
-    noteLocallyPublishedDisplayed(accountJid, jid, readPointer)
-    client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
-      // Best-effort — an unconverted marker is republished on the next advance. The recorded
-      // position stays: a rejection can be a timeout the server nonetheless committed.
-    })
+    const claim = beginLocallyPublishedDisplayed(accountJid, jid, readPointer)
+    void client.internal.mds.publishDisplayed(jid, stanzaId, by).then(
+      () => claim.settle('published'),
+      (error: unknown) => claim.settle(
+        isDefinitivePublishRejection(error) ? 'rejected' : 'ambiguous',
+      ),
+    )
   }
 
   function retryLegacyMigrations(): void {
@@ -572,16 +578,13 @@ export function setupMdsSideEffects(
       }
       if (decision === 'skip') continue
       const accountJid = ownBareJid()
-      // Recorded BEFORE the IQ and never taken back. A rejection can be an ambiguous timeout that
-      // the server nonetheless committed, and the node would then echo a position we no longer
-      // recognise as ours. Keeping it is the safe direction: at worst the divider ignores a marker
-      // covering ground this client had already read.
-      noteLocallyPublishedDisplayed(accountJid, jid, readPointer)
+      const claim = beginLocallyPublishedDisplayed(accountJid, jid, readPointer)
       try {
         await client.internal.mds.publishDisplayed(jid, stanzaId, by)
+        claim.settle('published')
         recordKnownNodeStanzaId(jid, stanzaId)
-      } catch {
-        // Best-effort; keep the position handled as documented above.
+      } catch (error) {
+        claim.settle(isDefinitivePublishRejection(error) ? 'rejected' : 'ambiguous')
       }
     }
   }

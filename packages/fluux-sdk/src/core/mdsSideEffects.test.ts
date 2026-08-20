@@ -309,6 +309,73 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('withdraws a local claim after a definitive publish rejection', async () => {
+    const cid = 'juliet@capulet.example'
+    const account = 'romeo@montague.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: `${account}/phone` } as never)
+    const messages = [
+      msg('m1', 's1'),
+      msg('m2', 's2'),
+      msg('m3', 's3'),
+      msg('m4', 's4'),
+      msg('m5', 's5'),
+    ]
+    seedMessages(cid, messages)
+    seedMeta(cid, 'm1')
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+    noteLocallyPublishedDisplayed(account, cid, makeReadPointer(messages[0], 'chat'))
+    client.internal.mds.publishDisplayed.mockRejectedValue(
+      Object.assign(new Error('forbidden'), { name: 'StanzaError', condition: 'forbidden' }),
+    )
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    patchMeta(cid, { readPointer: makeReadPointer(messages[4], 'chat') })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's3')
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m4')
+    cleanup()
+  })
+
+  it('retains a local claim after an ambiguous publish failure', async () => {
+    const cid = 'juliet@capulet.example'
+    const account = 'romeo@montague.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: `${account}/phone` } as never)
+    const messages = [
+      msg('m1', 's1'),
+      msg('m2', 's2'),
+      msg('m3', 's3'),
+      msg('m4', 's4'),
+      msg('m5', 's5'),
+    ]
+    seedMessages(cid, messages)
+    seedMeta(cid, 'm1')
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+    client.internal.mds.publishDisplayed.mockRejectedValue(new Error('timeout'))
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    patchMeta(cid, { readPointer: makeReadPointer(messages[4], 'chat') })
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's3')
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    cleanup()
+  })
+
   it('ignores an echo of a position this client already published', async () => {
     const cid = 'juliet@capulet.example'
     const account = 'romeo@montague.example'
@@ -1448,6 +1515,42 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('withdraws a migrated claim after a definitive rejection', async () => {
+    const cid = 'juliet@capulet.example'
+    const account = 'romeo@montague.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's5', legacy: true }])
+    client.internal.mds.publishDisplayed.mockRejectedValue(
+      Object.assign(new Error('conflict'), { name: 'StanzaError', condition: 'conflict' }),
+    )
+    connectionStore.setState({ status: 'online', jid: `${account}/phone` } as never)
+    addConversation(cid)
+    const messages = [
+      msg('m1', 's1'),
+      msg('m2', 's2'),
+      msg('m3', 's3'),
+      msg('m4', 's4'),
+      msg('m5', 's5'),
+    ]
+    seedMessages(cid, messages)
+    seedMeta(cid, 'm5')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's3')
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m4')
     cleanup()
   })
 
