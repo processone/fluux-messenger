@@ -1,75 +1,58 @@
-/**
- * What this client has itself published to its XEP-0490 read-marker node.
- *
- * Publishing a read position pushes it to every subscribed resource of the account — this one
- * included — so a marker arriving as `read:displayed-synced` may be another device's reading or
- * this client's own scroll coming back. The wire cannot tell them apart: a PEP item carries no
- * publishing resource. What separates them is what this client remembers publishing.
- *
- * The distinction matters only for the new-message divider. Another device's marker is evidence the
- * user read there, so the line follows it; an echo of our own is the scroll we just made, and the
- * line must stay where the view opened it.
- *
- * Bounded by construction rather than by a clock. A time-to-live cannot bound this correctly: a
- * stream-management replay or a reconnect seed re-reads the node and can deliver an echo long after
- * any expiry, and until then every distinct publish accumulates. Keeping the last few ids per
- * conversation costs a fixed amount and does not care when the echo arrives.
- */
+import type { ReadPointer } from './types/readState'
 
 /**
- * How many recent publishes to remember per conversation.
+ * How far this client has itself told the account it read, per conversation.
  *
- * An echo can only be one of the markers this client published for that conversation, and it
- * arrives within a handful of publishes of the one that produced it. The bound exists so a long
- * session cannot grow this without limit; it is not a timing assumption.
+ * Publishing a XEP-0490 read position pushes it to every subscribed resource — this one included —
+ * so a marker arriving as `read:displayed-synced` may be another device's reading or this client's
+ * own scroll coming back. The wire cannot say which: a PEP item carries no publishing resource.
+ *
+ * Asking "did we publish this exact item?" needs a ledger, and a ledger has to be bounded, expired
+ * and carried across reconnects — none of which the protocol supports, and each of which leaks. The
+ * question that can be answered from one value is better: does this marker reach FURTHER than
+ * anything this client has claimed? A marker that does carries something we did not already know,
+ * whoever sent it. One that does not carries nothing new — it is our own echo, a replay of it, or a
+ * device that has read no further than we told the account we had.
+ *
+ * Only the new-message divider consults this. The read pointer is forward-only and cannot be harmed
+ * by a position it already holds.
  */
-const REMEMBERED_PUBLISHES_PER_CONVERSATION = 32
+const published = new Map<string, Map<string, ReadPointer>>()
 
-/** account JID → conversation JID → recently published stanza ids, oldest first. */
-const publishes = new Map<string, Map<string, string[]>>()
+const key = (accountJid: string): Map<string, ReadPointer> => {
+  let byConversation = published.get(accountJid)
+  if (!byConversation) {
+    byConversation = new Map()
+    published.set(accountJid, byConversation)
+  }
+  return byConversation
+}
 
-export function markLocallyPublishedDisplayed(
+/**
+ * Record a position this client published.
+ *
+ * Callers pass positions in the order they publish them, and publication follows a forward-only read
+ * pointer, so the newest value is the furthest. Recording an ambiguous publish — a timeout that may
+ * still have committed server-side — is the safe direction: at worst the divider ignores a marker
+ * covering ground this client had already read.
+ */
+export function noteLocallyPublishedDisplayed(
   accountJid: string,
   conversationJid: string,
-  stanzaId: string,
+  readPointer: ReadPointer,
 ): void {
   if (!accountJid) return
-  let conversations = publishes.get(accountJid)
-  if (!conversations) {
-    conversations = new Map()
-    publishes.set(accountJid, conversations)
-  }
-  const recent = conversations.get(conversationJid) ?? []
-  const existing = recent.indexOf(stanzaId)
-  if (existing !== -1) recent.splice(existing, 1)
-  recent.push(stanzaId)
-  while (recent.length > REMEMBERED_PUBLISHES_PER_CONVERSATION) recent.shift()
-  conversations.set(conversationJid, recent)
+  key(accountJid).set(conversationJid, readPointer)
 }
 
-export function wasLocallyPublishedDisplayed(
+/** The furthest position this client has published for a conversation, if any. */
+export function locallyPublishedDisplayed(
   accountJid: string,
   conversationJid: string,
-  stanzaId: string,
-): boolean {
-  return publishes.get(accountJid)?.get(conversationJid)?.includes(stanzaId) ?? false
-}
-
-export function forgetLocallyPublishedDisplayed(
-  accountJid: string,
-  conversationJid: string,
-  stanzaId: string,
-): void {
-  const conversations = publishes.get(accountJid)
-  const recent = conversations?.get(conversationJid)
-  if (!conversations || !recent) return
-  const at = recent.indexOf(stanzaId)
-  if (at === -1) return
-  recent.splice(at, 1)
-  if (recent.length === 0) conversations.delete(conversationJid)
-  if (conversations.size === 0) publishes.delete(accountJid)
+): ReadPointer | undefined {
+  return published.get(accountJid)?.get(conversationJid)
 }
 
 export function clearLocallyPublishedDisplayed(accountJid: string): void {
-  publishes.delete(accountJid)
+  published.delete(accountJid)
 }

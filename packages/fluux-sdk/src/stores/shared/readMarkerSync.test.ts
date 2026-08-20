@@ -42,6 +42,8 @@ function seenIn(id: string): ReadPointer {
   return { order: { role: 'floor', timestamp: found.timestamp.getTime() }, identity: { state: 'local', messageId: found.id } }
 }
 
+// Re-recording the stanza already stashed is `unchanged`, not `stash-pending`: the pending value
+// does not move, and every resolution that is not `unchanged` makes the stores rebuild the entry.
 describe('resolveRemoteDisplayed', () => {
   it('stashes the stanza-id as a pending high-water mark when the message is not loaded', () => {
     const result = resolveRemoteDisplayed(baseMeta, messages, undefined, 'arch-unknown', 'chat', { isActive: false })
@@ -162,7 +164,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('unchanged')
   })
 
   it('keeps an older-timestamped off-slice marker pending (a migrated pointer may lead its message)', () => {
@@ -186,7 +188,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('unchanged')
   })
 
   it('keeps the marker pending when the off-slice position carries the epoch sentinel', () => {
@@ -205,7 +207,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('unchanged')
   })
 
   it('keeps a newer-timestamped off-slice marker pending', () => {
@@ -224,7 +226,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: false }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('unchanged')
   })
 
   it('stashes rather than reporting unchanged for an undecidable position with nothing pending', () => {
@@ -261,7 +263,7 @@ describe('resolveRemoteDisplayed', () => {
       { isActive: true }
     )
 
-    expect(result.kind).toBe('stash-pending')
+    expect(result.kind).toBe('unchanged')
   })
 
   it('survives an off-slice catch-up and resolves on the later activation fold', () => {
@@ -296,7 +298,7 @@ describe('resolveRemoteDisplayed', () => {
       'chat',
       { isActive: false }
     )
-    expect(catchUp).toEqual({ kind: 'stash-pending' })
+    expect(catchUp).toEqual({ kind: 'unchanged' })
     expect(pending).toBe('arch-m3')
 
     // Opening the entity loads a wide enough slice to order both ends by

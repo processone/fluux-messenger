@@ -118,11 +118,18 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   kind: 'chat' | 'room',
   options: { isActive: boolean }
 ): RemoteDisplayedResolution {
+  // Re-recording the stanza already stashed changes nothing, and the stores rebuild an entry for
+  // every resolution that is not `unchanged`. A duplicate notification, a reconnect seed and a
+  // stream-management replay all deliver the same marker again, so saying so costs a re-render each.
+  const alreadyStashed = meta.pendingRemoteDisplayedStanzaId === stanzaId
+  const stash = (): RemoteDisplayedResolution =>
+    alreadyStashed ? { kind: 'unchanged' } : { kind: 'stash-pending' }
+
   const match = messages.find((m) => m.stanzaId === stanzaId)
-  if (!match) return { kind: 'stash-pending' }
+  if (!match) return stash()
 
   const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageId, kind)
-  if (outcome === 'undecidable') return { kind: 'stash-pending' }
+  if (outcome === 'undecidable') return stash()
   if (outcome === 'no-advance') {
     if (options.isActive && currentFirstNewMessageId !== undefined) {
       return { kind: 'resolved-active', markerPointer: makeReadPointer(match, kind) }

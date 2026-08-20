@@ -62,10 +62,8 @@ import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
 import {
   clearLocallyPublishedDisplayed,
-  forgetLocallyPublishedDisplayed,
-  markLocallyPublishedDisplayed,
+  noteLocallyPublishedDisplayed,
 } from './localMdsPublishes'
-import { classifyRemoteDisplayed } from './remoteDisplayedDispatch'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -168,6 +166,12 @@ export function setupMdsSideEffects(
    * XEP-0359 `by` for a conversation's stanza-ids: the archive that assigned
    * them — the room itself for MUC, our own server (bare JID) for 1:1.
    */
+  /** Remember how far this client just told the account it had read. */
+  function notePublishedPosition(accountJid: string, jid: string): void {
+    const pointer = conversationMetadata(jid)?.readPointer
+    if (pointer) noteLocallyPublishedDisplayed(accountJid, jid, pointer)
+  }
+
   function stanzaIdBy(jid: string): string {
     return isRoom(jid) ? jid : ownBareJid()
   }
@@ -181,11 +185,11 @@ export function setupMdsSideEffects(
     const by = stanzaIdBy(jid)
     if (!by) return
     const accountJid = ownBareJid()
-    markLocallyPublishedDisplayed(accountJid, jid, stanzaId)
+    notePublishedPosition(accountJid, jid)
     locallyPublishedAccounts.add(accountJid)
     client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
-      forgetLocallyPublishedDisplayed(accountJid, jid, stanzaId)
-      // Best-effort — an unconverted marker is republished on the next advance.
+      // Best-effort — an unconverted marker is republished on the next advance. The recorded
+      // position stays: a rejection can be a timeout the server nonetheless committed.
     })
   }
 
@@ -538,13 +542,16 @@ export function setupMdsSideEffects(
       }
       if (decision === 'skip') continue
       const accountJid = ownBareJid()
-      markLocallyPublishedDisplayed(accountJid, jid, stanzaId)
+      // Recorded BEFORE the IQ and never taken back. A rejection can be an ambiguous timeout that
+      // the server nonetheless committed, and the node would then echo a position we no longer
+      // recognise as ours. Keeping it is the safe direction: at worst the divider ignores a marker
+      // covering ground this client had already read.
+      notePublishedPosition(accountJid, jid)
       locallyPublishedAccounts.add(accountJid)
       try {
         await client.internal.mds.publishDisplayed(jid, stanzaId, by)
         recordKnownNodeStanzaId(jid, stanzaId)
       } catch {
-        forgetLocallyPublishedDisplayed(accountJid, jid, stanzaId)
         // Best-effort; keep the position handled as documented above.
       }
     }
@@ -806,8 +813,7 @@ export function setupMdsSideEffects(
       for (const [jid] of drainable) unroutedSeedMarkers.delete(jid)
       for (const [jid, { stanzaId, legacy }] of drainable) {
         roomStore.getState().applyRemoteDisplayed(
-          jid, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), jid, stanzaId),
-        )
+jid, stanzaId)
         // The JID is now classified as a room → a legacy item can be migrated.
         if (legacy) migrateLegacyMarker(jid, stanzaId)
       }
@@ -890,13 +896,11 @@ export function setupMdsSideEffects(
         // local read advance overwrites it.
         if (isRoom(bare)) {
           roomStore.getState().applyRemoteDisplayed(
-            bare, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), bare, stanzaId),
-          )
+bare, stanzaId)
           if (legacy) migrateLegacyMarker(bare, stanzaId)
         } else {
           chatStore.getState().applyRemoteDisplayed(
-            bare, stanzaId, undefined, classifyRemoteDisplayed(ownBareJid(), bare, stanzaId),
-          )
+bare, stanzaId)
           const migrateNow = !!legacy && chatStore.getState().conversationEntities.has(bare)
           if (migrateNow) migrateLegacyMarker(bare, stanzaId)
           unroutedSeedMarkers.set(bare, { stanzaId, legacy: !!legacy && !migrateNow })

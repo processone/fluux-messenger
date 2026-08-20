@@ -18,7 +18,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 })
 
 import {
-  markLocallyPublishedDisplayed,
+  noteLocallyPublishedDisplayed,
   clearLocallyPublishedDisplayed,
 } from './localMdsPublishes'
 import { setupMdsSideEffects } from './mdsSideEffects'
@@ -308,15 +308,15 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
-  it('classifies the local publish echo so it cannot move the divider', async () => {
+  it('ignores an echo of a position this client already published', async () => {
     const cid = 'juliet@capulet.example'
     const account = 'romeo@montague.example'
     const client = makeClient()
     const mockStores: MockStoreRefs = createMockStoreRefs()
     mockStores.connection.jid = `${account}/phone`
     const applyRemoteDisplayed = vi.fn(
-      (conversationId: string, stanzaId: string, messagesOverride?: never, origin?: never) => {
-        chatStore.getState().applyRemoteDisplayed(conversationId, stanzaId, messagesOverride, origin)
+      (conversationId: string, stanzaId: string) => {
+        chatStore.getState().applyRemoteDisplayed(conversationId, stanzaId)
       },
     )
     mockStores.chat.applyRemoteDisplayed = applyRemoteDisplayed as never
@@ -345,13 +345,13 @@ describe('setupMdsSideEffects', () => {
     // Applied like any other marker — the pointer and the pending bookkeeping still need it — but
     // classified as this client's own, which is the only thing the divider consults. The scroll that
     // produced the publish must not come back as a reason to move the line.
-    expect(applyRemoteDisplayed).toHaveBeenCalledWith(cid, 's2', undefined, 'local-echo')
+    expect(applyRemoteDisplayed).toHaveBeenCalledWith(cid, 's2')
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
     unbind()
     cleanup()
   })
 
-  it('classifies the echo that comes back through the reconnect seed too', async () => {
+  it('ignores that echo through the reconnect seed too', async () => {
     // The seed re-reads the whole node on `online` and applies each marker directly, without going
     // through the live event. That second entrance is how an echo used to slip past classification
     // — and a stream-management replay arrives the same way, however long after the publish.
@@ -368,7 +368,7 @@ describe('setupMdsSideEffects', () => {
     patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
 
     // This client publishes s2 from its own reading, then reconnects and the node hands it back.
-    markLocallyPublishedDisplayed(account, cid, 's2')
+    noteLocallyPublishedDisplayed(account, cid, makeReadPointer(msg('m2', 's2'), 'chat'))
     client.internal.mds.fetchAllDisplayed = vi
       .fn()
       .mockResolvedValue([{ conversationJid: cid, stanzaId: 's2' }])

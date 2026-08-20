@@ -51,7 +51,9 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
 import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
-import type { RemoteDisplayedOrigin } from '../core/remoteDisplayedDispatch'
+import { locallyPublishedDisplayed } from '../core/localMdsPublishes'
+import { isAhead } from './shared/readPointer'
+import { getBareJid } from '../core/jid'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
   advance,
@@ -403,8 +405,6 @@ interface ChatState {
     conversationId: string,
     stanzaId: string,
     messagesOverride?: Message[],
-    /** Whose reading this marker reports; only the divider depends on it. */
-    origin?: RemoteDisplayedOrigin,
   ) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
@@ -2114,7 +2114,7 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
-      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride, origin = 'remote') => {
+      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
         // Set when the resolution advanced the pointer on a NON-active
         // conversation — triggers the exact cache recount below.
         let advancedNonActive = false
@@ -2184,24 +2184,32 @@ export const chatStore = createStore<ChatState>()(
           // were read, so leaving the divider in front of them would mark as new what the user has
           // already seen. Scrolling THIS view is not such evidence and does not come through here.
           let newMarkers = state.firstNewMessageMarkers
-          if (
-            origin === 'remote' &&
-            (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active')
-          ) {
-            const parked = state.firstNewMessageMarkers.get(conversationId)
+          // The line follows a marker only when it reaches FURTHER than anything this client has told
+          // the account it read. Publishing pushes to every resource of the account, so a marker at or
+          // behind our own last published position is our own scroll coming back — live, replayed, or
+          // re-read from the node on reconnect — and letting it move the line would make scrolling move
+          // it through a loop. Past that position it carries something we never claimed, whoever sent
+          // it. The wire cannot name the publisher; this is the question that can be answered.
+          if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
             const markerPointer = resolution.kind === 'resolved-active'
               ? resolution.markerPointer
               : resolution.readPointer
-            const dividerAdvance = remoteDividerAdvances.apply(
+            const claimed = locallyPublishedDisplayed(
+              getBareJid(connectionStore.getState().jid ?? ''),
               conversationId,
-              parked,
-              markerPointer,
-              messages,
-              'chat',
             )
-            if (dividerAdvance.kind === 'advanced') {
-              newMarkers = new Map(state.firstNewMessageMarkers)
-              newMarkers.set(conversationId, dividerAdvance.divider)
+            if (claimed === undefined || isAhead(markerPointer, claimed)) {
+              const dividerAdvance = remoteDividerAdvances.apply(
+                conversationId,
+                state.firstNewMessageMarkers.get(conversationId),
+                markerPointer,
+                messages,
+                'chat',
+              )
+              if (dividerAdvance.kind === 'advanced') {
+                newMarkers = new Map(state.firstNewMessageMarkers)
+                newMarkers.set(conversationId, dividerAdvance.divider)
+              }
             }
           }
 

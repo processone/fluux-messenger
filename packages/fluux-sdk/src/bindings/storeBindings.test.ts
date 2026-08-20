@@ -8,10 +8,6 @@ import {
   type MockStoreRefs,
 } from '../core/test-utils'
 import type { Message, RoomMessage, RoomOccupant, Contact, Room, AdminCommand, AdminSession, SystemNotificationType } from '../core/types'
-import {
-  clearLocallyPublishedDisplayed,
-  markLocallyPublishedDisplayed,
-} from '../core/localMdsPublishes'
 
 describe('createStoreBindings', () => {
   let mockClient: MockSDKClient
@@ -190,8 +186,6 @@ describe('createStoreBindings', () => {
       expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith(
         'juliet@capulet.example',
         'stanza-77',
-        undefined,
-        'remote',
       )
     })
 
@@ -200,35 +194,16 @@ describe('createStoreBindings', () => {
       mockStores.room.applyRemoteDisplayed = roomApply
       ;(mockStores.room.rooms as Map<string, unknown>).set('room@conf.example', {})
       mockClient.emit('read:displayed-synced', { conversationId: 'room@conf.example', stanzaId: 's7' })
-      expect(roomApply).toHaveBeenCalledWith('room@conf.example', 's7', undefined, 'remote')
+      expect(roomApply).toHaveBeenCalledWith('room@conf.example', 's7')
       expect(mockStores.chat.applyRemoteDisplayed).not.toHaveBeenCalled()
     })
 
     it('routes read:displayed-synced for a non-room JID to chatStore', () => {
       mockClient.emit('read:displayed-synced', { conversationId: 'juliet@capulet.example', stanzaId: 's8' })
-      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith('juliet@capulet.example', 's8', undefined, 'remote')
+      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith('juliet@capulet.example', 's8')
       expect(mockStores.room.applyRemoteDisplayed).not.toHaveBeenCalled()
     })
 
-    it("classifies this client's own echo as such, without dropping it", () => {
-      const account = 'romeo@montague.example'
-      const chat = 'juliet@capulet.example'
-      const room = 'room@conf.example'
-      mockStores.connection.jid = `${account}/phone`
-      ;(mockStores.room.rooms as Map<string, unknown>).set(room, {})
-      markLocallyPublishedDisplayed(account, chat, 's-chat')
-      markLocallyPublishedDisplayed(account, room, 's-room')
-
-      mockClient.emit('read:displayed-synced', { conversationId: chat, stanzaId: 's-chat' })
-      mockClient.emit('read:displayed-synced', { conversationId: room, stanzaId: 's-room' })
-
-      // Still applied: an echo carries the read pointer, the pending-marker bookkeeping and the
-      // recount exactly as a peer's marker does. Only the divider reads the origin, so dropping the
-      // call outright would strand a pending marker a stash is waiting to clear.
-      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith(chat, 's-chat', undefined, 'local-echo')
-      expect(mockStores.room.applyRemoteDisplayed).toHaveBeenCalledWith(room, 's-room', undefined, 'local-echo')
-      clearLocallyPublishedDisplayed(account)
-    })
   })
 
   describe('MAM anchor-purged events (purged id-exact catch-up cursor)', () => {
