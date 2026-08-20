@@ -36,6 +36,7 @@ export type RemoteDisplayedResolution =
    * every merge.
    */
   | { kind: 'clear-pending' }
+  | { kind: 'resolved-active'; markerPointer: ReadPointer }
   /**
    * Forward advance. The whole read position travels as one `readPointer`
    * (#1081); divider placement remains owned by activation.
@@ -117,6 +118,9 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   const outcome = resolveAdvance(meta.readPointer, match, messages, meta, currentFirstNewMessageId, kind)
   if (outcome === 'undecidable') return { kind: 'stash-pending' }
   if (outcome === 'no-advance') {
+    if (options.isActive && currentFirstNewMessageId !== undefined) {
+      return { kind: 'resolved-active', markerPointer: makeReadPointer(match, kind) }
+    }
     return meta.pendingRemoteDisplayedStanzaId === undefined
       ? { kind: 'unchanged' }
       : { kind: 'clear-pending' }

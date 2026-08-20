@@ -2140,7 +2140,7 @@ export const chatStore = createStore<ChatState>()(
           const metaPatch =
             resolution.kind === 'stash-pending'
               ? { pendingRemoteDisplayedStanzaId: stanzaId }
-              : resolution.kind === 'clear-pending'
+              : resolution.kind === 'clear-pending' || resolution.kind === 'resolved-active'
                 ? { pendingRemoteDisplayedStanzaId: undefined }
                 : {
                     readPointer: resolution.readPointer,
@@ -2172,13 +2172,16 @@ export const chatStore = createStore<ChatState>()(
           // were read, so leaving the divider in front of them would mark as new what the user has
           // already seen. Scrolling THIS view is not such evidence and does not come through here.
           let newMarkers = state.firstNewMessageMarkers
-          if (resolution.kind === 'advanced-active') {
+          if (resolution.kind === 'advanced-active' || resolution.kind === 'resolved-active') {
             const parked = state.firstNewMessageMarkers.get(conversationId)
+            const markerPointer = resolution.kind === 'resolved-active'
+              ? resolution.markerPointer
+              : resolution.readPointer
             const remote = notifState.onActivate(
               {
                 unreadCount: 0,
                 mentionsCount: 0,
-                readPointer: resolution.readPointer,
+                readPointer: markerPointer,
                 firstNewMessageId: undefined,
               },
               messages,

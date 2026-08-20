@@ -249,6 +249,26 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m3')
   })
 
+  it('carries the divider past a remote marker behind the local pointer', () => {
+    const messages = [
+      rmsg('m1', 's1', 1),
+      rmsg('m2', 's2', 2),
+      rmsg('m3', 's3', 3),
+      rmsg('m4', 's4', 4),
+      rmsg('m5', 's5', 5),
+    ]
+    seedRoom(ROOM, messages, 'm5')
+    roomStore.setState((state) => ({
+      activeRoomJid: ROOM,
+      firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, 'm1'),
+    }))
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.readPointer?.identity.messageId).toBe('m5')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m4')
+  })
+
   it('does NOT recompute the divider for a non-active room', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
     roomStore.setState((s) => {

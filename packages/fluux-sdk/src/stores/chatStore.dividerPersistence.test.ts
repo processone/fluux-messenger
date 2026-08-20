@@ -65,6 +65,15 @@ describe('the active conversation keeps the divider its view opened with', () =>
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).not.toEqual(before)
   })
 
+  it('follows a remote marker behind the local pointer', () => {
+    seedActive('m4', 'm1')
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m4')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m3')
+  })
+
   it('does not resurrect a line the reader cleared', () => {
     // Clearing is deliberate — Esc, mark-all-read, sending. A later marker moves the pointer and
     // the count, and must not put the landmark back on screen.
