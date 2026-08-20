@@ -66,7 +66,7 @@ import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
-import { advanceDividerToRemoteRead } from './shared/dividerAdvance'
+import { createRemoteDividerAdvanceTracker } from './shared/dividerAdvance'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { advance, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
@@ -538,6 +538,7 @@ let activationToken = 0
 // XEP-0490 first-open-per-session fold gate (see shared/readMarkerSync;
 // parity with chatStore). Reset on reset() (logout).
 const mdsGate = createMdsSessionGate()
+const remoteDividerAdvances = createRemoteDividerAdvanceTracker()
 
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
@@ -1881,6 +1882,7 @@ export const roomStore = createStore<RoomState>()(
     roomPendingUnreadWrites.clear()
     roomEntityEpoch.clear()
     roomRecountRetry.clear()
+    remoteDividerAdvances.reset()
     // Tear down the OUTGOING account's transient overlay entries
     // before adopting the new scope — see lastRoomTransientScope's doc for
     // why this can't just read getStorageScopeJid() here.
@@ -1907,6 +1909,7 @@ export const roomStore = createStore<RoomState>()(
     roomPendingUnreadWrites.clear()
     roomEntityEpoch.clear()
     roomRecountRetry.clear()
+    remoteDividerAdvances.reset()
     // Logout tears down this account's transient overlay too.
     // Unlike switchAccount, nothing flips the global scope before reset()
     // runs (clearLocalData calls it directly), so getStorageScopeJid() here
@@ -2737,6 +2740,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   markReadToNewest: (roomJid) => {
+    remoteDividerAdvances.clear(roomJid)
     set((state) => {
       const existing = state.rooms.get(roomJid)
       if (!existing) return state
@@ -2794,6 +2798,8 @@ export const roomStore = createStore<RoomState>()(
     const prevJid = get().activeRoomJid
     // Skip if already the active room (prevents duplicate side effects)
     if (roomJid === prevJid) return
+    if (prevJid) remoteDividerAdvances.clear(prevJid)
+    if (roomJid) remoteDividerAdvances.clear(roomJid)
 
     // Deactivate previous room: clear its "new messages" marker (if any) and
     // EVICT its message array from RAM. Only the active room keeps its messages
@@ -3019,6 +3025,7 @@ export const roomStore = createStore<RoomState>()(
   getActiveRoomJid: () => get().activeRoomJid,
 
   clearFirstNewMessageId: (roomJid) => {
+    remoteDividerAdvances.clear(roomJid)
     set((state) => {
       const next = clearMarker(state.firstNewMessageMarkers, roomJid)
       return next ? { firstNewMessageMarkers: next } : state
@@ -3204,20 +3211,16 @@ export const roomStore = createStore<RoomState>()(
         const markerPointer = resolution.kind === 'resolved-active'
           ? resolution.markerPointer
           : resolution.readPointer
-        const remote = notifState.onActivate(
-          {
-            unreadCount: 0,
-            mentionsCount: 0,
-            readPointer: markerPointer,
-            firstNewMessageId: undefined,
-          },
+        const dividerAdvance = remoteDividerAdvances.apply(
+          roomJid,
+          parked,
+          markerPointer,
           messages,
-          'room'
-        ).firstNewMessageId
-        const next = advanceDividerToRemoteRead(parked, remote, messages)
-        if (next !== parked && next !== undefined) {
+          'room',
+        )
+        if (dividerAdvance.kind === 'advanced') {
           newMarkers = new Map(state.firstNewMessageMarkers)
-          newMarkers.set(roomJid, next)
+          newMarkers.set(roomJid, dividerAdvance.divider)
         }
       }
 
@@ -4438,3 +4441,29 @@ export const roomStore = createStore<RoomState>()(
   },
 }))
 )
+
+roomStore.subscribe((state, previous) => {
+  const roomJid = state.activeRoomJid
+  if (!roomJid || !remoteDividerAdvances.has(roomJid)) return
+  const parked = state.firstNewMessageMarkers.get(roomJid)
+  if (parked === undefined) {
+    remoteDividerAdvances.clear(roomJid)
+    return
+  }
+  if (state.messages.get(roomJid) === previous.messages.get(roomJid)) return
+
+  const result = remoteDividerAdvances.retry(
+    roomJid,
+    parked,
+    state.messages.get(roomJid) ?? [],
+    'room',
+  )
+  if (result.kind === 'advanced') {
+    roomStore.setState((current) => ({
+      firstNewMessageMarkers: new Map(current.firstNewMessageMarkers).set(
+        roomJid,
+        result.divider,
+      ),
+    }))
+  }
+})

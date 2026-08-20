@@ -1,3 +1,7 @@
+import type { NotificationMessage } from './notificationState'
+import * as notifState from './notificationState'
+import { isAhead, type ReadPointer } from './readPointer'
+
 /**
  * Moving the new-message divider forward on evidence that the reader already read past it.
  *
@@ -29,4 +33,79 @@ export function advanceDividerToRemoteRead(
   if (parkedIndex === -1 || remoteIndex === -1) return parkedDivider
 
   return remoteIndex > parkedIndex ? remoteDivider : parkedDivider
+}
+
+export type RemoteDividerAdvanceResult =
+  | { kind: 'advanced'; divider: string }
+  | { kind: 'unchanged' }
+
+export function createRemoteDividerAdvanceTracker() {
+  const pending = new Map<string, ReadPointer>()
+
+  function apply<T extends NotificationMessage>(
+    id: string,
+    parkedDivider: string | undefined,
+    markerPointer: ReadPointer,
+    messages: T[],
+    kind: 'chat' | 'room',
+  ): RemoteDividerAdvanceResult {
+    const remembered = pending.get(id)
+    const boundary = remembered && !isAhead(markerPointer, remembered) ? remembered : markerPointer
+
+    if (parkedDivider === undefined) {
+      pending.delete(id)
+      return { kind: 'unchanged' }
+    }
+
+    const remoteDivider = notifState.onActivate(
+      {
+        unreadCount: 0,
+        mentionsCount: 0,
+        readPointer: boundary,
+        firstNewMessageId: undefined,
+      },
+      messages,
+      kind,
+    ).firstNewMessageId
+
+    const parkedIndex = messages.findIndex((message) => message.id === parkedDivider)
+    const remoteIndex = remoteDivider === undefined
+      ? -1
+      : messages.findIndex((message) => message.id === remoteDivider)
+
+    if (remoteDivider === undefined || parkedIndex === -1 || remoteIndex === -1) {
+      pending.set(id, boundary)
+      return { kind: 'unchanged' }
+    }
+
+    pending.delete(id)
+    const divider = advanceDividerToRemoteRead(parkedDivider, remoteDivider, messages)
+    return divider !== parkedDivider && divider !== undefined
+      ? { kind: 'advanced', divider }
+      : { kind: 'unchanged' }
+  }
+
+  return {
+    apply,
+    retry<T extends NotificationMessage>(
+      id: string,
+      parkedDivider: string | undefined,
+      messages: T[],
+      kind: 'chat' | 'room',
+    ): RemoteDividerAdvanceResult {
+      const markerPointer = pending.get(id)
+      return markerPointer === undefined
+        ? { kind: 'unchanged' }
+        : apply(id, parkedDivider, markerPointer, messages, kind)
+    },
+    has(id: string): boolean {
+      return pending.has(id)
+    },
+    clear(id: string): void {
+      pending.delete(id)
+    },
+    reset(): void {
+      pending.clear()
+    },
+  }
 }

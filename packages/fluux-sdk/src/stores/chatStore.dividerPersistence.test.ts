@@ -44,6 +44,7 @@ function seedActive(lastSeen: string, marker: string) {
 
 describe('the active conversation keeps the divider its view opened with', () => {
   beforeEach(() => {
+    chatStore.getState().clearFirstNewMessageId(CID)
     chatStore.setState({
       activeConversationId: undefined,
       conversationMeta: new Map(),
@@ -72,6 +73,27 @@ describe('the active conversation keeps the divider its view opened with', () =>
 
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m4')
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m3')
+  })
+
+  it('follows a remote marker once its successor becomes resident', () => {
+    seedActive('m2', 'm1')
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m4', MESSAGES)
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+
+    chatStore.getState().addMessage(msg('m5'))
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m5')
+  })
+
+  it('does not restore a cleared line when a deferred successor arrives', () => {
+    seedActive('m2', 'm1')
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m4', MESSAGES)
+    chatStore.getState().clearFirstNewMessageId(CID)
+    chatStore.getState().addMessage(msg('m5'))
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBeUndefined()
   })
 
   it('does not resurrect a line the reader cleared', () => {
