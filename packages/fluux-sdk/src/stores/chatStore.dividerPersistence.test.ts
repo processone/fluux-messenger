@@ -104,9 +104,11 @@ describe('the active conversation keeps the divider its view opened with', () =>
   })
 
   it('drops a deferred marker overtaken by a local publish', () => {
+    // The parked line must be OUTSIDE the slice, or the advance applies at once and nothing is
+    // deferred — the fixture would then describe a state it never reaches.
     seedActive('m2', 'm1')
-    chatStore.setState({ messages: new Map([[CID, MESSAGES.slice(1)]]) })
-    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES.slice(1))
+    chatStore.setState({ messages: new Map([[CID, MESSAGES.slice(2)]]) })
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES.slice(2))
     noteLocallyPublishedDisplayed(
       'me@example.com',
       CID,

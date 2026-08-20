@@ -1431,7 +1431,7 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
-  it('records the migrated marker position instead of the current local pointer', async () => {
+  it('lets a migrated marker place the line, then ignores one behind our own reading', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
     client.internal.mds.fetchAllDisplayed = vi
@@ -1457,13 +1457,17 @@ describe('setupMdsSideEffects', () => {
     )
     expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
 
+    // s2 is behind the position this client published from its own pointer (m3), so it tells us
+    // nothing we had not already claimed — our own scrolling must not move the line through it.
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
     cleanup()
   })
 
-  it('waits to migrate an off-slice legacy marker until its position resolves', async () => {
+  it('migrates an off-slice legacy marker without waiting for its message', async () => {
+    // Migration rewrites a payload format. It carries no claim about what THIS client read, so it
+    // needs no local position and must not wait for the marker's message to load.
     const cid = 'juliet@capulet.example'
     const client = makeClient()
     client.internal.mds.fetchAllDisplayed = vi
@@ -1471,16 +1475,10 @@ describe('setupMdsSideEffects', () => {
       .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     addConversation(cid)
-    seedMessages(cid, [msg('m3', 's3'), msg('m4', 's4')])
-    seedMeta(cid, 'm3')
 
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
-
-    expect(client.internal.mds.publishDisplayed).not.toHaveBeenCalled()
-
-    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')])
 
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
       cid,

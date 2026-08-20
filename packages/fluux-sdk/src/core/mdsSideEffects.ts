@@ -164,17 +164,6 @@ export function setupMdsSideEffects(
     return jid ? getBareJid(jid) : ''
   }
 
-  /**
-   * XEP-0359 `by` for a conversation's stanza-ids: the archive that assigned
-   * them — the room itself for MUC, our own server (bare JID) for 1:1.
-   */
-  function resolvedPointerForStanzaId(jid: string, stanzaId: string): ReadPointer | undefined {
-    const kind = isRoom(jid) ? 'room' : 'chat'
-    const last = conversationLastMessage(jid)
-    const message = conversationMessages(jid).find((candidate) => candidate.stanzaId === stanzaId)
-      ?? (last?.stanzaId === stanzaId ? last : undefined)
-    return message ? makeReadPointer(message, kind) : undefined
-  }
 
   function stanzaIdBy(jid: string): string {
     return isRoom(jid) ? jid : ownBareJid()
@@ -188,20 +177,14 @@ export function setupMdsSideEffects(
   function migrateLegacyMarker(jid: string, stanzaId: string): void {
     const by = stanzaIdBy(jid)
     if (!by) return
-    const accountJid = ownBareJid()
-    const readPointer = resolvedPointerForStanzaId(jid, stanzaId)
-    if (!readPointer) {
-      pendingLegacyMigrations.set(jid, stanzaId)
-      return
-    }
     pendingLegacyMigrations.delete(jid)
-    const claim = beginLocallyPublishedDisplayed(accountJid, jid, readPointer)
-    void client.internal.mds.publishDisplayed(jid, stanzaId, by).then(
-      () => claim.settle('published'),
-      (error: unknown) => claim.settle(
-        isDefinitivePublishRejection(error) ? 'rejected' : 'ambiguous',
-      ),
-    )
+    // No publish claim here. Migration rewrites the PAYLOAD of a marker another client wrote; the
+    // position it carries is that client's reading, not ours. Claiming it would make this client
+    // suppress the very marker it just republished, and the divider would ignore a position it
+    // should follow.
+    void client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
+      // Best-effort — an unconverted marker is republished on the next advance.
+    })
   }
 
   function retryLegacyMigrations(): void {
