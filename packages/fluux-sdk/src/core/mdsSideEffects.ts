@@ -60,6 +60,11 @@ import {
 } from '../stores/shared/readState'
 import type { ReadPointer } from '../stores/shared/readPointer'
 import { getBareJid } from './jid'
+import {
+  clearLocallyPublishedDisplayed,
+  forgetLocallyPublishedDisplayed,
+  markLocallyPublishedDisplayed,
+} from './localMdsPublishes'
 import { logInfo } from './logger'
 import * as messageCache from '../utils/messageCache'
 import { getStorageScopeJid } from '../utils/storageScope'
@@ -132,6 +137,7 @@ export function setupMdsSideEffects(
   // the JIDs owed another pass because they changed during one. See consider().
   const resolutionInFlight = new Set<string>()
   const resolutionOwed = new Set<string>()
+  const locallyPublishedAccounts = new Set<string>()
   // Bumped whenever the session boundary moves (fresh seed, disconnect). A
   // resolution that spans a bump was ordered against node state the new session
   // has re-derived, so it is discarded rather than published.
@@ -173,7 +179,11 @@ export function setupMdsSideEffects(
   function migrateLegacyMarker(jid: string, stanzaId: string): void {
     const by = stanzaIdBy(jid)
     if (!by) return
+    const accountJid = ownBareJid()
+    markLocallyPublishedDisplayed(accountJid, jid, stanzaId)
+    locallyPublishedAccounts.add(accountJid)
     client.internal.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
+      forgetLocallyPublishedDisplayed(accountJid, jid, stanzaId)
       // Best-effort — an unconverted marker is republished on the next advance.
     })
   }
@@ -526,10 +536,14 @@ export function setupMdsSideEffects(
         continue
       }
       if (decision === 'skip') continue
+      const accountJid = ownBareJid()
+      markLocallyPublishedDisplayed(accountJid, jid, stanzaId)
+      locallyPublishedAccounts.add(accountJid)
       try {
         await client.internal.mds.publishDisplayed(jid, stanzaId, by)
         recordKnownNodeStanzaId(jid, stanzaId)
       } catch {
+        forgetLocallyPublishedDisplayed(accountJid, jid, stanzaId)
         // Best-effort; keep the position handled as documented above.
       }
     }
@@ -957,6 +971,9 @@ export function setupMdsSideEffects(
 
   return () => {
     disposed = true
+    for (const accountJid of locallyPublishedAccounts) {
+      clearLocallyPublishedDisplayed(accountJid)
+    }
     resolutionOwed.clear()
     unsubscribeConversationMeta()
     unsubscribeMessages()

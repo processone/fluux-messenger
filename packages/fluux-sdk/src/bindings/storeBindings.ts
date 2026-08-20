@@ -37,6 +37,7 @@ import {
 import { findLastNonIgnoredMessage } from '../stores/shared/lastMessageUtils'
 import { isMarkerDebugEnabled, markerDebugLog } from '../utils/markerDebug'
 import { getBareJid, getLocalPart } from '../core/jid'
+import { wasLocallyPublishedDisplayed } from '../core/localMdsPublishes'
 
 /**
  * Store references for binding SDK events.
@@ -244,6 +245,8 @@ export function createStoreBindings(
 
   on('read:displayed-synced', ({ conversationId, stanzaId }) => {
     const stores = getStores()
+    const accountJid = getBareJid(stores.connection.jid ?? '')
+    if (wasLocallyPublishedDisplayed(accountJid, conversationId, stanzaId)) return
     const isRoom = stores.room.rooms.has(conversationId)
     // XEP-0490 read-position from another of our own devices. This advances the read pointer,
     // from which the unread divider (firstNewMessageId) is derived — so a sync landing on/just

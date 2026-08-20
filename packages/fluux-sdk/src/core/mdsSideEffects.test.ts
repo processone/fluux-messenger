@@ -18,6 +18,8 @@ Object.defineProperty(globalThis, 'localStorage', {
 })
 
 import { setupMdsSideEffects } from './mdsSideEffects'
+import { createStoreBindings, type StoreRefs } from '../bindings/storeBindings'
+import { createMockStoreRefs, type MockStoreRefs } from './test-utils'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { roomStore } from '../stores/roomStore'
@@ -299,6 +301,44 @@ describe('setupMdsSideEffects', () => {
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     // 1:1 → by is our own bare JID (the archive that assigned the stanza-id).
     expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('suppresses the local publish echo before remote-divider dispatch', async () => {
+    const cid = 'juliet@capulet.example'
+    const account = 'romeo@montague.example'
+    const client = makeClient()
+    const mockStores: MockStoreRefs = createMockStoreRefs()
+    mockStores.connection.jid = `${account}/phone`
+    const applyRemoteDisplayed = vi.fn((conversationId: string, stanzaId: string) => {
+      chatStore.getState().applyRemoteDisplayed(conversationId, stanzaId)
+    })
+    mockStores.chat.applyRemoteDisplayed = applyRemoteDisplayed as never
+    const unbind = createStoreBindings(
+      client as never,
+      () => mockStores as unknown as StoreRefs,
+    )
+    connectionStore.setState({ status: 'online', jid: `${account}/phone` } as never)
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1' }])
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    seedMeta(cid, 'm1')
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+
+    patchMeta(cid, { readPointer: makeReadPointer(msg('m2', 's2'), 'chat') })
+    await vi.advanceTimersByTimeAsync(2_000)
+    client._emit('read:displayed-synced', { conversationId: cid, stanzaId: 's2' })
+
+    expect(applyRemoteDisplayed).not.toHaveBeenCalled()
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m1')
+    unbind()
     cleanup()
   })
 

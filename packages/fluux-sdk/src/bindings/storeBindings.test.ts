@@ -8,6 +8,10 @@ import {
   type MockStoreRefs,
 } from '../core/test-utils'
 import type { Message, RoomMessage, RoomOccupant, Contact, Room, AdminCommand, AdminSession, SystemNotificationType } from '../core/types'
+import {
+  clearLocallyPublishedDisplayed,
+  markLocallyPublishedDisplayed,
+} from '../core/localMdsPublishes'
 
 describe('createStoreBindings', () => {
   let mockClient: MockSDKClient
@@ -202,6 +206,23 @@ describe('createStoreBindings', () => {
       mockClient.emit('read:displayed-synced', { conversationId: 'juliet@capulet.example', stanzaId: 's8' })
       expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith('juliet@capulet.example', 's8')
       expect(mockStores.room.applyRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('suppresses locally published marker echoes before chat and room routing', () => {
+      const account = 'romeo@montague.example'
+      const chat = 'juliet@capulet.example'
+      const room = 'room@conf.example'
+      mockStores.connection.jid = `${account}/phone`
+      ;(mockStores.room.rooms as Map<string, unknown>).set(room, {})
+      markLocallyPublishedDisplayed(account, chat, 's-chat')
+      markLocallyPublishedDisplayed(account, room, 's-room')
+
+      mockClient.emit('read:displayed-synced', { conversationId: chat, stanzaId: 's-chat' })
+      mockClient.emit('read:displayed-synced', { conversationId: room, stanzaId: 's-room' })
+
+      expect(mockStores.chat.applyRemoteDisplayed).not.toHaveBeenCalled()
+      expect(mockStores.room.applyRemoteDisplayed).not.toHaveBeenCalled()
+      clearLocallyPublishedDisplayed(account)
     })
   })
 
