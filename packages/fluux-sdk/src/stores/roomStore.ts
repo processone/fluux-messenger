@@ -3233,6 +3233,18 @@ export const roomStore = createStore<RoomState>()(
           newMarkers.set(roomJid, dividerAdvance.divider)
         }
       }
+      // `resolved-active` exists only to give a live divider a chance to move; it advances no
+      // pointer. When the divider did not move and no pending marker needed clearing, nothing
+      // changed — and rebuilding the entry here would re-derive it and re-render every consumer on
+      // each echo of this client's own scrolling.
+      if (
+        resolution.kind === 'resolved-active' &&
+        newMarkers === state.firstNewMessageMarkers &&
+        meta.pendingRemoteDisplayedStanzaId === undefined
+      ) {
+        return state
+      }
+
 
       // A position another device read to is a read position like any other —
       // persist it. The stash/clear kinds move no pointer.

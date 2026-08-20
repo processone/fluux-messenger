@@ -96,6 +96,24 @@ describe('the active conversation keeps the divider its view opened with', () =>
     expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBeUndefined()
   })
 
+  it('writes nothing when a resolved marker moves neither the pointer nor the line', () => {
+    // This client publishes as it scrolls, and the account's node pushes every publish back. Those
+    // echoes resolve without advancing anything. Rebuilding the entry for each one re-derives it and
+    // re-renders every consumer, so a no-op must stay a no-op — identity is the assertion.
+    seedActive('m3', 'm4')
+    const before = {
+      meta: chatStore.getState().conversationMeta,
+      conversations: chatStore.getState().conversations,
+      markers: chatStore.getState().firstNewMessageMarkers,
+    }
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
+
+    expect(chatStore.getState().conversationMeta).toBe(before.meta)
+    expect(chatStore.getState().conversations).toBe(before.conversations)
+    expect(chatStore.getState().firstNewMessageMarkers).toBe(before.markers)
+  })
+
   it('does not resurrect a line the reader cleared', () => {
     // Clearing is deliberate — Esc, mark-all-read, sending. A later marker moves the pointer and
     // the count, and must not put the landmark back on screen.

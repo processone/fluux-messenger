@@ -39,7 +39,26 @@ export type RemoteDividerAdvanceResult =
   | { kind: 'advanced'; divider: string }
   | { kind: 'unchanged' }
 
+/**
+ * Remembers remote read boundaries that could not be applied to the divider yet.
+ *
+ * A marker can prove the user read through the newest row this client holds, and then there is no
+ * message after it to put the line on. Dropping that proof would leave the line standing in front
+ * of messages known to be read for the rest of the visit — the boundary is therefore kept and
+ * retried when the slice grows.
+ *
+ * One boundary per entity, and it only ever moves forward: a later marker that resolves NEARER than
+ * one already deferred must not walk the remembered boundary back, or a lagging device would undo
+ * what a leading one proved.
+ *
+ * A deferral is dropped, never re-applied, once the entity holds no divider. Clearing is deliberate
+ * — Esc, mark-all-read, sending — and replaying a boundary afterwards would put back a line the
+ * reader removed.
+ *
+ * Callers gate `retry` behind `has`, so an arrival costs nothing while nothing is deferred.
+ */
 export function createRemoteDividerAdvanceTracker() {
+  /** entity id → the furthest remote boundary still waiting for a message to land on. */
   const pending = new Map<string, ReadPointer>()
 
   function apply<T extends NotificationMessage>(
@@ -49,6 +68,7 @@ export function createRemoteDividerAdvanceTracker() {
     messages: T[],
     kind: 'chat' | 'room',
   ): RemoteDividerAdvanceResult {
+    // Forward-only: keep whichever of the two boundaries reaches further.
     const remembered = pending.get(id)
     const boundary = remembered && !isAhead(markerPointer, remembered) ? remembered : markerPointer
 
@@ -73,6 +93,8 @@ export function createRemoteDividerAdvanceTracker() {
       ? -1
       : messages.findIndex((message) => message.id === remoteDivider)
 
+    // Nothing to land on, or an end that cannot be ordered inside this slice. Hold the proof
+    // rather than spend it: `retry` gets another chance once the slice changes.
     if (remoteDivider === undefined || parkedIndex === -1 || remoteIndex === -1) {
       pending.set(id, boundary)
       return { kind: 'unchanged' }

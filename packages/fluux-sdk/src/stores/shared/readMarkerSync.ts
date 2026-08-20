@@ -36,6 +36,12 @@ export type RemoteDisplayedResolution =
    * every merge.
    */
   | { kind: 'clear-pending' }
+  /**
+   * The marker resolved but sits at or behind the local read pointer, on an ACTIVE entity that
+   * still shows a divider. No pointer moves — but the line might: the marker is another device
+   * stating it read that far, and the line may still stand in front of what it read. It carries the
+   * MARKER's own position, not ours, because that is the boundary the line is compared against.
+   */
   | { kind: 'resolved-active'; markerPointer: ReadPointer }
   /**
    * Forward advance. The whole read position travels as one `readPointer`
