@@ -531,7 +531,7 @@ describe('chatStore — new-message divider is session-only', () => {
   })
 })
 
-describe('chatStore.applyRemoteDisplayed — late marker advances ACTIVE read state without moving the divider', () => {
+describe('chatStore.applyRemoteDisplayed — late marker advances the ACTIVE read state and carries the line with it', () => {
   beforeEach(() => chatStore.getState().reset())
 
   // Reproduces the fresh-session seed race: the conversation is activated before the async MDS
@@ -774,7 +774,9 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 
-  it('keeps the divider where activation placed it when a pending marker resolves ahead', async () => {
+  it('moves the line past what the other device had already read', async () => {
+    // The marker is evidence of reading, not navigation: the other device read through m4,
+    // so leaving the line at m3 would label as new two messages the user has already seen.
     const cid = 'resolve-ahead@capulet.example'
     const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
     const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
@@ -796,7 +798,7 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
 
     expect(chatStore.getState().conversationMeta.get(cid)?.readPointer?.identity.messageId).toBe('m4')
-    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m5')
     expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
   })
 

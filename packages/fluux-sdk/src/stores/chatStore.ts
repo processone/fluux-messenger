@@ -50,6 +50,7 @@ import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMess
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { draftConversationMaps, rebuildCompatEntry } from './shared/conversationMaps'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
+import { advanceDividerToRemoteRead } from './shared/dividerAdvance'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import {
   advance,
@@ -2167,7 +2168,30 @@ export const chatStore = createStore<ChatState>()(
             advancedActive = true
           }
 
-          return draft.commit()
+          // The line follows a marker another client published: that marker states those messages
+          // were read, so leaving the divider in front of them would mark as new what the user has
+          // already seen. Scrolling THIS view is not such evidence and does not come through here.
+          let newMarkers = state.firstNewMessageMarkers
+          if (resolution.kind === 'advanced-active') {
+            const parked = state.firstNewMessageMarkers.get(conversationId)
+            const remote = notifState.onActivate(
+              {
+                unreadCount: 0,
+                mentionsCount: 0,
+                readPointer: resolution.readPointer,
+                firstNewMessageId: undefined,
+              },
+              messages,
+              'chat'
+            ).firstNewMessageId
+            const next = advanceDividerToRemoteRead(parked, remote, messages)
+            if (next !== parked && next !== undefined) {
+              newMarkers = new Map(state.firstNewMessageMarkers)
+              newMarkers.set(conversationId, next)
+            }
+          }
+
+          return { ...draft.commit(), firstNewMessageMarkers: newMarkers }
         })
 
         // Archive-derived recount (trigger: pointer advance / inbound

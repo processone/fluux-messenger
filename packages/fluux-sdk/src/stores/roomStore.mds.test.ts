@@ -678,7 +678,9 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIsProvisionalFor(NO_DIVIDER_ROOM)(roomStore.getState())).toBe(false)
   })
 
-  it('keeps the divider where activation placed it when a pending marker resolves ahead', async () => {
+  it('moves the line past what the other device had already read', async () => {
+    // The marker is evidence of reading, not navigation: the other device read through m4,
+    // so leaving the line at m3 would label as new two messages the user has already seen.
     const AHEAD_ROOM = 'resolve-ahead@conference.example'
     // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
     const loaded = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m5', 's5', 5)]
@@ -698,7 +700,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     roomStore.getState().applyRemoteDisplayed(AHEAD_ROOM, 's4', full)
 
     expect(roomStore.getState().roomMeta.get(AHEAD_ROOM)?.readPointer?.identity.messageId).toBe('m4')
-    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m3')
+    expect(roomSelectors.firstNewMessageIdFor(AHEAD_ROOM)(roomStore.getState())).toBe('m5')
     expect(roomSelectors.firstNewMessageIsProvisionalFor(AHEAD_ROOM)(roomStore.getState())).toBe(false)
   })
 

@@ -66,6 +66,7 @@ import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
 import { addPendingRetraction, applyPendingRetractions, type PendingRetraction } from './shared/pendingRetractions'
+import { advanceDividerToRemoteRead } from './shared/dividerAdvance'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import { advance, makeReadPointer } from './shared/readPointer'
 import { loadRoomReadState, saveRoomReadState, clearRoomReadState, _clearAllRoomReadStateForTesting, type RoomReadState } from './shared/readStateStorage'
@@ -3194,6 +3195,29 @@ export const roomStore = createStore<RoomState>()(
         advancedActive = true
       }
 
+      // The line follows a marker another client published: that marker states those messages were
+      // read, so leaving the divider in front of them would mark as new what the user has already
+      // seen. Scrolling THIS view is not such evidence and does not come through here.
+      let newMarkers = state.firstNewMessageMarkers
+      if (resolution.kind === 'advanced-active') {
+        const parked = state.firstNewMessageMarkers.get(roomJid)
+        const remote = notifState.onActivate(
+          {
+            unreadCount: 0,
+            mentionsCount: 0,
+            readPointer: resolution.readPointer,
+            firstNewMessageId: undefined,
+          },
+          messages,
+          'room'
+        ).firstNewMessageId
+        const next = advanceDividerToRemoteRead(parked, remote, messages)
+        if (next !== parked && next !== undefined) {
+          newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.set(roomJid, next)
+        }
+      }
+
       // A position another device read to is a read position like any other —
       // persist it. The stash/clear kinds move no pointer.
       if (resolution.kind === 'advanced' || resolution.kind === 'advanced-active') {
@@ -3204,9 +3228,9 @@ export const roomStore = createStore<RoomState>()(
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...existing, ...metaPatch })
-        return { roomMeta: newMeta, rooms: newRooms }
+        return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
-      return { roomMeta: newMeta }
+      return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
 
     // Archive-derived recount (trigger: pointer advance / inbound

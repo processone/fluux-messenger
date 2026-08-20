@@ -53,16 +53,52 @@ describe('the active conversation keeps the divider its view opened with', () =>
     })
   })
 
-  it('holds the divider when another device publishes a read marker further down', () => {
-    // XEP-0490 catch-up from a second client. The pointer must follow it — that is the whole point
-    // of the marker — but the line the reader is looking at is not the other device's business.
+  it('follows a read marker another device published past the line', () => {
+    // A marker from a second client is not navigation, it is a statement that those messages were
+    // read. Leaving the line in front of them would label as new what the user has already seen.
     seedActive('m1', 'm1')
     const before = chatStore.getState().conversationMeta.get(CID)?.readPointer
 
     chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES)
 
-    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
     expect(chatStore.getState().conversationMeta.get(CID)?.readPointer).not.toEqual(before)
+  })
+
+  it('does not resurrect a line the reader cleared', () => {
+    // Clearing is deliberate — Esc, mark-all-read, sending. A later marker moves the pointer and
+    // the count, and must not put the landmark back on screen.
+    seedActive('m1', 'm1')
+    chatStore.setState({ firstNewMessageMarkers: new Map() })
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m3', MESSAGES)
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBeUndefined()
+  })
+
+  it('never walks the line backwards', () => {
+    // The marker must genuinely advance the pointer, or the resolution never reaches the divider at
+    // all and this would assert nothing. Pointer at m0 and the line parked further down at m4: the
+    // marker advances the pointer to m2, whose first unread is m3 — BEHIND the line. Read state
+    // moved forward; the landmark must not slide back up the screen to meet it.
+    seedActive('m0', 'm4')
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m4')
+  })
+
+  it('leaves the line alone when it sits outside the loaded slice', () => {
+    // A line parked from a slice that has since been windowed out cannot be ordered against the
+    // marker's boundary. Moving it would be a guess, and the guess lands the reader somewhere they
+    // never were.
+    seedActive('m0', 'windowed-out')
+
+    chatStore.getState().applyRemoteDisplayed(CID, 'stanza-m2', MESSAGES)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.readPointer?.identity.messageId).toBe('m2')
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('windowed-out')
   })
 
   it('does not walk the divider forward when the read pointer has advanced past it', () => {
