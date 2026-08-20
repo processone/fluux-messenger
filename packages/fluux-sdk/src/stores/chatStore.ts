@@ -2149,18 +2149,23 @@ export const chatStore = createStore<ChatState>()(
           )
           if (resolution.kind === 'unchanged') return state
 
+          const clearsPending = meta.pendingRemoteDisplayedStanzaId === stanzaId
           const metaPatch =
             resolution.kind === 'stash-pending'
               ? { pendingRemoteDisplayedStanzaId: stanzaId }
-              : resolution.kind === 'clear-pending' || resolution.kind === 'resolved-active'
+              : resolution.kind === 'clear-pending'
                 ? { pendingRemoteDisplayedStanzaId: undefined }
+                : resolution.kind === 'resolved-active'
+                  ? clearsPending
+                    ? { pendingRemoteDisplayedStanzaId: undefined }
+                    : undefined
                 : {
                     readPointer: resolution.readPointer,
-                    pendingRemoteDisplayedStanzaId: undefined,
+                    ...(clearsPending && { pendingRemoteDisplayedStanzaId: undefined }),
                   }
 
           const draft = draftConversationMaps(state)
-          draft.patchMeta(conversationId, metaPatch)
+          if (metaPatch) draft.patchMeta(conversationId, metaPatch)
 
           // Inbound read-state sync (spec §4): a marker published by another
           // client advances this conversation's read position now, not on the
@@ -2220,7 +2225,7 @@ export const chatStore = createStore<ChatState>()(
           if (
             resolution.kind === 'resolved-active' &&
             newMarkers === state.firstNewMessageMarkers &&
-            meta.pendingRemoteDisplayedStanzaId === undefined
+            metaPatch === undefined
           ) {
             return state
           }

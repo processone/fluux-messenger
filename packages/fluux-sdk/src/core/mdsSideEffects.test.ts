@@ -1332,6 +1332,38 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('records the migrated marker position instead of the current local pointer', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.internal.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    addConversation(cid)
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')])
+    seedMeta(cid, 'm3')
+    chatStore.setState({
+      activeConversationId: cid,
+      firstNewMessageMarkers: new Map([[cid, 'm1']]),
+    })
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(client.internal.mds.publishDisplayed).toHaveBeenCalledWith(
+      cid,
+      's1',
+      'romeo@montague.example',
+    )
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's2')
+
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
+    cleanup()
+  })
+
   it('a failed legacy migration does not break the seed or later publishing', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()

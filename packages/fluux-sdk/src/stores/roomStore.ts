@@ -3176,18 +3176,20 @@ export const roomStore = createStore<RoomState>()(
       )
       if (resolution.kind === 'unchanged') return state
 
+      const clearsPending = meta.pendingRemoteDisplayedStanzaId === stanzaId
       const metaPatch =
         resolution.kind === 'stash-pending'
           ? { pendingRemoteDisplayedStanzaId: stanzaId }
-          : resolution.kind === 'clear-pending' || resolution.kind === 'resolved-active'
+          : resolution.kind === 'clear-pending'
             ? { pendingRemoteDisplayedStanzaId: undefined }
+            : resolution.kind === 'resolved-active'
+              ? clearsPending
+                ? { pendingRemoteDisplayedStanzaId: undefined }
+                : undefined
             : {
                 readPointer: resolution.readPointer,
-                pendingRemoteDisplayedStanzaId: undefined,
+                ...(clearsPending && { pendingRemoteDisplayedStanzaId: undefined }),
               }
-
-      const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, { ...meta, ...metaPatch })
 
       // Inbound read-state sync (spec §4): a marker published by another
       // client advances this room's read position now, not on the next
@@ -3247,11 +3249,13 @@ export const roomStore = createStore<RoomState>()(
       if (
         resolution.kind === 'resolved-active' &&
         newMarkers === state.firstNewMessageMarkers &&
-        meta.pendingRemoteDisplayedStanzaId === undefined
+        metaPatch === undefined
       ) {
         return state
       }
 
+      const newMeta = metaPatch ? new Map(state.roomMeta) : state.roomMeta
+      if (metaPatch) newMeta.set(roomJid, { ...meta, ...metaPatch })
 
       // A position another device read to is a read position like any other —
       // persist it. The stash/clear kinds move no pointer.
@@ -3259,7 +3263,7 @@ export const roomStore = createStore<RoomState>()(
         persistRoomReadState(newMeta)
       }
 
-      if (existing) {
+      if (existing && metaPatch) {
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...existing, ...metaPatch })

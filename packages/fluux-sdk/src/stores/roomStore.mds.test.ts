@@ -196,6 +196,34 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(after?.readPointer?.identity.messageId).toBe('m2')
   })
 
+  it('preserves a different pending marker when an older marker changes nothing', () => {
+    const messages = [
+      rmsg('m1', 's1', 1),
+      rmsg('m2', 's2', 2),
+      rmsg('m3', 's3', 3),
+      rmsg('m4', 's4', 4),
+      rmsg('m5', 's5', 5),
+    ]
+    seedRoom(ROOM, messages, 'm4')
+    roomStore.setState((state) => {
+      const meta = new Map(state.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, pendingRemoteDisplayedStanzaId: 's5' })
+      return {
+        activeRoomJid: ROOM,
+        roomMeta: meta,
+        firstNewMessageMarkers: new Map(state.firstNewMessageMarkers).set(ROOM, 'm4'),
+      }
+    })
+    const stateBefore = roomStore.getState()
+    const metaBefore = stateBefore.roomMeta.get(ROOM)
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's2')
+
+    expect(roomStore.getState()).toBe(stateBefore)
+    expect(roomStore.getState().roomMeta.get(ROOM)).toBe(metaBefore)
+    expect(metaBefore?.pendingRemoteDisplayedStanzaId).toBe('s5')
+  })
+
   // The widening — at the store layer, where it actually bites. The store
   // CHOOSES the array: `mergeRoomMAMMessages` hands `applyRemoteDisplayed` a
   // single trimmed MAM page (`mergedForMarker`, roomStore.ts:3972), and the

@@ -1,4 +1,5 @@
 import type { ReadPointer } from './types/readState'
+import { advance } from '../stores/shared/readPointer'
 
 /**
  * How far this client has itself told the account it read, per conversation.
@@ -31,10 +32,8 @@ const key = (accountJid: string): Map<string, ReadPointer> => {
 /**
  * Record a position this client published.
  *
- * Callers pass positions in the order they publish them, and publication follows a forward-only read
- * pointer, so the newest value is the furthest. Recording an ambiguous publish — a timeout that may
- * still have committed server-side — is the safe direction: at worst the divider ignores a marker
- * covering ground this client had already read.
+ * Recording an ambiguous publish — a timeout that may still have committed server-side — is the safe
+ * direction: at worst the divider ignores a marker covering ground this client had already read.
  */
 export function noteLocallyPublishedDisplayed(
   accountJid: string,
@@ -42,7 +41,8 @@ export function noteLocallyPublishedDisplayed(
   readPointer: ReadPointer,
 ): void {
   if (!accountJid) return
-  key(accountJid).set(conversationJid, readPointer)
+  const byConversation = key(accountJid)
+  byConversation.set(conversationJid, advance(byConversation.get(conversationJid), readPointer))
 }
 
 /** The furthest position this client has published for a conversation, if any. */

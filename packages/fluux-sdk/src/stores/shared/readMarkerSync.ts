@@ -134,9 +134,9 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
     if (options.isActive && currentFirstNewMessageId !== undefined) {
       return { kind: 'resolved-active', markerPointer: makeReadPointer(match, kind) }
     }
-    return meta.pendingRemoteDisplayedStanzaId === undefined
-      ? { kind: 'unchanged' }
-      : { kind: 'clear-pending' }
+    return meta.pendingRemoteDisplayedStanzaId === stanzaId
+      ? { kind: 'clear-pending' }
+      : { kind: 'unchanged' }
   }
   const readPointer = outcome
 
