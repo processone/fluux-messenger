@@ -42,8 +42,9 @@ export interface ThemeDefinition {
    * CSS variable overrides keyed by mode.
    *
    * In addition to color variables, themes may override typography variables:
-   *   --fluux-font-ui   — UI typeface (default: 'Inter', sans-serif)
-   *   --fluux-font-mono  — Monospace typeface (default: monospace)
+   *   --fluux-font-ui   — UI typeface (default: 'Inter', system-ui, sans-serif)
+   *   --fluux-font-mono  — Monospace typeface
+   *                        (default: 'JetBrains Mono', ui-monospace, monospace)
    *
    * Font overrides should reference system-installed or user-provided fonts
    * (never bundled). Always include a sensible fallback stack ending with

@@ -28,13 +28,14 @@ Repo-specific gotchas for syncing this repo to claude.ai/design. Read before re-
 
 - The app has no compiled component stylesheet of its own: `src/index.css` is Tailwind source.
   `cssEntry` points at the **Vite build output**, which is why `buildCmd` runs the full app build
-  and then copies the hashed `dist/assets/main-*.css` to a stable `dist/assets/ds-styles.css`.
+  and then `.design-sync/prep.mjs`, which copies the newest hashed `dist/assets/*.css` to a stable
+  `dist/assets/ds-styles.css`.
 - That compiled CSS carries the whole `--fluux-*` token tree, the `.light` overrides, the
   `fluux-*` Tailwind utility vocabulary, and component CSS (`.fluux-glass`, `.fluux-popover`).
   Font `url()`s are `../fonts/…`, which resolves because the css lives in `dist/assets/` and
   Vite copies `public/fonts/` to `dist/fonts/`. Do not relocate the css copy out of `dist/assets/`.
 - The 13 built-in themes are **TypeScript objects applied as inline styles at runtime**, so they
-  are invisible to any static stylesheet. `.design-sync/gen-theme-css.mjs` flattens them into
+  are invisible to any static stylesheet. `.design-sync/prep.mjs` also flattens them into
   `:root[data-theme="<id>"]:not(.light)` / `…​.light` blocks. Both selectors are deliberately
   (0,2,0) so a theme's dark block cannot outrank the base `.light` overrides, which are (0,1,0).
   Aurora (`id: 'fluux'`) correctly emits nothing — its values *are* the `:root` defaults.
@@ -54,13 +55,12 @@ Repo-specific gotchas for syncing this repo to claude.ai/design. Read before re-
 
 ## Known render warns
 
-- `[FONT_MISSING] "Fira Code"` — accepted. It is the *second* entry in the `--fluux-font-mono`
-  stack, and JetBrains Mono (the first) is now self-hosted, so Fira Code can never be reached
-  and shipping it would be dead weight. The stack still ends in `ui-monospace, monospace` for
-  themes that override the family. Worth considering dropping `"Fira Code"` from the token
-  now that it is unreachable — that is an app change, deliberately not made by the sync.
-- `tokens: N defined, M referenced (2 missing, below threshold)` — the two unresolved vars are
-  runtime-injected emoji-mart RGB triples, derived in `useTheme` rather than declared in CSS.
+Validate currently exits with **no warnings at all**. Any warn line on a future run is new —
+look at it rather than assuming it is a known one.
+
+- `tokens: N defined, M referenced (2 missing, below threshold)` — informational, not a warn.
+  The two unresolved vars are runtime-injected emoji-mart RGB triples, derived in `useTheme`
+  rather than declared in CSS.
 
 ## Fonts
 
@@ -71,7 +71,9 @@ blocks near the top of `src/index.css` and copied to `dist/fonts/` by Vite:
 - **Inter Tight** (500/600/700) — `--fluux-font-display`
 - **JetBrains Mono** (400/500/700) — `--fluux-font-mono`, SIL OFL 1.1, added during the first
   design-sync run from the JetBrains v2.304 release. Licence text sits beside the woff2 files
-  at `public/fonts/OFL.txt`.
+  at `public/fonts/OFL.txt`. `"Fira Code"` was dropped from the stack at the same time: it was
+  only ever a second guess at a locally-installed face, and once JetBrains Mono ships as a
+  webfont the family always resolves, so nothing could reach it.
 
 Font `url()`s in the compiled CSS are `../fonts/…`, relative to `dist/assets/`. The converter
 resolves and rewrites them to its own `fonts/` copy, so **no `cfg.extraFonts` entry is needed** —
@@ -88,7 +90,7 @@ adding a weight only means dropping the woff2 in `public/fonts/` and adding its 
 - **Preview compositions can rot.** They pass literal props that match today's `.d.ts`. A prop
   rename in a `ui/` component breaks the preview build (surfaced as
   `! preview build failed: <Name>`), not the bundle.
-- **`gen-theme-css.mjs` assumes `builtinThemes`** is exported from
+- **`prep.mjs` assumes `builtinThemes`** is exported from
   `src/themes/builtins/index.ts` and that entries carry `variables.dark` / `variables.light`.
   It throws loudly if the export disappears, but a *renamed variable key* would pass silently.
 - Only the Aurora default theme is exercised by the previews; the other 13 palettes ship as CSS
