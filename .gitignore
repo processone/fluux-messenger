@@ -83,3 +83,10 @@ packages/fluux-sdk/bench/results/
 # Scratch project written by scripts/check-jsdoc-examples.mjs; removed on exit,
 # but a killed run must not leave it staged.
 packages/fluux-sdk/.jsdoc-examples-*
+
+# design-sync (claude.ai/design import)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
