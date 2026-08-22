@@ -92,6 +92,33 @@
   src: url('/fonts/InterTight-Bold.woff2') format('woff2');
 }
 
+/* JetBrains Mono — code face, self-hosted (SIL OFL 1.1, see fonts/OFL.txt).
+   First entry in --fluux-font-mono; the stack still ends in ui-monospace so a
+   theme that overrides the family keeps a working fallback. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+}
+
 /* ============================================================
    THEME DESIGN TOKENS — 3-Tier Architecture
    ============================================================

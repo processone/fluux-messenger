@@ -1,0 +1,35 @@
+{
+  "projectId": "826da786-a179-455f-83af-2daa99b77338",
+  "pkg": "@xmpp/fluux",
+  "globalName": "Fluux",
+  "shape": "package",
+  "buildCmd": "npm run build:sdk && npm run build:app && node .design-sync/prep.mjs",
+  "entry": "apps/fluux/src/design-system.ts",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "dist/assets/ds-styles.css",
+  "tokensPkg": "@xmpp/fluux",
+  "tokensGlob": "dist/ds-tokens/*.css",
+  "componentSrcMap": {
+    "BottomSheet": "src/components/ui/BottomSheet.tsx",
+    "ListEmpty": "src/components/ui/ListEmpty.tsx",
+    "Select": "src/components/ui/Select.tsx",
+    "SettingsGroup": "src/components/ui/SettingsGroup.tsx",
+    "SettingsRow": "src/components/ui/SettingsRow.tsx",
+    "SettingsSection": "src/components/ui/SettingsSection.tsx",
+    "TextInput": "src/components/ui/TextInput.tsx",
+    "TextArea": "src/components/ui/TextInput.tsx",
+    "Toggle": "src/components/ui/Toggle.tsx",
+    "AppIconMark": "src/components/brand/AppIconMark.tsx",
+    "HollowIconMark": "src/components/brand/HollowIconMark.tsx"
+  },
+  "docsDir": "../../.design-sync/docs",
+  "overrides": {
+    "BottomSheet": {
+      "cardMode": "single",
+      "primaryStory": "MessageActions",
+      "viewport": "420x620"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
