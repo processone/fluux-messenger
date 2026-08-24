@@ -1,4 +1,4 @@
-# Fluux Messenger — Visual Overview
+# Fluux Messenger Visual Overview
 
 All screenshots are generated automatically from the [demo mode](../docs/DEMO_MODE.md) using Playwright. Run `npm run screenshots` to regenerate them.
 
@@ -14,9 +14,9 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | Conversation List                                                                                                              | Contact Directory                                                                                            |
 |--------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
 | <a href="./03-conversation-list-dark.png"><img src="./03-conversation-list-dark.png" width="400" alt="Conversation List"/></a> | <a href="./04-contacts-dark.png"><img src="./04-contacts-dark.png" width="400" alt="Contact Directory"/></a> |
-| *All conversations at a glance with unread badges*                                                                             | *User profiles with presence, devices, and timezone*                                                         |
+| *Every conversation with its unread badge*                                                                                     | *User profiles with presence, devices, and timezone*                                                         |
 
-## Rich Features
+## Polls, Code, and Emoji
 
 | Polls                                                                                    | Code Blocks                                                                                                |
 |------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
@@ -45,7 +45,7 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | Server Overview                                                                                       |
 |-------------------------------------------------------------------------------------------------------|
 | <a href="./07-admin-dark.png"><img src="./07-admin-dark.png" width="400" alt="Server Overview"/></a>  |
-| *At-a-glance server vital signs (uptime, version, users, rooms) plus user/room management*            |
+| *Server status (uptime, version, users, rooms) plus user and room management*                         |
 
 ## Customization
 
@@ -54,7 +54,7 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | <a href="./08-settings-dark.png"><img src="./08-settings-dark.png" width="400" alt="Settings"/></a> |
 | *14 built-in themes, custom accent colors, font sizes, and CSS overrides*                           |
 
-## Power Features
+## Search & Navigation
 
 | Search                                                                                        | Command Palette                                                                                                          |
 |-----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|

@@ -17,7 +17,7 @@
 
 <video src="https://github.com/user-attachments/assets/78db5134-5acd-4307-99db-2aa9f9bc8929" controls muted width="760"></video>
 
-*A quick tour — messaging, group rooms, end-to-end encryption, and theming.*
+*A quick tour: messaging, group rooms, end-to-end encryption, and theming.*
 
 </div>
 
@@ -53,7 +53,7 @@
 
 ## Features
 
-### Rich Messaging
+### Messaging
 - **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting)
 - **Emoji Autocomplete** - Type `:` and a keyword to complete emojis inline, with arrow-key navigation and Enter or Tab to insert
 - **Message Retraction & Moderation** - Delete your own messages or moderate room messages with full audit trail
@@ -68,13 +68,13 @@
 - **Per-User Ignore** - Mute specific users per room, synced across devices
 - **Activity Log** - Persistent feed of events: invitations, subscription requests, reactions, poll votes, joins and leaves
 
-### Powerful Search
+### Search
 - **Full-text Search** - Instant offline search powered by an IndexedDB inverted index, supplemented by live server archive queries
 - **Find on Page** - Cmd/Ctrl+F to search within the current conversation with highlight and scroll
 - **Smart Filters** - Type filter pills, `in:` prefix autocomplete, quoted exact-phrase matching, and keyboard-navigable results with context preview
 
 ### Theming & Personalization
-- **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, and more — plus light/dark mode
+- **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized and more, in light and dark mode
 - **Custom Themes** - Import/export themes as JSON, pick a custom accent color, or write CSS overrides in the built-in editor
 - **Synced Across Devices** - Theme, accent, and font size preferences are stored server-side and follow you everywhere
 - **Internationalization** - 34 languages including complete EU coverage
@@ -95,10 +95,10 @@
 
 ### Power User Tools
 - **Command Palette** - Keyboard-accessible launcher for conversations, contacts, rooms, and actions
-- **Keyboard Shortcuts** - Comprehensive shortcut system with a categorized help overlay and AZERTY support
+- **Keyboard Shortcuts** - Shortcuts for navigation and message actions, with a categorized help overlay and AZERTY support
 - **Built-in XMPP Console** - Live stanza inspector with exportable connection-health diagnostics for scheduler suspension, sleep, and reconnection troubleshooting
 - **Server Administration** - Manage users, rooms, and server commands right from the client (for admins)
-- **User Profiles** - Rich user info popovers with vCard details, connected devices, timezone, and last seen status
+- **User Profiles** - User info popovers with vCard details, connected devices, timezone, and last seen status
 
 ### Developer-Friendly
 - **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
@@ -108,9 +108,7 @@
 
 ## Quick Start
 
-Get started with Fluux Messenger in a few simple steps:
-
-> **Want to try it first?** Head over to [demo.fluux.io](https://demo.fluux.io) for an instant live demo, no installation needed.
+> **Want to try it first?** Head over to [demo.fluux.io](https://demo.fluux.io) for a live demo, no installation needed.
 
 1. **Download** the latest release for your platform from the [releases page](https://github.com/processone/fluux-messenger/releases/latest).
 
@@ -159,7 +157,7 @@ Both `x64` and `arm64` builds are available for all formats.
 <details>
 <summary><b>Web (self-hosted)</b></summary>
 
-Download the `fluux-messenger-*-web.zip` asset from the [releases page](https://github.com/processone/fluux-messenger/releases/latest), extract it, and serve it with any web server of your choice (app must be served over HTTP). This also works as a PWA on mobile devices when served from your own domain.
+Download the `fluux-messenger-*-web.zip` asset from the [releases page](https://github.com/processone/fluux-messenger/releases/latest), extract it, and serve it with any web server (the app must be served over HTTP). This also works as a PWA on mobile devices when served from your own domain.
 
 </details>
 
@@ -170,7 +168,7 @@ See the [Developer Guide](docs/DEVELOPER.md) for instructions on building and ru
 
 </details>
 
-Need help? Check out our [support options](#support-and-community) below.
+Need help? See the [support options](#support-and-community) below.
 
 ## Command-Line Options
 
@@ -199,15 +197,15 @@ The desktop app accepts a few command-line flags. Run `fluux-messenger --help` t
 
 ## Support and Community
 
-We have many ideas and exciting additions planned for Fluux Messenger! We welcome all questions, feedback, and bug reports.  
+We have a lot planned for Fluux Messenger, and we welcome questions, feedback, and bug reports.  
 
-- **GitHub Issues** - Use [Issues](https://github.com/processone/fluux-messenger/issues) to report bugs, request features, or track tasks. We use Issues as our lightweight roadmap for upcoming improvements and are always open to new ideas - don't hesitate to propose yours!  
+- **GitHub Issues** - Use [Issues](https://github.com/processone/fluux-messenger/issues) to report bugs, request features, or track tasks. We use Issues as our lightweight roadmap for upcoming improvements, and we're open to new ideas, so tell us about yours.  
 - **GitHub Discussions** - Use [Discussions](https://github.com/processone/fluux-messenger/discussions) for questions, ideas, or general conversations that don't require formal tracking. Great for brainstorming, getting help without opening an Issue, or suggesting documentation improvements.  
 - **XMPP Chatroom** - Join [fluux-messenger@conference.process-one.net](xmpp:fluux-messenger@conference.process-one.net?join) for live chat with the community and maintainers.
 
 ## Frequently Asked Questions
 
-*Have suggestions for this FAQ? Feel free to ask questions or propose additions in our [Q&A Discussions](https://github.com/processone/fluux-messenger/discussions/categories/q-a).*
+*Have suggestions for this FAQ? Ask questions or propose additions in our [Q&A Discussions](https://github.com/processone/fluux-messenger/discussions/categories/q-a).*
 
 ### Installation & Compatibility
 
@@ -217,9 +215,9 @@ We aim to create an XMPP client that respects standards, but currently the proje
 
 #### Will there be other installations methods? Can I run it on my own server?
 
-Yes. A pre-built static web bundle (`-web.zip`) is available on the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Simply extract it and serve it with any web server.
+Yes. A pre-built static web bundle (`-web.zip`) is available on the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Extract it and serve it with any web server.
 
-Looking ahead, we also plan to make Fluux Messenger available on F-Droid, and possibly on the Google Play Store as well.
+We also plan to publish Fluux Messenger on F-Droid, and possibly on the Google Play Store.
 
 #### My XMPP server only listens on the standard TCP port (5222), can I still use Fluux Messenger?
 
@@ -235,7 +233,7 @@ The web version downloads each encrypted attachment and decrypts it in the brows
 
 #### Does Fluux Messenger support end-to-end encryption?
 
-Yes — **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
+Yes. **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
 
 #### When will voice and video calls be available?
 
@@ -251,11 +249,11 @@ Not yet. Spaces ([XEP-0503](https://xmpp.org/extensions/xep-0503.html)) have sta
 
 #### Can I contribute a translation for my language?
 
-Yes, translations are welcome. Locale files live under `apps/fluux/src/i18n/locales/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the general contribution workflow. Feel free to open an issue or discussion first if you have questions.
+Yes, translations are welcome. Locale files live under `apps/fluux/src/i18n/locales/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the general contribution workflow. Open an issue or discussion first if you have questions.
 
 #### Is there a roadmap?
 
-There's no formal roadmap document, but we track upcoming work through GitHub [Milestones](https://github.com/processone/fluux-messenger/milestones) and [Issues](https://github.com/processone/fluux-messenger/issues). Feel free to follow, comment or open a new issue for anything you'd like to see.
+There's no formal roadmap document, but we track upcoming work through GitHub [Milestones](https://github.com/processone/fluux-messenger/milestones) and [Issues](https://github.com/processone/fluux-messenger/issues). Follow, comment or open a new issue for anything you'd like to see.
 
 ### Troubleshooting
 
@@ -266,7 +264,7 @@ Yes. Two things can trigger warnings right now:
 - Starting with 0.15, the Windows binary is temporarily **not code-signed** while we work through the signing infrastructure (see [#290](https://github.com/processone/fluux-messenger/issues/290)).
 - The combination of [Tauri](https://tauri.app/) and [NSIS](https://nsis.sourceforge.io/) used to package the app is also a known source of antivirus false positives affecting many legitimate apps.
 
-If you'd rather verify for yourself, you can always [build the app from source](docs/DEVELOPER.md).
+If you'd rather verify for yourself, [build the app from source](docs/DEVELOPER.md).
 
 #### Closing the window doesn't quit the app, is that normal?
 
@@ -280,7 +278,7 @@ Fluux never persists your password to local storage. If your XMPP server support
 
 Contributions are welcome! See [CONTRIBUTING](CONTRIBUTING.md) for detailed guidelines.
 
-For getting started with development, you can check out our [Developer Guide](docs/DEVELOPER.md).
+To get started with development, see the [Developer Guide](docs/DEVELOPER.md).
 
 ## License
 

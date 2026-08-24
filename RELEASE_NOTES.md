@@ -16,7 +16,7 @@
 ### Fixed
 
 - Conversation history no longer shows silent gaps: interruptions while syncing the archive are detected and healed from both directions
-- History sync: opening a conversation you had already read elsewhere no longer shows an empty history on a new or freshly cleared device — the archive now downloads independently of your read position
+- History sync: opening a conversation you had already read elsewhere no longer shows an empty history on a new or freshly cleared device: the archive now downloads independently of your read position
 - A conversation read on another device now opens at its live edge instead of an outdated saved scroll position after multi-device sync
 - Encryption: a leftover unread badge from an undecryptable reaction now clears once its placeholder is dropped
 - Web (PWA): an update already downloaded but parked is now applied automatically at launch instead of trailing the deployed build indefinitely

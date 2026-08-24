@@ -175,7 +175,7 @@ If a critical fix is needed for a released version:
 
 ## Contributor License Agreement
 
-Before we can accept your contribution, you must sign our Contributor License Agreement (CLA). This is a one-time process that takes only a few minutes.
+Before we can accept your contribution, you must sign our Contributor License Agreement (CLA). It is a one-time process.
 
 **[Sign the CLA](https://cla.process-one.net)**
 
