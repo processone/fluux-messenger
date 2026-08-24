@@ -37,9 +37,9 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
 
         if let Some(attrs) = attrs {
             for attr in attrs.flatten() {
-                let key = String::from_utf8_lossy(attr.key.as_ref());
-                let value = String::from_utf8_lossy(&attr.value);
-                match key.as_ref() {
+                let key = attr.key.as_ref();
+                let value = attr.value.as_ref();
+                match key {
                     "to" => to = value.to_string(),
                     // Forward the `from` attribute: ejabberd gates SASL2 (XEP-0388)
                     // stream features on the client's stream header carrying a
@@ -107,8 +107,8 @@ pub fn extract_open_to(text: &str) -> Option<String> {
     };
 
     for attr in attrs.flatten() {
-        if attr.key.as_ref() == b"to" {
-            let value = String::from_utf8_lossy(&attr.value).to_string();
+        if attr.key.as_ref() == "to" {
+            let value = attr.value.into_owned();
             return if value.is_empty() { None } else { Some(value) };
         }
     }
@@ -159,9 +159,9 @@ pub fn translate_tcp_to_ws<'a>(text: &'a str) -> Cow<'a, str> {
             let mut id = String::new();
 
             for attr in e.attributes().flatten() {
-                let key = String::from_utf8_lossy(attr.key.as_ref());
-                let value = String::from_utf8_lossy(&attr.value);
-                match key.as_ref() {
+                let key = attr.key.as_ref();
+                let value = attr.value.as_ref();
+                match key {
                     "to" => to = value.to_string(),
                     "from" => from = value.to_string(),
                     "version" => version = value.to_string(),
@@ -276,7 +276,7 @@ pub fn extract_stream_error_condition(stanza: &str) -> Option<String> {
                     continue;
                 }
                 let local = e.name().local_name();
-                let local = String::from_utf8_lossy(local.as_ref()).to_string();
+                let local = local.as_ref().to_string();
                 // Per RFC 6120 §4.9.2 the optional <text> follows the condition;
                 // skip it in case it is ever emitted first.
                 if local == "text" {
@@ -349,7 +349,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
 
                 // Handle stream:stream wrapper
                 if state == ParserState::Idle
-                    && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                    && (local_name.as_ref() == "stream" || e.name().as_ref() == "stream:stream")
                 {
                     // Return the stream opening immediately
                     let tag_end = reader.buffer_position() as usize;
@@ -369,7 +369,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
 
                 // Self-closing stream:stream (rare, but possible)
                 if state == ParserState::Idle
-                    && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                    && (local_name.as_ref() == "stream" || e.name().as_ref() == "stream:stream")
                 {
                     let tag_end = reader.buffer_position() as usize;
                     return Some((bytes_to_string(&buffer[0..tag_end]), tag_end));
@@ -390,7 +390,7 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 let local_name = e.name().local_name();
 
                 // Handle </stream:stream> closing
-                if (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                if (local_name.as_ref() == "stream" || e.name().as_ref() == "stream:stream")
                     && depth == 0
                 {
                     let tag_end = reader.buffer_position() as usize;
