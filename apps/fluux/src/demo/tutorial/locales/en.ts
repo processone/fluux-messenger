@@ -6,7 +6,7 @@
  */
 const tutorialEN = {
   'welcome-hint': {
-    content: 'Welcome to Fluux! This is your messaging workspace — conversations on the left, messages on the right.',
+    content: 'Welcome to Fluux! This is your messaging workspace: conversations on the left, messages on the right.',
     actionHint: 'Let\'s start by exploring your conversations',
   },
   'conversations-hint': {
@@ -14,7 +14,7 @@ const tutorialEN = {
     actionHint: 'Click on a conversation to catch up',
   },
   'rooms-hint': {
-    content: 'Rooms are group conversations where your team collaborates in real time.',
+    content: 'Rooms are group conversations for your team.',
     actionHint: 'Click the Rooms icon to see what your team is up to',
   },
   'image-hint': {
@@ -30,7 +30,7 @@ const tutorialEN = {
     actionHint: 'Click the Search icon and try typing "SDK" or "in:Team"',
   },
   'mention-hint': {
-    content: 'You were @mentioned in Team Chat — the badge shows unread mentions.',
+    content: 'You were @mentioned in Team Chat. The badge shows unread mentions.',
     actionHint: 'Click on Team Chat to jump to your mention',
   },
   'keyboard-shortcuts-hint': {
@@ -38,7 +38,7 @@ const tutorialEN = {
     actionHint: 'Try pressing ? to see the keyboard shortcuts',
   },
   'theme-hint': {
-    content: 'Make Fluux yours — themes, accent colors, fonts, and 30+ languages are just a click away.',
+    content: 'Make Fluux yours: themes, accent colors, fonts, and 34 languages.',
     actionHint: 'Open Settings to try accent colors, themes, and language switching',
   },
   'admin-hint': {
@@ -46,11 +46,11 @@ const tutorialEN = {
     actionHint: 'Click the Admin icon in the sidebar to explore',
   },
   'xmpp-console-hint': {
-    content: 'For developers: the XMPP console shows all protocol traffic — stanzas in and out.',
+    content: 'For developers: the XMPP console shows every stanza going in and out.',
     actionHint: 'Open Settings > XMPP Console to see live XMPP packets',
   },
   'tour-complete': {
-    content: "That's the tour! All features are live — explore freely. Enjoy Fluux! ✨",
+    content: "That's the tour! Everything here is live, so explore freely. Enjoy Fluux! ✨",
   },
   skip: 'Skip',
 } as const
