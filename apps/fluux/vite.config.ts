@@ -81,7 +81,7 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: 'Fluux Messenger',
         short_name: 'Fluux',
-        description: 'Modern XMPP chat client - pleasant to use',
+        description: 'Modern XMPP chat client, pleasant to use',
         theme_color: '#1a1b1e',
         background_color: '#1a1b1e',
         display: 'standalone',

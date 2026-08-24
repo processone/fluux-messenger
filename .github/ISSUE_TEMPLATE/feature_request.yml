@@ -24,7 +24,7 @@ body:
     id: solution
     attributes:
       label: Proposed solution
-      description: How would you like this to work? Feel free to get creative!
+      description: How would you like this to work? A rough sketch is fine.
     validations:
       required: false
 
