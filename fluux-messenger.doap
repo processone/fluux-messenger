@@ -12,8 +12,8 @@
     <shortdesc xml:lang="en">Modern cross-platform XMPP client</shortdesc>
     <shortdesc xml:lang="fr">Client XMPP moderne et multiplateforme</shortdesc>
 
-    <description xml:lang="en">A modern, Web and Desktop cross-platform XMPP client for communities and organizations, built with a reusable Typescript SDK and Tauri for desktop</description>
-    <description xml:lang="fr">Un client XMPP moderne, basé sur les technologies Web pour les communautés et organisations, construit avec un SDK Typescript réutilisable et Tauri pour les clients lourds</description>
+    <description xml:lang="en">A modern cross-platform XMPP client for communities and organizations, on the web and on the desktop, built with a reusable TypeScript SDK and Tauri</description>
+    <description xml:lang="fr">Un client XMPP moderne et multiplateforme pour les communautés et les organisations, sur le web et sur le bureau, construit avec un SDK TypeScript réutilisable et Tauri</description>
 
     <homepage rdf:resource="https://github.com/processone/fluux-messenger"/>
     <download-page rdf:resource="https://github.com/processone/fluux-messenger/releases"/>

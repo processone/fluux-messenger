@@ -12,7 +12,7 @@ This document describes a simple protocol extension for marking room-wide @all m
 
 ### 1.1 Motivation
 
-XEP-0372 (References) provides a mechanism for mentioning individual users by URI. However, it has no built-in concept of an @all mention — a mention that targets every participant in a room. This extension fills that gap with a minimal flag element that clients can use for notification filtering and UI highlighting.
+XEP-0372 (References) provides a mechanism for mentioning individual users by URI. However, it has no built-in concept of an @all mention, a mention that targets every participant in a room. This extension fills that gap with a minimal flag element that clients can use for notification filtering and UI highlighting.
 
 ---
 
@@ -53,7 +53,7 @@ The `<mention-all>` element is an empty element with no attributes and no child 
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)*  | —    | —        | Empty element; presence is the signal. |
+| *(none)*  | (    |)         | Empty element; presence is the signal. |
 
 ### 3.4 Receiving
 
@@ -70,8 +70,8 @@ The element check takes precedence. The text fallback ensures interoperability w
 
 The @all mention integrates naturally with XEP-0372 references:
 
-- **Individual mentions:** `<reference uri="xmpp:room@conference.example.com/nickname"/>` — URI includes a resource (occupant nickname).
-- **Room-wide mention:** `<reference uri="xmpp:room@conference.example.com"/>` — URI points to the bare room JID (no `/` path). This reference triggers the `<mention-all>` element.
+- **Individual mentions:** `<reference uri="xmpp:room@conference.example.com/nickname"/>`. URI includes a resource (occupant nickname).
+- **Room-wide mention:** `<reference uri="xmpp:room@conference.example.com"/>`. URI points to the bare room JID (no `/` path). This reference triggers the `<mention-all>` element.
 
 Both types can coexist in the same message (e.g., `@all and @alice`).
 

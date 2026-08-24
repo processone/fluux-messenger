@@ -9,7 +9,7 @@ Fluux supports two connection paths:
 | Platform            | Transport                     | Proxy                              |
 |---------------------|-------------------------------|------------------------------------|
 | **Desktop** (Tauri) | Native TCP/TLS via Rust proxy | WebSocket ↔ TCP proxy on localhost |
-| **Web**             | WebSocket (RFC 7395)          | None — direct WebSocket to server  |
+| **Web**             | WebSocket (RFC 7395)          | None: direct WebSocket to server   |
 
 On desktop, a Rust-based proxy translates between WebSocket framing (used by the xmpp.js client library) and traditional TCP XMPP framing. This allows native TCP and TLS connections without browser restrictions.
 
@@ -31,10 +31,10 @@ The server field in the login screen accepts several formats. Parsing is central
 
 ### Scheme details
 
-- **`tls://`** — Direct TLS connection (the TLS handshake happens immediately on connect, before any XMPP traffic). Default port: 5223.
-- **`tcp://`** — Plain TCP connection with STARTTLS upgrade (the connection starts unencrypted, then upgrades to TLS via the XMPP STARTTLS mechanism). Default port: 5222.
-- **`host:port`** (no scheme) — Port 5223 is treated as direct TLS, any other port as STARTTLS. This is a convenience shorthand when you know the port but don't want to type a scheme.
-- **`wss://`** or **`ws://`** — WebSocket URL passed directly to xmpp.js, bypassing the TCP proxy entirely. Useful when the server exposes a native WebSocket endpoint.
+- **`tls://`**: Direct TLS connection (the TLS handshake happens immediately on connect, before any XMPP traffic). Default port: 5223.
+- **`tcp://`**: Plain TCP connection with STARTTLS upgrade (the connection starts unencrypted, then upgrades to TLS via the XMPP STARTTLS mechanism). Default port: 5222.
+- **`host:port`** (no scheme). Port 5223 is treated as direct TLS, any other port as STARTTLS. This is a convenience shorthand when you know the port but don't want to type a scheme.
+- **`wss://`** or **`ws://`**. WebSocket URL passed directly to xmpp.js, bypassing the TCP proxy entirely. Useful when the server exposes a native WebSocket endpoint.
 
 ### Port heuristic for bare `host:port`
 
@@ -49,9 +49,9 @@ To override this heuristic, use an explicit `tls://` or `tcp://` scheme.
 
 When the server field is empty or contains a bare domain (no port, no scheme), the proxy performs DNS SRV resolution per [RFC 6120](https://www.rfc-editor.org/rfc/rfc6120):
 
-1. **`_xmpps-client._tcp.{domain}`** — Direct TLS (XEP-0368). If found, connects with direct TLS to the resolved host and port.
-2. **`_xmpp-client._tcp.{domain}`** — STARTTLS. If found, connects with STARTTLS to the resolved host and port.
-3. **Fallback** — If no SRV records are found, connects to `{domain}:5222` with STARTTLS (the standard XMPP client port per RFC 6120).
+1. **`_xmpps-client._tcp.{domain}`**. Direct TLS (XEP-0368). If found, connects with direct TLS to the resolved host and port.
+2. **`_xmpp-client._tcp.{domain}`**. STARTTLS. If found, connects with STARTTLS to the resolved host and port.
+3. **Fallback**. If no SRV records are found, connects to `{domain}:5222` with STARTTLS (the standard XMPP client port per RFC 6120).
 
 The TLS-first order means servers that publish `_xmpps-client` SRV records will get direct TLS connections without any user configuration.
 
@@ -66,10 +66,10 @@ xmpp.js ──WebSocket──► localhost:PORT ──TCP/TLS──► XMPP serv
 
 The proxy handles:
 
-1. **Framing translation** — Converts between RFC 7395 WebSocket framing (`<open/>`, `<close/>`) and traditional TCP stream framing (`<stream:stream>`, `</stream:stream>`).
-2. **Namespace rewriting** — Rewrites `<stream:features>` and `<stream:error>` to standalone XML with explicit `xmlns` attributes, since the WebSocket framing model doesn't have a parent `<stream:stream>` element to declare `xmlns:stream`.
-3. **TLS/STARTTLS** — Handles direct TLS connections and STARTTLS upgrades natively in Rust (see below).
-4. **SRV resolution** — Performs DNS SRV lookups to find the correct host and port.
+1. **Framing translation**. Converts between RFC 7395 WebSocket framing (`<open/>`, `<close/>`) and traditional TCP stream framing (`<stream:stream>`, `</stream:stream>`).
+2. **Namespace rewriting**. Rewrites `<stream:features>` and `<stream:error>` to standalone XML with explicit `xmlns` attributes, since the WebSocket framing model doesn't have a parent `<stream:stream>` element to declare `xmlns:stream`.
+3. **TLS/STARTTLS**. Handles direct TLS connections and STARTTLS upgrades natively in Rust (see below).
+4. **SRV resolution**. Performs DNS SRV lookups to find the correct host and port.
 
 ### STARTTLS Negotiation
 
@@ -83,7 +83,7 @@ When connecting to a STARTTLS endpoint (port 5222 or `tcp://`), the proxy:
 4. Sends `<starttls/>` and waits for `<proceed/>`
 5. Upgrades the TCP socket to TLS using rustls
 
-After the upgrade, the connection is handled identically to a direct TLS connection. xmpp.js never sees the STARTTLS exchange — it connects to `ws://127.0.0.1:PORT` and starts a normal XMPP session. The local WebSocket hop is treated as secure by xmpp.js (localhost exemption).
+After the upgrade, the connection is handled identically to a direct TLS connection. xmpp.js never sees the STARTTLS exchange, it connects to `ws://127.0.0.1:PORT` and starts a normal XMPP session. The local WebSocket hop is treated as secure by xmpp.js (localhost exemption).
 
 ```
 xmpp.js ──WebSocket──► Rust proxy ──[STARTTLS negotiation]──► TLS ──► XMPP server

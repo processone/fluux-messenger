@@ -1,7 +1,7 @@
 # Anomaly invariant registry
 
 Every `id` emitted into `anomalies.YYYY-MM-DD.jsonl` has an entry here. A review loads
-**this file plus the log** — not the codebase. That is what makes a recurring review
+**this file plus the log**: not the codebase. That is what makes a recurring review
 affordable rather than a re-derivation of "normal" every time.
 
 Design: `docs/superpowers/specs/2026-07-29-client-anomaly-detection-log-design.md`.
@@ -17,12 +17,12 @@ so their parity is asserted by a test in `values.test.ts` rather than assumed.
   "expected":..., "observed":..., "ctx":{...}, "crumbs":[...] }
 ```
 
-- `sev` — `bug` (an invariant broke), `suspect` (probably wrong, needs a look),
+- `sev`: `bug` (an invariant broke), `suspect` (probably wrong, needs a look),
   `drift` (a rate moved; not a failure).
-- `tokenKeyId` — **a hard correlation boundary.** Never join records across two
+- `tokenKeyId`. **a hard correlation boundary.** Never join records across two
   different values: they are disjoint token spaces, so the same `c:` token in each
   refers to different entities.
-- `c:unresolved` — **not an identity.** Never correlate two of them with each other.
+- `c:unresolved`. **not an identity.** Never correlate two of them with each other.
 - `s:` refs are session-local. Never correlate them across `sid` values.
 
 ## Recorder health
@@ -33,7 +33,7 @@ These describe the recorder itself, not the app.
 |---|---|---|
 | `recorder/session-start` | One per session, written once the tokenizer holds its key | Its absence means the runtime never installed. Its `tokenKeyId` opens the session's token space |
 | `recorder/ceiling-reached` | 500 records or 2 MB in one session; recording stopped | Something fired in a loop. Find the last repeated `id` before it |
-| `recorder/entity-warm-failing` | Entity tokenisation has failed `observed` times in a row. Records for that conversation are still written but name `c:unresolved`, so they cannot be correlated | The tokenizer holds its key (startup is excluded), so this is a real `crypto.subtle` failure. Reported once per episode and again only after a recovery — its absence is meaningful |
+| `recorder/entity-warm-failing` | Entity tokenisation has failed `observed` times in a row. Records for that conversation are still written but name `c:unresolved`, so they cannot be correlated | The tokenizer holds its key (startup is excluded), so this is a real `crypto.subtle` failure. Reported once per episode and again only after a recovery, its absence is meaningful  |
 
 Counter names (digest only, not invariant ids):
 
@@ -43,8 +43,8 @@ Counter names (digest only, not invariant ids):
 | `recorder/localref-overflow` | The 2 000-ref map was full and all refs pinned; a crumb was omitted | Usually a leak: something retains refs without releasing |
 | `recorder/token-unresolved` | A token was requested before it was warmed | Rare is fine. Sustained means the pre-warm is missing a lifecycle event |
 | `recorder/token-warm-failed` | A background token warm started by a synchronous lookup rejected | Check `recorder/entity-warm-failing` in the same session. Sustained failures mean `crypto.subtle.sign` is unavailable or failing |
-| `recorder/dropped-not-ready` | Records refused because the tokenizer had no key yet | A few at startup are normal. Sustained means the tokenizer never initialised — check `fluux.log` for the warning |
-| `recorder/sink-write-failed` | A sidecar append failed | Check `fluux.log` — failures mirror there, because a broken sink cannot report itself |
+| `recorder/dropped-not-ready` | Records refused because the tokenizer had no key yet | A few at startup are normal. Sustained means the tokenizer never initialised, check `fluux.log` for the warning  |
+| `recorder/sink-write-failed` | A sidecar append failed | Check `fluux.log`: failures mirror there, because a broken sink cannot report itself  |
 
 ## Recount deferrals
 
@@ -75,7 +75,7 @@ badge; recounts for other entities in the same window can contribute to the tall
 | `coverage-missing` | No coverage record, so the archive bottom is unknown |
 | `coverage-unresolvable` | The coverage bottom no longer resolves in the archive |
 | `coverage-short-of-floor` | Coverage does not reach back to the floor |
-| `cache-unavailable` | The archive count failed — an IndexedDB error |
+| `cache-unavailable` | The archive count failed: an IndexedDB error  |
 | `recount-superseded` | Another recount for the same entity overtook this one |
 | `input-version-changed` | Message inputs changed mid-recount, for example through a live arrival or MAM merge |
 | `pointer-changed` | The read pointer moved while the recount was in flight |
@@ -97,7 +97,7 @@ Each entry below is added by the stage that introduces it.
 |---|---|---|---|
 | `read-state/unread-survives-focus` | suspect | A conversation was active, the window focused, and the newest message actually on screen at the archive tail, yet the unread count stayed above zero for `ctx.heldMs`. `observed` is the count | The mark-read path on focus regain did not run or did not stick. Check the read pointer for that conversation and whether a recount overwrote it |
 | `read-state/unread-persists` | bug | The same condition was continuously observed 30s later. `observed` is how long it had held; `ctx.peak` is the worst count reached | The mark-read did not merely lag, it did not happen. This is the record that makes the finding actionable |
-| `read-state/unread-focus-cleared` | drift | The count genuinely reached zero while the conversation was still active, focused and at the live edge. `observed` is the real end-to-end duration | Not a complaint — the measurement that says how bad an episode was |
+| `read-state/unread-focus-cleared` | drift | The count genuinely reached zero while the conversation was still active, focused and at the live edge. `observed` is the real end-to-end duration | Not a complaint: the measurement that says how bad an episode was  |
 
 **How to read the three.** Within one `sid`, match records by their conversation or room
 token. The `suspect` record fires the instant the threshold is crossed, so its `heldMs`
@@ -106,13 +106,13 @@ that the same badge stayed wrong for at least 30s; a following `unread-focus-cle
 gives the observed recovery time. If neither follows, the episode's outcome is unknown.
 
 `unread-focus-cleared` is deliberately narrow: it is emitted **only** on a genuine
-recovery under observation. Losing sight of an episode any other way — focus lost,
-viewport moved, conversation switched, store rebuilt — ends it **silently**. An earlier
+recovery under observation. Losing sight of an episode any other way, focus lost,
+viewport moved, conversation switched, store rebuilt, ends it **silently**. An earlier
 revision reported those as clears, which measured how long the detector could watch
 rather than how long the badge was wrong.
 
 So the absence of a close record means **the end was not observed**. It does NOT mean
-the badge never recovered — the app marks read on focus change and tab switch, so a
+the badge never recovered, the app marks read on focus change and tab switch, so a
 badge may routinely clear just after the user looks away, and the per-id cooldown can
 also suppress a close when two episodes fall inside one minute. Judge severity from
 `unread-persists`, never from a missing `unread-focus-cleared`.
@@ -146,7 +146,7 @@ could not be recorded (overlapping loop labels, the conversation, the scrollHeig
 |---|---|---|---|
 | `scroll/reassert-overlap` | bug | Two or more message-list re-assert loops were alive at once, fighting over `scrollTop`. `observed` is how many; `expected` is 1 | A loop started without superseding the previous one. Historically a second MAM prepend beginning before the first re-assert finished |
 | `scroll/reassert-nonconverging` | bug | One loop issued `observed` scroll writes without settling on a stable anchor (`expected` is the threshold) | Two anchors disagree by more than the tolerance and the loop ping-pongs. `ctx.loop` names the loop kind |
-| `scroll/resize-loop` | suspect | The message-list `ResizeObserver` fired `observed` times in `ctx.elapsedMs` (`expected` is the threshold per window) | Oscillating content — classically a `<video controls>` on WebKitGTK — driving a correction feedback loop. Not itself a failure; a sustained one is |
+| `scroll/resize-loop` | suspect | The message-list `ResizeObserver` fired `observed` times in `ctx.elapsedMs` (`expected` is the threshold per window) | Oscillating content (classically a `<video controls>` on WebKitGTK) driving a correction feedback loop. Not itself a failure; a sustained one is   |
 | `scroll/slow-correction` | suspect | A scroll correction took `observed` ms (`expected` is the threshold), with `ctx.rows` rows rendered | Reflow cost scaling with the rendered backlog. Correlate with `ctx.rows`: a high count means virtualization is not engaged |
 
 These two are genuine detectors rather than fan-out, so they have **no** matching
@@ -154,21 +154,21 @@ These two are genuine detectors rather than fan-out, so they have **no** matchin
 
 | id | sev | Meaning | What to do |
 |---|---|---|---|
-| `scroll/fab-at-live-edge` | bug | The scroll-to-bottom button was shown for `ctx.heldMs` while an independent measurement put the viewport `observed` px from the content bottom — already at the newest message | Stale `showScrollToBottom` React state: the scroll handler stopped firing after the list returned to the bottom. Not a fault in `shouldShowScrollToBottomFab`, which cannot produce this state |
-| `scroll/jump-target-miss` | bug | A go-to-message reported that it applied a position, but the target row landed `ctx.offBy` px outside the viewport — negative above, positive below | The anchor resolved to the wrong offset, or content grew after the jump settled. `ctx.msg` is the session-local ref for the target |
+| `scroll/fab-at-live-edge` | bug | The scroll-to-bottom button was shown for `ctx.heldMs` while an independent measurement put the viewport `observed` px from the content bottom, already at the newest message  | Stale `showScrollToBottom` React state: the scroll handler stopped firing after the list returned to the bottom. Not a fault in `shouldShowScrollToBottomFab`, which cannot produce this state |
+| `scroll/jump-target-miss` | bug | A go-to-message reported that it applied a position, but the target row landed `ctx.offBy` px outside the viewport, negative above, positive below  | The anchor resolved to the wrong offset, or content grew after the jump settled. `ctx.msg` is the session-local ref for the target |
 
 **Named non-cases**, so a later reader does not think they were forgotten:
 
 - `fab-at-live-edge` does **not** fire while the loaded window has slid up. `fabVisible`
   is `showScrollToBottom || windowSlidUp`, so there the button means "jump to the
-  latest" — a real affordance, even with the viewport at the bottom of what is loaded.
+  latest", a real affordance, even with the viewport at the bottom of what is loaded.
 - `fab-at-live-edge` reads the FAB's `inert` state, not its presence. The button is
   always in the DOM; only its wrapper's `inert` attribute says whether it is offered.
 - `jump-target-miss` does **not** fire when the target row is absent from the DOM. That
   is a load or windowing failure with a different cause, and one id with two meanings
   would stop telling a reader where to look.
 - `fab-at-live-edge` measures through `utils/viewportScroller.ts`, deliberately not the
-  scroll hook's own at-bottom state — a detector reading the suspect value cannot
+  scroll hook's own at-bottom state, a detector reading the suspect value cannot
   disagree with it, and would go silent exactly when the bug is present.
 
 ### `perf/`

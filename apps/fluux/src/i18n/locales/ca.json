@@ -183,9 +183,9 @@
             "removeVerificationSuccess": "Verificació eliminada",
             "disableForContact": "Desactiva el xifratge per a aquest contacte",
             "notAvailableTitle": "Xifratge no disponible",
-            "notAvailableDescription": "Aquest contacte no ha publicat cap clau OpenPGP. Els missatges s’enviaran en text pla.",
+            "notAvailableDescription": "Aquest contacte no ha publicat cap clau OpenPGP. Els missatges s'enviaran en text pla.",
             "disabledByYouTitle": "Xifratge desactivat",
-            "disabledByYouDescription": "Has desactivat el xifratge per a aquest contacte. Els missatges s’enviaran en text pla.",
+            "disabledByYouDescription": "Has desactivat el xifratge per a aquest contacte. Els missatges s'enviaran en text pla.",
             "unavailableNowTitle": "Xifratge no disponible actualment",
             "unavailableNowDescription": "Torneu a connectar-vos o activeu el xifratge a la configuració.",
             "rejectedTitle": "Certificat no vàlid",
@@ -368,7 +368,7 @@
         "whisperingTo": "Xiuxiuejant en privat a {{nick}}",
         "whisperThread": "Privat amb {{nick}}",
         "whisperCounterpartGone": "{{nick}} ja no és a la sala, no pots respondre",
-        "whisperPlaceholder": "Xiuxiueja a {{nick}}…",
+        "whisperPlaceholder": "Xiuxiueja a {{nick}}...",
         "ignoreUser": "Ignorar en aquesta sala",
         "stopIgnoring": "Deixar d'ignorar",
         "ignoredUsers": "Ignorats",
@@ -474,7 +474,7 @@
         "newMessagesCount_many": "{{displayCount}} de missatges nous",
         "newMessagesCount_other": "{{displayCount}} missatges nous",
         "youWereAway": "Havies estat absent",
-        "jumpToLastRead": "Anar a l’últim llegit",
+        "jumpToLastRead": "Anar a l'últim llegit",
         "historyStart": "Inici de la conversa",
         "historyGap": "Alguns missatges podrien faltar",
         "historyUnavailable": "No s'han pogut carregar els missatges anteriors",
@@ -523,7 +523,7 @@
         "errorDetails": "Error: {{error}}",
         "encryption": {
             "encryptedTo": "Xifrat per a {{name}}",
-            "checking": "Comprovant el contacte…",
+            "checking": "Comprovant el contacte...",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clau OpenPGP verificada",
             "tofuNewTooltip": "Contacte nou. Verifiqueu l'empremta per a confiança plena",
@@ -540,7 +540,7 @@
             "keyLockedTooltip": "Xifratge bloquejat. Feu clic per desbloquejar",
             "encryptedClickToUnlock": "Missatge xifrat. Feu clic per desbloquejar",
             "encryptedCouldNotDecrypt": "No s'ha pogut desxifrar aquest missatge",
-            "encryptedDecrypting": "Missatge xifrat, desxifrant…",
+            "encryptedDecrypting": "Missatge xifrat, desxifrant...",
             "encryptedDisabled": "Xifratge desactivat. Activeu-lo a la configuració",
             "unsupportedMethodTooltip": "Xifrat amb {{method}}, un mètode que aquest dispositiu encara no admet",
             "unsupportedMessage": "Missatge xifrat: {{method}} no compatible",
@@ -605,7 +605,7 @@
             "acceptedWithoutVerifying": "Clau nova acceptada. El contacte no està verificat",
             "acceptFailed": "No s'ha pogut acceptar la clau nova. Torna-ho a provar"
         },
-        "offlinePlaceholder": "Fora de línia. Els missatges s’enviaran en reconnectar",
+        "offlinePlaceholder": "Fora de línia. Els missatges s'enviaran en reconnectar",
         "loadImage": "Carrega la imatge",
         "loadVideo": "Carrega el vídeo",
         "loadAudio": "Carrega l'àudio",
@@ -742,7 +742,7 @@
             "searchIndex": "Índex de cerca",
             "searchIndexDescription": "L'índex de cerca permet la cerca de text complet a l'historial de missatges. Reconstruïu-lo si els resultats semblen incomplets.",
             "rebuildIndex": "Reconstruir l'índex",
-            "rebuildingIndex": "Reconstruint…",
+            "rebuildingIndex": "Reconstruint...",
             "indexRebuilt": "{{count}} missatges indexats",
             "logs": "Registres",
             "logsDescription": "Obre la carpeta que conté els registres de diagnòstic de Fluux.",
@@ -753,14 +753,14 @@
             "openpgpLabel": "Xifratge d'extrem a extrem OpenPGP",
             "openpgpDescription": "Publica una clau pública al teu servidor i xifra els missatges privats amb contactes que també en tinguin una.",
             "statusLabel": "Estat",
-            "statusWaitingOnline": "Esperant la connexió…",
-            "statusGenerating": "S'està generant la vostra clau…",
+            "statusWaitingOnline": "Esperant la connexió...",
+            "statusGenerating": "S'està generant la vostra clau...",
             "statusReady": "La vostra clau està a punt i publicada.",
-            "unlockDialogRestoreTitle": "Restaurar el xifratge d’extrem a extrem",
+            "unlockDialogRestoreTitle": "Restaurar el xifratge d'extrem a extrem",
             "unlockDialogRestoreBody": "Introdueix la teva frase de contrasenya existent per restaurar la teva clau en aquest dispositiu des de la còpia de seguretat del servidor.",
             "unlockRecoveredNote": "Clau restaurada des de la còpia de seguretat del servidor.",
-            "unlockNoRecoveryBody": "Aquesta frase de contrasenya no ha desbloquejat la teva clau i no s’ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d’un fitxer.",
-            "unlockNoKeyNoBackupBody": "No hi ha cap clau emmagatzemada en aquest dispositiu i no s’ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d’un fitxer.",
+            "unlockNoRecoveryBody": "Aquesta frase de contrasenya no ha desbloquejat la teva clau i no s'ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d'un fitxer.",
+            "unlockNoKeyNoBackupBody": "No hi ha cap clau emmagatzemada en aquest dispositiu i no s'ha trobat cap còpia de seguretat al servidor. Pots importar la teva clau des d'un fitxer.",
             "statusLocked": "Bloquejat. Introdueix la frase de contrasenya per desbloquejar.",
             "copyFingerprint": "Copia l'empremta",
             "copyFailed": "No s'ha pogut copiar l'empremta",
@@ -802,7 +802,7 @@
             "backupPublish": "Desa",
             "backupSuccess": "Clau desada al servidor",
             "backupPluginUnavailable": "El connector OpenPGP no està disponible",
-            "backupStatusChecking": "S'està comprovant el servidor…",
+            "backupStatusChecking": "S'està comprovant el servidor...",
             "backupStatusNone": "Encara no hi ha còpia de seguretat en aquest servidor.",
             "backupStatusExists": "Hi ha una còpia de seguretat en aquest servidor.",
             "backupStatusInSync": "Aquesta clau està desada al servidor.",
@@ -882,8 +882,8 @@
                 "restorePassphraseLabel": "Contrasenya de còpia de seguretat",
                 "restorePassphrasePlaceholder": "Introduïu la contrasenya de còpia de seguretat",
                 "restoreAction": "Restaurar",
-                "importingProgress": "Important la clau…",
-                "replacingProgress": "Reemplaçant la identitat…"
+                "importingProgress": "Important la clau...",
+                "replacingProgress": "Reemplaçant la identitat..."
             },
             "exportFileAction": "Exporta a fitxer",
             "exportFileDialogTitle": "Exporta la clau OpenPGP a un fitxer",
@@ -923,7 +923,7 @@
             "description": "Permet que Claude llegeixi l'historial de converses i enviï missatges a través de Fluux mitjançant el Model Context Protocol. Cada sol·licitud s'ha d'aprovar individualment al vostre client MCP (p. ex. Claude Desktop) abans d'executar-se.",
             "enable": "Activa l'accés de Claude",
             "disable": "Desactiva l'accés de Claude",
-            "statusStarting": "S'està iniciant el servidor local…",
+            "statusStarting": "S'està iniciant el servidor local...",
             "statusRunning": "En execució a 127.0.0.1:{{port}}",
             "copy": "Copia les dades de connexió",
             "copied": "Copiat",
@@ -950,9 +950,9 @@
         "systemTray": {
             "title": "Safata del sistema",
             "keepInTray": "Mantén Fluux a la safata del sistema",
-            "descriptionWindows": "Quan està activat, minimitzar o tancar Fluux l’amaga a la safata del sistema.",
-            "descriptionLinux": "Quan està activat, tancar Fluux l’amaga a la safata del sistema si és compatible. Minimitzar manté el comportament normal de l’escriptori.",
-            "unavailableLinux": "No hi ha cap safata del sistema compatible disponible. Tancar Fluux sortirà de l’aplicació."
+            "descriptionWindows": "Quan està activat, minimitzar o tancar Fluux l'amaga a la safata del sistema.",
+            "descriptionLinux": "Quan està activat, tancar Fluux l'amaga a la safata del sistema si és compatible. Minimitzar manté el comportament normal de l'escriptori.",
+            "unavailableLinux": "No hi ha cap safata del sistema compatible disponible. Tancar Fluux sortirà de l'aplicació."
         }
     },
     "update": {
@@ -996,7 +996,7 @@
         "title": "Quant a",
         "version": "Versió {{version}}",
         "edition": "Edició Comunitat",
-        "description": "Un client de missatgeria potent, productiu i agradable d'utilitzar.",
+        "description": "Un client de missatgeria productiu i agradable d'utilitzar.",
         "madeBy": "Fet per",
         "commercialLicense": "Llicències comercials disponibles.",
         "contactUs": "Contacta'ns",
@@ -1339,8 +1339,8 @@
         "tapToChange": "Toca per canviar el vot",
         "close": "Tanca enquesta",
         "closed": "Enquesta tancada",
-        "bannerSingle": "📊 {{title}}, toca per votar",
-        "bannerMultiple": "📊 {{count}} enquestes sense resposta, toca per veure l'última",
+        "bannerSingle": "{{title}}, toca per votar",
+        "bannerMultiple": "{{count}} enquestes sense resposta, toca per veure l'última",
         "dismissBanner": "Descarta",
         "scrollToOriginal": "Desplaça fins a l'enquesta original"
     },
@@ -1370,10 +1370,10 @@
         "nick": {
             "desc": "Canvia el teu sobrenom en aquesta sala",
             "usage": "/nick <newnick>",
-            "changed": "Ara se’t coneix com a {{nick}}"
+            "changed": "Ara se't coneix com a {{nick}}"
         },
         "part": {
-            "desc": "Surt d’aquesta sala",
+            "desc": "Surt d'aquesta sala",
             "usage": "/part"
         },
         "topic": {
@@ -1386,12 +1386,12 @@
         "kick": {
             "desc": "Expulsa algú de la sala",
             "usage": "/kick <nick> [reason]",
-            "done": "S’ha expulsat {{nick}}"
+            "done": "S'ha expulsat {{nick}}"
         },
         "ban": {
             "desc": "Bandeja algú de la sala",
             "usage": "/ban <nick|jid> [reason]",
-            "done": "S’ha bandejat {{target}}"
+            "done": "S'ha bandejat {{target}}"
         },
         "invite": {
             "desc": "Convida algú a la sala",
@@ -1418,7 +1418,7 @@
             "needTarget": "Indica un sobrenom o una adreça",
             "userNotFound": "Aquí no hi ha ningú anomenat {{nick}}",
             "nickInUse": "El sobrenom {{nick}} ja està en ús",
-            "nickFailed": "No s’ha pogut canviar el teu sobrenom"
+            "nickFailed": "No s'ha pogut canviar el teu sobrenom"
         }
     },
     "easterEgg": {

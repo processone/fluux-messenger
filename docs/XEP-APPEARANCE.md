@@ -115,7 +115,7 @@ Early versions of the protocol used a `<theme>` child element instead of `<mode>
 ## 6. Privacy
 
 - The PEP node uses `access_model=whitelist`, ensuring only the owner can read or write their settings.
-- No sensitive data is stored — only a theme preference string.
+- No sensitive data is stored, only a theme preference string.
 
 ---
 

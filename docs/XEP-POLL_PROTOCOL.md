@@ -8,7 +8,7 @@
 
 ## 1. Introduction
 
-This document describes a protocol for creating and managing polls in XMPP Multi-User Chat (MUC) rooms. The design leverages existing XEP-0444 reactions as the voting mechanism — each poll option maps to an emoji, and voting is simply reacting with that emoji.
+This document describes a protocol for creating and managing polls in XMPP Multi-User Chat (MUC) rooms. The design leverages existing XEP-0444 reactions as the voting mechanism, each poll option maps to an emoji, and voting is simply reacting with that emoji.
 
 This approach has several advantages:
 
@@ -80,7 +80,7 @@ A poll is sent as a `<message type="groupchat">` containing a `<poll>` element i
 
 | Attribute | Type   | Required | Description                                                                                                                                |
 |-----------|--------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `emoji`   | string | Yes      | The emoji that represents this option. When using the default numbered set, this is `1️⃣`–`9️⃣`. Custom emojis are allowed. |
+| `emoji`   | string | Yes      | The emoji that represents this option. When using the default numbered set, this is `1️⃣`-`9️⃣`. Custom emojis are allowed. |
 
 The text content of `<option>` is the human-readable label for the option.
 
@@ -247,9 +247,9 @@ If any check fails, the `pollClosed` data is discarded and the message is treate
 
 If the original poll message is not available in the local store (e.g., the client joined the room after the poll was created), the client SHOULD:
 
-1. **Accept on trust** — display the `<poll-closed>` results immediately to avoid blocking the UI.
-2. **Fetch the original** — query the room's message archive (XEP-0313) for the original poll message using the `{urn:xmpp:mam:2}ids` form field with the `message-id` value.
-3. **Verify retroactively** — once the original poll is retrieved, apply the same verification checks from section 5.6. If verification fails, strip the `pollClosed` data from the message.
+1. **Accept on trust**: display the `<poll-closed>` results immediately to avoid blocking the UI.
+2. **Fetch the original**: query the room's message archive (XEP-0313) for the original poll message using the `{urn:xmpp:mam:2}ids` form field with the `message-id` value.
+3. **Verify retroactively**: once the original poll is retrieved, apply the same verification checks from section 5.6. If verification fails, strip the `pollClosed` data from the message.
 
 This ensures that late-joining clients still benefit from creator verification without blocking on a network round-trip.
 
@@ -327,7 +327,7 @@ for each option in poll.options:
 
 ### 7.2 Single-Vote Algorithm
 
-In single-vote mode, a voter who reacted with multiple poll-option emojis (e.g., from a legacy client that does not understand poll semantics) is counted only in their **last option** in option order. This is consistent with vote-replacement semantics — the latest choice takes precedence — and provides graceful best-effort handling without rejecting the vote entirely:
+In single-vote mode, a voter who reacted with multiple poll-option emojis (e.g., from a legacy client that does not understand poll semantics) is counted only in their **last option** in option order. This is consistent with vote-replacement semantics (the latest choice takes precedence) and provides graceful best-effort handling without rejecting the vote entirely:
 
 ```
 last_option = empty map          # voter → option index
@@ -419,9 +419,9 @@ These attacks are mitigated by:
 
 Receiving clients verify `<poll-closed>` messages against the original poll (see section 5.6). The verification checks:
 
-1. **Sender identity** — via XEP-0421 occupant-id (preferred, stable across nick changes) or MUC nickname (fallback).
-2. **Content integrity** — title and result emojis must match the original poll.
-3. **Deferred verification** — when the original poll is not locally available, clients accept on trust and verify asynchronously via MAM (sections 5.7 and 6.6).
+1. **Sender identity**: via XEP-0421 occupant-id (preferred, stable across nick changes) or MUC nickname (fallback).
+2. **Content integrity**: title and result emojis must match the original poll.
+3. **Deferred verification**: when the original poll is not locally available, clients accept on trust and verify asynchronously via MAM (sections 5.7 and 6.6).
 
 Without server enforcement, these client-side checks rely on the MUC service's existing identity guarantees (occupant-id or full JID binding).
 
@@ -431,7 +431,7 @@ A participant could create excessive polls to spam a room. This is a general MUC
 
 ### 10.4 Privacy
 
-Reaction-based voting is inherently **public** — all participants can see who voted for which option. This is by design for the initial implementation. A future extension could support anonymous voting via server-side aggregation, where the MUC component collects votes and only publishes aggregate counts.
+Reaction-based voting is inherently **public**, all participants can see who voted for which option. This is by design for the initial implementation. A future extension could support anonymous voting via server-side aggregation, where the MUC component collects votes and only publishes aggregate counts.
 
 ---
 
@@ -455,7 +455,7 @@ A server-side component could support anonymous polls by:
 
 ### 11.3 Extended Option Set
 
-The default numbered emoji set (1️⃣–9️⃣) covers up to 9 options. Custom emojis already allow more, but a standardized extended set (🔟 and beyond, or lettered emojis) could be defined for broader compatibility.
+The default numbered emoji set (1️⃣ to 9️⃣) covers up to 9 options. Custom emojis already allow more, but a standardized extended set (🔟 and beyond, or lettered emojis) could be defined for broader compatibility.
 
 ### 11.4 Poll Editing
 
@@ -545,8 +545,8 @@ The protocol uses the namespace `urn:fluux:poll:0`. The `:0` suffix indicates th
 
 This protocol builds on the following extensions:
 
-- **XEP-0444** (Message Reactions) — The voting mechanism.
-- **XEP-0045** (Multi-User Chat) — The room environment where polls operate.
-- **XEP-0428** (Fallback Indication) — Marking the text body as a fallback for structured content.
-- **XEP-0334** (Message Processing Hints) — Ensuring poll messages are stored for MAM retrieval.
-- **XEP-0421** (Occupant Id) — Future identity verification for creator-only actions.
+- **XEP-0444** (Message Reactions). The voting mechanism.
+- **XEP-0045** (Multi-User Chat). The room environment where polls operate.
+- **XEP-0428** (Fallback Indication). Marking the text body as a fallback for structured content.
+- **XEP-0334** (Message Processing Hints). Ensuring poll messages are stored for MAM retrieval.
+- **XEP-0421** (Occupant Id). Future identity verification for creator-only actions.

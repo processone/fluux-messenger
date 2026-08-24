@@ -183,13 +183,13 @@
             "removeVerificationSuccess": "Verifikazzjoni mneħħija",
             "disableForContact": "Itfi l-kriptaġġ għal dan il-kuntatt",
             "notAvailableTitle": "Il-kriptaġġ mhux disponibbli",
-            "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f’test ċar.",
+            "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f'test ċar.",
             "disabledByYouTitle": "Il-kriptaġġ ġie diżattivat",
-            "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f’test ċar.",
+            "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f'test ċar.",
             "unavailableNowTitle": "Il-kriptaġġ bħalissa mhux disponibbli",
             "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings.",
             "rejectedTitle": "Ċertifikat mhux validu",
-            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f’test ċar.",
+            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f'test ċar.",
             "glanceVerified": "Ivverifikat u kriptat",
             "glanceEncrypted": "Kriptat, mhux ivverifikat",
             "glanceNotEncrypted": "Mhux kriptat",
@@ -368,7 +368,7 @@
         "whisperingTo": "Qiegħed tsussurra b'mod privat lil {{nick}}",
         "whisperThread": "Privat ma' {{nick}}",
         "whisperCounterpartGone": "{{nick}} m'għadux fil-kamra, ma tistax twieġeb",
-        "whisperPlaceholder": "Sussurra lil {{nick}}…",
+        "whisperPlaceholder": "Sussurra lil {{nick}}...",
         "ignoreUser": "Injora f'din il-kamra",
         "stopIgnoring": "Ieqaf tinjora",
         "ignoredUsers": "Injorati",
@@ -527,7 +527,7 @@
         "errorDetails": "Errur: {{error}}",
         "encryption": {
             "encryptedTo": "Ikkriptat għal {{name}}",
-            "checking": "Qed nikkontrolla l-kuntatt…",
+            "checking": "Qed nikkontrolla l-kuntatt...",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Ċavetta OpenPGP verifikata",
             "tofuNewTooltip": "Kuntatt ġdid. Ivverifika l-marka tas-saba' għal fiduċja sħiħa",
@@ -544,7 +544,7 @@
             "keyLockedTooltip": "L-encryption huwa msakkar. Ikklikkja biex tiftaħ",
             "encryptedClickToUnlock": "Messaġġ kriptat. Ikklikkja biex tiftaħ",
             "encryptedCouldNotDecrypt": "Ma setax jiġi deċifrat dan il-messaġġ",
-            "encryptedDecrypting": "Messaġġ ċifrat, qed jiddeċifra…",
+            "encryptedDecrypting": "Messaġġ ċifrat, qed jiddeċifra...",
             "encryptedDisabled": "L-encryption huwa diżattivat. Attivah fis-settings",
             "unsupportedMethodTooltip": "Ikkriptat bi {{method}}, metodu li dan l-apparat għadu ma jappoġġjax",
             "unsupportedMessage": "Messaġġ kriptat: {{method}} mhux appoġġjat",
@@ -746,7 +746,7 @@
             "searchIndex": "Indiċi tat-tiftix",
             "searchIndexDescription": "L-indiċi tat-tiftix jippermetti tiftix ta' test sħiħ fl-istorja tal-messaġġi tiegħek. Erġa' ibnih jekk ir-riżultati jidhru mhux kompluti.",
             "rebuildIndex": "Erġa' ibni l-indiċi",
-            "rebuildingIndex": "Qed jinbena…",
+            "rebuildingIndex": "Qed jinbena...",
             "indexRebuilt": "{{count}} messaġġ indiċjati",
             "logs": "Reġistri",
             "logsDescription": "Iftaħ il-folder bir-reġistri dijanjostiċi ta’ Fluux.",
@@ -757,8 +757,8 @@
             "openpgpLabel": "Kriptaġġ minn tarf sa tarf OpenPGP",
             "openpgpDescription": "Ippubblika ċavetta pubblika fuq is-server tiegħek u ikripta messaġġi 1:1 lill-kuntatti li għandhom ukoll ċavetta.",
             "statusLabel": "Stat",
-            "statusWaitingOnline": "Qed nistennew konnessjoni…",
-            "statusGenerating": "Qed niġġeneraw iċ-ċavetta tiegħek…",
+            "statusWaitingOnline": "Qed nistennew konnessjoni...",
+            "statusGenerating": "Qed niġġeneraw iċ-ċavetta tiegħek...",
             "statusReady": "Iċ-ċavetta tiegħek hija lesta u ppubblikata.",
             "unlockDialogRestoreTitle": "Irrestawra l-Encryption Minn Tarf għal Tarf",
             "unlockDialogRestoreBody": "Daħħal il-passphrase eżistenti tiegħek biex tirrestawra ċ-ċavetta tiegħek f'din l-apparat mill-backup tas-server tiegħek.",
@@ -806,7 +806,7 @@
             "backupPublish": "Issejvja",
             "backupSuccess": "Iċ-ċavetta ġiet issejvjata fuq is-server",
             "backupPluginUnavailable": "Il-plugin OpenPGP mhux disponibbli",
-            "backupStatusChecking": "Qed niċċekkja s-server…",
+            "backupStatusChecking": "Qed niċċekkja s-server...",
             "backupStatusNone": "Għadu m'hemmx backup fuq dan is-server.",
             "backupStatusExists": "Hemm backup fuq dan is-server.",
             "backupStatusInSync": "Din iċ-ċavetta hi ssejvjata fuq is-server.",
@@ -886,8 +886,8 @@
                 "restorePassphraseLabel": "Passfrażi tal-backup",
                 "restorePassphrasePlaceholder": "Daħħal il-passfrażi tal-backup tiegħek",
                 "restoreAction": "Restawra",
-                "importingProgress": "Qed jiġi importat iċ-ċavetta…",
-                "replacingProgress": "Qed tinbidel l-identità…"
+                "importingProgress": "Qed jiġi importat iċ-ċavetta...",
+                "replacingProgress": "Qed tinbidel l-identità..."
             },
             "exportFileAction": "Esporta f'fajl",
             "exportFileDialogTitle": "Esporta ċ-ċavetta OpenPGP f'fajl",
@@ -927,7 +927,7 @@
             "description": "Ħalli lil Claude jaqra l-istorja tal-konverżazzjonijiet tiegħek u jibgħat messaġġi permezz ta' Fluux bl-użu tal-Model Context Protocol. Kull talba xorta trid tiġi approvata individwalment fil-klijent MCP tiegħek (eż. Claude Desktop) qabel titħaddem.",
             "enable": "Attiva l-aċċess ta' Claude",
             "disable": "Iddiżattiva l-aċċess ta' Claude",
-            "statusStarting": "Qed jinbeda s-server lokali…",
+            "statusStarting": "Qed jinbeda s-server lokali...",
             "statusRunning": "Qed jaħdem fuq 127.0.0.1:{{port}}",
             "copy": "Ikkopja d-dettalji tal-konnessjoni",
             "copied": "Ikkopjat",
@@ -956,7 +956,7 @@
             "keepInTray": "Żomm Fluux fit-trej tas-sistema",
             "descriptionWindows": "Meta attivat, it-tnaqqis jew l-għeluq jaħbi lil Fluux fit-trej tas-sistema.",
             "descriptionLinux": "Meta attivat, l-għeluq jaħbi lil Fluux fit-trej tas-sistema jekk ikun appoġġjat. It-tnaqqis iżomm l-imġiba normali tad-desktop.",
-            "unavailableLinux": "M’hemmx trej tas-sistema kompatibbli disponibbli. L-għeluq ta’ Fluux jagħlaq l-applikazzjoni."
+            "unavailableLinux": "M'hemmx trej tas-sistema kompatibbli disponibbli. L-għeluq ta’ Fluux jagħlaq l-applikazzjoni."
         }
     },
     "update": {
@@ -1000,7 +1000,7 @@
         "title": "Dwar",
         "version": "Verżjoni {{version}}",
         "edition": "Edizzjoni tal-Komunità",
-        "description": "Klijent ta' messaġġi b'saħħtu, produttiv li hu pjaċir tużah.",
+        "description": "Klijent ta' messaġġi produttiv li hu pjaċir tużah.",
         "madeBy": "Magħmul minn",
         "commercialLicense": "Liċenzji kummerċjali disponibbli.",
         "contactUs": "Ikkuntattjana",
@@ -1343,8 +1343,8 @@
         "tapToChange": "Tektek biex tibdel il-vot",
         "close": "Agħlaq l-istħarriġ",
         "closed": "L-istħarriġ magħluq",
-        "bannerSingle": "📊 {{title}}, tektek biex tivvota",
-        "bannerMultiple": "📊 {{count}} stħarriġiet mhux imwieġba, tektek biex tara l-aħħar wieħed",
+        "bannerSingle": "{{title}}, tektek biex tivvota",
+        "bannerMultiple": "{{count}} stħarriġiet mhux imwieġba, tektek biex tara l-aħħar wieħed",
         "dismissBanner": "Warrab",
         "scrollToOriginal": "Mur għall-istħarriġ oriġinali"
     },
@@ -1368,11 +1368,11 @@
             "usage": "/me <action>"
         },
         "say": {
-            "desc": "Ibgħat it-test litteralment, anke jekk jibda b’sing",
+            "desc": "Ibgħat it-test litteralment, anke jekk jibda b'sing",
             "usage": "/say <text>"
         },
         "nick": {
-            "desc": "Ibdel il-laqam tiegħek f’din il-kamra",
+            "desc": "Ibdel il-laqam tiegħek f'din il-kamra",
             "usage": "/nick <newnick>",
             "changed": "Issa int magħruf bħala {{nick}}"
         },
@@ -1420,7 +1420,7 @@
             "ownerOnly": "Is-sid tal-kamra biss jista’ jagħmel dan",
             "needNick": "Jekk jogħġbok agħti laqam",
             "needTarget": "Jekk jogħġbok agħti laqam jew indirizz",
-            "userNotFound": "M’hawn ħadd bl-isem {{nick}} hawnhekk",
+            "userNotFound": "M'hawn ħadd bl-isem {{nick}} hawnhekk",
             "nickInUse": "Il-laqam {{nick}} diġà qed jintuża",
             "nickFailed": "Ma setax jinbidel il-laqam tiegħek"
         }

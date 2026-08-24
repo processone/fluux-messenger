@@ -1,6 +1,6 @@
 # Linux Dev: Dock Icon Setup
 
-When running `npm run tauri:dev` on Linux (GNOME, KDE, etc.), the app appears in the dock/taskbar without an icon. This is expected — during development there's no installed `.desktop` file, so the desktop environment can't match the window to an icon.
+When running `npm run tauri:dev` on Linux (GNOME, KDE, etc.), the app appears in the dock/taskbar without an icon. This is expected: during development there's no installed `.desktop` file, so the desktop environment can't match the window to an icon.
 
 This only affects development. Installed packages (.deb, .rpm, Flatpak, AUR) include a proper `.desktop` file and icons.
 
@@ -46,10 +46,10 @@ update-desktop-database ~/.local/share/applications/
 
 ### 4. Verify
 
-Restart `npm run tauri:dev` — the Fluux icon should now appear in the dock.
+Restart `npm run tauri:dev` and the Fluux icon should now appear in the dock.
 
 ## Notes
 
 - This file is local to your machine and not tracked in git.
-- If you switch between debug and release builds, the `Exec` path doesn't matter for icon matching — only `StartupWMClass` needs to match.
+- If you switch between debug and release builds, the `Exec` path doesn't matter for icon matching, only `StartupWMClass` needs to match.
 - On Wayland, the app ID may come from the GTK application ID (`com.processone.fluux`) instead of `WM_CLASS`. If the icon still doesn't appear, try setting `StartupWMClass=com.processone.fluux`.

@@ -1,7 +1,7 @@
 # URL Schemes and Login Prefill Links
 
 This document describes the URL schemes Fluux understands for **preconfiguring the
-login screen** from a link — the `xmpp:` URI scheme on desktop and query-string
+login screen** from a link, the `xmpp:` URI scheme on desktop and query-string
 parameters on web. The goal is VPN-profile-style provisioning: hand a user a link
 and Fluux opens with the login form prefilled (address and, when needed, an
 explicit server endpoint). The user still types their password and presses
@@ -15,12 +15,12 @@ that feed that field; CONNECTION.md is about what the field accepts once filled.
 ## Principles
 
 - **No credentials, ever.** A link carries an address and connection hints, never
-  a password or token. There is no auto-connect from a link — it only seeds the
+  a password or token. There is no auto-connect from a link, it only seeds the
   form.
 - **One validated shape.** Both platforms normalize their input into the same
   `LoginPrefill` object in the SDK (`normalizeLoginPrefill`,
-  `packages/fluux-sdk/src/utils/loginPrefill.ts`). Validation — including the
-  server-scheme security gate — lives in that single pure function.
+  `packages/fluux-sdk/src/utils/loginPrefill.ts`). Validation, including the
+  server-scheme security gate, lives in that single pure function.
 - **Visible custom server.** When a link sets a non-default server, the login
   screen reveals and fills the advanced server field and shows a calm, neutral
   note (`A link set a custom server: <host>`) so the user sees the endpoint
@@ -30,7 +30,7 @@ that feed that field; CONNECTION.md is about what the field accepts once filled.
 
 | Field      | Source key | Notes                                                              |
 |------------|------------|-------------------------------------------------------------------|
-| `jid`      | `jid`      | `local@domain`, or a bare `domain` (web only — see Limitations).  |
+| `jid`      | `jid`      | `local@domain`, or a bare `domain` (web only, see Limitations).   |
 | `server`   | `server`   | Explicit endpoint. Same formats as the manual server field (see below). |
 | `resource` | `resource` | Optional XMPP resource (e.g. `desktop`). Overrides the default.   |
 | `lang`     | `lang`     | Optional UI / `xml:lang` language tag (e.g. `fr`).                |
@@ -59,7 +59,7 @@ Validation (`normalizeServer`):
   `blob:`, ...) is **dropped**. A URL that embeds credentials
   (`wss://user:pass@host`) is also dropped.
 - A value **without a scheme** must be a **dotted hostname** (e.g.
-  `process-one.net`) or `dotted-host:port` with a numeric 1–65535 port. This is
+  `process-one.net`) or `dotted-host:port` with a numeric 1-65535 port. This is
   what distinguishes a legitimate `chat.example.com:5222` from an opaque
   dangerous URI like `javascript:alert(1)` (whose part after the colon is not a
   port). A single-label host such as `localhost` is **not** accepted in this
@@ -72,7 +72,7 @@ When the `server` is dropped, a valid `jid` in the same link still applies.
 > **Platform note:** The native-TCP formats (`tls://`, `tcp://`, bare domain,
 > `host:port`) only connect on **desktop**, where the Rust proxy provides native
 > TCP/TLS. On **web**, only a `wss://`/`ws://` or `https://` (BOSH) endpoint can
-> actually connect — a web link should use one of those. The validator itself is
+> actually connect, a web link should use one of those. The validator itself is
 > platform-agnostic; it does not reject a desktop-only format on web, it simply
 > won't connect there.
 
@@ -106,7 +106,7 @@ screen). The handler `useLoginPrefillDeepLink`
 (`apps/fluux/src/hooks/useLoginPrefillDeepLink.ts`) is mounted by `LoginScreen`.
 
 When the user is **already connected**, `xmpp:` links keep their existing
-in-app navigation behavior (open a chat, join a room — see
+in-app navigation behavior (open a chat, join a room, see
 `apps/fluux/src/hooks/useDeepLink.ts`), and any connection hints are ignored.
 The two handlers are mutually exclusive because `LoginScreen` and `ChatLayout`
 are never mounted at the same time.

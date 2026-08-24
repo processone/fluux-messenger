@@ -74,8 +74,8 @@ export const PollBanner = memo(function PollBanner({ messages, myNick, votedPoll
         className="flex-1 min-w-0 text-start text-fluux-text hover:text-fluux-brand transition-colors truncate"
       >
         {count === 1
-          ? t('poll.bannerSingle', '📊 {{title}} — tap to vote', { title: latestPoll.poll!.title })
-          : t('poll.bannerMultiple', '📊 {{count}} unanswered polls — tap to see latest', { count })
+          ? t('poll.bannerSingle', 'Tap to vote on {{title}}', { title: latestPoll.poll!.title })
+          : t('poll.bannerMultiple', '{{count}} unanswered polls, tap to see latest', { count })
         }
       </button>
 

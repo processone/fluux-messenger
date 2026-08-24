@@ -44,15 +44,15 @@ Local desktop builds run under a **separate dev identity** so they never collide
 | Production (release, built in CI) | `com.processone.fluux` | Fluux Messenger |
 | Local (`tauri:dev` / `tauri:build` / `tauri:install`) | `com.processone.fluux.dev` | Fluux Messenger Dev |
 
-The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected — Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity — e.g. to test the release artifact — use the raw `npm run tauri build`, which uses the base config.)
+The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected. Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity, e.g. to test the release artifact, use the raw `npm run tauri build`, which uses the base config.)
 
 ### Why a separate identity
 
-macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits — but cannot match — the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
+macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits (but cannot match) the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
 
 ### Test notifications with `tauri:install`, not `tauri:dev`
 
-`tauri dev` runs the **unbundled** debug binary (it never produces a `.app`), which macOS will not reliably authorize for notifications — so it is not the tool for testing native notifications, and there is nothing to code-sign there. Build and install a real bundle instead:
+`tauri dev` runs the **unbundled** debug binary (it never produces a `.app`), which macOS will not reliably authorize for notifications, so it is not the tool for testing native notifications, and there is nothing to code-sign there. Build and install a real bundle instead:
 
 ```bash
 npm run tauri:install   # → "Fluux Messenger Dev.app" in /Applications, alongside prod
@@ -62,7 +62,7 @@ Launch **Fluux Messenger Dev**, accept the macOS prompt, and notifications fire.
 
 ### Durable grants across rebuilds (optional)
 
-Local builds are **ad-hoc signed** by default, which pins the grant to the binary's exact CDHash — so it resets on every **Rust** rebuild (frontend-only rebuilds keep it). To make the grant survive every rebuild, sign with a stable **self-signed** identity. No Apple Developer account is needed: these are *local* notifications (`UNUserNotificationCenter`), not APNs push — there is no App ID, provisioning profile, or Apple Developer console involved.
+Local builds are **ad-hoc signed** by default, which pins the grant to the binary's exact CDHash, so it resets on every **Rust** rebuild (frontend-only rebuilds keep it). To make the grant survive every rebuild, sign with a stable **self-signed** identity. No Apple Developer account is needed: these are *local* notifications (`UNUserNotificationCenter`), not APNs push, so there is no App ID, provisioning profile, or Apple Developer console involved.
 
 **Create the certificate (once, ~1 min):**
 
@@ -74,12 +74,12 @@ Local builds are **ad-hoc signed** by default, which pins the grant to the binar
 
 `scripts/tauri-build.sh` auto-detects a `Fluux Dev` code-signing identity and signs the build with it (logging `Signing local build with 'Fluux Dev'…`); without it, the build falls back to ad-hoc. Two things to know:
 
-- **The certificate does not need to be trusted.** A self-signed cert is reported as `CSSMERR_TP_NOT_TRUSTED`, but `codesign` signs with it regardless — trust only affects Gatekeeper, not local signing or the notification binding. (The script detects it with `security find-identity -p codesigning`, *without* the `-v`/valid-only filter that would otherwise hide an untrusted cert.)
-- **First use prompts for keychain access.** The first time `codesign` uses the key, macOS shows *"codesign wants to use a key…"* — click **Always Allow** so later rebuilds do not prompt again.
+- **The certificate does not need to be trusted.** A self-signed cert is reported as `CSSMERR_TP_NOT_TRUSTED`, but `codesign` signs with it regardless. Trust only affects Gatekeeper, not local signing or the notification binding. (The script detects it with `security find-identity -p codesigning`, *without* the `-v`/valid-only filter that would otherwise hide an untrusted cert.)
+- **First use prompts for keychain access.** The first time `codesign` uses the key, macOS shows *"codesign wants to use a key…"*. Click **Always Allow** so later rebuilds do not prompt again.
 
 Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Set up the certificate **before** your first grant on the Dev app, or you will just re-click *Allow* once after switching from ad-hoc to signed.
 
-> Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI — see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
+> Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI: see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
 
 ## Screenshots
 
@@ -99,11 +99,11 @@ The script navigates the demo at `/demo.html?tutorial=false`, freezes the animat
 
 ## Windows Test Builds
 
-Windows installers cannot be cross-compiled from macOS or Linux — the MSVC toolchain, WiX, and NSIS all require Windows. To try a branch on Windows before it is released, dispatch the **Windows Test Build** workflow (`.github/workflows/windows-test-build.yml`). It runs on `windows-latest`, builds both installers, and attaches them as a run artifact (14-day retention) — no tag and no GitHub release.
+Windows installers cannot be cross-compiled from macOS or Linux: the MSVC toolchain, WiX, and NSIS all require Windows. To try a branch on Windows before it is released, dispatch the **Windows Test Build** workflow (`.github/workflows/windows-test-build.yml`). It runs on `windows-latest`, builds both installers, and attaches them as a run artifact (14-day retention), with no tag and no GitHub release.
 
 ### Triggering the build
 
-The workflow is manual-only (`workflow_dispatch`); nothing runs it automatically. Because GitHub only exposes `workflow_dispatch` from the default branch, **the workflow file must be on `main`** before you can dispatch it — including against a feature branch. Once it is there, the branch you pick is what gets built.
+The workflow is manual-only (`workflow_dispatch`); nothing runs it automatically. Because GitHub only exposes `workflow_dispatch` from the default branch, **the workflow file must be on `main`** before you can dispatch it, including against a feature branch. Once it is there, the branch you pick is what gets built.
 
 From the command line:
 
@@ -133,12 +133,12 @@ When the run finishes, download the artifact into the current directory:
 gh run download <run-id>
 ```
 
-Or use the **Artifacts** section at the bottom of the run's summary page. Either way you get a zip named `fluux-windows-<branch>-<sha>` — with `/` flattened to `-`, so `mr/my-feature` becomes `mr-my-feature`, since artifact names cannot contain slashes. It holds two files:
+Or use the **Artifacts** section at the bottom of the run's summary page. Either way you get a zip named `fluux-windows-<branch>-<sha>`, with `/` flattened to `-`, so `mr/my-feature` becomes `mr-my-feature`, since artifact names cannot contain slashes. It holds two files:
 
 | File | Installer |
 |---|---|
-| `…_x64-setup.exe` | NSIS — per-user install, no admin prompt |
-| `…_x64_en-US.msi` | WiX — the MSI, for Group Policy or scripted deploys |
+| `…_x64-setup.exe` | NSIS: per-user install, no admin prompt  |
+| `…_x64_en-US.msi` | WiX: the MSI, for Group Policy or scripted deploys  |
 
 These are Tauri's raw bundle names, so they still carry the `Fluux Messenger_<version>_` prefix; `scripts/rename-release-assets.js` only tidies names on published releases, and it does not run here.
 
@@ -148,16 +148,16 @@ Two things differ from a release build:
 
 | | Test build | Release build |
 |---|---|---|
-| Code signing | None — SmartScreen warns on first run ("More info" → "Run anyway") | Azure Trusted Signing |
+| Code signing | None: SmartScreen warns on first run ("More info" → "Run anyway")  | Azure Trusted Signing |
 | Updater artifacts | Disabled (no signing key, no `latest.json` to serve) | `.sig` files published |
 
-Everything else matches `release.yml`, including the production identifier `com.processone.fluux` and the WiX `upgradeCode`. That means a test build installs *over* an installed Fluux Messenger and exercises the real upgrade path — which is usually what you want, but it does replace the release copy on that machine.
+Everything else matches `release.yml`, including the production identifier `com.processone.fluux` and the WiX `upgradeCode`. That means a test build installs *over* an installed Fluux Messenger and exercises the real upgrade path, which is usually what you want, but it does replace the release copy on that machine.
 
-The app reports its commit hash (embedded by `src-tauri/build.rs` as `GIT_HASH`), so you can confirm which build you actually installed. The version string still reads as the current `tauri.conf.json` version — Tauri v2 rejects non-`X.Y.Z` versions, so test builds are not separately stamped.
+The app reports its commit hash (embedded by `src-tauri/build.rs` as `GIT_HASH`), so you can confirm which build you actually installed. The version string still reads as the current `tauri.conf.json` version. Tauri v2 rejects non-`X.Y.Z` versions, so test builds are not separately stamped.
 
 ## Windows Installer Artwork
 
-The MSI and `.exe` installers carry four branded bitmaps. They are committed under `apps/fluux/src-tauri/installer/windows/` and referenced from `bundle.windows.wix` / `bundle.windows.nsis` in `tauri.conf.json`. They are **not** release-cadence assets — regenerate them only when the artwork itself changes.
+The MSI and `.exe` installers carry four branded bitmaps. They are committed under `apps/fluux/src-tauri/installer/windows/` and referenced from `bundle.windows.wix` / `bundle.windows.nsis` in `tauri.conf.json`. They are **not** release-cadence assets. Regenerate them only when the artwork itself changes.
 
 Sources are self-contained HTML layouts in `scripts/installer-art/`, rendered by Playwright:
 
@@ -172,8 +172,8 @@ Three constraints are easy to break and expensive to discover, since the result 
 
 | Constraint | Why |
 |---|---|
-| 24-bit uncompressed BMP, at the exact slot size | The only format WiX v3 and NSIS accept; anything off-size gets stretched. `render.mjs` encodes the BMP itself and asserts the dimensions — never render at 2x. |
-| The left of `wix-banner` and `wix-dialog` must stay light | WixUI draws each page's Title and Description as transparent **black** text controls on top of the bitmap — x 20–406 px on the banner, from x 180 px on the dialog. Art that reaches into those boxes makes the installer's own copy unreadable. |
+| 24-bit uncompressed BMP, at the exact slot size | The only format WiX v3 and NSIS accept; anything off-size gets stretched. `render.mjs` encodes the BMP itself and asserts the dimensions, never render at 2x.  |
+| The left of `wix-banner` and `wix-dialog` must stay light | WixUI draws each page's Title and Description as transparent **black** text controls on top of the bitmap, x 20-406 px on the banner, from x 180 px on the dialog. Art that reaches into those boxes makes the installer's own copy unreadable.  |
 | `nsis-header` stays on pure `#FFFFFF` | That is MUI2's default `MUI_BGCOLOR`. Any other background turns the image into a visible tile pasted onto the header bar. |
 
 Each HTML file's header comment records the dialog-unit coordinates behind those numbers. Only `nsis-sidebar` has no text over it, which is why it is the one surface carrying the full night-stage treatment.

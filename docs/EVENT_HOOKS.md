@@ -18,7 +18,7 @@ class NotificationSoundHook extends EventHook {
   readonly name = 'Notification Sound'
 
   onload(): void {
-    // Subscribe to SDK events — auto-cleaned on unload
+    // Subscribe to SDK events, auto-cleaned on unload
     this.registerEvent('chat:message', ({ message }) => {
       if (!message.isOutgoing) {
         playNotificationSound()
@@ -29,7 +29,7 @@ class NotificationSoundHook extends EventHook {
       playInvitationSound()
     })
 
-    // Subscribe to store changes — also auto-cleaned
+    // Subscribe to store changes, also auto-cleaned
     const unsub = someStore.subscribe(
       (state) => state.someValue,
       (value) => { /* react to change */ }
@@ -82,7 +82,7 @@ Logs notable events to `activityLogStore`:
 | `chat:reactions` (own messages) | `reaction-received` | informational |
 | `room:reactions` (own messages) | `reaction-received` | informational |
 
-Reactions are grouped by message — multiple reactors on the same message consolidate into a single event.
+Reactions are grouped by message. Multiple reactors on the same message consolidate into a single event.
 
 ## Activity Log Store
 

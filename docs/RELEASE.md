@@ -33,7 +33,7 @@ npm run release:prepare X.Y.Z
 
 ## Step-by-Step Release
 
-Every release — stable or beta, minor or patch — follows these steps in order. Unless otherwise noted, work happens on a **release branch** (`release/X.Y.Z`), not directly on `main`. This keeps `main` clean during the stabilization window and lets us cherry-pick late fixes without disrupting other work.
+Every release (stable or beta, minor or patch) follows these steps in order. Unless otherwise noted, work happens on a **release branch** (`release/X.Y.Z`), not directly on `main`. This keeps `main` clean during the stabilization window and lets us cherry-pick late fixes without disrupting other work.
 
 ### 0. Set Up the Release Branch
 
@@ -63,7 +63,7 @@ Before anything else, prepare a draft entry for `apps/fluux/src/data/changelog.t
    ```bash
    git log --oneline vX.Y.Z..HEAD
    ```
-   (where `vX.Y.Z` is the most recent release tag — `git describe --tags --abbrev=0` finds it).
+   (where `vX.Y.Z` is the most recent release tag, `git describe --tags --abbrev=0` finds it).
 2. Group them into `added` / `changed` / `fixed` / `removed` sections, rewriting terse commit subjects into user-facing language. Skip noise (merge commits, internal refactors with no user impact, CI-only changes).
 3. Insert the draft entry at the top of the `changelog` array in `apps/fluux/src/data/changelog.ts`:
 
@@ -94,13 +94,13 @@ Before anything else, prepare a draft entry for `apps/fluux/src/data/changelog.t
 
    Available section types: `added`, `changed`, `fixed`, `removed`.
 
-4. **Stop and hand off to the developer.** The developer must review and modify the draft before the release script runs — they decide what's worth highlighting, what wording resonates with users, and what to omit. Do not proceed to step 2 until the developer has confirmed the entry is ready.
+4. **Stop and hand off to the developer.** The developer must review and modify the draft before the release script runs: they decide what's worth highlighting, what wording resonates with users, and what to omit. Do not proceed to step 2 until the developer has confirmed the entry is ready.
 
 ### 2. Refresh Release Assets
 
-If the release includes UI or layout changes, regenerate the visual assets before running the release script. **Do these in order** — the blog hero may incorporate fresh screenshots, so screenshots must be up-to-date first.
+If the release includes UI or layout changes, regenerate the visual assets before running the release script. **Do these in order**: the blog hero may incorporate fresh screenshots, so screenshots must be up-to-date first.
 
-1. **Agree on the release highlights** with the developer. Pick the 1–3 changes to emphasize — they'll drive both the screenshot set and the hero image. The hero should tell the release's headline story, not summarize every changelog entry.
+1. **Agree on the release highlights** with the developer. Pick the 1-3 changes to emphasize. They'll drive both the screenshot set and the hero image. The hero should tell the release's headline story, not summarize every changelog entry.
 
 2. **Extend the screenshot script if new highlights call for new captures.** Edit `scripts/screenshots.ts` to add captures that showcase the headline features. For example, adding Arabic and Hebrew translations with RTL support should add new captures like `chat-ar` and `chat-he` alongside the existing `19-chat-fr` / `20-chat-el`.
 
@@ -111,18 +111,18 @@ If the release includes UI or layout changes, regenerate the visual assets befor
    The screenshots end up in `screenshots/` and are committed alongside the release. Review the diff to confirm nothing unexpected changed.
 
 4. **Build the blog hero** in `scripts/blog-hero/`. Each release gets its own self-contained 1200×675 HTML layout there, next to the shared `shared.css`, rendered at 2x by Playwright. (Heroes up to 0.16.1 were composited on a canvas inside `scripts/screenshots.ts`; those tests have been removed, so `npm run screenshots` can no longer rewrite a past hero.)
-   - Copy the previous release's file — e.g. `cp scripts/blog-hero/blog-hero-0.17.1.html scripts/blog-hero/blog-hero-0.17.2.html`. The "night stage" ground is the house style: dark field with aurora glows, and lockup + headline + version pill + feature chips in a 460px left column. **Published heroes are frozen** — once a version is tagged, its `blog-hero-X.Y.Z.html`/`.png` is a release archive and must never be re-rendered against a newer UI. Only ever render the version being prepared.
+   - Copy the previous release's file, e.g. `cp scripts/blog-hero/blog-hero-0.17.1.html scripts/blog-hero/blog-hero-0.17.2.html`. The "night stage" ground is the house style: dark field with aurora glows, and lockup + headline + version pill + feature chips in a 460px left column. **Published heroes are frozen**: once a version is tagged, its `blog-hero-X.Y.Z.html`/`.png` is a release archive and must never be re-rendered against a newer UI. Only ever render the version being prepared.
    - Rewrite the headline, version pill, date, and chips for the agreed highlights, and repoint the `<img>` tags at the screenshots that carry the story. Verify any number in the headline against the changelog (`awk '/^## \[X.Y.Z\]/{f=1;next} /^## \[/{f=0} f' CHANGELOG.md | grep -c '^- '`).
    - **How many objects go on the stage is a per-release call, not a template.** 0.17.0 and 0.17.1 used a tilted app window plus a second cropped card overlapping it; 0.17.2 dropped the card, because a chip of one screen floating over an unrelated screen left three subjects competing and the underlying message text poking out around the card as fragments. Prefer one window carrying the whole story when a single capture can.
-   - Whatever is on the stage is a fixed-pixel crop: the element's `width`/`height` set the visible window, and the inner `img` `width`/`left`/`top` pan the source screenshot behind it. Two traps: crop flush to the UI element's own edges (a few pixels of slack lets the surrounding app leak in as a stray strip), and give the crop element `position: relative` — without a transform or explicit positioning it is not a containing block, so the `img` escapes `overflow: hidden` entirely.
+   - Whatever is on the stage is a fixed-pixel crop: the element's `width`/`height` set the visible window, and the inner `img` `width`/`left`/`top` pan the source screenshot behind it. Two traps: crop flush to the UI element's own edges (a few pixels of slack lets the surrounding app leak in as a stray strip), and give the crop element `position: relative`, because without a transform or explicit positioning it is not a containing block, so the `img` escapes `overflow: hidden` entirely.
    - Watch what the source screenshot drags in. Sidebar captures carry a bright green Join button that becomes the highest-saturation thing in the frame, and Emma Wilson's thread ends with an image attachment that renders as a grey screenshot-inside-a-screenshot. Crop them out, or capture a different conversation.
    - Render it:
      ```bash
      node scripts/blog-hero/render.mjs <new version>
      ```
-     This writes a 1200×675 PNG into `screenshots/`. The version argument filters by filename, so past heroes are left untouched. Then **look at the PNG** and iterate — it is the one asset with no test to catch a bad crop.
+     This writes a 1200×675 PNG into `screenshots/`. The version argument filters by filename, so past heroes are left untouched. Then **look at the PNG** and iterate. It is the one asset with no test to catch a bad crop.
 
-5. **Create the marketing blog post / release announcement image** based on the agreed highlights. This lives outside the repo — follow the marketing workflow. It complements (not replaces) the auto-generated hero from step 4.
+5. **Create the marketing blog post / release announcement image** based on the agreed highlights. This lives outside the repo, follow the marketing workflow. It complements (not replaces) the auto-generated hero from step 4.
 
 6. **Update references to renumbered or renamed screenshots.** If renumbering captures (e.g. inserting `21-chat-ar` pushes the existing `21-chat-light-dark` to `23-chat-light-dark`), grep the repo for the old filenames and update them:
    ```bash
@@ -191,17 +191,17 @@ The tag push triggers the GitHub Actions release workflow.
 
 ### 8. Verify the Release
 
-Wait for GitHub Actions to finish (~15–25 min), then verify:
+Wait for GitHub Actions to finish (~15-25 min), then verify:
 
 - [ ] The workflow run for the tag is green (check https://github.com/processone/fluux-messenger/actions)
 - [ ] A GitHub Release was created at `https://github.com/processone/fluux-messenger/releases/tag/vX.Y.Z`
 - [ ] All platform binaries (macOS `.dmg`, Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`) are attached
-- [ ] `latest.json` is attached (for stable releases only — beta/RC tags skip this)
+- [ ] `latest.json` is attached (for stable releases only, beta/RC tags skip this)
 - [ ] Release notes render correctly on the GitHub Release page
 - [ ] `latest.json` version matches the tag (download it and inspect)
 - [ ] Install one of the binaries and confirm it launches and connects
 
-If the workflow failed, see the [Troubleshooting](#troubleshooting) section before retrying. Do not delete the tag without a good reason — retag with a suffix (e.g. `v0.9.0-redo`) if you need a replacement build, or fix forward with the next patch version.
+If the workflow failed, see the [Troubleshooting](#troubleshooting) section before retrying. Do not delete the tag without a good reason. Retag with a suffix (e.g. `v0.9.0-redo`) if you need a replacement build, or fix forward with the next patch version.
 
 ### 9. Merge the Release Branch Back to `main`
 
@@ -226,7 +226,7 @@ git push origin --delete release/0.9.0
 - Publish the marketing blog post with the hero image from step 2 (sub-step 5)
 - Post the announcement to the `@fluux` XMPP MUC, relevant Mastodon/social accounts, and any release channels the team uses
 - Link to the GitHub Release for the changelog
-- If the release has a headline feature (e.g. RTL + new languages), call it out specifically — don't just dump the full changelog
+- If the release has a headline feature (e.g. RTL + new languages), call it out specifically, don't just dump the full changelog
 
 ## What Happens After Tagging
 
@@ -280,7 +280,7 @@ Check that:
 
 ## Beta / Pre-release
 
-Beta releases follow the same step-by-step flow above, with a few differences. They are published to GitHub but **do not trigger Tauri autoupdate** for existing users — tested rollouts, not forced upgrades.
+Beta releases follow the same step-by-step flow above, with a few differences. They are published to GitHub but **do not trigger Tauri autoupdate** for existing users: tested rollouts, not forced upgrades.
 
 ### How it works
 
@@ -296,7 +296,7 @@ Testers download the beta from the GitHub Releases page directly.
 - **Version string**: use a pre-release suffix, e.g. `0.14.0-beta.1`, `0.14.0-rc.2`. The release-prepare script accepts this as-is: `npm run release:prepare 0.14.0-beta.1`.
 - **Changelog entry**: record the pre-release version in `changelog.ts` (e.g. `version: '0.14.0-beta.1'`). When promoting to stable, add a separate entry for the final version.
 - **Branch**: the release branch is typically named after the *target stable* version (`release/0.14.0`), and hosts every beta/rc leading up to it.
-- **Skip Step 9** (merge back to `main`) for intermediate betas — only merge when you cut the stable release.
+- **Skip Step 9** (merge back to `main`) for intermediate betas. Only merge when you cut the stable release.
 
 ### Local build verification (optional)
 
@@ -312,7 +312,7 @@ Launch the built binary and verify basic functionality (connect, send a message,
 
 ### Promoting a beta to stable
 
-Once the beta is stable enough for general release, follow steps 1–10 of the main flow with the final version number:
+Once the beta is stable enough for general release, follow steps 1-10 of the main flow with the final version number:
 
 1. On the same `release/0.14.0` branch, add a new changelog entry for the stable version (`0.14.0`). You can consolidate the beta entries into one stable entry, or keep the beta history in the changelog.
 2. Run `npm run release:prepare 0.14.0`.

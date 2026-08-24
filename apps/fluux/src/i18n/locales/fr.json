@@ -182,7 +182,7 @@
             "removeVerificationSuccess": "Vérification retirée",
             "disableForContact": "Désactiver le chiffrement pour ce contact",
             "notAvailableTitle": "Chiffrement non disponible",
-            "notAvailableDescription": "Ce contact n’a pas publié de clé OpenPGP. Les messages seront envoyés en clair.",
+            "notAvailableDescription": "Ce contact n'a pas publié de clé OpenPGP. Les messages seront envoyés en clair.",
             "disabledByYouTitle": "Chiffrement désactivé",
             "disabledByYouDescription": "Vous avez désactivé le chiffrement pour ce contact. Les messages seront envoyés en clair.",
             "unavailableNowTitle": "Chiffrement actuellement indisponible",
@@ -367,7 +367,7 @@
         "whisperingTo": "Vous chuchotez en privé à {{nick}}",
         "whisperThread": "Privé avec {{nick}}",
         "whisperCounterpartGone": "{{nick}} n'est plus dans le salon, vous ne pouvez pas répondre",
-        "whisperPlaceholder": "Chuchoter à {{nick}}…",
+        "whisperPlaceholder": "Chuchoter à {{nick}}...",
         "ignoreUser": "Ignorer dans ce salon",
         "stopIgnoring": "Ne plus ignorer",
         "ignoredUsers": "Ignorés",
@@ -522,7 +522,7 @@
         "errorDetails": "Erreur : {{error}}",
         "encryption": {
             "encryptedTo": "Chiffré avec {{name}}",
-            "checking": "Vérification du correspondant…",
+            "checking": "Vérification du correspondant...",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clé OpenPGP vérifiée",
             "tofuNewTooltip": "Nouveau contact. Vérifiez l'empreinte pour une confiance totale",
@@ -534,7 +534,7 @@
             "keyLockedTooltip": "Chiffrement verrouillé. Cliquez pour déverrouiller",
             "encryptedClickToUnlock": "Message chiffré. Cliquez pour déverrouiller",
             "encryptedCouldNotDecrypt": "Ce message n'a pas pu être déchiffré",
-            "encryptedDecrypting": "Message chiffré, déchiffrement…",
+            "encryptedDecrypting": "Message chiffré, déchiffrement...",
             "encryptedDisabled": "Chiffrement désactivé. Activez-le dans les paramètres",
             "unsupportedMethodTooltip": "Chiffré avec {{method}}, méthode non prise en charge sur cet appareil",
             "unsupportedMessage": "Message chiffré: {{method}} non pris en charge",
@@ -642,7 +642,7 @@
             "description": "Autorisez Claude à lire l'historique de vos conversations et à envoyer des messages via Fluux grâce au Model Context Protocol. Chaque requête reste approuvée individuellement dans votre client MCP (par exemple Claude Desktop) avant son exécution.",
             "enable": "Activer l'accès de Claude",
             "disable": "Désactiver l'accès de Claude",
-            "statusStarting": "Démarrage du serveur local…",
+            "statusStarting": "Démarrage du serveur local...",
             "statusRunning": "En cours d'exécution sur 127.0.0.1:{{port}}",
             "copy": "Copier les informations de connexion",
             "copied": "Copié",
@@ -770,7 +770,7 @@
             "searchIndex": "Index de recherche",
             "searchIndexDescription": "L'index de recherche permet la recherche en texte intégral dans l'historique de vos messages. Reconstruisez-le si les résultats semblent incomplets.",
             "rebuildIndex": "Reconstruire l'index",
-            "rebuildingIndex": "Reconstruction…",
+            "rebuildingIndex": "Reconstruction...",
             "indexRebuilt": "{{count}} messages indexés",
             "logs": "Journaux",
             "logsDescription": "Ouvrir le dossier contenant les journaux de diagnostic de Fluux.",
@@ -781,14 +781,14 @@
             "openpgpLabel": "Chiffrement de bout en bout OpenPGP",
             "openpgpDescription": "Publiez une clé publique sur votre serveur et chiffrez les messages 1:1 avec les contacts qui en ont également une.",
             "statusLabel": "État",
-            "statusWaitingOnline": "En attente de connexion…",
-            "statusGenerating": "Génération de votre clé…",
+            "statusWaitingOnline": "En attente de connexion...",
+            "statusGenerating": "Génération de votre clé...",
             "statusReady": "Votre clé est prête et publiée.",
             "unlockDialogRestoreTitle": "Restaurer le chiffrement de bout en bout",
             "unlockDialogRestoreBody": "Saisissez votre phrase de passe existante pour restaurer votre clé sur cet appareil depuis votre sauvegarde serveur.",
             "unlockRecoveredNote": "Clé restaurée depuis votre sauvegarde serveur.",
-            "unlockNoRecoveryBody": "Cette phrase de passe n’a pas déverrouillé votre clé, et aucune sauvegarde serveur n’a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
-            "unlockNoKeyNoBackupBody": "Aucune clé n’est stockée sur cet appareil et aucune sauvegarde serveur n’a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
+            "unlockNoRecoveryBody": "Cette phrase de passe n'a pas déverrouillé votre clé, et aucune sauvegarde serveur n'a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
+            "unlockNoKeyNoBackupBody": "Aucune clé n'est stockée sur cet appareil et aucune sauvegarde serveur n'a été trouvée. Vous pouvez importer votre clé depuis un fichier.",
             "statusLocked": "Verrouillé. Saisissez votre phrase de passe pour déverrouiller.",
             "copyFingerprint": "Copier l'empreinte",
             "copyFailed": "Impossible de copier l'empreinte",
@@ -830,7 +830,7 @@
             "backupPublish": "Sauvegarder",
             "backupSuccess": "Clé sauvegardée sur le serveur",
             "backupPluginUnavailable": "Plugin OpenPGP indisponible",
-            "backupStatusChecking": "Vérification sur le serveur…",
+            "backupStatusChecking": "Vérification sur le serveur...",
             "backupStatusNone": "Pas encore sauvegardée sur ce serveur.",
             "backupStatusExists": "Sauvegardée sur ce serveur.",
             "backupStatusInSync": "Cette clé est sauvegardée sur le serveur.",
@@ -910,8 +910,8 @@
                 "restorePassphraseLabel": "Phrase de passe de sauvegarde",
                 "restorePassphrasePlaceholder": "Saisissez votre phrase de passe de sauvegarde",
                 "restoreAction": "Restaurer",
-                "importingProgress": "Importation de la clé…",
-                "replacingProgress": "Remplacement de l'identité…"
+                "importingProgress": "Importation de la clé...",
+                "replacingProgress": "Remplacement de l'identité..."
             },
             "exportFileAction": "Exporter vers un fichier",
             "exportFileDialogTitle": "Exporter la clé OpenPGP vers un fichier",
@@ -951,7 +951,7 @@
             "keepInTray": "Conserver Fluux dans la zone de notification",
             "descriptionWindows": "Lorsque cette option est activée, réduire ou fermer Fluux le masque dans la zone de notification.",
             "descriptionLinux": "Lorsque cette option est activée, fermer Fluux le masque dans la zone de notification si elle est prise en charge. La réduction conserve le comportement normal du bureau.",
-            "unavailableLinux": "Aucune zone de notification compatible n’est disponible. Fermer Fluux quittera l’application."
+            "unavailableLinux": "Aucune zone de notification compatible n'est disponible. Fermer Fluux quittera l'application."
         }
     },
     "update": {
@@ -995,7 +995,7 @@
         "title": "À propos",
         "version": "Version {{version}}",
         "edition": "Édition Communautaire",
-        "description": "Un client de messagerie puissant, productif et agréable à utiliser.",
+        "description": "Un client de messagerie productif et agréable à utiliser.",
         "madeBy": "Créé par",
         "commercialLicense": "Licences commerciales disponibles.",
         "contactUs": "Contactez-nous",
@@ -1338,8 +1338,8 @@
         "tapToChange": "Appuyez pour changer de vote",
         "close": "Clôturer le sondage",
         "closed": "Sondage clôturé",
-        "bannerSingle": "📊 {{title}}, appuyez pour voter",
-        "bannerMultiple": "📊 {{count}} sondages sans réponse, appuyez pour voir le dernier",
+        "bannerSingle": "{{title}}, appuyez pour voter",
+        "bannerMultiple": "{{count}} sondages sans réponse, appuyez pour voir le dernier",
         "dismissBanner": "Ignorer",
         "scrollToOriginal": "Aller au sondage original"
     },
@@ -1359,11 +1359,11 @@
             "usage": "/help"
         },
         "me": {
-            "desc": "Envoyer un message d’action",
+            "desc": "Envoyer un message d'action",
             "usage": "/me <action>"
         },
         "say": {
-            "desc": "Envoyer le texte tel quel, même s’il commence par une barre oblique",
+            "desc": "Envoyer le texte tel quel, même s'il commence par une barre oblique",
             "usage": "/say <text>"
         },
         "nick": {
@@ -1380,20 +1380,20 @@
             "usage": "/topic [text]",
             "set": "Sujet mis à jour",
             "current": "Sujet actuel : {{subject}}",
-            "none": "Aucun sujet n’est défini"
+            "none": "Aucun sujet n'est défini"
         },
         "kick": {
-            "desc": "Retirer quelqu’un du salon",
+            "desc": "Retirer quelqu'un du salon",
             "usage": "/kick <nick> [reason]",
             "done": "{{nick}} a été expulsé"
         },
         "ban": {
-            "desc": "Bannir quelqu’un du salon",
+            "desc": "Bannir quelqu'un du salon",
             "usage": "/ban <nick|jid> [reason]",
             "done": "{{target}} a été banni"
         },
         "invite": {
-            "desc": "Inviter quelqu’un dans le salon",
+            "desc": "Inviter quelqu'un dans le salon",
             "usage": "/invite [jid] [reason]",
             "done": "Invitation envoyée à {{target}}"
         },
@@ -1406,7 +1406,7 @@
         },
         "indicator": {
             "willRun": "Cela exécutera une commande",
-            "unknownHint": "Commande inconnue. Utilisez /say pour l’envoyer telle quelle."
+            "unknownHint": "Commande inconnue. Utilisez /say pour l'envoyer telle quelle."
         },
         "error": {
             "unknown": "Commande inconnue : /{{name}}",
@@ -1415,7 +1415,7 @@
             "ownerOnly": "Seul le propriétaire du salon peut faire cela",
             "needNick": "Veuillez indiquer un pseudonyme",
             "needTarget": "Veuillez indiquer un pseudonyme ou une adresse",
-            "userNotFound": "Personne ne s’appelle {{nick}} ici",
+            "userNotFound": "Personne ne s'appelle {{nick}} ici",
             "nickInUse": "Le pseudonyme {{nick}} est déjà utilisé",
             "nickFailed": "Impossible de changer votre pseudonyme"
         }
