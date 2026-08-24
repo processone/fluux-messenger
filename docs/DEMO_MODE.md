@@ -34,8 +34,8 @@ The demo populates the UI with:
 - **Group chat rooms**: "Team Chat" (4 occupants, reactions, replies) and "Design Review"
 - **1 password-protected room** ("Board"), bookmarked but not joined. The simulated
   service refuses a join without the password (`fluux`) exactly as a real one does,
-  so the unlock path — 401, password prompt, retry, and remembering the password for
-  the next join — can be exercised without a server.
+  so the unlock path (401, password prompt, retry, and remembering the password for
+  the next join) can be exercised without a server.
 - **Live animations** that start after page load: typing indicators, incoming messages, and emoji reactions
 
 ## Recording a Demo Video
@@ -52,21 +52,21 @@ Output is written to the git-ignored `video/` directory at the repo root, as **n
 
 ### README clip
 
-The project `README.md` embeds a compact copy of the reel via a `<video>` tag. It lives at `assets/readme/fluux-demo.mp4` (tracked — unlike `video/`). To refresh it after a storyboard change:
+The project `README.md` embeds a compact copy of the reel via a `<video>` tag. It lives at `assets/readme/fluux-demo.mp4` (tracked, unlike `video/`). To refresh it after a storyboard change:
 
 ```bash
 npm run demo:video:reel      # 1. (re)generate the native 1080p reel
 npm run demo:video:readme    # 2. re-encode it to a compact ~1.5 MB clip
 ```
 
-`demo:video:readme` runs ffmpeg on `video/fluux-demo-reel.mp4` (so generate the reel first) and writes a 1080p H.264 clip at CRF 30 (~1.5 MB) — small enough to commit, full resolution preserved.
+`demo:video:readme` runs ffmpeg on `video/fluux-demo-reel.mp4` (so generate the reel first) and writes a 1080p H.264 clip at CRF 30 (~1.5 MB), small enough to commit, full resolution preserved.
 
 ### Prerequisites
 
 ```bash
 npm run build:sdk                 # demo consumes the built SDK
 npx playwright install chromium   # one-time, if not already installed
-# ffmpeg must be on PATH — it assembles the captured frames into the MP4 + WebM
+# ffmpeg must be on PATH: it assembles the captured frames into the MP4 + WebM
 ```
 
 Playwright starts the dev server automatically (reusing one already running on `:5173`).
@@ -75,25 +75,25 @@ Playwright starts the dev server automatically (reusing one already running on `
 
 The recorder is a **deterministic stepped capture** (see `scripts/video/director.ts`):
 
-- The app renders at a dense **1280×720** viewport with **`deviceScaleFactor: 1.5`**, so it fills the frame (like the marketing screenshots) and `page.screenshot()` produces **true native 1920×1080** frames — no upscaling. (`recordVideo` / CDP screencast capture at the CSS-viewport resolution, forcing a 720p-or-upscale trade-off; `page.screenshot()` respects the device scale.)
-- It takes **one screenshot per output frame.** Script-controlled motion — the synthetic gliding cursor, caption and title-card fades — advances one eased step per frame, so motion is smooth by construction and fully deterministic (no virtual-clock fragility).
+- The app renders at a dense **1280×720** viewport with **`deviceScaleFactor: 1.5`**, so it fills the frame (like the marketing screenshots) and `page.screenshot()` produces **true native 1920×1080** frames, no upscaling. (`recordVideo` / CDP screencast capture at the CSS-viewport resolution, forcing a 720p-or-upscale trade-off; `page.screenshot()` respects the device scale.)
+- It takes **one screenshot per output frame.** Script-controlled motion (the synthetic gliding cursor, caption and title-card fades) advances one eased step per frame, so motion is smooth by construction and fully deterministic (no virtual-clock fragility).
 - The app's own CSS transitions/animations are **frozen**, so every frame is a clean, deterministic still; static moments are a single screenshot held for a duration.
 - "Live" beats (typing indicators, incoming messages, reactions) are injected through `DemoClient` and then held, rather than relying on wall-clock timers.
 - ffmpeg assembles the frames (with per-frame durations) into an exact, smooth **30fps** MP4 + WebM.
 
-Because it screenshots frame-by-frame, **rendering is slower than real time** (~1 min reel / ~2 min full) — fine for a one-off asset, and the result is reproducible.
+Because it screenshots frame-by-frame, **rendering is slower than real time** (~1 min reel / ~2 min full), fine for a one-off asset, and the result is reproducible.
 
 ### Editing the walkthrough
 
 | File                          | Purpose                                                                    |
 |-------------------------------|----------------------------------------------------------------------------|
-| `scripts/video/storyboard.ts` | Ordered scenes — add, reorder, or retag features here                      |
+| `scripts/video/storyboard.ts` | Ordered scenes: add, reorder, or retag features here                       |
 | `scripts/video/director.ts`   | The stepped recorder: frame capture, cursor/caption/beat actions, assembly |
 | `scripts/video/helpers.ts`    | Constants, page bootstrap, overlay (cursor / caption / title) injection    |
 | `scripts/video/record.ts`     | Entry point (the `reel` and `full` tests)                                  |
 | `playwright.video.config.ts`  | Dense fixture viewport, timeout, dev-server reuse                          |
 
-Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour. Scenes drive the `Director` — e.g. `d.navigateTo('rooms')`, `d.selectItem('Team Chat')`, `d.caption(...)`, `d.typeBeat(...)`.
+Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour. Scenes drive the `Director`, e.g. `d.navigateTo('rooms')`, `d.selectItem('Team Chat')`, `d.caption(...)`, `d.typeBeat(...)`.
 
 ## Architecture
 
@@ -124,7 +124,7 @@ Seeded and stress-generated messages carry a deterministic XEP-0359 stanza-id
 plays the "another of my devices read up to this message" notify: it upserts
 the marker on the simulated PEP node and emits `read:displayed-synced`.
 
-Example — reproduce the unread divider position after catching up elsewhere:
+Example, reproduce the unread divider position after catching up elsewhere:
 
 ```js
 // 1. Seed a deep room backlog (1000 messages, stanza-ids sid-stress-0-0 … sid-stress-0-999)
@@ -136,7 +136,7 @@ localStorage.setItem('fluux:scroll-debug', '1')
 // 3. With the room closed, simulate the other device having read to message 850
 __demoClient.simulateRemoteDisplayed('stress-0@conference.fluux.chat', 'sid-stress-0-850')
 
-// 4. Open the room — the "new messages" divider should sit just after message 850
+// 4. Open the room, the "new messages" divider should sit just after message 850
 ```
 
 The SDK also exports the `DemoData`, `DemoAnimationStep`, and related type interfaces, plus time-offset helpers (`minutesAgo`, `hoursAgo`, `daysAgo`) so any app can build its own demo data.
@@ -175,9 +175,9 @@ The SDK also exports the `DemoData`, `DemoAnimationStep`, and related type inter
 
 Demo assets are **never included** in production builds:
 
-1. **Vite build input** — `demo.html` is not listed in `rollupOptions.input`
-2. **Strip plugin** — the `strip-demo` Vite plugin deletes `dist/demo/` and `dist/demo.html` after build
-3. **Service worker** — `globIgnores: ['demo/**', 'demo.html']` excludes demo files from SW precache
+1. **Vite build input**: `demo.html` is not listed in `rollupOptions.input`
+2. **Strip plugin**: the `strip-demo` Vite plugin deletes `dist/demo/` and `dist/demo.html` after build
+3. **Service worker**: `globIgnores: ['demo/**', 'demo.html']` excludes demo files from SW precache
 
 ## Adding or Modifying Demo Content
 

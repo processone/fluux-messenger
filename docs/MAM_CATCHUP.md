@@ -6,7 +6,7 @@ This document describes how the SDK uses Message Archive Management (XEP-0313) t
 
 When Fluux is closed, messages continue to flow between contacts and in rooms. On reconnect, only sidebar previews were refreshed (fetching the latest message per conversation). The actual message history was only populated lazily when the user opened each conversation. This meant messages exchanged while offline were not visible until the user navigated to every conversation individually.
 
-Additionally, if a roster contact sent a message while offline but there was no prior conversation, the message would never be discovered — the catch-up only covered conversations already in the store.
+Additionally, if a roster contact sent a message while offline but there was no prior conversation, the message would never be discovered, because the catch-up only covered conversations already in the store.
 
 ## Overview
 
@@ -46,7 +46,7 @@ Chains after the preview refresh completes.
 
 ### 3. Roster Discovery (new conversations)
 
-Runs in parallel with stages 1–2.
+Runs in parallel with stages 1-2.
 
 - Calls `discoverNewConversationsFromRoster()`.
 - Gets all roster contacts via `sortedContacts()`, then filters out those that already have a conversation in the store (active or archived) using `hasConversation()`.
@@ -73,13 +73,13 @@ Triggered 10 seconds after fresh-session setup, giving rooms time to finish join
 
 On an SM resume the delayed pass never runs, so room coverage comes from the
 resume seed instead: rooms joined, MAM-enabled, inactive, and **not** already
-caught up to live are queried with `catchUpRoom`. Caught-up rooms are skipped —
+caught up to live are queried with `catchUpRoom`. Caught-up rooms are skipped:
 SM replayed their traffic, and re-querying them on every resume is exactly the
 cost this predicate avoids.
 
 The seed is evaluated per room rather than once, because `handleSmResumption`
 re-fetches bookmarks after a long disconnect and joins any room that is not
-currently joined — hundreds of milliseconds after the resume event. Such a room
+currently joined, hundreds of milliseconds after the resume event. Such a room
 is not in `joinedRooms()` when the resume handler runs, and the fresh-session
 triggers that would otherwise cover it (the `room:joined` catch-up, the late-MAM
 retry, the `mucJoined` preview fetch) are all disabled on a resumed session. It

@@ -1,4 +1,4 @@
-# Plugin & Theme Engine — Design Document
+# Plugin & Theme Engine: Design Document
 
 ## Context
 
@@ -12,7 +12,7 @@ This document captures architecture decisions and serves as a reference for impl
 
 - React 19 is stable since December 2024, compiler stable since React 19.1 (March 2025).
 - The compiler auto-memoizes components, eliminating manual `useMemo`/`useCallback` and an entire class of render bugs.
-- Plugin code written on React 19 is simpler from day one — no memoization guidance needed for plugin authors.
+- Plugin code written on React 19 is simpler from day one, no memoization guidance needed for plugin authors.
 - React 19 brings `use()` and improved Suspense, which directly inform plugin lazy-loading patterns.
 - The migration is small (a few days); the plugin engine is weeks. Do the foundation first.
 
@@ -35,17 +35,17 @@ Obsidian's plugin ecosystem (~2,000 plugins) validates that a simple model with 
 | **Layered CSS**                       | Cascade: defaults < theme < snippets < plugin styles. Users drop `.css` files to tweak without forking a theme. | Same. Built-in defaults < active theme < user snippets. Clear specificity rules.                                  |
 | **Declarative theme settings**        | Themes declare customizable variables via comments; Style Settings plugin generates UI.                         | Build into core. Themes declare knobs in manifest, Fluux generates settings UI (color pickers, sliders, toggles). |
 | **Lifecycle hooks with auto-cleanup** | `onload()` / `onunload()`. Resources registered via `registerEvent()`, `addCommand()` etc. are auto-cleaned.    | Same pattern. `activate()` / `deactivate()`. All registrations auto-cleanup on unload.                            |
-| **Named extension points**            | Ribbon, status bar, sidebar, commands, settings tabs, modals — explicit slots.                                  | Define Fluux-specific slots (see Extension Points below).                                                         |
+| **Named extension points**            | Ribbon, status bar, sidebar, commands, settings tabs, modals, explicit slots.                                   | Define Fluux-specific slots (see Extension Points below).                                                         |
 
 ### What we fix
 
 | Obsidian problem                                                     | Our approach                                                                            |
 |----------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| **No sandboxing** — plugins have full filesystem/network/DOM access  | Capability-based permissions declared in manifest; sandboxed execution                  |
-| **No post-publication review** — updates ship unchecked              | Signed updates, or at minimum a permissions diff warning on update                      |
-| **Undocumented internals as real API** — developers use `@ts-ignore` | Public API is the only API. Internals are truly private.                                |
+| **No sandboxing**: plugins have full filesystem/network/DOM access   | Capability-based permissions declared in manifest; sandboxed execution                  |
+| **No post-publication review**: updates ship unchecked               | Signed updates, or at minimum a permissions diff warning on update                      |
+| **Undocumented internals as real API**: developers use `@ts-ignore`  | Public API is the only API. Internals are truly private.                                |
 | **No inter-plugin communication**                                    | Event bus from day one. Plugins can declare/consume named services.                     |
-| **No lazy loading** — all plugins load at startup                    | Lazy activation: plugins declare which slots they use, load on first access             |
+| **No lazy loading**: all plugins load at startup                     | Lazy activation: plugins declare which slots they use, load on first access             |
 | **CSS specificity wars**                                             | Variables-only for themes. Plugins get scoped style injection with clear cascade rules. |
 
 ## Architecture Overview
@@ -86,14 +86,14 @@ Obsidian's plugin ecosystem (~2,000 plugins) validates that a simple model with 
 Three layers, from general to specific:
 
 ```css
-/* Foundation — raw design tokens */
+/* Foundation: raw design tokens */
 --color-base-00: #ffffff;
 --color-base-100: #000000;
 --font-family-default: 'Inter', sans-serif;
 --radius-m: 8px;
 --spacing-m: 12px;
 
-/* Semantic — contextual meaning */
+/* Semantic: contextual meaning */
 --background-primary: var(--color-base-00);
 --background-secondary: ...;
 --text-normal: var(--color-base-100);
@@ -102,7 +102,7 @@ Three layers, from general to specific:
 --interactive-hover: ...;
 --border-color: ...;
 
-/* Component — specific UI elements */
+/* Component: specific UI elements */
 --sidebar-background: var(--background-secondary);
 --message-bubble-self: ...;
 --message-bubble-other: ...;
@@ -300,12 +300,12 @@ interface PluginContext {
 
 ### Lazy Activation
 
-Plugins declare `activationEvents` — they are loaded only when the trigger fires:
+Plugins declare `activationEvents`. They are loaded only when the trigger fires:
 
-- `onSlot:message-actions` — first time the message actions menu opens
-- `onCommand:translate` — user invokes the command
-- `onStartup` — load immediately (use sparingly)
-- `onMessage` — a message is received (for bot/filter plugins)
+- `onSlot:message-actions`: first time the message actions menu opens
+- `onCommand:translate`: user invokes the command
+- `onStartup`: load immediately (use sparingly)
+- `onMessage`: a message is received (for bot/filter plugins)
 
 ### Sandboxing Strategy
 
@@ -313,7 +313,7 @@ Sandboxing is enforced in layers, from strongest (Rust/OS level) to practical (J
 
 #### Layer 1: Tauri enforces hard boundaries (Rust side)
 
-The strongest layer — cannot be bypassed from JavaScript. Tauri already has a capability/permission system for IPC commands.
+The strongest layer, and the one that cannot be bypassed from JavaScript. Tauri already has a capability/permission system for IPC commands.
 
 Plugin manifest permissions map directly to Tauri scopes:
 
@@ -324,11 +324,11 @@ Plugin manifest permissions map directly to Tauri scopes:
 | `notifications`                   | Notification IPC command allowed                   |
 | `clipboard`                       | Clipboard IPC command allowed                      |
 
-A plugin declaring `network:https://api.deepl.com/*` literally cannot reach any other domain — Tauri's Rust layer rejects the request. Plugins don't call `fetch()` directly; they call `context.http.fetch()` which routes through a Tauri IPC command that checks the manifest scope.
+A plugin declaring `network:https://api.deepl.com/*` literally cannot reach any other domain. Tauri's Rust layer rejects the request. Plugins don't call `fetch()` directly; they call `context.http.fetch()` which routes through a Tauri IPC command that checks the manifest scope.
 
 #### Layer 2: Frozen PluginContext proxy (JavaScript side)
 
-The `PluginContext` given to each plugin is not the real store — it's a **frozen Proxy** that checks permissions before forwarding calls.
+The `PluginContext` given to each plugin is not the real store. It's a **frozen Proxy** that checks permissions before forwarding calls.
 
 ```typescript
 function createPluginAPI(pluginId: string, permissions: string[]): PluginContext {
@@ -354,7 +354,7 @@ function createPluginAPI(pluginId: string, permissions: string[]): PluginContext
 }
 ```
 
-This layer is **not bulletproof** — a determined attacker in the same JS process can access globals or walk prototypes. But it serves three purposes:
+This layer is **not bulletproof**: a determined attacker in the same JS process can access globals or walk prototypes. But it serves three purposes:
 - Prevents honest plugins from accidentally overstepping
 - Makes the permission contract explicit and auditable
 - Powers the settings UI that shows users exactly what each plugin can access
@@ -375,7 +375,7 @@ function SlotContainer({ slotId }: { slotId: string }) {
 }
 ```
 
-Plugins that register data-only items (actions, commands, filters) don't need this — the host renders the menu item from the plugin's descriptor.
+Plugins that register data-only items (actions, commands, filters) don't need this: the host renders the menu item from the plugin's descriptor.
 
 #### Layer 4 (future): Web Workers for untrusted plugins
 
@@ -406,7 +406,7 @@ Workers can't access the DOM. For UI, plugins send declarative descriptions and 
 | Phase 3     | Shadow DOM for plugin UI          | Style only         | Day one      |
 | Later       | Worker-based execution            | Strong (process)   | If needed    |
 
-**Key design decision:** The permission manifest is the stable contract. Whether enforcement is a JS proxy today or a Worker boundary tomorrow, plugin code doesn't change — it still calls `context.sdk.messages.getActive()`. We can tighten enforcement without breaking the plugin API.
+**Key design decision:** The permission manifest is the stable contract. Whether enforcement is a JS proxy today or a Worker boundary tomorrow, plugin code doesn't change. It still calls `context.sdk.messages.getActive()`. We can tighten enforcement without breaking the plugin API.
 
 ### Deliverables
 

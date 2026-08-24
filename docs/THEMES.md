@@ -1,6 +1,6 @@
 # Writing Themes for Fluux
 
-Fluux uses a 3-tier CSS variable system inspired by Obsidian. Themes override these variables to reskin the entire app — no class names or DOM structure knowledge required.
+Fluux uses a 3-tier CSS variable system inspired by Obsidian. Themes override these variables to reskin the entire app, no class names or DOM structure knowledge required.
 
 ## Quick Start
 
@@ -80,7 +80,7 @@ Tier 1: Foundation     →   Tier 2: Semantic       →   Tier 3: Component
 (raw color)                (purpose)                   (specific widget)
 ```
 
-When you change a foundation variable, everything that depends on it updates automatically. Most themes only need to override **Tier 1 (foundation)** variables — about 20 values — to completely reskin the app.
+When you change a foundation variable, everything that depends on it updates automatically. Most themes only need to override **Tier 1 (foundation)** variables (about 20 values) to completely reskin the app.
 
 ## Tier 1: Foundation Variables
 
@@ -88,7 +88,7 @@ These are the raw design tokens. Override these for a complete palette change.
 
 ### Neutral Ramp
 
-The base ramp provides all surface and text colors. In dark mode, `00` is the darkest and `100` is the lightest. In light mode, the relationship inverts — `00` becomes the lightest background and `90`/`100` become dark text.
+The base ramp provides all surface and text colors. In dark mode, `00` is the darkest and `100` is the lightest. In light mode, the relationship inverts: `00` becomes the lightest background and `90`/`100` become dark text.
 
 | Variable           | Dark mode role                   | Light mode role            |
 |--------------------|----------------------------------|----------------------------|
@@ -118,20 +118,20 @@ The accent is defined as HSL components so Fluux can derive hover states, select
 ```
 
 From these, the app computes:
-- `--fluux-bg-accent` — primary accent background (buttons, active icons)
-- `--fluux-bg-accent-hover` — darkened accent for hover
-- `--fluux-text-on-accent` — auto-computed text color (`#000000` or `#ffffff`) for readable contrast on the accent background
-- `--fluux-selection-bg` — translucent accent for text selection
-- `--fluux-search-highlight-bg` — translucent accent for search match highlighting
-- `--fluux-search-highlight-text` — text color inside search highlights
-- `--fluux-focus-ring` — translucent accent for focus outlines
-- `--fluux-aurora-1..4` — the **aurora quartet** used by the header hairline, the send button, the typing-indicator dots and the modal scrim. For every theme except Aurora, these are derived as a gentle hue-fan around your accent (`accent-h` ± ~50°), so those aurora accents harmonize with your palette instead of showing Aurora's teal→violet.
+- `--fluux-bg-accent`: primary accent background (buttons, active icons)
+- `--fluux-bg-accent-hover`: darkened accent for hover
+- `--fluux-text-on-accent`: auto-computed text color (`#000000` or `#ffffff`) for readable contrast on the accent background
+- `--fluux-selection-bg`: translucent accent for text selection
+- `--fluux-search-highlight-bg`: translucent accent for search match highlighting
+- `--fluux-search-highlight-text`: text color inside search highlights
+- `--fluux-focus-ring`: translucent accent for focus outlines
+- `--fluux-aurora-1..4`: the **aurora quartet** used by the header hairline, the send button, the typing-indicator dots and the modal scrim. For every theme except Aurora, these are derived as a gentle hue-fan around your accent (`accent-h` ± ~50°), so those aurora accents harmonize with your palette instead of showing Aurora's teal→violet.
 
-The `--fluux-text-on-accent` color is calculated automatically using WCAG relative luminance. Light accents (e.g. Yellow or Pink in dark mode) get black text; dark accents (e.g. Blue in light mode) get white text. This ensures buttons, active icon rail tabs, and other accent-colored elements remain readable with any accent color and mode combination. Theme authors do not need to set this variable — it adapts automatically.
+The `--fluux-text-on-accent` color is calculated automatically using WCAG relative luminance. Light accents (e.g. Yellow or Pink in dark mode) get black text; dark accents (e.g. Blue in light mode) get white text. This ensures buttons, active icon rail tabs, and other accent-colored elements remain readable with any accent color and mode combination. Theme authors do not need to set this variable, it adapts automatically.
 
 **Tip:** Lower the lightness by ~8-10% for light mode so the accent remains readable on light backgrounds.
 
-**Aurora accents.** The `--fluux-aurora-1..4` quartet is derived from your accent automatically — you don't need to set it. The built-in **Aurora** theme is the one exception: it keeps its explicit teal→violet (dark) / muted-dawn (light) signature. If the auto-derived hue-fan isn't right for your palette, you can override the four tokens with a hand-tuned quartet in `variables.dark` / `variables.light`:
+**Aurora accents.** The `--fluux-aurora-1..4` quartet is derived from your accent automatically, you don't need to set it. The built-in **Aurora** theme is the one exception: it keeps its explicit teal→violet (dark) / muted-dawn (light) signature. If the auto-derived hue-fan isn't right for your palette, you can override the four tokens with a hand-tuned quartet in `variables.dark` / `variables.light`:
 
 ```json
 "--fluux-aurora-1": "#2FE0C0",
@@ -144,7 +144,7 @@ The derivation floors the quartet's lightness so the send button's dark ink icon
 
 ### Typography
 
-Themes can optionally override the UI and monospace font families. Font overrides reference system-installed or user-provided fonts — themes never bundle font files. Always include a fallback stack ending with the default:
+Themes can optionally override the UI and monospace font families. Font overrides reference system-installed or user-provided fonts, themes never bundle font files. Always include a fallback stack ending with the default:
 
 | Variable            | Default               | Purpose                                |
 |---------------------|-----------------------|----------------------------------------|
@@ -180,7 +180,7 @@ Each color also needs an `-rgb` variant for transparency effects:
 
 ## Tier 2: Semantic Variables (Optional Overrides)
 
-These map foundation tokens to purposes. They cascade from Tier 1, so you rarely need to override them — but you can for fine-tuning.
+These map foundation tokens to purposes. They cascade from Tier 1, so you rarely need to override them, but you can for fine-tuning.
 
 | Variable                        | Default               | Purpose                         |
 |---------------------------------|-----------------------|---------------------------------|
@@ -196,7 +196,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-text-link`             | `color-blue`          | Hyperlinks                      |
 | `--fluux-status-success`        | `color-green`         | Success indicators              |
 | `--fluux-status-warning`        | `color-yellow`        | Warning indicators              |
-| `--fluux-status-error`          | `color-red`           | Error *fill* (danger button, toast border, DND dot, unread badge) — white text sits on it |
+| `--fluux-status-error`          | `color-red`           | Error *fill* (danger button, toast border, DND dot, unread badge), white text sits on it  |
 | `--fluux-text-error`            | Tuned red (not `color-red`) | Error *text/icons* (delivery-failed, validation, new-message marker) |
 | `--fluux-status-info`           | `color-blue`          | Informational indicators        |
 | `--fluux-border-color`          | `rgba(0,0,0,0.1)`     | Subtle dividers                 |
@@ -209,11 +209,11 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-search-highlight-text` | `text-normal`         | Search match text color         |
 
 **When to override semantic variables:** When the automatic cascade from your base ramp doesn't produce the right result. Common cases:
-- `--fluux-text-error` — **set this whenever you override `--fluux-color-red`.** Red has to pull in two directions: as a *fill* (`--fluux-status-error`, danger button, toast border, DND dot) it must stay dark enough for white text on it to clear WCAG AA, but as *text/icons* on your dark chat surface that same red is usually too dark to clear AA. They are deliberately separate tokens. Keep `--fluux-color-red` for the fill, and set `--fluux-text-error` to a red that clears AA (>=4.5:1) as text on `--fluux-chat-bg` — lighter than the fill in dark mode, darker in light mode. The `themeContrast.test.ts` guard asserts this for every builtin theme. (Themes that leave `--fluux-color-red` at the Aurora default inherit the Aurora `--fluux-text-error` automatically.)
-- `--fluux-bg-secondary` — if your ramp spacing makes `base-05` too similar to `base-10`
-- `--fluux-border-color` — light themes often need `rgba(0,0,0,0.12-0.15)` instead of `0.1`
-- `--fluux-scrollbar-thumb` / `--fluux-scrollbar-thumb-hover` — if your ramp makes the default (`base-70`/`base-80`) too subtle or too prominent on your chat surface
-- `--fluux-scrollbar-thumb-sidebar` / `--fluux-scrollbar-thumb-sidebar-hover` — these track the main thumb by default, so overriding `--fluux-scrollbar-thumb` reskins both surfaces at once. Override the sidebar pair only when the sidebar's (usually grayer) surface needs a different thumb for equal visual weight. The builtin light themes nudge the sidebar one step more prominent: set `--fluux-scrollbar-thumb-sidebar` to the main thumb's hover shade, with `--fluux-scrollbar-thumb-sidebar-hover` one step darker again. Dark variants generally leave them tracking the main thumb.
+- `--fluux-text-error`: **set this whenever you override `--fluux-color-red`.** Red has to pull in two directions: as a *fill* (`--fluux-status-error`, danger button, toast border, DND dot) it must stay dark enough for white text on it to clear WCAG AA, but as *text/icons* on your dark chat surface that same red is usually too dark to clear AA. They are deliberately separate tokens. Keep `--fluux-color-red` for the fill, and set `--fluux-text-error` to a red that clears AA (>=4.5:1) as text on `--fluux-chat-bg`, lighter than the fill in dark mode and darker in light mode. The `themeContrast.test.ts` guard asserts this for every builtin theme. (Themes that leave `--fluux-color-red` at the Aurora default inherit the Aurora `--fluux-text-error` automatically.)
+- `--fluux-bg-secondary`: if your ramp spacing makes `base-05` too similar to `base-10`
+- `--fluux-border-color`: light themes often need `rgba(0,0,0,0.12-0.15)` instead of `0.1`
+- `--fluux-scrollbar-thumb` / `--fluux-scrollbar-thumb-hover`: if your ramp makes the default (`base-70`/`base-80`) too subtle or too prominent on your chat surface
+- `--fluux-scrollbar-thumb-sidebar` / `--fluux-scrollbar-thumb-sidebar-hover`: these track the main thumb by default, so overriding `--fluux-scrollbar-thumb` reskins both surfaces at once. Override the sidebar pair only when the sidebar's (usually grayer) surface needs a different thumb for equal visual weight. The builtin light themes nudge the sidebar one step more prominent: set `--fluux-scrollbar-thumb-sidebar` to the main thumb's hover shade, with `--fluux-scrollbar-thumb-sidebar-hover` one step darker again. Dark variants generally leave them tracking the main thumb.
 
 ## Tier 3: Component Variables (Rarely Needed)
 
@@ -244,7 +244,7 @@ Per-widget overrides for surgical changes. These default to semantic values.
 
 **When to override component variables:** When you want one specific widget to look different from the rest. For example, giving the sidebar a distinct tint while keeping other surfaces neutral.
 
-**Unread badge color.** The unread count badge defaults to the accent fill (`--fluux-badge-bg`) with auto-contrasting text (`--fluux-badge-text` follows `--fluux-text-on-accent`, so it stays readable on light or dark accents). To get a classic **red** badge instead, override the fill and pair it with a text color that clears WCAG AA on that fill — the built-in **Indigo** theme does exactly this:
+**Unread badge color.** The unread count badge defaults to the accent fill (`--fluux-badge-bg`) with auto-contrasting text (`--fluux-badge-text` follows `--fluux-text-on-accent`, so it stays readable on light or dark accents). To get a classic **red** badge instead, override the fill and pair it with a text color that clears WCAG AA on that fill, the built-in **Indigo** theme does exactly this:
 
 ```json
 "--fluux-badge-bg": "var(--fluux-status-error)",
@@ -303,9 +303,9 @@ Swatches are a small row of colored rectangles displayed on each theme card in t
 └────────────┘
 ```
 
-Pick 3-5 representative colors from your palette — typically two surface colors and two or three accent/status colors. The field is optional and purely cosmetic; it has no effect on the actual theme rendering.
+Pick 3-5 representative colors from your palette, typically two surface colors and two or three accent/status colors. The field is optional and purely cosmetic; it has no effect on the actual theme rendering.
 
-A theme can provide `dark` only, `light` only, or both. Users independently choose the mode (dark/light/system) — the theme provides the palette for each mode.
+A theme can provide `dark` only, `light` only, or both. Users independently choose the mode (dark/light/system), the theme provides the palette for each mode.
 
 ### Accent Presets
 
@@ -355,9 +355,9 @@ Import snippets from **Settings > Appearance > Import snippet**. Each snippet ca
 
 ## Tips for Theme Authors
 
-1. **Start with the base ramp.** Get the 12 neutral values right first — they define 90% of the visual feel. Then adjust accent and palette colors.
+1. **Start with the base ramp.** Get the 12 neutral values right first, they define 90% of the visual feel. Then adjust accent and palette colors.
 
-2. **Test both modes.** Even if you only care about dark mode, set sensible light values — users may switch. If you only want to support one mode, omit the other from `variables`.
+2. **Test both modes.** Even if you only care about dark mode, set sensible light values, users may switch. If you only want to support one mode, omit the other from `variables`.
 
 3. **Don't skip the RGB variants.** If you change a palette color, also update its `-rgb` variant. These are used for translucent overlays (e.g. `rgba(var(--fluux-color-red-rgb), 0.2)`).
 

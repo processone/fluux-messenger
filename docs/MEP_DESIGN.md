@@ -9,7 +9,7 @@ within XMPP group chats.
 The challenge is architectural: `mod_pubsub` runs as a separate service
 (`pubsub.example.com`), completely independent from MUC rooms
 (`room@conference.example.com`). A PubSub IQ sent to a room JID returns
-`service-unavailable` — the MUC service does not handle PubSub protocol.
+`service-unavailable`: the MUC service does not handle PubSub protocol.
 
 XEP-0316 (MUC Eventing Protocol) proposed making room JIDs act as PubSub services, but
 it was Deferred with no known implementations. XEP-0369 (MIX) redesigns group chat
@@ -39,22 +39,22 @@ Data is organized as a four-level hierarchy: `{Service, Scope, Namespace, ItemId
 ```
 mod_pubsub (pubsub.example.com)
 │
-├─ service: default                       — Standard user-facing PubSub
-│   ├─ scope: user1@example.com           — PEP model: scope = user bare JID
+├─ service: default                       : Standard user-facing PubSub
+│   ├─ scope: user1@example.com           : PEP model: scope = user bare JID
 │   │   ├─ namespace: urn:xmpp:microblog:0 → [post-1, post-2]
 │   │   └─ namespace: urn:xmpp:bookmarks:1 → [room1@conf]
 │   └─ scope: user2@example.com
 │       └─ ...
 │
-├─ service: muc                           — Delegated to mod_muc_pubsub
-│   ├─ scope: room1@conf                  — MEP model: scope = room JID
+├─ service: muc                           : Delegated to mod_muc_pubsub
+│   ├─ scope: room1@conf                  : MEP model: scope = room JID
 │   │   ├─ namespace: urn:xmpp:pins:0     → [msg-1, msg-2]
 │   │   └─ namespace: urn:xmpp:polls:0    → [poll-1]
 │   ├─ scope: room2@conf
 │   │   └─ namespace: urn:xmpp:pins:0     → [msg-5]
 │   └─ ...
 │
-├─ service: another-module                — Delegated to another module
+├─ service: another-module                : Delegated to another module
 │   └─ ...
 ```
 
@@ -95,7 +95,7 @@ Key properties:
 - `mod_pubsub` maintains a registry of `{Service → Module}` mappings
 - Registered services are protected: external user IQs cannot create nodes in a
   delegated service's partition
-- Adding new namespaces (pins, polls, files) does NOT require re-registration — the
+- Adding new namespaces (pins, polls, files) does NOT require re-registration, since the
   delegate manages its own namespace logic internally
 - A service can limit itself to a single namespace (simple case) or support many
 
@@ -190,7 +190,7 @@ New ejabberd module that bridges MUC rooms and `mod_pubsub`:
 | **Notification routing**    | Implements `route_notify/4`: broadcasts to room occupants           |
 | **Room lifecycle**          | Auto-creates nodes on first publish, deletes all nodes on room destroy |
 
-The module does NOT contain any PubSub storage or item management logic — all of that
+The module does NOT contain any PubSub storage or item management logic. All of that
 stays in `mod_pubsub`.
 
 ## Notification Delivery
@@ -201,7 +201,7 @@ Notifications use a broadcast model through the room's existing occupant list:
   `route_notify` callback
 - The MUC delegate broadcasts the PubSub event to all current room occupants using
   `mod_muc:broadcast/2`
-- No PubSub subscriptions are managed — the room occupant list IS the subscriber list
+- No PubSub subscriptions are managed: the room occupant list IS the subscriber list
 - Notification recipients are always in sync with room occupancy (no drift)
 
 This mirrors how MUC already broadcasts subject changes and other room events.

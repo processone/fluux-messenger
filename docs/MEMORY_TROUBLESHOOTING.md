@@ -1,6 +1,6 @@
 # Memory Troubleshooting
 
-Guide for diagnosing high memory usage in Fluux Messenger. If the app's memory grows far beyond the ranges below, it is a leak we'd like to fix — please follow the steps in this guide and share the output in a GitHub issue.
+Guide for diagnosing high memory usage in Fluux Messenger. If the app's memory grows far beyond the ranges below, it is a leak we'd like to fix. Please follow the steps in this guide and share the output in a GitHub issue.
 
 ## Expected Memory Footprint
 
@@ -8,9 +8,9 @@ Rough ranges on a normal account (roster + ~20 MUC rooms, idle):
 
 | Process / Platform | Typical RSS |
 |---|---|
-| Tauri main process (Rust) | 100–250 MB |
-| WebKitWebProcess / WKWebView / msedgewebview2 (renderer) | 250–600 MB |
-| WebKitNetworkProcess | 50–150 MB |
+| Tauri main process (Rust) | 100-250 MB |
+| WebKitWebProcess / WKWebView / msedgewebview2 (renderer) | 250-600 MB |
+| WebKitNetworkProcess | 50-150 MB |
 
 Memory grows when loading long message histories, receiving media, or joining many rooms, but it should stabilize. If the renderer process climbs into **multiple GiB** and keeps growing, that's a leak.
 
@@ -24,13 +24,13 @@ So a genuine leak is almost always in the UI layer (detached DOM, listeners, blo
 
 ## Why the Process Stays Running After "Close"
 
-On all platforms, clicking the window **close (X) button hides the window**, it does **not** quit the app. This is intentional — the XMPP connection stays alive so you keep receiving messages, just like other chat apps. To fully quit:
+On all platforms, clicking the window **close (X) button hides the window**. It does **not** quit the app. This is intentional: the XMPP connection stays alive so you keep receiving messages, just like other chat apps. To fully quit:
 
 - **macOS**: `⌘Q`, or **Fluux Messenger → Quit** in the menu bar
 - **Linux**: system tray icon → **Quit**
 - **Windows**: system tray icon → **Quit**
 
-If you've quit explicitly and the process *still* lingers, that's a separate issue — please include it in your bug report.
+If you've quit explicitly and the process *still* lingers, that's a separate issue. Please include it in your bug report.
 
 ## Quick Check: What Is Using the Memory?
 
@@ -109,7 +109,7 @@ For deeper analysis, use **Windows Performance Recorder** or SysInternals **VMMa
 
 A heap snapshot shows which JavaScript objects are holding memory, and which constructors are leaking. Capturing one right after launch and one after the memory has grown makes the leaking objects obvious in a diff.
 
-### Linux — remote WebKit inspector
+### Linux: remote WebKit inspector
 
 Quit Fluux, then relaunch with the remote inspector enabled:
 
@@ -122,9 +122,9 @@ Open `http://127.0.0.1:9222` in any browser, click the **Fluux Messenger** entry
 
 1. Switch to the **Timelines** tab.
 2. Click the gear icon in the top-right → enable the **Memory** instrument (and optionally **JavaScript Allocations**).
-3. Click the red record button (●), use Fluux normally for 30–60 seconds, then stop.
+3. Click the red record button (●), use Fluux normally for 30-60 seconds, then stop.
 
-### macOS — Safari Web Inspector
+### macOS: Safari Web Inspector
 
 WKWebView has no "Memory" tab like Chrome. Use Safari Web Inspector:
 
@@ -133,15 +133,15 @@ WKWebView has no "Memory" tab like Chrome. Use Safari Web Inspector:
    (Or right-click inside Fluux → **Inspect Element**, which works because `devtools` is enabled in `tauri.conf.json`.)
 3. Switch to the **Timelines** tab.
 4. Click the gear icon → enable the **Memory** instrument.
-5. Click ● record, use Fluux for 30–60 seconds, stop, screenshot.
+5. Click ● record, use Fluux for 30-60 seconds, stop, screenshot.
 
-### Windows — Edge DevTools
+### Windows: Edge DevTools
 
 1. Right-click inside Fluux → **Inspect** (enabled by `devtools: true` in `tauri.conf.json`).
 2. Open the **Memory** tab.
 3. Take a **Heap snapshot** when Fluux has just started.
 4. Use Fluux until memory grows, then take another snapshot.
-5. Use the **Comparison** view between the two snapshots — the top constructors by delta size are the leak.
+5. Use the **Comparison** view between the two snapshots: the top constructors by delta size are the leak.
 
 ## Exit Hang After Quit
 
@@ -154,7 +154,7 @@ If the process lingers after an explicit Quit (tray menu or ⌘Q), Fluux's grace
 watch -n 1 'ps -axo pid,rss,comm | grep -iE "fluux|WebKit" | grep -v grep'
 ```
 
-If the process still exists after 10 seconds, that's the bug — include this in your report.
+If the process still exists after 10 seconds, that's the bug. Include this in your report.
 
 To force-kill if needed:
 
@@ -194,14 +194,14 @@ tar czf ~/fluux-logs.tar.gz ~/.local/share/com.processone.fluux/logs/
 Compress-Archive -Path "$env:APPDATA\com.processone.fluux\logs\*" -DestinationPath "$env:USERPROFILE\fluux-logs.zip"
 ```
 
-Look in the log for `[renderLoopDetector]` warnings — if they fire during startup or after specific actions, the leak is very likely linked to a render storm.
+Look in the log for `[renderLoopDetector]` warnings. If they fire during startup or after specific actions, the leak is very likely linked to a render storm.
 
 ## What to Include in a Memory Bug Report
 
 Please attach or paste:
 
 1. **Fluux version** (visible in Settings → About, or the top of `fluux.log`).
-2. **OS and desktop environment** — e.g. `uname -a`, Wayland vs X11 on Linux, macOS version, Windows build.
+2. **OS and desktop environment**: e.g. `uname -a`, Wayland vs X11 on Linux, macOS version, Windows build.
 3. **Approximate number of rooms joined and roster size.**
 4. **Timeline**: roughly how long from launch to reach the high memory value, and whether the growth is steady or spiky.
 5. **Output of "Quick Check" and "Deep Memory Breakdown"** from above.
@@ -211,6 +211,6 @@ Please attach or paste:
 
 ## Workarounds While We Investigate
 
-- **Restart Fluux periodically** — a daily restart keeps memory bounded on affected systems.
+- **Restart Fluux periodically**: a daily restart keeps memory bounded on affected systems.
 - **Quit rather than close** when you won't need messages for a while, so the process fully exits.
-- **Leave `backgroundThrottling` enabled in future builds** — on development builds we may ship a flag to re-enable it for users hitting this issue. Track progress in the relevant GitHub issue.
+- **Leave `backgroundThrottling` enabled in future builds**: on development builds we may ship a flag to re-enable it for users hitting this issue. Track progress in the relevant GitHub issue.

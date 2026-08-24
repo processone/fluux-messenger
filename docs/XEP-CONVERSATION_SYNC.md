@@ -8,7 +8,7 @@
 
 ## 1. Introduction
 
-This document describes a protocol for synchronizing a user's 1:1 conversation list across multiple XMPP clients. The conversation list — including which conversations are active or archived — is stored as private data via XEP-0223, allowing any connected client to retrieve and update it.
+This document describes a protocol for synchronizing a user's 1:1 conversation list across multiple XMPP clients. The conversation list (including which conversations are active or archived) is stored as private data via XEP-0223, allowing any connected client to retrieve and update it.
 
 ### 1.1 Motivation
 
@@ -80,7 +80,7 @@ If the node or item does not exist, the server returns an error. Clients SHOULD 
 
 ### 4.2 Publish Conversation List
 
-Publish the full conversation list, replacing any previous data. This is a complete replacement — there is no delta or incremental update mechanism.
+Publish the full conversation list, replacing any previous data. This is a complete replacement, there is no delta or incremental update mechanism.
 
 ```xml
 <iq type="set" id="conv_list_set_67890">
@@ -132,7 +132,7 @@ The `archived` flag allows users to hide conversations from their active list wi
 ## 6. Privacy
 
 - The PEP node uses `access_model=whitelist`, ensuring only the owner can read or write their conversation list.
-- The list contains only bare JIDs and archived flags — no message content or metadata.
+- The list contains only bare JIDs and archived flags, no message content or metadata.
 
 ---
 

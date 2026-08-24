@@ -13,7 +13,7 @@ is provided via scheduled encryption subkey rotation. See `docs/ENCRYPTION.md` f
 
 ### OMEMO (deferred)
 
-OMEMO 2 (XEP-0384) — full Double Ratchet implementation — is on the backlog but not scheduled.
+OMEMO 2 (XEP-0384) (full Double Ratchet implementation) is on the backlog but not scheduled.
 The primary value of OMEMO is interoperability with third-party XMPP clients (Conversations,
 Dino, Gajim). This will be revisited based on user demand.
 
@@ -32,7 +32,7 @@ Plan: contribute to the XEP standardisation effort, implement once the wire form
 
 ### Motivation
 
-Two features share the same root requirement — the XMPP connection surviving without an active
+Two features share the same root requirement, the XMPP connection surviving without an active
 WebView:
 
 - **Mobile background delivery**: WebView is frozen when the app is backgrounded; the connection
@@ -46,9 +46,9 @@ The connection backend becomes an abstraction with two platform-specific impleme
 
 ```
 ConnectionBackend (interface)
-  ├── TauriConnectionBackend   — Rust owns connection + message buffer;
+  ├── TauriConnectionBackend   : Rust owns connection + message buffer;
   │                              broadcasts state to all WebViews via app.emit_all()
-  └── WebConnectionBackend     — XMPPClient.ts owns connection directly (current behaviour)
+  └── WebConnectionBackend     : XMPPClient.ts owns connection directly (current behaviour)
 ```
 
 `XMPPProvider` detects the runtime (`window.__TAURI__`) and instantiates the appropriate
@@ -77,7 +77,7 @@ are unaffected. The split lives entirely in `apps/fluux`.
 Already on Tauri 2, which supports iOS and Android. The existing Rust backend (XMPP proxy,
 E2EE crypto, OS keychain) reuses directly. The web build remains unaffected.
 
-Reference implementation: [HuLa](https://github.com/HuLaSpark/HuLa) — a Tauri 2 chat app
+Reference implementation: [HuLa](https://github.com/HuLaSpark/HuLa), a Tauri 2 chat app
 shipping on all five platforms. Key native pieces required:
 
 - **iOS keyboard**: WebView frame resize + toolbar removal via `objc2` (see HuLa's
@@ -91,7 +91,7 @@ Architecture approach: disconnect on background, use push notifications to wake 
 reconnect and fetch missed messages via MAM.
 
 Stack:
-- ejabberd `mod_push` (XEP-0357) — already available server-side
+- ejabberd `mod_push` (XEP-0357), already available server-side
 - Self-hosted push proxy
 - FCM for Android, APNs for iOS
 - [UnifiedPush](https://unifiedpush.org) for privacy-conscious / FOSS users
@@ -105,27 +105,27 @@ architecture work is done.
 
 ## Priority Order
 
-### 1 — Admin panel
+### 1: Admin panel
 
 An ejabberd management console: user management, room administration, server metrics,
 `mod_push` configuration, invitation link generation. Built on ejabberd's admin API and
 ad-hoc commands. The "complete package" (ejabberd + Fluux + admin UI) is the main product
 differentiator for team and enterprise deployments.
 
-### 2 — Mobile (Tauri, FCM path)
+### 2: Mobile (Tauri, FCM path)
 
 Sequence:
-1. Responsive layout — keyboard handling, safe areas, touch targets
+1. Responsive layout, keyboard handling, safe areas, touch targets
 2. FCM + APNs token registration, ejabberd `mod_push` pipeline, push proxy
 3. UnifiedPush support
 4. App store submissions (iOS + Android)
 
-### 3 — Voice / video
+### 3: Voice / video
 
-1. 1:1 desktop calls via Jingle — bounded scope, ships independently
-2. Group calls via LiveKit SFU (already decided) — larger investment, sequenced after 1:1
+1. 1:1 desktop calls via Jingle, bounded scope, ships independently
+2. Group calls via LiveKit SFU (already decided), larger investment, sequenced after 1:1
 
-### 4 — MLS
+### 4: MLS
 
 Engage with the XMPP MLS XEP effort. Implement once the wire format stabilises.
 
@@ -133,11 +133,11 @@ Engage with the XMPP MLS XEP effort. Implement once the wire format stabilises.
 
 ## Polish & Backlog
 
-- **Localized emoji completion** — use locale-specific Unicode/CLDR annotations for
+- **Localized emoji completion**: use locale-specific Unicode/CLDR annotations for
   emoji names and search terms in composer autocomplete, while preserving canonical
   shortcodes and English aliases for compatibility and fallback search.
 
-- **Filter muted users from search results** — the per-room ignore (mute) list is
+- **Filter muted users from search results**: the per-room ignore (mute) list is
   applied in the room view (messages, mentions, typing indicators and reactions are
   hidden) but not in cross-room search. Messages, mentions and reactions from muted
   users still surface in `SearchContextView`. Apply the same ignore filter to search

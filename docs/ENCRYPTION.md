@@ -2,13 +2,13 @@
 
 This guide explains how end-to-end encryption (E2EE) works in Fluux Messenger and walks you through enabling it, sharing your identity with contacts, backing up your key, and moving to a new device.
 
-If you just want the short version: turn it on in **Settings → Encryption**, write down the backup code the app shows you, and keep it somewhere safe. That's the one thing that — if lost — cannot be recovered.
+If you just want the short version: turn it on in **Settings → Encryption**, write down the backup code the app shows you, and keep it somewhere safe. That's the one thing that (if lost) cannot be recovered.
 
 ## What end-to-end encryption means
 
 When E2EE is on, the messages you send and receive are scrambled on your device before they leave it, and only the people in the conversation can read them. Your XMPP server relays the ciphertext but cannot decrypt it. Neither can anyone who intercepts the traffic between servers, nor an administrator with access to server logs.
 
-Fluux uses **OpenPGP for XMPP**, standardised as [XEP-0373](https://xmpp.org/extensions/xep-0373.html) (often called *"OX"*) — the modern redesign of OpenPGP encryption for XMPP. If you have come across [XEP-0027](https://xmpp.org/extensions/xep-0027.html) (the older "Current Jabber OpenPGP Usage"), that is a different, now-deprecated approach with known security weaknesses: no authenticated message envelope, signed-plaintext exposure, and no multi-device story. Fluux implements XEP-0373 only. XEP-0373 uses a proper content-encryption layer ([XEP-0420](https://xmpp.org/extensions/xep-0420.html)) that authenticates the full message context and hides metadata from the server. It is built on the same OpenPGP cryptography used by email tools like GnuPG, adapted correctly to fit instant messaging.
+Fluux uses **OpenPGP for XMPP**, standardised as [XEP-0373](https://xmpp.org/extensions/xep-0373.html) (often called *"OX"*), the modern redesign of OpenPGP encryption for XMPP. If you have come across [XEP-0027](https://xmpp.org/extensions/xep-0027.html) (the older "Current Jabber OpenPGP Usage"), that is a different, now-deprecated approach with known security weaknesses: no authenticated message envelope, signed-plaintext exposure, and no multi-device story. Fluux implements XEP-0373 only. XEP-0373 uses a proper content-encryption layer ([XEP-0420](https://xmpp.org/extensions/xep-0420.html)) that authenticates the full message context and hides metadata from the server. It is built on the same OpenPGP cryptography used by email tools like GnuPG, adapted correctly to fit instant messaging.
 
 ## How it works, in plain terms
 
@@ -19,13 +19,13 @@ Each account has a **key pair**:
 
 When you send a message, Fluux encrypts it with your contact's public key and signs it with your secret key. When your contact receives the message, their client uses their own secret key to decrypt it and your public key to verify the signature. The message is authenticated (it really came from you) and confidential (only the recipient can read it).
 
-Every key has a **fingerprint** — a long identifier (64 hex characters) that uniquely represents it. When you want to be sure you are really talking to the right person and not someone impersonating them, you compare fingerprints out of band (in person, over the phone, on a verified channel).
+Every key has a **fingerprint**, a long identifier (64 hex characters) that uniquely represents it. When you want to be sure you are really talking to the right person and not someone impersonating them, you compare fingerprints out of band (in person, over the phone, on a verified channel).
 
 ## Turning encryption on
 
 1. Open **Settings → Encryption**.
 2. Toggle **Enable OpenPGP encryption**.
-3. Fluux generates a key pair for your account. This takes a few seconds — the app uses strong settings (Argon2id key derivation) so the work happens in the background.
+3. Fluux generates a key pair for your account. This takes a few seconds: the app uses strong settings (Argon2id key derivation) so the work happens in the background.
 4. Your public key is published to your XMPP server under [PEP](https://xmpp.org/extensions/xep-0163.html) so contacts can discover it automatically.
 5. Your fingerprint now appears in the Encryption panel. You can copy it and share it with contacts as proof of your identity.
 
@@ -41,7 +41,7 @@ Once encryption is on for both sides, you don't have to think about it:
 
 ## Trusting a contact's key
 
-The first time Fluux sees a contact's key, it trusts it automatically — a model called **Trust On First Use (TOFU)**. This is convenient and safe in most situations, but it cannot catch a deliberate impersonator who slipped a fake key in before you first spoke.
+The first time Fluux sees a contact's key, it trusts it automatically, a model called **Trust On First Use (TOFU)**. This is convenient and safe in most situations, but it cannot catch a deliberate impersonator who slipped a fake key in before you first spoke.
 
 To be certain, **verify** the fingerprint:
 
@@ -53,14 +53,14 @@ Verifying only has to be done once per contact per key.
 
 ## Using encryption on several devices
 
-If you log into Fluux on another device — a second laptop, the web client, a new phone down the line — that device does not automatically have your secret key. Without it, the new device cannot decrypt messages sent to you.
+If you log into Fluux on another device (a second laptop, the web client, a new phone down the line) that device does not automatically have your secret key. Without it, the new device cannot decrypt messages sent to you.
 
 Fluux solves this with an **encrypted server backup** of your secret key, defined by XEP-0373 §5.
 
 ### Backing up your key
 
 1. In **Settings → Encryption**, click **Back up**.
-2. Fluux generates a **backup code** — 24 upper-case characters drawn from an unambiguous alphabet (no `O` or `0`), grouped into 4-character chunks with dashes (e.g. `TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW`). This format follows XEP-0373 §5.4 and is accepted by other compliant clients such as Gajim. The code carries ~121 bits of entropy.
+2. Fluux generates a **backup code**. 24 upper-case characters drawn from an unambiguous alphabet (no `O` or `0`), grouped into 4-character chunks with dashes (e.g. `TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW`). This format follows XEP-0373 §5.4 and is accepted by other compliant clients such as Gajim. The code carries ~121 bits of entropy.
 3. **Write it down** or save it in a password manager. Confirm with the checkbox that you have stored it.
 4. Fluux encrypts your secret key with this code and publishes the encrypted blob to your XMPP server under a private PEP node that only you can read.
 
@@ -76,7 +76,7 @@ From that point on, the new device can read your encrypted history and send encr
 
 ### Exporting your key to a file
 
-Besides the server backup, **Settings → Encryption → Export to file** saves your secret key as an encrypted `.asc` file (named `openpgp-backup-<your-jid>.asc`). It uses the same XEP-0373 §5 format as the server backup — an OpenPGP message locked with your backup code — so nothing readable leaves your device.
+Besides the server backup, **Settings → Encryption → Export to file** saves your secret key as an encrypted `.asc` file (named `openpgp-backup-<your-jid>.asc`). It uses the same XEP-0373 §5 format as the server backup (an OpenPGP message locked with your backup code) so nothing readable leaves your device.
 
 You can hand this file to another device or client:
 
@@ -105,35 +105,35 @@ Treat the backup code like the recovery phrase of a cryptocurrency wallet: write
 
 When E2EE is on, images, videos, audio clips, and other files you attach to a conversation are protected the same way your messages are. Fluux follows the approach described in [XEP-0454](https://xmpp.org/extensions/xep-0454.html), adapted to work with OpenPGP:
 
-1. **Your device encrypts the file.** Before the file leaves your machine, Fluux encrypts its bytes with a fresh AES-256-GCM key. A new key is generated for every file you send — keys are never reused.
-2. **Only ciphertext is uploaded.** The upload server (the XMPP HTTP File Upload service) receives only the encrypted bytes. The filename, size, and type sent to the upload service are also stripped — the server sees `application/octet-stream` with a random name.
+1. **Your device encrypts the file.** Before the file leaves your machine, Fluux encrypts its bytes with a fresh AES-256-GCM key. A new key is generated for every file you send, and keys are never reused.
+2. **Only ciphertext is uploaded.** The upload server (the XMPP HTTP File Upload service) receives only the encrypted bytes. The filename, size, and type sent to the upload service are also stripped: the server sees `application/octet-stream` with a random name.
 3. **The key travels inside the encrypted message.** The URL where the ciphertext is stored, the AES key, the IV, and the original filename/size/type all ride inside the OpenPGP-encrypted message envelope. The XMPP server sees only the blob; it cannot reconstruct the URL or the key.
 4. **The recipient's device decrypts the file.** When your contact opens the message, their client fetches the ciphertext, decrypts it locally with the key from the envelope, and shows the file.
 
 Thumbnails for images and videos are encrypted with their own separate key so a preview cannot leak the contents of the protected file.
 
-**Caveat on link previews.** The ciphertext URL is still visible to your upload server (since it hosts the file), and to any proxy or monitoring tool between your client and that server. The *contents* are not — anyone who grabs the URL by itself gets only ciphertext bytes they cannot decrypt without the AES key.
+**Caveat on link previews.** The ciphertext URL is still visible to your upload server (since it hosts the file), and to any proxy or monitoring tool between your client and that server. The *contents* are not. Anyone who grabs the URL by itself gets only ciphertext bytes they cannot decrypt without the AES key.
 
 **Caveat for the web client.** Step 4 above downloads the ciphertext from your upload server before decrypting it. In the web version that download is a cross-origin browser request, so the host serving uploaded files (the XMPP HTTP File Upload service) must send [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers allowing the origin from which Fluux is served. Without it, encrypted attachments cannot be fetched and decrypted, so they will not open or preview. The desktop app downloads files through its native HTTP client and is not subject to this.
 
-**Compatibility.** Clients that don't yet implement this will see a message saying the content is encrypted, with a fallback notice — same as they would for text. Plain (non-encrypted) file attachments, sent in conversations where E2EE is off, keep working exactly as before.
+**Compatibility.** Clients that don't yet implement this will see a message saying the content is encrypted, with a fallback notice, same as they would for text. Plain (non-encrypted) file attachments, sent in conversations where E2EE is off, keep working exactly as before.
 
 ## Encrypt-to-self and message history
 
-When you send an encrypted message, Fluux also encrypts a copy to **your own key**. This is what lets other devices you own — and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html) — decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
+When you send an encrypted message, Fluux also encrypts a copy to **your own key**. This is what lets other devices you own, and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html), decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
 
 ## Where your key lives
 
 | Where                        | What is stored                                                                           |
 |------------------------------|------------------------------------------------------------------------------------------|
 | Your device (desktop)        | Secret key, encrypted with a random per-device passphrase held in the OS keychain        |
-| Your device (web)            | Secret key in memory only, loaded after you type the backup code — never persisted |
+| Your device (web)            | Secret key in memory only, loaded after you type the backup code, never persisted  |
 | Your XMPP server (optional)  | Secret key encrypted with your backup code; public key published for contacts      |
 | Your contacts' devices       | Your public key, so they can encrypt messages to you                                     |
 
 On Linux and Windows the secret key falls back to a file with restricted permissions if the OS keychain is unavailable.
 
-## What encryption does — and doesn't — protect
+## What encryption does and doesn't protect
 
 **Protected**
 
@@ -145,7 +145,7 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 **Not protected**
 
 - **Metadata**: who you talk to, when, and how often. XMPP routing information is always visible to the server.
-- **Typing indicators**: whether you are currently typing (XEP-0085 chat states) is sent in the clear. This is timing metadata only — it carries no message content — and running a separate encryption step on every keystroke transition would be disproportionate. Most encrypted messengers make the same choice. It may be revisited if a future threat model calls for hiding composition activity.
+- **Typing indicators**: whether you are currently typing (XEP-0085 chat states) is sent in the clear. This is timing metadata only (it carries no message content) and running a separate encryption step on every keystroke transition would be disproportionate. Most encrypted messengers make the same choice. It may be revisited if a future threat model calls for hiding composition activity.
 - **Group chats** (multi-user rooms): the current OX implementation covers one-to-one conversations only.
 - **Compromised devices**: if someone can read your device's storage and the OS keychain, they can decrypt your messages. Use full-disk encryption.
 - **Local message cache**: for responsiveness, Fluux stores decrypted messages and attachment metadata in the browser/webview's local database. They are not re-encrypted at rest today. The OS file-system permissions and (for Tauri builds) the OS keychain protecting the secret key are the security boundary. Use full-disk encryption for best protection. Encrypting this cache is planned as a follow-up.
@@ -154,7 +154,7 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 ## Frequently asked questions
 
 **My contact's lock icon is not showing.**
-Their client either doesn't support OpenPGP for XMPP, or they haven't enabled it. Nothing you can do from your side — ask them.
+Their client either doesn't support OpenPGP for XMPP, or they haven't enabled it. Nothing you can do from your side. Ask them.
 
 **I see "OpenPGP" above a fingerprint in tooltips. What is that?**
 It's just a label so the fingerprint's purpose is clear. The number below it is the actual fingerprint you compare.
@@ -163,7 +163,7 @@ It's just a label so the fingerprint's purpose is clear. The number below it is 
 Not currently. Encryption is enabled per account. If your contact's client supports OX, messages to them are encrypted.
 
 **I reinstalled Fluux and lost my key. What now?**
-If you had published a backup, restore it: open Settings → Encryption and enter the backup code. If you had not, generate a new key — your old encrypted messages will no longer be readable.
+If you had published a backup, restore it: open Settings → Encryption and enter the backup code. If you had not, generate a new key and your old encrypted messages will no longer be readable.
 
 **Will this work with OMEMO?**
 Not yet. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373.
@@ -179,5 +179,5 @@ Not yet. Fluux's encryption engine is built as a plugin layer so OMEMO can be ad
 | [XEP-0363](https://xmpp.org/extensions/xep-0363.html) HTTP File Upload       | Transport for file attachments                          |
 | [XEP-0454](https://xmpp.org/extensions/xep-0454.html) Encrypted Media        | AES-256-GCM scheme reused for encrypted file attachments |
 | [XEP-0066](https://xmpp.org/extensions/xep-0066.html) Out of Band Data       | Carries the file URL in encrypted messages              |
-| [XEP-0446](https://xmpp.org/extensions/xep-0446.html) File Metadata          | Original filename, size, mimetype — encrypted with body |
+| [XEP-0446](https://xmpp.org/extensions/xep-0446.html) File Metadata          | Original filename, size, mimetype, encrypted with body  |
 | [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580) OpenPGP                   | The underlying cryptography (via Sequoia-PGP)           |

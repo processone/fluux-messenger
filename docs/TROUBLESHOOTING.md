@@ -2,7 +2,7 @@
 
 ## Related Guides
 
-- [Memory Troubleshooting](MEMORY_TROUBLESHOOTING.md) — diagnosing high memory usage and renderer leaks.
+- [Memory Troubleshooting](MEMORY_TROUBLESHOOTING.md), diagnosing high memory usage and renderer leaks.
 
 ## Log Files
 
