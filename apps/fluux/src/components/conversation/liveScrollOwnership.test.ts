@@ -124,6 +124,7 @@ const allowedHookFunctions = [
   'handleLoadEarlier',
   'handleMediaLoad',
   'handleScroll',
+  'handleVirtualRowMeasuredGrowth',
   'handleWheel',
   'markerAboveViewport',
   'requestMessageTarget',

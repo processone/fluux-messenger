@@ -23,6 +23,7 @@ import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 
 const scrollToEndCalls = { count: 0 }
+let reportMeasuredRow: ((key: string, size: number) => void) | undefined
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
@@ -35,23 +36,30 @@ vi.mock('@/hooks', () => ({
   })),
 }))
 vi.mock('./tanstackMessageVirtualizer', () => ({
-  useTanstackMessageVirtualizer: (args: { items: { key: string }[]; scrollRef: React.RefObject<HTMLElement | null> }) => ({
-    getVirtualItems: () => args.items.map((it, index) => ({ index, start: index * 40, size: 40, key: it.key })),
-    getTotalSize: () => args.items.length * 40,
-    itemCount: args.items.length,
-    getOffsetForMessageId: () => 0,
-    getIndexForMessageId: (id: string) => { const i = args.items.findIndex((it) => it.key === id); return i >= 0 ? i : null },
-    ensureMessageMounted: vi.fn(() => Promise.resolve()),
-    measureElement: () => {},
-    scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
-    // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
-    beginAnimatedScrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
-    scrollToIndex: (_index: number, opts?: { align?: string }) => {
-      const el = args.scrollRef.current; if (!el) return
-      if (opts?.align === 'end') { scrollToEndCalls.count += 1; el.scrollTop = el.scrollHeight }
-      else el.scrollTop = _index * 40
-    },
-  }),
+  useTanstackMessageVirtualizer: (args: {
+    items: { key: string }[]
+    scrollRef: React.RefObject<HTMLElement | null>
+    onMeasured?: (key: string, size: number) => void
+  }) => {
+    reportMeasuredRow = args.onMeasured
+    return {
+      getVirtualItems: () => args.items.map((it, index) => ({ index, start: index * 40, size: 40, key: it.key })),
+      getTotalSize: () => args.items.length * 40,
+      itemCount: args.items.length,
+      getOffsetForMessageId: () => 0,
+      getIndexForMessageId: (id: string) => { const i = args.items.findIndex((it) => it.key === id); return i >= 0 ? i : null },
+      ensureMessageMounted: vi.fn(() => Promise.resolve()),
+      measureElement: () => {},
+      scrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+      // jsdom has no smooth-scroll animation, so an animated scroll lands immediately.
+      beginAnimatedScrollToOffset: (offset: number) => { const el = args.scrollRef.current; if (el) el.scrollTop = offset },
+      scrollToIndex: (_index: number, opts?: { align?: string }) => {
+        const el = args.scrollRef.current; if (!el) return
+        if (opts?.align === 'end') { scrollToEndCalls.count += 1; el.scrollTop = el.scrollHeight }
+        else el.scrollTop = _index * 40
+      },
+    }
+  },
 }))
 
 function makeMessages(count: number, prefix = 'msg'): BaseMessage[] {
@@ -171,6 +179,123 @@ describe('MessageList — live-edge executor cost control', () => {
 
     expect(scrollToEndCalls.count).toBeGreaterThan(0)
     expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
+  })
+
+  it('re-pins when a virtual row reports growth after the original reaction pin has settled', () => {
+    const isAtBottomRef = { current: true }
+    const messages = makeMessages(50)
+    const view = render(
+      <MessageList messages={messages} conversationId="conv-late-reaction-measure" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70)
+    scroller.scrollTop = geo.scrollHeight
+    act(() => { scroller.dispatchEvent(new Event('scroll')) })
+    act(() => { reportMeasuredRow?.('msg-49', 40) })
+
+    view.rerender(
+      <MessageList
+        messages={messages.map((message, index) =>
+          index === messages.length - 1
+            ? { ...message, reactions: { '👍': ['someone@example.com'] } }
+            : message,
+        )}
+        conversationId="conv-late-reaction-measure"
+        isAtBottomRef={isAtBottomRef}
+        {...props}
+      />,
+    )
+    flush(20)
+    expect(rafQueue.length).toBe(0)
+
+    scrollToEndCalls.count = 0
+    geo.scrollHeight += 28
+    act(() => {
+      reportMeasuredRow?.('msg-49', 68)
+      flush(10)
+    })
+
+    expect(scrollToEndCalls.count).toBeGreaterThan(0)
+    expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight)
+  })
+
+  it('does not re-pin late measured reaction growth for a reader in history', () => {
+    const isAtBottomRef = { current: true }
+    const messages = makeMessages(50)
+    const view = render(
+      <MessageList messages={messages} conversationId="conv-late-reaction-history" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70)
+    scroller.scrollTop = 400
+    act(() => {
+      scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+      reportMeasuredRow?.('msg-49', 40)
+    })
+
+    view.rerender(
+      <MessageList
+        messages={messages.map((message, index) =>
+          index === messages.length - 1
+            ? { ...message, reactions: { '👍': ['someone@example.com'] } }
+            : message,
+        )}
+        conversationId="conv-late-reaction-history"
+        isAtBottomRef={isAtBottomRef}
+        {...props}
+      />,
+    )
+    flush(20)
+
+    scrollToEndCalls.count = 0
+    geo.scrollHeight += 28
+    act(() => { reportMeasuredRow?.('msg-49', 68) })
+    flush(10)
+
+    expect(scrollToEndCalls.count).toBe(0)
+    expect(scroller.scrollTop).toBe(400)
+  })
+
+  it('waits for post-measurement geometry before deciding whether to re-pin', () => {
+    const isAtBottomRef = { current: true }
+    const messages = makeMessages(50)
+    const view = render(
+      <MessageList messages={messages} conversationId="conv-reaction-threshold" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70)
+    scroller.scrollTop = geo.scrollHeight - geo.clientHeight - 160
+    act(() => {
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+      reportMeasuredRow?.('msg-49', 40)
+    })
+
+    view.rerender(
+      <MessageList
+        messages={messages.map((message, index) =>
+          index === messages.length - 1
+            ? { ...message, reactions: { '👍': ['someone@example.com'] } }
+            : message,
+        )}
+        conversationId="conv-reaction-threshold"
+        isAtBottomRef={isAtBottomRef}
+        {...props}
+      />,
+    )
+    flush(20)
+    scrollToEndCalls.count = 0
+
+    act(() => { reportMeasuredRow?.('msg-49', 68) })
+    expect(scrollToEndCalls.count).toBe(0)
+
+    geo.scrollHeight += 28
+    act(() => { flush(10) })
+    expect(scrollToEndCalls.count).toBe(0)
+    expect(scroller.scrollTop).toBe(geo.scrollHeight - geo.clientHeight - 188)
   })
 
   it('does not yank a scrolled-up reader down when a link-preview fastening lands', () => {
