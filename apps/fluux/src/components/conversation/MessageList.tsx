@@ -390,9 +390,14 @@ export function MessageList<T extends BaseMessage>({
   }
   const initialMeasurements = initialMeasurementsRef.current
 
-  // Write-back: record each row's measured height to the persistent cache.
-  // scalePct/conversationId are captured via a ref so the stable callback identity
-  // is preserved (no virtualizer re-creation on every render).
+  // Write-back: record each row's measured height to the persistent cache. A repeated measurement
+  // for the same row also carries the authoritative delta from @tanstack's ResizeObserver. Positive
+  // deltas are forwarded to the positioning controller so a late reaction/media measurement can
+  // re-pin after an earlier signature-triggered loop has already settled. The first measurement is
+  // only a baseline; conversation and scale are part of the key so unrelated layouts never compare.
+  // All live parameters are captured via refs so the callback stays stable.
+  const measuredRowSizesRef = useRef(new Map<string, number>())
+  const handleVirtualRowMeasuredGrowthRef = useRef<(heightDelta: number) => void>(() => {})
   const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef, indexById, virtualItems })
   onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, indexById, virtualItems }
   const onMeasured = useMemo(
@@ -402,6 +407,12 @@ export function MessageList<T extends BaseMessage>({
             const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
             const idx = idMap.get(key)
             const item = idx != null ? items[idx] : undefined
+            const measurementKey = `${cid}\u0000${scale}\u0000${key}`
+            const previousSize = measuredRowSizesRef.current.get(measurementKey)
+            measuredRowSizesRef.current.set(measurementKey, size)
+            if (previousSize !== undefined && size > previousSize) {
+              handleVirtualRowMeasuredGrowthRef.current(size - previousSize)
+            }
             // isFirstNew rows include the "new messages" divider, which comes and goes with
             // read-state between opens — caching their height re-blinks the next open.
             if (!(item?.kind === 'message' && item.isFirstNew)) {
@@ -535,6 +546,7 @@ export function MessageList<T extends BaseMessage>({
     handleWheel,
     handleLoadEarlier,
     handleMediaLoad,
+    handleVirtualRowMeasuredGrowth,
     scrollToBottom,
     requestMessageTarget,
     showScrollToBottom,
@@ -567,6 +579,7 @@ export function MessageList<T extends BaseMessage>({
     staticMode,
     virtualizer: activeVirtualizer,
   })
+  handleVirtualRowMeasuredGrowthRef.current = handleVirtualRowMeasuredGrowth
 
   // Combined ref setter for scroll container
   const setScrollContainerRef = (element: HTMLDivElement | null) => {
