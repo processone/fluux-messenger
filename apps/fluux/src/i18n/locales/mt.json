@@ -183,13 +183,13 @@
             "removeVerificationSuccess": "Verifikazzjoni mneħħija",
             "disableForContact": "Itfi l-kriptaġġ għal dan il-kuntatt",
             "notAvailableTitle": "Il-kriptaġġ mhux disponibbli",
-            "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f’test ċar.",
+            "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f'test ċar.",
             "disabledByYouTitle": "Il-kriptaġġ ġie diżattivat",
-            "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f’test ċar.",
+            "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f'test ċar.",
             "unavailableNowTitle": "Il-kriptaġġ bħalissa mhux disponibbli",
             "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings.",
             "rejectedTitle": "Ċertifikat mhux validu",
-            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f’test ċar.",
+            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f'test ċar.",
             "glanceVerified": "Ivverifikat u kriptat",
             "glanceEncrypted": "Kriptat, mhux ivverifikat",
             "glanceNotEncrypted": "Mhux kriptat",
@@ -956,7 +956,7 @@
             "keepInTray": "Żomm Fluux fit-trej tas-sistema",
             "descriptionWindows": "Meta attivat, it-tnaqqis jew l-għeluq jaħbi lil Fluux fit-trej tas-sistema.",
             "descriptionLinux": "Meta attivat, l-għeluq jaħbi lil Fluux fit-trej tas-sistema jekk ikun appoġġjat. It-tnaqqis iżomm l-imġiba normali tad-desktop.",
-            "unavailableLinux": "M’hemmx trej tas-sistema kompatibbli disponibbli. L-għeluq ta’ Fluux jagħlaq l-applikazzjoni."
+            "unavailableLinux": "M'hemmx trej tas-sistema kompatibbli disponibbli. L-għeluq ta’ Fluux jagħlaq l-applikazzjoni."
         }
     },
     "update": {
@@ -1368,11 +1368,11 @@
             "usage": "/me <action>"
         },
         "say": {
-            "desc": "Ibgħat it-test litteralment, anke jekk jibda b’sing",
+            "desc": "Ibgħat it-test litteralment, anke jekk jibda b'sing",
             "usage": "/say <text>"
         },
         "nick": {
-            "desc": "Ibdel il-laqam tiegħek f’din il-kamra",
+            "desc": "Ibdel il-laqam tiegħek f'din il-kamra",
             "usage": "/nick <newnick>",
             "changed": "Issa int magħruf bħala {{nick}}"
         },
@@ -1420,7 +1420,7 @@
             "ownerOnly": "Is-sid tal-kamra biss jista’ jagħmel dan",
             "needNick": "Jekk jogħġbok agħti laqam",
             "needTarget": "Jekk jogħġbok agħti laqam jew indirizz",
-            "userNotFound": "M’hawn ħadd bl-isem {{nick}} hawnhekk",
+            "userNotFound": "M'hawn ħadd bl-isem {{nick}} hawnhekk",
             "nickInUse": "Il-laqam {{nick}} diġà qed jintuża",
             "nickFailed": "Ma setax jinbidel il-laqam tiegħek"
         }

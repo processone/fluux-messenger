@@ -474,7 +474,7 @@
         "newMessagesCount_many": "{{displayCount}} di nuovi messaggi",
         "newMessagesCount_other": "{{displayCount}} nuovi messaggi",
         "youWereAway": "Eri assente",
-        "jumpToLastRead": "Vai all’ultimo letto",
+        "jumpToLastRead": "Vai all'ultimo letto",
         "historyStart": "Inizio della conversazione",
         "historyGap": "Alcuni messaggi potrebbero mancare",
         "historyUnavailable": "Non è stato possibile caricare i messaggi precedenti",
@@ -687,7 +687,7 @@
         "motionReduced": "Ridotto",
         "motionFullDescription": "Mostra tutte le animazioni e le transizioni",
         "motionReducedDescription": "Riduci le animazioni per comfort e accessibilità",
-        "motionSystemDescription": "Segui l’impostazione di riduzione del movimento del sistema",
+        "motionSystemDescription": "Segui l'impostazione di riduzione del movimento del sistema",
         "density": "Densità di visualizzazione",
         "comfortable": "Confortevole",
         "compact": "Compatto",
@@ -949,10 +949,10 @@
         },
         "systemTray": {
             "title": "Area di notifica",
-            "keepInTray": "Mantieni Fluux nell’area di notifica",
-            "descriptionWindows": "Se attiva, la riduzione a icona o la chiusura nasconde Fluux nell’area di notifica.",
-            "descriptionLinux": "Se attiva, la chiusura nasconde Fluux nell’area di notifica quando supportata. La riduzione a icona mantiene il comportamento normale del desktop.",
-            "unavailableLinux": "Non è disponibile un’area di notifica compatibile. La chiusura terminerà Fluux."
+            "keepInTray": "Mantieni Fluux nell'area di notifica",
+            "descriptionWindows": "Se attiva, la riduzione a icona o la chiusura nasconde Fluux nell'area di notifica.",
+            "descriptionLinux": "Se attiva, la chiusura nasconde Fluux nell'area di notifica quando supportata. La riduzione a icona mantiene il comportamento normale del desktop.",
+            "unavailableLinux": "Non è disponibile un'area di notifica compatibile. La chiusura terminerà Fluux."
         }
     },
     "update": {
@@ -1377,7 +1377,7 @@
             "usage": "/part"
         },
         "topic": {
-            "desc": "Visualizza o imposta l’argomento della stanza",
+            "desc": "Visualizza o imposta l'argomento della stanza",
             "usage": "/topic [text]",
             "set": "Argomento aggiornato",
             "current": "Argomento attuale: {{subject}}",
@@ -1416,7 +1416,7 @@
             "ownerOnly": "Solo il proprietario della stanza può farlo",
             "needNick": "Indica un soprannome",
             "needTarget": "Indica un soprannome o un indirizzo",
-            "userNotFound": "Non c’è nessuno di nome {{nick}} qui",
+            "userNotFound": "Non c'è nessuno di nome {{nick}} qui",
             "nickInUse": "Il soprannome {{nick}} è già in uso",
             "nickFailed": "Impossibile cambiare il tuo soprannome"
         }

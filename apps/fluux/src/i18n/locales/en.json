@@ -242,7 +242,7 @@
         "registeredNicknameRequired": "This room requires your registered nickname.",
         "roomNotFound": "Room not found.",
         "nonAnonWarningTitle": "Join non-anonymous channel?",
-        "nonAnonWarningMessage": "Everyone in “{{room}}” can see your real address (your XMPP/Jabber ID). Join anyway?",
+        "nonAnonWarningMessage": "Everyone in \"{{room}}\" can see your real address (your XMPP/Jabber ID). Join anyway?",
         "nonAnonWarningConfirm": "Join anyway",
         "joinToParticipate": "Join room to participate",
         "cachedHistoryWarning": "Cached history up to {{date}}. Join to get latest messages.",
@@ -674,7 +674,7 @@
             "unlockDialogRestoreTitle": "Restore End-to-End Encryption",
             "unlockDialogRestoreBody": "Enter your existing passphrase to restore your key on this device from your server backup.",
             "unlockRecoveredNote": "Key restored from your server backup.",
-            "unlockNoRecoveryBody": "That passphrase didn’t unlock your key, and no server backup was found to recover from. You can import your key from a file.",
+            "unlockNoRecoveryBody": "That passphrase didn't unlock your key, and no server backup was found to recover from. You can import your key from a file.",
             "unlockNoKeyNoBackupBody": "No key is stored on this device and no server backup was found. You can import your key from a file.",
             "statusLocked": "Locked. Enter your passphrase to unlock.",
             "statusGenerationFailed": "Key generation failed. Check the developer console for details.",
@@ -819,7 +819,7 @@
             "unlockSkip": "Skip, send without encryption",
             "rememberPassphrase": "Keep my passphrase on this device for 24 hours",
             "rememberPassphraseHint": "Stored encrypted. Anyone with access to this device could use it until it expires.",
-            "unlockPassphraseMismatch": "Passphrases don’t match",
+            "unlockPassphraseMismatch": "Passphrases don't match",
             "unlockPassphraseTooShort": "Passphrase must be at least 8 characters",
             "lockedBannerBody": "Your encryption key is locked. Enter your passphrase to enable encryption for this session.",
             "rotateNotSupportedWeb": "Key rotation is not available on the web. Use the desktop app."
@@ -947,7 +947,7 @@
             "title": "System tray",
             "keepInTray": "Keep Fluux in the system tray",
             "descriptionWindows": "When enabled, minimizing or closing Fluux hides it in the system tray.",
-            "descriptionLinux": "When enabled, closing Fluux hides it in the system tray when supported. Minimizing keeps your desktop’s normal behavior.",
+            "descriptionLinux": "When enabled, closing Fluux hides it in the system tray when supported. Minimizing keeps your desktop's normal behavior.",
             "unavailableLinux": "No compatible system tray is available. Closing Fluux will quit the app."
         }
     },
