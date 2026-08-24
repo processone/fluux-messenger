@@ -12,12 +12,13 @@
   <description>
     <p>
       Fluux Messenger is a modern XMPP chat client built with React and Tauri.
-      It provides a polished user experience while supporting the full breadth
-      of the XMPP protocol.
+      It connects to any XMPP server and implements more than 50 protocol
+      extensions.
     </p>
     <p>Features include:</p>
     <ul>
-      <li>Real-time messaging with typing indicators and read receipts</li>
+      <li>Real-time messaging with typing indicators</li>
+      <li>OpenPGP end-to-end encryption for one-to-one chats</li>
       <li>Multi-user chat rooms with roles, affiliations, and mentions</li>
       <li>File sharing via HTTP uploads with previews</li>
       <li>Message reactions, corrections, and replies</li>
@@ -27,8 +28,8 @@
       <li>Server administration features</li>
     </ul>
     <p>
-      Connect to any XMPP server - there is no vendor lock-in. Fluux Messenger
-      is fully open source under the AGPL-3.0 license.
+      Connect to any XMPP server: there is no vendor lock-in. Fluux Messenger
+      is open source under the AGPL-3.0 license.
     </p>
   </description>
 

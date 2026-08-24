@@ -25,9 +25,8 @@ AutoReqProv:    no
 %global debug_package %{nil}
 
 %description
-Fluux Messenger is a modern, user-friendly XMPP chat client built with
-Tauri and React. It provides a clean interface for real-time messaging
-using the XMPP protocol.
+Fluux Messenger is a modern XMPP chat client built with Tauri and React.
+It connects to any XMPP server, self-hosted or public.
 
 Features include:
 - One-to-one and group chat (MUC)
