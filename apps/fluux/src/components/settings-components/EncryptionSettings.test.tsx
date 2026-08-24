@@ -8,7 +8,7 @@
  * - Reactive: when plugin registration already failed, the typed error
  *   from `encryptionSettingsStore.registrationError` is surfaced
  *   immediately (specific text for `pep-unsupported`, generic for other
- *   codes) instead of spinning on "Generating your key…" for 60s.
+ *   codes) instead of spinning on "Generating your key..." for 60s.
  */
 import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'

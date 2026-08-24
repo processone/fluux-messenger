@@ -385,7 +385,7 @@ function EncryptionIcon({
         <div>{verified
           ? t('chat.encryption.verifiedTooltip')
           : tofuNew
-            ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+            ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
             : t('chat.encryption.openpgpTooltip')
         }</div>
         {state.kind === 'encrypted' && (
@@ -414,7 +414,7 @@ function EncryptionIcon({
             <div>{verified
               ? t('chat.encryption.verifiedTooltip')
               : tofuNew
-                ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+                ? t('chat.encryption.tofuNewTooltip', 'New contact. Verify fingerprint for full trust')
                 : t('chat.encryption.openpgpTooltip')
             }</div>
             <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
