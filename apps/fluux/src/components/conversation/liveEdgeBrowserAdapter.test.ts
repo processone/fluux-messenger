@@ -167,6 +167,33 @@ function harness(input: {
 }
 
 describe('LiveEdgeBrowserAdapter', () => {
+  it('keeps the emergency virtualized write and bottom intent behind the adapter', () => {
+    const viewport = scrollerHarness()
+    const { virtualizer, scrollToIndex } = virtualizerHarness(viewport.setScrollTop)
+    const scope = harness({ scroller: viewport.scroller, virtualizer })
+
+    expect(scope.adapter.emergencyWrite({
+      rememberBottomIntent: scope.rememberBottomIntent,
+    })).toBe(true)
+    expect(scrollToIndex).toHaveBeenCalledWith(19, { align: 'end' })
+    expect(scope.rememberBottomIntent).toHaveBeenCalledOnce()
+  })
+
+  it('preserves the emergency native smooth write used by the FAB', () => {
+    const viewport = scrollerHarness({ scrollHeight: 2_000 })
+    const scope = harness({ scroller: viewport.scroller })
+
+    expect(scope.adapter.emergencyWrite({
+      smoothNonVirtualized: true,
+      rememberBottomIntent: scope.rememberBottomIntent,
+    })).toBe(true)
+    expect(viewport.scroller.scrollTo).toHaveBeenCalledWith({
+      top: 2_000,
+      behavior: 'smooth',
+    })
+    expect(scope.rememberBottomIntent).toHaveBeenCalledOnce()
+  })
+
   it('re-reads window facts per call while keeping recenter provenance per execution', () => {
     const viewport = scrollerHarness()
     const { virtualizer } = virtualizerHarness(viewport.setScrollTop)

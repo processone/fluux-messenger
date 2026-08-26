@@ -16,6 +16,7 @@ export interface ResidentTopBrowserAdapterOptions {
   getVirtualizer: () => MessageVirtualizer | undefined
   getWindowFacts: () => ResidentTopWindowFacts
   beginLoop: (lease: PositionExecutionLease) => PositionFrameLoop | null
+  recordProgrammaticWrite: () => void
   log?: (action: string, data?: Record<string, unknown>) => void
 }
 
@@ -25,6 +26,22 @@ export interface ResidentTopBrowserAdapterOptions {
  */
 export class ResidentTopBrowserAdapter {
   constructor(private readonly options: ResidentTopBrowserAdapterOptions) {}
+
+  /**
+   * Controller rejection must degrade to progress, not a dead Home key. This write is instant on
+   * purpose: an unleased smooth animation has no loop to mark its intermediate scroll events as
+   * programmatic and can otherwise re-arm resident-top pagination while travelling.
+   */
+  emergencyWrite(): boolean {
+    const scroller = this.options.getScroller()
+    if (!scroller) return false
+    this.options.recordProgrammaticWrite()
+    const virtualizer = this.options.getVirtualizer()
+    if (virtualizer) virtualizer.scrollToOffset(0)
+    else scroller.scrollTop = 0
+    this.options.log?.('RESIDENT TOP: emergency write')
+    return true
+  }
 
   createExecutor(): ResidentTopExecutor {
     return {

@@ -92,6 +92,11 @@ export interface LiveEdgeBrowserPorts {
   recenter?: LiveEdgeExecutor['recenter']
 }
 
+export interface EmergencyLiveEdgeWrite {
+  smoothNonVirtualized?: boolean
+  rememberBottomIntent: () => void
+}
+
 /**
  * Owns every bottom-specific browser mechanic: tail-layout flushes for late WebKit measurement, the
  * missed-frame distance correction, repaint-burst coalescing, background-MAM repaint suppression,
@@ -110,6 +115,26 @@ export class LiveEdgeBrowserAdapter {
   /** Drop repaint debt from a conversation being left so it cannot flush into the next one. */
   resetRepaintDebt(): void {
     this.burst?.reset()
+  }
+
+  /**
+   * Last-resort one-shot when controller construction or arbitration fails. Keep this write behind
+   * the same browser boundary as normal live-edge execution, but deliberately outside its repaint
+   * and convergence machinery: without a current lease there is no safe loop to continue.
+   */
+  emergencyWrite(input: EmergencyLiveEdgeWrite): boolean {
+    const scroller = this.options.getScroller()
+    if (!scroller) return false
+    const virtualizer = this.options.getVirtualizer()
+    if (virtualizer && virtualizer.itemCount > 0) {
+      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
+    } else if (input.smoothNonVirtualized) {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+    } else {
+      scroller.scrollTop = scroller.scrollHeight
+    }
+    input.rememberBottomIntent()
+    return true
   }
 
   createExecutor(ports: LiveEdgeBrowserPorts): LiveEdgeExecutor {
