@@ -8,6 +8,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient, getInternalSurfaceForTesting, bindStoresForTesting } from '../XMPPClient'
 import { E2EEEncryptionRequiredError } from '../e2ee'
+import { createStoreBindings, type StoreRefs } from '../../bindings/storeBindings'
+import { chatStore } from '../../stores/chatStore'
 import {
   createMockXmppClient,
   createMockStores,
@@ -382,6 +384,193 @@ describe('XMPPClient Message', () => {
           body: 'I sent this from my phone',
           isOutgoing: true,
         })
+      })
+    })
+
+    it('should preserve a replay delay from the sent carbon envelope', async () => {
+      await connectClient()
+
+      const replayedAt = '2026-08-24T08:44:21.173Z'
+      const carbonStanza = createMockElement('message', {
+        from: 'user@example.com',
+        to: 'user@example.com/desktop',
+      }, [
+        {
+          name: 'sent',
+          attrs: { xmlns: 'urn:xmpp:carbons:2' },
+          children: [
+            {
+              name: 'forwarded',
+              attrs: { xmlns: 'urn:xmpp:forward:0' },
+              children: [
+                {
+                  name: 'message',
+                  attrs: {
+                    from: 'user@example.com/phone',
+                    to: 'contact@example.com',
+                    type: 'chat',
+                    id: 'replayed-sent-carbon',
+                  },
+                  children: [{ name: 'body', text: 'Sent while desktop was suspended' }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'delay',
+          attrs: {
+            xmlns: 'urn:xmpp:delay',
+            stamp: replayedAt,
+          },
+          text: 'Resent',
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', carbonStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: 'replayed-sent-carbon',
+          timestamp: new Date(replayedAt),
+          isDelayed: true,
+        }),
+      })
+    })
+
+    it('should keep a replayed sent carbon before a newer post-resume message', async () => {
+      vi.setSystemTime(new Date('2026-08-24T08:45:00.000Z'))
+      await connectClient()
+
+      const originalChatState = chatStore.getState()
+      chatStore.setState({
+        conversations: new Map(),
+        conversationEntities: new Map(),
+        conversationMeta: new Map(),
+        messages: new Map(),
+        activeConversationId: null,
+      })
+      const stores = createMockStores()
+      stores.chat.addConversation.mockImplementation(chatStore.getState().addConversation)
+      stores.chat.addMessage.mockImplementation(chatStore.getState().addMessage)
+      const unsubscribe = createStoreBindings(xmppClient, () => stores as unknown as StoreRefs)
+
+      try {
+        mockXmppClientInstance._emit('stanza', createMockElement('message', {
+          from: 'contact@example.com/phone',
+          to: 'user@example.com/desktop',
+          type: 'chat',
+          id: 'a-post-resume',
+        }, [
+          { name: 'body', text: 'Arrived after desktop resumed' },
+        ]))
+
+        mockXmppClientInstance._emit('stanza', createMockElement('message', {
+          from: 'user@example.com',
+          to: 'user@example.com/desktop',
+        }, [
+          {
+            name: 'sent',
+            attrs: { xmlns: 'urn:xmpp:carbons:2' },
+            children: [
+              {
+                name: 'forwarded',
+                attrs: { xmlns: 'urn:xmpp:forward:0' },
+                children: [
+                  {
+                    name: 'message',
+                    attrs: {
+                      from: 'user@example.com/phone',
+                      to: 'contact@example.com',
+                      type: 'chat',
+                      id: 'z-sent-while-suspended',
+                    },
+                    children: [{ name: 'body', text: 'Sent while desktop was suspended' }],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'delay',
+            attrs: {
+              xmlns: 'urn:xmpp:delay',
+              stamp: '2026-08-24T08:44:21.173Z',
+            },
+            text: 'Resent',
+          },
+        ]))
+
+        const messages = chatStore.getState().messages.get('contact@example.com')
+        const observedOrder = messages?.map(({ id, body, timestamp }) => ({
+          id,
+          body,
+          timestamp: timestamp.toISOString(),
+        }))
+        expect(observedOrder?.map(({ id, timestamp }) => [id, timestamp])).toEqual([
+          ['z-sent-while-suspended', '2026-08-24T08:44:21.173Z'],
+          ['a-post-resume', '2026-08-24T08:45:00.000Z'],
+        ])
+      } finally {
+        unsubscribe()
+        chatStore.setState(originalChatState, true)
+      }
+    })
+
+    it('should keep a received-carbon whisper on live room semantics', async () => {
+      vi.setSystemTime(new Date('2026-08-24T08:45:00.000Z'))
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({
+        jid: 'room@conference.example.com',
+        nickname: 'me',
+        joined: true,
+      })
+
+      mockXmppClientInstance._emit('stanza', createMockElement('message', {
+        from: 'user@example.com',
+        to: 'user@example.com/desktop',
+      }, [
+        {
+          name: 'received',
+          attrs: { xmlns: 'urn:xmpp:carbons:2' },
+          children: [
+            {
+              name: 'forwarded',
+              attrs: { xmlns: 'urn:xmpp:forward:0' },
+              children: [
+                {
+                  name: 'message',
+                  attrs: {
+                    from: 'room@conference.example.com/alice',
+                    to: 'user@example.com/phone',
+                    type: 'chat',
+                    id: 'replayed-whisper',
+                  },
+                  children: [{ name: 'body', text: 'Private hello' }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'delay',
+          attrs: {
+            xmlns: 'urn:xmpp:delay',
+            stamp: '2026-08-24T08:44:21.173Z',
+          },
+          text: 'Resent',
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', {
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          id: 'replayed-whisper',
+          timestamp: new Date('2026-08-24T08:45:00.000Z'),
+          isPrivate: true,
+        }),
+        incrementUnread: true,
+        incrementMentions: true,
       })
     })
 
