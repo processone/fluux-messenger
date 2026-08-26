@@ -519,10 +519,15 @@ test.describe('Controller-owned resident-top navigation', () => {
       }
       probe.__fluuxResidentTopWrites = writes
       probe.__fluuxResidentTopMaxBacktrack = 0
-      scroller.scrollTo = ((...args: Parameters<HTMLDivElement['scrollTo']>) => {
+      // Spelled as the union rather than `Parameters<>`: `scrollTo` is overloaded, and
+      // `Parameters<>` resolves to the LAST overload only — `(x, y)` — so `args[0]` typed
+      // as a number, the object branch narrowed to `never`, and the spread that records
+      // every write was spreading nothing as far as the compiler was concerned.
+      type ScrollToArgs = [options?: ScrollToOptions] | [x: number, y: number]
+      scroller.scrollTo = ((...args: ScrollToArgs) => {
         const first = args[0]
-        if (typeof first === 'object') writes.push({ ...first })
-        return nativeScrollTo(...args)
+        if (typeof first === 'object' && first !== null) writes.push({ ...first })
+        return (nativeScrollTo as (...a: ScrollToArgs) => void)(...args)
       }) as HTMLDivElement['scrollTo']
       let closestToTop = startedAt
       const sample = () => {
