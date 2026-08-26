@@ -131,6 +131,7 @@ export interface ScrollExecutors {
     trigger: string,
     smoothNonVirtualized?: boolean,
   ) => LiveEdgeExecutor
+  emergencyLiveEdgeWrite: (smoothNonVirtualized?: boolean) => boolean
   createAnchorPreservationExecutor: (
     loopLabel: AnchorPreservationLoopLabel,
   ) => AnchorPreservationExecutor
@@ -144,6 +145,7 @@ export interface ScrollExecutors {
     consumeStoreTarget: boolean,
   ) => ExplicitTargetExecutor
   createResidentTopExecutor: () => ResidentTopExecutor
+  emergencyResidentTopWrite: () => boolean
   getDirectionalHistoryBrowser: () => DirectionalHistoryBrowserAdapter
   /** Conversation entry: drop repaint debt owed by the room being left. */
   resetLiveEdgeRepaintDebt: () => void
@@ -306,6 +308,13 @@ export function useScrollExecutors({
     rememberBottomIntent,
     windowAtLiveEdge,
   ])
+
+  const emergencyLiveEdgeWrite = useCallback((
+    smoothNonVirtualized = false,
+  ): boolean => getLiveEdgeBrowser().emergencyWrite({
+    smoothNonVirtualized,
+    rememberBottomIntent,
+  }), [getLiveEdgeBrowser, rememberBottomIntent])
 
   const createAnchorPreservationExecutor = useCallback(
     (loopLabel: AnchorPreservationLoopLabel): AnchorPreservationExecutor =>
@@ -517,7 +526,7 @@ export function useScrollExecutors({
     setMeasuredAtBottom,
   ])
 
-  const createResidentTopExecutor = useCallback((): ResidentTopExecutor =>
+  const createResidentTopBrowser = useCallback(() =>
     new ResidentTopBrowserAdapter({
       getScroller: () => portsRef.current.getScroller(),
       getVirtualizer: () => portsRef.current.getVirtualizer(),
@@ -526,13 +535,22 @@ export function useScrollExecutors({
         windowAtLiveEdge: windowAtLiveEdge !== false,
       }),
       beginLoop: (lease) => beginControllerFrameLoop('resident-top', lease),
+      recordProgrammaticWrite: () =>
+        portsRef.current.recordProgrammaticWrite(conversationId, Date.now()),
       log: (action, data) => portsRef.current.log(action, data),
-    }).createExecutor(), [
+    }), [
     beginControllerFrameLoop,
+    conversationId,
     firstMessageId,
     messageCount,
     windowAtLiveEdge,
   ])
+
+  const createResidentTopExecutor = useCallback((): ResidentTopExecutor =>
+    createResidentTopBrowser().createExecutor(), [createResidentTopBrowser])
+
+  const emergencyResidentTopWrite = useCallback((): boolean =>
+    createResidentTopBrowser().emergencyWrite(), [createResidentTopBrowser])
 
   const resetLiveEdgeRepaintDebt = useCallback(() => {
     // Read through the ref, not the lazy getter: a list that never pinned owes nothing, and building
@@ -550,12 +568,14 @@ export function useScrollExecutors({
 
   return {
     createLiveEdgeExecutor,
+    emergencyLiveEdgeWrite,
     createAnchorPreservationExecutor,
     buildDirectionalHistoryExecutor,
     buildSavedPositionExecutor,
     buildUnreadMarkerExecutor,
     buildExplicitTargetExecutor,
     createResidentTopExecutor,
+    emergencyResidentTopWrite,
     getDirectionalHistoryBrowser,
     resetLiveEdgeRepaintDebt,
     disposeDirectionalHistoryBrowser,

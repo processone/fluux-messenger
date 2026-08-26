@@ -45,6 +45,7 @@ function scrollerHarness(input: {
 
 function virtualizerHarness(input: { itemCount?: number } = {}) {
   const beginAnimatedScrollToOffset = vi.fn()
+  const scrollToOffset = vi.fn()
   const virtualizer: MessageVirtualizer = {
     getVirtualItems: () => [],
     getTotalSize: () => 2_000,
@@ -53,11 +54,11 @@ function virtualizerHarness(input: { itemCount?: number } = {}) {
     getIndexForMessageId: vi.fn(() => 5),
     ensureMessageMounted: vi.fn(async () => {}),
     measureElement: vi.fn(),
-    scrollToOffset: vi.fn(),
+    scrollToOffset,
     scrollToIndex: vi.fn(),
     beginAnimatedScrollToOffset,
   }
-  return { virtualizer, beginAnimatedScrollToOffset }
+  return { virtualizer, beginAnimatedScrollToOffset, scrollToOffset }
 }
 
 function lease(isCurrent: () => boolean = () => true): PositionExecutionLease {
@@ -247,7 +248,8 @@ describe('ResidentTopBrowserAdapter', () => {
     const viewport = scrollerHarness()
     const scroller = input.scroller === undefined ? viewport.scroller : input.scroller
     const { loop, beginLoop } = loopHarness()
-    const executor = new ResidentTopBrowserAdapter({
+    const recordProgrammaticWrite = vi.fn()
+    const adapter = new ResidentTopBrowserAdapter({
       getScroller: () => scroller,
       getVirtualizer: () => input.virtualizer,
       getWindowFacts: () => ({
@@ -255,8 +257,10 @@ describe('ResidentTopBrowserAdapter', () => {
         windowAtLiveEdge: true,
       }),
       beginLoop,
-    }).createExecutor()
-    return { executor, viewport, loop, beginLoop }
+      recordProgrammaticWrite,
+    })
+    const executor = adapter.createExecutor()
+    return { adapter, executor, viewport, loop, beginLoop, recordProgrammaticWrite }
   }
 
   function residentTopRequest() {
@@ -290,6 +294,25 @@ describe('ResidentTopBrowserAdapter', () => {
       top: 0,
       behavior: 'smooth',
     })
+  })
+
+  it('degrades a rejected virtualized Home to one instant adapter write', () => {
+    const { virtualizer, scrollToOffset, beginAnimatedScrollToOffset } = virtualizerHarness()
+    const scope = harness({ virtualizer })
+
+    expect(scope.adapter.emergencyWrite()).toBe(true)
+    expect(scrollToOffset).toHaveBeenCalledWith(0)
+    expect(beginAnimatedScrollToOffset).not.toHaveBeenCalled()
+    expect(scope.recordProgrammaticWrite).toHaveBeenCalledOnce()
+  })
+
+  it('degrades a rejected native Home to one instant adapter write', () => {
+    const scope = harness()
+
+    expect(scope.adapter.emergencyWrite()).toBe(true)
+    expect(scope.viewport.scrollTop).toBe(0)
+    expect(scope.viewport.scroller.scrollTo).not.toHaveBeenCalled()
+    expect(scope.recordProgrammaticWrite).toHaveBeenCalledOnce()
   })
 
   it('starts nothing under a stale lease or without a scroller', () => {

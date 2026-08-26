@@ -540,12 +540,14 @@ export function useMessageListScroll({
   // churn with the live window so dependent effects below re-run when the window moves.
   const {
     createLiveEdgeExecutor,
+    emergencyLiveEdgeWrite,
     createAnchorPreservationExecutor,
     buildDirectionalHistoryExecutor,
     buildSavedPositionExecutor,
     buildUnreadMarkerExecutor,
     buildExplicitTargetExecutor,
     createResidentTopExecutor,
+    emergencyResidentTopWrite,
     // Not construction: an availability probe and the one-frame settlement scheduler, both of which
     // the directional load flow drives directly.
     getDirectionalHistoryBrowser,
@@ -597,25 +599,6 @@ export function useMessageListScroll({
     })
   }, [conversationId, createLiveEdgeExecutor])
   reconcileLiveEdgeRef.current = reconcileLiveEdge
-
-  // Controller/instrumentation failure boundary only. Normal bottom positioning always goes through
-  // a generation-bearing live-edge execution; this one-shot keeps the UI usable if that machinery
-  // cannot be constructed.
-  const emergencyLiveEdgeWrite = useCallback((
-    smoothNonVirtualized = false,
-  ) => {
-    const scroller = scrollerRef.current
-    const virtualizer = virtualizerRef.current
-    if (!scroller) return
-    if (virtualizer && virtualizer.itemCount > 0) {
-      virtualizer.scrollToIndex(virtualizer.itemCount - 1, { align: 'end' })
-    } else if (smoothNonVirtualized) {
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-    } else {
-      scroller.scrollTop = scroller.scrollHeight
-    }
-    rememberBottomIntent()
-  }, [rememberBottomIntent])
 
   measuredRowGrowthFlushRef.current = (measuredConversationId, measuredGrowth) => {
     const liveScroller = scrollerRef.current
@@ -819,11 +802,17 @@ export function useMessageListScroll({
     // prepend history and supersede the resident-top request. A later genuine move away from the
     // top re-arms the latch in handleScroll.
     viewportSessionRef.current?.clearTravel(conversationId, 'top')
-    positioningControllerRef.current?.beginResidentTopNavigation({
+    const request = positioningControllerRef.current?.beginResidentTopNavigation({
       conversationId,
       executor: createResidentTopExecutor(),
     })
-  }, [conversationId, createResidentTopExecutor, staticMode])
+    if (!request) emergencyResidentTopWrite()
+  }, [
+    conversationId,
+    createResidentTopExecutor,
+    emergencyResidentTopWrite,
+    staticMode,
+  ])
   // Published to MessageList's keyboard listeners. Keep the shell stable while the executor factory
   // tracks row/window facts so normal appends do not churn global keydown subscriptions.
   const scrollToTop = useStableCallback(scrollToTopImpl)

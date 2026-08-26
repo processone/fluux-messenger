@@ -88,6 +88,14 @@ const explicitTargetBrowserAdapterPath = resolve(
 const explicitTargetBrowserAdapterSource = existsSync(explicitTargetBrowserAdapterPath)
   ? readFileSync(explicitTargetBrowserAdapterPath, 'utf8')
   : ''
+const liveEdgeBrowserAdapterSource = readFileSync(
+  resolve(process.cwd(), 'src/components/conversation/liveEdgeBrowserAdapter.ts'),
+  'utf8',
+)
+const residentTopBrowserAdapterSource = readFileSync(
+  resolve(process.cwd(), 'src/components/conversation/residentTopBrowserAdapter.ts'),
+  'utf8',
+)
 const appHooksIndexPath = resolve(process.cwd(), 'src/hooks/index.ts')
 const appHooksIndexSource = readFileSync(appHooksIndexPath, 'utf8')
 const legacyMessageScrollPath = resolve(
@@ -101,6 +109,10 @@ const directScrollPersistenceCall =
   /\bscrollStateManager\.(?:clearSavedScrollState|saveScrollPosition|leaveConversation|markAsLeft|isInitialized|enterConversation|getSavedScrollTop|getSavedAnchor|getSavedReadPositionId)\s*\(/
 const browserOrPixelAuthority =
   /\b(?:HTMLElement|Element|MessageVirtualizer|requestAnimationFrame|cancelAnimationFrame|scrollIntoView|scrollTo)\b|\.scrollTop\s*=/
+const inlineEmergencyLiveEdgeWrite =
+  /\bscroller\.scrollTop\s*=\s*scroller\.scrollHeight|\bscroller\.scrollTo\(\{\s*top:\s*scroller\.scrollHeight|\bvirtualizer\.scrollToIndex\(virtualizer\.itemCount\s*-\s*1/
+const inlineEmergencyResidentTopWrite =
+  /\bvirtualizer\.scrollToOffset\(0\)|\bscroller\.scrollTop\s*=\s*0/
 
 function interfaceMemberNames(
   sourceText: string,
@@ -180,6 +192,23 @@ describe('live message-list scroll ownership', () => {
     expect(existsSync(viewportResizeHookPath)).toBe(true)
     expect(viewportResizeHookSource).not.toMatch(
       /\.scrollTop\s*=|\.scrollTo\s*\(|\.scrollIntoView\s*\(/,
+    )
+  })
+
+  it('keeps emergency live-list writes behind the matching browser adapters', () => {
+    expect(hookSource).not.toMatch(/const emergencyLiveEdgeWrite\b/)
+    expect(hookSource).not.toMatch(/const emergencyResidentTopWrite\b/)
+    expect(hookSource).not.toMatch(inlineEmergencyLiveEdgeWrite)
+    expect(hookSource).not.toMatch(inlineEmergencyResidentTopWrite)
+    expect(liveEdgeBrowserAdapterSource).toMatch(/emergencyWrite\s*\(/)
+    expect(residentTopBrowserAdapterSource).toMatch(/emergencyWrite\s*\(/)
+
+    // Control implementations: the guard must fail if either one-shot write is inlined again.
+    expect('scroller.scrollTop = scroller.scrollHeight').toMatch(
+      inlineEmergencyLiveEdgeWrite,
+    )
+    expect('virtualizer.scrollToOffset(0)').toMatch(
+      inlineEmergencyResidentTopWrite,
     )
   })
 

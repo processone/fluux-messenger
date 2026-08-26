@@ -16,6 +16,7 @@ vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, act, fireEvent } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
+import { PositioningController } from './positioningController'
 
 // Mock useTranslation with full i18n object
 vi.mock('react-i18next', () => ({
@@ -145,6 +146,33 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('resident-top navigation', () => {
+    it('falls back to an immediate resident-top write when the controller rejects Home', () => {
+      const reject = vi.spyOn(
+        PositioningController.prototype,
+        'beginResidentTopNavigation',
+      ).mockReturnValue(null)
+      try {
+        render(
+          <MessageList
+            messages={createTestMessages(10)}
+            conversationId="conv-1"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />,
+        )
+        const container = document.querySelector(
+          '[data-message-list]',
+        ) as HTMLDivElement
+        container.scrollTop = 500
+
+        fireEvent.keyDown(window, { key: 'Home' })
+
+        expect(container.scrollTop).toBe(0)
+      } finally {
+        reject.mockRestore()
+      }
+    })
+
     it.each([
       {
         label: 'Home',
