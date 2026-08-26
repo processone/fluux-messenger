@@ -11,8 +11,12 @@
  * Output mirrors the long-standing inline formatter: messages grouped by date,
  * each date preceded by a "— Weekday, Month D, YYYY —" header (blank line between
  * groups), each message as "From HH:MM\nbody". Returns null when fewer than two
- * messages carry a body — single-message selections fall back to the browser's
+ * messages carry text — single-message selections fall back to the browser's
  * native copy.
+ *
+ * `body` is the caller-derived clipboard text. `deriveCopyBody` in
+ * `copyMessageBody.ts` owns that derivation contract; this formatter only decides
+ * what is empty and how lines are laid out.
  */
 import { format, parseISO } from 'date-fns'
 
@@ -29,9 +33,12 @@ export function buildCopyText(
   messages: CopyMessageMeta[],
   opts: { fallbackDate?: string } = {},
 ): string | null {
-  // Only messages with a body participate (matches the legacy DOM path); a single
-  // message is left to the native browser copy.
-  const withBody = messages.filter((m) => m.body)
+  // Only messages that carry text participate; a single message is left to the
+  // native browser copy. Whitespace-only counts as absent — a message that would
+  // contribute nothing but a blank line must not appear in the transcript at all.
+  // Callers derive `body` through `deriveCopyBody`; this function deliberately
+  // remains unaware of the source message kind.
+  const withBody = messages.filter((m) => m.body.trim().length > 0)
   if (withBody.length <= 1) return null
 
   // Fallback date for messages that carry none: caller-provided, else the earliest

@@ -26,6 +26,24 @@ describe('buildCopyText', () => {
     ).toBeNull()
   })
 
+  it('treats a whitespace-only body as absent, never as a blank transcript line', () => {
+    const out = buildCopyText([
+      { id: '1', from: 'Alice', time: '14:30', body: 'Hello', date: '2024-01-15' },
+      { id: '2', from: 'Bob', time: '14:31', body: '  \n\t ', date: '2024-01-15' },
+      { id: '3', from: 'Carol', time: '14:32', body: 'Bye', date: '2024-01-15' },
+    ])
+    expect(out).toBe(['— Monday, January 15, 2024 —', 'Alice 14:30', 'Hello', 'Carol 14:32', 'Bye'].join('\n'))
+  })
+
+  it('returns null when only one message carries non-whitespace text', () => {
+    expect(
+      buildCopyText([
+        { id: '1', from: 'Alice', time: '14:30', body: 'Hello', date: '2024-01-15' },
+        { id: '2', from: 'Bob', time: '14:31', body: '   ', date: '2024-01-15' },
+      ]),
+    ).toBeNull()
+  })
+
   it('groups across two dates, sorted ascending, with a blank line between groups', () => {
     const out = buildCopyText([
       { id: '2', from: 'Bob', time: '09:00', body: 'Second day', date: '2024-01-16' },

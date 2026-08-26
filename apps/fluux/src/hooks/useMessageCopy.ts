@@ -46,7 +46,7 @@ export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
           const body = element.getAttribute('data-message-body') || ''
           const timestamp = element.getAttribute('data-message-time') || ''
 
-          // Only include if we have body content
+          // Only include non-empty derived clipboard text from a named sender.
           if (body && from) {
             selectedMessages.push({ id, from, body, timestamp })
           }

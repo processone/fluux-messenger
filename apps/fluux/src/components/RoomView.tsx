@@ -12,6 +12,7 @@ import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvata
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
+import { deriveCopyBody } from '@/utils/copyMessageBody'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
 import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
@@ -1107,7 +1108,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     id: msg.id,
     from: resolveRoomSender(msg, room, contactsByJid, selfOccupant).resolvedSenderName,
     time: formatTime(msg.timestamp),
-    body: msg.body || '',
+    body: deriveCopyBody(msg, t),
     date: format(msg.timestamp, 'yyyy-MM-dd'),
   })
 
