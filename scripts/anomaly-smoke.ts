@@ -455,4 +455,157 @@ test.describe('anomaly runtime', () => {
     expect(typeof record.observed).toBe('number')
     expect(record.observed as number).toBeLessThanOrEqual(150)
   })
+
+  /**
+   * The read-state counterpart to the FAB proof above.
+   *
+   * `unread-survives-focus` is what the read-state half of stage 3 rests on, and every
+   * other test here can only prove it SILENT. Silence is also what a detector wired to
+   * a dead reading produces, so the healthy-session control was vacuous for this signal
+   * in exactly the way it was for the FAB before the test above existed.
+   *
+   * It is the READING that needs proving, not the verdict logic —
+   * `unreadSurvivesFocus.test.ts` already covers that as a pure function. So four of
+   * the five conditions come from the real app and only the count is forced:
+   *
+   * - `focused` — the page genuinely is
+   * - `viewportAtBottom` — `isViewportAtBottom`, a registry the views populate via
+   *   `registerViewportBottomRef` and `useMessageListScroll` maintains. That is a
+   *   DIFFERENT registry from the scroller one the FAB test exercises, so nothing else
+   *   in this suite covers it.
+   * - `windowAtLiveEdge` — read from the SDK store
+   * - `active` — read from the room store
+   *
+   * Forcing any of those would make this hollow: it would then pass with every one of
+   * those couplings broken. Pinning the count in the STORE rather than in the tick's
+   * adapter keeps `readUnreadCount`'s own path — right store, right map, right field —
+   * inside the assertion too.
+   *
+   * `driveFocusRegainInPage` is deliberately NOT installed: it exists to keep a healthy
+   * session's badge clear, which is precisely what this test needs to prevent.
+   */
+  test('a badge stuck at the live edge reaches the anomaly log', async ({ page }) => {
+    // Distinctive on purpose, and load-bearing rather than decorative. Without
+    // `driveFocusRegainInPage` the demo sits on a room it never marks read, so it trips
+    // this detector on its own — confirmed by disabling the pin below, which still
+    // produced a record, just with the demo's own count. The poll alone would therefore
+    // be satisfiable by ambient state; matching `observed` against a value the demo
+    // never reaches is what ties the record to THIS forced episode, and what keeps the
+    // test from silently changing meaning when the demo seed data does.
+    const PINNED_UNREAD = 7
+
+    await page.addInitScript((pinned) => {
+      interface Meta {
+        unreadCount: number
+      }
+      const w = window as unknown as {
+        __roomStore?: { getState(): { activeRoomJid?: string; roomMeta: Map<string, Meta> } }
+        __pinnedUnreadMetas: number
+      }
+      Object.defineProperty(window, '__pinnedUnreadMetas', {
+        configurable: true,
+        writable: true,
+        value: 0,
+      })
+
+      // An accessor, re-applied whenever the store hands out a new meta OBJECT. Both
+      // halves are load-bearing: the app clears the count as soon as the room is read
+      // at the bottom, so a plain write is undone well before the 2s hold elapses, and
+      // a recount replaces the object outright, so one accessor stops being consulted.
+      // The setter SWALLOWS the app's clear rather than rejecting it — assigning to a
+      // getter-only property throws in module strict mode, which would take the app
+      // down instead of the badge.
+      let pinnedMeta: Meta | null = null
+      setInterval(() => {
+        const state = w.__roomStore?.getState()
+        const jid = state?.activeRoomJid
+        if (!jid) return
+        const meta = state.roomMeta.get(jid)
+        if (!meta || meta === pinnedMeta) return
+        try {
+          Object.defineProperty(meta, 'unreadCount', {
+            configurable: true,
+            get: () => pinned,
+            set: () => {},
+          })
+          pinnedMeta = meta
+          w.__pinnedUnreadMetas++
+        } catch {
+          // A frozen meta cannot be pinned. The count assertion below reports that as
+          // itself rather than letting it read as a blind detector.
+        }
+      }, 25)
+    }, PINNED_UNREAD)
+
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+
+    // Prove the forcing took BEFORE asserting its consequence, so a failure separates
+    // "the pin never applied" from "the detector never saw it".
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () => (window as unknown as { __pinnedUnreadMetas: number }).__pinnedUnreadMetas,
+          ),
+        {
+          timeout: 15_000,
+          message: 'the unread count was never pinned — the active room had no meta, or it was frozen',
+        },
+      )
+      .toBeGreaterThan(0)
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() =>
+            (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+              .map((line) => JSON.parse(line) as { id?: string })
+              .some((record) => record.id === 'read-state/unread-survives-focus'),
+          ),
+        {
+          timeout: 20_000,
+          message:
+            'a badge held at the live edge never reached the anomaly log — the read-state sampler is blind',
+        },
+      )
+      .toBe(true)
+
+    const record = await page.evaluate(
+      () =>
+        (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .find((candidate) => candidate.id === 'read-state/unread-survives-focus')!,
+    )
+
+    expect(record).toMatchObject({
+      kind: 'anomaly',
+      id: 'read-state/unread-survives-focus',
+      sev: 'suspect',
+      expected: 0,
+      observed: PINNED_UNREAD,
+    })
+
+    const ctx = record.ctx as { room?: string; heldMs?: number }
+    // A RESOLVED room token, never `c:unresolved`: the entity was warmed in the room
+    // namespace, so the record can be correlated rather than merely counted.
+    expect(ctx.room).toMatch(/^c:[0-9a-f]{16}$/)
+    // Past the 2s hold by construction. Proves the verdict came from a sustained
+    // observation rather than a single lucky sample.
+    expect(ctx.heldMs).toBeGreaterThanOrEqual(2000)
+    expect(record.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
+  })
 })

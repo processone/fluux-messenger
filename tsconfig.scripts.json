@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    // Node tooling, not bundled app code: these run through Playwright's and tsx's
+    // loaders rather than Vite, so they need Node's globals and its resolution of
+    // package `exports` maps.
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["scripts/**/*.ts", "playwright*.config.ts"]
+}

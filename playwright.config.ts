@@ -11,8 +11,11 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     viewport: { width: 1280, height: 800 },
-    // Disable animations for crisp screenshots
-    reducedMotion: 'reduce',
+    // Through `contextOptions`, not as a bare `use` key: `reducedMotion` is not a
+    // Playwright test option, so the top-level form type-checks against nothing and is
+    // dropped before the browser context is built — the animations it means to disable
+    // stayed on.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   webServer: {
     command: 'npm run dev',
