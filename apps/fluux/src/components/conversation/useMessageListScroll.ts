@@ -19,11 +19,9 @@
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { AT_BOTTOM_THRESHOLD } from '@/utils/scrollStateManager'
-// Still used by the composer/container resize observer below, a separate owner from the content
-// observer that moved into useScrollContainerBinding.
-import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import type { ControllerFrameLoopRegistration } from './controllerFrameLoop'
 import { useScrollContainerBinding } from './useScrollContainerBinding'
+import { useViewportResizeReconciliation } from './useViewportResizeReconciliation'
 import { useAmbientAnchorPreservation } from './useAmbientAnchorPreservation'
 import { useMediaGrowthPreservation } from './useMediaGrowthPreservation'
 import { useDirectionalHistoryLoads } from './useDirectionalHistoryLoads'
@@ -42,7 +40,6 @@ import { createPinLoopClaim, type PinLoopClaim } from './pinLoopClaim'
 import { decideRowGrowth } from './rowGrowthDecision'
 import { decideMdsSettle } from './mdsSettleDecision'
 import { decideTypingIndicator } from './typingIndicatorDecision'
-import { signalAnomaly } from '@/utils/anomalySignal'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
@@ -50,7 +47,6 @@ import { ViewportSession } from './viewportSession'
 import { ScrollPersistenceAdapter } from './scrollPersistenceAdapter'
 import { DirectionalHistoryWindowCoordinator } from './directionalHistoryWindowCoordinator'
 import { TARGET_HIGHLIGHT_MS } from './explicitTargetBrowserAdapter'
-import { BOTTOM_PIN_TOLERANCE } from './liveEdgeBrowserAdapter'
 import { useScrollExecutors } from './useScrollExecutors'
 import { PositioningController } from './positioningController'
 import {
@@ -120,7 +116,6 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // AT_BOTTOM_THRESHOLD is imported from scrollStateManager (shared with wasAtBottom persistence).
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
-// BOTTOM_PIN_TOLERANCE is imported from liveEdgeBrowserAdapter, which owns bottom-pin geometry.
 
 /**
  * Freeze a callback's identity while always invoking its latest version.
@@ -833,33 +828,6 @@ export function useMessageListScroll({
   // tracks row/window facts so normal appends do not churn global keydown subscriptions.
   const scrollToTop = useStableCallback(scrollToTopImpl)
 
-  // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
-  // that is following along — most importantly when the mobile on-screen keyboard
-  // deploys. The keyboard shrinks the scroller's clientHeight WITHOUT changing the
-  // content height, so the content ResizeObserver binding never fires and the latest
-  // message slides out of view behind the composer/keyboard. window 'resize' fires
-  // when the layout viewport resizes (Android, resizing webviews); visualViewport
-  // 'resize' covers the overlay-keyboard case (iOS). Reasserts directly (no rAF
-  // coalescing) to match the new-message / typing re-pin sites — a window 'resize'
-  // handler is not a ResizeObserver callback, so a synchronous scroll write here is
-  // safe. Gated on isAtBottomRef so a reader who scrolled up to history is not
-  // yanked back down.
-  useEffect(() => {
-    if (staticMode) return
-    const onViewportResize = () => {
-      if (isAtBottomRef.current) {
-        reconcileLiveEdgeRef.current('viewport-resize')
-      }
-    }
-    window.addEventListener('resize', onViewportResize)
-    const vv = window.visualViewport
-    vv?.addEventListener('resize', onViewportResize)
-    return () => {
-      window.removeEventListener('resize', onViewportResize)
-      vv?.removeEventListener('resize', onViewportResize)
-    }
-  }, [staticMode, isAtBottomRef])
-
   // ==========================================================================
   // LOAD OLDER MESSAGES
   // ==========================================================================
@@ -948,6 +916,19 @@ export function useMessageListScroll({
       positioningControllerRef.current?.observeUserInput(id),
     log: debugLog,
   })
+
+  useViewportResizeReconciliation({
+    ports: {
+      getScroller: () => scrollerRef.current,
+      isAtBottom: () => isAtBottomRef.current,
+      reconcileLiveEdge: (trigger) => {
+        reconcileLiveEdgeRef.current(trigger)
+      },
+    },
+    conversationId,
+    staticMode,
+  })
+
   // The implementation must close over the current conversation and executors, so its identity
   // legitimately changes on appends/window updates. Message rows must not observe that churn: a
   // changed onMediaLoad prop bypasses their memo bailout and re-renders the whole mounted window.
@@ -2016,107 +1997,6 @@ export function useMessageListScroll({
 
     reconcileLiveEdge('typing')
   }, [hasTypingIndicator, conversationId, reconcileLiveEdge, staticMode])
-
-  // ==========================================================================
-  // EFFECT: Container resize (composer grows/shrinks)
-  // ==========================================================================
-
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-
-    let lastHeight: number | null = null
-    let pendingHeight: number | null = null
-    let lastWidth: number | null = null
-    let pendingWidth: number | null = null
-    let scheduled = false
-    let rafId: number | null = null
-    let monitor: ReturnType<typeof createResizeLoopMonitor> | null = null
-
-    // The measure + scroll-correction. Runs inside a rAF so the scrollTop write
-    // never happens synchronously inside the ResizeObserver delivery cycle —
-    // that synchronous write is the literal trigger for WebKitGTK's
-    // "ResizeObserver loop completed with undelivered notifications". Parity with
-    // the content observer's rAF coalescing in useScrollContainerBinding.
-    const runCorrection = () => {
-      scheduled = false
-      rafId = null
-      const newHeight = pendingHeight
-      const newWidth = pendingWidth
-      pendingHeight = null
-      pendingWidth = null
-      if (newHeight === null) return
-
-      if (lastHeight === null) { lastHeight = newHeight; lastWidth = newWidth; return }
-
-      const shrunk = lastHeight - newHeight
-      if (shrunk > 0 && scrollerRef.current) {
-        const distanceFromBottom = getDistanceFromBottom(scrollerRef.current)
-        const wasNear = distanceFromBottom <= shrunk + AT_BOTTOM_THRESHOLD
-        // Route through live-edge reconciliation so the virtualized path re-windows rather
-        // than a raw scrollTop write that would leave the mounted window stale → blank/clipped.
-        if (wasNear && distanceFromBottom > BOTTOM_PIN_TOLERANCE) {
-          reconcileLiveEdgeRef.current('container-shrink')
-        }
-      } else if (
-        newWidth !== null && lastWidth !== null && newWidth !== lastWidth &&
-        scrollerRef.current && isAtBottomRef.current
-      ) {
-        // A WIDTH change with no height shrink — most notably the occupant sidebar toggling
-        // in/out at lg+, where the message column narrows/widens as the panel becomes an
-        // in-flow flex sibling. That re-wraps message text and grows/shrinks row heights, but
-        // fires no window 'resize' event (so the viewport-resize handler never runs) and does
-        // not shrink the scroller's height (so the branch above never runs) — leaving the list
-        // drifted off the bottom. Re-assert while the user is following along, mirroring the
-        // window-resize handler. The scroller's own width only changes on real layout changes,
-        // not on row measurement, so this cannot feed back into the @tanstack spacer churn.
-        reconcileLiveEdgeRef.current('width-change')
-      }
-
-      lastHeight = newHeight
-      lastWidth = newWidth
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      // Diagnostic only: surface a runaway fire rate (the composer-resize
-      // observer is a second candidate for the WebKitGTK feedback loop).
-      // Log-rate-limited; never disconnects.
-      if (!monitor) monitor = createResizeLoopMonitor()
-      const warning = monitor.record(performance.now())
-      if (warning) {
-        console.warn(warning.message)
-        if (__FLUUX_ANOMALY__) {
-          signalAnomaly({
-            name: 'scroll/resize-loop',
-            fires: warning.fires,
-            threshold: warning.threshold,
-            elapsedMs: warning.elapsedMs,
-          })
-        }
-      }
-
-      // Track the latest height and coalesce the correction into one rAF per
-      // frame, no matter how many times the observer fires this frame. The
-      // `scheduled` flag (rather than `rafId === null`) is what guards against
-      // double-scheduling: it stays correct even when rAF runs the callback
-      // synchronously and reentrantly.
-      pendingHeight = entries[0].contentRect.height
-      pendingWidth = entries[0].contentRect.width
-      if (!scheduled) {
-        scheduled = true
-        rafId = requestAnimationFrame(runCorrection)
-      }
-    })
-
-    observer.observe(scroller)
-    return () => {
-      observer.disconnect()
-      if (rafId !== null) cancelAnimationFrame(rafId)
-    }
-    // Re-create with the current conversation's live-edge executor.
-    // isAtBottomRef is stable unless the caller passes a new externalIsAtBottomRef (same
-    // rationale as the viewport-resize effect above).
-  }, [conversationId, isAtBottomRef])
 
   // ==========================================================================
   // EFFECT: Keyboard shortcuts
