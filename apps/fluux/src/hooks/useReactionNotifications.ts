@@ -7,6 +7,7 @@ import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessag
 import { getRoomMessage as getCachedRoomMessage, getRoomMessageByStanzaId as getCachedRoomMessageByStanzaId } from '@fluux/sdk/cache'
 import { useToastStore } from '@/stores/toastStore'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
+import { formatReactionNotification, reactionPreviewText } from '@/utils/reactionNotificationText'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { decideReactionNotification, type ReactionDecision } from './reactionNotificationDecision'
 
@@ -39,7 +40,7 @@ export function useReactionNotifications(): void {
     ) => {
       if (decision.kind === 'none') return
 
-      const label = t('reactions.mention', { name: m.reactorName, emoji: m.emoji, preview: m.preview })
+      const label = formatReactionNotification(t, { name: m.reactorName, emoji: m.emoji, preview: m.preview })
 
       if (decision.kind === 'toast') {
         useToastStore.getState().addToast('info', label, 6000, () => {
@@ -115,7 +116,7 @@ export function useReactionNotifications(): void {
         messageId: canonicalMessageId,
         reactorName,
         emoji: emojis[0] ?? '',
-        preview: message.body?.slice(0, 80) ?? '',
+        preview: reactionPreviewText(message, t),
         isRoom: false,
       })
     })
@@ -164,7 +165,7 @@ export function useReactionNotifications(): void {
         messageId: canonicalMessageId,
         reactorName: reactorNick,
         emoji: emojis[0] ?? '',
-        preview: message.body?.slice(0, 80) ?? '',
+        preview: reactionPreviewText(message, t),
         isRoom: true,
       })
     })

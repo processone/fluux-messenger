@@ -1347,6 +1347,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} реагира на '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Виж"
     },
     "commands": {

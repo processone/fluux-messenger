@@ -21,4 +21,11 @@ describe('ReactionMentions', () => {
     fireEvent.click(screen.getByLabelText('common.dismiss'))
     expect(reactionMentionStore.getState().mentions.get('c1')?.length ?? 0).toBe(0)
   })
+  it('uses the quote-free label when the reacted message had nothing to preview', () => {
+    // Shares the toast's derivation, so the chip can no longer read "reacted to ''".
+    reactionMentionStore.getState().addMention({ id: 'c1:m1', conversationId: 'c1', messageId: 'm1', reactorName: 'Marie', emoji: '❤️', preview: '' })
+    render(<ReactionMentions conversationId="c1" onSee={vi.fn()} />)
+    expect(screen.getByText(/reactions\.mentionNoPreview/)).toBeTruthy()
+    expect(screen.queryByText(/reactions\.mention:/)).toBeNull()
+  })
 })

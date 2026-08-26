@@ -1350,6 +1350,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Skatīt"
     },
     "commands": {

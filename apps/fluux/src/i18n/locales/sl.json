@@ -1353,6 +1353,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} se je odzval(a) na '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Prikaži"
     },
     "commands": {

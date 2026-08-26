@@ -1353,6 +1353,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Zobrazit"
     },
     "commands": {

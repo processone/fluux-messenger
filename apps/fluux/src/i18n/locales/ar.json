@@ -1355,6 +1355,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "عرض"
     },
     "commands": {

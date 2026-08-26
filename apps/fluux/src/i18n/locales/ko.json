@@ -1347,6 +1347,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}}이(가) '{{preview}}'에 반응했습니다",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "보기"
     },
     "commands": {

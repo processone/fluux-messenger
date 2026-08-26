@@ -1349,6 +1349,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "הצג"
     },
     "commands": {

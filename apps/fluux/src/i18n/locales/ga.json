@@ -1353,6 +1353,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Amharc"
     },
     "commands": {
