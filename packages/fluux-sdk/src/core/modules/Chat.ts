@@ -161,6 +161,12 @@ interface E2EEOutboundOptions {
  * checks the real claims rather than a copy of them. */
 export const CHAT_CLAIMS: readonly StanzaClaim[] = [{ kind: 'message' }]
 
+interface MessageEnvelopeContext {
+  isCarbonCopy?: boolean
+  isSentCarbon?: boolean
+  delayEl?: Element
+}
+
 export class Chat extends BaseModule {
   private mamModule: MAM
 
@@ -192,9 +198,9 @@ export class Chat extends BaseModule {
    */
   private handleMessageInternal(
     stanza: Element,
-    isCarbonCopy = false,
-    isSentCarbon = false
+    context: MessageEnvelopeContext = {},
   ): { handled: boolean; message?: Message | RoomMessage | null } {
+    const { isCarbonCopy = false, isSentCarbon = false, delayEl } = context
     const carbonSent = stanza.getChild('sent', NS_CARBONS)
     const carbonReceived = stanza.getChild('received', NS_CARBONS)
 
@@ -202,7 +208,17 @@ export class Chat extends BaseModule {
       const forwarded = (carbonSent || carbonReceived)!.getChild('forwarded', NS_FORWARD)
       const forwardedMessage = forwarded?.getChild('message')
       if (forwardedMessage) {
-        return this.handleMessageInternal(forwardedMessage, true, !!carbonSent)
+        // A forwarding service places its delay beside the forwarded message,
+        // while a server replaying an unacknowledged carbon can place it on the
+        // outer stanza. Both describe when the nested message entered storage.
+        const forwardedDelay = forwarded?.getChild('delay', NS_DELAY)
+          ?? stanza.getChild('delay', NS_DELAY)
+          ?? delayEl
+        return this.handleMessageInternal(forwardedMessage, {
+          isCarbonCopy: true,
+          isSentCarbon: !!carbonSent,
+          ...(forwardedDelay && { delayEl: forwardedDelay }),
+        })
       }
       return { handled: true }
     }
@@ -212,7 +228,7 @@ export class Chat extends BaseModule {
     // plaintext body in place of the encrypted element. Returning
     // `{ handled: true }` here prevents other modules from also processing
     // the encrypted stanza.
-    if (this.tryHandleEncrypted(stanza, isCarbonCopy, isSentCarbon)) {
+    if (this.tryHandleEncrypted(stanza, context)) {
       return { handled: true }
     }
 
@@ -428,7 +444,7 @@ export class Chat extends BaseModule {
       if (type === 'groupchat') {
         message = this.processRoomMessage(stanza, from, bareFrom, body || '', isCarbonCopy, isSentCarbon)
       } else {
-        message = this.processChatMessage(stanza, from, bareFrom, bareTo, body || '', isCarbonCopy, isSentCarbon)
+        message = this.processChatMessage(stanza, from, bareFrom, bareTo, body || '', isCarbonCopy, isSentCarbon, delayEl)
       }
 
       if (message) {
@@ -454,21 +470,19 @@ export class Chat extends BaseModule {
    */
   private tryHandleEncrypted(
     stanza: Element,
-    isCarbonCopy: boolean,
-    isSentCarbon: boolean,
+    context: MessageEnvelopeContext,
   ): boolean {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return false
     if (!stanzaHasE2EEClaim(stanza, manager)) return false
-    void this.decryptAndReprocess(manager, stanza, isCarbonCopy, isSentCarbon)
+    void this.decryptAndReprocess(manager, stanza, context)
     return true
   }
 
   private async decryptAndReprocess(
     manager: E2EEManager,
     stanza: Element,
-    isCarbonCopy: boolean,
-    isSentCarbon: boolean,
+    context: MessageEnvelopeContext,
   ): Promise<void> {
     // Single helper covers every live shape (regular received, received
     // carbon, sent carbon): if `from` is our bare JID, the peer is the
@@ -481,7 +495,7 @@ export class Chat extends BaseModule {
     await decryptStanzaInPlace(stanza, manager, peer, 'live', {
       isSelfOutgoing,
     })
-    this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
+    this.handleMessageInternal(stanza, context)
   }
 
   /**
@@ -2109,7 +2123,7 @@ export class Chat extends BaseModule {
     return false
   }
 
-  private processChatMessage(stanza: Element, _from: string, bareFrom: string, bareTo: string | undefined, body: string, isCarbonCopy: boolean, isSentCarbon: boolean): Message | null {
+  private processChatMessage(stanza: Element, _from: string, bareFrom: string, bareTo: string | undefined, body: string, isCarbonCopy: boolean, isSentCarbon: boolean, delayEl?: Element): Message | null {
     const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const isOutgoing = isSentCarbon || bareFrom === myBareJid
     const conversationId = isOutgoing ? bareTo : bareFrom
@@ -2127,6 +2141,7 @@ export class Chat extends BaseModule {
       // XEP-0359: the valid stanza-id for a 1:1 message is the one stamped by
       // the user's own archive (bare JID), so it works as a MAM cursor.
       expectedStanzaIdBy: myBareJid,
+      ...(delayEl && { delayEl }),
       ...(authoredAt && { authoredAt }),
     })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
