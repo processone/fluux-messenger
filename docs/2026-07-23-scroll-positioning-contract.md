@@ -39,13 +39,13 @@ same-generation content stimuli, global-tail recentering, the 60-frame/8-stable-
 budget, and user cancellation. Media growth, unread-divider movement, and delayed live-path
 insertions while reading history share one fixed-anchor execution machine with the former
 90-frame/8-stable-frame/8px contract. Divider movement and delayed insertion have distinct
-`layout-preservation` reasons and are ambient: they are rejected rather than superseding an
-unsettled entry restore, explicit target, or user navigation. Leased imperative executors
-translate accepted requests into browser/virtualizer writes, and every frame must hold the current
-controller lease before it can write. Directional history is accepted before a load begins, remains
-pending until the first resident ID changes or the load settles without a window shift, then either
-performs its pre-paint anchor/fallback write or releases the request. A landed shift retains the
-former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
+`layout-preservation` reasons. Their request arbitration, along with media and directional-history
+preservation, is defined under "Entry arbitration and later supersession" below. Leased imperative
+executors translate accepted requests into browser/virtualizer writes, and every frame must hold the
+current controller lease before it can write. Directional history is accepted before a load begins,
+remains pending until the first resident ID changes or the load settles without a window shift, then
+either performs its pre-paint anchor/fallback write or releases the request. A landed shift retains
+the former full 60-frame late-measurement budget under one lease. Its executor retains WebKit
 kinetic-scroll cancellation, 2px target-shift correction, 5px clamp recovery, and bounded
 distance-from-bottom fallback. Boundary input while the load is still pending retains the captured
 anchor because no pixel owner exists yet; takeover becomes cancellable after the initial
@@ -261,6 +261,15 @@ Source priority chooses the one provisional entry request. After entry, generati
 permitted supersession; a newer generation alone does not bypass current-conversation or MDS
 eligibility guards. Async work tagged with a stale generation is ignored.
 
+Request precedence is classified exhaustively by source. Layout preservation is the strictest
+ambient class: it yields to every unsettled position, including live-edge follow. Media and
+directional-history preservation yield while a non-live-edge reader-intent position is still
+converging, but may re-anchor an unsettled live-edge follow because following the bottom is a policy,
+not a destination the reader is waiting to reach. Unknown future sources default to the strictest
+class until deliberately classified. An outgoing-message live-edge request is the deliberate
+exception: sending is reader intent and may supersede an in-flight navigation, subject to the
+unfinished restore or history-preservation ownership rule above.
+
 User input and follow-live are separate facts. Genuine input cancels the current reconciliation
 run immediately. A live-edge request retains its generation in a paused-user-input phase until
 settled geometry shows whether the reader left the edge; stale callbacks cannot resume that pause.
@@ -362,12 +371,12 @@ abort valid deep growth and media-settle runs.
 | FAB or live-edge keyboard command | Unread marker, then live edge | If the marker is still below the viewport, first activation visits it (virtualized start alignment; current non-virtualized path uses top-third); a later activation goes live |
 | Outgoing message | Live edge | Deliberately supersedes a fixed historical position after its first landing releases preservation ownership; it need not wait for full convergence |
 | Incoming message at the resident live edge | Existing live edge only | Must not make a fixed anchor follow |
-| Delayed live-path message inserted inside the resident window while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; reject the ambient request while requested navigation is unsettled |
+| Delayed live-path message inserted inside the resident window while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; subject to ambient request precedence above |
 | Late MDS live-edge state | Live edge | Newer automatic request only before user takeover |
 | Media at live edge | Existing live edge | Debounced measurement stimulus |
-| Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement |
-| Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; reject the ambient request while requested navigation is unsettled |
-| Load older/newer | Fixed top-relative offset anchor | Wait for the directional window change; release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
+| Media while reading history | Fixed bottom-relative fractional anchor | Preserve the reading point through remeasurement; subject to ambient request precedence above |
+| Unread divider moves while reading history | Fixed bottom-relative fractional anchor | Preserve a continuously captured pre-mutation reading point; subject to ambient request precedence above |
+| Load older/newer | Fixed top-relative offset anchor | Subject to ambient request precedence above; wait for the directional window change and release if the load settles without one; if the anchor disappears after a shift, preserve captured distance from bottom and clamp |
 | Home / resident-top command | Resident top | Does not itself trigger load-older; later genuine user travel can re-arm ordinary boundary loading |
 | Reaction, typing, resize, MAM completion | Current live edge, when active | Geometry stimulus, not a new position request |
 
