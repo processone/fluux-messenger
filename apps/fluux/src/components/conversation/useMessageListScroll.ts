@@ -67,6 +67,7 @@ import {
 } from './scrollPositionModel'
 import { runScrollShadowSafely } from './scrollPositionShadow'
 import { findMessageTargetElement } from './messageTargetElement'
+import { VirtualRowGrowthBatcher } from './virtualRowGrowth'
 
 // ============================================================================
 // DEBUG
@@ -239,7 +240,7 @@ export interface UseMessageListScrollResult {
   handleLoadEarlier: () => void
   handleMediaLoad: () => void
   /** Reconcile a positive, virtualizer-reported row-height delta against live scroll geometry. */
-  handleVirtualRowMeasuredGrowth: (heightDelta: number) => void
+  handleVirtualRowMeasuredGrowth: (conversationId: string, heightDelta: number) => void
   scrollToBottom: () => void
   scrollToTop: () => void
   /** Submit a reply/poll/find target to the generation-aware positioning controller. */
@@ -313,8 +314,17 @@ export function useMessageListScroll({
   // Lazy-ref idiom shared with the extracted browser-adapter hook: a ref is stable, so reading it
   // at the use sites keeps the exhaustive-deps rule satisfied without a dependency.
   const pinBottomClaim = () => (pinBottomClaimRef.current ??= createPinLoopClaim())
-  const measuredRowGrowthFrameRef = useRef<number | null>(null)
-  const pendingMeasuredRowGrowthRef = useRef(0)
+  const measuredRowGrowthFlushRef = useRef<(conversationId: string, heightDelta: number) => void>(
+    () => {},
+  )
+  const measuredRowGrowthBatcherRef = useRef<VirtualRowGrowthBatcher | null>(null)
+  if (measuredRowGrowthBatcherRef.current === null) {
+    measuredRowGrowthBatcherRef.current = new VirtualRowGrowthBatcher(
+      (measuredConversationId, measuredGrowth) => {
+        measuredRowGrowthFlushRef.current(measuredConversationId, measuredGrowth)
+      },
+    )
+  }
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -612,48 +622,48 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [rememberBottomIntent])
 
-  const handleVirtualRowMeasuredGrowth = useCallback((heightDelta: number) => {
-    const scroller = scrollerRef.current
-    if (!scroller || staticMode || !virtualizerRef.current || heightDelta <= 0) return
-    pendingMeasuredRowGrowthRef.current += heightDelta
-    if (measuredRowGrowthFrameRef.current !== null) return
+  measuredRowGrowthFlushRef.current = (measuredConversationId, measuredGrowth) => {
+    const liveScroller = scrollerRef.current
+    if (
+      !liveScroller ||
+      latestRef.current.staticMode ||
+      !virtualizerRef.current ||
+      activeConversationIdRef.current !== measuredConversationId
+    ) return
 
-    const measuredConversationId = activeConversationIdRef.current
-    measuredRowGrowthFrameRef.current = requestAnimationFrame(() => {
-      measuredRowGrowthFrameRef.current = null
-      const measuredGrowth = pendingMeasuredRowGrowthRef.current
-      pendingMeasuredRowGrowthRef.current = 0
-      const liveScroller = scrollerRef.current
-      if (
-        !liveScroller ||
-        latestRef.current.staticMode ||
-        !virtualizerRef.current ||
-        activeConversationIdRef.current !== measuredConversationId
-      ) return
-
-      const active = positioningControllerRef.current?.snapshot().active
-      const decision = decideRowGrowth({
-        distanceFromBottom: getDistanceFromBottom(liveScroller),
-        heightDelta: measuredGrowth,
-        atBottomThreshold: AT_BOTTOM_THRESHOLD,
-        pinClaimHeld: pinBottomClaim().isHeld(),
-        navigationInFlight: Boolean(
-          active &&
-          active.request.conversationId === activeConversationIdRef.current &&
-          active.request.desired.kind !== 'live-edge' &&
-          active.phase.kind !== 'settled',
-        ),
-      })
-      if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
+    const active = positioningControllerRef.current?.snapshot().active
+    const decision = decideRowGrowth({
+      distanceFromBottom: getDistanceFromBottom(liveScroller),
+      heightDelta: measuredGrowth,
+      atBottomThreshold: AT_BOTTOM_THRESHOLD,
+      pinClaimHeld: pinBottomClaim().isHeld(),
+      navigationInFlight: Boolean(
+        active &&
+        active.request.conversationId === activeConversationIdRef.current &&
+        active.request.desired.kind !== 'live-edge' &&
+        active.phase.kind !== 'settled',
+      ),
     })
+    if (decision === 'pin') reconcileLiveEdgeRef.current('row-growth')
+  }
+
+  const handleVirtualRowMeasuredGrowth = useCallback((
+    measuredConversationId: string,
+    heightDelta: number,
+  ) => {
+    const scroller = scrollerRef.current
+    if (
+      !scroller ||
+      staticMode ||
+      !virtualizerRef.current ||
+      activeConversationIdRef.current !== measuredConversationId ||
+      heightDelta <= 0
+    ) return
+    measuredRowGrowthBatcherRef.current?.enqueue(measuredConversationId, heightDelta)
   }, [staticMode])
 
   useEffect(() => () => {
-    if (measuredRowGrowthFrameRef.current !== null) {
-      cancelAnimationFrame(measuredRowGrowthFrameRef.current)
-      measuredRowGrowthFrameRef.current = null
-    }
-    pendingMeasuredRowGrowthRef.current = 0
+    measuredRowGrowthBatcherRef.current?.dispose()
   }, [])
 
   // Ambient layout preservation for divider movement and mid-array insertion. It owns the
