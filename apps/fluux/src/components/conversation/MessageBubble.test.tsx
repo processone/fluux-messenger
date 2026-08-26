@@ -566,6 +566,58 @@ describe('MessageBubble', () => {
       expect(messageDiv.getAttribute('data-message-from')).toBe('TestUser')
       expect(messageDiv.getAttribute('data-message-body')).toBe('Test message content')
     })
+
+    it('refreshes poll content and copy metadata when the poll changes', () => {
+      const poll = {
+        title: 'Lunch where?',
+        options: [
+          { emoji: '1️⃣', label: 'Sushi' },
+          { emoji: '2️⃣', label: 'Pizza' },
+        ],
+        settings: { allowMultiple: false, hideResultsBeforeVote: false },
+      }
+      const props = createDefaultProps({
+        message: createTestMessage({ body: '', poll }),
+      })
+      const { container, rerender } = render(<MessageBubble {...props} />)
+
+      const messageDiv = container.firstChild as HTMLElement
+      expect(messageDiv.getAttribute('data-message-body')).toBe('📊 Lunch where?')
+
+      rerender(
+        <MessageBubble
+          {...props}
+          message={createTestMessage({ body: '', poll: { ...poll, title: 'Dinner where?' } })}
+        />,
+      )
+
+      expect(messageDiv.getAttribute('data-message-body')).toBe('📊 Dinner where?')
+      expect(screen.getByText('Dinner where?')).toBeInTheDocument()
+      expect(screen.queryByText('Lunch where?')).not.toBeInTheDocument()
+    })
+
+    it('removes rejected poll-close content and copy metadata', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({
+          body: '',
+          pollClosed: { title: 'Lunch where?', pollMessageId: 'poll-1', results: [] },
+        }),
+      })
+      const { container, rerender } = render(<MessageBubble {...props} />)
+
+      const messageDiv = container.firstChild as HTMLElement
+      expect(messageDiv.getAttribute('data-message-body')).toBe('📊 Poll closed: Lunch where?')
+
+      rerender(
+        <MessageBubble
+          {...props}
+          message={createTestMessage({ body: '', pollClosed: undefined })}
+        />,
+      )
+
+      expect(messageDiv.getAttribute('data-message-body')).toBe('')
+      expect(screen.queryByText('Lunch where?')).not.toBeInTheDocument()
+    })
   })
 
   describe('Whisper threads (MUC private messages)', () => {

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
+import { deriveCopyBody } from '@/utils/copyMessageBody'
 import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, getStorageScopeJid, currentViewportGeneration, reportViewport, type Message, type ContactIdentity, type ViewportEvidenceKey } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -772,7 +773,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       ? (ownNickname || getLocalPart(msg.from))
       : (contactsByJid.get(getBareJid(msg.from))?.name || getLocalPart(msg.from)),
     time: formatTime(msg.timestamp),
-    body: msg.body || '',
+    body: deriveCopyBody(msg, t),
     date: format(msg.timestamp, 'yyyy-MM-dd'),
   })
 

@@ -16,6 +16,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { renderQuotePreview } from '@/utils/messageStyles'
+import { deriveCopyBody } from '@/utils/copyMessageBody'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
@@ -227,6 +228,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Attachment and link preview (compare by reference - they shouldn't change)
   if (prev.message.attachment !== next.message.attachment) return false
   if (prev.message.linkPreview !== next.message.linkPreview) return false
+  if (prev.message.poll !== next.message.poll) return false
+  if (prev.message.pollClosed !== next.message.pollClosed) return false
 
   // Display state
   if (prev.showAvatar !== next.showAvatar) return false
@@ -534,7 +537,7 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-id={message.id}
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
-      data-message-body={message.body || ''}
+      data-message-body={deriveCopyBody(message, t)}
       className={`${outerRowClass}${ownRowClass}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
