@@ -1348,6 +1348,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} αντέδρασε στο '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Προβολή"
     },
     "commands": {

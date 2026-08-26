@@ -1347,6 +1347,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerede på '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Vis"
     },
     "commands": {

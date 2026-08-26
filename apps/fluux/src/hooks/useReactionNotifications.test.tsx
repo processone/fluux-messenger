@@ -49,7 +49,9 @@ vi.mock('@fluux/sdk/cache', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, params?: Record<string, unknown>) => `${key}:${params?.name ?? ''}:${params?.emoji ?? ''}`,
+    // Include `preview` so tests can assert the derived preview text, not just the key.
+    t: (key: string, params?: Record<string, unknown>) =>
+      `${key}:${params?.name ?? ''}:${params?.emoji ?? ''}:${params?.preview ?? ''}`,
   }),
 }))
 
@@ -334,5 +336,157 @@ describe('useReactionNotifications — room reaction resolution', () => {
 
     expect(mockGetCachedRoomMessage).not.toHaveBeenCalled()
     expect(mockAddToast).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Preview derivation
+//
+// The notification quotes what was reacted to. Deriving that from `body` alone
+// left every bodiless message kind quoting nothing — a reaction to a poll read
+// `1️⃣ danielstein reacted to ''`. Both paths now go through the same shared
+// derivation the sidebar uses (formatLocalizedPreview), so a poll names its
+// title, an attachment names its file, and a message with nothing to quote
+// falls back to a quote-free string instead of empty quotes.
+// ---------------------------------------------------------------------------
+describe('useReactionNotifications — notification preview', () => {
+  const ROOM = 'team@conference.example.com'
+  const POLL = {
+    title: 'Which emoji do you use more often?',
+    options: [
+      { emoji: '1️⃣', label: 'thumbs up' },
+      { emoji: '2️⃣', label: 'heart' },
+    ],
+    settings: { allowMultiple: false, hideResultsBeforeVote: false },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubscribe.mockReturnValue(vi.fn())
+    chatState.messages = new Map()
+    chatState.activeConversationId = 'other@example.com'
+    connectionState.jid = 'me@example.com'
+    roomState.rooms = new Map()
+    roomState.activeRoomJid = 'other@conference.example.com'
+    roomState.getMessage = vi.fn().mockReturnValue(undefined)
+    mockGetCachedMessage.mockResolvedValue(null)
+    mockGetCachedMessageByStanzaId.mockResolvedValue(null)
+    mockGetCachedRoomMessage.mockResolvedValue(null)
+    mockGetCachedRoomMessageByStanzaId.mockResolvedValue(null)
+    seedRoom(ROOM, [{ id: 'r-last', nick: 'Alice' }])
+  })
+
+  /** The toast label the hook handed to the toast store. */
+  function toastLabel(): string {
+    expect(mockAddToast).toHaveBeenCalledTimes(1)
+    return mockAddToast.mock.calls[0][1] as string
+  }
+
+  /** Drive the 1:1 path with `message` resolved from the durable cache. */
+  async function reactInChat(message: Record<string, unknown>): Promise<void> {
+    mockGetCachedMessage.mockResolvedValue({ id: 'm1', isOutgoing: true, body: '', ...message })
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({
+      conversationId: 'peer@example.com',
+      messageId: 'm1',
+      reactorJid: 'peer@example.com/res',
+      emojis: ['1️⃣'],
+      isLive: true,
+    })
+  }
+
+  /** Drive the room path with `message` resident in the room window. */
+  async function reactInRoom(message: Record<string, unknown>): Promise<void> {
+    roomState.getMessage = vi.fn().mockReturnValue({ id: 'r1', nick: 'Me', body: '', ...message })
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'r1', reactorNick: 'danielstein', emojis: ['1️⃣'], isLive: true })
+  }
+
+  it('names the poll when a poll is reacted to in a 1:1 chat', async () => {
+    await reactInChat({ poll: POLL })
+
+    expect(toastLabel()).toContain('Which emoji do you use more often?')
+  })
+
+  it('names the poll when a poll is reacted to in a room', async () => {
+    await reactInRoom({ poll: POLL })
+
+    expect(toastLabel()).toContain('Which emoji do you use more often?')
+  })
+
+  it('names the poll in the in-flow mention chip too', async () => {
+    const conv = 'peer@example.com'
+    chatState.activeConversationId = conv
+    chatState.messages.set(conv, [
+      { id: 'm1', isOutgoing: true, body: '', poll: POLL } as never,
+      { id: 'last', isOutgoing: false },
+    ])
+
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({ conversationId: conv, messageId: 'm1', reactorJid: 'peer@example.com', emojis: ['1️⃣'], isLive: true })
+
+    expect(mockAddMention).toHaveBeenCalledWith(
+      expect.objectContaining({ preview: expect.stringContaining('Which emoji do you use more often?') }),
+    )
+  })
+
+  it('names the poll for a frozen poll-results announcement', async () => {
+    await reactInChat({
+      pollClosed: { title: 'Which emoji do you use more often?', pollMessageId: 'p1', results: [] },
+    })
+
+    expect(toastLabel()).toContain('Which emoji do you use more often?')
+  })
+
+  it('names the file for an attachment-only message', async () => {
+    await reactInRoom({
+      attachment: { url: 'https://example.com/report.pdf', name: 'report.pdf', mediaType: 'application/pdf' },
+    })
+
+    expect(toastLabel()).toContain('report.pdf')
+  })
+
+  it('shows the localized deleted-message notice for a retracted message', async () => {
+    await reactInChat({ isRetracted: true, body: '' })
+
+    expect(toastLabel()).toContain('chat.messageDeleted')
+  })
+
+  it('shows the localized notice — not the sender-chosen fallback body — for unsupported encryption', async () => {
+    await reactInChat({
+      body: 'You received a message encrypted with OMEMO but your client does not support it.',
+      unsupportedEncryption: { name: 'OMEMO' },
+    })
+
+    const label = toastLabel()
+    expect(label).toContain('chat.encryption.unsupportedMessage')
+    expect(label).not.toContain('but your client does not support it')
+  })
+
+  it('keeps the 80-character truncation for long text bodies', async () => {
+    const body = 'x'.repeat(200)
+    await reactInChat({ body })
+
+    // The mocked t() renders `key:name:emoji:preview`, so the preview is the last segment.
+    const preview = toastLabel().split(':').pop() as string
+    expect(preview).toBe('x'.repeat(80))
+  })
+
+  it('falls back to a quote-free label when nothing can be previewed', async () => {
+    // A bodiless signal placeholder (e.g. an encrypted reaction stored as an
+    // empty-body message) has nothing to quote. It must never render `''`.
+    await reactInChat({ body: '   ' })
+
+    const label = toastLabel()
+    expect(label).toContain('reactions.mentionNoPreview')
+    expect(label).not.toContain("''")
+  })
+
+  it('falls back to a quote-free label when formatting leaves only whitespace', async () => {
+    await reactInChat({ body: '`````` ``````' })
+
+    const label = toastLabel()
+    expect(label).toContain('reactions.mentionNoPreview')
+    expect(label).not.toContain("''")
   })
 })

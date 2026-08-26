@@ -1351,6 +1351,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} адрэагаваў на '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Паказаць"
     },
     "commands": {

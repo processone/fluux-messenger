@@ -1351,6 +1351,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reaccionó a '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Ver"
     },
     "commands": {

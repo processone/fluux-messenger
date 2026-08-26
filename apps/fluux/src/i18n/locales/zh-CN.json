@@ -1347,6 +1347,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} 回应了 '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "查看"
     },
     "commands": {

@@ -1355,6 +1355,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Ara"
     },
     "commands": {

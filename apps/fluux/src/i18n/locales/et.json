@@ -1349,6 +1349,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} reageeris sõnumile '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Vaata"
     },
     "commands": {

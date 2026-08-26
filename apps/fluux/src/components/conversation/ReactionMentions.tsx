@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
+import { formatReactionNotification } from '@/utils/reactionNotificationText'
 import { MentionChip } from './MentionChip'
 
 interface ReactionMentionsProps {
@@ -25,7 +26,7 @@ export function ReactionMentions({ conversationId, onSee }: ReactionMentionsProp
       {mentions.map((m) => (
         <MentionChip
           key={m.id}
-          label={t('reactions.mention', { name: m.reactorName, emoji: m.emoji, preview: m.preview })}
+          label={formatReactionNotification(t, { name: m.reactorName, emoji: m.emoji, preview: m.preview })}
           actionLabel={t('reactions.see')}
           onAction={() => onSee(m.messageId)}
           onDismiss={() => dismissMention(conversationId, m.id)}

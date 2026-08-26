@@ -1351,6 +1351,7 @@
     },
     "reactions": {
         "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
+        "mentionNoPreview": "{{emoji}} {{name}} reacted to your message",
         "see": "Mostra"
     },
     "commands": {
