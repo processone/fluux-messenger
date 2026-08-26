@@ -18,6 +18,13 @@ const hookSource = readFileSync(
   ),
   'utf8',
 )
+const viewportResizeHookPath = resolve(
+  process.cwd(),
+  'src/components/conversation/useViewportResizeReconciliation.ts',
+)
+const viewportResizeHookSource = existsSync(viewportResizeHookPath)
+  ? readFileSync(viewportResizeHookPath, 'utf8')
+  : ''
 const activeControllerSource = readFileSync(
   resolve(
     process.cwd(),
@@ -157,6 +164,23 @@ describe('live message-list scroll ownership', () => {
     expect(viewportSessionSource).not.toMatch(/\b(?:HTMLElement|Element|MessageVirtualizer)\b/)
     expect(viewportSessionSource).not.toMatch(/\b(?:scrollTop|scrollTo|scrollIntoView)\b/)
     expect(viewportSessionSource).not.toMatch(/\brequestAnimationFrame\b/)
+  })
+
+  it('keeps viewport and container resize scheduling behind one dedicated hook', () => {
+    expect(existsSync(viewportResizeHookPath)).toBe(true)
+    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('viewport-resize')")
+    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('container-shrink')")
+    expect(viewportResizeHookSource).toContain("reconcileLiveEdge('width-change')")
+    expect(hookSource).not.toMatch(/\bnew ResizeObserver\b/)
+    expect(hookSource).not.toMatch(/\brequestAnimationFrame\b/)
+    expect(hookSource).not.toMatch(/addEventListener\(['"]resize['"]/)
+  })
+
+  it('keeps resize reconciliation semantic and unable to write pixels', () => {
+    expect(existsSync(viewportResizeHookPath)).toBe(true)
+    expect(viewportResizeHookSource).not.toMatch(
+      /\.scrollTop\s*=|\.scrollTo\s*\(|\.scrollIntoView\s*\(/,
+    )
   })
 
   it('keeps scroll persistence behind its adapter boundary', () => {
