@@ -16,6 +16,7 @@ import {
   type BottomFractionAnchorPosition,
   type PixelOffset,
   type PositionRequest,
+  type PositioningPhase,
 } from './scrollPositionModel'
 
 const conversationId = 'room@example.test'
@@ -99,6 +100,30 @@ function dividerPreservation(generation: number): PositionRequest {
     source: { kind: 'layout-preservation', reason: 'divider-mutation' },
     desired: savedAnchor,
     onUnavailable: { kind: 'warn-and-stop' },
+  }
+}
+
+function mediaPreservation(generation: number): PositionRequest {
+  return {
+    generation,
+    conversationId,
+    source: { kind: 'media-preservation', reason: 'remeasure' },
+    desired: savedAnchor,
+    onUnavailable: { kind: 'warn-and-stop' },
+  }
+}
+
+function windowShift(generation: number): PositionRequest {
+  return {
+    generation,
+    conversationId,
+    source: { kind: 'history-preservation', reason: 'window-shift' },
+    desired: {
+      kind: 'anchor',
+      messageId: 'top-visible',
+      placement: { kind: 'top-offset', offsetPx: pixelOffset(-24) },
+    },
+    onUnavailable: { kind: 'distance-from-bottom', distancePx: pixelOffset(600) },
   }
 }
 
@@ -206,6 +231,88 @@ describe('scroll position model', () => {
       kind: 'layout-preservation',
       reason: 'divider-mutation',
     })
+  })
+
+  it('refuses every ambient correction while an explicit navigation is in flight', () => {
+    // The whole point of the guard is that it covers the CLASS, so both ambient sources are driven
+    // through every phase in which the reader is still waiting to reach the target.
+    const unsettledPhases: PositioningPhase[] = [
+      { kind: 'resolving' },
+      { kind: 'pending', reason: 'around-load' },
+      { kind: 'loading-around', messageId: 'explicit-target' },
+      { kind: 'recentering-live-edge' },
+      { kind: 'mounting', index: 12, messageId: 'explicit-target' },
+      { kind: 'unavailable', policy: { kind: 'wait' } },
+      { kind: 'reconciling' },
+      { kind: 'position-applied' },
+    ]
+    const ambientRequests = [mediaPreservation(3), windowShift(3)]
+
+    unsettledPhases.forEach((phase) => {
+      const navigating = advancePhaseIfCurrent(
+        acceptPositionRequest(
+          acceptPositionRequest(initialPositioningModel(), liveEntry(1)),
+          explicitMessage(2),
+        ),
+        conversationId,
+        2,
+        phase,
+      )
+      expect(navigating.active?.phase).toEqual(phase)
+
+      ambientRequests.forEach((ambient) => {
+        expect(acceptPositionRequest(navigating, ambient)).toBe(navigating)
+      })
+
+      // Counterfactual: nothing else about these requests makes them unacceptable. The same model
+      // and the same generation take a request whose source is exempt from the guard...
+      expect(
+        acceptPositionRequest(navigating, outgoingMessage(3)).active?.request,
+      ).toEqual(outgoingMessage(3))
+      // ...and the same ambient requests are accepted once the target is reached, so the guard is
+      // the only thing refusing them above. Remove it and both assertions above would fail.
+      const settled = advancePhaseIfCurrent(navigating, conversationId, 2, {
+        kind: 'settled',
+      })
+      ambientRequests.forEach((ambient) => {
+        const accepted = acceptPositionRequest(settled, ambient)
+        expect(accepted.watermark).toBe(3)
+        expect(accepted.active?.request).toEqual(ambient)
+      })
+    })
+  })
+
+  it('lets an outgoing send supersede an in-flight navigation, by design', () => {
+    // Deliberate exemption, asserted so it reads as a choice: sending a message is an explicit
+    // reader action that implies wanting to see it land, unlike media growth or a window shift.
+    const navigating = advancePhaseIfCurrent(
+      acceptPositionRequest(
+        acceptPositionRequest(initialPositioningModel(), liveEntry(1)),
+        explicitMessage(2),
+      ),
+      conversationId,
+      2,
+      { kind: 'loading-around', messageId: 'explicit-target' },
+    )
+
+    const sent = acceptPositionRequest(navigating, outgoingMessage(3))
+
+    expect(sent.watermark).toBe(3)
+    expect(sent.active).toEqual({
+      request: outgoingMessage(3),
+      phase: { kind: 'resolving' },
+    })
+  })
+
+  it('still lets ambient corrections re-anchor a live-edge follow', () => {
+    // Following the bottom is a policy, not a destination the reader is waiting on, so media and
+    // window-shift preservation may still correct it while entry positioning is unsettled.
+    const entering = acceptPositionRequest(initialPositioningModel(), liveEntry(1))
+
+    expect(acceptPositionRequest(entering, mediaPreservation(2)).watermark).toBe(2)
+    expect(acceptPositionRequest(entering, windowShift(2)).watermark).toBe(2)
+    // Layout preservation is the strictest class and keeps yielding to it.
+    expect(acceptPositionRequest(entering, dividerPreservation(2))).toBe(entering)
   })
 
   it('distinguishes empty, loadable, unavailable, unmounted, and mounted targets', () => {

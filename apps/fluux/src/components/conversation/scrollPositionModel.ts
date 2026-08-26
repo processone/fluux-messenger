@@ -417,6 +417,77 @@ export function isCurrentGeneration(
 }
 
 /**
+ * How a request behaves when it arrives while an earlier one is still converging.
+ *
+ * This is a property of the request CLASS, not of any single `source.kind`: the same rule has to
+ * cover every ambient correction, present and future, or the hole simply moves to the next source
+ * somebody adds. `requestPrecedence` therefore resolves an UNKNOWN kind to the strictest value, so
+ * a new source is refused while positioning until its author deliberately classifies it.
+ *
+ * - `yields-to-any-unsettled-position` — ambient correction that must never displace a position the
+ *   reader is still waiting to reach, including a live-edge one. The safe default.
+ * - `yields-to-navigation` — ambient correction that stands aside for an explicit navigation
+ *   (Home, jump-to-message, saved-position restore) but may still correct a live-edge follow, which
+ *   is a policy rather than a destination. Matches `RowGrowthFacts.navigationInFlight` in
+ *   `rowGrowthDecision.ts`, the repo's existing answer to "is a navigation in flight".
+ * - `supersedes` — reader intent, or a deliberate exemption from the rule.
+ */
+type RequestPrecedence =
+  | 'yields-to-any-unsettled-position'
+  | 'yields-to-navigation'
+  | 'supersedes'
+
+const REQUEST_PRECEDENCE: Record<PositionRequestSource['kind'], RequestPrecedence> = {
+  entry: 'supersedes',
+  'user-navigation': 'supersedes',
+  fallback: 'supersedes',
+  'late-mds-supersession': 'supersedes',
+  /**
+   * DELIBERATE EXEMPTION, not an oversight. Sending a message is an explicit reader action that
+   * reasonably implies wanting to see it land, so an outgoing send is allowed to take the live edge
+   * from an in-flight navigation. It is still refused behind an unfinished restore or window shift
+   * by the `preservationPending` rule below.
+   */
+  'live-update': 'supersedes',
+  /**
+   * Divider movement and mid-array insertion: layout changes ABOVE the reader that nobody asked
+   * for. Strictest class — see `LayoutPreservationReason`.
+   */
+  'layout-preservation': 'yields-to-any-unsettled-position',
+  /** Media finishing its load and remeasuring: an ambient correction on a debounce. */
+  'media-preservation': 'yields-to-navigation',
+  /** A directional window shift re-anchoring the resident range: also ambient. */
+  'history-preservation': 'yields-to-navigation',
+}
+
+function requestPrecedence(kind: PositionRequestSource['kind']): RequestPrecedence {
+  return REQUEST_PRECEDENCE[kind] ?? 'yields-to-any-unsettled-position'
+}
+
+/**
+ * The active request has not reached its position yet. `paused-user-input` is excluded: the reader
+ * took over, so nothing is converging for them any more.
+ */
+function isConverging(phase: PositioningPhase): boolean {
+  return phase.kind !== 'settled' && phase.kind !== 'paused-user-input'
+}
+
+/**
+ * The controller is converging on a position the reader explicitly asked for — the model-level
+ * counterpart of `RowGrowthFacts.navigationInFlight`. A live-edge desire is excluded for the same
+ * reason it is there: following the bottom is a policy an ambient correction may re-assert, not a
+ * destination the reader is waiting on.
+ */
+function isNavigationInFlight(active: PositioningModel['active']): boolean {
+  return (
+    active !== null &&
+    isConverging(active.phase) &&
+    active.request.desired.kind !== 'live-edge' &&
+    requestPrecedence(active.request.source.kind) === 'supersedes'
+  )
+}
+
+/**
  * Accept a newer request and supersede the previous one.
  *
  * Entry chooses the displayed conversation. Automatic late MDS may only correct that same
@@ -445,16 +516,18 @@ export function acceptPositionRequest(
   }
 
   const active = model.active
-  const layoutPreservationWhilePositioning =
-    request.source.kind === 'layout-preservation' &&
-    active !== null &&
-    active.phase.kind !== 'settled' &&
-    active.phase.kind !== 'paused-user-input'
-  if (layoutPreservationWhilePositioning) {
-    // Divider movement is ambient layout preservation, not navigation. It may preserve a settled
-    // reading point, but it must never supersede Home, a message target, entry restore, or another
-    // position the reader is still waiting to reach.
-    return model
+  switch (requestPrecedence(request.source.kind)) {
+    case 'yields-to-any-unsettled-position':
+      // Ambient preservation is not navigation. It may preserve a settled reading point, but it must
+      // never supersede Home, a message target, entry restore, or another position the reader is
+      // still waiting to reach.
+      if (active !== null && isConverging(active.phase)) return model
+      break
+    case 'yields-to-navigation':
+      if (isNavigationInFlight(active)) return model
+      break
+    case 'supersedes':
+      break
   }
 
   const preservationPending =
