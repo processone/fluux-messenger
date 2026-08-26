@@ -25,6 +25,40 @@ so their parity is asserted by a test in `values.test.ts` rather than assumed.
 - `c:unresolved`. **not an identity.** Never correlate two of them with each other.
 - `s:` refs are session-local. Never correlate them across `sid` values.
 
+Digest records summarize one recorder window. `counters` are raw quantities,
+`suppressed` restores anomalies hidden by the per-id cooldown, and each `rates` entry
+keeps its numerator `n` and denominator/sample count `d` together. `env` supplies the
+platform context needed to compare those rates.
+
+## Running the review
+
+From the repository root:
+
+```bash
+npm run anomaly:review
+```
+
+The command reads the last seven UTC days from the platform's Fluux log directory.
+Pass options after npm's `--`: `--dir <path>` for another directory, `--days <n>` for
+another window, and `--json` for machine-readable output. It reports malformed or
+unsupported records instead of silently omitting them; legacy v1 digests without
+`rates` or `env` still contribute their counters and suppressed anomalies.
+
+Rate evidence is grouped by build and by platform and engine together. Windows with less than
+20% foreground time are excluded from rate aggregation, but their anomalies and raw
+counters remain in the report. A rate gets a verdict only when it is not marked
+informational, has at least the baseline's `minSamples`, and has an accepted entry in
+`docs/anomaly-baseline.json`. The default tolerance is 30% of that accepted rate.
+
+Pruning is explicit, never a side effect of inspection:
+
+```bash
+npm run anomaly:review -- --prune
+```
+
+That removes complete UTC-day files older than 30 days by default; override the
+boundary with `--retention <days>`.
+
 ## Recorder health
 
 These describe the recorder itself, not the app.
@@ -182,4 +216,16 @@ the message list.
 
 ### `resource/`
 
-_(stage 4: rates with denominators; no pass/fail)_
+Stage 4 records these rates as **informational** measurements. They appear in the
+weekly sweep with their numerator, denominator, size-class mix, and foreground share,
+but they never produce `ok` or `drift` and must not be added to the baseline yet.
+
+| rate | Numerator / denominator | Why it is informational |
+|---|---|---|
+| `render.MessageList/roomSwitch` | Message-list renders / conversation or room switches | Renders also scale with arrivals, typing, presence, read-state, scroll, and resize. Room arrivals are not yet observable without confusing them with MAM merges |
+| `scroll.writes/positioning` | Re-assert-loop scroll writes / positioning operations | The frame-loop signal does not yet distinguish a scroll call being issued from geometry actually moving |
+
+`apps/fluux/src/anomaly/values.ts` owns these pairings and their judgeability. Before
+stage 5 makes either rate judgeable, also resolve the build-stamp limitation documented
+in `docs/anomaly-baseline.json`: dirty rebuilds from one short HEAD currently share a
+series.

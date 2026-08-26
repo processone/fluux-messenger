@@ -17,6 +17,7 @@ import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
+import { countAnomalyMetric } from '@/utils/anomalyMetric'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -223,6 +224,17 @@ export function MessageList<T extends BaseMessage>({
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
+
+  // The numerator of the render rates, counted in the render body rather than an
+  // effect. An effect with no dependency array would survive dead-code elimination
+  // as an empty callback invoked after every render of the hottest component in the
+  // app; this statement disappears entirely when the gate is false.
+  //
+  // React double-invokes render under StrictMode, so `npm run dev` counts twice. The
+  // packaged Dev build does not: StrictMode only double-invokes when React itself is
+  // in development mode, and `tauri build` runs the production build. The bundle
+  // these rates are compared across is therefore counted once per render.
+  if (__FLUUX_ANOMALY__ && !staticMode) countAnomalyMetric('render.MessageList')
 
   // A density change re-measures every visible row once; arm the interaction
   // grace window so the virtualizer's re-window burst is not flagged as a loop.

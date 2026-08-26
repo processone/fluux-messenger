@@ -19,6 +19,7 @@ import {
   isReservedCounter,
   isTokenizerReady,
   localRefOverflowCount,
+  RATE,
   releaseOpaque,
   retainOpaque,
   tokenKeyId,
@@ -73,10 +74,20 @@ export interface RecorderOptions {
    * would not revive the recorder anyway.
    */
   maxBytes?: () => number
+  /**
+   * The session's environment, read fresh at each digest.
+   *
+   * Injected rather than sniffed so the recorder stays free of the DOM, the platform
+   * module and the clock-dependent foreground share — all three of which would
+   * otherwise have to be mocked to assert anything about a digest. Defaults to
+   * empty, which is also what a non-browser embedder gets.
+   */
+  env?: () => Array<[Opaque, Scalar]>
 }
 
 export function createRecorder(opts: RecorderOptions): Recorder {
   const { sink, now, build, sid } = opts
+  const env = opts.env ?? ((): Array<[Opaque, Scalar]> => [])
 
   // Clamp on every read: the seam exists so a test can TIGHTEN the budget, and one
   // that could relax it is a way to disable the bound in production by mistake.
@@ -322,11 +333,25 @@ export function createRecorder(opts: RecorderOptions): Recorder {
         all.push([constant, total - (lastHealth.get(constant.s) ?? 0)])
       }
 
+      // Derived from the SAME window the counters describe, before they are cleared.
+      // A rate whose numerator and denominator are both zero is dropped: every rate
+      // would otherwise appear in every digest, and an idle window would be as large
+      // as a busy one. A zero DENOMINATOR is kept — work done against nothing is the
+      // most interesting shape a rate takes, not a divide-by-zero to discard.
+      const rates: Array<[Opaque, number, number, boolean?]> = []
+      for (const spec of Object.values(RATE)) {
+        const n = counters.get(spec.numerator.s)?.[1] ?? 0
+        const d = counters.get(spec.denominator.s)?.[1] ?? 0
+        if (n === 0 && d === 0) continue
+        rates.push([spec.id, n, d, spec.informational])
+      }
+
       const base = {
         ...envelope(),
         kind: 'digest' as const,
         windowMs,
         suppressed: [...suppressed.values()],
+        env: env(),
       }
 
       // Shed WHOLE counter entries — smallest first, so the largest signals survive
@@ -335,11 +360,19 @@ export function createRecorder(opts: RecorderOptions): Recorder {
       let entries = [...all].sort((a, b) => b[1] - a[1])
       let line: string | null = null
       while (entries.length > 0) {
-        line = serialize({ ...base, counters: entries })
+        line = serialize({ ...base, counters: entries, rates })
         if (line) break
         entries = entries.slice(0, entries.length - 1)
       }
-      if (!line) line = serialize({ ...base, counters: [] })
+      // Counters go first because a rate is what drift is judged on, and its
+      // numerator survives inside it. Shedding a rate to keep the raw counter it was
+      // computed from would discard the interpretation and keep the ambiguity.
+      let shedRates = [...rates]
+      while (!line && shedRates.length > 0) {
+        shedRates = shedRates.slice(0, shedRates.length - 1)
+        line = serialize({ ...base, counters: [], rates: shedRates })
+      }
+      if (!line) line = serialize({ ...base, counters: [], rates: [] })
 
       // A digest that could not be SERIALIZED is a malformed digest, not a budget
       // event — announcing the ceiling here would claim the recorder had stopped

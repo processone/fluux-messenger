@@ -4,6 +4,7 @@ import { render } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import { createTestMessages } from './MessageList.test-utils'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import { countAnomalyMetric } from '@/utils/anomalyMetric'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -20,6 +21,10 @@ vi.mock('@/hooks', () => ({
     clearSelection: vi.fn(),
     copySelected: vi.fn(),
   })),
+}))
+
+vi.mock('@/utils/anomalyMetric', () => ({
+  countAnomalyMetric: vi.fn(),
 }))
 
 describe('MessageList floating date header wiring', () => {
@@ -41,5 +46,16 @@ describe('MessageList floating date header wiring', () => {
       <MessageList messages={messages} conversationId="c2" renderMessage={renderMessage} staticMode />,
     )
     expect(container.querySelector('[data-floating-date]')).toBeNull()
+  })
+
+  it('counts live renders but excludes static previews from the rate', () => {
+    render(<MessageList messages={messages} conversationId="live" renderMessage={renderMessage} />)
+    expect(countAnomalyMetric).toHaveBeenCalledWith('render.MessageList')
+
+    vi.mocked(countAnomalyMetric).mockClear()
+    render(
+      <MessageList messages={messages} conversationId="preview" renderMessage={renderMessage} staticMode />,
+    )
+    expect(countAnomalyMetric).not.toHaveBeenCalled()
   })
 })

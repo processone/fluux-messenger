@@ -44,7 +44,7 @@ right tool for human troubleshooting and is not modified or reduced anywhere (se
 
 | Constraint | Source | Consequence |
 |---|---|---|
-| Local only, no transport | Decided | No consent flow, no collector, no remote retention obligation. Local files are pruned at 30 days by the review skill (§3.5) |
+| Local only, no transport | Decided | No consent flow, no collector, no remote retention obligation. The review command can explicitly prune local files after 30 days (§3.5) |
 | Dev builds only | Decided | Corpus comes from `Fluux Messenger Dev`, demo mode, and Playwright |
 | Zero production JS, no new native command, no new permission | Decided | Build-time constant + guarded call sites + build-audit plugin + paired CI assertions (§7.2). One named exception: the stage-5 SDK seams (§5.5) |
 | SDK `dist` is built without defines | `packages/fluux-sdk/tsup.config.ts` | Detectors must not live in SDK source — see §3.1 |
@@ -197,11 +197,12 @@ Cost of this choice: append ordering must be enforced in JS. All sink writes go 
 **Web / demo / Playwright:** memory sink on `window.__fluuxAnomalies`. This is what later allows the
 same detectors to run as CI oracles.
 
-**Retention happens in `/fluux-anomaly-review`, not in the app.** A startup sweep would need
+**Retention happens in `npm run anomaly:review -- --prune`, not in the app.** A startup sweep would need
 `fs:allow-read-dir` and `fs:allow-remove`, neither of which is currently granted, and both of which
-would widen the **production** native capability surface for a Dev-only feature. The review skill
-already reads the directory and runs outside the app, so it prunes files older than 30 days as part
-of each sweep. The app only ever appends.
+would widen the **production** native capability surface for a Dev-only feature. The review command
+already reads the directory and runs outside the app, so an explicit `--prune` removes files older
+than 30 days without widening the app. Inspection alone never deletes them. The app only ever
+appends.
 
 ### 3.6 Data flow
 
@@ -239,14 +240,18 @@ The envelope — `v`, `t`, `sid`, `build`, `tokenKeyId` — is identical on both
 { "v":1, "t":"2026-07-29T11:50:00Z", "sid":"9f2c1a04-...", "build":"0.17.2+5abd37a",
   "tokenKeyId":"3b91cc07",
   "kind":"digest", "windowMs":300000,
-  "counters":{ "mam.queries":108, "mam.rowsRetained":340, "mam.pagesEmpty":4,
-               "room.joins":10, "render.MessageList":1840, "scroll.writes":96 },
-  "suppressed":{ "scroll/reassert-nonconverging":47 } }
+  "counters":{ "render.MessageList":1840, "room.switches":10,
+               "scroll.writes":96, "scroll.positioningOps":12 },
+  "suppressed":{ "scroll/reassert-nonconverging":47 },
+  "rates":{ "render.MessageList/roomSwitch":{ "n":1840, "d":10, "informational":true },
+            "scroll.writes/positioning":{ "n":96, "d":12, "informational":true } },
+  "env":{ "platform":"macos", "engine":"webkit", "engineVersion":620,
+           "sizeClass":"lg", "accounts":1, "foreground":0.94 } }
 ```
 
 ### 4.1 Field rules
 
-1. **`v` is a schema version.** The review skill refuses to parse an unknown major version rather
+1. **`v` is a schema version.** The review tool rejects and reports an unknown major version rather
    than silently misreading it.
 2. **`sid` is a `crypto.randomUUID()`** generated once per process in a module-level singleton, so
    it survives the StrictMode remount (§3.4) and cannot collide across days or concurrent Dev runs.
@@ -291,7 +296,7 @@ rest of the session — and the log would look like a healthy quiet day. Require
   attempt per record.
 
 **Flush on `visibilitychange` / exit is best effort.** The WebView gives no guarantee that
-asynchronous I/O completes during teardown, so the final digest may be lost. The review skill must
+asynchronous I/O completes during teardown, so the final digest may be lost. The review tool must
 therefore treat a missing trailing digest as normal, not as a signal, and never infer session length
 from its absence.
 
@@ -338,7 +343,7 @@ the leak the rule exists to prevent. A rejected record is a visible bug in a det
 one is a silent disclosure.
 
 The wire format is unchanged — records still serialize to `"c:7f3a…"` and `"focus"` — so the
-patterns below remain the *reader's* contract for the review skill. They are simply no longer the
+patterns below remain the *reader's* contract for the review tool. They are simply no longer the
 writer's authorization check.
 
 **Two identifier classes, because one mechanism cannot serve both.** JIDs are not the only
@@ -397,7 +402,7 @@ is the correct scope anyway — cross-session correlation of a single stanza is 
 review asks. Entity identity keeps cross-session stability via `Token`.
 
 **`c:unresolved` remains possible only for the entity class.** Its current causes and recorder-health
-signals are owned by `docs/ANOMALY_INVARIANTS.md`. The review skill **must never correlate two
+signals are owned by `docs/ANOMALY_INVARIANTS.md`. The review process **must never correlate two
 `c:unresolved` values with each other**; they are explicitly not an identity.
 
 - **Key persistence:** 32 random bytes from `crypto.getRandomValues`, generated once and stored in
@@ -410,7 +415,7 @@ signals are owned by `docs/ANOMALY_INVARIANTS.md`. The review skill **must never
   in the digest alone, because a short session — or a close before the first flush, which §4.3
   declares normal since the exit flush is best effort — yields anomaly records with no digest at
   all, leaving their tokens unattributable. Eight characters per record is the right price for that.
-  The review skill treats a `tokenKeyId` change as a hard correlation boundary and refuses to join
+  The review process treats a `tokenKeyId` change as a hard correlation boundary and refuses to join
   records across it.
 - **Raw identifiers never enter a record object.** Not in the breadcrumb ring, not in a generic
   record field, and **not transiently inside the write queue**. Tokenization happens at the
@@ -547,26 +552,27 @@ No pass/fail; drift only. But **raw counters are not a usable baseline**: compar
 `render.MessageList: 1840` against a committed number mostly measures how much the app was used that
 day. A quiet day and a fixed regression are indistinguishable, and so are a busy day and a new one.
 
-Every drift metric is therefore a **normalized rate with an explicit denominator**:
+Every drift metric is therefore a **normalized rate with an explicit denominator**. Stage 4 can
+observe two pairings, both informational until their remaining measurement ambiguity is removed:
 
-| Metric | Denominator |
-|---|---|
-| `render.MessageList` | per message arrival, and per room switch |
-| `mam.queries` | per reconnect |
-| `mam.rowsRetained` | per query |
-| `idb.writes` | per retained row |
-| `scroll.writes` | per positioning operation (live-edge stick, anchor restore, jump) |
+| Rate | Denominator | Stage 4 status |
+|---|---|---|
+| `render.MessageList/roomSwitch` | conversation or room switch | Informational: renders also scale with traffic, and room arrivals are not observable separately from MAM merges |
+| `scroll.writes/positioning` | positioning operation (live-edge stick, anchor restore, jump) | Informational: the frame-loop signal does not distinguish an issued write from actual movement |
 
-Raw counters are still emitted — they are the numerators, and they remain useful for spotting an
+The message-arrival, MAM, and IndexedDB pairings wait for the stage 5 seams that can measure their
+denominators without substituting a nearby but different quantity.
+
+Raw counters are still emitted — they are the rate inputs and remain useful for spotting an
 absolute explosion — but **drift verdicts are computed only on rates**.
 
 Two further requirements, without which a rate is still misleading:
 
-- **Sample counts travel with every rate**, and the review skill **suppresses a drift verdict below
+- **Sample counts travel with every rate**, and the review tool **suppresses a drift verdict below
   a minimum sample size** (default 30 denominator events). Three room switches producing a high
   render rate is noise, not a regression.
 - **Environment travels with the digest** — platform, WebView engine and version, window size class,
-  account count, and whether the session was mostly foreground. A WebKitGTK session and a macOS
+  account count, and the window's foreground share. A WebKitGTK session and a macOS
   session are not comparable, and a baseline that silently mixes them will drift forever.
 
 ### 5.5 SDK seams (stage 5)
@@ -691,9 +697,10 @@ spec should not pretend otherwise:
 - **`docs/ANOMALY_INVARIANTS.md`** — registry keyed by `id`: what the invariant means, likely
   causes, where to look.
 - **`docs/anomaly-baseline.json`** — committed digest baseline for drift comparison.
-- **`/fluux-anomaly-review` skill** — reads the last 7 days of JSONL by default, refuses unknown
-  schema majors, groups by `id`, folds in `suppressed` counts, diffs digest against baseline,
-  reports. It **reports findings; it does not fix them.** Findings become issues.
+- **`npm run anomaly:review`** — reads the last 7 UTC days of JSONL by default, rejects and reports
+  unknown schema majors, groups by `id`, folds in `suppressed` counts, compares rates with the
+  baseline, and reports. `--prune` explicitly applies the 30-day retention boundary. It **reports
+  findings; it does not fix them.** Findings become issues.
 - **Cadence** — invoked manually, optionally driven by `/loop`.
 
 ### 6.1 The maintenance hazard, named
@@ -815,7 +822,7 @@ Each stage is independently useful and independently revertable.
 | 1 | Schema + constrained serializer, recorder with cooldown/ceiling, single-flight `writeFile` sink, build-audit plugin, paired CI assertions, registry skeleton | Production cost is zero, Dev actually runs, privacy holds at runtime | none |
 | 2 | Scroll/stall sentinel **fan-out** | The pipe works end to end with no new detection logic, and the prose log is untouched | none |
 | 3 | `read-state/` (unread-survives-focus) + `scroll/` (fab-at-live-edge, jump-target-miss) | Real detectors on state observable from public surfaces alone | none |
-| 4 | `resource/` **rates with denominators**, baseline, `/fluux-anomaly-review` skill incl. retention pruning | The review loop closes and drift detection starts | none |
+| 4 | `resource/` **rates with denominators**, baseline, `npm run anomaly:review` incl. explicit retention pruning | The review loop closes and drift detection starts | none |
 | 5 | Four SDK seams (§5.5), then `xmpp-traffic/`, `badge-vs-pointer` and `pointer-regression` | Everything requiring new SDK visibility | four read-only additions, measured (§5.5) |
 
 Stage 0 is separated out because the gate correction is a live pre-existing bug (§2.1) that is worth
@@ -834,7 +841,7 @@ public API is extended.
   ever changes.
 - A native append command, and therefore any Cargo feature matrix (§3.5).
 - Any new entry in `capabilities/default.json`. In-app log pruning is excluded for this reason —
-  retention lives in the review skill (§3.5).
+  retention lives in the review command (§3.5).
 - Transport-level outbound instrumentation, and therefore `iq-unanswered` coverage of connection
   pings and SM nonzas (§5.5).
 - Automatic fixing of anomalies. The review reports; a human triages.

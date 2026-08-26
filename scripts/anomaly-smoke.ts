@@ -608,4 +608,74 @@ test.describe('anomaly runtime', () => {
     expect(ctx.heldMs).toBeGreaterThanOrEqual(2000)
     expect(record.tokenKeyId).toMatch(/^[0-9a-f]{8}$/)
   })
+
+  /**
+   * The rates, end to end, in a real browser.
+   *
+   * Every layer below this has its own unit test, and all of them would still pass
+   * if the render counter never fired: the seam is a null check when nothing
+   * registers, and a digest with no rates is a legal digest. Only a real render
+   * reaching a real digest proves the chain — component body, neutral seam, handler,
+   * registry constant, recorder, serializer — is actually connected.
+   */
+  test('a real render reaches the digest as a rate', async ({ page }) => {
+    await page.goto('/demo.html?tutorial=false')
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              ((window as unknown as { __fluuxAnomalies?: string[] }).__fluuxAnomalies ?? [])
+                .length,
+          ),
+        { message: 'the anomaly runtime never installed' },
+      )
+      .toBeGreaterThan(0)
+
+    await openDemoRoom(page)
+
+    // Digests are on a five-minute timer, which no test can wait for. Hiding the
+    // document flushes one — the same path a real session takes when it is
+    // backgrounded, so this exercises production behaviour rather than a test hook.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      })
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() =>
+            (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+              .map((line) => JSON.parse(line) as { kind?: string })
+              .some((record) => record.kind === 'digest'),
+          ),
+        { timeout: 15_000, message: 'hiding the document flushed no digest' },
+      )
+      .toBe(true)
+
+    const digest = await page.evaluate(
+      () =>
+        (window as unknown as { __fluuxAnomalies: string[] }).__fluuxAnomalies
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .find((record) => record.kind === 'digest')!,
+    )
+
+    // Opening a room renders the list, so the numerator cannot legitimately be zero,
+    // and activating one IS the denominator — a switch.
+    const rates = digest.rates as Record<string, { n: number; d: number }>
+    expect(Object.keys(rates)).toContain('render.MessageList/roomSwitch')
+    expect(rates['render.MessageList/roomSwitch'].n).toBeGreaterThan(0)
+    expect(rates['render.MessageList/roomSwitch'].d).toBeGreaterThan(0)
+
+    // Environment travels with it, or the rate cannot be compared with anything.
+    const env = digest.env as Record<string, unknown>
+    expect(env.engine).toBe('blink')
+    expect(env.platform).toBeTruthy()
+    expect(typeof env.foreground).toBe('number')
+  })
 })

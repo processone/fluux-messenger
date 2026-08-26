@@ -6,6 +6,7 @@ import {
   ID,
   initTokenizer,
   METRIC,
+  RATE,
   resetValuesForTesting,
   TAG,
   tokenSync,
@@ -92,6 +93,15 @@ describe('happy path', () => {
     const parsed = JSON.parse(serialize(anomaly())!)
     expect('expected' in parsed).toBe(false)
     expect('observed' in parsed).toBe(false)
+  })
+
+  it('rejects non-finite rate scalars before JSON serialization', () => {
+    for (const value of [Infinity, -Infinity, NaN]) {
+      expect(
+        serialize(digest({ rates: [[RATE.renderPerRoomSwitch.id, value, 1, true]] })),
+      ).toBeNull()
+    }
+    expect(rejectedValueCount()).toBe(3)
   })
 })
 
