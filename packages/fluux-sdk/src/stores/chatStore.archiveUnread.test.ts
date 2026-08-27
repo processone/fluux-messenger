@@ -1734,3 +1734,190 @@ describe('chatStore.recomputeUnreadForConversation — archive-derived unread (P
     })
   })
 })
+
+/**
+ * A timestamp-resumed catch-up has no `initialAfter`. The fixture uses an own
+ * send without an archive id as that edge, so a completed walk must anchor
+ * missing coverage on the oldest persistable archive id it carried itself.
+ */
+describe('chatStore — `start`-filtered catch-up bootstraps coverage from its walk extent', () => {
+  const SELF = 'me@example.com'
+
+  /** Our own last send: persisted with an origin-id and NO archive id. */
+  function ownSend(overrides: Partial<Message> = {}): Message {
+    return archiveMsg('own', 1000, {
+      from: SELF,
+      isOutgoing: true,
+      originId: 'own-origin',
+      body: 'last word',
+      ...overrides,
+    })
+  }
+
+  const POINTER_ON_OWN_SEND = {
+    order: { role: 'exact' as const, timestamp: 1000, tiebreak: { kind: 'chat' as const, id: 'own' } },
+    identity: { state: 'local' as const, messageId: 'own' },
+  }
+
+  function markCaughtUpWithoutCoverage(): void {
+    chatStore.setState((state) => {
+      const mamQueryStates = new Map(state.mamQueryStates)
+      mamQueryStates.set(CID, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: true, isCaughtUpToLive: true })
+      return { mamQueryStates }
+    })
+  }
+
+  /** The walk's messages carry archive ids: `start` is inclusive, so the
+   *  anchor own send comes back down with the id the archive gave it. */
+  function catchUp(complete: boolean): void {
+    chatStore.getState().mergeMAMMessages(
+      CID,
+      [ownSend({ stanzaId: 'own-archive-id' })],
+      { first: 'own-archive-id' },
+      complete,
+      'forward',
+      false,
+      false,
+      // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
+      { walkCarriedModifications: false, walkOldestId: 'own-archive-id' }
+    )
+  }
+
+  /** Let the archive write, and the coverage commit gated on it, settle. */
+  async function settle(): Promise<void> {
+    await vi.waitFor(() => {
+      expect(chatStore.getState().getConversationCoverage(CID)).toBeDefined()
+    }, { timeout: 2000 })
+  }
+
+  beforeEach(async () => {
+    _resetStorageScopeForTesting()
+    globalThis.indexedDB = new IDBFactory()
+    ;(messageCache as unknown as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
+    localStorageMock.clear()
+    chatStore.getState().reset()
+    resetRecountDeferralsForTesting()
+    clearTransientScope(getStorageScopeJid() ?? '')
+    chatStore.getState().addConversation(createConversation(CID))
+
+    await messageCache.saveMessages([ownSend()])
+    chatStore.setState({ activeConversationId: 'someone-else@example.com' })
+    setMeta({ unreadCount: 4, readPointer: POINTER_ON_OWN_SEND })
+    markCaughtUpWithoutCoverage()
+    expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+  })
+
+  it('gets a coverage record, and the frozen badge finally recomputes', async () => {
+    catchUp(true)
+    await settle()
+
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id' })
+
+    // Nothing sits after the pointer, so the seeded count of 4 converges to 0 with
+    // no further prodding — the merge re-derives once its record commits.
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(chatStore.getState().conversations.get(CID)?.unreadCount).toBe(0)
+
+    expect(readRecountDeferrals()['chat:coverage-missing']).toBeUndefined()
+  })
+
+  it('gates an active dedupe backfill and then recomputes it once', async () => {
+    let releaseWrite!: () => void
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
+    vi.mocked(messageCache.saveMessages).mockClear()
+    vi.mocked(messageCache.saveMessages).mockImplementationOnce(async (messages) => {
+      const committed = await saveMessagesImplementation(messages)
+      await writeGate
+      return committed
+    })
+    chatStore.setState((state) => ({
+      activeConversationId: CID,
+      messages: new Map(state.messages).set(CID, [ownSend()]),
+    }))
+
+    catchUp(true)
+    await vi.waitFor(() => {
+      expect(messageCache.saveMessages).toHaveBeenCalled()
+    })
+    expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+
+    releaseWrite()
+    await settle()
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+
+    expect(readRecountDeferrals()['chat:coverage-missing']).toBeUndefined()
+    expect(readRecountDeferrals()['chat:active-skipped']).toBeUndefined()
+  })
+
+  it('an INCOMPLETE walk still leaves no coverage, and the badge still freezes', async () => {
+    // Completion is the whole warrant for trusting the walk's extent.
+    catchUp(false)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+
+    resetRecountDeferralsForTesting()
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    // An unfinished walk also clears `isCaughtUpToLive`, so the recount stands
+    // down one guard earlier. Re-assert caught-up to reach the coverage gate
+    // itself and show the door it used to leak through is still shut.
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['chat:history-not-caught-up']).toBe(1)
+
+    markCaughtUpWithoutCoverage()
+    resetRecountDeferralsForTesting()
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['chat:coverage-missing']).toBe(1)
+  })
+
+  it('re-establishes coverage after an unresolvable bottom dropped the record', async () => {
+    // An unresolvable bottom drops the record. A later completed timestamp
+    // catch-up must be able to establish durable coverage again.
+    seedCoverage('evicted-stanza-id')
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+    expect(chatStore.getState().getConversationCoverage(CID)).toBeUndefined()
+    expect(readRecountDeferrals()['chat:coverage-unresolvable']).toBe(1)
+
+    catchUp(true)
+    await settle()
+
+    expect(chatStore.getState().getConversationCoverage(CID)).toEqual({ bottomId: 'own-archive-id' })
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(readRecountDeferrals()['chat:coverage-missing']).toBeUndefined()
+  })
+
+  it('leaves the other deferral reasons standing in their own conditions', async () => {
+    // Closing this exit must not open the others: a walk that reached live is
+    // not a licence to count from history that has not caught up.
+    catchUp(true)
+    await settle()
+    await vi.waitFor(() => {
+      expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+
+    // Coverage is now proven, so only the OTHER guards can stand between a
+    // stale badge and the archive. Re-stale it and take one away.
+    setMeta({ unreadCount: 4 })
+    chatStore.setState((state) => {
+      const mamQueryStates = new Map(state.mamQueryStates)
+      mamQueryStates.set(CID, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: false, isCaughtUpToLive: false })
+      return { mamQueryStates }
+    })
+
+    resetRecountDeferralsForTesting()
+    await chatStore.getState().recomputeUnreadForConversation(CID)
+
+    expect(chatStore.getState().conversationMeta.get(CID)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['chat:history-not-caught-up']).toBe(1)
+  })
+})

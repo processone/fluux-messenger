@@ -57,6 +57,7 @@ import {
   MAM_POINTER_STITCH_MAX_PAGES,
   MAM_POINTER_SEED_PROBE_LIMIT,
   oldestMessageWithStanzaId,
+  walkExtentBottomId,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -436,6 +437,7 @@ export class MAM extends BaseModule {
           // The cursor this walk resumed from — anchors the coverage bottom
           // when the catch-up reports complete (mamCoverage.ts).
           initialAfter: after,
+          walkOldestId: walkExtentBottomId(allMessages),
         }),
       })
 
@@ -641,6 +643,8 @@ export class MAM extends BaseModule {
             // Emit modifications targeting messages already in the store (from prior queries/cache)
             this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
+            allMessages.push(...collectedMessages)
+
             // Emit each page's messages immediately so the store can update incrementally
             this.deps.emitSDK('room:history-messages', {
               roomJid,
@@ -653,11 +657,13 @@ export class MAM extends BaseModule {
               // The cursor the WALK resumed from (not this page's), so the
               // completing page can anchor a coverage bottom (mamCoverage.ts).
               initialAfter: after,
+              walkOldestId: walkExtentBottomId(allMessages),
               walkCarriedModifications: forwardWalkCarriedModifications,
             })
+          } else {
+            allMessages.push(...collectedMessages)
           }
 
-          allMessages.push(...collectedMessages)
           isComplete = complete
           lastPage = pageInfo
           if (page === 0 && !isForward) fetchLatestTopId = pageInfo.last

@@ -1640,3 +1640,207 @@ describe('roomStore.recomputeUnreadForRoom — archive-derived unread (PR B, Tas
     })
   })
 })
+
+/**
+ * A room timestamp resume can come from a gap boundary without an id or a local
+ * edge without an archive id. With no `initialAfter`, a completed walk must
+ * anchor missing coverage on the oldest persistable archive id it carried.
+ */
+describe('roomStore — `start`-filtered catch-up bootstraps coverage from its walk extent', () => {
+  /** The room's newest cached entry, held with no archive id. */
+  function edgeMsg(overrides: Partial<RoomMessage> = {}): RoomMessage {
+    return archiveMsg('edge', 1000, { from: ROOM + '/alice', nick: 'alice', body: 'last word', ...overrides })
+  }
+
+  const POINTER_ON_EDGE = {
+    order: { role: 'exact' as const, timestamp: 1000, tiebreak: { kind: 'room' as const, from: ROOM + '/alice', id: 'edge' } },
+    identity: { state: 'local' as const, messageId: 'edge' },
+  }
+
+  function markCaughtUpWithoutCoverage(): void {
+    roomStore.setState((state) => {
+      const mamQueryStates = new Map(state.mamQueryStates)
+      mamQueryStates.set(ROOM, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: true, isCaughtUpToLive: true })
+      return { mamQueryStates }
+    })
+  }
+
+  /** `start` is inclusive, so the anchor entry comes back down carrying the
+   *  archive id it never had locally. */
+  function catchUp(complete: boolean): void {
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [edgeMsg({ stanzaId: 'edge-archive-id' })],
+      { first: 'edge-archive-id' },
+      complete,
+      'forward',
+      false,
+      false,
+      // No `initialAfter`: this walk resumed from a timestamp, not a cursor.
+      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
+    )
+  }
+
+  async function settle(): Promise<void> {
+    await vi.waitFor(() => {
+      expect(roomStore.getState().getRoomCoverage(ROOM)).toBeDefined()
+    }, { timeout: 2000 })
+  }
+
+  beforeEach(async () => {
+    _resetStorageScopeForTesting()
+    globalThis.indexedDB = new IDBFactory()
+    ;(messageCache as unknown as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
+    localStorageMock.clear()
+    roomStore.getState().reset()
+    _resetRoomReadStateForTesting()
+    resetRecountDeferralsForTesting()
+    clearTransientScope(getStorageScopeJid() ?? '')
+    roomStore.getState().addRoom(createRoom(ROOM))
+
+    await messageCache.saveRoomMessages([edgeMsg()])
+    roomStore.setState({ activeRoomJid: 'someone-else@conference.example.com' })
+    setMeta({ unreadCount: 4, readPointer: POINTER_ON_EDGE })
+    markCaughtUpWithoutCoverage()
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+  })
+
+  it('gets a coverage record, and the frozen badge finally recomputes', async () => {
+    catchUp(true)
+    await settle()
+
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+    expect(roomStore.getState().rooms.get(ROOM)?.unreadCount).toBe(0)
+
+    expect(readRecountDeferrals()['room:coverage-missing']).toBeUndefined()
+  })
+
+  it('gates an active dedupe backfill and then recomputes it once', async () => {
+    let releaseWrite!: () => void
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
+    vi.mocked(messageCache.saveRoomMessages).mockClear()
+    vi.mocked(messageCache.saveRoomMessages).mockImplementationOnce(async (messages) => {
+      const committed = await saveRoomMessagesImplementation(messages)
+      await writeGate
+      return committed
+    })
+    roomStore.setState((state) => ({
+      activeRoomJid: ROOM,
+      messages: new Map(state.messages).set(ROOM, [edgeMsg()]),
+    }))
+
+    catchUp(true)
+    await vi.waitFor(() => {
+      expect(messageCache.saveRoomMessages).toHaveBeenCalled()
+    })
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+
+    releaseWrite()
+    await settle()
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+
+    expect(readRecountDeferrals()['room:coverage-missing']).toBeUndefined()
+    expect(readRecountDeferrals()['room:active-skipped']).toBeUndefined()
+  })
+
+  it('uses the whole forward walk extent when the completing page is newer', async () => {
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [edgeMsg({ stanzaId: 'edge-archive-id' })],
+      { first: 'edge-archive-id', last: 'edge-archive-id' },
+      false,
+      'forward',
+      false,
+      false,
+      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
+    )
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [archiveMsg('newer', 1100, { stanzaId: 'newer-archive-id' })],
+      { first: 'newer-archive-id', last: 'newer-archive-id' },
+      true,
+      'forward',
+      false,
+      false,
+      { walkCarriedModifications: false, walkOldestId: 'edge-archive-id' }
+    )
+
+    await settle()
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(1)
+    }, { timeout: 2000 })
+    expect(readRecountDeferrals()['room:coverage-missing']).toBeUndefined()
+    expect(readRecountDeferrals()['room:coverage-short-of-floor']).toBeUndefined()
+  })
+
+  it('an INCOMPLETE walk still leaves no coverage, and the badge still freezes', async () => {
+    catchUp(false)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+
+    // An unfinished walk also clears `isCaughtUpToLive`, so the recount stands
+    // down one guard earlier. Re-assert caught-up to exercise the independent
+    // coverage guard as well.
+    resetRecountDeferralsForTesting()
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(1)
+
+    markCaughtUpWithoutCoverage()
+    resetRecountDeferralsForTesting()
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['room:coverage-missing']).toBe(1)
+  })
+
+  it('re-establishes coverage after an unresolvable bottom dropped the record', async () => {
+    seedCoverage('evicted-stanza-id')
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toBeUndefined()
+    expect(readRecountDeferrals()['room:coverage-unresolvable']).toBe(1)
+
+    catchUp(true)
+    await settle()
+
+    expect(roomStore.getState().getRoomCoverage(ROOM)).toEqual({ bottomId: 'edge-archive-id' })
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+
+    expect(readRecountDeferrals()['room:coverage-missing']).toBeUndefined()
+  })
+
+  it('leaves the other deferral reasons standing in their own conditions', async () => {
+    catchUp(true)
+    await settle()
+    await vi.waitFor(() => {
+      expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+    }, { timeout: 2000 })
+
+    // Coverage is now proven, so only the OTHER guards can stand between a
+    // stale badge and the archive. Re-stale it and take one away.
+    setMeta({ unreadCount: 4 })
+    roomStore.setState((state) => {
+      const mamQueryStates = new Map(state.mamQueryStates)
+      mamQueryStates.set(ROOM, { isLoading: false, error: null, hasQueried: true, isHistoryComplete: false, isCaughtUpToLive: false })
+      return { mamQueryStates }
+    })
+
+    resetRecountDeferralsForTesting()
+    await roomStore.getState().recomputeUnreadForRoom(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(4)
+    expect(readRecountDeferrals()['room:history-not-caught-up']).toBe(1)
+  })
+})

@@ -6706,11 +6706,15 @@ describe('roomStore parity drift regressions', () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].stanzaId).toBe('arch-merge')
       expect(roomStore.getState().messages.get(roomJid)?.[0]?.stanzaId).toBe('arch-merge')
-      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
-        roomJid,
-        'own-1',
-        expect.objectContaining({ stanzaId: 'arch-merge' }),
-        `${roomJid}/testuser`
+      // The backfill rides the merge's DURABLE archive write, not a
+      // fire-and-forget update: a coverage bottom may name this row, so its
+      // write has to be the one the gap/coverage commit gates on.
+      // saveRoomMessages upserts by identity, so the row stays findable by the
+      // archive id it just gained.
+      expect(messageCache.saveRoomMessages).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'own-1', stanzaId: 'arch-merge' }),
+        ])
       )
     })
   })

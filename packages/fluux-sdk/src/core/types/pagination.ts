@@ -318,4 +318,6 @@ export interface MergeArchiveExtras {
   /** FORWARD only: the `after` cursor the catch-up resumed from — the bootstrap
    *  anchor when that catch-up reports complete. */
   initialAfter?: string
+  /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
+  walkOldestId?: string
 }

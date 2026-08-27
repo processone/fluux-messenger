@@ -46,6 +46,7 @@ const inputArb: fc.Arbitrary<ArchiveMergeCoverageInput> = fc.record({
   isFetchLatest: fc.boolean(),
   complete: fc.option(fc.boolean(), { nil: undefined }),
   initialAfter: maybeArchiveId,
+  walkOldestId: maybeArchiveId,
   preserveGapMarker: fc.boolean(),
   rsmFirst: maybeArchiveId,
   fetchLatestTopId: maybeArchiveId,
@@ -150,6 +151,24 @@ describe('coverage map discipline', () => {
           expect(coverage.has(key)).toBe(true)
           if (key !== input.id) expect(coverage.get(key)).toBe(value)
         }
+      }),
+      { numRuns: 5000 },
+    )
+  })
+
+  it('never seeds a forward record from an unfinished walk', () => {
+    // The bootstrap accepts two anchors — the resume cursor and, for a
+    // `start`-filtered catch-up, the walk's own extent — and `complete` is the
+    // warrant for BOTH. An unfinished walk never reached the live edge, so
+    // neither anchor describes coverage.
+    fc.assert(
+      fc.property(inputArb, (input) => {
+        if (input.direction !== 'forward') return
+        const { coverage, transition } = syncCoverageAfterArchiveMerge(input)
+        if (transition === 'none') return
+
+        expect(input.complete).toBe(true)
+        expect(coverage.get(input.id)!.bottomId).toBe(input.initialAfter ?? input.walkOldestId)
       }),
       { numRuns: 5000 },
     )
