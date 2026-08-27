@@ -402,12 +402,15 @@ Use touched paths to decide which specialized questions to apply.
 | Touched area | Mandatory checklist sections |
 | --- | --- |
 | `packages/fluux-sdk/src/stores` | 1, 2, 3, 4, 6, 7, 11 |
+| `stores/shared/dividerAdvance.ts` (new-message divider) | 1, 2, 3, 7, 11 |
+| `stores/shared/recountDiagnostics.ts` (reason counters; must stay id-free — reason names and tallies only) | 1, 3, 7, 11 |
 | `packages/fluux-sdk/src/core/modules/MAM*` | 1, 2, 3, 4, 6, 11 |
 | `packages/fluux-sdk/src/core/e2ee` or app E2EE plugins | 1, 2, 4, 5, 6, 7, 11 |
 | notification/read hooks and state | 1, 2, 3, 6, 7, 10, 11 |
 | `useMessageListScroll` or message virtualizer | 1, 2, 7, 8, 9, 11 |
+| `components/conversation/entryArbitration.ts` (conversation entry choice) | 1, 2, 3, 7, 8, 11 |
 | overlays, focus, shortcuts, navigation | 1, 4, 7, 9, 11 |
-| `src-tauri`, packaging, or workflows | 4, 5, 6, 10, 11 |
+| `apps/fluux/src-tauri`, packaging, or workflows | 4, 5, 6, 10, 11 |
 
 ## LLM reviewer instructions
 
