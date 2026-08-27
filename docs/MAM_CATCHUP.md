@@ -39,8 +39,19 @@ Chains after the preview refresh completes.
 
 - Calls `catchUpAllConversations()`.
 - For each non-archived conversation:
-  - If there are cached messages: sends a **forward query** with `start` = newest cached timestamp + 1 ms, `max=100`. This fetches only messages newer than what is already in the store.
+  - If there are cached messages: sends a **forward query** with `max=100`,
+    preferring an id-exact `after` cursor from the held archive edge. When the
+    edge has no archive id, such as the user's own last send, it falls back to
+    an inclusive `start` timestamp.
   - If no cached messages exist: sends a **backward query** with `before=""`, `max=50` to fetch the latest messages.
+- A completed forward walk can seed a missing contiguous-coverage record. The
+  resume cursor is the preferred bottom; a timestamp-resumed walk instead uses
+  the oldest persistable archive id returned by that whole walk. An incomplete
+  walk never seeds coverage.
+- Coverage is committed only after the messages and archive-id backfills that
+  make its bottom resolvable are durable. For a timestamp-resumed bootstrap,
+  the unread recount then runs against that committed coverage, including when
+  the conversation is active.
 - Runs at **concurrency 2** to be gentle on the server.
 - Errors are silently ignored per conversation (best-effort).
 
@@ -61,8 +72,9 @@ Triggered 10 seconds after fresh-session setup, giving rooms time to finish join
 
 - Filters rooms to those that confirmed self-presence in the current session,
   are still joined, support MAM, are not Quick Chat rooms, and are not active.
-- Peeks at each room's cached messages and uses the same forward/backward query
-  pattern as conversation catch-up.
+- Peeks at each room's cached messages and uses the same forward/backward query,
+  coverage-bootstrap, durability, and unread-recount rules as conversation
+  catch-up.
 - Revalidates the session, membership, active room, and foreground ownership
   after cache hydration so an obsolete background attempt cannot query MAM.
 - Rooms that join or discover MAM after the initial pass are caught up once
@@ -89,7 +101,8 @@ therefore joins and is caught up as it becomes eligible, once per session.
 
 Triggered by side effects when the user opens a conversation or room.
 
-- If the conversation/room has cached messages: forward query from the newest cached timestamp.
+- If the conversation/room has cached messages: use the same id-exact forward
+  cursor or inclusive timestamp fallback as background catch-up.
 - If no cached messages: backward query for recent history.
 - On a fresh session, the active room may display hydrated cache immediately,
   but it waits for successful self-presence (`room:joined`) in that session
@@ -136,6 +149,8 @@ Lower concurrency for catch-up keeps server load reasonable during background wo
 | `packages/fluux-sdk/src/core/backgroundSync.ts` | Orchestrates all background sync stages on connect |
 | `packages/fluux-sdk/src/core/chatSideEffects.ts` and `roomSideEffects.ts` | Active conversation/room cache and MAM triggers |
 | `packages/fluux-sdk/src/core/roomMamHandoff.ts` and `roomMembershipEpoch.ts` | Coordinates foreground/background room ownership across membership changes |
+| `packages/fluux-sdk/src/utils/mamCatchUpUtils.ts` | Selects id or timestamp catch-up anchors and derives a walk's persistable extent |
+| `packages/fluux-sdk/src/stores/shared/mamCoverage.ts` | Owns coverage bootstrap and extension rules |
 | `packages/fluux-sdk/src/utils/concurrencyUtils.ts` | `executeWithConcurrency()` utility |
 | `packages/fluux-sdk/src/core/modules/MAM.catchup.test.ts` | Tests for catch-up and discovery methods |
 | `packages/fluux-sdk/src/core/roomSideEffects.test.ts` and `backgroundSync.test.ts` | Tests for room trigger, ownership, and handoff wiring |

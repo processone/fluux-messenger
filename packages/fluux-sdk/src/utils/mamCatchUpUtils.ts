@@ -8,6 +8,9 @@
  * @module Utils/MAMCatchUp
  */
 
+import { isNoLocalStore } from '../core/types/message-internal'
+import type { Message, RoomMessage } from '../core/types'
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -156,6 +159,15 @@ export function oldestMessageWithStanzaId<T extends { timestamp?: Date; stanzaId
     if (!oldest || ts < oldest.timestamp!.getTime()) oldest = message
   }
   return oldest
+}
+
+/**
+ * The bottom of a walk's own extent: the oldest message it carried that can
+ * anchor durable coverage. Messages without archive ids and messages excluded
+ * from the local cache cannot provide a resolvable bottom.
+ */
+export function walkExtentBottomId(messages: Array<Message | RoomMessage>): string | undefined {
+  return oldestMessageWithStanzaId(messages.filter((message) => !isNoLocalStore(message)))?.stanzaId
 }
 
 /** Result of {@link selectCatchUpQuery}: an id-exact forward `after` cursor

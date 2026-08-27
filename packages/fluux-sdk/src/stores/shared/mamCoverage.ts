@@ -8,6 +8,8 @@
 import { resolveArchivePosition } from '../../utils/messageCache'
 import type { CoverageRecord, ExactPosition } from '../../core/types'
 
+export { walkExtentBottomId } from '../../utils/mamCatchUpUtils'
+
 /**
  * The coverage shapes are declared in `core/types/pagination.ts` — they ride on
  * SDK events, so `core/types` must be able to name them without depending on a
@@ -80,6 +82,10 @@ export interface ArchiveMergeCoverageInput {
   /** The `after` cursor a forward catch-up resumed from (the local downloaded
    *  edge). Undefined for `start`-filtered or cursorless catch-ups. */
   initialAfter?: string
+  /** Oldest archive id the forward walk itself carried — its own extent, from
+   *  {@link walkExtentBottomId}. The bootstrap's fallback anchor when the
+   *  catch-up resumed by timestamp and so has no `initialAfter`. */
+  walkOldestId?: string
   /** Bounded windowed query — proves nothing about live contiguity. */
   preserveGapMarker: boolean
   /** page.first of the merge's LAST page (deepest entry seen, signals included). */
@@ -105,8 +111,9 @@ export interface ArchiveMergeCoverageInput {
  *   give-up with zero displayable messages) → replace with the walk extent;
  * - plain backward page → extend the bottom ONLY when the query resumed
  *   id-exactly from it (initialBefore === bottomId);
- * - COMPLETED forward catch-up with a resume cursor → seed the bottom from that
- *   cursor when no record exists yet (bootstrap, see below);
+ * - COMPLETED forward catch-up → seed the bottom when no record exists yet,
+ *   from the resume cursor, or from the walk's own extent when the catch-up
+ *   resumed by timestamp and has none (bootstrap, see below);
  * - incomplete forward merges and preserveGapMarker (bounded windowed) queries
  *   prove nothing about the live-contiguous bottom → no-op.
  *
@@ -118,7 +125,8 @@ export interface ArchiveMergeCoverageInput {
 export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput): CoverageSyncResult {
   const {
     coverage, id, direction, isFetchLatest, preserveGapMarker, complete, initialAfter,
-    rsmFirst, fetchLatestTopId, initialBefore, sawCoverageTop, walkCarriedModifications,
+    walkOldestId, rsmFirst, fetchLatestTopId, initialBefore, sawCoverageTop,
+    walkCarriedModifications,
   } = input
   const unchanged: CoverageSyncResult = { coverage, transition: 'none' }
   if (preserveGapMarker) return unchanged
@@ -137,16 +145,35 @@ export function syncCoverageAfterArchiveMerge(input: ArchiveMergeCoverageInput):
     //
     // A forward catch-up that resumed at `initialAfter` and came back complete
     // has downloaded everything from that cursor to the live edge — which is
-    // precisely "oldest entry proven contiguous with live". The claim is
-    // deliberately conservative: it anchors on the cursor we resumed from, never
-    // on how deep the cache happens to reach, and it never overwrites an
-    // existing record, so a bottom already proven deeper always wins. Erring
-    // shallow only costs Phase B a re-walk of covered ground; erring deep would
-    // skip real history, and this path cannot do that.
-    if (!complete || !initialAfter) return unchanged
+    // precisely "oldest entry proven contiguous with live".
+    //
+    // `initialAfter` is undefined whenever the catch-up resumed by TIMESTAMP
+    // (`selectCatchUpQuery` falls back to a `start` filter when the local edge
+    // carries no archive id — the user's own last send, which the server never
+    // echoes back with one). Such a walk then anchors on `walkOldestId`, the
+    // oldest archive id it carried itself.
+    //
+    // Anchoring on the walk's extent is a WEAKER premise than a resume cursor
+    // and it is admitted only for a `complete` walk. Completion is the whole
+    // warrant: the server said the walk exhausted its direction, so everything
+    // from its oldest entry to the live edge came down in it, and no gap can
+    // hide between the two. An INCOMPLETE walk proves nothing about the live
+    // edge, so `complete` stays a hard condition, and a `start`-filtered walk
+    // that returned nothing has no extent to claim.
+    //
+    // What is still refused, and why the older, narrower rule is not simply
+    // relaxed: depth the cache reached by some OTHER means — an earlier
+    // fetchContext island, a scroll-up page, whatever a previous session left
+    // behind — is not evidence and is never consulted here. The anchor is the
+    // extent of THIS walk or nothing. The rest of the caution stands unchanged:
+    // this never overwrites an existing record, so a bottom already proven
+    // deeper always wins, and erring shallow only costs Phase B a re-walk of
+    // covered ground, while erring deep would skip real history.
+    const bootstrapBottom = initialAfter ?? walkOldestId
+    if (!complete || !bootstrapBottom) return unchanged
     if (coverage.get(id)) return unchanged
     const next = new Map(coverage)
-    next.set(id, { bottomId: initialAfter })
+    next.set(id, { bottomId: bootstrapBottom })
     return { coverage: next, transition: 'created' }
   }
 

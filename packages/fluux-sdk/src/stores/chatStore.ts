@@ -12,6 +12,7 @@ import type { HistoryQueryDirection } from './shared/mamState'
 import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
 import {
   syncCoverageAfterArchiveMerge,
+  walkExtentBottomId,
   isCaughtUpForCounting,
   resolveCoverageBottom,
   type CoverageRecord,
@@ -445,11 +446,9 @@ interface ChatState {
    * reconciled for the active conversation by their own synchronous path
    * (`onMessageReceived`'s live-edge convergence), so racing an async
    * archive recompute against that would be redundant at best. The one
-   * exception is `{ allowActive: true }`: a remote XEP-0490 marker can advance
-   * the ACTIVE entity's read position without that convergence path running at
-   * all, and activation writes no unconditional zero, so nothing
-   * else re-derives the active entity's count after such an advance — pass
-   * `allowActive: true` ONLY from that trigger.
+   * exception is `{ allowActive: true }`: callers that establish new durable
+   * counting input while the entity is active must opt into the guarded
+   * archive derivation.
    */
   recomputeUnreadForConversation: (conversationId: string, options?: { allowActive?: boolean }) => Promise<void>
   /**
@@ -2622,10 +2621,8 @@ export const chatStore = createStore<ChatState>()(
           }
         }
         // Active conversation counts are usually reconciled by their own
-        // synchronous path (the live-edge convergence) — skip here to
-        // avoid a redundant race, UNLESS the caller explicitly opted in
-        // (a remote XEP-0490 advance on the active entity, which that
-        // convergence path never runs for).
+        // synchronous path (the live-edge convergence) — skip here unless the
+        // caller explicitly opted into the guarded archive derivation.
         if (!allowActive && get().activeConversationId === conversationId) return defer('active-skipped')
 
         // --- Defer conditions ---------------------------------------------
@@ -2904,6 +2901,7 @@ export const chatStore = createStore<ChatState>()(
         let shouldRecountAfterMerge = false
         let archiveCommitGate: Promise<boolean> | undefined
         let durableMessages: Message[] = []
+        let coverageBootstrappedFromWalkExtent = false
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -2918,10 +2916,6 @@ export const chatStore = createStore<ChatState>()(
             chatTimelineConfig(),
             isFetchLatest
           )
-          // Persist backfilled archive ids so pagination cursors survive a reload.
-          for (const p of patched) {
-            void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
-          }
           mergedForMarker = trimmed
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
@@ -3005,16 +2999,24 @@ export const chatStore = createStore<ChatState>()(
           // no crash window and the transition applies immediately.
           const prevGap = state.conversationGaps.get(conversationId)
           const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
+          const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
+          const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
           durableMessages = persistableMessages
           // A merge with nothing persistable still defers when earlier pages
           // of this conversation are in flight (or failed): its cursor must
           // not leap them.
-          const mustGateOnChain = persistableMessages.length > 0 || conversationArchiveSaves.has(conversationId)
+          const mustGateOnChain = archiveWriteMessages.length > 0 || conversationArchiveSaves.has(conversationId)
           const deferGapCommit =
             newGaps !== state.conversationGaps &&
             mustGateOnChain
           const gapsAfterMerge = deferGapCommit ? state.conversationGaps : newGaps
 
+          // The walk's own extent, the bootstrap's anchor when a `start`-filtered
+          // catch-up leaves `initialAfter` undefined. Scanned only for the
+          // direction that can use it.
+          const walkOldestId = direction !== 'backward'
+            ? extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
+            : undefined
           // Persisted coverage record; see mamCoverage.ts for the durability
           // invariant this defers on. A merge with nothing persistable
           // (signal-only give-up) applies now.
@@ -3031,12 +3033,18 @@ export const chatStore = createStore<ChatState>()(
             walkCarriedModifications: extras?.walkCarriedModifications ?? false,
             complete,
             initialAfter: extras?.initialAfter,
+            walkOldestId,
           })
           const prevCoverage = state.conversationCoverage.get(conversationId)
           const deferCoverageCommit =
             newCoverage !== state.conversationCoverage &&
             mustGateOnChain
           const coverageAfterMerge = deferCoverageCommit ? state.conversationCoverage : newCoverage
+          coverageBootstrappedFromWalkExtent =
+            coverageTransition === 'created' &&
+            extras?.initialAfter === undefined &&
+            walkOldestId !== undefined &&
+            newCoverage.get(conversationId)?.bottomId === walkOldestId
           // Reported where the value actually enters the state (#1138):
           // reporting at merge time on the DEFERRED path would arm the flush for
           // a write that still carries the old record, and leave the real one
@@ -3085,6 +3093,17 @@ export const chatStore = createStore<ChatState>()(
             })
           }
 
+          if (archiveWriteMessages.length > 0) {
+            const savePromise = messageCache.saveMessages(archiveWriteMessages)
+            archiveCommitGate = conversationArchiveSaves.chain(conversationId, savePromise)
+            if (deferGapCommit || deferCoverageCommit) {
+              scheduleDeferredCommit(archiveCommitGate)
+            }
+            if (persistableMessages.length > 0) {
+              searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
+            }
+          }
+
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
           // RAM messages must persist — but only for the ACTIVE conversation
@@ -3094,7 +3113,7 @@ export const chatStore = createStore<ChatState>()(
             // Nothing of our own to persist, but earlier in-flight pages may
             // still gate this merge's transitions: chain a no-op save so the
             // transition applies (or is dropped) with the same ordering rules.
-            if (deferGapCommit || deferCoverageCommit) {
+            if (!archiveCommitGate && (deferGapCommit || deferCoverageCommit)) {
               archiveCommitGate = conversationArchiveSaves.chain(conversationId, Promise.resolve(true))
               scheduleDeferredCommit(archiveCommitGate)
             }
@@ -3104,20 +3123,6 @@ export const chatStore = createStore<ChatState>()(
             const backfilledMap = new Map(state.messages)
             backfilledMap.set(conversationId, trimmed)
             return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, conversationCoverage: coverageAfterMerge }
-          }
-
-          // Persist to IndexedDB regardless of active state (durable history).
-          if (persistableMessages.length > 0) {
-            const savePromise = messageCache.saveMessages(persistableMessages)
-            // Serialize through the per-conversation chain: the gate resolves
-            // true only when THIS page and every earlier in-flight page
-            // committed.
-            const commitGate = conversationArchiveSaves.chain(conversationId, savePromise)
-            archiveCommitGate = commitGate
-            if (deferGapCommit || deferCoverageCommit) {
-              scheduleDeferredCommit(commitGate)
-            }
-            searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
           // Sidebar preview via the shared policy: the newest previewable message
@@ -3144,7 +3149,9 @@ export const chatStore = createStore<ChatState>()(
             // and an outgoing-message advance would be an inference the
             // forward-only pointer cannot take back. Backward merges only
             // prepend older history (nothing after the pointer changes).
-            if (direction === 'forward' && newMessages.length > 0) shouldRecountAfterMerge = true
+            if (direction === 'forward' && newMessages.length > 0 && !coverageBootstrappedFromWalkExtent) {
+              shouldRecountAfterMerge = true
+            }
 
             if (previewUpdate) {
               const draft = draftConversationMaps(state)
@@ -3222,6 +3229,9 @@ export const chatStore = createStore<ChatState>()(
           const resume = () => {
             if (chatCacheEpoch !== cacheEpochAtMerge || currentChatEntityEpoch(conversationId) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
             chatRecountRetry.resume(conversationId)
+            if (coverageBootstrappedFromWalkExtent) {
+              void get().recomputeUnreadForConversation(conversationId, { allowActive: true })
+            }
           }
           if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
           else resume()

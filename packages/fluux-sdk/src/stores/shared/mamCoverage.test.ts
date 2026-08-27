@@ -11,6 +11,7 @@ import {
   deserializeCoverage,
   isCaughtUpForCounting,
   resolveCoverageBottom,
+  walkExtentBottomId,
   type CoverageRecord,
   type ArchiveMergeCoverageInput,
 } from './mamCoverage'
@@ -134,10 +135,70 @@ describe('syncCoverageAfterArchiveMerge', () => {
       ).toBe(coverage)
     })
 
-    it('a completed forward catch-up with no resume cursor seeds nothing', () => {
-      // `start`-filtered or cursorless catch-up: no archive id to anchor on.
+    it('a completed `start`-filtered catch-up seeds from its own walk extent', () => {
+      // No resume cursor (the local edge was an own send with no archive id),
+      // so the anchor is the oldest entry the completed walk carried itself.
+      const out = syncCoverageAfterArchiveMerge(fwd({ complete: true, walkOldestId: 'walk-oldest' }))
+      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'walk-oldest' })
+      expect(out.transition).toBe('created')
+    })
+
+    it('an INCOMPLETE catch-up seeds nothing from its walk extent either', () => {
+      // Completion is the whole warrant for trusting the extent: without it
+      // nothing connects the walk's oldest entry to the live edge.
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(fwd({ coverage, complete: false, walkOldestId: 'walk-oldest' })).coverage
+      ).toBe(coverage)
+    })
+
+    it('the resume cursor still wins over the walk extent when both are present', () => {
+      const out = syncCoverageAfterArchiveMerge(
+        fwd({ complete: true, initialAfter: 'local-edge', walkOldestId: 'walk-oldest' })
+      )
+      expect(out.coverage.get('a@b')).toEqual({ bottomId: 'local-edge' })
+    })
+
+    it('a completed forward catch-up with neither cursor nor extent seeds nothing', () => {
+      // An empty `start`-filtered walk has no extent to claim.
       const coverage = new Map<string, CoverageRecord>()
       expect(syncCoverageAfterArchiveMerge(fwd({ coverage, complete: true })).coverage).toBe(coverage)
+    })
+
+    it('a walk extent never shallows an existing, deeper record', () => {
+      const coverage = new Map([['a@b', { bottomId: 'much-deeper', topId: 'top' }]])
+      expect(
+        syncCoverageAfterArchiveMerge(fwd({ coverage, complete: true, walkOldestId: 'walk-oldest' })).coverage
+      ).toBe(coverage)
+    })
+
+    it('a walk extent from a walk that carried modifications never seeds', () => {
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(
+          fwd({ coverage, complete: true, walkOldestId: 'walk-oldest', walkCarriedModifications: true })
+        ).coverage
+      ).toBe(coverage)
+    })
+
+    it('a bounded windowed query never seeds from its walk extent', () => {
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(
+          fwd({ coverage, complete: true, walkOldestId: 'walk-oldest', preserveGapMarker: true })
+        ).coverage
+      ).toBe(coverage)
+    })
+
+    it('a BACKWARD merge never seeds from a walk extent', () => {
+      // The extent is a forward-catch-up claim only: a backward page proves
+      // nothing about the live edge it never reached.
+      const coverage = new Map<string, CoverageRecord>()
+      expect(
+        syncCoverageAfterArchiveMerge(
+          base({ coverage, isFetchLatest: false, complete: true, walkOldestId: 'walk-oldest' })
+        ).coverage
+      ).toBe(coverage)
     })
 
     it('a completed forward catch-up that carried modifications never seeds', () => {
@@ -231,6 +292,40 @@ describe('syncCoverageAfterArchiveMerge — reported transition', () => {
     expect(none({ rsmFirst: 'deep', fetchLatestTopId: 'top' })).toBe('none') // identical record
     expect(none({ isFetchLatest: false, initialBefore: 'elsewhere', rsmFirst: 'x' })).toBe('none')
     expect(none({ direction: 'forward', isFetchLatest: false, complete: true, initialAfter: 'edge' })).toBe('none')
+  })
+})
+
+describe('walkExtentBottomId', () => {
+  const msg = (over: Record<string, unknown>) => ({ id: 'x', ...over }) as unknown as Message
+
+  it('returns the oldest archived entry the walk carried', () => {
+    expect(walkExtentBottomId([
+      msg({ stanzaId: 'mid', timestamp: new Date(2000) }),
+      msg({ stanzaId: 'oldest', timestamp: new Date(1000) }),
+      msg({ stanzaId: 'newest', timestamp: new Date(3000) }),
+    ])).toBe('oldest')
+  })
+
+  it('skips id-less entries rather than giving up on the whole anchor', () => {
+    // An own send still awaiting its archive id cannot name a bottom; the
+    // next-oldest archived entry is a shallower but equally true one.
+    expect(walkExtentBottomId([
+      msg({ originId: 'own', timestamp: new Date(1000) }),
+      msg({ stanzaId: 'archived', timestamp: new Date(2000) }),
+    ])).toBe('archived')
+  })
+
+  it('skips `noLocalStore` entries — they never reach the cache the record resolves against', () => {
+    expect(walkExtentBottomId([
+      msg({ stanzaId: 'transient', timestamp: new Date(1000), noLocalStore: true }),
+      msg({ stanzaId: 'stored', timestamp: new Date(2000) }),
+    ])).toBe('stored')
+  })
+
+  it('has no extent for an empty walk, or one with nothing anchorable', () => {
+    expect(walkExtentBottomId([])).toBeUndefined()
+    expect(walkExtentBottomId([msg({ stanzaId: 'no-timestamp' })])).toBeUndefined()
+    expect(walkExtentBottomId([msg({ originId: 'own', timestamp: new Date(1000) })])).toBeUndefined()
   })
 })
 

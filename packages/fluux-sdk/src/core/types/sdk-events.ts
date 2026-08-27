@@ -246,6 +246,8 @@ export interface ChatEvents {
     /** FORWARD only: the `after` cursor the catch-up resumed from. With
      *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */
     initialAfter?: string
+    /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
+    walkOldestId?: string
   }
 
   /**
@@ -510,6 +512,8 @@ export interface RoomEvents {
     /** FORWARD only: the `after` cursor the catch-up resumed from. With
      *  `complete`, it anchors the coverage bottom (mamCoverage.ts). */
     initialAfter?: string
+    /** FORWARD only: the oldest persistable archive id carried by the whole walk. */
+    walkOldestId?: string
   }
 
   /**

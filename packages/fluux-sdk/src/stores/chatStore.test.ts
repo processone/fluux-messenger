@@ -3250,9 +3250,13 @@ describe('chatStore', () => {
         const messages = chatStore.getState().messages.get('alice@example.com')
         expect(messages?.length).toBe(1) // still deduplicated
         expect(messages?.[0].stanzaId).toBe('archive-99') // but now backfilled
-        expect(messageCache.updateMessage).toHaveBeenCalledWith(
-          'uuid-sent',
-          expect.objectContaining({ stanzaId: 'archive-99' })
+        // The backfill rides the merge's DURABLE archive write, not a
+        // fire-and-forget update: a coverage bottom may name this row, so its
+        // write has to be the one the gap/coverage commit gates on.
+        expect(messageCache.saveMessages).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ id: 'uuid-sent', stanzaId: 'archive-99' }),
+          ])
         )
       })
 

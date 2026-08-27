@@ -3601,6 +3601,78 @@ describe('XMPPClient MAM', () => {
       }))
     })
 
+    it('carries the oldest persistable id across forward room pages', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        callCount++
+        const query = iq.children?.find((child: any) => child.name === 'query')
+        const queryId = query?.attrs?.queryid || 'test'
+        const archiveId = callCount === 1 ? 'walk-oldest' : 'walk-newest'
+        const stamp = callCount === 1 ? '2024-01-15T09:00:00Z' : '2024-01-15T10:00:00Z'
+        stanzaListener?.(createMockElement('message', { from: roomJid }, [{
+          name: 'result',
+          attrs: { xmlns: 'urn:xmpp:mam:2', queryid: queryId, id: archiveId },
+          children: [{
+            name: 'forwarded',
+            attrs: { xmlns: 'urn:xmpp:forward:0' },
+            children: [
+              { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp } },
+              {
+                name: 'message',
+                attrs: { from: `${roomJid}/OtherUser`, type: 'groupchat', id: `message-${callCount}` },
+                children: [{ name: 'body', text: `page ${callCount}` }],
+              },
+            ],
+          }],
+        }]))
+        return createMockElement('iq', { type: 'result' }, [{
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: callCount === 2 ? 'true' : 'false' },
+          children: [{
+            name: 'set',
+            attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+            children: [
+              { name: 'first', text: archiveId },
+              { name: 'last', text: archiveId },
+            ],
+          }],
+        }])
+      })
+
+      await xmppClient.messages.queryRoomMAM({
+        roomJid,
+        start: '2024-01-15T08:00:00Z',
+        maxAutoPages: 2,
+      })
+
+      const mamEmits = emitSDKSpy.mock.calls.filter(([event]: unknown[]) => event === 'room:history-messages')
+      expect(mamEmits).toHaveLength(2)
+      expect(mamEmits[1][1]).toEqual(expect.objectContaining({
+        complete: true,
+        walkOldestId: 'walk-oldest',
+      }))
+    })
+
     it('backward fetch-latest: retries past a signal-only page and emits ONE accumulated batch (parity with 1:1)', async () => {
       // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null

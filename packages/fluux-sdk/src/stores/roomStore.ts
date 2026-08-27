@@ -26,6 +26,7 @@ import type { HistoryQueryDirection } from './shared/mamState'
 import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import {
   syncCoverageAfterArchiveMerge,
+  walkExtentBottomId,
   isCaughtUpForCounting,
   resolveCoverageBottom,
   serializeCoverage,
@@ -977,11 +978,9 @@ export interface RoomState {
    * No-op for the active room by default: most triggers are already
    * reconciled for the active room by their own synchronous path
    * (`onMessageReceived`'s live-edge convergence). The one exception
-   * is `{ allowActive: true }`: a remote XEP-0490 marker can advance the
-   * ACTIVE room's read position without that convergence path running at
-   * all, and activation writes no unconditional zero, so nothing re-derives the
-   * active room's count after such an advance — pass `allowActive: true`
-   * ONLY from that trigger.
+   * is `{ allowActive: true }`: callers that establish new durable counting
+   * input while the room is active must opt into the guarded archive
+   * derivation.
    */
   recomputeUnreadForRoom: (roomJid: string, options?: { allowActive?: boolean }) => Promise<void>
   /**
@@ -2461,9 +2460,8 @@ export const roomStore = createStore<RoomState>()(
       }
     }
     // Active room counts are usually reconciled by their own synchronous path
-    // (the live-edge convergence) — skip here to avoid a redundant
-    // race, UNLESS the caller explicitly opted in (a remote XEP-0490
-    // advance on the active room, which that convergence path never runs for).
+    // (the live-edge convergence) — skip here unless the caller explicitly
+    // opted into the guarded archive derivation.
     if (!allowActive && get().activeRoomJid === roomJid) return defer('active-skipped')
 
     // --- Defer conditions -----------------------------------------------
@@ -3907,6 +3905,7 @@ export const roomStore = createStore<RoomState>()(
     let shouldRecountAfterMerge = false
     let archiveCommitGate: Promise<boolean> | undefined
     let durableMessages: RoomMessage[] = []
+    let coverageBootstrappedFromWalkExtent = false
     set((state) => {
       const room = state.rooms.get(roomJid)
       if (!room) return state
@@ -3926,10 +3925,6 @@ export const roomStore = createStore<RoomState>()(
         roomTimelineConfig(),
         isFetchLatest
       )
-      // Persist backfilled archive ids so pagination cursors survive a reload.
-      for (const p of patched) {
-        void messageCache.updateRoomMessage(roomJid, p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) }, p.from)
-      }
       mergedForMarker = merged
 
       // Compute the newest fetched timestamp for gap marker positioning.
@@ -4014,16 +4009,24 @@ export const roomStore = createStore<RoomState>()(
       // applies immediately.
       const prevGap = state.roomGaps.get(roomJid)
       const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
+      const persistablePatches = patched.filter(msg => !isNoLocalStore(msg))
+      const archiveWriteMessages = [...persistableMessages, ...persistablePatches]
       durableMessages = persistableMessages
       // A merge with nothing persistable still defers when earlier pages of
       // this room are in flight (or failed): its cursor must not leap them.
-      const mustGateOnChain = persistableMessages.length > 0 || roomArchiveSaves.has(roomJid)
+      const mustGateOnChain = archiveWriteMessages.length > 0 || roomArchiveSaves.has(roomJid)
       const deferGapCommit =
         newGaps !== state.roomGaps &&
         mustGateOnChain
       const gapsAfterMerge = deferGapCommit ? state.roomGaps : newGaps
       if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
+      // The walk's own extent, the bootstrap's anchor when a `start`-filtered
+      // catch-up leaves `initialAfter` undefined. Scanned only for the
+      // direction that can use it.
+      const walkOldestId = direction !== 'backward'
+        ? extras?.walkOldestId ?? walkExtentBottomId(mamMessages)
+        : undefined
       // Persisted coverage record; see mamCoverage.ts for the durability
       // invariant this defers on. A merge with nothing persistable
       // (signal-only give-up) applies now.
@@ -4040,12 +4043,18 @@ export const roomStore = createStore<RoomState>()(
         walkCarriedModifications: extras?.walkCarriedModifications ?? false,
         complete,
         initialAfter: extras?.initialAfter,
+        walkOldestId,
       })
       const prevCoverage = state.roomCoverage.get(roomJid)
       const deferCoverageCommit =
         newCoverage !== state.roomCoverage &&
         mustGateOnChain
       const coverageAfterMerge = deferCoverageCommit ? state.roomCoverage : newCoverage
+      coverageBootstrappedFromWalkExtent =
+        coverageTransition === 'created' &&
+        extras?.initialAfter === undefined &&
+        walkOldestId !== undefined &&
+        newCoverage.get(roomJid)?.bottomId === walkOldestId
       if (coverageAfterMerge !== state.roomCoverage) {
         saveCoverageToStorage(coverageAfterMerge, undefined, { roomJid, kind: coverageTransition })
       }
@@ -4090,6 +4099,17 @@ export const roomStore = createStore<RoomState>()(
         })
       }
 
+      if (archiveWriteMessages.length > 0) {
+        const savePromise = messageCache.saveRoomMessages(archiveWriteMessages)
+        archiveCommitGate = roomArchiveSaves.chain(roomJid, savePromise)
+        if (deferGapCommit || deferCoverageCommit) {
+          scheduleDeferredCommit(archiveCommitGate)
+        }
+        if (persistableMessages.length > 0) {
+          searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
+        }
+      }
+
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates.
       // Exception: a stanzaId backfill onto existing RAM messages must persist —
@@ -4098,7 +4118,7 @@ export const roomStore = createStore<RoomState>()(
         // Nothing of our own to persist, but earlier in-flight pages may
         // still gate this merge's transitions: chain a no-op save so the
         // transition applies (or is dropped) with the same ordering rules.
-        if (deferGapCommit || deferCoverageCommit) {
+        if (!archiveCommitGate && (deferGapCommit || deferCoverageCommit)) {
           archiveCommitGate = roomArchiveSaves.chain(roomJid, Promise.resolve(true))
           scheduleDeferredCommit(archiveCommitGate)
         }
@@ -4107,20 +4127,6 @@ export const roomStore = createStore<RoomState>()(
         }
         const backfilled = withRoomMessageWindow(state, roomJid, merged)
         return { ...backfilled, mamQueryStates: newStates, roomGaps: gapsAfterMerge, roomCoverage: coverageAfterMerge }
-      }
-
-      // Persist to IndexedDB regardless of active state — this is the durable
-      // history that rehydrates on open (search index too).
-      if (persistableMessages.length > 0) {
-        const savePromise = messageCache.saveRoomMessages(persistableMessages)
-        // Serialize through the per-room chain: the gate resolves true only
-        // when THIS page and every earlier in-flight page committed.
-        const commitGate = roomArchiveSaves.chain(roomJid, savePromise)
-        archiveCommitGate = commitGate
-        if (deferGapCommit || deferCoverageCommit) {
-          scheduleDeferredCommit(commitGate)
-        }
-        searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
       // Sidebar preview via the shared policy: only replace when the merged set's
@@ -4155,7 +4161,9 @@ export const roomStore = createStore<RoomState>()(
         // would be an inference built on nick-attributed `isOutgoing` that the
         // forward-only pointer cannot take back. Backward merges only prepend
         // older history (nothing after the pointer changes).
-        if (direction === 'forward' && newFromMAM.length > 0) shouldRecountAfterMerge = true
+        if (direction === 'forward' && newFromMAM.length > 0 && !coverageBootstrappedFromWalkExtent) {
+          shouldRecountAfterMerge = true
+        }
 
         // roomRuntime deliberately untouched.
         return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
@@ -4231,6 +4239,9 @@ export const roomStore = createStore<RoomState>()(
       const resume = () => {
         if (roomCacheEpoch !== cacheEpochAtMerge || currentRoomEntityEpoch(roomJid) !== entityEpochAtMerge || getStorageScopeJid() !== storageScopeAtMerge) return
         roomRecountRetry.resume(roomJid)
+        if (coverageBootstrappedFromWalkExtent) {
+          void get().recomputeUnreadForRoom(roomJid, { allowActive: true })
+        }
       }
       if (archiveCommitGate) void archiveCommitGate.then((committed) => { if (committed) resume() })
       else resume()
