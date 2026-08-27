@@ -1043,10 +1043,21 @@ describe('onMessageSeen', () => {
     expect(result).toBe(state)
   })
 
-  it('returns same reference for same message', () => {
-    const state = makeState({ readPointer: pointerAt('msg-3') })
-    const result = onMessageSeen(state, 'msg-3', messages, 'chat')
-    expect(result).toBe(state)
+  // A FLOOR reported on its own named live-edge message is RESOLVED once — it
+  // keeps the message and gains the tie-break — and settles from there. See
+  // "onMessageSeen — resolves a floor onto the message it names" for why the
+  // resolution has to happen at all.
+  it('resolves a floor on its own message once, then returns the same reference', () => {
+    const state = makeState({ readPointer: pointerAt('msg-5') })
+    const resolved = onMessageSeen(state, 'msg-5', messages, 'chat')
+    expect(resolved.readPointer?.identity.messageId).toBe('msg-5')
+    expect(resolved.readPointer?.order.role).toBe('exact')
+    expect(onMessageSeen(resolved, 'msg-5', messages, 'chat')).toBe(resolved)
+  })
+
+  it('returns same reference for same message when the pointer is already exact', () => {
+    const state = makeState({ readPointer: makeReadPointer(messages[2], 'chat') })
+    expect(onMessageSeen(state, 'msg-3', messages, 'chat')).toBe(state)
   })
 
   // #1081 constraint: the id and the timestamp of a read position move together
@@ -1871,5 +1882,218 @@ describe('onMessageReceived — outgoing collapse (PR C, D1)', () => {
       { isActive: true, windowVisible: true, viewportAtLiveEdge: false }, 'room')
     expect(r).toBe(state)
     expect(r.firstNewMessageId).toBe('old')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onMessageSeen — resolving a floor onto the message it already names
+// ---------------------------------------------------------------------------
+
+/**
+ * A floor pointer naming the NEWEST message is a trap the two comparators build
+ * between them, each correct on its own: `isAfterBoundary` is at-or-after, so
+ * the named message counts as unread and takes the divider; `mayAdvanceTo` is
+ * strictly-after, so no read of that same message can ever move past it. The
+ * divider comes back at every activation, for good.
+ *
+ * `onMessageSeen` breaks it by RESOLVING the floor — rebuilding it, exact, on
+ * the very message it already names. Nothing here relaxes either comparator:
+ * `readState.test.ts` owns their deliberately opposite semantics — at-or-after
+ * for counting and divider placement, strictly-after for advancing — and the
+ * resolution changes neither.
+ */
+describe('onMessageSeen — resolves a floor onto the message it names', () => {
+  const src = (id: string, ms: number) => ({ id, timestamp: new Date(ms) })
+  const inc = (id: string, ms: number): NotificationMessage =>
+    ({ id, timestamp: new Date(ms), isOutgoing: false, body: 'hi' })
+
+  const floorAt = (messageId: string, ms: number): ReadPointer => ({
+    order: { role: 'floor', timestamp: ms },
+    identity: { state: 'local', messageId },
+  })
+
+  const addressableFloorAt = (messageId: string, archiveId: string, ms: number): ReadPointer => ({
+    order: { role: 'floor', timestamp: ms },
+    identity: { state: 'addressable', messageId, archiveId },
+  })
+
+  const stateWith = (pointer: ReadPointer, unreadCount = 1): EntityNotificationState =>
+    ({ unreadCount, mentionsCount: 0, readPointer: pointer, firstNewMessageId: undefined })
+
+  it('turns the floor into an exact position WITHOUT changing which message it names', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
+
+    expect(out.readPointer?.identity.messageId).toBe('m2') // same message, still
+    expect(out.readPointer?.order.role).toBe('exact')
+    expect(out.readPointer?.order.timestamp).toBe(2000) // the named message's OWN timestamp
+  })
+
+  // THE SYMPTOM, end to end at the level that owns it: open, read, leave,
+  // come back. Without the resolution the second activation puts the divider
+  // straight back on 'm2' — this assertion is the counterfactual.
+  it('clears the divider for good: activate, read the named message, re-activate', () => {
+    const messages = [inc('m1', 1000), inc('m2', 2000)]
+    const sources = messages.map((m) => ({ id: m.id, timestamp: m.timestamp }))
+
+    // A floor naming the newest message places the divider ON that message.
+    const opened = onActivate(stateWith(floorAt('m2', 1500)), messages, 'chat')
+    expect(opened.firstNewMessageId).toBe('m2')
+
+    // The user reads it: the viewport reports the divider's own message.
+    const read = onMessageSeen(opened, 'm2', sources, 'chat')
+    expect(read.readPointer?.order.role).toBe('exact')
+
+    // Leaving clears the marker; returning must NOT put it back.
+    const reopened = onActivate(onDeactivate(read), messages, 'chat')
+    expect(reopened.firstNewMessageId).toBeUndefined()
+  })
+
+  it('resolves an addressable room floor when the archive identity matches', () => {
+    const pointer = addressableFloorAt('m2', 'archive-m2', 1500)
+    const identity = pointer.identity
+    const messages = [
+      { id: 'm1', from: 'room/a', timestamp: new Date(1000), stanzaId: 'archive-m1' },
+      { id: 'm2', from: 'room/z', timestamp: new Date(2000), stanzaId: 'archive-m2' },
+    ]
+    const out = onMessageSeen(stateWith(pointer), 'm2', messages, 'room')
+
+    expect(out.readPointer?.order.role).toBe('exact')
+    expect(out.readPointer?.identity).toBe(identity)
+    expect(out.readPointer?.identity).toEqual({
+      state: 'addressable',
+      messageId: 'm2',
+      archiveId: 'archive-m2',
+    })
+  })
+
+  it('leaves an addressable room floor unchanged when only another sender\'s row is resident', () => {
+    const pointer = addressableFloorAt('dup', 'archive-room-z', 2000)
+    const state = stateWith(pointer)
+    const messages = [
+      { id: 'dup', from: 'room/a', timestamp: new Date(3000), stanzaId: 'archive-room-a' },
+    ]
+
+    const out = onMessageSeen(state, 'dup', messages, 'room')
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(pointer)
+    expect(out.readPointer?.order.role).toBe('floor')
+  })
+
+  it('preserves an addressable floor when a chat row has no archive ID', () => {
+    const pointer = addressableFloorAt('m2', 'archive-m2', 1500)
+    const state = stateWith(pointer)
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const out = onMessageSeen(state, 'm2', messages, 'chat')
+
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(pointer)
+    expect(out.readPointer?.identity).toBe(pointer.identity)
+    expect(out.readPointer?.identity).toEqual({
+      state: 'addressable',
+      messageId: 'm2',
+      archiveId: 'archive-m2',
+    })
+  })
+
+  it('leaves a local room floor unchanged when its ID appears once in the resident slice', () => {
+    const pointer = floorAt('m2', 1500)
+    const state = stateWith(pointer)
+    const messages = [{ id: 'm2', from: 'room/a', timestamp: new Date(2000) }]
+    const out = onMessageSeen(state, 'm2', messages, 'room')
+
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(pointer)
+    expect(out.readPointer?.order.role).toBe('floor')
+  })
+
+  it('leaves an ambiguous room floor unchanged when two senders share an ID', () => {
+    const messages = [
+      { id: 'dup', from: 'room/a', timestamp: new Date(2000) },
+      { id: 'dup', from: 'room/z', timestamp: new Date(2000) },
+    ]
+    const state = stateWith(floorAt('dup', 1500))
+    const out = onMessageSeen(state, 'dup', messages, 'room')
+
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(state.readPointer)
+    expect(out.readPointer?.order.role).toBe('floor')
+  })
+
+  it('resolves a local chat floor at the unique resident live edge', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const out = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
+
+    expect(out.readPointer?.identity.messageId).toBe('m2')
+    expect(out.readPointer?.order.role).toBe('exact')
+  })
+
+  it('leaves a local chat floor unchanged when its client ID is duplicated', () => {
+    const pointer = floorAt('dup', 500)
+    const state = stateWith(pointer)
+    const messages = [src('dup', 1000), src('dup', 2000)]
+    const out = onMessageSeen(state, 'dup', messages, 'chat')
+
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(pointer)
+    expect(out.readPointer?.order.role).toBe('floor')
+  })
+
+  it('leaves a local chat floor unchanged when its message is not the newest resident row', () => {
+    const pointer = floorAt('m2', 1500)
+    const state = stateWith(pointer)
+    const messages = [src('m1', 1000), src('m2', 2000), src('m3', 3000)]
+    const out = onMessageSeen(state, 'm2', messages, 'chat')
+
+    expect(out).toBe(state)
+    expect(out.readPointer).toBe(pointer)
+    expect(out.readPointer?.order.role).toBe('floor')
+  })
+
+  // NEGATIVE POLARITY. Resolving is only ever legitimate onto the pointer's OWN
+  // named message; every other target is an ADVANCE, which the floor rules
+  // already govern. A relaxation to `>=` on anything but identity is caught here.
+  it('does NOT resolve onto a DIFFERENT message at the floor\'s own millisecond', () => {
+    const messages = [src('m1', 1500), src('m2', 2000)]
+    // The floor names m2 but the viewport reports m1, which sits before it.
+    const state = stateWith(floorAt('m2', 1500))
+    expect(onMessageSeen(state, 'm1', messages, 'chat')).toBe(state)
+  })
+
+  // The forward-only rule cuts both ways: a floor whose millisecond sits AHEAD
+  // of its named message must stay put. Resolving there would drag the boundary
+  // backwards and re-surface messages the user has already read — the very
+  // symptom, inverted.
+  it('refuses when the floor sits AHEAD of the message it names', () => {
+    const messages = [src('m1', 1000), src('m2', 2000), src('m3', 3000)]
+    const state = stateWith(floorAt('m2', 2500))
+    expect(onMessageSeen(state, 'm2', messages, 'chat')).toBe(state)
+  })
+
+  it('resolves when the floor already sits exactly on its named message\'s millisecond', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const out = onMessageSeen(stateWith(floorAt('m2', 2000)), 'm2', messages, 'chat')
+    expect(out.readPointer?.order).toEqual({ role: 'exact', timestamp: 2000, tiebreak: expect.anything() })
+    expect(out.readPointer?.identity.messageId).toBe('m2')
+  })
+
+  // CONTROL: the off-slice live-edge escape hatch is a DIFFERENT rule with its
+  // own guards. Resolution does not widen it.
+  it('preserves the off-slice live-edge hatch', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const offSlice = stateWith(floorAt('evicted', 500))
+    expect(onMessageSeen(offSlice, 'm2', messages, 'chat', { atLiveEdge: true }).readPointer?.identity.messageId).toBe('m2')
+    expect(onMessageSeen(offSlice, 'm2', messages, 'chat', { atLiveEdge: false })).toBe(offSlice)
+    expect(onMessageSeen(offSlice, 'm1', messages, 'chat', { atLiveEdge: true })).toBe(offSlice)
+  })
+
+  // Idempotence: the resolved pointer is exact, so the next viewport report of
+  // the same message goes down the exact branch and hands the state back by
+  // reference. Both stores commit on a reference check, so a pointer that kept
+  // minting fresh objects would write on every scroll tick.
+  it('settles: a second report of the same message changes nothing', () => {
+    const messages = [src('m1', 1000), src('m2', 2000)]
+    const once = onMessageSeen(stateWith(floorAt('m2', 1500)), 'm2', messages, 'chat')
+    expect(onMessageSeen(once, 'm2', messages, 'chat')).toBe(once)
   })
 })

@@ -20,8 +20,8 @@
  * kind-discriminated because chat and room break same-millisecond ties
  * differently:
  *
- * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'`,
- *   `messageCache.ts:140`).
+ * - Chat breaks ties by `id` only (the chat store's `keyPath: 'id'` in
+ *   `messageCache.ts`).
  * - Room breaks ties by `from` then `id` (the `room_ts_from_id` index).
  *
  * Chat messages also carry `from`, so a generic "from then id" comparator
@@ -133,10 +133,22 @@ export type PointerIdentity =
  * unrecoverable. Only `order` is used for ordering; nothing derives a message
  * from it.
  *
+ * ONE resolution is legitimate, and only on evidence: `onMessageSeen` accepts a
+ * matching XEP-0359 server ID as proof, or confines a local chat pointer to the
+ * unique newest resident row under the cache's `id` key. It replaces only the
+ * approximate order. The position does not move — it stays on the message the
+ * identity already names. Resolving onto any OTHER message is the forward move
+ * forbidden above.
+ *
  * @category Read state
  */
 export interface ReadPointer {
-  /** Where this position sits in message-cache order. NEVER rewritten. */
+  /**
+   * Where this position sits in message-cache order. Never rewritten to a
+   * different position; server identity proof or constrained local evidence may
+   * replace a floor with the exact position of the same named message without
+   * changing `identity`.
+   */
   readonly order: PointerOrder
   /** What this position is called — locally, and on the wire when we can. */
   readonly identity: PointerIdentity
